@@ -9,16 +9,17 @@ import { ChatPanel } from '@/components/chat/ChatPanel'
 import { ThemeToggle } from '@/components/ThemeToggle'
 import { LanguageSelect } from '@/components/LanguageSelect'
 import { AboutTab } from '@/components/tabs/AboutTab'
-import { PermissionsTab } from '@/components/tabs/PermissionsTab'
+import { ProjectTeamTab } from '@/components/tabs/ProjectTeamTab'
 import { FilesTab } from '@/components/tabs/FilesTab'
 import { CredentialsTab } from '@/components/tabs/CredentialsTab'
 
 // Главный экран: чат 40% | табы проекта 60% (см. CONCEPT.md §3)
-const TAB_KEYS = ['about', 'tasks', 'files', 'credentials', 'permissions'] as const
+const TAB_KEYS = ['about', 'tasks', 'files', 'credentials', 'team'] as const
 type TabKey = (typeof TAB_KEYS)[number]
 
 type ProjectDetails = {
   id: string
+  companyId: string
   name: string
   about: string
   chatRules: string
@@ -57,9 +58,7 @@ export function ProjectScreen() {
       {/* Табы проекта — 60% */}
       <div className="flex flex-1 flex-col">
         <nav className="flex items-center gap-1 border-b px-4 py-2">
-          {TAB_KEYS.filter(
-            (key) => key !== 'permissions' || project.data?.myRole === 'owner' || project.data?.myRole === 'admin',
-          ).map((key) => (
+          {TAB_KEYS.map((key) => (
             <button
               key={key}
               onClick={() => setTab(key)}
@@ -96,9 +95,10 @@ export function ProjectScreen() {
               projectId={id}
               isAdmin={project.data?.myRole === 'owner' || project.data?.myRole === 'admin'}
             />
-          ) : tab === 'permissions' && id ? (
-            <PermissionsTab
+          ) : tab === 'team' && id ? (
+            <ProjectTeamTab
               projectId={id}
+              companyId={project.data?.companyId}
               canEdit={project.data?.myRole === 'owner' || project.data?.myRole === 'admin'}
             />
           ) : (

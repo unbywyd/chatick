@@ -164,8 +164,22 @@
     "tasks": "Tasks",
     "files": "Files",
     "credentials": "Credentials",
-    "permissions": "Permissions",
+    "team": "Team",
     "placeholder": "“{{tab}}” tab — content coming soon"
+  },
+  "projTeam": {
+    "title": "Project team",
+    "subtitle": "Members, invitations and permissions of this project",
+    "add": "Add member",
+    "addTitle": "Add from the company",
+    "addBtn": "Add",
+    "added": "Member added — a notification email was sent",
+    "addNote": "Members are added without confirmation; they receive an email afterwards.",
+    "nobodyToAdd": "Everyone from the company is already in the project",
+    "permissions": "Permissions",
+    "remove": "Remove from project",
+    "removeConfirm": "Remove {{name}} from the project?",
+    "removeNote": "They will receive a notification email."
   },
   "theme": {
     "light": "Light",
