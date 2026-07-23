@@ -1,4 +1,4 @@
-const API_URL = import.meta.env.VITE_API_URL ?? 'http://localhost:3170'
+const API_URL = import.meta.env.VITE_API_URL ?? 'http://localhost:3200'
 
 export function getToken(): string | null {
   return localStorage.getItem('chatick_token')

@@ -13,9 +13,9 @@
 |---|---|
 | Каталог | `/var/www/chatick-next` |
 | PM2-процесс | `chatick-next-api` |
-| Порт API | `3170` (3160 — старый chatick, 3180 — vexelkit) |
+| Порт API | `3200` (3160 — старый chatick, 3180 — vexelkit) |
 | БД | `chatick_next` на локальном Postgres `:55432`, юзер `chatick_next` |
-| Домены | `api.chatick.com` → :3170; `app.chatick.com` → `apps/app/dist`; `cp.chatick.com` → админка (позже) |
+| Домены | `api.chatick.com` → :3200; `app.chatick.com` → `apps/app/dist`; `cp.chatick.com` → админка (позже) |
 
 ## Этап 0 — потушить старый chatick (ничего не удалять!)
 
@@ -60,11 +60,11 @@ pm2 save
 
 Правим `/etc/nginx/sites-enabled/chatick.com` (бэкап сделан на этапе 0):
 
-- `api.chatick.com` → `proxy_pass http://127.0.0.1:3170;` (было 3160). Оставить `proxy_read_timeout 86400s` (SSE/WebSocket), `client_max_body_size 50M`.
+- `api.chatick.com` → `proxy_pass http://127.0.0.1:3200;` (было 3160). Оставить `proxy_read_timeout 86400s` (SSE/WebSocket), `client_max_body_size 50M`.
 - `app.chatick.com` → `root /var/www/chatick-next/apps/app/dist;` + `try_files $uri $uri/ /index.html;`
 - `chat.chatick.com` → 301 на `app.chatick.com` (или 404) — поддомен освобождаем.
 - `chatick.com` / `www` — пока оставить как есть (basic-auth заглушка старого лендинга) или 301 на app.
-- `cp.chatick.com` — пока не трогаем; при готовности админки → `proxy_pass http://127.0.0.1:3171;`.
+- `cp.chatick.com` — пока не трогаем; при готовности админки → `proxy_pass http://127.0.0.1:3201;`.
 
 TLS-сертификаты уже покрывают все поддомены — перевыпуск не нужен.
 
