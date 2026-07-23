@@ -62,6 +62,9 @@
     },
     "improveTasks": "לשפר משימות עם AI",
     "improveTasksHint": "משימות חדשות מתורגמות לשפת הפרויקט ומלוטשות קלות — המשמעות לא משתנה",
+    "storageLimit": "מגבלת אחסון",
+    "storageLimitHint": "הגודל הכולל המרבי של קבצי הפרויקט",
+    "noLimit": "ללא הגבלה",
     "name": "שם",
     "about": "אודות הפרויקט",
     "aboutPlaceholder": "על מה הפרויקט הזה?",
@@ -132,7 +135,16 @@
     "delete": "מחיקה",
     "deleteConfirm": "למחוק את «{{name}}»?",
     "empty": "אין עדיין קבצים",
-    "loadMore": "לטעון עוד"
+    "loadMore": "לטעון עוד",
+    "storage": "אחסון",
+    "period": "תקופה",
+    "clearFilter": "לנקות",
+    "select": "בחירת קבצים",
+    "selectAll": "לבחור הכול",
+    "selectedCount": "נבחרו: {{count}}",
+    "bulkDeleteConfirm": "למחוק את הקבצים שנבחרו ({{count}})?",
+    "bulkDeleted": "נמחקו {{count}} קבצים",
+    "limitReached": "הגעת למגבלת האחסון"
   },
   "viewer": {
     "google": "לפתוח ב-Google Viewer",

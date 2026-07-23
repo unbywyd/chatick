@@ -1,11 +1,13 @@
 import { Hono } from 'hono'
 import { Readable } from 'node:stream'
-import { and, desc, eq, ilike } from 'drizzle-orm'
+import { and, desc, eq, gte, ilike, inArray, lte, sql } from 'drizzle-orm'
 import { nanoid } from 'nanoid'
+import { zValidator } from '@hono/zod-validator'
+import { z } from 'zod'
 import sharp from 'sharp'
 import { PutObjectCommand } from '@aws-sdk/client-s3'
 import { db } from '../db/client.js'
-import { files, tasks, users } from '../db/schema.js'
+import { files, projects, tasks, users } from '../db/schema.js'
 import { requireProject, signFileToken, verifyFileToken, type ProjectEnv } from '../auth.js'
 import { s3Client, presignDownload, presignView, deleteObject, getObjectStream, S3_KEY_PREFIX, s3Bucket } from '../lib/s3.js'
 
@@ -46,16 +48,28 @@ const MAX_FILE_MB = 100
 
 const PAGE_SIZE = 24
 
-// Список файлов проекта (?taskId=... — только вложения задачи; ?page= и ?q= — пагинация/поиск)
+async function storageUsage(projectId: string): Promise<number> {
+  const [{ total }] = (await db
+    .select({ total: sql<string>`coalesce(sum(cast(${files.size} as bigint)), 0)` })
+    .from(files)
+    .where(eq(files.projectId, projectId))) as [{ total: string }]
+  return Number(total)
+}
+
+// Список файлов проекта (фильтры: taskId, q, from/to по дате; пагинация; + usage/limit)
 filesRoute.get('/', async (c) => {
   const { projectId } = c.get('auth')
   const taskId = c.req.query('taskId')
   const q = (c.req.query('q') ?? '').trim()
+  const from = c.req.query('from')
+  const to = c.req.query('to')
   const page = Math.max(1, Number(c.req.query('page')) || 1)
 
   const conds = [eq(files.projectId, projectId)]
   if (taskId) conds.push(eq(files.taskId, taskId))
   if (q) conds.push(ilike(files.name, `%${q}%`))
+  if (from && !isNaN(Date.parse(from))) conds.push(gte(files.createdAt, new Date(from)))
+  if (to && !isNaN(Date.parse(to))) conds.push(lte(files.createdAt, new Date(to + 'T23:59:59')))
 
   const rows = await db
     .select({ file: files, uploader: users, taskNumber: tasks.number })
@@ -79,7 +93,15 @@ filesRoute.get('/', async (c) => {
     hasOriginal: Boolean(r.file.originalKey),
     uploader: r.uploader ? { id: r.uploader.id, name: r.uploader.name, avatarUrl: r.uploader.avatarUrl } : null,
   }))
-  return c.json({ items, page, hasMore })
+
+  // usage/limit отдаём только на первой странице без фильтров (полное состояние хранилища)
+  let storage: { used: number; limit: number } | undefined
+  if (page === 1) {
+    const project = await db.query.projects.findFirst({ where: eq(projects.id, projectId) })
+    storage = { used: await storageUsage(projectId), limit: Number(project?.storageLimit ?? 0) }
+  }
+
+  return c.json({ items, page, hasMore, storage })
 })
 
 const OPTIMIZABLE = new Set(['image/jpeg', 'image/png', 'image/webp', 'image/avif', 'image/tiff'])
@@ -102,6 +124,13 @@ filesRoute.post('/', async (c) => {
     if (!task) return c.json({ error: 'Task not found' }, 404)
   }
   if (file.size > MAX_FILE_MB * 1024 * 1024) return c.json({ error: `File too large (max ${MAX_FILE_MB}MB)` }, 413)
+
+  // лимит хранилища проекта
+  const project = await db.query.projects.findFirst({ where: eq(projects.id, projectId) })
+  const limit = Number(project?.storageLimit ?? 0)
+  if (limit > 0 && (await storageUsage(projectId)) + file.size > limit) {
+    return c.json({ error: 'Storage limit exceeded', code: 'STORAGE_LIMIT' }, 413)
+  }
 
   const fileId = nanoid()
   // UUID-имена (скриншоты из буфера) → человекочитаемое
@@ -193,6 +222,25 @@ filesRoute.get('/:fileId/download', async (c) => {
   const key = wantOriginal && file.originalKey ? file.originalKey : file.key
   const url = inline ? await presignView(key, file.mime) : await presignDownload(key, file.name)
   return c.json({ url })
+})
+
+// Массовое удаление (owner/admin — любые; иначе только свои)
+filesRoute.post('/bulk-delete', zValidator('json', z.object({ ids: z.array(z.string()).min(1).max(500) })), async (c) => {
+  const { projectId, sub, role } = c.get('auth')
+  const { ids } = c.req.valid('json')
+
+  const rows = await db.query.files.findMany({ where: and(eq(files.projectId, projectId), inArray(files.id, ids)) })
+  const isAdmin = role === 'owner' || role === 'admin'
+  const deletable = rows.filter((f) => isAdmin || f.uploadedById === sub)
+
+  if (deletable.length) {
+    await db.delete(files).where(inArray(files.id, deletable.map((f) => f.id)))
+    for (const f of deletable) {
+      deleteObject(f.key).catch(() => {})
+      if (f.originalKey) deleteObject(f.originalKey).catch(() => {})
+    }
+  }
+  return c.json({ deleted: deletable.length, skipped: rows.length - deletable.length })
 })
 
 // Удаление (загрузивший или owner/admin)

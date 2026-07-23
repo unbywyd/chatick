@@ -62,6 +62,9 @@
     },
     "improveTasks": "Улучшать задачи через ИИ",
     "improveTasksHint": "Новые задачи переводятся на язык проекта и слегка причёсываются — суть не меняется",
+    "storageLimit": "Лимит хранилища",
+    "storageLimitHint": "Максимальный суммарный размер файлов проекта",
+    "noLimit": "Без лимита",
     "name": "Название",
     "about": "О проекте",
     "aboutPlaceholder": "О чём этот проект?",
@@ -132,7 +135,16 @@
     "delete": "Удалить",
     "deleteConfirm": "Удалить «{{name}}»?",
     "empty": "Файлов пока нет",
-    "loadMore": "Показать ещё"
+    "loadMore": "Показать ещё",
+    "storage": "Хранилище",
+    "period": "Период",
+    "clearFilter": "Сбросить",
+    "select": "Выделить файлы",
+    "selectAll": "Выделить всё",
+    "selectedCount": "Выбрано: {{count}}",
+    "bulkDeleteConfirm": "Удалить выбранные файлы ({{count}})?",
+    "bulkDeleted": "Удалено файлов: {{count}}",
+    "limitReached": "Достигнут лимит хранилища"
   },
   "viewer": {
     "google": "Открыть в Google Viewer",

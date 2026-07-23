@@ -62,6 +62,9 @@
     },
     "improveTasks": "Improve tasks with AI",
     "improveTasksHint": "New tasks are translated into the project language and lightly polished — meaning unchanged",
+    "storageLimit": "Storage limit",
+    "storageLimitHint": "Maximum total size of project files",
+    "noLimit": "No limit",
     "name": "Name",
     "about": "About the project",
     "aboutPlaceholder": "What is this project about?",
@@ -132,7 +135,16 @@
     "delete": "Delete",
     "deleteConfirm": "Delete “{{name}}”?",
     "empty": "No files yet",
-    "loadMore": "Load more"
+    "loadMore": "Load more",
+    "storage": "Storage",
+    "period": "Period",
+    "clearFilter": "Clear",
+    "select": "Select files",
+    "selectAll": "Select all",
+    "selectedCount": "{{count}} selected",
+    "bulkDeleteConfirm": "Delete {{count}} selected file(s)?",
+    "bulkDeleted": "Deleted {{count}} file(s)",
+    "limitReached": "Storage limit reached"
   },
   "viewer": {
     "google": "Open in Google Viewer",

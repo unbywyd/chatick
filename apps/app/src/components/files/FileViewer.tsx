@@ -9,10 +9,12 @@ import { Button } from '@/components/ui/button'
 export type ViewerFile = { id: string; name: string; mime: string; hasOriginal?: boolean }
 
 // Детекция по mime И расширению (mime бывает octet-stream). Порядок важен: spreadsheet до text.
-function kindOf(file: ViewerFile): 'image' | 'pdf' | 'sheet' | 'text' | 'office' | 'other' {
+function kindOf(file: ViewerFile): 'image' | 'video' | 'audio' | 'pdf' | 'sheet' | 'text' | 'office' | 'other' {
   const m = file.mime
   const ext = file.name.toLowerCase().match(/\.([a-z0-9]+)$/)?.[1] ?? ''
   if (m.startsWith('image/')) return 'image'
+  if (m.startsWith('video/') || ['mp4', 'webm', 'mov', 'mkv', 'avi'].includes(ext)) return 'video'
+  if (m.startsWith('audio/') || ['mp3', 'wav', 'ogg', 'm4a', 'flac', 'aac'].includes(ext)) return 'audio'
   if (m === 'application/pdf' || ext === 'pdf') return 'pdf'
   if (/spreadsheetml|ms-excel/.test(m) || ['xlsx', 'xls', 'csv'].includes(ext)) return 'sheet'
   if (/wordprocessingml|msword|presentationml|ms-powerpoint|opendocument/.test(m) || ['doc', 'docx', 'ppt', 'pptx', 'odt', 'ods', 'odp'].includes(ext))
@@ -113,6 +115,12 @@ export function FileViewer({ file, onClose }: { file: ViewerFile; onClose: () =>
           <Loader2 className="size-6 animate-spin text-white/70" />
         ) : kind === 'image' ? (
           <img src={url} alt={file.name} className="max-h-full max-w-full rounded-lg object-contain" />
+        ) : kind === 'video' ? (
+          <video src={url} controls autoPlay className="max-h-full max-w-full rounded-lg" />
+        ) : kind === 'audio' ? (
+          <div className="rounded-xl bg-card p-8">
+            <audio src={url} controls autoPlay className="w-80 max-w-full" />
+          </div>
         ) : kind === 'pdf' ? (
           <iframe src={url} title={file.name} className="h-full w-full max-w-5xl rounded-lg bg-white" />
         ) : kind === 'sheet' ? (

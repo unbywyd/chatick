@@ -173,6 +173,7 @@ projectsRoute.patch(
       about: z.string().max(5000).optional(),
       aiConfig: aiConfigSchema.partial().optional(),
       chatRules: z.string().max(CHAT_RULES_MAX).optional(),
+      storageLimit: z.number().int().min(0).optional(), // байты; 0 = без лимита
     }),
   ),
   async (c) => {
@@ -186,11 +187,12 @@ projectsRoute.patch(
     const allowed = membership?.role === 'owner' || membership?.role === 'admin' || companyRole === 'admin'
     if (!allowed) return c.json({ error: 'Forbidden' }, 403)
 
-    const { name, about, aiConfig, chatRules } = c.req.valid('json')
+    const { name, about, aiConfig, chatRules, storageLimit } = c.req.valid('json')
     const patch: Record<string, unknown> = {}
     if (name !== undefined) patch.name = name
     if (about !== undefined) patch.about = about
     if (chatRules !== undefined) patch.chatRules = chatRules
+    if (storageLimit !== undefined) patch.storageLimit = String(storageLimit)
     if (aiConfig !== undefined) {
       const current = JSON.parse(project.aiConfig || '{}')
       patch.aiConfig = JSON.stringify({ ...current, ...aiConfig })

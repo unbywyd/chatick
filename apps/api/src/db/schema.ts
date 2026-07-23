@@ -121,6 +121,8 @@ export const projects = pgTable(
     chatRules: text('chat_rules').notNull().default(''),
     // курсор сжатия переписки (SPEC §5.6): сообщения старше — уже в саммари
     lastSummarizedAt: timestamp('last_summarized_at', { withTimezone: true }),
+    // лимит хранилища проекта в байтах (дефолт 2 GB); настраивается owner/admin
+    storageLimit: text('storage_limit').notNull().default(String(2 * 1024 * 1024 * 1024)),
     createdAt: createdAt(),
     updatedAt: updatedAt(),
   },

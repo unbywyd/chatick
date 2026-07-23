@@ -18,6 +18,7 @@ type ProjectDetails = {
   about: string
   chatRules: string
   aiConfig: Partial<AiConfig>
+  storageLimit?: string | number | null
   myRole: 'owner' | 'admin' | 'member' | null
 }
 
@@ -48,6 +49,7 @@ export function AboutTab({ project, loading }: { project?: ProjectDetails; loadi
       about: project.about,
       chatRules: project.chatRules,
       aiConfig: { ...DEFAULT_AI_CONFIG, ...project.aiConfig },
+      storageLimit: project.storageLimit != null ? Number(project.storageLimit) : undefined,
     })
     setEditing(true)
   }

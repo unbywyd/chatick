@@ -38,7 +38,11 @@ export type ProjectSettings = {
   about: string
   chatRules: string
   aiConfig: AiConfig
+  storageLimit?: number // байты; 0 = без лимита
 }
+
+const GB = 1024 * 1024 * 1024
+const STORAGE_OPTIONS = [1, 2, 5, 10, 50] as const // GB
 
 const PROJECT_LANGUAGES = [
   { code: 'en', label: 'English' },
@@ -130,6 +134,32 @@ export function ProjectSettingsForm({
               className="w-full resize-none rounded-md border bg-transparent px-3 py-2 text-sm outline-none placeholder:text-muted-foreground focus:ring-2 focus:ring-ring"
             />
           </Field>
+
+          {/* Лимит хранилища */}
+          <div className="flex items-center justify-between gap-3">
+            <div>
+              <p className="text-sm font-medium">{t('projectForm.storageLimit')}</p>
+              <p className="text-xs text-muted-foreground">{t('projectForm.storageLimitHint')}</p>
+            </div>
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <Button variant="outline" size="sm" className="gap-1.5">
+                  {value.storageLimit && value.storageLimit > 0 ? `${(value.storageLimit / GB).toFixed(0)} GB` : t('projectForm.noLimit')}
+                  <ChevronDown className="size-3.5 text-muted-foreground" />
+                </Button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="end">
+                {STORAGE_OPTIONS.map((gb) => (
+                  <DropdownMenuCheckItem key={gb} checked={value.storageLimit === gb * GB} onSelect={() => set('storageLimit', gb * GB)}>
+                    {gb} GB
+                  </DropdownMenuCheckItem>
+                ))}
+                <DropdownMenuCheckItem checked={value.storageLimit === 0} onSelect={() => set('storageLimit', 0)}>
+                  {t('projectForm.noLimit')}
+                </DropdownMenuCheckItem>
+              </DropdownMenuContent>
+            </DropdownMenu>
+          </div>
         </div>
       )}
 

@@ -1,0 +1,1 @@
+ALTER TABLE "projects" ADD COLUMN "storage_limit" text DEFAULT '2147483648' NOT NULL;
