@@ -6,6 +6,7 @@ import { health } from './routes/health.js'
 import { auth } from './routes/auth.js'
 import { companiesRoute } from './routes/companies.js'
 import { projectsRoute } from './routes/projects.js'
+import { filesRoute } from './routes/files.js'
 
 export const app = new Hono()
 
@@ -16,6 +17,7 @@ app.route('/health', health)
 app.route('/api/v1/auth', auth)
 app.route('/api/v1/companies', companiesRoute)
 app.route('/api/v1/projects', projectsRoute)
+app.route('/api/v1/files', filesRoute)
 
 // Модули дальше по мере разработки:
 // app.route('/api/v1/messages', messages)   — чат + SSE-стрим

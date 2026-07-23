@@ -10,6 +10,7 @@ import { ThemeToggle } from '@/components/ThemeToggle'
 import { LanguageSelect } from '@/components/LanguageSelect'
 import { AboutTab } from '@/components/tabs/AboutTab'
 import { PermissionsTab } from '@/components/tabs/PermissionsTab'
+import { FilesTab } from '@/components/tabs/FilesTab'
 
 // Главный экран: чат 40% | табы проекта 60% (см. CONCEPT.md §3)
 const TAB_KEYS = ['about', 'tasks', 'files', 'credentials', 'permissions'] as const
@@ -87,6 +88,8 @@ export function ProjectScreen() {
         <main className="flex-1 overflow-y-auto">
           {tab === 'about' ? (
             <AboutTab project={project.data} loading={project.isLoading} />
+          ) : tab === 'files' && id ? (
+            <FilesTab projectId={id} />
           ) : tab === 'permissions' && id ? (
             <PermissionsTab
               projectId={id}

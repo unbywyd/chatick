@@ -65,6 +65,16 @@
     "remind": "Gently remind",
     "hold": "Hold back"
   },
+  "files": {
+    "search": "Search files…",
+    "upload": "Upload",
+    "dropHint": "Drag files here or use the Upload button",
+    "uploading": "Uploading {{count}} file(s)…",
+    "download": "Download",
+    "delete": "Delete",
+    "deleteConfirm": "Delete “{{name}}”?",
+    "empty": "No files yet"
+  },
   "perms": {
     "title": "Permissions",
     "subtitle": "What each member can do with tasks — in the UI and via the AI in chat",
