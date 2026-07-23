@@ -1,0 +1,102 @@
+---
+import { LOCALES, type LocaleCode } from '../i18n'
+
+interface Props {
+  locale: LocaleCode
+  title: string
+  description: string
+}
+
+const { locale, title, description } = Astro.props
+const current = LOCALES.find((l) => l.code === locale)!
+const canonical = new URL(current.path, Astro.site)
+---
+
+<!doctype html>
+<html lang={locale} dir={current.dir}>
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>{title}</title>
+    <meta name="description" content={description} />
+    <link rel="canonical" href={canonical} />
+    {LOCALES.map((l) => <link rel="alternate" hreflang={l.code} href={new URL(l.path, Astro.site)} />)}
+    <link rel="alternate" hreflang="x-default" href={new URL('/', Astro.site)} />
+    <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
+    <meta name="theme-color" content="#141611" />
+    <meta property="og:title" content={title} />
+    <meta property="og:description" content={description} />
+    <meta property="og:type" content="website" />
+    <meta property="og:url" content={canonical} />
+    <script>
+      // Автодетект языка: только на первом заходе на корень, уважаем явный выбор (localStorage)
+      const KEY = 'chatick_lang'
+      const saved = localStorage.getItem(KEY)
+      const path = location.pathname
+      const atRoot = path === '/' || path === '/index.html'
+      if (!saved && atRoot) {
+        const nav = (navigator.language || 'en').slice(0, 2)
+        if (nav === 'ru') location.replace('/ru/')
+        else if (nav === 'he' || nav === 'iw') location.replace('/he/')
+      } else if (saved && atRoot && saved !== 'en') {
+        location.replace(saved === 'ru' ? '/ru/' : saved === 'he' ? '/he/' : '/')
+      }
+    </script>
+  </head>
+  <body>
+    <slot />
+  </body>
+</html>
+
+<style is:global>
+  /* Chatick landing — black & lime, same design language as the app */
+  :root {
+    --lime: #d4f228;
+    --lime-dark: #1c2003;
+    --bg: #141611;
+    --bg-soft: #1b1e17;
+    --fg: #f4f5f0;
+    --fg-muted: #a2a69a;
+    --border: rgba(255, 255, 255, 0.09);
+    --radius: 14px;
+  }
+  * {
+    margin: 0;
+    padding: 0;
+    box-sizing: border-box;
+  }
+  html {
+    scroll-behavior: smooth;
+  }
+  body {
+    background: var(--bg);
+    color: var(--fg);
+    font-family: 'Segoe UI', system-ui, -apple-system, sans-serif;
+    line-height: 1.6;
+    -webkit-font-smoothing: antialiased;
+  }
+  a {
+    color: inherit;
+    text-decoration: none;
+  }
+  .container {
+    max-width: 1060px;
+    margin: 0 auto;
+    padding: 0 24px;
+  }
+  .btn {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    background: var(--lime);
+    color: var(--lime-dark);
+    font-weight: 700;
+    padding: 13px 28px;
+    border-radius: 999px;
+    transition: transform 0.15s ease, box-shadow 0.15s ease;
+  }
+  .btn:hover {
+    transform: translateY(-1px);
+    box-shadow: 0 8px 30px rgba(212, 242, 40, 0.25);
+  }
+</style>

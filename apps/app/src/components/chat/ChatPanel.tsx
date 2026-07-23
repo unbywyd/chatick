@@ -7,7 +7,7 @@ import { Logo } from '@/components/Logo'
 // Два режима чата (CONCEPT.md): группа (через ИИ-диспетчер) / личный диалог с ИИ
 type ChatMode = 'group' | 'ai'
 
-export function ChatPanel() {
+export function ChatPanel({ projectName }: { projectName?: string }) {
   const { t } = useTranslation()
   const [mode, setMode] = useState<ChatMode>('group')
   const [draft, setDraft] = useState('')
@@ -15,7 +15,12 @@ export function ChatPanel() {
   return (
     <div className="flex h-full flex-col">
       <header className="flex items-center justify-between border-b px-4 py-2">
-        <Logo />
+        <div className="flex items-center gap-2 overflow-hidden">
+          <Logo />
+          {projectName && (
+            <span className="truncate text-xs text-muted-foreground">/ {projectName}</span>
+          )}
+        </div>
         <div className="flex rounded-md border p-0.5">
           <ModeButton
             active={mode === 'group'}

@@ -2,6 +2,52 @@
   "app": {
     "name": "Chatick"
   },
+  "login": {
+    "title": "Welcome to Chatick",
+    "subtitle": "Sign in to open your project workspace",
+    "google": "Continue with Google",
+    "failed": "Sign-in failed, please try again"
+  },
+  "start": {
+    "logout": "Sign out",
+    "companyTitle": "Your company",
+    "companySubtitle": "A company holds your projects and your team",
+    "invitesTitle": "Invitations",
+    "accept": "Accept",
+    "inviteAccepted": "Invitation accepted",
+    "yourCompanies": "Your companies",
+    "orCreateCompany": "Or create a new company",
+    "createFirstCompany": "Create your first company",
+    "companyName": "Company name",
+    "companyCreated": "Company created",
+    "create": "Create",
+    "projectSubtitle": "Choose a project or create a new one",
+    "changeCompany": "Change company",
+    "notMember": "Not a member",
+    "noProjects": "No projects yet",
+    "createProject": "Create a project",
+    "projectName": "Project name"
+  },
+  "rules": {
+    "title": "Rules of “{{project}}”",
+    "empty": "No special rules — be respectful and stay on topic.",
+    "accept": "I agree",
+    "decline": "Cancel"
+  },
+  "project": {
+    "switch": "Switch project"
+  },
+  "about": {
+    "noDescription": "No description yet.",
+    "rules": "Chat rules",
+    "members": "Members"
+  },
+  "roles": {
+    "admin": "Admin",
+    "manager": "Manager",
+    "member": "Member",
+    "owner": "Owner"
+  },
   "chat": {
     "modeGroup": "Group",
     "modeAi": "AI",

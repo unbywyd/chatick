@@ -23,11 +23,13 @@ export const users = pgTable(
     phone: text('phone'), // для deep link «личное → WhatsApp»
     locale: text('locale').notNull().default('en'), // язык, на который ИИ переводит для юзера
     passwordHash: text('password_hash'),
+    googleId: text('google_id'),
+    avatarUrl: text('avatar_url'),
     isAdmin: boolean('is_admin').notNull().default(false),
     createdAt: createdAt(),
     updatedAt: updatedAt(),
   },
-  (t) => [uniqueIndex('users_email_idx').on(t.email)],
+  (t) => [uniqueIndex('users_email_idx').on(t.email), uniqueIndex('users_google_idx').on(t.googleId)],
 )
 
 // Персональные API-токены — для MCP-сервера и внешних агентов (Claude Code).
@@ -46,19 +48,78 @@ export const apiTokens = pgTable(
 )
 
 // ---------------------------------------------------------------------------
-// Projects (проект = группа = чат)
+// Companies (компания — над проектами, SPEC.md §1-3)
+// ---------------------------------------------------------------------------
+
+export const companyRole = pgEnum('company_role', ['admin', 'manager', 'member'])
+
+export const companies = pgTable('companies', {
+  id: id(),
+  name: text('name').notNull(),
+  logoUrl: text('logo_url'),
+  createdAt: createdAt(),
+  updatedAt: updatedAt(),
+})
+
+export const companyMembers = pgTable(
+  'company_members',
+  {
+    id: id(),
+    companyId: text('company_id').notNull().references(() => companies.id, { onDelete: 'cascade' }),
+    userId: text('user_id').notNull().references(() => users.id, { onDelete: 'cascade' }),
+    role: companyRole('role').notNull().default('member'),
+    createdAt: createdAt(),
+  },
+  (t) => [
+    uniqueIndex('company_members_uniq').on(t.companyId, t.userId),
+    index('company_members_user_idx').on(t.userId),
+  ],
+)
+
+export const inviteStatus = pgEnum('invite_status', ['pending', 'accepted', 'revoked'])
+
+// Приглашение в компанию — по email, с подтверждением (SPEC.md §3.1)
+export const companyInvites = pgTable(
+  'company_invites',
+  {
+    id: id(),
+    companyId: text('company_id').notNull().references(() => companies.id, { onDelete: 'cascade' }),
+    email: text('email').notNull(),
+    role: companyRole('role').notNull().default('member'),
+    token: text('token').notNull().unique(),
+    status: inviteStatus('status').notNull().default('pending'),
+    invitedById: text('invited_by_id').references(() => users.id, { onDelete: 'set null' }),
+    createdAt: createdAt(),
+    updatedAt: updatedAt(),
+  },
+  (t) => [index('company_invites_email_idx').on(t.email), index('company_invites_company_idx').on(t.companyId)],
+)
+
+// ---------------------------------------------------------------------------
+// Projects (проект = группа = чат; принадлежит компании)
 // ---------------------------------------------------------------------------
 
 export const memberRole = pgEnum('member_role', ['owner', 'admin', 'member'])
 
-export const projects = pgTable('projects', {
-  id: id(),
-  name: text('name').notNull(),
-  slug: text('slug').notNull().unique(),
-  about: text('about').notNull().default(''), // таб «О проекте»
-  createdAt: createdAt(),
-  updatedAt: updatedAt(),
-})
+export const projects = pgTable(
+  'projects',
+  {
+    id: id(),
+    companyId: text('company_id').notNull().references(() => companies.id, { onDelete: 'cascade' }),
+    name: text('name').notNull(),
+    slug: text('slug').notNull().unique(),
+    about: text('about').notNull().default(''), // таб «О проекте»
+    // --- конфиг ИИ-диспетчера (SPEC.md §4.1) ---
+    // структурированные флаги/проценты храним одним JSON-полем — состав будет расти
+    aiConfig: text('ai_config').notNull().default('{}'), // JSON: { strictness, allowFlood, allowJokes, allowQuestions, allowOfftopic, filters: {...} }
+    // --- текстовые правила чата (SPEC.md §4.2) ---
+    // жёсткий лимит ~300 символов (валидация на API) — включается в каждый промпт ИИ
+    chatRules: text('chat_rules').notNull().default(''),
+    createdAt: createdAt(),
+    updatedAt: updatedAt(),
+  },
+  (t) => [index('projects_company_idx').on(t.companyId)],
+)
 
 export const projectMembers = pgTable(
   'project_members',
@@ -67,6 +128,8 @@ export const projectMembers = pgTable(
     projectId: text('project_id').notNull().references(() => projects.id, { onDelete: 'cascade' }),
     userId: text('user_id').notNull().references(() => users.id, { onDelete: 'cascade' }),
     role: memberRole('role').notNull().default('member'),
+    // подтверждение правил чата перед вступлением (SPEC.md §4.2)
+    rulesAcceptedAt: timestamp('rules_accepted_at', { withTimezone: true }),
     createdAt: createdAt(),
   },
   (t) => [

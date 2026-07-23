@@ -2,6 +2,52 @@
   "app": {
     "name": "Chatick"
   },
+  "login": {
+    "title": "Добро пожаловать в Chatick",
+    "subtitle": "Войдите, чтобы открыть рабочее пространство проекта",
+    "google": "Продолжить с Google",
+    "failed": "Не удалось войти, попробуйте ещё раз"
+  },
+  "start": {
+    "logout": "Выйти",
+    "companyTitle": "Ваша компания",
+    "companySubtitle": "Компания объединяет проекты и команду",
+    "invitesTitle": "Приглашения",
+    "accept": "Принять",
+    "inviteAccepted": "Приглашение принято",
+    "yourCompanies": "Ваши компании",
+    "orCreateCompany": "Или создайте новую компанию",
+    "createFirstCompany": "Создайте первую компанию",
+    "companyName": "Название компании",
+    "companyCreated": "Компания создана",
+    "create": "Создать",
+    "projectSubtitle": "Выберите проект или создайте новый",
+    "changeCompany": "Сменить компанию",
+    "notMember": "Не участник",
+    "noProjects": "Проектов пока нет",
+    "createProject": "Создать проект",
+    "projectName": "Название проекта"
+  },
+  "rules": {
+    "title": "Правила «{{project}}»",
+    "empty": "Особых правил нет — будьте вежливы и по делу.",
+    "accept": "Согласен",
+    "decline": "Отмена"
+  },
+  "project": {
+    "switch": "Сменить проект"
+  },
+  "about": {
+    "noDescription": "Описания пока нет.",
+    "rules": "Правила чата",
+    "members": "Участники"
+  },
+  "roles": {
+    "admin": "Админ",
+    "manager": "Менеджер",
+    "member": "Член",
+    "owner": "Владелец"
+  },
   "chat": {
     "modeGroup": "Группа",
     "modeAi": "ИИ",

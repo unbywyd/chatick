@@ -1,0 +1,9 @@
+---
+import Base from '../../layouts/Base.astro'
+import Landing from '../../components/Landing.astro'
+import { dict } from '../../i18n'
+---
+
+<Base locale="ru" title={dict.ru.meta.title} description={dict.ru.meta.description}>
+  <Landing locale="ru" />
+</Base>

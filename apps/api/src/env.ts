@@ -14,6 +14,11 @@ const envSchema = z.object({
 
   CORS_ORIGIN: z.string().default('*'),
 
+  // Google OAuth
+  GOOGLE_CLIENT_ID: z.string().min(1),
+  GOOGLE_CLIENT_SECRET: z.string().min(1),
+  GOOGLE_REDIRECT_URI: z.string().min(1),
+
   // LLM (диспетчер чата) — обязательным станет на этапе ИИ-фич
   ANTHROPIC_API_KEY: z.string().optional(),
 

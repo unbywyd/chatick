@@ -2,6 +2,52 @@
   "app": {
     "name": "Chatick"
   },
+  "login": {
+    "title": "ברוכים הבאים ל-Chatick",
+    "subtitle": "התחברו כדי לפתוח את סביבת העבודה של הפרויקט",
+    "google": "המשך עם Google",
+    "failed": "ההתחברות נכשלה, נסו שוב"
+  },
+  "start": {
+    "logout": "התנתקות",
+    "companyTitle": "החברה שלכם",
+    "companySubtitle": "חברה מאגדת פרויקטים וצוות",
+    "invitesTitle": "הזמנות",
+    "accept": "לקבל",
+    "inviteAccepted": "ההזמנה התקבלה",
+    "yourCompanies": "החברות שלכם",
+    "orCreateCompany": "או צרו חברה חדשה",
+    "createFirstCompany": "צרו את החברה הראשונה שלכם",
+    "companyName": "שם החברה",
+    "companyCreated": "החברה נוצרה",
+    "create": "ליצור",
+    "projectSubtitle": "בחרו פרויקט או צרו חדש",
+    "changeCompany": "החלפת חברה",
+    "notMember": "לא חבר",
+    "noProjects": "אין עדיין פרויקטים",
+    "createProject": "יצירת פרויקט",
+    "projectName": "שם הפרויקט"
+  },
+  "rules": {
+    "title": "כללי «{{project}}»",
+    "empty": "אין כללים מיוחדים — היו מנומסים ולעניין.",
+    "accept": "אני מסכים",
+    "decline": "ביטול"
+  },
+  "project": {
+    "switch": "החלפת פרויקט"
+  },
+  "about": {
+    "noDescription": "אין עדיין תיאור.",
+    "rules": "כללי הצ׳אט",
+    "members": "חברים"
+  },
+  "roles": {
+    "admin": "אדמין",
+    "manager": "מנהל",
+    "member": "חבר",
+    "owner": "בעלים"
+  },
   "chat": {
     "modeGroup": "קבוצה",
     "modeAi": "AI",

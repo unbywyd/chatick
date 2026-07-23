@@ -1,23 +1,54 @@
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
+import { useNavigate, useParams } from 'react-router-dom'
+import { useQuery } from '@tanstack/react-query'
 import { useTranslation } from 'react-i18next'
+import { ArrowLeftRight } from 'lucide-react'
+import { api, getProjectToken, setProjectToken } from '@/lib/api'
 import { cn } from '@/lib/utils'
 import { ChatPanel } from '@/components/chat/ChatPanel'
 import { ThemeToggle } from '@/components/ThemeToggle'
 import { LanguageSelect } from '@/components/LanguageSelect'
+import { AboutTab } from '@/components/tabs/AboutTab'
 
 // Главный экран: чат 40% | табы проекта 60% (см. CONCEPT.md §3)
 const TAB_KEYS = ['about', 'tasks', 'files', 'credentials'] as const
 type TabKey = (typeof TAB_KEYS)[number]
 
+type ProjectDetails = {
+  id: string
+  name: string
+  about: string
+  chatRules: string
+  aiConfig: Record<string, unknown>
+  myRole: 'owner' | 'admin' | 'member' | null
+}
+
 export function ProjectScreen() {
   const { t } = useTranslation()
-  const [tab, setTab] = useState<TabKey>('tasks')
+  const navigate = useNavigate()
+  const { id } = useParams()
+  const [tab, setTab] = useState<TabKey>('about')
+
+  useEffect(() => {
+    if (!getProjectToken()) navigate('/start', { replace: true })
+  }, [navigate])
+
+  const project = useQuery({
+    queryKey: ['project', id],
+    queryFn: () => api<ProjectDetails>(`/api/v1/projects/${id}`),
+    enabled: Boolean(id),
+  })
+
+  const switchProject = () => {
+    setProjectToken(null) // сессия жива — назад к выбору без релогина (SPEC §5)
+    navigate('/start')
+  }
 
   return (
     <div className="flex h-dvh">
       {/* Чат — 40% */}
       <div className="flex w-[40%] min-w-[320px] flex-col border-e">
-        <ChatPanel />
+        <ChatPanel projectName={project.data?.name} />
       </div>
 
       {/* Табы проекта — 60% */}
@@ -38,12 +69,26 @@ export function ProjectScreen() {
             </button>
           ))}
           <div className="ms-auto flex items-center gap-2">
+            <button
+              onClick={switchProject}
+              title={t('project.switch')}
+              className="flex items-center gap-1.5 rounded-md border px-2.5 py-1.5 text-xs text-muted-foreground hover:text-foreground"
+            >
+              <ArrowLeftRight className="size-3.5" />
+              {t('project.switch')}
+            </button>
             <LanguageSelect />
             <ThemeToggle />
           </div>
         </nav>
-        <main className="flex flex-1 items-center justify-center text-muted-foreground">
-          <p className="text-sm">{t('tabs.placeholder', { tab: t(`tabs.${tab}`) })}</p>
+        <main className="flex-1 overflow-y-auto">
+          {tab === 'about' ? (
+            <AboutTab project={project.data} loading={project.isLoading} />
+          ) : (
+            <div className="grid h-full place-items-center text-muted-foreground">
+              <p className="text-sm">{t('tabs.placeholder', { tab: t(`tabs.${tab}`) })}</p>
+            </div>
+          )}
         </main>
       </div>
     </div>
