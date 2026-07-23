@@ -1,33 +1,77 @@
 import { StrictMode } from 'react'
 import { createRoot } from 'react-dom/client'
-import { HashRouter, Routes, Route } from 'react-router-dom'
+import { HashRouter, Routes, Route, Navigate, useParams } from 'react-router-dom'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { Toaster } from 'sonner'
 import './index.css'
 import './i18n'
 import { ThemeProvider } from './providers/theme'
 import { ConfirmProvider } from './components/ui/confirm'
-import { ProjectScreen } from './screens/ProjectScreen'
+import { ProjectLayout, useProjectCtx } from './screens/ProjectScreen'
 import { LoginScreen, AuthCallback } from './screens/LoginScreen'
 import { StartScreen } from './screens/StartScreen'
+import { AboutTab } from './components/tabs/AboutTab'
+import { TasksTab } from './components/tabs/TasksTab'
+import { FilesTab } from './components/tabs/FilesTab'
+import { CredentialsTab } from './components/tabs/CredentialsTab'
+import { ProjectTeamTab } from './components/tabs/ProjectTeamTab'
 
 // HashRouter — единый роутинг для веба и Electron (file://) без доп. настроек.
 const queryClient = new QueryClient()
+
+// Обёртки: тянут контекст layout'а (Outlet) и параметры URL
+function AboutPage() {
+  const { project } = useProjectCtx()
+  return <AboutTab project={project} loading={!project} />
+}
+function TasksPage() {
+  const { meId } = useProjectCtx()
+  const { id } = useParams()
+  return id ? <TasksTab projectId={id} meId={meId} /> : null
+}
+function FilesPage() {
+  const { id } = useParams()
+  return id ? <FilesTab projectId={id} /> : null
+}
+function CredentialsPage() {
+  const { project } = useProjectCtx()
+  const { id } = useParams()
+  return id ? <CredentialsTab projectId={id} isAdmin={project?.myRole === 'owner' || project?.myRole === 'admin'} /> : null
+}
+function TeamPage() {
+  const { project } = useProjectCtx()
+  const { id } = useParams()
+  return id ? (
+    <ProjectTeamTab
+      projectId={id}
+      companyId={project?.companyId}
+      canEdit={project?.myRole === 'owner' || project?.myRole === 'admin'}
+    />
+  ) : null
+}
 
 createRoot(document.getElementById('root')!).render(
   <StrictMode>
     <ThemeProvider>
       <QueryClientProvider client={queryClient}>
         <ConfirmProvider>
-        <HashRouter>
-          <Routes>
-            <Route path="/" element={<LoginScreen />} />
-            <Route path="/login" element={<LoginScreen />} />
-            <Route path="/auth" element={<AuthCallback />} />
-            <Route path="/start" element={<StartScreen />} />
-            <Route path="/p/:id" element={<ProjectScreen />} />
-          </Routes>
-        </HashRouter>
+          <HashRouter>
+            <Routes>
+              <Route path="/" element={<LoginScreen />} />
+              <Route path="/login" element={<LoginScreen />} />
+              <Route path="/auth" element={<AuthCallback />} />
+              <Route path="/start" element={<StartScreen />} />
+              <Route path="/p/:id" element={<ProjectLayout />}>
+                <Route index element={<Navigate to="about" replace />} />
+                <Route path="about" element={<AboutPage />} />
+                {/* :taskId — прямая ссылка на задачу (drawer открыт по URL) */}
+                <Route path="tasks/:taskId?" element={<TasksPage />} />
+                <Route path="files" element={<FilesPage />} />
+                <Route path="credentials" element={<CredentialsPage />} />
+                <Route path="team" element={<TeamPage />} />
+              </Route>
+            </Routes>
+          </HashRouter>
         </ConfirmProvider>
         <Toaster richColors position="top-right" />
       </QueryClientProvider>

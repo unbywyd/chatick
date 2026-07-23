@@ -1,9 +1,9 @@
 import { Hono } from 'hono'
 import { zValidator } from '@hono/zod-validator'
 import { z } from 'zod'
-import { and, desc, eq, sql } from 'drizzle-orm'
+import { and, asc, desc, eq, sql } from 'drizzle-orm'
 import { db } from '../db/client.js'
-import { tasks, users } from '../db/schema.js'
+import { files, tasks, users } from '../db/schema.js'
 import { requireProject, type ProjectEnv } from '../auth.js'
 import { hasPermission } from './projects.js'
 
@@ -19,6 +19,7 @@ const taskShape = {
   description: z.string().max(10_000).default(''),
   status: z.enum(STATUSES).default('todo'),
   priority: z.enum(PRIORITIES).default('normal'),
+  sortOrder: z.number().optional(),
   dueDate: z.string().datetime({ offset: true }).nullable().optional(),
   assigneeId: z.string().nullable().optional(),
 }
@@ -31,6 +32,7 @@ function serialize(row: typeof tasks.$inferSelect, assignee?: typeof users.$infe
     description: row.description,
     status: row.status,
     priority: row.priority,
+    sortOrder: row.sortOrder,
     dueDate: row.dueDate,
     assignee: assignee ? { id: assignee.id, name: assignee.name, avatarUrl: assignee.avatarUrl } : null,
     createdById: row.createdById,
@@ -43,12 +45,16 @@ function serialize(row: typeof tasks.$inferSelect, assignee?: typeof users.$infe
 tasksRoute.get('/', async (c) => {
   const { projectId } = c.get('auth')
   const rows = await db
-    .select({ task: tasks, assignee: users })
+    .select({
+      task: tasks,
+      assignee: users,
+      attachmentsCount: sql<number>`(select count(*)::int from ${files} where ${files.taskId} = ${tasks.id})`,
+    })
     .from(tasks)
     .leftJoin(users, eq(users.id, tasks.assigneeId))
     .where(eq(tasks.projectId, projectId))
-    .orderBy(desc(tasks.createdAt))
-  return c.json(rows.map((r) => serialize(r.task, r.assignee)))
+    .orderBy(asc(tasks.sortOrder), desc(tasks.createdAt))
+  return c.json(rows.map((r) => ({ ...serialize(r.task, r.assignee), attachmentsCount: r.attachmentsCount })))
 })
 
 // Создать — tasks.create
@@ -58,17 +64,21 @@ tasksRoute.post('/', zValidator('json', z.object(taskShape)), async (c) => {
 
   const body = c.req.valid('json')
 
-  // порядковый номер в рамках проекта: TASK-<max+1>
-  const [{ next }] = (await db
-    .select({ next: sql<number>`coalesce(max(cast(substring(${tasks.number} from 6) as int)), 0) + 1` })
+  // порядковый номер в рамках проекта: TASK-<max+1>; новая задача — наверх группы
+  const [{ next, minSort }] = (await db
+    .select({
+      next: sql<number>`coalesce(max(cast(substring(${tasks.number} from 6) as int)), 0) + 1`,
+      minSort: sql<number>`coalesce(min(${tasks.sortOrder}), 0)`,
+    })
     .from(tasks)
-    .where(eq(tasks.projectId, projectId))) as [{ next: number }]
+    .where(eq(tasks.projectId, projectId))) as [{ next: number; minSort: number }]
 
   const [row] = await db
     .insert(tasks)
     .values({
       projectId,
       number: `TASK-${next}`,
+      sortOrder: minSort - 1,
       title: body.title,
       description: body.description,
       status: body.status,
@@ -95,7 +105,8 @@ tasksRoute.patch(
 
     const body = c.req.valid('json')
     const keys = Object.keys(body)
-    const statusOnly = keys.length === 1 && keys[0] === 'status'
+    // смена статуса (в т.ч. drag между группами с новым sortOrder) и чистая пересортировка — по changeStatus
+    const statusOnly = keys.every((k) => k === 'status' || k === 'sortOrder')
 
     const permitted = statusOnly
       ? (await hasPermission(projectId, sub, 'tasks.changeStatus')) || (await hasPermission(projectId, sub, 'tasks.edit'))
@@ -107,6 +118,7 @@ tasksRoute.patch(
     if (body.description !== undefined) patch.description = body.description
     if (body.status !== undefined) patch.status = body.status
     if (body.priority !== undefined) patch.priority = body.priority
+    if (body.sortOrder !== undefined) patch.sortOrder = body.sortOrder
     if (body.dueDate !== undefined) patch.dueDate = body.dueDate ? new Date(body.dueDate) : null
     if (body.assigneeId !== undefined) patch.assigneeId = body.assigneeId
 

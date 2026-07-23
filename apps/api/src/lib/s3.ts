@@ -37,6 +37,20 @@ export function presignDownload(key: string, filename: string, expiresIn = 600) 
   )
 }
 
+/** Presigned GET для просмотра в браузере (inline): превью картинок, PDF во вкладке. */
+export function presignView(key: string, mime: string, expiresIn = 3600) {
+  return getSignedUrl(
+    s3Client(),
+    new GetObjectCommand({
+      Bucket: s3Bucket(),
+      Key: key,
+      ResponseContentDisposition: 'inline',
+      ResponseContentType: mime,
+    }),
+    { expiresIn },
+  )
+}
+
 export async function deleteObject(key: string) {
   await s3Client().send(new DeleteObjectCommand({ Bucket: s3Bucket(), Key: key }))
 }

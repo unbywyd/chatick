@@ -1,4 +1,4 @@
-import { pgTable, text, timestamp, boolean, uniqueIndex, index, pgEnum } from 'drizzle-orm/pg-core'
+import { pgTable, text, timestamp, boolean, uniqueIndex, index, pgEnum, doublePrecision } from 'drizzle-orm/pg-core'
 import { nanoid } from 'nanoid'
 
 // ---------------------------------------------------------------------------
@@ -191,6 +191,8 @@ export const tasks = pgTable(
     description: text('description').notNull().default(''),
     status: taskStatus('status').notNull().default('todo'),
     priority: taskPriority('priority').notNull().default('normal'),
+    // ручной порядок внутри статус-группы (drag&drop); меньше = выше
+    sortOrder: doublePrecision('sort_order').notNull().default(0),
     dueDate: timestamp('due_date', { withTimezone: true }),
     assigneeId: text('assignee_id').references(() => users.id, { onDelete: 'set null' }),
     createdById: text('created_by_id').references(() => users.id, { onDelete: 'set null' }),
@@ -213,6 +215,8 @@ export const files = pgTable(
   {
     id: id(),
     projectId: text('project_id').notNull().references(() => projects.id, { onDelete: 'cascade' }),
+    // вложение задачи: файл прикреплён прямо в таске (null = общий файл проекта)
+    taskId: text('task_id').references(() => tasks.id, { onDelete: 'set null' }),
     uploadedById: text('uploaded_by_id').references(() => users.id, { onDelete: 'set null' }),
     name: text('name').notNull(),
     key: text('key').notNull(), // S3 object key
@@ -220,7 +224,7 @@ export const files = pgTable(
     size: text('size').notNull().default('0'),
     createdAt: createdAt(),
   },
-  (t) => [index('files_project_idx').on(t.projectId)],
+  (t) => [index('files_project_idx').on(t.projectId), index('files_task_idx').on(t.taskId)],
 )
 
 export const credentials = pgTable(

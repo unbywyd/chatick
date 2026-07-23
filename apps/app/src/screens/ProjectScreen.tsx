@@ -1,5 +1,5 @@
-import { useEffect, useState } from 'react'
-import { useNavigate, useParams } from 'react-router-dom'
+import { useEffect } from 'react'
+import { NavLink, Outlet, useNavigate, useOutletContext, useParams } from 'react-router-dom'
 import { useQuery } from '@tanstack/react-query'
 import { useTranslation } from 'react-i18next'
 import { ArrowLeftRight } from 'lucide-react'
@@ -8,17 +8,12 @@ import { cn } from '@/lib/utils'
 import { ChatPanel } from '@/components/chat/ChatPanel'
 import { ThemeToggle } from '@/components/ThemeToggle'
 import { LanguageSelect } from '@/components/LanguageSelect'
-import { AboutTab } from '@/components/tabs/AboutTab'
-import { TasksTab } from '@/components/tabs/TasksTab'
-import { ProjectTeamTab } from '@/components/tabs/ProjectTeamTab'
-import { FilesTab } from '@/components/tabs/FilesTab'
-import { CredentialsTab } from '@/components/tabs/CredentialsTab'
 
-// Главный экран: чат 40% | табы проекта 60% (см. CONCEPT.md §3)
+// Layout проекта (CONCEPT.md §3): чат 40% постоянен, табы — вложенные роуты (Outlet),
+// каждый таб имеет свой URL — прямые ссылки работают: /p/:id/tasks, /p/:id/files, ...
 const TAB_KEYS = ['about', 'tasks', 'files', 'credentials', 'team'] as const
-type TabKey = (typeof TAB_KEYS)[number]
 
-type ProjectDetails = {
+export type ProjectDetails = {
   id: string
   companyId: string
   name: string
@@ -28,11 +23,12 @@ type ProjectDetails = {
   myRole: 'owner' | 'admin' | 'member' | null
 }
 
-export function ProjectScreen() {
+export type ProjectOutletCtx = { project?: ProjectDetails; meId?: string }
+
+export function ProjectLayout() {
   const { t } = useTranslation()
   const navigate = useNavigate()
   const { id } = useParams()
-  const [tab, setTab] = useState<TabKey>('about')
 
   useEffect(() => {
     if (!getProjectToken()) navigate('/start', { replace: true })
@@ -52,27 +48,29 @@ export function ProjectScreen() {
 
   return (
     <div className="flex h-dvh">
-      {/* Чат — 40% */}
+      {/* Чат — 40%, живёт на всех страницах проекта */}
       <div className="flex w-[40%] min-w-[320px] flex-col border-e">
         <ChatPanel projectName={project.data?.name} />
       </div>
 
-      {/* Табы проекта — 60% */}
-      <div className="flex flex-1 flex-col">
+      {/* Табы — роуты */}
+      <div className="flex min-w-0 flex-1 flex-col">
         <nav className="flex items-center gap-1 border-b px-4 py-2">
           {TAB_KEYS.map((key) => (
-            <button
+            <NavLink
               key={key}
-              onClick={() => setTab(key)}
-              className={cn(
-                'rounded-md px-3 py-1.5 text-sm transition-colors',
-                tab === key
-                  ? 'bg-primary text-primary-foreground'
-                  : 'text-muted-foreground hover:bg-accent hover:text-accent-foreground',
-              )}
+              to={`/p/${id}/${key}`}
+              className={({ isActive }) =>
+                cn(
+                  'rounded-md px-3 py-1.5 text-sm transition-colors',
+                  isActive
+                    ? 'bg-primary text-primary-foreground'
+                    : 'text-muted-foreground hover:bg-accent hover:text-accent-foreground',
+                )
+              }
             >
               {t(`tabs.${key}`)}
-            </button>
+            </NavLink>
           ))}
           <div className="ms-auto flex items-center gap-2">
             <button
@@ -87,31 +85,14 @@ export function ProjectScreen() {
             <ThemeToggle />
           </div>
         </nav>
-        <main className="flex-1 overflow-y-auto">
-          {tab === 'about' ? (
-            <AboutTab project={project.data} loading={project.isLoading} />
-          ) : tab === 'tasks' && id ? (
-            <TasksTab projectId={id} meId={me.data?.id} />
-          ) : tab === 'files' && id ? (
-            <FilesTab projectId={id} />
-          ) : tab === 'credentials' && id ? (
-            <CredentialsTab
-              projectId={id}
-              isAdmin={project.data?.myRole === 'owner' || project.data?.myRole === 'admin'}
-            />
-          ) : tab === 'team' && id ? (
-            <ProjectTeamTab
-              projectId={id}
-              companyId={project.data?.companyId}
-              canEdit={project.data?.myRole === 'owner' || project.data?.myRole === 'admin'}
-            />
-          ) : (
-            <div className="grid h-full place-items-center text-muted-foreground">
-              <p className="text-sm">{t('tabs.placeholder', { tab: t(`tabs.${tab}`) })}</p>
-            </div>
-          )}
+        <main className="min-h-0 flex-1 overflow-y-auto">
+          <Outlet context={{ project: project.data, meId: me.data?.id } satisfies ProjectOutletCtx} />
         </main>
       </div>
     </div>
   )
+}
+
+export function useProjectCtx() {
+  return useOutletContext<ProjectOutletCtx>()
 }

@@ -36,6 +36,13 @@
       "when": 1784816320499,
       "tag": "0004_cuddly_ultragirl",
       "breakpoints": true
+    },
+    {
+      "idx": 5,
+      "version": "7",
+      "when": 1784816942284,
+      "tag": "0005_clean_anthem",
+      "breakpoints": true
     }
   ]
 }
