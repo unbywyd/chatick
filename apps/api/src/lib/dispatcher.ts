@@ -16,11 +16,41 @@ const LANG_NAMES: Record<string, string> = { en: 'English', ru: 'Russian', he: '
 
 function parseJson<T>(text: string | null): T | null {
   if (!text) return null
+  const clean = text.trim().replace(/^```(?:json)?\s*|\s*```$/g, '')
   try {
-    return JSON.parse(text.trim().replace(/^```(?:json)?\s*|\s*```$/g, '')) as T
+    return JSON.parse(clean) as T
   } catch {
-    console.error('[dispatcher] bad JSON from LLM:', text.slice(0, 200))
-    return null
+    // модели (особенно deepseek) кладут неэкранированные кавычки внутрь строк:
+    // {"reason":"слово "Ямина" запрещено"} — чиним посимвольно: кавычка закрывает строку
+    // только если за ней структурный символ, иначе экранируем
+    try {
+      let out = ''
+      let inString = false
+      for (let i = 0; i < clean.length; i++) {
+        const ch = clean[i]!
+        if (ch === '"' && clean[i - 1] !== '\\') {
+          if (!inString) {
+            inString = true
+            out += ch
+          } else {
+            // конец строки только если дальше структурный символ
+            const rest = clean.slice(i + 1).match(/^\s*[:,}\]]/)
+            if (rest) {
+              inString = false
+              out += ch
+            } else {
+              out += '\\"' // внутренняя кавычка — экранируем
+            }
+          }
+        } else {
+          out += ch
+        }
+      }
+      return JSON.parse(out) as T
+    } catch {
+      console.error('[dispatcher] bad JSON from LLM:', text.slice(0, 200))
+      return null
+    }
   }
 }
 
@@ -54,6 +84,7 @@ function dispatcherSystem(project: { chatRules: string }, ai: AiConfig, authorNa
     'Respond with ONLY JSON:',
     '{"verdict":"pass"} or {"verdict":"hold","reason":"<short reason in the AUTHOR\'S language>","questions":"<what to clarify, author\'s language>","suggestion":"<improved message in the PROJECT language, or empty>"}',
     'Keep reason/questions to 1-2 sentences. Suggestion must preserve the author\'s meaning.',
+    'IMPORTANT: output valid JSON — escape any double quotes inside string values as \\".',
   ].join('\n')
 }
 
@@ -84,7 +115,13 @@ export async function evaluateMessage(messageId: string): Promise<Verdict> {
     maxTokens: 500,
   })
   const parsed = parseJson<Verdict>(raw)
-  if (!parsed || (parsed.verdict !== 'pass' && parsed.verdict !== 'hold')) return { verdict: 'pass' }
+  if (!parsed || (parsed.verdict !== 'pass' && parsed.verdict !== 'hold')) {
+    // JSON битый, но намерение hold в тексте видно — не даём фильтру протечь
+    if (raw && /"verdict"\s*:\s*"hold"/.test(raw)) {
+      return { verdict: 'hold', reason: 'The AI flagged this message but the details were lost. Please rephrase or ask the AI below.' }
+    }
+    return { verdict: 'pass' }
+  }
   return parsed
 }
 
