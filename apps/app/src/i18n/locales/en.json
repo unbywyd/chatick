@@ -234,6 +234,12 @@
     "typing_one": "{{names}} is typing…",
     "typing_other": "{{names}} are typing…"
   },
+  "chatSearch": {
+    "title": "Search chat",
+    "placeholder": "Search messages…",
+    "hint": "Type to search messages, files and links",
+    "type": { "all": "All", "files": "Files", "links": "Links" }
+  },
   "aiChannel": {
     "title": "AI channel",
     "subtitle": "Private conversation with the project AI — others don't see it",

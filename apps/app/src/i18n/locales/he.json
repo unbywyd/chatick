@@ -234,6 +234,12 @@
     "typing_one": "{{names}} כותב…",
     "typing_other": "{{names}} כותבים…"
   },
+  "chatSearch": {
+    "title": "חיפוש בצ׳אט",
+    "placeholder": "חיפוש הודעות…",
+    "hint": "הקלידו כדי לחפש הודעות, קבצים וקישורים",
+    "type": { "all": "הכול", "files": "קבצים", "links": "קישורים" }
+  },
   "aiChannel": {
     "title": "ערוץ AI",
     "subtitle": "שיחה פרטית עם ה-AI של הפרויקט — אחרים לא רואים",

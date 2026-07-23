@@ -1,7 +1,7 @@
 import { Hono } from 'hono'
 import { zValidator } from '@hono/zod-validator'
 import { z } from 'zod'
-import { and, asc, desc, eq, inArray, lt, sql } from 'drizzle-orm'
+import { and, asc, desc, eq, ilike, inArray, lt, sql } from 'drizzle-orm'
 import { db } from '../db/client.js'
 import { files, messages, sandboxMessages, users } from '../db/schema.js'
 import { requireProject, type ProjectEnv } from '../auth.js'
@@ -284,6 +284,40 @@ messagesRoute.post(
     const message = serialize(updated!, author, atts.get(msg.id))
     broadcast(projectId, 'message', message)
     return c.json(message)
+  },
+)
+
+// Поиск по сообщениям чата: текст / только с файлами / только со ссылками
+messagesRoute.get(
+  '/search',
+  zValidator('query', z.object({ q: z.string().default(''), type: z.enum(['all', 'files', 'links']).default('all') })),
+  async (c) => {
+    const { projectId, sub } = c.get('auth')
+    const { q, type } = c.req.valid('query')
+    const needle = q.trim()
+
+    // базовый where: доставленные групповые + свои
+    const conds = [eq(messages.projectId, projectId), eq(messages.mode, 'group'), eq(messages.status, 'delivered')]
+    if (needle) conds.push(ilike(messages.text, `%${needle}%`))
+    if (type === 'links') conds.push(sql`${messages.text} ~* 'https?://'`)
+
+    const rows = await db
+      .select({ msg: messages, author: users, attCount: sql<number>`(select count(*)::int from ${files} where ${files.messageId} = ${messages.id})` })
+      .from(messages)
+      .leftJoin(users, eq(users.id, messages.authorId))
+      .where(and(...conds))
+      .orderBy(desc(messages.createdAt))
+      .limit(type === 'files' ? 200 : 40)
+
+    let result = rows
+    if (type === 'files') result = rows.filter((r) => r.attCount > 0).slice(0, 40)
+
+    const atts = await attachmentsOf(result.map((r) => r.msg.id))
+    return c.json(
+      result.map((r) => ({
+        ...serialize(r.msg, r.author, atts.get(r.msg.id)),
+      })),
+    )
   },
 )
 

@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
-import { useQuery, useQueryClient } from '@tanstack/react-query'
-import { Bot, Users, BrainCircuit, Settings } from 'lucide-react'
+import { useInfiniteQuery, useQuery, useQueryClient } from '@tanstack/react-query'
+import { ArrowDown, Bot, Users, BrainCircuit, Loader2, Search, Settings, X } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
 import ReactMarkdown from 'react-markdown'
 import { toast } from 'sonner'
@@ -34,7 +34,11 @@ export function ChatPanel({ projectName, aiMode = 'assistant' }: { projectName?:
   const [sandboxId, setSandboxId] = useState<string | null>(null)
   const [sandboxStream, setSandboxStream] = useState('') // постепенная печать ответа ИИ
   const [aiThinking, setAiThinking] = useState(false) // ai-режим: ждём ответ
+  const [searchOpen, setSearchOpen] = useState(false)
+  const scrollRef = useRef<HTMLDivElement>(null)
   const bottomRef = useRef<HTMLDivElement>(null)
+  const [atBottom, setAtBottom] = useState(true)
+  const [newBelow, setNewBelow] = useState(false)
 
   const llm = useQuery({
     queryKey: ['llm-status', projectId],
@@ -49,11 +53,17 @@ export function ChatPanel({ projectName, aiMode = 'assistant' }: { projectName?:
     enabled: Boolean(projectId),
   })
 
-  const history = useQuery({
+  // Ленивая подгрузка вверх: страницы по 50, курсор before=<createdAt самого старого>
+  const history = useInfiniteQuery({
     queryKey: ['messages', projectId],
-    queryFn: () => api<ChatMessage[]>('/api/v1/messages', {}, 'project'),
     enabled: Boolean(projectId),
+    initialPageParam: undefined as string | undefined,
+    queryFn: ({ pageParam }) =>
+      api<ChatMessage[]>(`/api/v1/messages${pageParam ? `?before=${encodeURIComponent(pageParam)}` : ''}`, {}, 'project'),
+    // страница отсортирована по возрастанию; следующий курсор — самое старое сообщение
+    getNextPageParam: (lastPage) => (lastPage.length >= 50 ? lastPage[0]?.createdAt : undefined),
   })
+  const historyMessages = useMemo(() => (history.data?.pages ?? []).flat(), [history.data])
 
   const [live, setLive] = useState<ChatMessage[]>([])
   useEffect(() => setLive([]), [projectId])
@@ -92,24 +102,63 @@ export function ChatPanel({ projectName, aiMode = 'assistant' }: { projectName?:
   // история + live, дедуп по id; в ленте только delivered (SPEC §5.5.1 — до вердикта не показываем)
   const merged = useMemo(() => {
     const byId = new Map<string, ChatMessage>()
-    for (const m of [...(history.data ?? []), ...live]) byId.set(m.id, m)
+    for (const m of [...historyMessages, ...live]) byId.set(m.id, m)
     return [...byId.values()]
       .filter((m) => m.status === 'delivered')
       .sort((a, b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime())
-  }, [history.data, live])
+  }, [historyMessages, live])
   const allMessages = useMemo(() => merged.filter((m) => m.mode === 'group'), [merged])
   const aiMessages = useMemo(() => merged.filter((m) => m.mode === 'ai'), [merged])
 
   // held-сообщение из истории (после перезагрузки) — снова открыть sandbox
   useEffect(() => {
-    const held = (history.data ?? []).find((m) => m.status === 'held')
+    const held = historyMessages.find((m) => m.status === 'held')
     if (held && !sandboxId) setSandboxId(held.id)
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [history.data])
+  }, [historyMessages])
 
+  // автоскролл вниз только если пользователь у низа; иначе — бейдж «новые»
+  const prevCount = useRef(0)
   useEffect(() => {
-    bottomRef.current?.scrollIntoView({ behavior: 'smooth' })
+    const grew = allMessages.length > prevCount.current
+    prevCount.current = allMessages.length
+    if (!grew) return
+    if (atBottom) bottomRef.current?.scrollIntoView({ behavior: 'smooth' })
+    else setNewBelow(true)
+  }, [allMessages.length, atBottom])
+
+  // при первом заходе — сразу вниз
+  const didInitialScroll = useRef(false)
+  useEffect(() => {
+    if (!didInitialScroll.current && allMessages.length > 0) {
+      didInitialScroll.current = true
+      requestAnimationFrame(() => bottomRef.current?.scrollIntoView())
+    }
   }, [allMessages.length])
+
+  // скролл: отслеживаем низ + ленивая подгрузка при приближении к верху
+  const onScroll = () => {
+    const el = scrollRef.current
+    if (!el) return
+    const nearBottom = el.scrollHeight - el.scrollTop - el.clientHeight < 120
+    setAtBottom(nearBottom)
+    if (nearBottom) setNewBelow(false)
+    if (el.scrollTop < 200 && history.hasNextPage && !history.isFetchingNextPage) {
+      const prevHeight = el.scrollHeight
+      history.fetchNextPage().then(() => {
+        // сохранить позицию: старые добавились сверху
+        requestAnimationFrame(() => {
+          const el2 = scrollRef.current
+          if (el2) el2.scrollTop += el2.scrollHeight - prevHeight
+        })
+      })
+    }
+  }
+
+  const scrollToBottom = () => {
+    setNewBelow(false)
+    bottomRef.current?.scrollIntoView({ behavior: 'smooth' })
+  }
 
   const send = async (
     { markdown, mentionIds, attachmentIds, raw }: { markdown: string; mentionIds: string[]; attachmentIds: string[]; raw?: boolean },
@@ -178,6 +227,10 @@ export function ChatPanel({ projectName, aiMode = 'assistant' }: { projectName?:
             )}
           </div>
 
+          <Button variant="ghost" size="icon" title={t('chatSearch.title')} onClick={() => setSearchOpen(true)}>
+            <Search className="size-4" />
+          </Button>
+
           <div className="flex rounded-md border p-0.5">
             <ModeButton active={!aiOpen} onClick={() => setAiOpen(false)} icon={<Users className="size-3.5" />} label={t('chat.modeGroup')} />
             <ModeButton active={aiOpen} onClick={() => setAiOpen(true)} icon={<Bot className="size-3.5" />} label={t('chat.modeAi')} />
@@ -185,7 +238,7 @@ export function ChatPanel({ projectName, aiMode = 'assistant' }: { projectName?:
         </div>
       </header>
 
-      <div className="flex-1 overflow-y-auto p-4">
+      <div ref={scrollRef} onScroll={onScroll} className="relative flex-1 overflow-y-auto p-4">
         {llmMissing ? (
           <div className="mx-auto mt-8 max-w-xs rounded-xl border bg-card p-5 text-center">
             <span className="mx-auto grid size-12 place-items-center rounded-full bg-secondary">
@@ -200,6 +253,11 @@ export function ChatPanel({ projectName, aiMode = 'assistant' }: { projectName?:
           </div>
         ) : (
           <div>
+            {history.isFetchingNextPage && (
+              <p className="flex justify-center py-2">
+                <Loader2 className="size-4 animate-spin text-muted-foreground" />
+              </p>
+            )}
             {allMessages.length === 0 && !history.isLoading && (
               <p className="pt-6 text-center text-sm text-muted-foreground">{t('chat.groupHint')}</p>
             )}
@@ -235,7 +293,21 @@ export function ChatPanel({ projectName, aiMode = 'assistant' }: { projectName?:
             <div ref={bottomRef} />
           </div>
         )}
+
+        {/* Кнопка «вниз» при новых сообщениях / когда не у низа */}
+        {!llmMissing && !atBottom && (
+          <button
+            onClick={scrollToBottom}
+            className="sticky bottom-2 float-end me-1 flex items-center gap-1 rounded-full border bg-card px-2.5 py-1.5 text-xs shadow-md hover:bg-accent"
+          >
+            <ArrowDown className="size-3.5" />
+            {newBelow && <span className="size-2 rounded-full bg-brand" />}
+          </button>
+        )}
       </div>
+
+      {/* Поиск по чату */}
+      {searchOpen && projectId && <ChatSearch projectId={projectId} lang={i18n.language} onClose={() => setSearchOpen(false)} />}
 
       {/* Личный ИИ-канал — оверлей поверх чата (тот же паттерн, что sandbox) */}
       {aiOpen && !sandboxId && (
@@ -420,6 +492,84 @@ function MessageAttachments({ attachments }: { attachments: NonNullable<ChatMess
           ))}
         </div>
       )}
+    </div>
+  )
+}
+
+// Поиск по чату: текст / только с файлами / только со ссылками
+function ChatSearch({ projectId, lang, onClose }: { projectId: string; lang: string; onClose: () => void }) {
+  const { t } = useTranslation()
+  const [q, setQ] = useState('')
+  const [type, setType] = useState<'all' | 'files' | 'links'>('all')
+  const [debounced, setDebounced] = useState('')
+
+  useEffect(() => {
+    const id = setTimeout(() => setDebounced(q), 300)
+    return () => clearTimeout(id)
+  }, [q])
+
+  const results = useQuery({
+    queryKey: ['chat-search', projectId, debounced, type],
+    enabled: debounced.trim().length > 0 || type !== 'all',
+    queryFn: () => api<ChatMessage[]>(`/api/v1/messages/search?q=${encodeURIComponent(debounced)}&type=${type}`, {}, 'project'),
+  })
+
+  return (
+    <div className="absolute inset-0 z-40 flex flex-col bg-background/98 backdrop-blur-sm">
+      <header className="flex items-center gap-2 border-b p-3">
+        <div className="relative flex-1">
+          <Search className="pointer-events-none absolute start-2.5 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
+          <input
+            autoFocus
+            value={q}
+            onChange={(e) => setQ(e.target.value)}
+            placeholder={t('chatSearch.placeholder')}
+            className="h-9 w-full rounded-md border bg-transparent ps-9 pe-3 text-sm outline-none focus:ring-2 focus:ring-ring"
+          />
+        </div>
+        <Button variant="ghost" size="icon" onClick={onClose}>
+          <X className="size-4" />
+        </Button>
+      </header>
+
+      <div className="flex gap-1.5 border-b px-3 py-2">
+        {(['all', 'files', 'links'] as const).map((tp) => (
+          <button
+            key={tp}
+            onClick={() => setType(tp)}
+            className={cn(
+              'rounded-full border px-2.5 py-1 text-xs transition-colors',
+              type === tp ? 'border-brand bg-accent text-accent-foreground' : 'text-muted-foreground hover:text-foreground',
+            )}
+          >
+            {t(`chatSearch.type.${tp}`)}
+          </button>
+        ))}
+      </div>
+
+      <div className="flex-1 space-y-1 overflow-y-auto p-3">
+        {results.isFetching && <p className="py-4 text-center text-sm text-muted-foreground">…</p>}
+        {results.data?.map((m) => (
+          <div key={m.id} className="rounded-lg border bg-card px-3 py-2">
+            <p className="mb-0.5 flex items-baseline gap-2 text-xs">
+              <span className="font-semibold">{m.author?.name ?? 'AI'}</span>
+              <span className="text-muted-foreground">{new Date(m.createdAt).toLocaleString(lang)}</span>
+            </p>
+            <div className="msg-md line-clamp-3 break-words text-sm">
+              <ReactMarkdown>{renderMentions(m.text)}</ReactMarkdown>
+            </div>
+            {(m.attachments?.length ?? 0) > 0 && (
+              <p className="mt-1 text-xs text-muted-foreground">📎 {m.attachments!.map((a) => a.name).join(', ')}</p>
+            )}
+          </div>
+        ))}
+        {results.data && results.data.length === 0 && (debounced.trim() || type !== 'all') && (
+          <p className="py-6 text-center text-sm text-muted-foreground">{t('start.nothingFound')}</p>
+        )}
+        {!results.data && !results.isFetching && (
+          <p className="py-6 text-center text-sm text-muted-foreground">{t('chatSearch.hint')}</p>
+        )}
+      </div>
     </div>
   )
 }
