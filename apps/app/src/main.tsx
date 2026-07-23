@@ -62,7 +62,7 @@ createRoot(document.getElementById('root')!).render(
               <Route path="/auth" element={<AuthCallback />} />
               <Route path="/start" element={<StartScreen />} />
               <Route path="/p/:id" element={<ProjectLayout />}>
-                <Route index element={<Navigate to="about" replace />} />
+                <Route index element={<Navigate to="tasks" replace />} />
                 <Route path="about" element={<AboutPage />} />
                 {/* :taskId — прямая ссылка на задачу (drawer открыт по URL) */}
                 <Route path="tasks/:taskId?" element={<TasksPage />} />
