@@ -33,11 +33,27 @@ export const STATUS_ICON: Record<Status, typeof Circle> = {
   done: CircleCheck,
 }
 
+// Цвета статусов: путь задачи серый → синий → фиолетовый → лайм
+export const STATUS_COLOR: Record<Status, string> = {
+  todo: 'text-muted-foreground',
+  in_progress: 'text-sky-400',
+  review: 'text-violet-400',
+  done: 'text-brand',
+}
+
 export const PRIORITY_COLOR: Record<Priority, string> = {
   low: 'text-muted-foreground',
   normal: 'text-foreground/70',
   high: 'text-orange-400',
   urgent: 'text-destructive',
+}
+
+// Заливка кружков приоритета (чипы)
+export const PRIORITY_DOT: Record<Priority, string> = {
+  low: 'bg-muted-foreground',
+  normal: 'bg-foreground/70',
+  high: 'bg-orange-400',
+  urgent: 'bg-destructive',
 }
 
 export function isOverdue(t: Task) {

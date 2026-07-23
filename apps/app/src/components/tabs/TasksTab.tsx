@@ -15,7 +15,7 @@ import {
   DropdownMenuCheckItem,
 } from '@/components/ui/dropdown-menu'
 import { TaskDrawer } from './tasks/TaskDrawer'
-import { STATUSES, PRIORITIES, STATUS_ICON, PRIORITY_COLOR, isOverdue, type Task, type Member, type Status, type Priority } from './tasks/types'
+import { STATUSES, PRIORITIES, STATUS_ICON, STATUS_COLOR, PRIORITY_COLOR, isOverdue, type Task, type Member, type Status, type Priority } from './tasks/types'
 
 // Таб «Задачи»: список по статусам + drawer с деталями и вложениями (SPEC §4.3 — права)
 export function TasksTab({ projectId, meId }: { projectId: string; meId?: string }) {
@@ -186,7 +186,7 @@ export function TasksTab({ projectId, meId }: { projectId: string; meId?: string
                   }}
                 >
                   <h3 className="mb-2 flex items-center gap-2 text-sm font-semibold text-muted-foreground">
-                    <Icon className={cn('size-4', status === 'done' && 'text-brand')} />
+                    <Icon className={cn('size-4', STATUS_COLOR[status])} />
                     {t(`tasks.status.${status}`)}
                     <span className="tabular-nums">({list.length})</span>
                   </h3>
@@ -319,7 +319,7 @@ function TaskRow({
       <DropdownMenu>
         <DropdownMenuTrigger asChild>
           <button title={t(`tasks.status.${task.status}`)} className="shrink-0" onClick={(e) => e.stopPropagation()}>
-            <StatusIcon className={cn('size-[18px]', task.status === 'done' ? 'text-brand' : 'text-muted-foreground hover:text-foreground')} />
+            <StatusIcon className={cn('size-[18px] transition-colors', STATUS_COLOR[task.status])} />
           </button>
         </DropdownMenuTrigger>
         <DropdownMenuContent align="start">

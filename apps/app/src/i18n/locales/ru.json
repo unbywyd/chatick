@@ -74,6 +74,7 @@
     "statusLabel": "Статус",
     "priorityLabel": "Приоритет",
     "assigneeLabel": "Исполнитель",
+    "clearDue": "Убрать дедлайн",
     "attachments": "Вложения",
     "attach": "Прикрепить",
     "attachHint": "Перетащите файлы сюда или нажмите «Прикрепить»",

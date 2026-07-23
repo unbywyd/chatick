@@ -74,6 +74,7 @@
     "statusLabel": "Status",
     "priorityLabel": "Priority",
     "assigneeLabel": "Assignee",
+    "clearDue": "Clear due date",
     "attachments": "Attachments",
     "attach": "Attach",
     "attachHint": "Drag files here or click Attach",

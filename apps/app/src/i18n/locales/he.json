@@ -74,6 +74,7 @@
     "statusLabel": "סטטוס",
     "priorityLabel": "עדיפות",
     "assigneeLabel": "אחראי",
+    "clearDue": "להסיר תאריך יעד",
     "attachments": "קבצים מצורפים",
     "attach": "לצרף",
     "attachHint": "גררו קבצים לכאן או לחצו «לצרף»",

@@ -7,7 +7,6 @@ import {
   Download,
   ExternalLink,
   File,
-  Flag,
   Loader2,
   Paperclip,
   Trash2,
@@ -26,7 +25,9 @@ import {
   DropdownMenuItem,
   DropdownMenuCheckItem,
 } from '@/components/ui/dropdown-menu'
-import { STATUSES, PRIORITIES, STATUS_ICON, PRIORITY_COLOR, type Task, type Member } from './types'
+import { Popover, PopoverTrigger, PopoverContent } from '@/components/ui/popover'
+import { Calendar } from '@/components/ui/calendar'
+import { STATUSES, PRIORITIES, STATUS_ICON, STATUS_COLOR, PRIORITY_DOT, type Task, type Member } from './types'
 
 type Attachment = {
   id: string
@@ -142,7 +143,6 @@ export function TaskDrawer({
   })
 
   const confirm = useConfirm()
-  const StatusIcon = STATUS_ICON[task.status]
   const canPreviewInline = (mime: string) => mime.startsWith('image/') || mime === 'application/pdf'
 
   return (
@@ -184,87 +184,104 @@ export function TaskDrawer({
           {/* Title */}
           <Input value={title} onChange={(e) => setTitle(e.target.value)} className="border-0 px-0 text-lg font-semibold focus:ring-0" />
 
-          {/* Properties */}
-          <div className="grid grid-cols-2 gap-2">
+          {/* Properties: чипы-кнопки вместо селектов — выбор одним кликом */}
+          <div className="space-y-3">
             <PropRow label={t('tasks.statusLabel')}>
-              <DropdownMenu>
-                <DropdownMenuTrigger asChild>
-                  <Button variant="outline" size="sm" className="w-full justify-start gap-2">
-                    <StatusIcon className={cn('size-3.5', task.status === 'done' && 'text-brand')} />
-                    {t(`tasks.status.${task.status}`)}
-                  </Button>
-                </DropdownMenuTrigger>
-                <DropdownMenuContent>
-                  {STATUSES.map((s) => {
-                    const Icon = STATUS_ICON[s]
-                    return (
-                      <DropdownMenuCheckItem key={s} checked={s === task.status} onSelect={() => onPatch({ status: s })}>
-                        <Icon className="size-3.5" />
-                        {t(`tasks.status.${s}`)}
-                      </DropdownMenuCheckItem>
-                    )
-                  })}
-                </DropdownMenuContent>
-              </DropdownMenu>
+              <div className="flex flex-wrap gap-1.5">
+                {STATUSES.map((s) => {
+                  const Icon = STATUS_ICON[s]
+                  const active = s === task.status
+                  return (
+                    <button
+                      key={s}
+                      type="button"
+                      onClick={() => onPatch({ status: s })}
+                      className={cn(
+                        'inline-flex items-center gap-1.5 rounded-full border px-2.5 py-1 text-xs transition-colors',
+                        active ? 'border-current bg-accent font-medium' : 'text-muted-foreground hover:text-foreground',
+                        active && STATUS_COLOR[s],
+                      )}
+                    >
+                      <Icon className={cn('size-3.5', STATUS_COLOR[s])} />
+                      {t(`tasks.status.${s}`)}
+                    </button>
+                  )
+                })}
+              </div>
             </PropRow>
 
             <PropRow label={t('tasks.priorityLabel')}>
-              <DropdownMenu>
-                <DropdownMenuTrigger asChild>
-                  <Button variant="outline" size="sm" className="w-full justify-start gap-2">
-                    <Flag className={cn('size-3.5', PRIORITY_COLOR[task.priority])} />
-                    {t(`tasks.priority.${task.priority}`)}
-                  </Button>
-                </DropdownMenuTrigger>
-                <DropdownMenuContent>
-                  {PRIORITIES.map((p) => (
-                    <DropdownMenuCheckItem key={p} checked={p === task.priority} onSelect={() => onPatch({ priority: p })}>
-                      <Flag className={cn('size-3.5', PRIORITY_COLOR[p])} />
+              <div className="flex flex-wrap gap-1.5">
+                {PRIORITIES.map((p) => {
+                  const active = p === task.priority
+                  return (
+                    <button
+                      key={p}
+                      type="button"
+                      onClick={() => onPatch({ priority: p })}
+                      className={cn(
+                        'inline-flex items-center gap-1.5 rounded-full border px-2.5 py-1 text-xs transition-colors',
+                        active ? 'border-brand bg-accent font-medium text-accent-foreground' : 'text-muted-foreground hover:text-foreground',
+                      )}
+                    >
+                      <span className={cn('size-2 rounded-full', PRIORITY_DOT[p])} />
                       {t(`tasks.priority.${p}`)}
-                    </DropdownMenuCheckItem>
-                  ))}
-                </DropdownMenuContent>
-              </DropdownMenu>
+                    </button>
+                  )
+                })}
+              </div>
             </PropRow>
 
-            <PropRow label={t('tasks.assigneeLabel')}>
-              <DropdownMenu>
-                <DropdownMenuTrigger asChild>
-                  <Button variant="outline" size="sm" className="w-full justify-start gap-2">
-                    <User className="size-3.5 text-muted-foreground" />
-                    <span className="truncate">{task.assignee?.name ?? t('tasks.unassigned')}</span>
-                  </Button>
-                </DropdownMenuTrigger>
-                <DropdownMenuContent>
-                  <DropdownMenuItem onSelect={() => onPatch({ assigneeId: null })}>
-                    <X className="size-3.5" />
-                    {t('tasks.unassigned')}
-                  </DropdownMenuItem>
-                  {members.map((m) => (
-                    <DropdownMenuCheckItem key={m.user.id} checked={task.assignee?.id === m.user.id} onSelect={() => onPatch({ assigneeId: m.user.id })}>
-                      {m.user.name || m.user.email}
-                    </DropdownMenuCheckItem>
-                  ))}
-                </DropdownMenuContent>
-              </DropdownMenu>
-            </PropRow>
+            <div className="grid grid-cols-2 gap-2">
+              <PropRow label={t('tasks.assigneeLabel')}>
+                <DropdownMenu>
+                  <DropdownMenuTrigger asChild>
+                    <Button variant="outline" size="sm" className="w-full justify-start gap-2">
+                      <User className="size-3.5 text-muted-foreground" />
+                      <span className="truncate">{task.assignee?.name ?? t('tasks.unassigned')}</span>
+                    </Button>
+                  </DropdownMenuTrigger>
+                  <DropdownMenuContent>
+                    <DropdownMenuItem onSelect={() => onPatch({ assigneeId: null })}>
+                      <X className="size-3.5" />
+                      {t('tasks.unassigned')}
+                    </DropdownMenuItem>
+                    {members.map((m) => (
+                      <DropdownMenuCheckItem key={m.user.id} checked={task.assignee?.id === m.user.id} onSelect={() => onPatch({ assigneeId: m.user.id })}>
+                        {m.user.name || m.user.email}
+                      </DropdownMenuCheckItem>
+                    ))}
+                  </DropdownMenuContent>
+                </DropdownMenu>
+              </PropRow>
 
-            <PropRow label={t('tasks.due')}>
-              <label className="relative block">
-                <span className="inline-flex h-8 w-full items-center gap-2 rounded-md border px-3 text-xs font-medium">
-                  <CalendarDays className="size-3.5 text-muted-foreground" />
-                  {task.dueDate
-                    ? new Date(task.dueDate).toLocaleDateString(i18n.language, { day: 'numeric', month: 'short', year: 'numeric' })
-                    : '—'}
-                </span>
-                <input
-                  type="date"
-                  value={task.dueDate ? task.dueDate.slice(0, 10) : ''}
-                  onChange={(e) => onPatch({ dueDate: e.target.value ? new Date(e.target.value + 'T12:00:00').toISOString() : null })}
-                  className="absolute inset-0 cursor-pointer opacity-0"
-                />
-              </label>
-            </PropRow>
+              <PropRow label={t('tasks.due')}>
+                <Popover>
+                  <PopoverTrigger asChild>
+                    <Button variant="outline" size="sm" className="w-full justify-start gap-2">
+                      <CalendarDays className="size-3.5 text-muted-foreground" />
+                      {task.dueDate
+                        ? new Date(task.dueDate).toLocaleDateString(i18n.language, { day: 'numeric', month: 'short', year: 'numeric' })
+                        : '—'}
+                    </Button>
+                  </PopoverTrigger>
+                  <PopoverContent align="end" className="w-auto">
+                    <Calendar
+                      selected={task.dueDate ? new Date(task.dueDate) : undefined}
+                      onSelect={(d) =>
+                        onPatch({ dueDate: d ? new Date(d.getFullYear(), d.getMonth(), d.getDate(), 12).toISOString() : null })
+                      }
+                    />
+                    {task.dueDate && (
+                      <Button variant="ghost" size="sm" className="mt-1 w-full" onClick={() => onPatch({ dueDate: null })}>
+                        <X className="size-3.5" />
+                        {t('tasks.clearDue')}
+                      </Button>
+                    )}
+                  </PopoverContent>
+                </Popover>
+              </PropRow>
+            </div>
           </div>
 
           {/* Description */}
