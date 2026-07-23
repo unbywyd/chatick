@@ -90,7 +90,13 @@ messagesRoute.post(
   ),
   async (c) => {
     const { projectId, sub } = c.get('auth')
-    const { text, mode, replyToId, attachmentIds, raw } = c.req.valid('json')
+    const { text, replyToId, attachmentIds, raw } = c.req.valid('json')
+    let { mode } = c.req.valid('json')
+
+    // @AI в группе → сообщение уходит в личный ИИ-канал, группа его не видит (по решению 2026-07-23)
+    const mentionsAi = /@\[[^\]]*\]\(ai\)/.test(text)
+    const redirectedToAi = mode === 'group' && mentionsAi
+    if (redirectedToAi) mode = 'ai'
 
     // чисто файловые сообщения (без содержательного текста) не фильтруем — нечего оценивать
     const attachmentOnly = attachmentIds.length > 0 && (!text.trim() || text.trim() === '📎')
@@ -100,6 +106,7 @@ messagesRoute.post(
       .values({
         projectId,
         authorId: sub,
+        recipientId: mode === 'ai' ? sub : null, // ai-диалог приватен
         mode,
         status: mode === 'group' && !raw && !attachmentOnly ? 'pending' : 'delivered',
         rawSend: raw,
@@ -132,7 +139,7 @@ messagesRoute.post(
         // ai-режим приватный: шлём только автору
         sendToUser(projectId, sub, 'message', serialize(aiRow!))
       })()
-      return c.json(message, 201)
+      return c.json({ ...message, redirectedToAi }, 201)
     }
 
     if (raw || attachmentOnly) {

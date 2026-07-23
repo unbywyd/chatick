@@ -229,6 +229,7 @@
     "rawSend": "לשלוח כמו שזה (raw)",
     "rawSendHint": "לדלג על בדיקת ה-AI — עם תווית «לא נבדק»",
     "rawBadge": "לא נבדק",
+    "redirectedToAi": "השאלה ל-AI עברה לערוץ ה-AI הפרטי",
     "verifying": "בודקים את ההודעה שלך…",
     "typing_one": "{{names}} כותב…",
     "typing_other": "{{names}} כותבים…"

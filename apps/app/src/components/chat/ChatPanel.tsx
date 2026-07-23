@@ -110,7 +110,7 @@ export function ChatPanel({ projectName, aiMode = 'assistant' }: { projectName?:
   const send = async ({ markdown, mentionIds, attachmentIds, raw }: { markdown: string; mentionIds: string[]; attachmentIds: string[]; raw?: boolean }) => {
     try {
       if (mode === 'group' && !raw) setMyPending(true) // «проверяется…» до вердикта
-      const created = await api<ChatMessage>(
+      const created = await api<ChatMessage & { redirectedToAi?: boolean }>(
         '/api/v1/messages',
         { method: 'POST', body: JSON.stringify({ text: markdown, mode, attachmentIds, raw: Boolean(raw) }) },
         'project',
@@ -119,8 +119,12 @@ export function ChatPanel({ projectName, aiMode = 'assistant' }: { projectName?:
         setLive((prev) => (prev.some((x) => x.id === created.id) ? prev : [...prev, created]))
         setMyPending(false)
       }
-      if (mode === 'ai') setAiThinking(true)
-      // упоминание @AI — прямое обращение к диспетчеру (подключится в следующем слое)
+      // @AI в группе → сообщение автоматически ушло в личный ИИ-канал
+      if (created.redirectedToAi) {
+        setMode('ai')
+        toast.info(t('chat.redirectedToAi'))
+      }
+      if (mode === 'ai' || created.redirectedToAi) setAiThinking(true)
       void mentionIds.includes(AI_MENTION_ID)
     } catch (e) {
       setMyPending(false)
