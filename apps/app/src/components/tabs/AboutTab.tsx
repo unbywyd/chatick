@@ -49,7 +49,7 @@ export function AboutTab({ project, loading }: { project?: ProjectDetails; loadi
       about: project.about,
       chatRules: project.chatRules,
       aiConfig: { ...DEFAULT_AI_CONFIG, ...project.aiConfig },
-      storageLimit: project.storageLimit != null ? Number(project.storageLimit) : undefined,
+      storageLimit: project.storageLimit != null ? Number(project.storageLimit) : null,
     })
     setEditing(true)
   }

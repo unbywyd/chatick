@@ -38,7 +38,7 @@ export type ProjectSettings = {
   about: string
   chatRules: string
   aiConfig: AiConfig
-  storageLimit?: number // байты; 0 = без лимита
+  storageLimit?: number | null // байты; null = наследовать компанию; число = override
 }
 
 const GB = 1024 * 1024 * 1024
@@ -135,7 +135,7 @@ export function ProjectSettingsForm({
             />
           </Field>
 
-          {/* Лимит хранилища */}
+          {/* Лимит хранилища проекта (override; по умолчанию наследует пул компании) */}
           <div className="flex items-center justify-between gap-3">
             <div>
               <p className="text-sm font-medium">{t('projectForm.storageLimit')}</p>
@@ -144,19 +144,19 @@ export function ProjectSettingsForm({
             <DropdownMenu>
               <DropdownMenuTrigger asChild>
                 <Button variant="outline" size="sm" className="gap-1.5">
-                  {value.storageLimit && value.storageLimit > 0 ? `${(value.storageLimit / GB).toFixed(0)} GB` : t('projectForm.noLimit')}
+                  {value.storageLimit == null ? t('projectForm.inheritCompany') : value.storageLimit > 0 ? `${(value.storageLimit / GB).toFixed(0)} GB` : t('projectForm.noLimit')}
                   <ChevronDown className="size-3.5 text-muted-foreground" />
                 </Button>
               </DropdownMenuTrigger>
               <DropdownMenuContent align="end">
+                <DropdownMenuCheckItem checked={value.storageLimit == null} onSelect={() => set('storageLimit', null)}>
+                  {t('projectForm.inheritCompany')}
+                </DropdownMenuCheckItem>
                 {STORAGE_OPTIONS.map((gb) => (
                   <DropdownMenuCheckItem key={gb} checked={value.storageLimit === gb * GB} onSelect={() => set('storageLimit', gb * GB)}>
                     {gb} GB
                   </DropdownMenuCheckItem>
                 ))}
-                <DropdownMenuCheckItem checked={value.storageLimit === 0} onSelect={() => set('storageLimit', 0)}>
-                  {t('projectForm.noLimit')}
-                </DropdownMenuCheckItem>
               </DropdownMenuContent>
             </DropdownMenu>
           </div>

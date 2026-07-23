@@ -61,6 +61,11 @@ export const companies = pgTable('companies', {
   llmProvider: text('llm_provider'), // anthropic | openai | google | deepseek | groq
   llmModel: text('llm_model'),
   llmKeyEncrypted: text('llm_key_encrypted'),
+  // Лимиты уровня компании (задел под подписки; настраиваются через БД). 0 = без лимита.
+  storageLimit: text('storage_limit').notNull().default(String(5 * 1024 * 1024 * 1024)), // общий пул хранилища
+  maxProjects: text('max_projects').notNull().default('0'), // 0 = без лимита
+  maxMembers: text('max_members').notNull().default('0'),
+  plan: text('plan').notNull().default('free'), // ярлык тарифа (для будущего биллинга)
   createdAt: createdAt(),
   updatedAt: updatedAt(),
 })
@@ -121,8 +126,8 @@ export const projects = pgTable(
     chatRules: text('chat_rules').notNull().default(''),
     // курсор сжатия переписки (SPEC §5.6): сообщения старше — уже в саммари
     lastSummarizedAt: timestamp('last_summarized_at', { withTimezone: true }),
-    // лимит хранилища проекта в байтах (дефолт 2 GB); настраивается owner/admin
-    storageLimit: text('storage_limit').notNull().default(String(2 * 1024 * 1024 * 1024)),
+    // override лимита хранилища проекта в байтах; NULL = наследует пул компании (SPEC §7)
+    storageLimit: text('storage_limit'),
     createdAt: createdAt(),
     updatedAt: updatedAt(),
   },

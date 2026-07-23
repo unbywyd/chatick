@@ -7,7 +7,7 @@ import { z } from 'zod'
 import sharp from 'sharp'
 import { PutObjectCommand } from '@aws-sdk/client-s3'
 import { db } from '../db/client.js'
-import { files, projects, tasks, users } from '../db/schema.js'
+import { files, companies, projects, tasks, users } from '../db/schema.js'
 import { requireProject, signFileToken, verifyFileToken, type ProjectEnv } from '../auth.js'
 import { s3Client, presignDownload, presignView, deleteObject, getObjectStream, S3_KEY_PREFIX, s3Bucket } from '../lib/s3.js'
 
@@ -56,6 +56,36 @@ async function storageUsage(projectId: string): Promise<number> {
   return Number(total)
 }
 
+async function companyStorageUsage(companyId: string): Promise<number> {
+  const [{ total }] = (await db
+    .select({ total: sql<string>`coalesce(sum(cast(${files.size} as bigint)), 0)` })
+    .from(files)
+    .innerJoin(projects, eq(projects.id, files.projectId))
+    .where(eq(projects.companyId, companyId))) as [{ total: string }]
+  return Number(total)
+}
+
+/**
+ * Эффективный лимит проекта (SPEC §7): min(override проекта, остаток пула компании).
+ * used — сколько уже занято в этом проекте. Возвращает лимит в байтах (0 = без лимита).
+ */
+async function effectiveLimit(project: typeof projects.$inferSelect): Promise<{ limit: number; used: number }> {
+  const used = await storageUsage(project.id)
+  const company = await db.query.companies.findFirst({ where: eq(companies.id, project.companyId) })
+  const companyLimit = Number(company?.storageLimit ?? 0)
+  const projectOverride = project.storageLimit != null ? Number(project.storageLimit) : null
+
+  const candidates: number[] = []
+  if (projectOverride && projectOverride > 0) candidates.push(projectOverride)
+  if (companyLimit > 0) {
+    // доступное этому проекту = его used + (свободное в пуле компании)
+    const companyUsed = await companyStorageUsage(project.companyId)
+    candidates.push(used + Math.max(0, companyLimit - companyUsed))
+  }
+  const limit = candidates.length ? Math.min(...candidates) : 0
+  return { limit, used }
+}
+
 // Список файлов проекта (фильтры: taskId, q, from/to по дате; пагинация; + usage/limit)
 filesRoute.get('/', async (c) => {
   const { projectId } = c.get('auth')
@@ -94,11 +124,11 @@ filesRoute.get('/', async (c) => {
     uploader: r.uploader ? { id: r.uploader.id, name: r.uploader.name, avatarUrl: r.uploader.avatarUrl } : null,
   }))
 
-  // usage/limit отдаём только на первой странице без фильтров (полное состояние хранилища)
+  // usage/limit отдаём только на первой странице (эффективный лимит: проект+пул компании)
   let storage: { used: number; limit: number } | undefined
   if (page === 1) {
     const project = await db.query.projects.findFirst({ where: eq(projects.id, projectId) })
-    storage = { used: await storageUsage(projectId), limit: Number(project?.storageLimit ?? 0) }
+    storage = project ? await effectiveLimit(project) : undefined
   }
 
   return c.json({ items, page, hasMore, storage })
@@ -125,11 +155,13 @@ filesRoute.post('/', async (c) => {
   }
   if (file.size > MAX_FILE_MB * 1024 * 1024) return c.json({ error: `File too large (max ${MAX_FILE_MB}MB)` }, 413)
 
-  // лимит хранилища проекта
+  // эффективный лимит: min(override проекта, остаток пула компании) — SPEC §7
   const project = await db.query.projects.findFirst({ where: eq(projects.id, projectId) })
-  const limit = Number(project?.storageLimit ?? 0)
-  if (limit > 0 && (await storageUsage(projectId)) + file.size > limit) {
-    return c.json({ error: 'Storage limit exceeded', code: 'STORAGE_LIMIT' }, 413)
+  if (project) {
+    const { limit, used } = await effectiveLimit(project)
+    if (limit > 0 && used + file.size > limit) {
+      return c.json({ error: 'Storage limit exceeded', code: 'STORAGE_LIMIT' }, 413)
+    }
   }
 
   const fileId = nanoid()

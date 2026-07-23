@@ -173,7 +173,7 @@ projectsRoute.patch(
       about: z.string().max(5000).optional(),
       aiConfig: aiConfigSchema.partial().optional(),
       chatRules: z.string().max(CHAT_RULES_MAX).optional(),
-      storageLimit: z.number().int().min(0).optional(), // байты; 0 = без лимита
+      storageLimit: z.number().int().min(0).nullable().optional(), // байты; null = наследовать компанию, 0 = без override (безлимит в рамках компании)
     }),
   ),
   async (c) => {
@@ -192,7 +192,7 @@ projectsRoute.patch(
     if (name !== undefined) patch.name = name
     if (about !== undefined) patch.about = about
     if (chatRules !== undefined) patch.chatRules = chatRules
-    if (storageLimit !== undefined) patch.storageLimit = String(storageLimit)
+    if (storageLimit !== undefined) patch.storageLimit = storageLimit === null ? null : String(storageLimit)
     if (aiConfig !== undefined) {
       const current = JSON.parse(project.aiConfig || '{}')
       patch.aiConfig = JSON.stringify({ ...current, ...aiConfig })
