@@ -1,7 +1,8 @@
 import { and, desc, eq } from 'drizzle-orm'
 import { db } from '../db/client.js'
 import { messages, projects, sandboxMessages, users } from '../db/schema.js'
-import { projectLlm, complete, completeStream } from './llm.js'
+import { projectLlm, complete, completeStream, completeWithTools } from './llm.js'
+import { buildMemoryContext, memoryTools } from './memory.js'
 
 // ИИ-диспетчер (SPEC §5.5): оценка сообщений группы (PASS/HOLD) и sandbox-диалог.
 // Все ответы модели — строгий JSON; парсинг устойчив к ```json обёрткам.
@@ -52,6 +53,40 @@ function parseJson<T>(text: string | null): T | null {
       return null
     }
   }
+}
+
+/**
+ * Ответ ИИ в личном режиме («ИИ»-таб чата): полный доступ к памяти и инструментам,
+ * CRUD задач — строго в пределах пермишенов автора (SPEC §5.6).
+ */
+export async function aiChatReply(projectId: string, userId: string, userMessage: string): Promise<string | null> {
+  const project = await db.query.projects.findFirst({ where: eq(projects.id, projectId) })
+  if (!project) return null
+  const cfg = await projectLlm(projectId)
+  if (!cfg) return null
+
+  const ai = JSON.parse(project.aiConfig || '{}') as AiConfig
+  const lang = LANG_NAMES[ai.language ?? 'en'] ?? 'English'
+  const user = await db.query.users.findFirst({ where: eq(users.id, userId) })
+  const context = await buildMemoryContext(projectId)
+  const { tools, handlers } = memoryTools(projectId, userId)
+
+  return completeWithTools(cfg, {
+    system: [
+      `You are the AI assistant of the project "${project.name}". Project language: ${lang}.`,
+      `You are talking privately with ${user?.name ?? 'a member'}. Answer in THEIR language.`,
+      project.chatRules ? `Chat rules: "${project.chatRules}"` : '',
+      'You have tools: conversation summaries, full-history search, files, and task CRUD.',
+      'Task actions are permission-checked per user — if a tool returns PERMISSION DENIED, politely explain the user lacks that permission.',
+      'Prefer looking things up with tools over guessing. Be concise.',
+    ]
+      .filter(Boolean)
+      .join('\n'),
+    user: `${context}\n\nUSER'S MESSAGE:\n${userMessage}`,
+    tools,
+    handlers,
+    maxTokens: 1500,
+  })
 }
 
 async function recentContext(projectId: string, excludeId: string, limit = 15): Promise<string> {
@@ -108,11 +143,12 @@ export async function evaluateMessage(messageId: string): Promise<Verdict> {
   if (!cfg) return { verdict: 'pass' }
 
   const author = msg.authorId ? await db.query.users.findFirst({ where: eq(users.id, msg.authorId) }) : null
-  const context = await recentContext(msg.projectId, msg.id)
+  // трёхслойная память (SPEC §5.6): оглавление саммари + последнее саммари + живой хвост
+  const context = await buildMemoryContext(msg.projectId)
 
   const raw = await complete(cfg, {
     system: dispatcherSystem(project, ai, author?.name ?? 'Unknown'),
-    user: `Recent chat:\n${context || '(empty)'}\n\nIncoming message:\n${msg.text}`,
+    user: `${context}\n\nINCOMING MESSAGE (judge only this):\n${msg.text}`,
     maxTokens: 500,
   })
   const parsed = parseJson<Verdict>(raw)

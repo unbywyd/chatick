@@ -30,6 +30,7 @@ export function ChatPanel({ projectName, aiMode = 'assistant' }: { projectName?:
   const [myPending, setMyPending] = useState(false) // «проверяется…» у автора
   const [sandboxId, setSandboxId] = useState<string | null>(null)
   const [sandboxStream, setSandboxStream] = useState('') // постепенная печать ответа ИИ
+  const [aiThinking, setAiThinking] = useState(false) // ai-режим: ждём ответ
   const bottomRef = useRef<HTMLDivElement>(null)
 
   const llm = useQuery({
@@ -55,6 +56,7 @@ export function ChatPanel({ projectName, aiMode = 'assistant' }: { projectName?:
   useEffect(() => setLive([]), [projectId])
 
   const onWsMessage = useCallback((m: ChatMessage) => {
+    if (m.mode === 'ai' && !m.author) setAiThinking(false)
     setLive((prev) => {
       // finalize мог обновить текст held-сообщения — заменяем по id
       const idx = prev.findIndex((x) => x.id === m.id)
@@ -117,6 +119,7 @@ export function ChatPanel({ projectName, aiMode = 'assistant' }: { projectName?:
         setLive((prev) => (prev.some((x) => x.id === created.id) ? prev : [...prev, created]))
         setMyPending(false)
       }
+      if (mode === 'ai') setAiThinking(true)
       // упоминание @AI — прямое обращение к диспетчеру (подключится в следующем слое)
       void mentionIds.includes(AI_MENTION_ID)
     } catch (e) {
@@ -212,6 +215,12 @@ export function ChatPanel({ projectName, aiMode = 'assistant' }: { projectName?:
               )
             })}
             {/* Индикаторы пайплайна */}
+            {aiThinking && mode === 'ai' && (
+              <p className="mt-2 flex items-center gap-2 px-2 text-xs text-muted-foreground">
+                <Bot className="size-3.5 animate-pulse text-brand" />
+                {t('sandbox.aiThinking')}
+              </p>
+            )}
             {myPending && (
               <p className="mt-2 flex items-center gap-2 px-2 text-xs text-muted-foreground">
                 <span className="size-2 animate-pulse rounded-full bg-brand" />

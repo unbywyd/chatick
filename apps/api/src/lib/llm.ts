@@ -123,6 +123,107 @@ export async function complete(
   }
 }
 
+// --- Tool-use (SPEC §5.6): единый формат инструментов, цикл до N итераций ---
+
+export type ToolDef = {
+  name: string
+  description: string
+  parameters: Record<string, unknown> // JSON Schema
+}
+export type ToolHandler = (args: Record<string, unknown>) => Promise<string>
+
+/**
+ * Диалог с инструментами: модель может вызывать tools, результаты возвращаются ей,
+ * цикл до maxIterations; итог — финальный текст. Anthropic tool_use / OpenAI functions.
+ */
+export async function completeWithTools(
+  cfg: LlmConfig,
+  opts: {
+    system: string
+    user: string
+    tools: ToolDef[]
+    handlers: Record<string, ToolHandler>
+    maxTokens?: number
+    maxIterations?: number
+  },
+): Promise<string | null> {
+  const p = LLM_PROVIDERS[cfg.provider]
+  const maxIter = opts.maxIterations ?? 5
+  try {
+    if (p.kind === 'anthropic') {
+      const tools = opts.tools.map((t) => ({ name: t.name, description: t.description, input_schema: t.parameters }))
+      const msgs: unknown[] = [{ role: 'user', content: opts.user }]
+      for (let i = 0; i < maxIter; i++) {
+        const res = await fetch(`${p.baseUrl}/messages`, {
+          method: 'POST',
+          headers: { 'x-api-key': cfg.apiKey, 'anthropic-version': '2023-06-01', 'content-type': 'application/json' },
+          body: JSON.stringify({ model: cfg.model, max_tokens: opts.maxTokens ?? 1500, system: opts.system, messages: msgs, tools }),
+        })
+        if (!res.ok) {
+          console.error('[llm] tools failed:', res.status, await res.text().catch(() => ''))
+          return null
+        }
+        const data = (await res.json()) as {
+          stop_reason?: string
+          content: ({ type: 'text'; text: string } | { type: 'tool_use'; id: string; name: string; input: Record<string, unknown> })[]
+        }
+        if (data.stop_reason !== 'tool_use') {
+          return data.content.find((b) => b.type === 'text')?.text ?? null
+        }
+        msgs.push({ role: 'assistant', content: data.content })
+        const results = await Promise.all(
+          data.content
+            .filter((b): b is { type: 'tool_use'; id: string; name: string; input: Record<string, unknown> } => b.type === 'tool_use')
+            .map(async (b) => ({
+              type: 'tool_result',
+              tool_use_id: b.id,
+              content: (await opts.handlers[b.name]?.(b.input).catch((e) => `Error: ${e}`)) ?? 'Unknown tool',
+            })),
+        )
+        msgs.push({ role: 'user', content: results })
+      }
+      return null // не сошлось за maxIter
+    }
+
+    // OpenAI-compatible
+    const tools = opts.tools.map((t) => ({ type: 'function', function: { name: t.name, description: t.description, parameters: t.parameters } }))
+    const msgs: unknown[] = [
+      { role: 'system', content: opts.system },
+      { role: 'user', content: opts.user },
+    ]
+    for (let i = 0; i < maxIter; i++) {
+      const res = await fetch(`${p.baseUrl}/chat/completions`, {
+        method: 'POST',
+        headers: { Authorization: `Bearer ${cfg.apiKey}`, 'content-type': 'application/json' },
+        body: JSON.stringify({ model: cfg.model, max_tokens: opts.maxTokens ?? 1500, messages: msgs, tools }),
+      })
+      if (!res.ok) {
+        console.error('[llm] tools failed:', res.status, await res.text().catch(() => ''))
+        return null
+      }
+      const data = (await res.json()) as {
+        choices?: { message?: { content?: string; tool_calls?: { id: string; function: { name: string; arguments: string } }[] } }[]
+      }
+      const msg = data.choices?.[0]?.message
+      if (!msg) return null
+      if (!msg.tool_calls?.length) return msg.content ?? null
+      msgs.push({ role: 'assistant', content: msg.content ?? null, tool_calls: msg.tool_calls })
+      for (const call of msg.tool_calls) {
+        let args: Record<string, unknown> = {}
+        try {
+          args = JSON.parse(call.function.arguments || '{}')
+        } catch { /* пустые аргументы */ }
+        const result = (await opts.handlers[call.function.name]?.(args).catch((e) => `Error: ${e}`)) ?? 'Unknown tool'
+        msgs.push({ role: 'tool', tool_call_id: call.id, content: result })
+      }
+    }
+    return null
+  } catch (err) {
+    console.error('[llm] tools error:', err)
+    return null
+  }
+}
+
 /** Стриминговое дополнение: onChunk получает дельты текста; возвращает полный текст (null при сбое). */
 export async function completeStream(
   cfg: LlmConfig,

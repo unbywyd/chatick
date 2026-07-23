@@ -6,7 +6,8 @@ import { db } from '../db/client.js'
 import { files, messages, sandboxMessages, users } from '../db/schema.js'
 import { requireProject, type ProjectEnv } from '../auth.js'
 import { broadcast, sendToUser } from '../ws.js'
-import { evaluateMessage, sandboxReply } from '../lib/dispatcher.js'
+import { evaluateMessage, sandboxReply, aiChatReply } from '../lib/dispatcher.js'
+import { maybeCompress } from '../lib/memory.js'
 
 // Чат (SPEC §5.5): pending → диспетчер → delivered | held(sandbox) → выбор → delivered.
 // Вложения (files.messageId) прикрепляются до отправки и едут с финальным вариантом.
@@ -62,8 +63,13 @@ messagesRoute.get('/', zValidator('query', z.object({ before: z.string().optiona
     .orderBy(desc(messages.createdAt))
     .limit(80)
 
-  // фильтрация видимости: чужие видят только delivered; свои — все статусы
-  const visible = rows.filter((r) => r.msg.status === 'delivered' || r.msg.authorId === sub).slice(0, 50)
+  // видимость: group delivered — всем; свои любые; ai-режим — только участнику диалога
+  const visible = rows
+    .filter((r) => {
+      if (r.msg.mode === 'ai') return r.msg.authorId === sub || r.msg.recipientId === sub
+      return r.msg.status === 'delivered' || r.msg.authorId === sub
+    })
+    .slice(0, 50)
   const atts = await attachmentsOf(visible.map((r) => r.msg.id))
   return c.json(visible.map((r) => serialize(r.msg, r.author, atts.get(r.msg.id))).reverse())
 })
@@ -114,10 +120,24 @@ messagesRoute.post(
     const atts = await attachmentsOf([row!.id])
     const message = serialize(row!, author, atts.get(row!.id))
 
-    if (mode === 'ai') return c.json(message, 201) // личный диалог с ИИ — отдельный слой
+    if (mode === 'ai') {
+      // личный диалог с ИИ: память + инструменты, CRUD в пределах пермишенов юзера (SPEC §5.6)
+      void (async () => {
+        const answer = await aiChatReply(projectId, sub, text)
+        if (!answer) return
+        const [aiRow] = await db
+          .insert(messages)
+          .values({ projectId, authorId: null, recipientId: sub, mode: 'ai', status: 'delivered', text: answer })
+          .returning()
+        // ai-режим приватный: шлём только автору
+        sendToUser(projectId, sub, 'message', serialize(aiRow!))
+      })()
+      return c.json(message, 201)
+    }
 
     if (raw || attachmentOnly) {
       broadcast(projectId, 'message', message)
+      void maybeCompress(projectId)
       return c.json(message, 201)
     }
 
@@ -131,6 +151,7 @@ messagesRoute.post(
         const [updated] = await db.update(messages).set({ status: 'delivered' }).where(eq(messages.id, row!.id)).returning()
         broadcast(projectId, 'message', serialize(updated!, author, atts.get(row!.id)))
         broadcast(projectId, 'checking_done', { userId: sub }, { except: sub })
+        void maybeCompress(projectId) // фоновое сжатие памяти (SPEC §5.6)
       } else {
         await db.update(messages).set({ status: 'held' }).where(eq(messages.id, row!.id))
         // первый ход ИИ в sandbox: причина + вопросы (+ вариант, если есть)

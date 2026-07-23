@@ -119,6 +119,8 @@ export const projects = pgTable(
     // --- текстовые правила чата (SPEC.md §4.2) ---
     // жёсткий лимит ~300 символов (валидация на API) — включается в каждый промпт ИИ
     chatRules: text('chat_rules').notNull().default(''),
+    // курсор сжатия переписки (SPEC §5.6): сообщения старше — уже в саммари
+    lastSummarizedAt: timestamp('last_summarized_at', { withTimezone: true }),
     createdAt: createdAt(),
     updatedAt: updatedAt(),
   },
@@ -171,6 +173,8 @@ export const messages = pgTable(
     status: messageStatus('status').notNull().default('pending'),
     // отправлено в обход/вопреки ИИ — в ленте помечается «без проверки»
     rawSend: boolean('raw_send').notNull().default(false),
+    // ai-режим приватен: ответ ИИ адресован конкретному юзеру
+    recipientId: text('recipient_id').references(() => users.id, { onDelete: 'cascade' }),
     text: text('text').notNull(),
     // переводы: { "ru": "...", "he": "...", "en": "..." } — лениво заполняет ИИ
     translations: text('translations'), // JSON
@@ -239,6 +243,23 @@ export const files = pgTable(
     index('files_task_idx').on(t.taskId),
     index('files_message_idx').on(t.messageId),
   ],
+)
+
+// Саммари бесед (SPEC §5.6): переписка сжимается кусками; имя генерит ИИ.
+// Сырые сообщения не удаляются — по ним работает search_messages.
+export const chatSummaries = pgTable(
+  'chat_summaries',
+  {
+    id: id(),
+    projectId: text('project_id').notNull().references(() => projects.id, { onDelete: 'cascade' }),
+    name: text('name').notNull(), // короткое ИИ-имя беседы: «Обсуждение деплоя API»
+    content: text('content').notNull(), // полное саммари
+    fromAt: timestamp('from_at', { withTimezone: true }).notNull(),
+    toAt: timestamp('to_at', { withTimezone: true }).notNull(),
+    messageCount: text('message_count').notNull().default('0'),
+    createdAt: createdAt(),
+  },
+  (t) => [index('chat_summaries_project_idx').on(t.projectId, t.toAt)],
 )
 
 // Sandbox — приватный диалог автора с ИИ вокруг held-сообщения (SPEC §5.5.3).
