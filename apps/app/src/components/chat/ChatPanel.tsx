@@ -12,6 +12,7 @@ import { Button } from '@/components/ui/button'
 import { useProjectSocket, type ChatMessage } from '@/hooks/useProjectSocket'
 import { Composer, AI_MENTION_ID } from './Composer'
 import { SandboxOverlay } from './SandboxOverlay'
+import { AiOverlay } from './AiOverlay'
 
 type ChatMode = 'group' | 'ai'
 type Member = { id: string; role: string; user: { id: string; name: string; email: string; avatarUrl: string | null } }
@@ -25,7 +26,9 @@ export function ChatPanel({ projectName, aiMode = 'assistant' }: { projectName?:
   const navigate = useNavigate()
   const { id: projectId } = useParams()
   const qc = useQueryClient()
-  const [mode, setMode] = useState<ChatMode>('group')
+  // «ИИ» — не отдельный таб, а оверлей поверх группового чата (единый паттерн с sandbox)
+  const [aiOpen, setAiOpen] = useState(false)
+  const mode: ChatMode = 'group'
   const [checkingUsers, setCheckingUsers] = useState<Map<string, string>>(new Map()) // userId -> name («пишет…»)
   const [myPending, setMyPending] = useState(false) // «проверяется…» у автора
   const [sandboxId, setSandboxId] = useState<string | null>(null)
@@ -87,14 +90,15 @@ export function ChatPanel({ projectName, aiMode = 'assistant' }: { projectName?:
   })
 
   // история + live, дедуп по id; в ленте только delivered (SPEC §5.5.1 — до вердикта не показываем)
-  const allMessages = useMemo(() => {
+  const merged = useMemo(() => {
     const byId = new Map<string, ChatMessage>()
     for (const m of [...(history.data ?? []), ...live]) byId.set(m.id, m)
     return [...byId.values()]
       .filter((m) => m.status === 'delivered')
-      .filter((m) => (mode === 'ai' ? m.mode === 'ai' : m.mode === 'group'))
       .sort((a, b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime())
-  }, [history.data, live, mode])
+  }, [history.data, live])
+  const allMessages = useMemo(() => merged.filter((m) => m.mode === 'group'), [merged])
+  const aiMessages = useMemo(() => merged.filter((m) => m.mode === 'ai'), [merged])
 
   // held-сообщение из истории (после перезагрузки) — снова открыть sandbox
   useEffect(() => {
@@ -107,24 +111,24 @@ export function ChatPanel({ projectName, aiMode = 'assistant' }: { projectName?:
     bottomRef.current?.scrollIntoView({ behavior: 'smooth' })
   }, [allMessages.length])
 
-  const send = async ({ markdown, mentionIds, attachmentIds, raw }: { markdown: string; mentionIds: string[]; attachmentIds: string[]; raw?: boolean }) => {
+  const send = async (
+    { markdown, mentionIds, attachmentIds, raw }: { markdown: string; mentionIds: string[]; attachmentIds: string[]; raw?: boolean },
+    sendMode: ChatMode = 'group',
+  ) => {
     try {
-      if (mode === 'group' && !raw) setMyPending(true) // «проверяется…» до вердикта
+      if (sendMode === 'group' && !raw) setMyPending(true) // «проверяется…» до вердикта
       const created = await api<ChatMessage & { redirectedToAi?: boolean }>(
         '/api/v1/messages',
-        { method: 'POST', body: JSON.stringify({ text: markdown, mode, attachmentIds, raw: Boolean(raw) }) },
+        { method: 'POST', body: JSON.stringify({ text: markdown, mode: sendMode, attachmentIds, raw: Boolean(raw) }) },
         'project',
       )
       if (created.status === 'delivered') {
         setLive((prev) => (prev.some((x) => x.id === created.id) ? prev : [...prev, created]))
         setMyPending(false)
       }
-      // @AI в группе → сообщение автоматически ушло в личный ИИ-канал
-      if (created.redirectedToAi) {
-        setMode('ai')
-        toast.info(t('chat.redirectedToAi'))
-      }
-      if (mode === 'ai' || created.redirectedToAi) setAiThinking(true)
+      // @AI в группе → тот же оверлей, что и перехват: беседа с ИИ поверх чата
+      if (created.redirectedToAi) setAiOpen(true)
+      if (sendMode === 'ai' || created.redirectedToAi) setAiThinking(true)
       void mentionIds.includes(AI_MENTION_ID)
     } catch (e) {
       setMyPending(false)
@@ -175,8 +179,8 @@ export function ChatPanel({ projectName, aiMode = 'assistant' }: { projectName?:
           </div>
 
           <div className="flex rounded-md border p-0.5">
-            <ModeButton active={mode === 'group'} onClick={() => setMode('group')} icon={<Users className="size-3.5" />} label={t('chat.modeGroup')} />
-            <ModeButton active={mode === 'ai'} onClick={() => setMode('ai')} icon={<Bot className="size-3.5" />} label={t('chat.modeAi')} />
+            <ModeButton active={!aiOpen} onClick={() => setAiOpen(false)} icon={<Users className="size-3.5" />} label={t('chat.modeGroup')} />
+            <ModeButton active={aiOpen} onClick={() => setAiOpen(true)} icon={<Bot className="size-3.5" />} label={t('chat.modeAi')} />
           </div>
         </div>
       </header>
@@ -197,9 +201,7 @@ export function ChatPanel({ projectName, aiMode = 'assistant' }: { projectName?:
         ) : (
           <div>
             {allMessages.length === 0 && !history.isLoading && (
-              <p className="pt-6 text-center text-sm text-muted-foreground">
-                {mode === 'group' ? t('chat.groupHint') : t('chat.aiHint')}
-              </p>
+              <p className="pt-6 text-center text-sm text-muted-foreground">{t('chat.groupHint')}</p>
             )}
             {allMessages.map((m, i) => {
               const prev = allMessages[i - 1]
@@ -219,12 +221,6 @@ export function ChatPanel({ projectName, aiMode = 'assistant' }: { projectName?:
               )
             })}
             {/* Индикаторы пайплайна */}
-            {aiThinking && mode === 'ai' && (
-              <p className="mt-2 flex items-center gap-2 px-2 text-xs text-muted-foreground">
-                <Bot className="size-3.5 animate-pulse text-brand" />
-                {t('sandbox.aiThinking')}
-              </p>
-            )}
             {myPending && (
               <p className="mt-2 flex items-center gap-2 px-2 text-xs text-muted-foreground">
                 <span className="size-2 animate-pulse rounded-full bg-brand" />
@@ -240,6 +236,16 @@ export function ChatPanel({ projectName, aiMode = 'assistant' }: { projectName?:
           </div>
         )}
       </div>
+
+      {/* Личный ИИ-канал — оверлей поверх чата (тот же паттерн, что sandbox) */}
+      {aiOpen && !sandboxId && (
+        <AiOverlay
+          messages={aiMessages}
+          thinking={aiThinking}
+          onSend={(text) => send({ markdown: text, mentionIds: [], attachmentIds: [] }, 'ai')}
+          onClose={() => setAiOpen(false)}
+        />
+      )}
 
       {/* Sandbox поверх чата (SPEC §5.5.3) */}
       {sandboxId && (
@@ -264,9 +270,9 @@ export function ChatPanel({ projectName, aiMode = 'assistant' }: { projectName?:
       <footer className="border-t p-3">
         <Composer
           disabled={llmMissing}
-          placeholder={llmMissing ? t('chat.noLlmPlaceholder') : mode === 'group' ? t('chat.placeholderGroup') : t('chat.placeholderAi')}
+          placeholder={llmMissing ? t('chat.noLlmPlaceholder') : t('chat.placeholderGroup')}
           mentions={mentionItems}
-          onSend={send}
+          onSend={(p) => send(p, 'group')}
         />
       </footer>
     </div>

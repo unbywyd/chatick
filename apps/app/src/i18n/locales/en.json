@@ -234,6 +234,11 @@
     "typing_one": "{{names}} is typing…",
     "typing_other": "{{names}} are typing…"
   },
+  "aiChannel": {
+    "title": "AI channel",
+    "subtitle": "Private conversation with the project AI — others don't see it",
+    "close": "Close and return to chat"
+  },
   "sandbox": {
     "title": "Message review",
     "subtitle": "The AI held your message — sort it out here privately, nobody else sees this",
