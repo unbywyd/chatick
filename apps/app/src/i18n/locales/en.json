@@ -25,12 +25,40 @@
     "changeCompany": "Change company",
     "notMember": "Not a member",
     "noProjects": "No projects yet",
-    "createProject": "Create a project",
-    "projectName": "Project name"
+    "createProject": "New project",
+    "projectName": "Project name",
+    "searchProjects": "Search projects…",
+    "nothingFound": "Nothing found"
+  },
+  "companyTabs": {
+    "projects": "Projects",
+    "team": "Team"
+  },
+  "projectForm": {
+    "createTitle": "New project",
+    "editTitle": "Project settings",
+    "name": "Name",
+    "about": "About the project",
+    "aboutPlaceholder": "What is this project about?",
+    "rules": "Chat rules",
+    "rulesHint": "Shown to every member before joining and included in every AI request — keep it to a couple of sentences.",
+    "rulesPlaceholder": "E.g.: Work topics only. Statuses go to tasks, not the chat. English or Russian.",
+    "aiTitle": "AI dispatcher",
+    "aiSubtitle": "How strictly the AI moderates this chat",
+    "strictness": "Strictness",
+    "strictnessLow": "Gentle",
+    "strictnessHigh": "Strict",
+    "allowFlood": "Allow flooding",
+    "allowJokes": "Allow jokes",
+    "allowQuestions": "Allow questions",
+    "allowOfftopic": "Allow off-topic questions",
+    "save": "Save",
+    "saved": "Saved"
   },
   "team": {
     "button": "Team",
     "title": "Team — {{company}}",
+    "search": "Search by name or email…",
     "invite": "Invite by email",
     "send": "Invite",
     "inviteSent": "Invitation sent",
@@ -56,7 +84,8 @@
   "about": {
     "noDescription": "No description yet.",
     "rules": "Chat rules",
-    "members": "Members"
+    "members": "Members",
+    "edit": "Edit"
   },
   "roles": {
     "admin": "Admin",

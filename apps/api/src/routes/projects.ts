@@ -66,15 +66,20 @@ projectsRoute.post(
       companyId: z.string().min(1),
       name: z.string().min(1).max(120),
       about: z.string().max(5000).default(''),
+      chatRules: z.string().max(CHAT_RULES_MAX).default(''),
+      aiConfig: aiConfigSchema.partial().default({}),
     }),
   ),
   async (c) => {
     const { sub } = c.get('session')
-    const { companyId, name, about } = c.req.valid('json')
+    const { companyId, name, about, chatRules, aiConfig } = c.req.valid('json')
     if (!canCreateProjects(await companyRoleOf(companyId, sub))) return c.json({ error: 'Forbidden' }, 403)
 
     const slug = `${name.toLowerCase().replace(/[^a-z0-9а-яё]+/gi, '-').replace(/^-+|-+$/g, '').slice(0, 40) || 'project'}-${nanoid(6)}`
-    const [project] = await db.insert(projects).values({ companyId, name, about, slug }).returning()
+    const [project] = await db
+      .insert(projects)
+      .values({ companyId, name, about, slug, chatRules, aiConfig: JSON.stringify(aiConfig) })
+      .returning()
     await db.insert(projectMembers).values({ projectId: project!.id, userId: sub, role: 'owner', rulesAcceptedAt: new Date() })
 
     return c.json(project, 201)

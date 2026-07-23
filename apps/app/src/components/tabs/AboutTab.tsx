@@ -1,17 +1,33 @@
-import { useQuery } from '@tanstack/react-query'
+import { useState } from 'react'
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { useTranslation } from 'react-i18next'
+import { toast } from 'sonner'
+import { Pencil, X } from 'lucide-react'
 import { api } from '@/lib/api'
+import { Button } from '@/components/ui/button'
+import {
+  ProjectSettingsForm,
+  DEFAULT_AI_CONFIG,
+  type ProjectSettings,
+  type AiConfig,
+} from '@/components/ProjectSettingsForm'
 
 type Member = { id: string; role: string; user: { id: string; name: string; email: string; avatarUrl: string | null } }
 
-export function AboutTab({
-  project,
-  loading,
-}: {
-  project?: { id: string; name: string; about: string; chatRules: string }
-  loading: boolean
-}) {
+type ProjectDetails = {
+  id: string
+  name: string
+  about: string
+  chatRules: string
+  aiConfig: Partial<AiConfig>
+  myRole: 'owner' | 'admin' | 'member' | null
+}
+
+export function AboutTab({ project, loading }: { project?: ProjectDetails; loading: boolean }) {
   const { t } = useTranslation()
+  const qc = useQueryClient()
+  const [editing, setEditing] = useState(false)
+  const [form, setForm] = useState<ProjectSettings | null>(null)
 
   const members = useQuery({
     queryKey: ['project-members', project?.id],
@@ -19,15 +35,68 @@ export function AboutTab({
     enabled: Boolean(project?.id),
   })
 
+  const save = useMutation({
+    mutationFn: (v: ProjectSettings) =>
+      api(`/api/v1/projects/${project!.id}`, { method: 'PATCH', body: JSON.stringify(v) }),
+    onSuccess: () => {
+      toast.success(t('projectForm.saved'))
+      setEditing(false)
+      qc.invalidateQueries({ queryKey: ['project', project!.id] })
+    },
+    onError: (e) => toast.error(e instanceof Error ? e.message : String(e)),
+  })
+
   if (loading || !project) return <p className="p-6 text-sm text-muted-foreground">…</p>
+
+  const canEdit = project.myRole === 'owner' || project.myRole === 'admin'
+
+  const startEdit = () => {
+    setForm({
+      name: project.name,
+      about: project.about,
+      chatRules: project.chatRules,
+      aiConfig: { ...DEFAULT_AI_CONFIG, ...project.aiConfig },
+    })
+    setEditing(true)
+  }
+
+  if (editing && form) {
+    return (
+      <div className="mx-auto max-w-2xl p-6">
+        <div className="mb-4 flex items-center justify-between">
+          <h1 className="text-xl font-bold tracking-tight">{t('projectForm.editTitle')}</h1>
+          <Button variant="ghost" size="icon" onClick={() => setEditing(false)}>
+            <X className="size-4" />
+          </Button>
+        </div>
+        <ProjectSettingsForm value={form} onChange={setForm} />
+        <div className="mt-5 flex justify-end gap-2">
+          <Button variant="outline" onClick={() => setEditing(false)}>
+            {t('rules.decline')}
+          </Button>
+          <Button variant="brand" disabled={save.isPending || !form.name.trim()} onClick={() => save.mutate(form)}>
+            {t('projectForm.save')}
+          </Button>
+        </div>
+      </div>
+    )
+  }
 
   return (
     <div className="mx-auto max-w-2xl space-y-8 p-6">
-      <div>
-        <h1 className="text-xl font-bold tracking-tight">{project.name}</h1>
-        <p className="mt-2 whitespace-pre-wrap text-sm text-muted-foreground">
-          {project.about || t('about.noDescription')}
-        </p>
+      <div className="flex items-start justify-between gap-3">
+        <div>
+          <h1 className="text-xl font-bold tracking-tight">{project.name}</h1>
+          <p className="mt-2 whitespace-pre-wrap text-sm text-muted-foreground">
+            {project.about || t('about.noDescription')}
+          </p>
+        </div>
+        {canEdit && (
+          <Button variant="outline" size="sm" onClick={startEdit}>
+            <Pencil className="size-3.5" />
+            {t('about.edit')}
+          </Button>
+        )}
       </div>
 
       {project.chatRules && (

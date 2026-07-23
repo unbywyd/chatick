@@ -25,12 +25,40 @@
     "changeCompany": "Сменить компанию",
     "notMember": "Не участник",
     "noProjects": "Проектов пока нет",
-    "createProject": "Создать проект",
-    "projectName": "Название проекта"
+    "createProject": "Новый проект",
+    "projectName": "Название проекта",
+    "searchProjects": "Поиск проектов…",
+    "nothingFound": "Ничего не найдено"
+  },
+  "companyTabs": {
+    "projects": "Проекты",
+    "team": "Команда"
+  },
+  "projectForm": {
+    "createTitle": "Новый проект",
+    "editTitle": "Настройки проекта",
+    "name": "Название",
+    "about": "О проекте",
+    "aboutPlaceholder": "О чём этот проект?",
+    "rules": "Правила чата",
+    "rulesHint": "Показываются каждому участнику перед вступлением и включаются в каждый запрос ИИ — уложитесь в пару предложений.",
+    "rulesPlaceholder": "Например: Только рабочие темы. Статусы — в задачи, а не в чат. Русский или английский.",
+    "aiTitle": "ИИ-диспетчер",
+    "aiSubtitle": "Насколько строго ИИ модерирует этот чат",
+    "strictness": "Строгость",
+    "strictnessLow": "Мягко",
+    "strictnessHigh": "Строго",
+    "allowFlood": "Разрешить флуд",
+    "allowJokes": "Разрешить шутки",
+    "allowQuestions": "Разрешить вопросы",
+    "allowOfftopic": "Разрешить вопросы не по теме",
+    "save": "Сохранить",
+    "saved": "Сохранено"
   },
   "team": {
     "button": "Команда",
     "title": "Команда — {{company}}",
+    "search": "Поиск по имени или email…",
     "invite": "Пригласить по email",
     "send": "Пригласить",
     "inviteSent": "Приглашение отправлено",
@@ -56,7 +84,8 @@
   "about": {
     "noDescription": "Описания пока нет.",
     "rules": "Правила чата",
-    "members": "Участники"
+    "members": "Участники",
+    "edit": "Изменить"
   },
   "roles": {
     "admin": "Админ",

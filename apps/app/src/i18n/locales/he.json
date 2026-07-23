@@ -25,12 +25,40 @@
     "changeCompany": "החלפת חברה",
     "notMember": "לא חבר",
     "noProjects": "אין עדיין פרויקטים",
-    "createProject": "יצירת פרויקט",
-    "projectName": "שם הפרויקט"
+    "createProject": "פרויקט חדש",
+    "projectName": "שם הפרויקט",
+    "searchProjects": "חיפוש פרויקטים…",
+    "nothingFound": "לא נמצא כלום"
+  },
+  "companyTabs": {
+    "projects": "פרויקטים",
+    "team": "צוות"
+  },
+  "projectForm": {
+    "createTitle": "פרויקט חדש",
+    "editTitle": "הגדרות הפרויקט",
+    "name": "שם",
+    "about": "אודות הפרויקט",
+    "aboutPlaceholder": "על מה הפרויקט הזה?",
+    "rules": "כללי הצ׳אט",
+    "rulesHint": "מוצגים לכל חבר לפני ההצטרפות ונכללים בכל בקשת AI — הסתפקו בשני משפטים.",
+    "rulesPlaceholder": "לדוגמה: נושאי עבודה בלבד. סטטוסים למשימות, לא לצ׳אט.",
+    "aiTitle": "מנהל ה-AI",
+    "aiSubtitle": "עד כמה ה-AI ממתן את הצ׳אט הזה",
+    "strictness": "חומרה",
+    "strictnessLow": "רך",
+    "strictnessHigh": "קפדני",
+    "allowFlood": "לאפשר הצפה",
+    "allowJokes": "לאפשר בדיחות",
+    "allowQuestions": "לאפשר שאלות",
+    "allowOfftopic": "לאפשר שאלות מחוץ לנושא",
+    "save": "לשמור",
+    "saved": "נשמר"
   },
   "team": {
     "button": "צוות",
     "title": "צוות — {{company}}",
+    "search": "חיפוש לפי שם או אימייל…",
     "invite": "הזמנה באימייל",
     "send": "להזמין",
     "inviteSent": "ההזמנה נשלחה",
@@ -56,7 +84,8 @@
   "about": {
     "noDescription": "אין עדיין תיאור.",
     "rules": "כללי הצ׳אט",
-    "members": "חברים"
+    "members": "חברים",
+    "edit": "עריכה"
   },
   "roles": {
     "admin": "אדמין",
