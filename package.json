@@ -1,0 +1,22 @@
+{
+  "name": "chatick-next",
+  "private": true,
+  "packageManager": "pnpm@10.28.2",
+  "engines": {
+    "node": ">=22"
+  },
+  "scripts": {
+    "dev": "turbo dev",
+    "build": "turbo build",
+    "typecheck": "turbo typecheck",
+    "lint": "turbo lint",
+    "api": "pnpm --filter @chatick/api",
+    "app": "pnpm --filter @chatick/app",
+    "admin": "pnpm --filter @chatick/admin",
+    "desktop": "pnpm --filter @chatick/desktop"
+  },
+  "devDependencies": {
+    "turbo": "^2.5.0",
+    "typescript": "^5.9.3"
+  }
+}

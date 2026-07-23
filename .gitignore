@@ -1,0 +1,19 @@
+# deps / build
+node_modules/
+dist/
+.next/
+out/
+.turbo/
+*.tsbuildinfo
+
+# env & secrets
+.env
+.env.*
+!.env.example
+!.env.production
+.local-notes/
+
+# misc
+.DS_Store
+*.log
+release/

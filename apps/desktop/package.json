@@ -1,0 +1,26 @@
+{
+  "name": "@chatick/desktop",
+  "version": "0.1.0",
+  "private": true,
+  "main": "main.cjs",
+  "scripts": {
+    "dev": "electron . --dev",
+    "build": "echo \"desktop: packaging via electron-builder (pnpm dist) — skipped in turbo build\"",
+    "dist": "electron-builder",
+    "typecheck": "echo \"desktop: plain js, nothing to typecheck\""
+  },
+  "devDependencies": {
+    "electron": "^38.0.0",
+    "electron-builder": "^26.0.0"
+  },
+  "build": {
+    "appId": "com.chatick.app",
+    "productName": "Chatick",
+    "directories": {
+      "output": "release"
+    },
+    "files": ["main.cjs", "preload.cjs", "web/**/*"],
+    "win": { "target": "nsis" },
+    "mac": { "target": "dmg", "category": "public.app-category.productivity" }
+  }
+}
