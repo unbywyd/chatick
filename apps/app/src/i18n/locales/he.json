@@ -95,6 +95,7 @@
     "pending": "ממתינות לאישור",
     "resend": "לשלוח שוב",
     "revoke": "לבטל",
+    "revokeConfirm": "לבטל את ההזמנה של {{email}}?",
     "members": "חברים",
     "you": "אתם",
     "remove": "להסיר מהחברה",
@@ -144,5 +145,9 @@
     "dark": "כהה",
     "system": "מערכת"
   },
-  "language": "שפה"
+  "language": "שפה",
+  "confirm": {
+    "ok": "לאשר",
+    "cancel": "ביטול"
+  }
 }

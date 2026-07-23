@@ -6,6 +6,7 @@ import { Toaster } from 'sonner'
 import './index.css'
 import './i18n'
 import { ThemeProvider } from './providers/theme'
+import { ConfirmProvider } from './components/ui/confirm'
 import { ProjectScreen } from './screens/ProjectScreen'
 import { LoginScreen, AuthCallback } from './screens/LoginScreen'
 import { StartScreen } from './screens/StartScreen'
@@ -17,6 +18,7 @@ createRoot(document.getElementById('root')!).render(
   <StrictMode>
     <ThemeProvider>
       <QueryClientProvider client={queryClient}>
+        <ConfirmProvider>
         <HashRouter>
           <Routes>
             <Route path="/" element={<LoginScreen />} />
@@ -26,6 +28,7 @@ createRoot(document.getElementById('root')!).render(
             <Route path="/p/:id" element={<ProjectScreen />} />
           </Routes>
         </HashRouter>
+        </ConfirmProvider>
         <Toaster richColors position="top-right" />
       </QueryClientProvider>
     </ThemeProvider>

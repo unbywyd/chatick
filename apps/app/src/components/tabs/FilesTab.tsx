@@ -19,6 +19,7 @@ import { api, API_URL, getProjectToken } from '@/lib/api'
 import { cn } from '@/lib/utils'
 import { Input } from '@/components/ui/input'
 import { Button } from '@/components/ui/button'
+import { useConfirm } from '@/components/ui/confirm'
 
 type FileRow = {
   id: string
@@ -49,6 +50,7 @@ function fmtSize(bytes: number) {
 export function FilesTab({ projectId }: { projectId: string }) {
   const { t, i18n } = useTranslation()
   const qc = useQueryClient()
+  const confirm = useConfirm()
   const [q, setQ] = useState('')
   const [dragOver, setDragOver] = useState(false)
   const [uploading, setUploading] = useState<string[]>([])
@@ -182,8 +184,9 @@ export function FilesTab({ projectId }: { projectId: string }) {
                 variant="destructive"
                 size="icon"
                 title={t('files.delete')}
-                onClick={() => {
-                  if (confirm(t('files.deleteConfirm', { name: f.name }))) remove.mutate(f.id)
+                onClick={async () => {
+                  if (await confirm({ title: t('files.deleteConfirm', { name: f.name }), destructive: true, confirmLabel: t('files.delete') }))
+                    remove.mutate(f.id)
                 }}
               >
                 <Trash2 className="size-4" />

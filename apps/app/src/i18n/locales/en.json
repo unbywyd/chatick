@@ -95,6 +95,7 @@
     "pending": "Pending invitations",
     "resend": "Resend",
     "revoke": "Revoke",
+    "revokeConfirm": "Revoke the invitation for {{email}}?",
     "members": "Members",
     "you": "you",
     "remove": "Remove from company",
@@ -144,5 +145,9 @@
     "dark": "Dark",
     "system": "System"
   },
-  "language": "Language"
+  "language": "Language",
+  "confirm": {
+    "ok": "Confirm",
+    "cancel": "Cancel"
+  }
 }

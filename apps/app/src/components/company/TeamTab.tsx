@@ -6,6 +6,7 @@ import { ChevronDown, Mail, MoreHorizontal, RotateCw, Search, Trash2, UserPlus }
 import { api, type Company } from '@/lib/api'
 import { Input } from '@/components/ui/input'
 import { Button } from '@/components/ui/button'
+import { useConfirm } from '@/components/ui/confirm'
 import {
   DropdownMenu,
   DropdownMenuTrigger,
@@ -29,6 +30,7 @@ type Role = (typeof ROLES)[number]
 export function TeamTab({ company, meId }: { company: Company; meId?: string }) {
   const { t } = useTranslation()
   const qc = useQueryClient()
+  const confirm = useConfirm()
   const [q, setQ] = useState('')
   const [email, setEmail] = useState('')
   const [inviteRole, setInviteRole] = useState<Role>('member')
@@ -139,7 +141,15 @@ export function TeamTab({ company, meId }: { company: Company; meId?: string }) 
                   <RotateCw className="size-3.5" />
                   {t('team.resend')}
                 </Button>
-                <Button variant="destructive" size="icon" title={t('team.revoke')} onClick={() => revoke.mutate(inv.id)}>
+                <Button
+                  variant="destructive"
+                  size="icon"
+                  title={t('team.revoke')}
+                  onClick={async () => {
+                    if (await confirm({ title: t('team.revokeConfirm', { email: inv.email }), destructive: true, confirmLabel: t('team.revoke') }))
+                      revoke.mutate(inv.id)
+                  }}
+                >
                   <Trash2 className="size-3.5" />
                 </Button>
               </li>
@@ -194,7 +204,16 @@ export function TeamTab({ company, meId }: { company: Company; meId?: string }) 
                       <DropdownMenuSeparator className="hidden first:hidden" />
                       <DropdownMenuItem
                         className="text-destructive focus:text-destructive"
-                        onSelect={() => removeMember.mutate(m.user.id)}
+                        onSelect={async () => {
+                          if (
+                            await confirm({
+                              title: t('team.removeConfirm', { name: m.user.name || m.user.email }),
+                              destructive: true,
+                              confirmLabel: t('team.remove'),
+                            })
+                          )
+                            removeMember.mutate(m.user.id)
+                        }}
                       >
                         <Trash2 className="size-3.5" />
                         {t('team.remove')}
