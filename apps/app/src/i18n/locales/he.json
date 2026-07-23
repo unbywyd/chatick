@@ -32,11 +32,36 @@
   },
   "companyTabs": {
     "projects": "פרויקטים",
-    "team": "צוות"
+    "team": "צוות",
+    "settings": "הגדרות"
+  },
+  "llm": {
+    "title": "ספק AI (LLM)",
+    "subtitle": "חברו מפתח LLM של החברה — הוא מפעיל את כל יכולות ה-AI בכל הפרויקטים",
+    "configured": "מחובר",
+    "notConfigured": "לא מחובר — יכולות ה-AI כבויות",
+    "provider": "ספק",
+    "model": "מודל (אופציונלי)",
+    "apiKey": "מפתח API",
+    "keyKeep": "הזינו מפתח חדש כדי להחליף את הנוכחי",
+    "keyNote": "המפתח מאוחסן מוצפן (AES-256-GCM) ולעולם לא מוצג שוב.",
+    "choose": "לבחור…",
+    "saveTest": "לבדוק ולשמור",
+    "testing": "בודק מפתח…",
+    "saved": "ה-LLM חובר",
+    "disconnect": "לנתק",
+    "disconnectConfirm": "לנתק את ה-LLM? יכולות ה-AI יפסיקו לעבוד."
   },
   "projectForm": {
     "createTitle": "פרויקט חדש",
     "editTitle": "הגדרות הפרויקט",
+    "tabs": {
+      "general": "כללי",
+      "ai": "AI",
+      "rules": "כללים"
+    },
+    "improveTasks": "לשפר משימות עם AI",
+    "improveTasksHint": "משימות חדשות מתורגמות לשפת הפרויקט ומלוטשות קלות — המשמעות לא משתנה",
     "name": "שם",
     "about": "אודות הפרויקט",
     "aboutPlaceholder": "על מה הפרויקט הזה?",

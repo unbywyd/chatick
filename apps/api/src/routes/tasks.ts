@@ -3,9 +3,10 @@ import { zValidator } from '@hono/zod-validator'
 import { z } from 'zod'
 import { and, asc, desc, eq, sql } from 'drizzle-orm'
 import { db } from '../db/client.js'
-import { files, tasks, users } from '../db/schema.js'
+import { files, projects, tasks, users } from '../db/schema.js'
 import { requireProject, type ProjectEnv } from '../auth.js'
 import { hasPermission } from './projects.js'
+import { improveTask } from '../lib/llm.js'
 
 // Задачи проекта — project-токен; права per-user (SPEC §4.3) на каждое действие
 export const tasksRoute = new Hono<ProjectEnv>()
@@ -64,6 +65,20 @@ tasksRoute.post('/', zValidator('json', z.object(taskShape)), async (c) => {
 
   const body = c.req.valid('json')
 
+  // aiConfig.improveTasks: адаптировать под язык проекта + слегка улучшить (fail-open)
+  let { title, description } = body
+  const project = await db.query.projects.findFirst({ where: eq(projects.id, projectId) })
+  const aiConfig = JSON.parse(project?.aiConfig || '{}') as { improveTasks?: boolean; language?: string }
+  let aiImproved = false
+  if (aiConfig.improveTasks) {
+    const improved = await improveTask(projectId, { title, description, language: aiConfig.language ?? 'en' })
+    if (improved) {
+      title = improved.title
+      description = improved.description
+      aiImproved = true
+    }
+  }
+
   // порядковый номер в рамках проекта: TASK-<max+1>; новая задача — наверх группы
   const [{ next, minSort }] = (await db
     .select({
@@ -79,8 +94,8 @@ tasksRoute.post('/', zValidator('json', z.object(taskShape)), async (c) => {
       projectId,
       number: `TASK-${next}`,
       sortOrder: minSort - 1,
-      title: body.title,
-      description: body.description,
+      title,
+      description,
       status: body.status,
       priority: body.priority,
       dueDate: body.dueDate ? new Date(body.dueDate) : null,
@@ -90,7 +105,7 @@ tasksRoute.post('/', zValidator('json', z.object(taskShape)), async (c) => {
     .returning()
 
   const assignee = row!.assigneeId ? await db.query.users.findFirst({ where: eq(users.id, row!.assigneeId) }) : null
-  return c.json(serialize(row!, assignee), 201)
+  return c.json({ ...serialize(row!, assignee), aiImproved }, 201)
 })
 
 // Обновить: смена только статуса — tasks.changeStatus; всё остальное — tasks.edit

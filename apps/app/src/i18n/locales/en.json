@@ -32,11 +32,36 @@
   },
   "companyTabs": {
     "projects": "Projects",
-    "team": "Team"
+    "team": "Team",
+    "settings": "Settings"
+  },
+  "llm": {
+    "title": "AI provider (LLM)",
+    "subtitle": "Connect your company's own LLM key — it powers all AI features across projects",
+    "configured": "Connected",
+    "notConfigured": "Not connected yet — AI features are disabled",
+    "provider": "Provider",
+    "model": "Model (optional)",
+    "apiKey": "API key",
+    "keyKeep": "Enter a new key to replace the current one",
+    "keyNote": "The key is stored encrypted (AES-256-GCM) and is never shown again.",
+    "choose": "Choose…",
+    "saveTest": "Test & save",
+    "testing": "Testing key…",
+    "saved": "LLM connected",
+    "disconnect": "Disconnect",
+    "disconnectConfirm": "Disconnect the LLM? AI features will stop working."
   },
   "projectForm": {
     "createTitle": "New project",
     "editTitle": "Project settings",
+    "tabs": {
+      "general": "General",
+      "ai": "AI",
+      "rules": "Rules"
+    },
+    "improveTasks": "Improve tasks with AI",
+    "improveTasksHint": "New tasks are translated into the project language and lightly polished — meaning unchanged",
     "name": "Name",
     "about": "About the project",
     "aboutPlaceholder": "What is this project about?",

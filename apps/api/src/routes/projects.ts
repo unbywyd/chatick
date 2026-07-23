@@ -20,6 +20,8 @@ const aiConfigSchema = z.object({
   autoTranslate: z.boolean().default(true),
   answerRepeats: z.boolean().default(true),
   offtopic: z.enum(['ignore', 'remind', 'hold']).default('remind'),
+  // при создании задачи ИИ адаптирует её под язык проекта и слегка улучшает формулировку
+  improveTasks: z.boolean().default(false),
 })
 
 // SPEC §4.3: per-user пермишены; tasks.read всегда true

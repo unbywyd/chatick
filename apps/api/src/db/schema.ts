@@ -57,6 +57,10 @@ export const companies = pgTable('companies', {
   id: id(),
   name: text('name').notNull(),
   logoUrl: text('logo_url'),
+  // BYO-LLM: компания подключает своего провайдера; ключ — AES-256-GCM, наружу не отдаётся
+  llmProvider: text('llm_provider'), // anthropic | openai | google | deepseek | groq
+  llmModel: text('llm_model'),
+  llmKeyEncrypted: text('llm_key_encrypted'),
   createdAt: createdAt(),
   updatedAt: updatedAt(),
 })

@@ -21,6 +21,7 @@ import { LanguageSelect } from '@/components/LanguageSelect'
 import { Input } from '@/components/ui/input'
 import { Button } from '@/components/ui/button'
 import { TeamTab } from '@/components/company/TeamTab'
+import { LlmSettings } from '@/components/company/LlmSettings'
 import {
   ProjectSettingsForm,
   DEFAULT_AI_CONFIG,
@@ -243,13 +244,13 @@ function CompanyHome({
   onEntered: (projectId: string) => void
 }) {
   const { t } = useTranslation()
-  const [tab, setTab] = useState<'projects' | 'team'>('projects')
+  const [tab, setTab] = useState<'projects' | 'team' | 'settings'>('projects')
   const canManage = company.myRole === 'admin' || company.myRole === 'manager'
 
   return (
     <div className="space-y-6">
       <nav className="flex gap-1 border-b pb-0">
-        {(['projects', 'team'] as const).map((key) => (
+        {(['projects', 'team', 'settings'] as const).map((key) => (
           <button
             key={key}
             onClick={() => setTab(key)}
@@ -267,8 +268,10 @@ function CompanyHome({
 
       {tab === 'projects' ? (
         <ProjectsTab company={company} canManage={canManage} onEntered={onEntered} />
-      ) : (
+      ) : tab === 'team' ? (
         <TeamTab company={company} meId={meId} />
+      ) : (
+        <LlmSettings companyId={company.id} isAdmin={company.myRole === 'admin'} />
       )}
     </div>
   )

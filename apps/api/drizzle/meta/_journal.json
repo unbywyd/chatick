@@ -43,6 +43,13 @@
       "when": 1784816942284,
       "tag": "0005_clean_anthem",
       "breakpoints": true
+    },
+    {
+      "idx": 6,
+      "version": "7",
+      "when": 1784818072726,
+      "tag": "0006_long_firebird",
+      "breakpoints": true
     }
   ]
 }

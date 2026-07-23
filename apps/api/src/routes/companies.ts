@@ -7,6 +7,8 @@ import { db } from '../db/client.js'
 import { companies, companyMembers, companyInvites, users } from '../db/schema.js'
 import { requireSession, type SessionEnv } from '../auth.js'
 import { sendMail } from '../lib/mail.js'
+import { encrypt } from '../lib/crypto.js'
+import { LLM_PROVIDERS, testLlm, type LlmProvider } from '../lib/llm.js'
 import { env } from '../env.js'
 
 export const companiesRoute = new Hono<SessionEnv>()
@@ -77,6 +79,66 @@ companiesRoute.get('/:companyId/members', async (c) => {
       user: { id: r.user.id, name: r.user.name, email: r.user.email, avatarUrl: r.user.avatarUrl },
     })),
   )
+})
+
+// --- BYO-LLM (только admin компании) -----------------------------------------
+// Ключ шифруется (AES-256-GCM) и НИКОГДА не отдаётся обратно — только статус + last4.
+
+companiesRoute.get('/:companyId/llm', async (c) => {
+  const { sub } = c.get('session')
+  const companyId = c.req.param('companyId')
+  const role = await memberRoleIn(companyId, sub)
+  if (!role) return c.json({ error: 'Forbidden' }, 403)
+
+  const company = await db.query.companies.findFirst({ where: eq(companies.id, companyId) })
+  return c.json({
+    configured: Boolean(company?.llmProvider && company.llmKeyEncrypted),
+    provider: company?.llmProvider ?? null,
+    model: company?.llmModel ?? null,
+    providers: Object.entries(LLM_PROVIDERS).map(([id, p]) => ({ id, label: p.label, defaultModel: p.defaultModel })),
+  })
+})
+
+companiesRoute.put(
+  '/:companyId/llm',
+  zValidator(
+    'json',
+    z.object({
+      provider: z.enum(Object.keys(LLM_PROVIDERS) as [LlmProvider, ...LlmProvider[]]),
+      model: z.string().min(1).max(120).optional(),
+      apiKey: z.string().min(8).max(512),
+    }),
+  ),
+  async (c) => {
+    const { sub } = c.get('session')
+    const companyId = c.req.param('companyId')
+    if ((await memberRoleIn(companyId, sub)) !== 'admin') return c.json({ error: 'Forbidden' }, 403)
+
+    const { provider, model, apiKey } = c.req.valid('json')
+    const resolvedModel = model || LLM_PROVIDERS[provider].defaultModel
+
+    // проверяем ключ живым запросом до сохранения
+    const ok = await testLlm({ provider, model: resolvedModel, apiKey })
+    if (!ok) return c.json({ error: 'LLM check failed — verify the key and model' }, 422)
+
+    await db
+      .update(companies)
+      .set({ llmProvider: provider, llmModel: resolvedModel, llmKeyEncrypted: encrypt(apiKey) })
+      .where(eq(companies.id, companyId))
+    return c.json({ ok: true, provider, model: resolvedModel })
+  },
+)
+
+companiesRoute.delete('/:companyId/llm', async (c) => {
+  const { sub } = c.get('session')
+  const companyId = c.req.param('companyId')
+  if ((await memberRoleIn(companyId, sub)) !== 'admin') return c.json({ error: 'Forbidden' }, 403)
+
+  await db
+    .update(companies)
+    .set({ llmProvider: null, llmModel: null, llmKeyEncrypted: null })
+    .where(eq(companies.id, companyId))
+  return c.json({ ok: true })
 })
 
 // Сменить роль участника (только admin; себя-единственного-админа не понизить)

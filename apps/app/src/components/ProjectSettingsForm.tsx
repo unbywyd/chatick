@@ -1,3 +1,4 @@
+import { useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { Eye, MessageCircleQuestion, ShieldCheck, ChevronDown } from 'lucide-react'
 import { Switch } from '@/components/ui/switch'
@@ -23,6 +24,7 @@ export type AiConfig = {
   autoTranslate: boolean
   answerRepeats: boolean
   offtopic: Offtopic
+  improveTasks: boolean // ИИ адаптирует новые задачи под язык проекта и улучшает формулировку
 }
 
 export const DEFAULT_AI_CONFIG: AiConfig = {
@@ -31,6 +33,7 @@ export const DEFAULT_AI_CONFIG: AiConfig = {
   autoTranslate: true,
   answerRepeats: true,
   offtopic: 'remind',
+  improveTasks: false,
 }
 
 export type ProjectSettings = {
@@ -52,6 +55,10 @@ const MODES: { key: AiMode; icon: typeof Eye }[] = [
   { key: 'moderator', icon: ShieldCheck },
 ]
 
+const FORM_TABS = ['general', 'ai', 'rules'] as const
+type FormTab = (typeof FORM_TABS)[number]
+
+// Настройки проекта — поля растут, разбито табами: Основное / ИИ / Правила
 export function ProjectSettingsForm({
   value,
   onChange,
@@ -62,6 +69,7 @@ export function ProjectSettingsForm({
   showName?: boolean
 }) {
   const { t } = useTranslation()
+  const [tab, setTab] = useState<FormTab>('general')
   const set = <K extends keyof ProjectSettings>(k: K, v: ProjectSettings[K]) => onChange({ ...value, [k]: v })
   const setAi = <K extends keyof AiConfig>(k: K, v: AiConfig[K]) =>
     onChange({ ...value, aiConfig: { ...value.aiConfig, [k]: v } })
@@ -70,68 +78,63 @@ export function ProjectSettingsForm({
   const lang = PROJECT_LANGUAGES.find((l) => l.code === value.aiConfig.language)
 
   return (
-    <div className="space-y-6">
-      {showName && (
-        <Field label={t('projectForm.name')}>
-          <Input value={value.name} onChange={(e) => set('name', e.target.value)} placeholder={t('start.projectName')} />
-        </Field>
+    <div>
+      <nav className="mb-4 flex gap-1 border-b">
+        {FORM_TABS.map((key) => (
+          <button
+            key={key}
+            type="button"
+            onClick={() => setTab(key)}
+            className={cn(
+              '-mb-px border-b-2 px-3 py-2 text-sm transition-colors',
+              tab === key ? 'border-brand font-medium text-foreground' : 'border-transparent text-muted-foreground hover:text-foreground',
+            )}
+          >
+            {t(`projectForm.tabs.${key}`)}
+          </button>
+        ))}
+      </nav>
+
+      {tab === 'general' && (
+        <div className="space-y-5">
+          {showName && (
+            <Field label={t('projectForm.name')}>
+              <Input value={value.name} onChange={(e) => set('name', e.target.value)} placeholder={t('start.projectName')} />
+            </Field>
+          )}
+          <Field label={t('projectForm.about')}>
+            <textarea
+              value={value.about}
+              onChange={(e) => set('about', e.target.value)}
+              rows={5}
+              placeholder={t('projectForm.aboutPlaceholder')}
+              className="w-full resize-none rounded-md border bg-transparent px-3 py-2 text-sm outline-none placeholder:text-muted-foreground focus:ring-2 focus:ring-ring"
+            />
+          </Field>
+        </div>
       )}
 
-      <Field label={t('projectForm.about')}>
-        <textarea
-          value={value.about}
-          onChange={(e) => set('about', e.target.value)}
-          rows={3}
-          placeholder={t('projectForm.aboutPlaceholder')}
-          className="w-full resize-none rounded-md border bg-transparent px-3 py-2 text-sm outline-none placeholder:text-muted-foreground focus:ring-2 focus:ring-ring"
-        />
-      </Field>
+      {tab === 'ai' && (
+        <div className="space-y-5">
+          {/* Режим — 3 карточки (SPEC §4.1) */}
+          <div className="grid gap-2 sm:grid-cols-3">
+            {MODES.map(({ key, icon: Icon }) => (
+              <button
+                key={key}
+                type="button"
+                onClick={() => setAi('mode', key)}
+                className={cn(
+                  'rounded-lg border p-3 text-start transition-colors',
+                  value.aiConfig.mode === key ? 'border-brand bg-accent' : 'hover:bg-accent/50',
+                )}
+              >
+                <Icon className={cn('size-4', value.aiConfig.mode === key ? 'text-brand' : 'text-muted-foreground')} />
+                <p className="mt-2 text-sm font-medium">{t(`aiMode.${key}.title`)}</p>
+                <p className="mt-0.5 text-xs leading-snug text-muted-foreground">{t(`aiMode.${key}.desc`)}</p>
+              </button>
+            ))}
+          </div>
 
-      {/* Правила чата: тон, шутки, флуд — человеческим языком; в каждый промпт ИИ (SPEC §4.2) */}
-      <Field
-        label={t('projectForm.rules')}
-        hint={t('projectForm.rulesHint')}
-        trailing={
-          <span className={cn('text-xs tabular-nums', rulesLeft < 30 ? 'text-destructive' : 'text-muted-foreground')}>
-            {rulesLeft}
-          </span>
-        }
-      >
-        <textarea
-          value={value.chatRules}
-          onChange={(e) => set('chatRules', e.target.value.slice(0, CHAT_RULES_MAX))}
-          rows={3}
-          maxLength={CHAT_RULES_MAX}
-          placeholder={t('projectForm.rulesPlaceholder')}
-          className="w-full resize-none rounded-md border bg-transparent px-3 py-2 text-sm outline-none placeholder:text-muted-foreground focus:ring-2 focus:ring-ring"
-        />
-      </Field>
-
-      {/* Конфигурация ИИ (SPEC §4.1) */}
-      <div className="rounded-lg border p-4">
-        <h3 className="text-sm font-semibold">{t('projectForm.aiTitle')}</h3>
-        <p className="mt-0.5 text-xs text-muted-foreground">{t('projectForm.aiSubtitle')}</p>
-
-        {/* Режим — 3 карточки */}
-        <div className="mt-4 grid gap-2 sm:grid-cols-3">
-          {MODES.map(({ key, icon: Icon }) => (
-            <button
-              key={key}
-              type="button"
-              onClick={() => setAi('mode', key)}
-              className={cn(
-                'rounded-lg border p-3 text-start transition-colors',
-                value.aiConfig.mode === key ? 'border-brand bg-accent' : 'hover:bg-accent/50',
-              )}
-            >
-              <Icon className={cn('size-4', value.aiConfig.mode === key ? 'text-brand' : 'text-muted-foreground')} />
-              <p className="mt-2 text-sm font-medium">{t(`aiMode.${key}.title`)}</p>
-              <p className="mt-0.5 text-xs leading-snug text-muted-foreground">{t(`aiMode.${key}.desc`)}</p>
-            </button>
-          ))}
-        </div>
-
-        <div className="mt-4 space-y-4">
           {/* Язык проекта */}
           <div className="flex items-center justify-between gap-3">
             <div>
@@ -167,6 +170,12 @@ export function ProjectSettingsForm({
             checked={value.aiConfig.answerRepeats}
             onChange={(v) => setAi('answerRepeats', v)}
           />
+          <ToggleRow
+            label={t('projectForm.improveTasks')}
+            hint={t('projectForm.improveTasksHint')}
+            checked={value.aiConfig.improveTasks}
+            onChange={(v) => setAi('improveTasks', v)}
+          />
 
           {/* Оффтоп — сегмент из 3 действий */}
           <div>
@@ -190,7 +199,28 @@ export function ProjectSettingsForm({
             </div>
           </div>
         </div>
-      </div>
+      )}
+
+      {tab === 'rules' && (
+        <Field
+          label={t('projectForm.rules')}
+          hint={t('projectForm.rulesHint')}
+          trailing={
+            <span className={cn('text-xs tabular-nums', rulesLeft < 30 ? 'text-destructive' : 'text-muted-foreground')}>
+              {rulesLeft}
+            </span>
+          }
+        >
+          <textarea
+            value={value.chatRules}
+            onChange={(e) => set('chatRules', e.target.value.slice(0, CHAT_RULES_MAX))}
+            rows={5}
+            maxLength={CHAT_RULES_MAX}
+            placeholder={t('projectForm.rulesPlaceholder')}
+            className="w-full resize-none rounded-md border bg-transparent px-3 py-2 text-sm outline-none placeholder:text-muted-foreground focus:ring-2 focus:ring-ring"
+          />
+        </Field>
+      )}
     </div>
   )
 }
