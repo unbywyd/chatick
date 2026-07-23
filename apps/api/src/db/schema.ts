@@ -221,6 +221,8 @@ export const files = pgTable(
     projectId: text('project_id').notNull().references(() => projects.id, { onDelete: 'cascade' }),
     // вложение задачи: файл прикреплён прямо в таске (null = общий файл проекта)
     taskId: text('task_id').references(() => tasks.id, { onDelete: 'set null' }),
+    // вложение сообщения чата (SPEC §5.5.4)
+    messageId: text('message_id').references(() => messages.id, { onDelete: 'set null' }),
     uploadedById: text('uploaded_by_id').references(() => users.id, { onDelete: 'set null' }),
     name: text('name').notNull(),
     key: text('key').notNull(), // S3 object key
@@ -228,7 +230,29 @@ export const files = pgTable(
     size: text('size').notNull().default('0'),
     createdAt: createdAt(),
   },
-  (t) => [index('files_project_idx').on(t.projectId), index('files_task_idx').on(t.taskId)],
+  (t) => [
+    index('files_project_idx').on(t.projectId),
+    index('files_task_idx').on(t.taskId),
+    index('files_message_idx').on(t.messageId),
+  ],
+)
+
+// Sandbox — приватный диалог автора с ИИ вокруг held-сообщения (SPEC §5.5.3).
+// role: user | ai; suggestion=true — ИИ предложил вариант; approved=true — годен к отправке («Выбрать»)
+export const sandboxRole = pgEnum('sandbox_role', ['user', 'ai'])
+
+export const sandboxMessages = pgTable(
+  'sandbox_messages',
+  {
+    id: id(),
+    messageId: text('message_id').notNull().references(() => messages.id, { onDelete: 'cascade' }),
+    role: sandboxRole('role').notNull(),
+    text: text('text').notNull(),
+    suggestion: boolean('suggestion').notNull().default(false),
+    approved: boolean('approved').notNull().default(false),
+    createdAt: createdAt(),
+  },
+  (t) => [index('sandbox_message_idx').on(t.messageId, t.createdAt)],
 )
 
 export const credentials = pgTable(

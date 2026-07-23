@@ -50,6 +50,13 @@
       "when": 1784818072726,
       "tag": "0006_long_firebird",
       "breakpoints": true
+    },
+    {
+      "idx": 7,
+      "version": "7",
+      "when": 1784823040333,
+      "tag": "0007_lying_thunderbird",
+      "breakpoints": true
     }
   ]
 }

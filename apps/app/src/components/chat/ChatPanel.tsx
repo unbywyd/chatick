@@ -11,6 +11,7 @@ import { Logo } from '@/components/Logo'
 import { Button } from '@/components/ui/button'
 import { useProjectSocket, type ChatMessage } from '@/hooks/useProjectSocket'
 import { Composer, AI_MENTION_ID } from './Composer'
+import { SandboxOverlay } from './SandboxOverlay'
 
 type ChatMode = 'group' | 'ai'
 type Member = { id: string; role: string; user: { id: string; name: string; email: string; avatarUrl: string | null } }
@@ -19,12 +20,15 @@ type Member = { id: string; role: string; user: { id: string; name: string; emai
 const mentionRe = /@\[([^\]]+)\]\(([^)]+)\)/g
 const renderMentions = (text: string) => text.replace(mentionRe, '**@$1**')
 
-export function ChatPanel({ projectName }: { projectName?: string }) {
+export function ChatPanel({ projectName, aiMode = 'assistant' }: { projectName?: string; aiMode?: 'observer' | 'assistant' | 'moderator' }) {
   const { t, i18n } = useTranslation()
   const navigate = useNavigate()
   const { id: projectId } = useParams()
   const qc = useQueryClient()
   const [mode, setMode] = useState<ChatMode>('group')
+  const [checkingUsers, setCheckingUsers] = useState<Map<string, string>>(new Map()) // userId -> name («пишет…»)
+  const [myPending, setMyPending] = useState(false) // «проверяется…» у автора
+  const [sandboxId, setSandboxId] = useState<string | null>(null)
   const bottomRef = useRef<HTMLDivElement>(null)
 
   const llm = useQuery({
@@ -50,39 +54,71 @@ export function ChatPanel({ projectName }: { projectName?: string }) {
   useEffect(() => setLive([]), [projectId])
 
   const onWsMessage = useCallback((m: ChatMessage) => {
-    setLive((prev) => (prev.some((x) => x.id === m.id) ? prev : [...prev, m]))
+    setLive((prev) => {
+      // finalize мог обновить текст held-сообщения — заменяем по id
+      const idx = prev.findIndex((x) => x.id === m.id)
+      if (idx >= 0) {
+        const next = [...prev]
+        next[idx] = m
+        return next
+      }
+      return [...prev, m]
+    })
+    setMyPending(false)
   }, [])
 
-  const { online, connected } = useProjectSocket(projectId, onWsMessage)
+  const { online, connected } = useProjectSocket(projectId, {
+    onMessage: onWsMessage,
+    onChecking: ({ userId, name }) => setCheckingUsers((prev) => new Map(prev).set(userId, name)),
+    onCheckingDone: ({ userId }) =>
+      setCheckingUsers((prev) => {
+        const next = new Map(prev)
+        next.delete(userId)
+        return next
+      }),
+    onHeld: ({ messageId }) => {
+      setMyPending(false)
+      setSandboxId(messageId)
+    },
+  })
 
-  // история + live, дедуп по id (свои приходят и по ws после POST)
+  // история + live, дедуп по id; в ленте только delivered (SPEC §5.5.1 — до вердикта не показываем)
   const allMessages = useMemo(() => {
-    const seen = new Set<string>()
-    const list: ChatMessage[] = []
-    for (const m of [...(history.data ?? []), ...live]) {
-      if (!seen.has(m.id)) {
-        seen.add(m.id)
-        list.push(m)
-      }
-    }
-    return list.filter((m) => (mode === 'ai' ? m.mode === 'ai' : m.mode === 'group'))
+    const byId = new Map<string, ChatMessage>()
+    for (const m of [...(history.data ?? []), ...live]) byId.set(m.id, m)
+    return [...byId.values()]
+      .filter((m) => m.status === 'delivered')
+      .filter((m) => (mode === 'ai' ? m.mode === 'ai' : m.mode === 'group'))
+      .sort((a, b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime())
   }, [history.data, live, mode])
+
+  // held-сообщение из истории (после перезагрузки) — снова открыть sandbox
+  useEffect(() => {
+    const held = (history.data ?? []).find((m) => m.status === 'held')
+    if (held && !sandboxId) setSandboxId(held.id)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [history.data])
 
   useEffect(() => {
     bottomRef.current?.scrollIntoView({ behavior: 'smooth' })
   }, [allMessages.length])
 
-  const send = async ({ markdown, mentionIds }: { markdown: string; mentionIds: string[] }) => {
+  const send = async ({ markdown, mentionIds, attachmentIds }: { markdown: string; mentionIds: string[]; attachmentIds: string[] }) => {
     try {
+      if (mode === 'group') setMyPending(true) // «проверяется…» до вердикта
       const created = await api<ChatMessage>(
         '/api/v1/messages',
-        { method: 'POST', body: JSON.stringify({ text: markdown, mode }) },
+        { method: 'POST', body: JSON.stringify({ text: markdown, mode, attachmentIds }) },
         'project',
       )
-      setLive((prev) => (prev.some((x) => x.id === created.id) ? prev : [...prev, created]))
+      if (created.status === 'delivered') {
+        setLive((prev) => (prev.some((x) => x.id === created.id) ? prev : [...prev, created]))
+        setMyPending(false)
+      }
       // упоминание @AI — прямое обращение к диспетчеру (подключится в следующем слое)
       void mentionIds.includes(AI_MENTION_ID)
     } catch (e) {
+      setMyPending(false)
       toast.error(e instanceof Error ? e.message : String(e))
     }
   }
@@ -98,7 +134,7 @@ export function ChatPanel({ projectName }: { projectName?: string }) {
   )
 
   return (
-    <div className="flex h-full flex-col">
+    <div className="relative flex h-full flex-col overflow-hidden">
       <header className="flex items-center justify-between gap-2 border-b px-4 py-2">
         <div className="flex min-w-0 items-center gap-2">
           <Logo />
@@ -173,10 +209,38 @@ export function ChatPanel({ projectName }: { projectName?: string }) {
                 </div>
               )
             })}
+            {/* Индикаторы пайплайна */}
+            {myPending && (
+              <p className="mt-2 flex items-center gap-2 px-2 text-xs text-muted-foreground">
+                <span className="size-2 animate-pulse rounded-full bg-brand" />
+                {t('chat.verifying')}
+              </p>
+            )}
+            {checkingUsers.size > 0 && (
+              <p className="mt-2 px-2 text-xs italic text-muted-foreground">
+                {t('chat.typing', { names: [...checkingUsers.values()].join(', '), count: checkingUsers.size })}
+              </p>
+            )}
             <div ref={bottomRef} />
           </div>
         )}
       </div>
+
+      {/* Sandbox поверх чата (SPEC §5.5.3) */}
+      {sandboxId && (
+        <SandboxOverlay
+          messageId={sandboxId}
+          aiMode={aiMode}
+          onSent={() => {
+            setSandboxId(null)
+            qc.invalidateQueries({ queryKey: ['messages', projectId] })
+          }}
+          onDiscard={() => {
+            setSandboxId(null)
+            qc.invalidateQueries({ queryKey: ['messages', projectId] })
+          }}
+        />
+      )}
 
       <footer className="border-t p-3">
         <Composer
@@ -250,7 +314,33 @@ function MessageRow({ message, compact, lang }: { message: ChatMessage; compact:
         <div className="msg-md break-words text-sm">
           <ReactMarkdown>{renderMentions(message.text)}</ReactMarkdown>
         </div>
+        {(message.attachments?.length ?? 0) > 0 && <MessageAttachments attachments={message.attachments!} />}
       </div>
+    </div>
+  )
+}
+
+function MessageAttachments({ attachments }: { attachments: NonNullable<ChatMessage['attachments']> }) {
+  const open = async (id: string, inline: boolean) => {
+    try {
+      const { url } = await api<{ url: string }>(`/api/v1/files/${id}/download${inline ? '?inline=1' : ''}`, {}, 'project')
+      window.open(url, '_blank')
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : String(e))
+    }
+  }
+  return (
+    <div className="mt-1.5 flex flex-wrap gap-1.5">
+      {attachments.map((a) => (
+        <button
+          key={a.id}
+          onClick={() => open(a.id, a.mime.startsWith('image/') || a.mime === 'application/pdf')}
+          className="inline-flex max-w-56 items-center gap-1.5 rounded-md border bg-card px-2 py-1 text-xs transition-colors hover:bg-accent"
+          title={a.name}
+        >
+          📎 <span className="truncate">{a.name}</span>
+        </button>
+      ))}
     </div>
   )
 }

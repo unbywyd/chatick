@@ -223,7 +223,28 @@
     "placeholderGroup": "Написать в группу…",
     "placeholderAi": "Спросить ИИ…",
     "send": "Отправить",
-    "sendHint": "Ctrl+Enter"
+    "sendHint": "Ctrl+Enter",
+    "attach": "Прикрепить файл",
+    "verifying": "Проверяем ваше сообщение…",
+    "typing_one": "{{names}} пишет…",
+    "typing_few": "{{names}} пишут…",
+    "typing_many": "{{names}} пишут…",
+    "typing_other": "{{names}} пишут…"
+  },
+  "sandbox": {
+    "title": "Доработка сообщения",
+    "subtitle": "ИИ придержал сообщение — разберитесь здесь приватно, остальные этого не видят",
+    "peek": "Посмотреть чат",
+    "back": "Вернуться",
+    "original": "Ваше исходное сообщение",
+    "sendAsIs": "Отправить как есть",
+    "suggestion": "Вариант от ИИ",
+    "approvedSuggestion": "Годное — готово к отправке",
+    "choose": "Выбрать",
+    "discard": "Отменить",
+    "discardConfirm": "Отменить сообщение полностью?",
+    "aiThinking": "ИИ думает…",
+    "placeholder": "Ответить ИИ…"
   },
   "tabs": {
     "about": "О проекте",

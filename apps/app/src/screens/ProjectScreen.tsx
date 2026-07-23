@@ -50,7 +50,10 @@ export function ProjectLayout() {
     <div className="flex h-dvh">
       {/* Чат — 40%, живёт на всех страницах проекта */}
       <div className="flex w-[40%] min-w-[320px] flex-col border-e">
-        <ChatPanel projectName={project.data?.name} />
+        <ChatPanel
+          projectName={project.data?.name}
+          aiMode={(project.data?.aiConfig as { mode?: 'observer' | 'assistant' | 'moderator' })?.mode ?? 'assistant'}
+        />
       </div>
 
       {/* Табы — роуты */}

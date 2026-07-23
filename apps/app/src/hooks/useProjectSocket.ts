@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from 'react'
 import { API_URL, getProjectToken } from '@/lib/api'
 
 export type PresenceUser = { id: string; name: string; avatarUrl: string | null }
+export type MessageAttachment = { id: string; name: string; mime: string; size: number }
 export type ChatMessage = {
   id: string
   mode: 'group' | 'ai'
@@ -9,15 +10,23 @@ export type ChatMessage = {
   text: string
   replyToId: string | null
   createdAt: string
+  attachments?: MessageAttachment[]
   author: { id: string; name: string; avatarUrl: string | null } | null // null = ИИ
 }
 
-// Realtime проекта: presence + новые сообщения. Реконнект с бэкоффом.
-export function useProjectSocket(projectId: string | undefined, onMessage: (m: ChatMessage) => void) {
+export type SocketEvents = {
+  onMessage: (m: ChatMessage) => void
+  onChecking?: (p: { userId: string; name: string }) => void
+  onCheckingDone?: (p: { userId: string }) => void
+  onHeld?: (p: { messageId: string }) => void
+}
+
+// Realtime проекта: presence + сообщения + пайплайн-события. Реконнект с бэкоффом.
+export function useProjectSocket(projectId: string | undefined, events: SocketEvents) {
   const [online, setOnline] = useState<PresenceUser[]>([])
   const [connected, setConnected] = useState(false)
-  const onMessageRef = useRef(onMessage)
-  onMessageRef.current = onMessage
+  const eventsRef = useRef(events)
+  eventsRef.current = events
 
   useEffect(() => {
     if (!projectId) return
@@ -39,7 +48,10 @@ export function useProjectSocket(projectId: string | undefined, onMessage: (m: C
         try {
           const { event, payload } = JSON.parse(e.data as string) as { event: string; payload: unknown }
           if (event === 'presence') setOnline(payload as PresenceUser[])
-          if (event === 'message') onMessageRef.current(payload as ChatMessage)
+          if (event === 'message') eventsRef.current.onMessage(payload as ChatMessage)
+          if (event === 'checking') eventsRef.current.onChecking?.(payload as { userId: string; name: string })
+          if (event === 'checking_done') eventsRef.current.onCheckingDone?.(payload as { userId: string })
+          if (event === 'held') eventsRef.current.onHeld?.(payload as { messageId: string })
         } catch {
           /* ignore */
         }

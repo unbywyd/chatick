@@ -28,10 +28,19 @@ function roomClients(projectId: string): Set<Client> {
 }
 
 /** Бродкаст события всем в проекте (используется и HTTP-роутами, напр. messages). */
-export function broadcast(projectId: string, event: string, payload: unknown) {
+export function broadcast(projectId: string, event: string, payload: unknown, opts?: { except?: string }) {
   const msg = JSON.stringify({ event, payload })
   for (const c of rooms.get(projectId) ?? []) {
+    if (opts?.except && c.userId === opts.except) continue
     if (c.ws.readyState === WebSocket.OPEN) c.ws.send(msg)
+  }
+}
+
+/** Событие конкретному юзеру проекта (все его вкладки). */
+export function sendToUser(projectId: string, userId: string, event: string, payload: unknown) {
+  const msg = JSON.stringify({ event, payload })
+  for (const c of rooms.get(projectId) ?? []) {
+    if (c.userId === userId && c.ws.readyState === WebSocket.OPEN) c.ws.send(msg)
   }
 }
 

@@ -1,16 +1,20 @@
-import { useEffect } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { useEditor, EditorContent, ReactRenderer } from '@tiptap/react'
 import { BubbleMenu } from '@tiptap/react/menus'
 import StarterKit from '@tiptap/starter-kit'
 import Placeholder from '@tiptap/extension-placeholder'
 import Mention from '@tiptap/extension-mention'
 import tippy, { type Instance } from 'tippy.js'
-import { Bold, Italic, Code, List, SendHorizontal, Strikethrough } from 'lucide-react'
+import { Bold, Italic, Code, FileText, Image as ImageIcon, List, Loader2, Paperclip, SendHorizontal, Strikethrough, X } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
+import { toast } from 'sonner'
+import { API_URL, getProjectToken } from '@/lib/api'
 import { cn } from '@/lib/utils'
 import { MentionList, type MentionItem, type MentionListRef } from './MentionList'
 
 export const AI_MENTION_ID = 'ai'
+
+export type PendingAttachment = { id: string; name: string; mime: string; size: number }
 
 // Композер чата: tiptap + markdown-база, bubble-меню инструментов по выделению,
 // mentions (@участники + @AI первым), Enter=отправить / Shift+Enter=перенос
@@ -23,9 +27,35 @@ export function Composer({
   disabled?: boolean
   placeholder: string
   mentions: MentionItem[]
-  onSend: (payload: { markdown: string; mentionIds: string[] }) => void
+  onSend: (payload: { markdown: string; mentionIds: string[]; attachmentIds: string[] }) => void
 }) {
   const { t } = useTranslation()
+  const [attachments, setAttachments] = useState<PendingAttachment[]>([])
+  const [uploading, setUploading] = useState(0)
+  const fileRef = useRef<HTMLInputElement>(null)
+
+  // вложения грузятся сразу (files API), к сообщению привяжутся при отправке (SPEC §5.5.4)
+  async function uploadFiles(list: FileList | File[]) {
+    for (const file of Array.from(list)) {
+      setUploading((n) => n + 1)
+      try {
+        const fd = new FormData()
+        fd.append('file', file)
+        const res = await fetch(`${API_URL}/api/v1/files`, {
+          method: 'POST',
+          headers: { Authorization: `Bearer ${getProjectToken()}` },
+          body: fd,
+        })
+        if (!res.ok) throw new Error(((await res.json().catch(() => ({}))) as { error?: string }).error ?? res.statusText)
+        const created = (await res.json()) as PendingAttachment
+        setAttachments((prev) => [...prev, created])
+      } catch (e) {
+        toast.error(`${file.name}: ${e instanceof Error ? e.message : String(e)}`)
+      } finally {
+        setUploading((n) => n - 1)
+      }
+    }
+  }
 
   const editor = useEditor({
     editable: !disabled,
@@ -99,18 +129,49 @@ export function Composer({
   }, [editor, disabled])
 
   const submit = () => {
-    if (!editor || editor.isEmpty) return
-    const markdown = serializeToMarkdown(editor.getJSON())
-    if (!markdown.trim()) return
+    if (!editor) return
+    const markdown = editor.isEmpty ? '' : serializeToMarkdown(editor.getJSON())
+    if (!markdown.trim() && attachments.length === 0) return
     const mentionIds = collectMentions(editor.getJSON())
-    onSend({ markdown, mentionIds })
+    onSend({ markdown: markdown || '📎', mentionIds, attachmentIds: attachments.map((a) => a.id) })
     editor.commands.clearContent()
+    setAttachments([])
   }
 
   if (!editor) return null
 
   return (
-    <div className={cn('rounded-md border transition-shadow focus-within:ring-2 focus-within:ring-ring', disabled && 'opacity-50')}>
+    <div
+      className={cn('rounded-md border transition-shadow focus-within:ring-2 focus-within:ring-ring', disabled && 'opacity-50')}
+      onDragOver={(e) => e.preventDefault()}
+      onDrop={(e) => {
+        e.preventDefault()
+        if (!disabled && e.dataTransfer.files.length) uploadFiles(e.dataTransfer.files)
+      }}
+    >
+      {/* Чипы вложений */}
+      {(attachments.length > 0 || uploading > 0) && (
+        <div className="flex flex-wrap gap-1.5 border-b px-2.5 py-2">
+          {attachments.map((a) => (
+            <span key={a.id} className="inline-flex max-w-48 items-center gap-1.5 rounded-full border bg-secondary px-2 py-1 text-xs">
+              {a.mime.startsWith('image/') ? <ImageIcon className="size-3 shrink-0" /> : <FileText className="size-3 shrink-0" />}
+              <span className="truncate">{a.name}</span>
+              <button
+                type="button"
+                onClick={() => setAttachments((prev) => prev.filter((x) => x.id !== a.id))}
+                className="text-muted-foreground hover:text-destructive"
+              >
+                <X className="size-3" />
+              </button>
+            </span>
+          ))}
+          {uploading > 0 && (
+            <span className="inline-flex items-center gap-1.5 rounded-full border px-2 py-1 text-xs text-muted-foreground">
+              <Loader2 className="size-3 animate-spin text-brand" />
+            </span>
+          )}
+        </div>
+      )}
       {/* Контекстное меню форматирования по выделению */}
       <BubbleMenu editor={editor}>
         <div className="flex rounded-md border bg-popover p-0.5 shadow-md">
@@ -136,6 +197,25 @@ export function Composer({
         <div className="min-w-0 flex-1">
           <EditorContent editor={editor} />
         </div>
+        <button
+          type="button"
+          onClick={() => fileRef.current?.click()}
+          disabled={disabled}
+          title={t('chat.attach')}
+          className="rounded-md p-2 text-muted-foreground transition-colors hover:text-foreground disabled:opacity-40"
+        >
+          <Paperclip className="size-4" />
+        </button>
+        <input
+          ref={fileRef}
+          type="file"
+          multiple
+          className="hidden"
+          onChange={(e) => {
+            if (e.target.files?.length) uploadFiles(e.target.files)
+            e.target.value = ''
+          }}
+        />
         <button
           type="button"
           onClick={submit}

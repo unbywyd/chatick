@@ -223,7 +223,26 @@
     "placeholderGroup": "כתיבה לקבוצה…",
     "placeholderAi": "לשאול את ה-AI…",
     "send": "שליחה",
-    "sendHint": "Ctrl+Enter"
+    "sendHint": "Ctrl+Enter",
+    "attach": "צירוף קובץ",
+    "verifying": "בודקים את ההודעה שלך…",
+    "typing_one": "{{names}} כותב…",
+    "typing_other": "{{names}} כותבים…"
+  },
+  "sandbox": {
+    "title": "עריכת הודעה",
+    "subtitle": "ה-AI עיכב את ההודעה — סדרו את זה כאן בפרטיות, אחרים לא רואים",
+    "peek": "להציץ בצ׳אט",
+    "back": "חזרה",
+    "original": "ההודעה המקורית שלך",
+    "sendAsIs": "לשלוח כמו שזה",
+    "suggestion": "הצעת ה-AI",
+    "approvedSuggestion": "מאושר — מוכן לשליחה",
+    "choose": "לבחור",
+    "discard": "לבטל",
+    "discardConfirm": "לבטל את ההודעה לגמרי?",
+    "aiThinking": "ה-AI חושב…",
+    "placeholder": "להשיב ל-AI…"
   },
   "tabs": {
     "about": "אודות",

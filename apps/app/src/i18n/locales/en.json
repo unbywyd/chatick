@@ -223,7 +223,26 @@
     "placeholderGroup": "Message the group…",
     "placeholderAi": "Ask the AI…",
     "send": "Send",
-    "sendHint": "Ctrl+Enter"
+    "sendHint": "Ctrl+Enter",
+    "attach": "Attach file",
+    "verifying": "Checking your message…",
+    "typing_one": "{{names}} is typing…",
+    "typing_other": "{{names}} are typing…"
+  },
+  "sandbox": {
+    "title": "Message review",
+    "subtitle": "The AI held your message — sort it out here privately, nobody else sees this",
+    "peek": "View chat",
+    "back": "Back to review",
+    "original": "Your original message",
+    "sendAsIs": "Send as is",
+    "suggestion": "AI suggestion",
+    "approvedSuggestion": "Approved — ready to send",
+    "choose": "Choose",
+    "discard": "Discard",
+    "discardConfirm": "Discard this message entirely?",
+    "aiThinking": "AI is thinking…",
+    "placeholder": "Reply to the AI…"
   },
   "tabs": {
     "about": "About",
