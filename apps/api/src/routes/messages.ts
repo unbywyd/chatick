@@ -36,6 +36,7 @@ function serialize(
     id: row.id,
     mode: row.mode,
     status: row.status,
+    rawSend: row.rawSend,
     text: row.text,
     replyToId: row.replyToId,
     createdAt: row.createdAt,
@@ -77,15 +78,25 @@ messagesRoute.post(
       mode: z.enum(['group', 'ai']).default('group'),
       replyToId: z.string().nullable().optional(),
       attachmentIds: z.array(z.string()).max(10).default([]),
+      // raw: минуя диспетчер, с пометкой «без проверки» (split-кнопка «Отправить как есть»)
+      raw: z.boolean().default(false),
     }),
   ),
   async (c) => {
     const { projectId, sub } = c.get('auth')
-    const { text, mode, replyToId, attachmentIds } = c.req.valid('json')
+    const { text, mode, replyToId, attachmentIds, raw } = c.req.valid('json')
 
     const [row] = await db
       .insert(messages)
-      .values({ projectId, authorId: sub, mode, status: mode === 'group' ? 'pending' : 'delivered', text, replyToId: replyToId ?? null })
+      .values({
+        projectId,
+        authorId: sub,
+        mode,
+        status: mode === 'group' && !raw ? 'pending' : 'delivered',
+        rawSend: raw,
+        text,
+        replyToId: replyToId ?? null,
+      })
       .returning()
 
     // привязать вложения (только свои файлы проекта без владельца-сообщения)
@@ -101,6 +112,11 @@ messagesRoute.post(
     const message = serialize(row!, author, atts.get(row!.id))
 
     if (mode === 'ai') return c.json(message, 201) // личный диалог с ИИ — отдельный слой
+
+    if (raw) {
+      broadcast(projectId, 'message', message)
+      return c.json(message, 201)
+    }
 
     // остальным: «<имя> пишет…» (typing до вердикта)
     broadcast(projectId, 'checking', { userId: sub, name: author?.name ?? '' }, { except: sub })
@@ -170,9 +186,13 @@ messagesRoute.post(
     if (!msg) return c.json({ error: 'Not found' }, 404)
     const { text } = c.req.valid('json')
 
+    const { projectId, sub } = c.get('auth')
     const [userMsg] = await db.insert(sandboxMessages).values({ messageId: msg.id, role: 'user', text }).returning()
 
-    const reply = await sandboxReply(msg.id)
+    // стриминг ответа ИИ автору («постепенная печать»)
+    const reply = await sandboxReply(msg.id, (delta) =>
+      sendToUser(projectId, sub, 'sandbox_chunk', { messageId: msg.id, delta }),
+    )
     const created: (typeof sandboxMessages.$inferSelect)[] = [userMsg!]
     if (reply) {
       const [aiMsg] = await db.insert(sandboxMessages).values({ messageId: msg.id, role: 'ai', text: reply.text }).returning()
@@ -191,35 +211,40 @@ messagesRoute.post(
   },
 )
 
-// «Выбрать» / «Отправить как есть»: финализировать held → delivered (вложения едут с сообщением)
+// «Выбрать» / «Отправить как есть» / force=«Послать всё равно» (с пометкой ⚠️ без проверки)
 messagesRoute.post(
   '/:messageId/finalize',
-  zValidator('json', z.object({ sandboxItemId: z.string().optional() })),
+  zValidator('json', z.object({ sandboxItemId: z.string().optional(), force: z.boolean().default(false) })),
   async (c) => {
     const { projectId } = c.get('auth')
     const msg = await heldMessageOf(c, c.req.param('messageId'))
     if (!msg) return c.json({ error: 'Not found' }, 404)
-    const { sandboxItemId } = c.req.valid('json')
+    const { sandboxItemId, force } = c.req.valid('json')
 
     const project = await db.query.projects.findFirst({ where: (p, { eq: e }) => e(p.id, projectId) })
     const mode = (JSON.parse(project?.aiConfig || '{}') as { mode?: string }).mode ?? 'assistant'
 
     let finalText = msg.text
+    let rawSend = false
     if (sandboxItemId) {
       const item = await db.query.sandboxMessages.findFirst({
         where: and(eq(sandboxMessages.id, sandboxItemId), eq(sandboxMessages.messageId, msg.id)),
       })
       if (!item?.suggestion) return c.json({ error: 'Not a suggestion' }, 400)
-      if (mode === 'moderator' && !item.approved) return c.json({ error: 'Not approved by AI' }, 403)
+      if (mode === 'moderator' && !item.approved && !force) return c.json({ error: 'Not approved by AI' }, 403)
       finalText = item.text
-    } else if (mode === 'moderator') {
-      // модератор: как-есть нельзя, только одобренные варианты (SPEC §5.5)
-      return c.json({ error: 'Moderator mode: choose an approved suggestion' }, 403)
+      rawSend = !item.approved && force
+    } else if (mode === 'moderator' && !force) {
+      // модератор: как-есть — только с force («Послать всё равно», уйдёт с пометкой)
+      return c.json({ error: 'Moderator mode: choose an approved suggestion or force-send' }, 403)
+    } else {
+      // отправка исходника: в ассистенте — обычная, с force — помеченная
+      rawSend = force
     }
 
     const [updated] = await db
       .update(messages)
-      .set({ status: 'delivered', text: finalText, createdAt: new Date() })
+      .set({ status: 'delivered', text: finalText, rawSend, createdAt: new Date() })
       .where(eq(messages.id, msg.id))
       .returning()
 

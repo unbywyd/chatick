@@ -1,7 +1,7 @@
 import { and, desc, eq } from 'drizzle-orm'
 import { db } from '../db/client.js'
 import { messages, projects, sandboxMessages, users } from '../db/schema.js'
-import { projectLlm, complete, type LlmConfig } from './llm.js'
+import { projectLlm, complete, completeStream } from './llm.js'
 
 // ИИ-диспетчер (SPEC §5.5): оценка сообщений группы (PASS/HOLD) и sandbox-диалог.
 // Все ответы модели — строгий JSON; парсинг устойчив к ```json обёрткам.
@@ -10,7 +10,6 @@ type AiConfig = {
   mode?: 'observer' | 'assistant' | 'moderator'
   language?: string
   answerRepeats?: boolean
-  offtopic?: 'ignore' | 'remind' | 'hold'
 }
 
 const LANG_NAMES: Record<string, string> = { en: 'English', ru: 'Russian', he: 'Hebrew' }
@@ -43,15 +42,13 @@ async function recentContext(projectId: string, excludeId: string, limit = 15): 
 function dispatcherSystem(project: { chatRules: string }, ai: AiConfig, authorName: string): string {
   const lang = LANG_NAMES[ai.language ?? 'en'] ?? ai.language ?? 'English'
   return [
-    `You are the AI dispatcher of a team project chat. Project language: ${lang}.`,
+    `You are the AI dispatcher of a team project chat. PROJECT LANGUAGE: ${lang} — the chat is conducted ONLY in it.`,
     `Author of the incoming message: ${authorName}.`,
     ai.mode === 'moderator'
-      ? 'Mode: MODERATOR — hold messages that are unclear, duplicate already-answered questions, or violate the rules.'
-      : 'Mode: ASSISTANT — be permissive; hold ONLY messages that clearly violate the rules or are impossible to understand. When unsure, PASS.',
+      ? 'Mode: MODERATOR — hold messages that are unclear, off-topic, duplicate already-answered questions, or violate the rules.'
+      : 'Mode: ASSISTANT — be permissive with content; hold ONLY messages that clearly violate the rules, are off-topic, or impossible to understand. When unsure, PASS.',
+    `LANGUAGE RULE (always enforced): if the message is NOT in ${lang}, HOLD it and provide a faithful ${lang} translation as the suggestion (mark it good to send).`,
     project.chatRules ? `Chat rules set by the team: "${project.chatRules}"` : 'No special chat rules.',
-    ai.offtopic === 'hold'
-      ? 'Off-topic messages must be held.'
-      : 'Off-topic is tolerated (do not hold for off-topic alone).',
     '',
     'Decide: PASS (deliver to the group as-is) or HOLD (needs a private clarification with the author).',
     'Respond with ONLY JSON:',
@@ -91,8 +88,14 @@ export async function evaluateMessage(messageId: string): Promise<Verdict> {
   return parsed
 }
 
-/** Ответ ИИ в sandbox-диалоге: помогает довести сообщение, предлагает варианты. */
-export async function sandboxReply(messageId: string): Promise<{
+/**
+ * Ответ ИИ в sandbox-диалоге: помогает довести сообщение, предлагает варианты.
+ * onChunk — стриминг «text»-части ответа для постепенной печати (SPEC: streaming).
+ */
+export async function sandboxReply(
+  messageId: string,
+  onChunk?: (delta: string) => void,
+): Promise<{
   text: string
   suggestion: string | null
   approved: boolean
@@ -112,30 +115,51 @@ export async function sandboxReply(messageId: string): Promise<{
   })
   const context = await recentContext(msg.projectId, msg.id, 10)
 
-  const raw = await complete(cfg, {
-    system: [
-      `You help an author finalize a held chat message. Project language: ${lang}.`,
-      project.chatRules ? `Chat rules: "${project.chatRules}"` : '',
-      'Talk to the author in THEIR language. Be brief and practical.',
-      'When you have a message version ready for the group chat (in the project language, respecting the rules), include it as "suggestion" and set "approved":true if it is good to send.',
-      'Respond with ONLY JSON: {"text":"<your reply to the author>","suggestion":"<message version or empty>","approved":true|false}',
-    ]
-      .filter(Boolean)
-      .join('\n'),
-    user: [
-      `Group chat context:\n${context || '(empty)'}`,
-      `Original held message:\n${msg.text}`,
-      `Sandbox conversation so far:`,
-      ...history.map((h) => `${h.role === 'user' ? 'Author' : 'You'}: ${h.text}`),
-    ].join('\n\n'),
-    maxTokens: 800,
-  })
+  // формат под стриминг: свободный ответ (стримится) → маркеры с вариантом
+  const system = [
+    `You help an author finalize a held chat message. Project language: ${lang}.`,
+    project.chatRules ? `Chat rules: "${project.chatRules}"` : '',
+    'Talk to the author in THEIR language. Be brief and practical.',
+    'Format your response EXACTLY like this:',
+    '<your reply to the author>',
+    'Then, if you have a message version ready for the group chat (project language, rules respected), add:',
+    '---SUGGESTION---',
+    '<the message version>',
+    '---APPROVED--- (add this line ONLY if the version is good to send as-is)',
+  ]
+    .filter(Boolean)
+    .join('\n')
+  const user = [
+    `Group chat context:\n${context || '(empty)'}`,
+    `Original held message:\n${msg.text}`,
+    `Sandbox conversation so far:`,
+    ...history.map((h) => `${h.role === 'user' ? 'Author' : 'You'}: ${h.text}`),
+  ].join('\n\n')
 
-  const parsed = parseJson<{ text?: string; suggestion?: string; approved?: boolean }>(raw)
-  if (!parsed?.text) return null
-  return {
-    text: parsed.text,
-    suggestion: parsed.suggestion?.trim() || null,
-    approved: Boolean(parsed.approved && parsed.suggestion?.trim()),
-  }
+  let streamedPastMarker = false
+  let buffer = ''
+  const raw = await completeStream(
+    cfg,
+    { system, user, maxTokens: 800 },
+    (delta) => {
+      if (streamedPastMarker || !onChunk) return
+      buffer += delta
+      const idx = buffer.indexOf('---SUGGESTION---')
+      if (idx >= 0) {
+        streamedPastMarker = true
+        const before = buffer.slice(0, idx)
+        // дослать хвост до маркера (сколько ещё не ушло)
+        const sentLen = buffer.length - delta.length
+        if (before.length > sentLen) onChunk(before.slice(sentLen))
+      } else {
+        onChunk(delta)
+      }
+    },
+  )
+  if (!raw) return null
+
+  const [textPart, rest] = raw.split('---SUGGESTION---')
+  const approved = rest?.includes('---APPROVED---') ?? false
+  const suggestion = rest?.replace('---APPROVED---', '').trim() || null
+  return { text: (textPart ?? '').trim(), suggestion, approved: Boolean(approved && suggestion) }
 }

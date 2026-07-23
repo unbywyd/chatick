@@ -5,7 +5,7 @@ import StarterKit from '@tiptap/starter-kit'
 import Placeholder from '@tiptap/extension-placeholder'
 import Mention from '@tiptap/extension-mention'
 import tippy, { type Instance } from 'tippy.js'
-import { Bold, Italic, Code, FileText, Image as ImageIcon, List, Loader2, Paperclip, SendHorizontal, Strikethrough, X } from 'lucide-react'
+import { Bold, ChevronUp, Code, FileText, Image as ImageIcon, Italic, List, Loader2, Paperclip, SendHorizontal, ShieldOff, Strikethrough, X } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
 import { toast } from 'sonner'
 import { API_URL, getProjectToken } from '@/lib/api'
@@ -27,11 +27,14 @@ export function Composer({
   disabled?: boolean
   placeholder: string
   mentions: MentionItem[]
-  onSend: (payload: { markdown: string; mentionIds: string[]; attachmentIds: string[] }) => void
+  onSend: (payload: { markdown: string; mentionIds: string[]; attachmentIds: string[]; raw?: boolean }) => void
 }) {
   const { t } = useTranslation()
   const [attachments, setAttachments] = useState<PendingAttachment[]>([])
   const [uploading, setUploading] = useState(0)
+  const [sendMenu, setSendMenu] = useState(false)
+  // «отправить оригинал» — как в WhatsApp: без сжатия картинок
+  const [keepOriginal, setKeepOriginal] = useState(false)
   const fileRef = useRef<HTMLInputElement>(null)
 
   // вложения грузятся сразу (files API), к сообщению привяжутся при отправке (SPEC §5.5.4)
@@ -41,6 +44,7 @@ export function Composer({
       try {
         const fd = new FormData()
         fd.append('file', file)
+        if (keepOriginal) fd.append('keepOriginal', '1')
         const res = await fetch(`${API_URL}/api/v1/files`, {
           method: 'POST',
           headers: { Authorization: `Bearer ${getProjectToken()}` },
@@ -128,14 +132,15 @@ export function Composer({
     editor?.setEditable(!disabled)
   }, [editor, disabled])
 
-  const submit = () => {
+  const submit = (raw = false) => {
     if (!editor) return
     const markdown = editor.isEmpty ? '' : serializeToMarkdown(editor.getJSON())
     if (!markdown.trim() && attachments.length === 0) return
     const mentionIds = collectMentions(editor.getJSON())
-    onSend({ markdown: markdown || '📎', mentionIds, attachmentIds: attachments.map((a) => a.id) })
+    onSend({ markdown: markdown || '📎', mentionIds, attachmentIds: attachments.map((a) => a.id), raw })
     editor.commands.clearContent()
     setAttachments([])
+    setSendMenu(false)
   }
 
   if (!editor) return null
@@ -146,7 +151,30 @@ export function Composer({
       onDragOver={(e) => e.preventDefault()}
       onDrop={(e) => {
         e.preventDefault()
-        if (!disabled && e.dataTransfer.files.length) uploadFiles(e.dataTransfer.files)
+        if (disabled) return
+        // D&D задач: строки таба «Задачи» кладут application/x-chatick-task
+        const taskData = e.dataTransfer.getData('application/x-chatick-task')
+        if (taskData && editor) {
+          try {
+            const task = JSON.parse(taskData) as { id: string; number: string; title: string; projectId: string }
+            editor
+              .chain()
+              .focus()
+              .insertContent(`[${task.number}: ${task.title}](#/p/${task.projectId}/tasks/${task.id}) `)
+              .run()
+            return
+          } catch { /* fallthrough */ }
+        }
+        // D&D файла из файл-менеджера: application/x-chatick-file
+        const fileData = e.dataTransfer.getData('application/x-chatick-file')
+        if (fileData) {
+          try {
+            const f = JSON.parse(fileData) as PendingAttachment
+            setAttachments((prev) => (prev.some((x) => x.id === f.id) ? prev : [...prev, f]))
+            return
+          } catch { /* fallthrough */ }
+        }
+        if (e.dataTransfer.files.length) uploadFiles(e.dataTransfer.files)
       }}
     >
       {/* Чипы вложений */}
@@ -206,6 +234,18 @@ export function Composer({
         >
           <Paperclip className="size-4" />
         </button>
+        <button
+          type="button"
+          onClick={() => setKeepOriginal((v) => !v)}
+          disabled={disabled}
+          title={t('chat.keepOriginal')}
+          className={cn(
+            'rounded-md p-2 transition-colors disabled:opacity-40',
+            keepOriginal ? 'text-brand' : 'text-muted-foreground hover:text-foreground',
+          )}
+        >
+          <ImageIcon className="size-4" />
+        </button>
         <input
           ref={fileRef}
           type="file"
@@ -216,16 +256,47 @@ export function Composer({
             e.target.value = ''
           }}
         />
-        <button
-          type="button"
-          onClick={submit}
-          disabled={disabled}
-          aria-label={t('chat.send')}
-          title={t('chat.sendHint')}
-          className="rounded-md bg-brand p-2 text-brand-foreground transition-opacity disabled:opacity-40"
-        >
-          <SendHorizontal className="size-4 rtl:-scale-x-100" />
-        </button>
+
+        {/* Split-кнопка: основная = отправить через ИИ; стрелка = меню опций отправки */}
+        <div className="relative flex">
+          <button
+            type="button"
+            onClick={() => submit(false)}
+            disabled={disabled}
+            aria-label={t('chat.send')}
+            title={t('chat.sendHint')}
+            className="rounded-s-md bg-brand p-2 text-brand-foreground transition-opacity disabled:opacity-40"
+          >
+            <SendHorizontal className="size-4 rtl:-scale-x-100" />
+          </button>
+          <button
+            type="button"
+            onClick={() => setSendMenu((v) => !v)}
+            disabled={disabled}
+            className="rounded-e-md border-s border-brand-foreground/20 bg-brand px-1 text-brand-foreground transition-opacity disabled:opacity-40"
+          >
+            <ChevronUp className={cn('size-3.5 transition-transform', sendMenu && 'rotate-180')} />
+          </button>
+
+          {sendMenu && (
+            <>
+              <div className="fixed inset-0 z-40" onClick={() => setSendMenu(false)} />
+              <div className="absolute bottom-full end-0 z-50 mb-1 min-w-52 overflow-hidden rounded-md border bg-popover p-1 shadow-md">
+                <button
+                  type="button"
+                  onClick={() => submit(true)}
+                  className="flex w-full items-center gap-2 rounded-sm px-2 py-1.5 text-start text-sm hover:bg-accent"
+                >
+                  <ShieldOff className="size-3.5 text-orange-400" />
+                  <span>
+                    <span className="block">{t('chat.rawSend')}</span>
+                    <span className="block text-xs text-muted-foreground">{t('chat.rawSendHint')}</span>
+                  </span>
+                </button>
+              </div>
+            </>
+          )}
+        </div>
       </div>
     </div>
   )

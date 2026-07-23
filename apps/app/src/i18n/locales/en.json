@@ -225,6 +225,10 @@
     "send": "Send",
     "sendHint": "Ctrl+Enter",
     "attach": "Attach file",
+    "keepOriginal": "Send images uncompressed (original)",
+    "rawSend": "Send as is (raw)",
+    "rawSendHint": "Skip the AI check — marked as unverified",
+    "rawBadge": "unverified",
     "verifying": "Checking your message…",
     "typing_one": "{{names}} is typing…",
     "typing_other": "{{names}} are typing…"
@@ -242,7 +246,10 @@
     "discard": "Discard",
     "discardConfirm": "Discard this message entirely?",
     "aiThinking": "AI is thinking…",
-    "placeholder": "Reply to the AI…"
+    "placeholder": "Reply to the AI…",
+    "forceSend": "Send anyway",
+    "forceConfirm": "Send despite the AI's hold?",
+    "forceNote": "The message will appear in the chat with an “unverified” badge."
   },
   "tabs": {
     "about": "About",

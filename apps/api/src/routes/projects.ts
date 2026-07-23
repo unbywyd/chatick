@@ -17,10 +17,10 @@ const CHAT_RULES_MAX = 300 // SPEC §4.2 — попадает в каждый п
 // SPEC §4.1: каждый параметр = конкретное действие диспетчера
 const aiConfigSchema = z.object({
   mode: z.enum(['observer', 'assistant', 'moderator']).default('assistant'),
-  language: z.string().min(2).max(8).default('en'), // язык проекта
+  // ЯЗЫК ПРОЕКТА: задачи, документы и чат ведутся на нём; сообщения на других языках ИИ придерживает и переводит
+  language: z.string().min(2).max(8).default('en'),
   autoTranslate: z.boolean().default(true),
   answerRepeats: z.boolean().default(true),
-  offtopic: z.enum(['ignore', 'remind', 'hold']).default('remind'),
   // при создании задачи ИИ адаптирует её под язык проекта и слегка улучшает формулировку
   improveTasks: z.boolean().default(false),
 })

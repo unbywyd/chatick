@@ -1,6 +1,7 @@
 import { Hono } from 'hono'
 import { and, desc, eq } from 'drizzle-orm'
 import { nanoid } from 'nanoid'
+import sharp from 'sharp'
 import { PutObjectCommand } from '@aws-sdk/client-s3'
 import { db } from '../db/client.js'
 import { files, tasks, users } from '../db/schema.js'
@@ -45,13 +46,20 @@ filesRoute.get('/', async (c) => {
   )
 })
 
-// Загрузка: multipart/form-data, поле "file"; опционально taskId — вложение задачи
+const OPTIMIZABLE = new Set(['image/jpeg', 'image/png', 'image/webp', 'image/avif', 'image/tiff'])
+const MAX_DIMENSION = 2048
+const WEBP_QUALITY = 82
+
+// Загрузка: multipart/form-data, поле "file"; taskId — вложение задачи;
+// keepOriginal=1 — не оптимизировать (как «отправить оригинал» в WhatsApp).
+// Картинки по умолчанию: resize ≤2048px + webp; оригинал сохраняется рядом (originalKey).
 filesRoute.post('/', async (c) => {
   const { projectId, sub } = c.get('auth')
 
   const body = await c.req.parseBody()
   const file = body['file']
   const taskId = typeof body['taskId'] === 'string' && body['taskId'] ? body['taskId'] : null
+  const keepOriginal = body['keepOriginal'] === '1'
   if (!(file instanceof File)) return c.json({ error: 'file field is required' }, 400)
   if (taskId) {
     const task = await db.query.tasks.findFirst({ where: and(eq(tasks.id, taskId), eq(tasks.projectId, projectId)) })
@@ -61,36 +69,76 @@ filesRoute.post('/', async (c) => {
 
   const fileId = nanoid()
   const safeName = file.name.replace(/[/\\]/g, '_')
-  const key = `${S3_KEY_PREFIX}/${projectId}/${fileId}-${safeName}`
   const mime = file.type || 'application/octet-stream'
+  let buffer = Buffer.from(await file.arrayBuffer())
+  let outName = file.name
+  let outMime = mime
+  let key = `${S3_KEY_PREFIX}/${projectId}/${fileId}-${safeName}`
+  let originalKey: string | null = null
 
-  await s3Client().send(
-    new PutObjectCommand({
-      Bucket: s3Bucket(),
-      Key: key,
-      Body: Buffer.from(await file.arrayBuffer()),
-      ContentType: mime,
-    }),
-  )
+  if (!keepOriginal && OPTIMIZABLE.has(mime)) {
+    try {
+      const optimized = await sharp(buffer, { failOn: 'none' })
+        .rotate() // EXIF-ориентация
+        .resize(MAX_DIMENSION, MAX_DIMENSION, { fit: 'inside', withoutEnlargement: true })
+        .webp({ quality: WEBP_QUALITY })
+        .toBuffer()
+      // применяем только если реально выгодно
+      if (optimized.length < buffer.length * 0.9) {
+        originalKey = `${S3_KEY_PREFIX}/${projectId}/${fileId}-orig-${safeName}`
+        await s3Client().send(
+          new PutObjectCommand({ Bucket: s3Bucket(), Key: originalKey, Body: buffer, ContentType: mime }),
+        )
+        buffer = optimized
+        outMime = 'image/webp'
+        outName = file.name.replace(/\.[^.]+$/, '') + '.webp'
+        key = `${S3_KEY_PREFIX}/${projectId}/${fileId}-${outName.replace(/[/\\]/g, '_')}`
+      }
+    } catch (e) {
+      console.error('[files] optimize failed, storing original:', e)
+    }
+  }
+
+  await s3Client().send(new PutObjectCommand({ Bucket: s3Bucket(), Key: key, Body: buffer, ContentType: outMime }))
 
   const [row] = await db
     .insert(files)
-    .values({ id: fileId, projectId, taskId, uploadedById: sub, name: file.name, key, mime, size: String(file.size) })
+    .values({
+      id: fileId,
+      projectId,
+      taskId,
+      uploadedById: sub,
+      name: outName,
+      key,
+      mime: outMime,
+      size: String(buffer.length),
+      originalKey,
+    })
     .returning()
   return c.json(
-    { id: row!.id, name: row!.name, mime: row!.mime, size: Number(row!.size), taskId: row!.taskId, createdAt: row!.createdAt },
+    {
+      id: row!.id,
+      name: row!.name,
+      mime: row!.mime,
+      size: Number(row!.size),
+      taskId: row!.taskId,
+      hasOriginal: Boolean(row!.originalKey),
+      createdAt: row!.createdAt,
+    },
     201,
   )
 })
 
-// Скачивание — presigned GET (attachment); ?inline=1 — просмотр в браузере (превью/лайтбокс/PDF)
+// Скачивание — presigned GET (attachment); ?inline=1 — просмотр; ?original=1 — исходник до оптимизации
 filesRoute.get('/:fileId/download', async (c) => {
   const { projectId } = c.get('auth')
   const fileId = c.req.param('fileId')
   const inline = c.req.query('inline') === '1'
+  const wantOriginal = c.req.query('original') === '1'
   const file = await db.query.files.findFirst({ where: and(eq(files.id, fileId), eq(files.projectId, projectId)) })
   if (!file) return c.json({ error: 'Not found' }, 404)
-  const url = inline ? await presignView(file.key, file.mime) : await presignDownload(file.key, file.name)
+  const key = wantOriginal && file.originalKey ? file.originalKey : file.key
+  const url = inline ? await presignView(key, file.mime) : await presignDownload(key, file.name)
   return c.json({ url })
 })
 
@@ -106,5 +154,6 @@ filesRoute.delete('/:fileId', async (c) => {
 
   await db.delete(files).where(eq(files.id, fileId))
   deleteObject(file.key).catch((e) => console.error('[s3] delete failed:', e)) // best-effort
+  if (file.originalKey) deleteObject(file.originalKey).catch(() => {})
   return c.json({ ok: true })
 })

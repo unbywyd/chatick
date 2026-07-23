@@ -16,14 +16,12 @@ export const CHAT_RULES_MAX = 300
 
 // SPEC §4.1: каждый параметр = конкретное действие диспетчера
 export type AiMode = 'observer' | 'assistant' | 'moderator'
-export type Offtopic = 'ignore' | 'remind' | 'hold'
 
 export type AiConfig = {
   mode: AiMode
-  language: string // язык проекта
+  language: string // язык ПРОЕКТА: задачи, документы и чат ведутся на нём; иное ИИ переводит
   autoTranslate: boolean
   answerRepeats: boolean
-  offtopic: Offtopic
   improveTasks: boolean // ИИ адаптирует новые задачи под язык проекта и улучшает формулировку
 }
 
@@ -32,7 +30,6 @@ export const DEFAULT_AI_CONFIG: AiConfig = {
   language: 'en',
   autoTranslate: true,
   answerRepeats: true,
-  offtopic: 'remind',
   improveTasks: false,
 }
 
@@ -102,6 +99,28 @@ export function ProjectSettingsForm({
               <Input value={value.name} onChange={(e) => set('name', e.target.value)} placeholder={t('start.projectName')} />
             </Field>
           )}
+          {/* Язык проекта — фундаментальное свойство: задачи, документы и чат на нём */}
+          <div className="flex items-center justify-between gap-3">
+            <div>
+              <p className="text-sm font-medium">{t('projectForm.language')}</p>
+              <p className="text-xs text-muted-foreground">{t('projectForm.languageHint')}</p>
+            </div>
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <Button variant="outline" size="sm" className="gap-1.5">
+                  {lang?.label ?? value.aiConfig.language}
+                  <ChevronDown className="size-3.5 text-muted-foreground" />
+                </Button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="end">
+                {PROJECT_LANGUAGES.map((l) => (
+                  <DropdownMenuCheckItem key={l.code} checked={l.code === value.aiConfig.language} onSelect={() => setAi('language', l.code)}>
+                    {l.label}
+                  </DropdownMenuCheckItem>
+                ))}
+              </DropdownMenuContent>
+            </DropdownMenu>
+          </div>
           <Field label={t('projectForm.about')}>
             <textarea
               value={value.about}
@@ -135,29 +154,6 @@ export function ProjectSettingsForm({
             ))}
           </div>
 
-          {/* Язык проекта */}
-          <div className="flex items-center justify-between gap-3">
-            <div>
-              <p className="text-sm">{t('projectForm.language')}</p>
-              <p className="text-xs text-muted-foreground">{t('projectForm.languageHint')}</p>
-            </div>
-            <DropdownMenu>
-              <DropdownMenuTrigger asChild>
-                <Button variant="outline" size="sm" className="gap-1.5">
-                  {lang?.label ?? value.aiConfig.language}
-                  <ChevronDown className="size-3.5 text-muted-foreground" />
-                </Button>
-              </DropdownMenuTrigger>
-              <DropdownMenuContent align="end">
-                {PROJECT_LANGUAGES.map((l) => (
-                  <DropdownMenuCheckItem key={l.code} checked={l.code === value.aiConfig.language} onSelect={() => setAi('language', l.code)}>
-                    {l.label}
-                  </DropdownMenuCheckItem>
-                ))}
-              </DropdownMenuContent>
-            </DropdownMenu>
-          </div>
-
           <ToggleRow
             label={t('projectForm.autoTranslate')}
             hint={t('projectForm.autoTranslateHint')}
@@ -176,28 +172,6 @@ export function ProjectSettingsForm({
             checked={value.aiConfig.improveTasks}
             onChange={(v) => setAi('improveTasks', v)}
           />
-
-          {/* Оффтоп — сегмент из 3 действий */}
-          <div>
-            <p className="text-sm">{t('projectForm.offtopic')}</p>
-            <div className="mt-2 flex rounded-md border p-0.5">
-              {(['ignore', 'remind', 'hold'] as const).map((o) => (
-                <button
-                  key={o}
-                  type="button"
-                  onClick={() => setAi('offtopic', o)}
-                  className={cn(
-                    'flex-1 rounded px-2 py-1.5 text-xs transition-colors',
-                    value.aiConfig.offtopic === o
-                      ? 'bg-primary text-primary-foreground'
-                      : 'text-muted-foreground hover:text-foreground',
-                  )}
-                >
-                  {t(`offtopic.${o}`)}
-                </button>
-              ))}
-            </div>
-          </div>
         </div>
       )}
 

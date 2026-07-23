@@ -123,6 +123,82 @@ export async function complete(
   }
 }
 
+/** Стриминговое дополнение: onChunk получает дельты текста; возвращает полный текст (null при сбое). */
+export async function completeStream(
+  cfg: LlmConfig,
+  opts: { system: string; user: string; maxTokens?: number },
+  onChunk: (delta: string) => void,
+): Promise<string | null> {
+  const p = LLM_PROVIDERS[cfg.provider]
+  try {
+    const isAnthropic = p.kind === 'anthropic'
+    const res = await fetch(isAnthropic ? `${p.baseUrl}/messages` : `${p.baseUrl}/chat/completions`, {
+      method: 'POST',
+      headers: isAnthropic
+        ? { 'x-api-key': cfg.apiKey, 'anthropic-version': '2023-06-01', 'content-type': 'application/json' }
+        : { Authorization: `Bearer ${cfg.apiKey}`, 'content-type': 'application/json' },
+      body: JSON.stringify(
+        isAnthropic
+          ? {
+              model: cfg.model,
+              max_tokens: opts.maxTokens ?? 1024,
+              system: opts.system,
+              messages: [{ role: 'user', content: opts.user }],
+              stream: true,
+            }
+          : {
+              model: cfg.model,
+              max_tokens: opts.maxTokens ?? 1024,
+              messages: [
+                { role: 'system', content: opts.system },
+                { role: 'user', content: opts.user },
+              ],
+              stream: true,
+            },
+      ),
+    })
+    if (!res.ok || !res.body) {
+      console.error('[llm] stream failed:', res.status, await res.text().catch(() => ''))
+      return null
+    }
+
+    let full = ''
+    const reader = res.body.getReader()
+    const decoder = new TextDecoder()
+    let buf = ''
+    for (;;) {
+      const { done, value } = await reader.read()
+      if (done) break
+      buf += decoder.decode(value, { stream: true })
+      const lines = buf.split('\n')
+      buf = lines.pop() ?? ''
+      for (const line of lines) {
+        if (!line.startsWith('data:')) continue
+        const data = line.slice(5).trim()
+        if (!data || data === '[DONE]') continue
+        try {
+          const json = JSON.parse(data) as Record<string, unknown>
+          const delta = isAnthropic
+            ? ((json as { type?: string; delta?: { type?: string; text?: string } }).type === 'content_block_delta'
+                ? (json as { delta?: { text?: string } }).delta?.text
+                : undefined)
+            : (json as { choices?: { delta?: { content?: string } }[] }).choices?.[0]?.delta?.content
+          if (delta) {
+            full += delta
+            onChunk(delta)
+          }
+        } catch {
+          /* пропускаем неполные чанки */
+        }
+      }
+    }
+    return full || null
+  } catch (err) {
+    console.error('[llm] stream error:', err)
+    return null
+  }
+}
+
 /** Быстрая проверка ключа при сохранении настроек. */
 export async function testLlm(cfg: LlmConfig): Promise<boolean> {
   const r = await complete(cfg, { system: 'Reply with exactly: ok', user: 'ping', maxTokens: 8 })

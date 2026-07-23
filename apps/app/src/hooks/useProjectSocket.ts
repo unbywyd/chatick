@@ -7,6 +7,7 @@ export type ChatMessage = {
   id: string
   mode: 'group' | 'ai'
   status: string
+  rawSend?: boolean
   text: string
   replyToId: string | null
   createdAt: string
@@ -19,6 +20,7 @@ export type SocketEvents = {
   onChecking?: (p: { userId: string; name: string }) => void
   onCheckingDone?: (p: { userId: string }) => void
   onHeld?: (p: { messageId: string }) => void
+  onSandboxChunk?: (p: { messageId: string; delta: string }) => void
 }
 
 // Realtime проекта: presence + сообщения + пайплайн-события. Реконнект с бэкоффом.
@@ -52,6 +54,7 @@ export function useProjectSocket(projectId: string | undefined, events: SocketEv
           if (event === 'checking') eventsRef.current.onChecking?.(payload as { userId: string; name: string })
           if (event === 'checking_done') eventsRef.current.onCheckingDone?.(payload as { userId: string })
           if (event === 'held') eventsRef.current.onHeld?.(payload as { messageId: string })
+          if (event === 'sandbox_chunk') eventsRef.current.onSandboxChunk?.(payload as { messageId: string; delta: string })
         } catch {
           /* ignore */
         }

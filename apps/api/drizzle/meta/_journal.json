@@ -57,6 +57,13 @@
       "when": 1784823040333,
       "tag": "0007_lying_thunderbird",
       "breakpoints": true
+    },
+    {
+      "idx": 8,
+      "version": "7",
+      "when": 1784824230301,
+      "tag": "0008_jazzy_terror",
+      "breakpoints": true
     }
   ]
 }

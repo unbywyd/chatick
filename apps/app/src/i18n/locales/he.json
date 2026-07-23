@@ -225,6 +225,10 @@
     "send": "שליחה",
     "sendHint": "Ctrl+Enter",
     "attach": "צירוף קובץ",
+    "keepOriginal": "לשלוח תמונות ללא דחיסה (מקור)",
+    "rawSend": "לשלוח כמו שזה (raw)",
+    "rawSendHint": "לדלג על בדיקת ה-AI — עם תווית «לא נבדק»",
+    "rawBadge": "לא נבדק",
     "verifying": "בודקים את ההודעה שלך…",
     "typing_one": "{{names}} כותב…",
     "typing_other": "{{names}} כותבים…"
@@ -242,7 +246,10 @@
     "discard": "לבטל",
     "discardConfirm": "לבטל את ההודעה לגמרי?",
     "aiThinking": "ה-AI חושב…",
-    "placeholder": "להשיב ל-AI…"
+    "placeholder": "להשיב ל-AI…",
+    "forceSend": "לשלוח בכל זאת",
+    "forceConfirm": "לשלוח למרות עיכוב ה-AI?",
+    "forceNote": "ההודעה תופיע בצ׳אט עם תווית «לא נבדק»."
   },
   "tabs": {
     "about": "אודות",

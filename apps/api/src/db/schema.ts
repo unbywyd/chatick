@@ -169,6 +169,8 @@ export const messages = pgTable(
     authorId: text('author_id').references(() => users.id, { onDelete: 'set null' }), // null = сообщение от ИИ
     mode: messageMode('mode').notNull().default('group'),
     status: messageStatus('status').notNull().default('pending'),
+    // отправлено в обход/вопреки ИИ — в ленте помечается «без проверки»
+    rawSend: boolean('raw_send').notNull().default(false),
     text: text('text').notNull(),
     // переводы: { "ru": "...", "he": "...", "en": "..." } — лениво заполняет ИИ
     translations: text('translations'), // JSON
@@ -223,6 +225,8 @@ export const files = pgTable(
     taskId: text('task_id').references(() => tasks.id, { onDelete: 'set null' }),
     // вложение сообщения чата (SPEC §5.5.4)
     messageId: text('message_id').references(() => messages.id, { onDelete: 'set null' }),
+    // картинки оптимизируются (webp); оригинал сохраняется отдельным ключом, если просили
+    originalKey: text('original_key'),
     uploadedById: text('uploaded_by_id').references(() => users.id, { onDelete: 'set null' }),
     name: text('name').notNull(),
     key: text('key').notNull(), // S3 object key

@@ -164,7 +164,18 @@ export function FilesTab({ projectId }: { projectId: string }) {
         {filtered.map((f) => {
           const Icon = iconFor(f.mime)
           return (
-            <li key={f.id} className="flex items-center gap-3 rounded-lg border bg-card px-3 py-2.5">
+            <li
+              key={f.id}
+              draggable
+              onDragStart={(e) =>
+                // D&D в чат: композер прикрепит файл к сообщению
+                e.dataTransfer.setData(
+                  'application/x-chatick-file',
+                  JSON.stringify({ id: f.id, name: f.name, mime: f.mime, size: f.size }),
+                )
+              }
+              className="flex cursor-grab items-center gap-3 rounded-lg border bg-card px-3 py-2.5 active:cursor-grabbing"
+            >
               <span className="grid size-9 shrink-0 place-items-center rounded-md bg-secondary">
                 <Icon className="size-4" />
               </span>

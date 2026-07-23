@@ -302,7 +302,12 @@ function TaskRow({
     <li
       draggable
       onDragStart={(e) => {
-        e.dataTransfer.effectAllowed = 'move'
+        e.dataTransfer.effectAllowed = 'copyMove'
+        // для D&D в чат: композер вставит ссылку на задачу
+        e.dataTransfer.setData(
+          'application/x-chatick-task',
+          JSON.stringify({ id: task.id, number: task.number, title: task.title, projectId: window.location.hash.split('/')[2] }),
+        )
         onDragStart()
       }}
       onDragEnd={onDragEnd}

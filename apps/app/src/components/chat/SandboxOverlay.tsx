@@ -28,11 +28,15 @@ type SandboxData = {
 export function SandboxOverlay({
   messageId,
   aiMode,
+  streamingText,
+  onStreamReset,
   onSent,
   onDiscard,
 }: {
   messageId: string
   aiMode: 'observer' | 'assistant' | 'moderator'
+  streamingText?: string // постепенная печать ответа ИИ (ws sandbox_chunk)
+  onStreamReset?: () => void
   onSent: () => void
   onDiscard: () => void
 }) {
@@ -50,21 +54,23 @@ export function SandboxOverlay({
 
   useEffect(() => {
     bottomRef.current?.scrollIntoView({ behavior: 'smooth' })
-  }, [sandbox.data?.items.length])
+  }, [sandbox.data?.items.length, streamingText])
 
   const reply = useMutation({
     mutationFn: (text: string) =>
       api<SandboxItem[]>(`/api/v1/messages/${messageId}/sandbox`, { method: 'POST', body: JSON.stringify({ text }) }, 'project'),
+    onMutate: () => onStreamReset?.(),
     onSuccess: () => {
       setDraft('')
+      onStreamReset?.()
       qc.invalidateQueries({ queryKey: ['sandbox', messageId] })
     },
     onError: (e) => toast.error(e instanceof Error ? e.message : String(e)),
   })
 
   const finalize = useMutation({
-    mutationFn: (sandboxItemId?: string) =>
-      api(`/api/v1/messages/${messageId}/finalize`, { method: 'POST', body: JSON.stringify({ sandboxItemId }) }, 'project'),
+    mutationFn: (body: { sandboxItemId?: string; force?: boolean }) =>
+      api(`/api/v1/messages/${messageId}/finalize`, { method: 'POST', body: JSON.stringify(body) }, 'project'),
     onSuccess: onSent,
     onError: (e) => toast.error(e instanceof Error ? e.message : String(e)),
   })
@@ -132,11 +138,27 @@ export function SandboxOverlay({
                     ))}
                   </div>
                 )}
-                {aiMode !== 'moderator' && (
-                  <Button variant="outline" size="sm" className="mt-2" onClick={() => finalize.mutate(undefined)} disabled={finalize.isPending}>
-                    {t('sandbox.sendAsIs')}
-                  </Button>
-                )}
+                <div className="mt-2 flex flex-wrap gap-2">
+                  {aiMode !== 'moderator' ? (
+                    <Button variant="outline" size="sm" onClick={() => finalize.mutate({})} disabled={finalize.isPending}>
+                      {t('sandbox.sendAsIs')}
+                    </Button>
+                  ) : (
+                    /* даже в модераторе можно «Послать всё равно» — уйдёт с пометкой «без проверки» */
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      className="border-orange-400/40 text-orange-400 hover:bg-orange-400/10"
+                      onClick={async () => {
+                        if (await confirm({ title: t('sandbox.forceConfirm'), description: t('sandbox.forceNote'), confirmLabel: t('sandbox.forceSend') }))
+                          finalize.mutate({ force: true })
+                      }}
+                      disabled={finalize.isPending}
+                    >
+                      {t('sandbox.forceSend')}
+                    </Button>
+                  )}
+                </div>
               </div>
             )}
 
@@ -149,12 +171,15 @@ export function SandboxOverlay({
                       {item.approved && <Check className="size-3 text-brand" />}
                       {item.approved ? t('sandbox.approvedSuggestion') : t('sandbox.suggestion')}
                     </p>
-                    {(item.approved || aiMode !== 'moderator') && (
-                      <Button variant="brand" size="sm" onClick={() => finalize.mutate(item.id)} disabled={finalize.isPending}>
-                        <Check className="size-3.5" />
-                        {t('sandbox.choose')}
-                      </Button>
-                    )}
+                    <Button
+                      variant="brand"
+                      size="sm"
+                      onClick={() => finalize.mutate({ sandboxItemId: item.id, force: !item.approved })}
+                      disabled={finalize.isPending}
+                    >
+                      <Check className="size-3.5" />
+                      {t('sandbox.choose')}
+                    </Button>
                   </div>
                   <div className="msg-md text-sm">
                     <ReactMarkdown>{item.text}</ReactMarkdown>
@@ -178,12 +203,24 @@ export function SandboxOverlay({
                 </div>
               ),
             )}
-            {(reply.isPending || sandbox.isLoading) && (
+            {/* Стриминг: постепенная печать ответа ИИ */}
+            {reply.isPending && streamingText && (
+              <div className="flex gap-2.5">
+                <span className="grid size-7 shrink-0 place-items-center rounded-full bg-brand text-brand-foreground">
+                  <Bot className="size-4" />
+                </span>
+                <div className="msg-md max-w-[85%] rounded-lg border bg-card px-3 py-2 text-sm">
+                  <ReactMarkdown>{streamingText}</ReactMarkdown>
+                  <span className="inline-block h-3.5 w-1 animate-pulse bg-brand align-text-bottom" />
+                </div>
+              </div>
+            )}
+            {(reply.isPending && !streamingText) || sandbox.isLoading ? (
               <p className="flex items-center gap-2 text-xs text-muted-foreground">
                 <Loader2 className="size-3.5 animate-spin text-brand" />
                 {t('sandbox.aiThinking')}
               </p>
-            )}
+            ) : null}
             <div ref={bottomRef} />
           </div>
 

@@ -29,6 +29,7 @@ export function ChatPanel({ projectName, aiMode = 'assistant' }: { projectName?:
   const [checkingUsers, setCheckingUsers] = useState<Map<string, string>>(new Map()) // userId -> name («пишет…»)
   const [myPending, setMyPending] = useState(false) // «проверяется…» у автора
   const [sandboxId, setSandboxId] = useState<string | null>(null)
+  const [sandboxStream, setSandboxStream] = useState('') // постепенная печать ответа ИИ
   const bottomRef = useRef<HTMLDivElement>(null)
 
   const llm = useQuery({
@@ -80,6 +81,7 @@ export function ChatPanel({ projectName, aiMode = 'assistant' }: { projectName?:
       setMyPending(false)
       setSandboxId(messageId)
     },
+    onSandboxChunk: ({ delta }) => setSandboxStream((prev) => prev + delta),
   })
 
   // история + live, дедуп по id; в ленте только delivered (SPEC §5.5.1 — до вердикта не показываем)
@@ -103,12 +105,12 @@ export function ChatPanel({ projectName, aiMode = 'assistant' }: { projectName?:
     bottomRef.current?.scrollIntoView({ behavior: 'smooth' })
   }, [allMessages.length])
 
-  const send = async ({ markdown, mentionIds, attachmentIds }: { markdown: string; mentionIds: string[]; attachmentIds: string[] }) => {
+  const send = async ({ markdown, mentionIds, attachmentIds, raw }: { markdown: string; mentionIds: string[]; attachmentIds: string[]; raw?: boolean }) => {
     try {
-      if (mode === 'group') setMyPending(true) // «проверяется…» до вердикта
+      if (mode === 'group' && !raw) setMyPending(true) // «проверяется…» до вердикта
       const created = await api<ChatMessage>(
         '/api/v1/messages',
-        { method: 'POST', body: JSON.stringify({ text: markdown, mode, attachmentIds }) },
+        { method: 'POST', body: JSON.stringify({ text: markdown, mode, attachmentIds, raw: Boolean(raw) }) },
         'project',
       )
       if (created.status === 'delivered') {
@@ -231,12 +233,16 @@ export function ChatPanel({ projectName, aiMode = 'assistant' }: { projectName?:
         <SandboxOverlay
           messageId={sandboxId}
           aiMode={aiMode}
+          streamingText={sandboxStream}
+          onStreamReset={() => setSandboxStream('')}
           onSent={() => {
             setSandboxId(null)
+            setSandboxStream('')
             qc.invalidateQueries({ queryKey: ['messages', projectId] })
           }}
           onDiscard={() => {
             setSandboxId(null)
+            setSandboxStream('')
             qc.invalidateQueries({ queryKey: ['messages', projectId] })
           }}
         />
@@ -279,6 +285,7 @@ function DayDivider({ date, lang }: { date: Date; lang: string }) {
 }
 
 function MessageRow({ message, compact, lang }: { message: ChatMessage; compact: boolean; lang: string }) {
+  const { t } = useTranslation()
   const isAi = !message.author
   const time = new Date(message.createdAt).toLocaleTimeString(lang, { hour: '2-digit', minute: '2-digit' })
 
@@ -309,6 +316,11 @@ function MessageRow({ message, compact, lang }: { message: ChatMessage; compact:
           <p className="mb-0.5 flex items-baseline gap-2">
             <span className={cn('text-xs font-semibold', isAi && 'text-brand')}>{isAi ? 'AI' : message.author!.name}</span>
             <span className="text-[10px] text-muted-foreground">{time}</span>
+            {message.rawSend && (
+              <span className="rounded-full bg-orange-400/15 px-1.5 py-0.5 text-[10px] text-orange-400">
+                ⚠ {t('chat.rawBadge')}
+              </span>
+            )}
           </p>
         )}
         <div className="msg-md break-words text-sm">
