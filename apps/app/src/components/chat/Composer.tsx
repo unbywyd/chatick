@@ -83,7 +83,8 @@ export function Composer({
         class: 'tiptap-editor max-h-40 min-h-9 overflow-y-auto px-3 py-2 text-sm outline-none',
       },
       handleKeyDown: (_view, event) => {
-        if (event.key === 'Enter' && !event.shiftKey) {
+        // Ctrl/Cmd+Enter = отправить; Enter = перенос строки
+        if (event.key === 'Enter' && (event.ctrlKey || event.metaKey)) {
           event.preventDefault()
           submit()
           return true
@@ -131,7 +132,7 @@ export function Composer({
         </div>
       </BubbleMenu>
 
-      <div className="flex items-end gap-1 pe-1.5">
+      <div className="flex items-center gap-1 pe-1.5">
         <div className="min-w-0 flex-1">
           <EditorContent editor={editor} />
         </div>
@@ -140,7 +141,8 @@ export function Composer({
           onClick={submit}
           disabled={disabled}
           aria-label={t('chat.send')}
-          className="mb-1.5 rounded-md bg-brand p-2 text-brand-foreground transition-opacity disabled:opacity-40"
+          title={t('chat.sendHint')}
+          className="rounded-md bg-brand p-2 text-brand-foreground transition-opacity disabled:opacity-40"
         >
           <SendHorizontal className="size-4 rtl:-scale-x-100" />
         </button>

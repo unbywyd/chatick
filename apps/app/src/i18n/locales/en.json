@@ -220,7 +220,8 @@
     "aiHint": "Private conversation with the project AI",
     "placeholderGroup": "Message the group…",
     "placeholderAi": "Ask the AI…",
-    "send": "Send"
+    "send": "Send",
+    "sendHint": "Ctrl+Enter"
   },
   "tabs": {
     "about": "About",

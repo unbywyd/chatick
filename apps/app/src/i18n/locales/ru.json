@@ -220,7 +220,8 @@
     "aiHint": "Личный диалог с ИИ проекта",
     "placeholderGroup": "Написать в группу…",
     "placeholderAi": "Спросить ИИ…",
-    "send": "Отправить"
+    "send": "Отправить",
+    "sendHint": "Ctrl+Enter"
   },
   "tabs": {
     "about": "О проекте",
