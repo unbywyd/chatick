@@ -1,7 +1,7 @@
 import { Hono } from 'hono'
 import { zValidator } from '@hono/zod-validator'
 import { z } from 'zod'
-import { and, asc, desc, eq, inArray, lt } from 'drizzle-orm'
+import { and, asc, desc, eq, inArray, lt, sql } from 'drizzle-orm'
 import { db } from '../db/client.js'
 import { files, messages, sandboxMessages, users } from '../db/schema.js'
 import { requireProject, type ProjectEnv } from '../auth.js'
@@ -286,6 +286,21 @@ messagesRoute.post(
     return c.json(message)
   },
 )
+
+// Очистить личный ИИ-канал юзера — контекст с нуля
+messagesRoute.delete('/ai', async (c) => {
+  const { projectId, sub } = c.get('auth')
+  await db
+    .delete(messages)
+    .where(
+      and(
+        eq(messages.projectId, projectId),
+        eq(messages.mode, 'ai'),
+        sql`(${messages.authorId} = ${sub} or ${messages.recipientId} = ${sub})`,
+      ),
+    )
+  return c.json({ ok: true })
+})
 
 // Отменить held-сообщение (discard)
 messagesRoute.delete('/:messageId', async (c) => {

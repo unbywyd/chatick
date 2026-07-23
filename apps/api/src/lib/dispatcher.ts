@@ -1,4 +1,4 @@
-import { and, desc, eq } from 'drizzle-orm'
+import { and, desc, eq, sql } from 'drizzle-orm'
 import { db } from '../db/client.js'
 import { messages, projects, sandboxMessages, users } from '../db/schema.js'
 import { projectLlm, complete, completeStream, completeWithTools } from './llm.js'
@@ -68,21 +68,40 @@ export async function aiChatReply(projectId: string, userId: string, userMessage
   const ai = JSON.parse(project.aiConfig || '{}') as AiConfig
   const lang = LANG_NAMES[ai.language ?? 'en'] ?? 'English'
   const user = await db.query.users.findFirst({ where: eq(users.id, userId) })
-  const context = await buildMemoryContext(projectId)
   const { tools, handlers } = memoryTools(projectId, userId)
+
+  // контекст = история ЭТОГО ai-диалога (не групповой чат — его ИИ читает сам через read_chat)
+  const dialog = await db
+    .select({ msg: messages })
+    .from(messages)
+    .where(
+      and(
+        eq(messages.projectId, projectId),
+        eq(messages.mode, 'ai'),
+        // диалог юзера: его сообщения + адресованные ему ответы ИИ
+        sql`(${messages.authorId} = ${userId} or ${messages.recipientId} = ${userId})`,
+      ),
+    )
+    .orderBy(desc(messages.createdAt))
+    .limit(20)
+  const dialogText = dialog
+    .reverse()
+    .map((r) => `${r.msg.authorId ? user?.name ?? 'User' : 'You'}: ${r.msg.text}`)
+    .join('\n')
 
   return completeWithTools(cfg, {
     system: [
       `You are the AI assistant of the project "${project.name}". Project language: ${lang}.`,
       `You are talking privately with ${user?.name ?? 'a member'}. Answer in THEIR language.`,
       project.chatRules ? `Chat rules: "${project.chatRules}"` : '',
-      'You have tools: conversation summaries, full-history search, files, and task CRUD.',
+      'Tools: read_chat (the group conversation — use it when asked about the chat), conversation summaries, full-history search, files, and task CRUD.',
+      'Do NOT assume chat contents — read them with tools when needed.',
       'Task actions are permission-checked per user — if a tool returns PERMISSION DENIED, politely explain the user lacks that permission.',
-      'Prefer looking things up with tools over guessing. Be concise.',
+      'Be concise.',
     ]
       .filter(Boolean)
       .join('\n'),
-    user: `${context}\n\nUSER'S MESSAGE:\n${userMessage}`,
+    user: `${dialogText ? `OUR CONVERSATION SO FAR:\n${dialogText}\n\n` : ''}USER'S MESSAGE:\n${userMessage}`,
     tools,
     handlers,
     maxTokens: 1500,

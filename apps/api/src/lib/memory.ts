@@ -54,6 +54,18 @@ export async function buildMemoryContext(projectId: string): Promise<string> {
 export function memoryTools(projectId: string, actorUserId: string): { tools: ToolDef[]; handlers: Record<string, ToolHandler> } {
   const tools: ToolDef[] = [
     {
+      name: 'read_chat',
+      description:
+        'Read recent GROUP chat messages (the team conversation). Use when the user asks about what was said in the chat. Paginate back with before (ISO date).',
+      parameters: {
+        type: 'object',
+        properties: {
+          limit: { type: 'number', description: 'messages to read, default 30, max 60' },
+          before: { type: 'string', description: 'ISO date — read messages older than this' },
+        },
+      },
+    },
+    {
       name: 'list_summaries',
       description: 'List conversation summaries (name, dates, message count). Paginated, newest first.',
       parameters: { type: 'object', properties: { page: { type: 'number', description: '1-based page, 20 per page' } } },
@@ -130,6 +142,28 @@ export function memoryTools(projectId: string, actorUserId: string): { tools: To
     db.query.tasks.findFirst({ where: and(eq(tasks.projectId, projectId), eq(tasks.number, number.toUpperCase())) })
 
   const handlers: Record<string, ToolHandler> = {
+    read_chat: async (args) => {
+      const limit = Math.min(60, Math.max(1, Number(args.limit) || 30))
+      const before = typeof args.before === 'string' && args.before ? new Date(args.before) : null
+      const where = and(
+        eq(messages.projectId, projectId),
+        eq(messages.mode, 'group'),
+        eq(messages.status, 'delivered'),
+        ...(before && !isNaN(before.getTime()) ? [sql`${messages.createdAt} < ${before}`] : []),
+      )
+      const rows = await db
+        .select({ msg: messages, author: users })
+        .from(messages)
+        .leftJoin(users, eq(users.id, messages.authorId))
+        .where(where)
+        .orderBy(desc(messages.createdAt))
+        .limit(limit)
+      if (!rows.length) return 'No messages.'
+      return rows
+        .reverse()
+        .map((r) => `[${r.msg.createdAt.toISOString().slice(0, 16)}] ${r.author?.name ?? 'AI'}: ${r.msg.text.slice(0, 500)}`)
+        .join('\n')
+    },
     list_summaries: async (args) => {
       const page = Math.max(1, Number(args.page) || 1)
       const rows = await db.query.chatSummaries.findMany({

@@ -243,6 +243,10 @@ export function ChatPanel({ projectName, aiMode = 'assistant' }: { projectName?:
           messages={aiMessages}
           thinking={aiThinking}
           onSend={(text) => send({ markdown: text, mentionIds: [], attachmentIds: [] }, 'ai')}
+          onCleared={() => {
+            setLive((prev) => prev.filter((m) => m.mode !== 'ai'))
+            qc.invalidateQueries({ queryKey: ['messages', projectId] })
+          }}
           onClose={() => setAiOpen(false)}
         />
       )}

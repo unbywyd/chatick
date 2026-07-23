@@ -1,9 +1,12 @@
 import { useEffect, useRef, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import ReactMarkdown from 'react-markdown'
-import { Bot, Eye, EyeOff, Loader2, SendHorizontal, X } from 'lucide-react'
+import { toast } from 'sonner'
+import { Bot, Eye, EyeOff, Loader2, SendHorizontal, Trash2, X } from 'lucide-react'
+import { api } from '@/lib/api'
 import { cn } from '@/lib/utils'
 import { Button } from '@/components/ui/button'
+import { useConfirm } from '@/components/ui/confirm'
 import type { ChatMessage } from '@/hooks/useProjectSocket'
 
 // Личный диалог с ИИ — тот же паттерн, что sandbox: оверлей поверх чата,
@@ -12,14 +15,17 @@ export function AiOverlay({
   messages,
   thinking,
   onSend,
+  onCleared,
   onClose,
 }: {
   messages: ChatMessage[]
   thinking: boolean
   onSend: (text: string) => void
+  onCleared: () => void
   onClose: () => void
 }) {
   const { t } = useTranslation()
+  const confirm = useConfirm()
   const [peek, setPeek] = useState(false)
   const [draft, setDraft] = useState('')
   const bottomRef = useRef<HTMLDivElement>(null)
@@ -54,6 +60,23 @@ export function AiOverlay({
         <Button variant="outline" size="sm" onClick={() => setPeek((v) => !v)}>
           {peek ? <EyeOff className="size-3.5" /> : <Eye className="size-3.5" />}
           {peek ? t('sandbox.back') : t('sandbox.peek')}
+        </Button>
+        <Button
+          variant="destructive"
+          size="icon"
+          title={t('aiChannel.clear')}
+          onClick={async () => {
+            if (await confirm({ title: t('aiChannel.clearConfirm'), description: t('aiChannel.clearNote'), destructive: true, confirmLabel: t('aiChannel.clear') })) {
+              try {
+                await api('/api/v1/messages/ai', { method: 'DELETE' }, 'project')
+                onCleared()
+              } catch (e) {
+                toast.error(e instanceof Error ? e.message : String(e))
+              }
+            }
+          }}
+        >
+          <Trash2 className="size-4" />
         </Button>
         <Button variant="ghost" size="icon" title={t('aiChannel.close')} onClick={onClose}>
           <X className="size-4" />

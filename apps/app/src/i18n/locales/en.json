@@ -237,7 +237,10 @@
   "aiChannel": {
     "title": "AI channel",
     "subtitle": "Private conversation with the project AI — others don't see it",
-    "close": "Close and return to chat"
+    "close": "Close and return to chat",
+    "clear": "Clear conversation",
+    "clearConfirm": "Clear the AI conversation?",
+    "clearNote": "The AI's context starts fresh — the group chat is not affected."
   },
   "sandbox": {
     "title": "Message review",
