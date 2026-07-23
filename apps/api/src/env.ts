@@ -11,6 +11,8 @@ const envSchema = z.object({
   DATABASE_URL: z.string().min(1),
 
   JWT_SECRET: z.string().min(32),
+  // 32 байта hex — шифрование кредишенов (AES-256-GCM)
+  ENCRYPTION_KEY: z.string().length(64),
 
   CORS_ORIGIN: z.string().default('*'),
 

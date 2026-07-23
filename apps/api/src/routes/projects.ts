@@ -23,12 +23,45 @@ const aiConfigSchema = z.object({
 })
 
 // SPEC §4.3: per-user пермишены; tasks.read всегда true
-export const TASK_PERMISSIONS = ['tasks.create', 'tasks.edit', 'tasks.delete', 'tasks.changeStatus'] as const
-const permissionsSchema = z.record(z.enum(TASK_PERMISSIONS), z.boolean())
+export const PROJECT_PERMISSIONS = [
+  'tasks.create',
+  'tasks.edit',
+  'tasks.delete',
+  'tasks.changeStatus',
+  'credentials.read', // видеть и раскрывать значения
+  'credentials.manage', // создавать/менять/удалять
+] as const
+export type ProjectPermission = (typeof PROJECT_PERMISSIONS)[number]
+const permissionsSchema = z.record(z.enum(PROJECT_PERMISSIONS), z.boolean())
 
-export function defaultPermissions(role: 'owner' | 'admin' | 'member'): Record<string, boolean> {
-  if (role === 'member') return { 'tasks.create': false, 'tasks.edit': false, 'tasks.delete': false, 'tasks.changeStatus': true }
-  return { 'tasks.create': true, 'tasks.edit': true, 'tasks.delete': true, 'tasks.changeStatus': true }
+export function defaultPermissions(role: 'owner' | 'admin' | 'member'): Record<ProjectPermission, boolean> {
+  if (role === 'member')
+    return {
+      'tasks.create': false,
+      'tasks.edit': false,
+      'tasks.delete': false,
+      'tasks.changeStatus': true,
+      'credentials.read': true,
+      'credentials.manage': false,
+    }
+  return {
+    'tasks.create': true,
+    'tasks.edit': true,
+    'tasks.delete': true,
+    'tasks.changeStatus': true,
+    'credentials.read': true,
+    'credentials.manage': true,
+  }
+}
+
+/** Эффективный пермишен участника (дефолты роли + оверрайды). */
+export async function hasPermission(projectId: string, userId: string, perm: ProjectPermission): Promise<boolean> {
+  const m = await db.query.projectMembers.findFirst({
+    where: and(eq(projectMembers.projectId, projectId), eq(projectMembers.userId, userId)),
+  })
+  if (!m) return false
+  const effective = { ...defaultPermissions(m.role), ...JSON.parse(m.permissions || '{}') }
+  return Boolean(effective[perm])
 }
 
 async function companyRoleOf(companyId: string, userId: string) {

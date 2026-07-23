@@ -11,6 +11,7 @@ import { LanguageSelect } from '@/components/LanguageSelect'
 import { AboutTab } from '@/components/tabs/AboutTab'
 import { PermissionsTab } from '@/components/tabs/PermissionsTab'
 import { FilesTab } from '@/components/tabs/FilesTab'
+import { CredentialsTab } from '@/components/tabs/CredentialsTab'
 
 // Главный экран: чат 40% | табы проекта 60% (см. CONCEPT.md §3)
 const TAB_KEYS = ['about', 'tasks', 'files', 'credentials', 'permissions'] as const
@@ -90,6 +91,11 @@ export function ProjectScreen() {
             <AboutTab project={project.data} loading={project.isLoading} />
           ) : tab === 'files' && id ? (
             <FilesTab projectId={id} />
+          ) : tab === 'credentials' && id ? (
+            <CredentialsTab
+              projectId={id}
+              isAdmin={project.data?.myRole === 'owner' || project.data?.myRole === 'admin'}
+            />
           ) : tab === 'permissions' && id ? (
             <PermissionsTab
               projectId={id}

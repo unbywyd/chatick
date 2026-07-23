@@ -4,8 +4,15 @@ import { toast } from 'sonner'
 import { api } from '@/lib/api'
 import { Switch } from '@/components/ui/switch'
 
-// SPEC §4.3: per-user пермишены на задачи; синхронизированы с ИИ в чате
-const TASK_PERMISSIONS = ['tasks.create', 'tasks.edit', 'tasks.delete', 'tasks.changeStatus'] as const
+// SPEC §4.3: per-user пермишены; синхронизированы с ИИ в чате
+const TASK_PERMISSIONS = [
+  'tasks.create',
+  'tasks.edit',
+  'tasks.delete',
+  'tasks.changeStatus',
+  'credentials.read',
+  'credentials.manage',
+] as const
 type Perm = (typeof TASK_PERMISSIONS)[number]
 
 type Member = {

@@ -77,12 +77,39 @@
   },
   "perms": {
     "title": "Permissions",
-    "subtitle": "What each member can do with tasks — in the UI and via the AI in chat",
-    "tasks.create": "Create",
-    "tasks.edit": "Edit",
-    "tasks.delete": "Delete",
-    "tasks.changeStatus": "Status",
-    "aiNote": "The AI dispatcher respects these permissions: a member without “Create” can't create tasks through chat either."
+    "subtitle": "What each member can do — in the UI and via the AI in chat",
+    "tasks.create": "Tasks: create",
+    "tasks.edit": "Tasks: edit",
+    "tasks.delete": "Tasks: delete",
+    "tasks.changeStatus": "Tasks: status",
+    "credentials.read": "Creds: read",
+    "credentials.manage": "Creds: manage",
+    "aiNote": "The AI dispatcher respects these permissions: a member without “Create” can't create tasks through chat either. Credential values are never shared with the AI."
+  },
+  "creds": {
+    "search": "Search credentials…",
+    "add": "Add",
+    "addTitle": "New credential",
+    "editTitle": "Edit credential",
+    "namePlaceholder": "Name, e.g. “Prod server SSH”",
+    "valuePlaceholder": "Value (login, password, key…)",
+    "valueKeepPlaceholder": "New value (leave empty to keep current)",
+    "reveal": "Reveal",
+    "hide": "Hide",
+    "copy": "Copy value",
+    "copied": "Copied to clipboard",
+    "deleteConfirm": "Delete credential “{{name}}”?",
+    "empty": "No credentials yet",
+    "securityNote": "Values are stored encrypted (AES-256-GCM). Every reveal and copy is recorded in the audit log. Values are never shared with the AI.",
+    "audit": "Audit",
+    "auditTitle": "Access log",
+    "auditEmpty": "No records yet",
+    "actions": {
+      "reveal": "revealed",
+      "create": "created",
+      "update": "updated",
+      "delete": "deleted"
+    }
   },
   "team": {
     "button": "Team",

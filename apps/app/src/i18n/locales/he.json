@@ -77,12 +77,39 @@
   },
   "perms": {
     "title": "הרשאות",
-    "subtitle": "מה כל חבר יכול לעשות עם משימות — בממשק ודרך ה-AI בצ׳אט",
-    "tasks.create": "יצירה",
-    "tasks.edit": "עריכה",
-    "tasks.delete": "מחיקה",
-    "tasks.changeStatus": "סטטוס",
-    "aiNote": "מנהל ה-AI מכבד את ההרשאות: חבר בלי «יצירה» לא יוכל ליצור משימה גם דרך הצ׳אט."
+    "subtitle": "מה כל חבר יכול לעשות — בממשק ודרך ה-AI בצ׳אט",
+    "tasks.create": "משימות: יצירה",
+    "tasks.edit": "משימות: עריכה",
+    "tasks.delete": "משימות: מחיקה",
+    "tasks.changeStatus": "משימות: סטטוס",
+    "credentials.read": "סודות: קריאה",
+    "credentials.manage": "סודות: ניהול",
+    "aiNote": "מנהל ה-AI מכבד את ההרשאות. ערכי סודות לעולם לא מועברים ל-AI."
+  },
+  "creds": {
+    "search": "חיפוש סודות…",
+    "add": "הוספה",
+    "addTitle": "סוד חדש",
+    "editTitle": "עריכת סוד",
+    "namePlaceholder": "שם, למשל «SSH שרת פרודקשן»",
+    "valuePlaceholder": "ערך (שם משתמש, סיסמה, מפתח…)",
+    "valueKeepPlaceholder": "ערך חדש (ריק — להשאיר את הנוכחי)",
+    "reveal": "להציג",
+    "hide": "להסתיר",
+    "copy": "להעתיק ערך",
+    "copied": "הועתק ללוח",
+    "deleteConfirm": "למחוק את הסוד «{{name}}»?",
+    "empty": "אין עדיין סודות",
+    "securityNote": "הערכים מאוחסנים מוצפנים (AES-256-GCM). כל חשיפה והעתקה נרשמות ביומן הגישה. הערכים לעולם לא מועברים ל-AI.",
+    "audit": "יומן",
+    "auditTitle": "יומן גישה",
+    "auditEmpty": "אין עדיין רשומות",
+    "actions": {
+      "reveal": "חשף",
+      "create": "יצר",
+      "update": "עדכן",
+      "delete": "מחק"
+    }
   },
   "team": {
     "button": "צוות",

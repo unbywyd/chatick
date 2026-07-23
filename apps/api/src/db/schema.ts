@@ -227,8 +227,27 @@ export const credentials = pgTable(
     name: text('name').notNull(), // «Прод сервер SSH», «Админка WP»
     // значение шифруется на уровне приложения (AES-256-GCM), в БД — ciphertext
     valueEncrypted: text('value_encrypted').notNull(),
+    createdById: text('created_by_id').references(() => users.id, { onDelete: 'set null' }),
     createdAt: createdAt(),
     updatedAt: updatedAt(),
   },
   (t) => [index('credentials_project_idx').on(t.projectId)],
+)
+
+// Аудит доступа к кредишенам: кто/когда раскрывал, создавал, менял, удалял.
+// Значения сюда НИКОГДА не пишутся.
+export const credentialActions = pgEnum('credential_action', ['reveal', 'create', 'update', 'delete'])
+
+export const credentialAccessLog = pgTable(
+  'credential_access_log',
+  {
+    id: id(),
+    projectId: text('project_id').notNull().references(() => projects.id, { onDelete: 'cascade' }),
+    credentialId: text('credential_id'), // без FK: лог живёт и после удаления креда
+    credentialName: text('credential_name').notNull(),
+    userId: text('user_id').references(() => users.id, { onDelete: 'set null' }),
+    action: credentialActions('action').notNull(),
+    createdAt: createdAt(),
+  },
+  (t) => [index('cred_log_project_created_idx').on(t.projectId, t.createdAt)],
 )
