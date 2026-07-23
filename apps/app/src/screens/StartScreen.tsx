@@ -3,7 +3,8 @@ import { useNavigate } from 'react-router-dom'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { useTranslation } from 'react-i18next'
 import { toast } from 'sonner'
-import { Building2, Plus, FolderKanban, LogOut, Check, Mail } from 'lucide-react'
+import { Building2, Plus, FolderKanban, LogOut, Check, Mail, Users } from 'lucide-react'
+import { TeamPanel } from '@/components/TeamPanel'
 import {
   api,
   logout,
@@ -83,6 +84,7 @@ export function StartScreen() {
           <ProjectStep
             companyId={companyId}
             company={companiesQ.data?.companies.find((c) => c.id === companyId)}
+            meId={me.data?.id}
             onBack={() => setCompanyId(null)}
             onEntered={(projectId) => navigate(`/p/${projectId}`)}
           />
@@ -226,11 +228,13 @@ function CompanyStep({
 function ProjectStep({
   companyId,
   company,
+  meId,
   onBack,
   onEntered,
 }: {
   companyId: string
   company?: Company
+  meId?: string
   onBack: () => void
   onEntered: (projectId: string) => void
 }) {
@@ -238,6 +242,7 @@ function ProjectStep({
   const qc = useQueryClient()
   const [name, setName] = useState('')
   const [rulesModal, setRulesModal] = useState<{ projectId: string; projectName: string; chatRules: string } | null>(null)
+  const [teamOpen, setTeamOpen] = useState(false)
 
   const projectsQ = useQuery({
     queryKey: ['projects', companyId],
@@ -279,15 +284,28 @@ function ProjectStep({
 
   return (
     <div className="space-y-8">
-      <div className="flex items-center justify-between">
+      <div className="flex items-center justify-between gap-3">
         <div>
           <h1 className="text-xl font-bold tracking-tight">{company?.name}</h1>
           <p className="mt-1 text-sm text-muted-foreground">{t('start.projectSubtitle')}</p>
         </div>
-        <button onClick={onBack} className="text-xs text-muted-foreground underline-offset-2 hover:underline">
-          {t('start.changeCompany')}
-        </button>
+        <div className="flex items-center gap-2">
+          {(company?.myRole === 'admin' || company?.myRole === 'manager') && (
+            <button
+              onClick={() => setTeamOpen(true)}
+              className="flex items-center gap-1.5 rounded-md border px-3 py-1.5 text-xs font-medium hover:bg-accent"
+            >
+              <Users className="size-3.5" />
+              {t('team.button')}
+            </button>
+          )}
+          <button onClick={onBack} className="text-xs text-muted-foreground underline-offset-2 hover:underline">
+            {t('start.changeCompany')}
+          </button>
+        </div>
       </div>
+
+      {teamOpen && company && <TeamPanel company={company} meId={meId} onClose={() => setTeamOpen(false)} />}
 
       <section className="space-y-2">
         {projectsQ.isLoading && <p className="text-sm text-muted-foreground">…</p>}

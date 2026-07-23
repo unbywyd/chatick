@@ -28,6 +28,22 @@
     "createProject": "יצירת פרויקט",
     "projectName": "שם הפרויקט"
   },
+  "team": {
+    "button": "צוות",
+    "title": "צוות — {{company}}",
+    "invite": "הזמנה באימייל",
+    "send": "להזמין",
+    "inviteSent": "ההזמנה נשלחה",
+    "inviteResent": "ההזמנה נשלחה שוב",
+    "pending": "ממתינות לאישור",
+    "resend": "לשלוח שוב",
+    "revoke": "לבטל",
+    "members": "חברים",
+    "you": "אתם",
+    "remove": "להסיר מהחברה",
+    "removeConfirm": "להסיר את {{name}} מהחברה?",
+    "memberRemoved": "החבר הוסר"
+  },
   "rules": {
     "title": "כללי «{{project}}»",
     "empty": "אין כללים מיוחדים — היו מנומסים ולעניין.",

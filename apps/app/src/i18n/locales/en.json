@@ -28,6 +28,22 @@
     "createProject": "Create a project",
     "projectName": "Project name"
   },
+  "team": {
+    "button": "Team",
+    "title": "Team — {{company}}",
+    "invite": "Invite by email",
+    "send": "Invite",
+    "inviteSent": "Invitation sent",
+    "inviteResent": "Invitation resent",
+    "pending": "Pending invitations",
+    "resend": "Resend",
+    "revoke": "Revoke",
+    "members": "Members",
+    "you": "you",
+    "remove": "Remove from company",
+    "removeConfirm": "Remove {{name}} from the company?",
+    "memberRemoved": "Member removed"
+  },
   "rules": {
     "title": "Rules of “{{project}}”",
     "empty": "No special rules — be respectful and stay on topic.",

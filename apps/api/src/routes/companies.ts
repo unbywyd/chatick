@@ -79,6 +79,50 @@ companiesRoute.get('/:companyId/members', async (c) => {
   )
 })
 
+// Сменить роль участника (только admin; себя-единственного-админа не понизить)
+companiesRoute.patch(
+  '/:companyId/members/:userId',
+  zValidator('json', z.object({ role: z.enum(['admin', 'manager', 'member']) })),
+  async (c) => {
+    const { sub } = c.get('session')
+    const { companyId, userId } = c.req.param()
+    if ((await memberRoleIn(companyId, sub)) !== 'admin') return c.json({ error: 'Forbidden' }, 403)
+
+    const { role } = c.req.valid('json')
+    if (userId === sub && role !== 'admin') {
+      const admins = await db.query.companyMembers.findMany({
+        where: and(eq(companyMembers.companyId, companyId), eq(companyMembers.role, 'admin')),
+      })
+      if (admins.length <= 1) return c.json({ error: 'Cannot demote the only admin' }, 400)
+    }
+
+    await db
+      .update(companyMembers)
+      .set({ role })
+      .where(and(eq(companyMembers.companyId, companyId), eq(companyMembers.userId, userId)))
+    return c.json({ ok: true })
+  },
+)
+
+// Удалить участника из компании (admin; себя-единственного-админа нельзя)
+companiesRoute.delete('/:companyId/members/:userId', async (c) => {
+  const { sub } = c.get('session')
+  const { companyId, userId } = c.req.param()
+  if ((await memberRoleIn(companyId, sub)) !== 'admin') return c.json({ error: 'Forbidden' }, 403)
+
+  if (userId === sub) {
+    const admins = await db.query.companyMembers.findMany({
+      where: and(eq(companyMembers.companyId, companyId), eq(companyMembers.role, 'admin')),
+    })
+    if (admins.length <= 1) return c.json({ error: 'Cannot remove the only admin' }, 400)
+  }
+
+  await db
+    .delete(companyMembers)
+    .where(and(eq(companyMembers.companyId, companyId), eq(companyMembers.userId, userId)))
+  return c.json({ ok: true })
+})
+
 // Пригласить в компанию (email + роль) — с подтверждением (SPEC §3.1)
 companiesRoute.post(
   '/:companyId/invites',
