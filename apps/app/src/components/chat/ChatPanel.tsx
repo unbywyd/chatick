@@ -150,7 +150,7 @@ export function ChatPanel({ projectName }: { projectName?: string }) {
             </Button>
           </div>
         ) : (
-          <div className="space-y-3">
+          <div>
             {allMessages.length === 0 && !history.isLoading && (
               <p className="pt-6 text-center text-sm text-muted-foreground">
                 {mode === 'group' ? t('chat.groupHint') : t('chat.aiHint')}
@@ -158,8 +158,20 @@ export function ChatPanel({ projectName }: { projectName?: string }) {
             )}
             {allMessages.map((m, i) => {
               const prev = allMessages[i - 1]
-              const compact = prev?.author?.id === m.author?.id && Boolean(m.author)
-              return <MessageRow key={m.id} message={m} compact={compact} lang={i18n.language} />
+              const sameDay = prev && isSameDay(new Date(prev.createdAt), new Date(m.createdAt))
+              // компактим только того же автора в пределах 5 минут и одного дня
+              const compact =
+                Boolean(prev) &&
+                Boolean(sameDay) &&
+                prev!.author?.id === m.author?.id &&
+                Boolean(m.author) &&
+                new Date(m.createdAt).getTime() - new Date(prev!.createdAt).getTime() < 5 * 60 * 1000
+              return (
+                <div key={m.id}>
+                  {!sameDay && <DayDivider date={new Date(m.createdAt)} lang={i18n.language} />}
+                  <MessageRow message={m} compact={compact} lang={i18n.language} />
+                </div>
+              )
             })}
             <div ref={bottomRef} />
           </div>
@@ -178,25 +190,55 @@ export function ChatPanel({ projectName }: { projectName?: string }) {
   )
 }
 
+function isSameDay(a: Date, b: Date) {
+  return a.getFullYear() === b.getFullYear() && a.getMonth() === b.getMonth() && a.getDate() === b.getDate()
+}
+
+function DayDivider({ date, lang }: { date: Date; lang: string }) {
+  const { t } = useTranslation()
+  const now = new Date()
+  const yesterday = new Date(now)
+  yesterday.setDate(now.getDate() - 1)
+  const label = isSameDay(date, now)
+    ? t('chat.today')
+    : isSameDay(date, yesterday)
+      ? t('chat.yesterday')
+      : date.toLocaleDateString(lang, { day: 'numeric', month: 'long', ...(date.getFullYear() !== now.getFullYear() && { year: 'numeric' }) })
+
+  return (
+    <div className="my-4 flex items-center gap-3">
+      <span className="h-px flex-1 bg-border" />
+      <span className="rounded-full border px-2.5 py-0.5 text-[11px] text-muted-foreground">{label}</span>
+      <span className="h-px flex-1 bg-border" />
+    </div>
+  )
+}
+
 function MessageRow({ message, compact, lang }: { message: ChatMessage; compact: boolean; lang: string }) {
   const isAi = !message.author
   const time = new Date(message.createdAt).toLocaleTimeString(lang, { hour: '2-digit', minute: '2-digit' })
 
   return (
-    <div className={cn('flex gap-2.5', compact && 'mt-0.5')}>
-      <span className="w-7 shrink-0">
-        {!compact &&
-          (isAi ? (
-            <span className="grid size-7 place-items-center rounded-full bg-brand text-brand-foreground">
-              <Bot className="size-4" />
-            </span>
-          ) : message.author!.avatarUrl ? (
-            <img src={message.author!.avatarUrl} alt="" className="size-7 rounded-full" referrerPolicy="no-referrer" />
-          ) : (
-            <span className="grid size-7 place-items-center rounded-full bg-secondary text-xs font-semibold">
-              {message.author!.name[0]?.toUpperCase()}
-            </span>
-          ))}
+    <div
+      className={cn(
+        'group flex gap-2.5 rounded-md px-2 py-1 transition-colors hover:bg-accent/40',
+        compact ? 'mt-px' : 'mt-2.5',
+      )}
+    >
+      <span className="w-7 shrink-0 select-none">
+        {compact ? (
+          <span className="hidden text-[10px] leading-6 text-muted-foreground group-hover:block">{time}</span>
+        ) : isAi ? (
+          <span className="grid size-7 place-items-center rounded-full bg-brand text-brand-foreground">
+            <Bot className="size-4" />
+          </span>
+        ) : message.author!.avatarUrl ? (
+          <img src={message.author!.avatarUrl} alt="" className="size-7 rounded-full" referrerPolicy="no-referrer" />
+        ) : (
+          <span className="grid size-7 place-items-center rounded-full bg-secondary text-xs font-semibold">
+            {message.author!.name[0]?.toUpperCase()}
+          </span>
+        )}
       </span>
       <div className="min-w-0 flex-1">
         {!compact && (

@@ -214,6 +214,8 @@
     "noLlmCta": "לפתוח הגדרות LLM",
     "noLlmPlaceholder": "חברו LLM כדי להתחיל…",
     "connecting": "מתחבר…",
+    "today": "היום",
+    "yesterday": "אתמול",
     "modeGroup": "קבוצה",
     "modeAi": "AI",
     "groupHint": "הודעות קבוצה — עוברות דרך מנהל ה-AI",

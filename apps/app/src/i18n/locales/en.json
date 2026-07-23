@@ -214,6 +214,8 @@
     "noLlmCta": "Open LLM settings",
     "noLlmPlaceholder": "Connect an LLM to start chatting…",
     "connecting": "connecting…",
+    "today": "Today",
+    "yesterday": "Yesterday",
     "modeGroup": "Group",
     "modeAi": "AI",
     "groupHint": "Group messages — routed through the AI dispatcher",
