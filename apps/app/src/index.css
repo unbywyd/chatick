@@ -3,52 +3,68 @@
 
 @custom-variant dark (&:is(.dark *));
 
+/* ---------------------------------------------------------------------------
+   Chatick design system — black & lime ("тик" = зелёная галочка)
+   Brand lime: #d4f228 ≈ oklch(0.92 0.2 118)
+   Light: чистый белый + почти-чёрный текст, лайм как акцент
+   Dark (основная): глубокий чёрный + лайм
+--------------------------------------------------------------------------- */
+
 :root {
-  --background: oklch(1 0 0);
-  --foreground: oklch(0.141 0.005 285.823);
+  /* brand */
+  --brand: oklch(0.92 0.2 118);
+  --brand-foreground: oklch(0.2 0.02 118);
+
+  --background: oklch(0.99 0 0);
+  --foreground: oklch(0.16 0.01 120);
   --card: oklch(1 0 0);
-  --card-foreground: oklch(0.141 0.005 285.823);
+  --card-foreground: oklch(0.16 0.01 120);
   --popover: oklch(1 0 0);
-  --popover-foreground: oklch(0.141 0.005 285.823);
-  --primary: oklch(0.21 0.006 285.885);
-  --primary-foreground: oklch(0.985 0 0);
-  --secondary: oklch(0.967 0.001 286.375);
-  --secondary-foreground: oklch(0.21 0.006 285.885);
-  --muted: oklch(0.967 0.001 286.375);
-  --muted-foreground: oklch(0.552 0.016 285.938);
-  --accent: oklch(0.967 0.001 286.375);
-  --accent-foreground: oklch(0.21 0.006 285.885);
+  --popover-foreground: oklch(0.16 0.01 120);
+  --primary: oklch(0.2 0.01 120);
+  --primary-foreground: oklch(0.98 0 0);
+  --secondary: oklch(0.96 0.005 120);
+  --secondary-foreground: oklch(0.2 0.01 120);
+  --muted: oklch(0.96 0.005 120);
+  --muted-foreground: oklch(0.5 0.01 120);
+  --accent: oklch(0.95 0.08 118);
+  --accent-foreground: oklch(0.25 0.05 118);
   --destructive: oklch(0.577 0.245 27.325);
   --destructive-foreground: oklch(0.985 0 0);
-  --border: oklch(0.92 0.004 286.32);
-  --input: oklch(0.92 0.004 286.32);
-  --ring: oklch(0.705 0.015 286.067);
+  --border: oklch(0.91 0.005 120);
+  --input: oklch(0.91 0.005 120);
+  --ring: oklch(0.75 0.15 118);
   --radius: 0.625rem;
 }
 
 .dark {
-  --background: oklch(0.141 0.005 285.823);
-  --foreground: oklch(0.985 0 0);
-  --card: oklch(0.21 0.006 285.885);
-  --card-foreground: oklch(0.985 0 0);
-  --popover: oklch(0.21 0.006 285.885);
-  --popover-foreground: oklch(0.985 0 0);
-  --primary: oklch(0.92 0.004 286.32);
-  --primary-foreground: oklch(0.21 0.006 285.885);
-  --secondary: oklch(0.274 0.006 286.033);
-  --secondary-foreground: oklch(0.985 0 0);
-  --muted: oklch(0.274 0.006 286.033);
-  --muted-foreground: oklch(0.705 0.015 286.067);
-  --accent: oklch(0.274 0.006 286.033);
-  --accent-foreground: oklch(0.985 0 0);
+  --brand: oklch(0.92 0.2 118);
+  --brand-foreground: oklch(0.18 0.02 118);
+
+  --background: oklch(0.15 0.005 120);
+  --foreground: oklch(0.96 0.005 120);
+  --card: oklch(0.19 0.006 120);
+  --card-foreground: oklch(0.96 0.005 120);
+  --popover: oklch(0.19 0.006 120);
+  --popover-foreground: oklch(0.96 0.005 120);
+  --primary: oklch(0.92 0.2 118);        /* лайм как primary в тёмной */
+  --primary-foreground: oklch(0.18 0.02 118);
+  --secondary: oklch(0.24 0.006 120);
+  --secondary-foreground: oklch(0.96 0.005 120);
+  --muted: oklch(0.24 0.006 120);
+  --muted-foreground: oklch(0.66 0.01 120);
+  --accent: oklch(0.28 0.03 118);
+  --accent-foreground: oklch(0.92 0.15 118);
   --destructive: oklch(0.704 0.191 22.216);
   --destructive-foreground: oklch(0.985 0 0);
   --border: oklch(1 0 0 / 10%);
-  --input: oklch(1 0 0 / 15%);
-  --ring: oklch(0.552 0.016 285.938);
+  --input: oklch(1 0 0 / 14%);
+  --ring: oklch(0.7 0.13 118);
 }
 
 @theme inline {
+  --color-brand: var(--brand);
+  --color-brand-foreground: var(--brand-foreground);
   --color-background: var(--background);
   --color-foreground: var(--foreground);
   --color-card: var(--card);
@@ -78,7 +94,17 @@
   * {
     @apply border-border outline-ring/50;
   }
+  html {
+    color-scheme: light;
+  }
+  html.dark {
+    color-scheme: dark;
+  }
   body {
-    @apply bg-background text-foreground;
+    @apply bg-background text-foreground antialiased;
+  }
+  /* RTL (иврит): направление ставит i18n через dir на <html> */
+  [dir='rtl'] {
+    direction: rtl;
   }
 }

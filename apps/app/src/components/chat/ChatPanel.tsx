@@ -1,29 +1,40 @@
 import { useState } from 'react'
 import { Bot, Users, SendHorizontal } from 'lucide-react'
+import { useTranslation } from 'react-i18next'
 import { cn } from '@/lib/utils'
+import { Logo } from '@/components/Logo'
 
 // Два режима чата (CONCEPT.md): группа (через ИИ-диспетчер) / личный диалог с ИИ
 type ChatMode = 'group' | 'ai'
 
 export function ChatPanel() {
+  const { t } = useTranslation()
   const [mode, setMode] = useState<ChatMode>('group')
   const [draft, setDraft] = useState('')
 
   return (
     <div className="flex h-full flex-col">
       <header className="flex items-center justify-between border-b px-4 py-2">
-        <h1 className="text-sm font-semibold">Chatick</h1>
+        <Logo />
         <div className="flex rounded-md border p-0.5">
-          <ModeButton active={mode === 'group'} onClick={() => setMode('group')} icon={<Users className="size-3.5" />} label="Группа" />
-          <ModeButton active={mode === 'ai'} onClick={() => setMode('ai')} icon={<Bot className="size-3.5" />} label="ИИ" />
+          <ModeButton
+            active={mode === 'group'}
+            onClick={() => setMode('group')}
+            icon={<Users className="size-3.5" />}
+            label={t('chat.modeGroup')}
+          />
+          <ModeButton
+            active={mode === 'ai'}
+            onClick={() => setMode('ai')}
+            icon={<Bot className="size-3.5" />}
+            label={t('chat.modeAi')}
+          />
         </div>
       </header>
 
       <div className="flex-1 overflow-y-auto p-4">
         <p className="text-center text-sm text-muted-foreground">
-          {mode === 'group'
-            ? 'Сообщения группы — проходят через ИИ-диспетчер'
-            : 'Личный диалог с ИИ проекта'}
+          {mode === 'group' ? t('chat.groupHint') : t('chat.aiHint')}
         </p>
       </div>
 
@@ -40,15 +51,16 @@ export function ChatPanel() {
             value={draft}
             onChange={(e) => setDraft(e.target.value)}
             rows={1}
-            placeholder={mode === 'group' ? 'Написать в группу…' : 'Спросить ИИ…'}
+            placeholder={mode === 'group' ? t('chat.placeholderGroup') : t('chat.placeholderAi')}
             className="max-h-40 flex-1 resize-none rounded-md border bg-transparent px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-ring"
           />
           <button
             type="submit"
             disabled={!draft.trim()}
-            className="rounded-md bg-primary p-2 text-primary-foreground disabled:opacity-40"
+            aria-label={t('chat.send')}
+            className="rounded-md bg-brand p-2 text-brand-foreground transition-opacity disabled:opacity-40"
           >
-            <SendHorizontal className="size-4" />
+            <SendHorizontal className="size-4 rtl:-scale-x-100" />
           </button>
         </form>
       </footer>

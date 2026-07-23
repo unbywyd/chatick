@@ -3,7 +3,20 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <link rel="icon" type="image/svg+xml" href="./favicon.svg" />
+    <link rel="apple-touch-icon" href="./logo-small.png" />
+    <meta name="theme-color" content="#1a1c16" />
     <title>Chatick</title>
+    <script>
+      // Анти-мигание: применяем тему до загрузки React (тот же ключ, что в ThemeProvider)
+      ;(function () {
+        try {
+          var t = localStorage.getItem('chatick_theme')
+          var dark = t === 'dark' || ((!t || t === 'system') && matchMedia('(prefers-color-scheme: dark)').matches)
+          if (dark) document.documentElement.classList.add('dark')
+        } catch (e) {}
+      })()
+    </script>
   </head>
   <body>
     <div id="root"></div>

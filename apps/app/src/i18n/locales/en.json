@@ -1,0 +1,27 @@
+{
+  "app": {
+    "name": "Chatick"
+  },
+  "chat": {
+    "modeGroup": "Group",
+    "modeAi": "AI",
+    "groupHint": "Group messages — routed through the AI dispatcher",
+    "aiHint": "Private conversation with the project AI",
+    "placeholderGroup": "Message the group…",
+    "placeholderAi": "Ask the AI…",
+    "send": "Send"
+  },
+  "tabs": {
+    "about": "About",
+    "tasks": "Tasks",
+    "files": "Files",
+    "credentials": "Credentials",
+    "placeholder": "“{{tab}}” tab — content coming soon"
+  },
+  "theme": {
+    "light": "Light",
+    "dark": "Dark",
+    "system": "System"
+  },
+  "language": "Language"
+}

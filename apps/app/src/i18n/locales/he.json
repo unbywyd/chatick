@@ -1,0 +1,27 @@
+{
+  "app": {
+    "name": "Chatick"
+  },
+  "chat": {
+    "modeGroup": "קבוצה",
+    "modeAi": "AI",
+    "groupHint": "הודעות קבוצה — עוברות דרך מנהל ה-AI",
+    "aiHint": "שיחה פרטית עם ה-AI של הפרויקט",
+    "placeholderGroup": "כתיבה לקבוצה…",
+    "placeholderAi": "לשאול את ה-AI…",
+    "send": "שליחה"
+  },
+  "tabs": {
+    "about": "אודות",
+    "tasks": "משימות",
+    "files": "קבצים",
+    "credentials": "הרשאות",
+    "placeholder": "לשונית «{{tab}}» — תוכן יתווסף בהמשך"
+  },
+  "theme": {
+    "light": "בהיר",
+    "dark": "כהה",
+    "system": "מערכת"
+  },
+  "language": "שפה"
+}
