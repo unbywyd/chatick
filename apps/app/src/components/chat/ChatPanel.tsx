@@ -13,6 +13,7 @@ import { useProjectSocket, type ChatMessage } from '@/hooks/useProjectSocket'
 import { Composer, AI_MENTION_ID } from './Composer'
 import { SandboxOverlay } from './SandboxOverlay'
 import { AiOverlay } from './AiOverlay'
+import { FileViewer, type ViewerFile } from '@/components/files/FileViewer'
 
 type ChatMode = 'group' | 'ai'
 type Member = { id: string; role: string; user: { id: string; name: string; email: string; avatarUrl: string | null } }
@@ -432,8 +433,9 @@ function MessageRow({ message, compact, lang }: { message: ChatMessage; compact:
 function MessageAttachments({ attachments }: { attachments: NonNullable<ChatMessage['attachments']> }) {
   const images = attachments.filter((a) => a.mime.startsWith('image/'))
   const others = attachments.filter((a) => !a.mime.startsWith('image/'))
+  const [viewing, setViewing] = useState<ViewerFile | null>(null)
 
-  // inline-превью картинок (presigned, 1ч)
+  // inline-превью картинок (через прокси-URL)
   const previews = useQuery({
     queryKey: ['msg-previews', images.map((a) => a.id).join(',')],
     enabled: images.length > 0,
@@ -441,22 +443,13 @@ function MessageAttachments({ attachments }: { attachments: NonNullable<ChatMess
     queryFn: async () => {
       const entries = await Promise.all(
         images.map(async (a) => {
-          const { url } = await api<{ url: string }>(`/api/v1/files/${a.id}/download?inline=1`, {}, 'project')
+          const { url } = await api<{ url: string }>(`/api/v1/files/${a.id}/view-url`, {}, 'project')
           return [a.id, url] as const
         }),
       )
       return Object.fromEntries(entries) as Record<string, string>
     },
   })
-
-  const open = async (id: string, inline: boolean) => {
-    try {
-      const { url } = await api<{ url: string }>(`/api/v1/files/${id}/download${inline ? '?inline=1' : ''}`, {}, 'project')
-      window.open(url, '_blank')
-    } catch (e) {
-      toast.error(e instanceof Error ? e.message : String(e))
-    }
-  }
 
   return (
     <div className="mt-1.5 space-y-1.5">
@@ -465,7 +458,7 @@ function MessageAttachments({ attachments }: { attachments: NonNullable<ChatMess
           {images.map((a) => (
             <button
               key={a.id}
-              onClick={() => open(a.id, true)}
+              onClick={() => setViewing(a)}
               title={a.name}
               className="block max-h-52 max-w-64 overflow-hidden rounded-lg border transition-opacity hover:opacity-90"
             >
@@ -483,7 +476,7 @@ function MessageAttachments({ attachments }: { attachments: NonNullable<ChatMess
           {others.map((a) => (
             <button
               key={a.id}
-              onClick={() => open(a.id, a.mime === 'application/pdf')}
+              onClick={() => setViewing(a)}
               className="inline-flex max-w-56 items-center gap-1.5 rounded-md border bg-card px-2 py-1 text-xs transition-colors hover:bg-accent"
               title={a.name}
             >
@@ -492,6 +485,7 @@ function MessageAttachments({ attachments }: { attachments: NonNullable<ChatMess
           ))}
         </div>
       )}
+      {viewing && <FileViewer file={viewing} onClose={() => setViewing(null)} />}
     </div>
   )
 }

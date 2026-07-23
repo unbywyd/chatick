@@ -178,6 +178,17 @@
     text-decoration: underline;
     text-underline-offset: 2px;
   }
+  /* SheetJS-таблица во вьюере */
+  .sheet-view table {
+    border-collapse: collapse;
+    font-size: 12px;
+  }
+  .sheet-view td,
+  .sheet-view th {
+    border: 1px solid #d1d5db;
+    padding: 3px 8px;
+    white-space: nowrap;
+  }
   html {
     color-scheme: light;
   }

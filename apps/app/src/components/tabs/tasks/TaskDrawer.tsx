@@ -27,6 +27,7 @@ import {
 } from '@/components/ui/dropdown-menu'
 import { Popover, PopoverTrigger, PopoverContent } from '@/components/ui/popover'
 import { Calendar } from '@/components/ui/calendar'
+import { FileViewer, type ViewerFile } from '@/components/files/FileViewer'
 import { STATUSES, PRIORITIES, STATUS_ICON, STATUS_COLOR, PRIORITY_DOT, type Task, type Member } from './types'
 
 type Attachment = {
@@ -58,7 +59,7 @@ export function TaskDrawer({
   const [description, setDescription] = useState(task.description)
   const [uploading, setUploading] = useState(0)
   const [dragOver, setDragOver] = useState(false)
-  const [lightbox, setLightbox] = useState<string | null>(null)
+  const [viewing, setViewing] = useState<ViewerFile | null>(null)
   const inputRef = useRef<HTMLInputElement>(null)
 
   // при переключении на другую задачу — сбросить черновики
@@ -69,11 +70,11 @@ export function TaskDrawer({
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') (lightbox ? setLightbox(null) : onClose())
+      if (e.key === 'Escape' && !viewing) onClose()
     }
     window.addEventListener('keydown', onKey)
     return () => window.removeEventListener('keydown', onKey)
-  }, [lightbox, onClose])
+  }, [viewing, onClose])
 
   const attachments = useQuery({
     queryKey: ['task-files', task.id],
@@ -87,7 +88,7 @@ export function TaskDrawer({
       const images = attachments.data!.filter((a) => a.mime.startsWith('image/'))
       const entries = await Promise.all(
         images.map(async (a) => {
-          const { url } = await api<{ url: string }>(`/api/v1/files/${a.id}/download?inline=1`, {}, 'project')
+          const { url } = await api<{ url: string }>(`/api/v1/files/${a.id}/view-url`, {}, 'project')
           return [a.id, url] as const
         }),
       )
@@ -126,15 +127,7 @@ export function TaskDrawer({
     }
   }
 
-  const open = async (att: Attachment, inline: boolean) => {
-    try {
-      const { url } = await api<{ url: string }>(`/api/v1/files/${att.id}/download${inline ? '?inline=1' : ''}`, {}, 'project')
-      if (inline && att.mime.startsWith('image/')) setLightbox(url)
-      else window.open(url, '_blank')
-    } catch (e) {
-      toast.error(e instanceof Error ? e.message : String(e))
-    }
-  }
+  const open = (att: Attachment) => setViewing({ id: att.id, name: att.name, mime: att.mime })
 
   const removeAtt = useMutation({
     mutationFn: (id: string) => api(`/api/v1/files/${id}`, { method: 'DELETE' }, 'project'),
@@ -339,7 +332,7 @@ export function TaskDrawer({
                       <button
                         key={a.id}
                         className="group relative aspect-square overflow-hidden rounded-md border bg-secondary"
-                        onClick={() => open(a, true)}
+                        onClick={() => open(a)}
                         title={a.name}
                       >
                         {previews.data?.[a.id] ? (
@@ -363,11 +356,11 @@ export function TaskDrawer({
                       <File className="size-4 shrink-0 text-muted-foreground" />
                       <span className="min-w-0 flex-1 truncate text-sm">{a.name}</span>
                       {canPreviewInline(a.mime) && (
-                        <Button variant="ghost" size="icon" title={t('tasks.preview')} onClick={() => open(a, true)}>
+                        <Button variant="ghost" size="icon" title={t('tasks.preview')} onClick={() => open(a)}>
                           <ExternalLink className="size-3.5" />
                         </Button>
                       )}
-                      <Button variant="ghost" size="icon" title={t('files.download')} onClick={() => open(a, false)}>
+                      <Button variant="ghost" size="icon" title={t('files.download')} onClick={() => open(a)}>
                         <Download className="size-3.5" />
                       </Button>
                       <Button variant="ghost" size="icon" title={t('files.delete')} onClick={() => removeAtt.mutate(a.id)}>
@@ -398,7 +391,7 @@ export function TaskDrawer({
                     .map((a) => (
                       <li key={a.id} className="flex items-center gap-2 text-xs">
                         <span className="min-w-0 flex-1 truncate">{a.name}</span>
-                        <Button variant="ghost" size="icon" title={t('files.download')} onClick={() => open(a, false)}>
+                        <Button variant="ghost" size="icon" title={t('files.download')} onClick={() => open(a)}>
                           <Download className="size-3" />
                         </Button>
                         <Button variant="ghost" size="icon" title={t('files.delete')} onClick={() => removeAtt.mutate(a.id)}>
@@ -413,15 +406,8 @@ export function TaskDrawer({
         </div>
       </div>
 
-      {/* Лайтбокс */}
-      {lightbox && (
-        <div className="fixed inset-0 z-50 grid place-items-center bg-black/85 p-6" onClick={() => setLightbox(null)}>
-          <img src={lightbox} alt="" className="max-h-full max-w-full rounded-lg object-contain shadow-2xl" />
-          <button className="absolute end-4 top-4 rounded-full bg-black/50 p-2 text-white hover:bg-black/70">
-            <X className="size-5" />
-          </button>
-        </div>
-      )}
+      {/* Встроенный просмотрщик вложений */}
+      {viewing && <FileViewer file={viewing} onClose={() => setViewing(null)} />}
     </>
   )
 }

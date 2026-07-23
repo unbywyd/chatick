@@ -1,23 +1,36 @@
 import { useEffect, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { Download, ExternalLink, Loader2, X } from 'lucide-react'
+import * as XLSX from 'xlsx'
 import { api } from '@/lib/api'
+import { cn } from '@/lib/utils'
 import { Button } from '@/components/ui/button'
 
 export type ViewerFile = { id: string; name: string; mime: string; hasOriginal?: boolean }
 
-const isImage = (m: string) => m.startsWith('image/')
-const isPdf = (m: string) => m === 'application/pdf'
-const isText = (m: string) => m.startsWith('text/') || /json|xml|javascript|typescript|csv|markdown/.test(m)
-// office-форматы просматриваем через Google Docs Viewer (нужен публичный presigned inline URL)
-const isOffice = (m: string) =>
-  /(msword|wordprocessingml|ms-excel|spreadsheetml|ms-powerpoint|presentationml|opendocument)/.test(m)
+// Детекция по mime И расширению (mime бывает octet-stream). Порядок важен: spreadsheet до text.
+function kindOf(file: ViewerFile): 'image' | 'pdf' | 'sheet' | 'text' | 'office' | 'other' {
+  const m = file.mime
+  const ext = file.name.toLowerCase().match(/\.([a-z0-9]+)$/)?.[1] ?? ''
+  if (m.startsWith('image/')) return 'image'
+  if (m === 'application/pdf' || ext === 'pdf') return 'pdf'
+  if (/spreadsheetml|ms-excel/.test(m) || ['xlsx', 'xls', 'csv'].includes(ext)) return 'sheet'
+  if (/wordprocessingml|msword|presentationml|ms-powerpoint|opendocument/.test(m) || ['doc', 'docx', 'ppt', 'pptx', 'odt', 'ods', 'odp'].includes(ext))
+    return 'office'
+  if (m.startsWith('text/') || /json|xml|javascript|csv|markdown/.test(m) || ['txt', 'json', 'xml', 'md', 'log', 'yml', 'yaml', 'ts', 'js', 'css', 'html'].includes(ext))
+    return 'text'
+  return 'other'
+}
 
-// Встроенный просмотрщик файлов: картинки, PDF (iframe), текст (inline), office → Google Viewer
+// Встроенный просмотрщик: картинки, PDF, таблицы (SheetJS локально), текст, office → Google Viewer
 export function FileViewer({ file, onClose }: { file: ViewerFile; onClose: () => void }) {
   const { t } = useTranslation()
+  const kind = kindOf(file)
   const [url, setUrl] = useState<string | null>(null)
   const [text, setText] = useState<string | null>(null)
+  const [sheet, setSheet] = useState<{ names: string[]; html: string } | null>(null)
+  const [activeSheet, setActiveSheet] = useState(0)
+  const [wb, setWb] = useState<XLSX.WorkBook | null>(null)
   const [error, setError] = useState(false)
 
   useEffect(() => {
@@ -30,14 +43,20 @@ export function FileViewer({ file, onClose }: { file: ViewerFile; onClose: () =>
     let alive = true
     ;(async () => {
       try {
-        // прокси-URL на нашем домене — работает в iframe/img/Google без CORS/CSP-проблем R2
         const { url } = await api<{ url: string }>(`/api/v1/files/${file.id}/view-url`, {}, 'project')
         if (!alive) return
         setUrl(url)
-        if (isText(file.mime)) {
+
+        if (kind === 'text') {
           const res = await fetch(url)
-          const body = await res.text()
-          if (alive) setText(body.slice(0, 200_000))
+          if (alive) setText((await res.text()).slice(0, 200_000))
+        } else if (kind === 'sheet') {
+          // таблицы читаем локально (SheetJS) — приватно, без Google
+          const buf = await (await fetch(url)).arrayBuffer()
+          const book = XLSX.read(buf, { type: 'array' })
+          if (!alive) return
+          setWb(book)
+          renderSheet(book, 0)
         }
       } catch {
         if (alive) setError(true)
@@ -46,7 +65,15 @@ export function FileViewer({ file, onClose }: { file: ViewerFile; onClose: () =>
     return () => {
       alive = false
     }
-  }, [file.id, file.mime])
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [file.id])
+
+  const renderSheet = (book: XLSX.WorkBook, idx: number) => {
+    const name = book.SheetNames[idx]!
+    const html = XLSX.utils.sheet_to_html(book.Sheets[name]!, { editable: false })
+    setSheet({ names: book.SheetNames, html })
+    setActiveSheet(idx)
+  }
 
   const download = async (original = false) => {
     const { url } = await api<{ url: string }>(`/api/v1/files/${file.id}/download${original ? '?original=1' : ''}`, {}, 'project')
@@ -59,7 +86,7 @@ export function FileViewer({ file, onClose }: { file: ViewerFile; onClose: () =>
     <div className="fixed inset-0 z-50 flex flex-col bg-black/85 backdrop-blur-sm" onClick={onClose}>
       <header className="flex items-center gap-2 px-4 py-3 text-white" onClick={(e) => e.stopPropagation()}>
         <span className="min-w-0 flex-1 truncate text-sm font-medium">{file.name}</span>
-        {isOffice(file.mime) && googleViewer && (
+        {kind === 'office' && googleViewer && (
           <Button variant="outline" size="sm" className="border-white/20 bg-white/10 text-white hover:bg-white/20" onClick={() => window.open(googleViewer, '_blank')}>
             <ExternalLink className="size-3.5" />
             {t('viewer.google')}
@@ -84,16 +111,37 @@ export function FileViewer({ file, onClose }: { file: ViewerFile; onClose: () =>
           <p className="text-white/70">{t('viewer.failed')}</p>
         ) : !url ? (
           <Loader2 className="size-6 animate-spin text-white/70" />
-        ) : isImage(file.mime) ? (
+        ) : kind === 'image' ? (
           <img src={url} alt={file.name} className="max-h-full max-w-full rounded-lg object-contain" />
-        ) : isPdf(file.mime) ? (
-          <iframe src={url} title={file.name} className="h-full w-full max-w-4xl rounded-lg bg-white" />
-        ) : isText(file.mime) ? (
+        ) : kind === 'pdf' ? (
+          <iframe src={url} title={file.name} className="h-full w-full max-w-5xl rounded-lg bg-white" />
+        ) : kind === 'sheet' ? (
+          sheet ? (
+            <div className="flex h-full w-full max-w-5xl flex-col overflow-hidden rounded-lg bg-white text-black">
+              {sheet.names.length > 1 && (
+                <div className="flex gap-1 overflow-x-auto border-b bg-gray-100 p-1">
+                  {sheet.names.map((n, i) => (
+                    <button
+                      key={n}
+                      onClick={() => wb && renderSheet(wb, i)}
+                      className={cn('whitespace-nowrap rounded px-2.5 py-1 text-xs', i === activeSheet ? 'bg-white font-semibold shadow' : 'text-gray-600 hover:bg-white/60')}
+                    >
+                      {n}
+                    </button>
+                  ))}
+                </div>
+              )}
+              <div className="sheet-view flex-1 overflow-auto p-2" dangerouslySetInnerHTML={{ __html: sheet.html }} />
+            </div>
+          ) : (
+            <Loader2 className="size-6 animate-spin text-white/70" />
+          )
+        ) : kind === 'text' ? (
           <pre className="h-full w-full max-w-4xl overflow-auto rounded-lg bg-card p-4 font-mono text-xs text-foreground">
             {text ?? <Loader2 className="size-5 animate-spin" />}
           </pre>
-        ) : isOffice(file.mime) && googleViewer ? (
-          <iframe src={googleViewer} title={file.name} className="h-full w-full max-w-4xl rounded-lg bg-white" />
+        ) : kind === 'office' && googleViewer ? (
+          <iframe src={googleViewer} title={file.name} className="h-full w-full max-w-5xl rounded-lg bg-white" />
         ) : (
           <div className="rounded-xl bg-card p-8 text-center">
             <p className="text-sm text-muted-foreground">{t('viewer.noPreview')}</p>
