@@ -30,7 +30,8 @@ export function FileViewer({ file, onClose }: { file: ViewerFile; onClose: () =>
     let alive = true
     ;(async () => {
       try {
-        const { url } = await api<{ url: string }>(`/api/v1/files/${file.id}/download?inline=1`, {}, 'project')
+        // прокси-URL на нашем домене — работает в iframe/img/Google без CORS/CSP-проблем R2
+        const { url } = await api<{ url: string }>(`/api/v1/files/${file.id}/view-url`, {}, 'project')
         if (!alive) return
         setUrl(url)
         if (isText(file.mime)) {

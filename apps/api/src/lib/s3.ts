@@ -1,4 +1,5 @@
 import { S3Client, GetObjectCommand, DeleteObjectCommand } from '@aws-sdk/client-s3'
+import type { Readable } from 'node:stream'
 import { getSignedUrl } from '@aws-sdk/s3-request-presigner'
 import { env } from '../env.js'
 
@@ -53,4 +54,10 @@ export function presignView(key: string, mime: string, expiresIn = 3600) {
 
 export async function deleteObject(key: string) {
   await s3Client().send(new DeleteObjectCommand({ Bucket: s3Bucket(), Key: key }))
+}
+
+/** Стрим объекта из R2 (для прокси-отдачи файла через API). */
+export async function getObjectStream(key: string): Promise<{ body: Readable; contentType?: string; contentLength?: number }> {
+  const res = await s3Client().send(new GetObjectCommand({ Bucket: s3Bucket(), Key: key }))
+  return { body: res.Body as Readable, contentType: res.ContentType, contentLength: res.ContentLength }
 }

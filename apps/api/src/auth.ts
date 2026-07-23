@@ -31,6 +31,26 @@ export const signSessionToken = (p: Omit<SessionPayload, 'typ'>) =>
 export const signProjectToken = (p: Omit<ProjectPayload, 'typ'>) =>
   sign({ typ: 'project', ...p }, '30d')
 
+// Короткоживущий file-токен для прокси-отдачи (в URL: img/iframe/Google не шлют Authorization)
+export async function signFileToken(fileId: string, projectId: string): Promise<string> {
+  return new SignJWT({ typ: 'file', fileId, projectId })
+    .setProtectedHeader({ alg: 'HS256' })
+    .setIssuedAt()
+    .setExpirationTime('1h')
+    .sign(secret)
+}
+
+export async function verifyFileToken(token: string): Promise<{ fileId: string; projectId: string } | null> {
+  try {
+    const { payload } = await jwtVerify(token, secret)
+    const p = payload as { typ?: string; fileId?: string; projectId?: string }
+    if (p.typ !== 'file' || !p.fileId || !p.projectId) return null
+    return { fileId: p.fileId, projectId: p.projectId }
+  } catch {
+    return null
+  }
+}
+
 export async function verifyToken(token: string): Promise<TokenPayload | null> {
   try {
     const { payload } = await jwtVerify(token, secret)

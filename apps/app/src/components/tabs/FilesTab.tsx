@@ -195,7 +195,7 @@ function FileCard({ file, lang, onOpen, onDelete }: { file: FileRow; lang: strin
     queryKey: ['file-preview', file.id],
     enabled: isImg,
     staleTime: 50 * 60 * 1000,
-    queryFn: () => api<{ url: string }>(`/api/v1/files/${file.id}/download?inline=1`, {}, 'project').then((r) => r.url),
+    queryFn: () => api<{ url: string }>(`/api/v1/files/${file.id}/view-url`, {}, 'project').then((r) => r.url),
   })
 
   const openDownload = async (e: React.MouseEvent) => {

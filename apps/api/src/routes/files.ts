@@ -1,12 +1,40 @@
 import { Hono } from 'hono'
+import { Readable } from 'node:stream'
 import { and, desc, eq, ilike } from 'drizzle-orm'
 import { nanoid } from 'nanoid'
 import sharp from 'sharp'
 import { PutObjectCommand } from '@aws-sdk/client-s3'
 import { db } from '../db/client.js'
 import { files, tasks, users } from '../db/schema.js'
-import { requireProject, type ProjectEnv } from '../auth.js'
-import { s3Client, presignDownload, presignView, deleteObject, S3_KEY_PREFIX, s3Bucket } from '../lib/s3.js'
+import { requireProject, signFileToken, verifyFileToken, type ProjectEnv } from '../auth.js'
+import { s3Client, presignDownload, presignView, deleteObject, getObjectStream, S3_KEY_PREFIX, s3Bucket } from '../lib/s3.js'
+
+// Публичная прокси-отдача файла по file-токену (в URL) — для iframe/img/Google Viewer.
+// Отдельный роут БЕЗ project-middleware: доступ по короткоживущему подписанному токену.
+export const filesPublicRoute = new Hono()
+filesPublicRoute.get('/:fileId/raw', async (c) => {
+  const token = c.req.query('t')
+  const payload = token ? await verifyFileToken(token) : null
+  if (!payload || payload.fileId !== c.req.param('fileId')) return c.json({ error: 'Unauthorized' }, 401)
+
+  const file = await db.query.files.findFirst({ where: and(eq(files.id, payload.fileId), eq(files.projectId, payload.projectId)) })
+  if (!file) return c.json({ error: 'Not found' }, 404)
+
+  const key = c.req.query('original') === '1' && file.originalKey ? file.originalKey : file.key
+  try {
+    const { body, contentType, contentLength } = await getObjectStream(key)
+    const web = Readable.toWeb(body) as ReadableStream
+    c.header('Content-Type', contentType || file.mime)
+    c.header('Content-Disposition', `inline; filename*=UTF-8''${encodeURIComponent(file.name)}`)
+    if (contentLength) c.header('Content-Length', String(contentLength))
+    c.header('Cache-Control', 'private, max-age=3600')
+    c.header('Access-Control-Allow-Origin', '*') // чтобы работал fetch текста из вьюера
+    return c.body(web)
+  } catch (e) {
+    console.error('[files] proxy failed:', e)
+    return c.json({ error: 'Read failed' }, 500)
+  }
+})
 
 // Файлы проекта (таб «Файлы») — project-токен, скоуп жёстко из токена.
 // Загрузка проксируется через API (R2-токен не может ставить CORS на бакет,
@@ -139,6 +167,19 @@ filesRoute.post('/', async (c) => {
     },
     201,
   )
+})
+
+// Получить прокси-URL для просмотра (стабильный, на нашем домене, для iframe/img/Google)
+filesRoute.get('/:fileId/view-url', async (c) => {
+  const { projectId } = c.get('auth')
+  const fileId = c.req.param('fileId')
+  const file = await db.query.files.findFirst({ where: and(eq(files.id, fileId), eq(files.projectId, projectId)) })
+  if (!file) return c.json({ error: 'Not found' }, 404)
+  const token = await signFileToken(fileId, projectId)
+  const original = c.req.query('original') === '1' && file.originalKey ? '&original=1' : ''
+  // абсолютный URL — Google Viewer требует публичный адрес
+  const base = process.env.API_PUBLIC_URL || `https://api.chatick.com`
+  return c.json({ url: `${base}/files/${fileId}/raw?t=${token}${original}`, mime: file.mime, name: file.name })
 })
 
 // Скачивание — presigned GET (attachment); ?inline=1 — просмотр; ?original=1 — исходник до оптимизации
