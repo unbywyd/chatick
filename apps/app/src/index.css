@@ -111,6 +111,27 @@
     padding: 0.1em 0.3em;
     font-size: 0.85em;
   }
+  /* tailwind preflight обнуляет списки — возвращаем маркеры в редакторе */
+  .tiptap-editor ul {
+    list-style: disc;
+    padding-inline-start: 1.2em;
+    margin: 0.2em 0;
+  }
+  .tiptap-editor ol {
+    list-style: decimal;
+    padding-inline-start: 1.2em;
+    margin: 0.2em 0;
+  }
+  .tiptap-editor pre {
+    background: var(--secondary);
+    border-radius: 8px;
+    padding: 0.5em 0.7em;
+    margin: 0.3em 0;
+  }
+  .tiptap-editor pre code {
+    background: none;
+    padding: 0;
+  }
   .mention {
     color: var(--brand);
     background: color-mix(in oklab, var(--brand) 12%, transparent);
@@ -125,8 +146,13 @@
   .msg-md p + p {
     margin-top: 0.4em;
   }
-  .msg-md ul,
+  .msg-md ul {
+    list-style: disc;
+    margin: 0.2em 0;
+    padding-inline-start: 1.2em;
+  }
   .msg-md ol {
+    list-style: decimal;
     margin: 0.2em 0;
     padding-inline-start: 1.2em;
   }
