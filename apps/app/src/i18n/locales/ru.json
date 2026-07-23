@@ -131,7 +131,14 @@
     "download": "Скачать",
     "delete": "Удалить",
     "deleteConfirm": "Удалить «{{name}}»?",
-    "empty": "Файлов пока нет"
+    "empty": "Файлов пока нет",
+    "loadMore": "Показать ещё"
+  },
+  "viewer": {
+    "google": "Открыть в Google Viewer",
+    "original": "Оригинал",
+    "failed": "Не удалось загрузить файл",
+    "noPreview": "Для этого типа файла нет предпросмотра"
   },
   "perms": {
     "title": "Права",

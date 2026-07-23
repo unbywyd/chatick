@@ -1,5 +1,5 @@
 import { Hono } from 'hono'
-import { and, desc, eq } from 'drizzle-orm'
+import { and, desc, eq, ilike } from 'drizzle-orm'
 import { nanoid } from 'nanoid'
 import sharp from 'sharp'
 import { PutObjectCommand } from '@aws-sdk/client-s3'
@@ -16,34 +16,42 @@ filesRoute.use('*', requireProject)
 
 const MAX_FILE_MB = 100
 
-// Список файлов проекта (?taskId=... — только вложения задачи)
+const PAGE_SIZE = 24
+
+// Список файлов проекта (?taskId=... — только вложения задачи; ?page= и ?q= — пагинация/поиск)
 filesRoute.get('/', async (c) => {
   const { projectId } = c.get('auth')
   const taskId = c.req.query('taskId')
-  const where = taskId
-    ? and(eq(files.projectId, projectId), eq(files.taskId, taskId))
-    : eq(files.projectId, projectId)
+  const q = (c.req.query('q') ?? '').trim()
+  const page = Math.max(1, Number(c.req.query('page')) || 1)
+
+  const conds = [eq(files.projectId, projectId)]
+  if (taskId) conds.push(eq(files.taskId, taskId))
+  if (q) conds.push(ilike(files.name, `%${q}%`))
 
   const rows = await db
     .select({ file: files, uploader: users, taskNumber: tasks.number })
     .from(files)
     .leftJoin(users, eq(users.id, files.uploadedById))
     .leftJoin(tasks, eq(tasks.id, files.taskId))
-    .where(where)
+    .where(and(...conds))
     .orderBy(desc(files.createdAt))
+    .limit(PAGE_SIZE + 1)
+    .offset((page - 1) * PAGE_SIZE)
 
-  return c.json(
-    rows.map((r) => ({
-      id: r.file.id,
-      name: r.file.name,
-      mime: r.file.mime,
-      size: Number(r.file.size),
-      createdAt: r.file.createdAt,
-      taskId: r.file.taskId,
-      taskNumber: r.taskNumber,
-      uploader: r.uploader ? { id: r.uploader.id, name: r.uploader.name, avatarUrl: r.uploader.avatarUrl } : null,
-    })),
-  )
+  const hasMore = rows.length > PAGE_SIZE
+  const items = rows.slice(0, PAGE_SIZE).map((r) => ({
+    id: r.file.id,
+    name: r.file.name,
+    mime: r.file.mime,
+    size: Number(r.file.size),
+    createdAt: r.file.createdAt,
+    taskId: r.file.taskId,
+    taskNumber: r.taskNumber,
+    hasOriginal: Boolean(r.file.originalKey),
+    uploader: r.uploader ? { id: r.uploader.id, name: r.uploader.name, avatarUrl: r.uploader.avatarUrl } : null,
+  }))
+  return c.json({ items, page, hasMore })
 })
 
 const OPTIMIZABLE = new Set(['image/jpeg', 'image/png', 'image/webp', 'image/avif', 'image/tiff'])

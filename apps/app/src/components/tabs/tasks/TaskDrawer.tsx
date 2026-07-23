@@ -77,7 +77,7 @@ export function TaskDrawer({
 
   const attachments = useQuery({
     queryKey: ['task-files', task.id],
-    queryFn: () => api<Attachment[]>(`/api/v1/files?taskId=${task.id}`, {}, 'project'),
+    queryFn: () => api<{ items: Attachment[] }>(`/api/v1/files?taskId=${task.id}`, {}, 'project').then((r) => r.items),
   })
   // превью-URL картинок (inline presigned, 1ч)
   const previews = useQuery({

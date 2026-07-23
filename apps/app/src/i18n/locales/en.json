@@ -131,7 +131,14 @@
     "download": "Download",
     "delete": "Delete",
     "deleteConfirm": "Delete “{{name}}”?",
-    "empty": "No files yet"
+    "empty": "No files yet",
+    "loadMore": "Load more"
+  },
+  "viewer": {
+    "google": "Open in Google Viewer",
+    "original": "Original",
+    "failed": "Failed to load the file",
+    "noPreview": "No preview available for this file type"
   },
   "perms": {
     "title": "Permissions",

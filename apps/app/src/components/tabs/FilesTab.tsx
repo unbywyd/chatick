@@ -1,5 +1,5 @@
 import { useMemo, useRef, useState } from 'react'
-import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
+import { useInfiniteQuery, useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { useTranslation } from 'react-i18next'
 import { toast } from 'sonner'
 import {
@@ -20,6 +20,7 @@ import { cn } from '@/lib/utils'
 import { Input } from '@/components/ui/input'
 import { Button } from '@/components/ui/button'
 import { useConfirm } from '@/components/ui/confirm'
+import { FileViewer, type ViewerFile } from '@/components/files/FileViewer'
 
 type FileRow = {
   id: string
@@ -27,6 +28,7 @@ type FileRow = {
   mime: string
   size: number
   createdAt: string
+  hasOriginal?: boolean
   uploader: { id: string; name: string; avatarUrl: string | null } | null
 }
 
@@ -46,7 +48,9 @@ function fmtSize(bytes: number) {
   return `${(bytes / 1024 ** 3).toFixed(1)} GB`
 }
 
-// Таб «Файлы»: presigned upload в R2 напрямую, список, поиск, скачивание, удаление
+type Page = { items: FileRow[]; page: number; hasMore: boolean }
+
+// Таб «Файлы»: сетка 2 колонки, превью картинок, пагинация, встроенный просмотрщик
 export function FilesTab({ projectId }: { projectId: string }) {
   const { t, i18n } = useTranslation()
   const qc = useQueryClient()
@@ -54,25 +58,22 @@ export function FilesTab({ projectId }: { projectId: string }) {
   const [q, setQ] = useState('')
   const [dragOver, setDragOver] = useState(false)
   const [uploading, setUploading] = useState<string[]>([])
+  const [viewing, setViewing] = useState<ViewerFile | null>(null)
   const inputRef = useRef<HTMLInputElement>(null)
 
-  const filesQ = useQuery({
-    queryKey: ['files', projectId],
-    queryFn: () => api<FileRow[]>('/api/v1/files', {}, 'project'),
+  const filesQ = useInfiniteQuery({
+    queryKey: ['files', projectId, q],
+    initialPageParam: 1,
+    queryFn: ({ pageParam }) => api<Page>(`/api/v1/files?page=${pageParam}&q=${encodeURIComponent(q)}`, {}, 'project'),
+    getNextPageParam: (last) => (last.hasMore ? last.page + 1 : undefined),
   })
-
-  const filtered = useMemo(() => {
-    const list = filesQ.data ?? []
-    const needle = q.trim().toLowerCase()
-    return needle ? list.filter((f) => f.name.toLowerCase().includes(needle)) : list
-  }, [filesQ.data, q])
+  const items = useMemo(() => (filesQ.data?.pages ?? []).flatMap((p) => p.items), [filesQ.data])
 
   async function uploadFiles(list: FileList | File[]) {
     for (const file of Array.from(list)) {
       const label = file.name
       setUploading((u) => [...u, label])
       try {
-        // multipart через API (R2-токен без прав на CORS — прямой PUT из браузера недоступен)
         const fd = new FormData()
         fd.append('file', file)
         const res = await fetch(`${API_URL}/api/v1/files`, {
@@ -80,10 +81,7 @@ export function FilesTab({ projectId }: { projectId: string }) {
           headers: { Authorization: `Bearer ${getProjectToken()}` },
           body: fd,
         })
-        if (!res.ok) {
-          const body = (await res.json().catch(() => ({}))) as { error?: string }
-          throw new Error(body.error ?? res.statusText)
-        }
+        if (!res.ok) throw new Error(((await res.json().catch(() => ({}))) as { error?: string }).error ?? res.statusText)
         qc.invalidateQueries({ queryKey: ['files', projectId] })
       } catch (e) {
         toast.error(`${file.name}: ${e instanceof Error ? e.message : String(e)}`)
@@ -93,12 +91,6 @@ export function FilesTab({ projectId }: { projectId: string }) {
     }
   }
 
-  const download = useMutation({
-    mutationFn: (fileId: string) => api<{ url: string }>(`/api/v1/files/${fileId}/download`, {}, 'project'),
-    onSuccess: (r) => window.open(r.url, '_blank'),
-    onError: (e) => toast.error(e instanceof Error ? e.message : String(e)),
-  })
-
   const remove = useMutation({
     mutationFn: (fileId: string) => api(`/api/v1/files/${fileId}`, { method: 'DELETE' }, 'project'),
     onSuccess: () => qc.invalidateQueries({ queryKey: ['files', projectId] }),
@@ -107,7 +99,7 @@ export function FilesTab({ projectId }: { projectId: string }) {
 
   return (
     <div
-      className="mx-auto max-w-3xl p-6"
+      className="mx-auto max-w-4xl p-6"
       onDragOver={(e) => {
         e.preventDefault()
         setDragOver(true)
@@ -140,7 +132,6 @@ export function FilesTab({ projectId }: { projectId: string }) {
         />
       </div>
 
-      {/* Drop-зона / прогресс */}
       <div
         className={cn(
           'mt-4 rounded-lg border-2 border-dashed p-6 text-center text-sm transition-colors',
@@ -158,59 +149,109 @@ export function FilesTab({ projectId }: { projectId: string }) {
         )}
       </div>
 
-      {/* Список */}
-      <ul className="mt-4 space-y-1.5">
+      {/* Сетка 2 колонки на широких экранах */}
+      <div className="mt-4 grid gap-2 sm:grid-cols-2">
         {filesQ.isLoading && <p className="text-sm text-muted-foreground">…</p>}
-        {filtered.map((f) => {
-          const Icon = iconFor(f.mime)
-          return (
-            <li
-              key={f.id}
-              draggable
-              onDragStart={(e) =>
-                // D&D в чат: композер прикрепит файл к сообщению
-                e.dataTransfer.setData(
-                  'application/x-chatick-file',
-                  JSON.stringify({ id: f.id, name: f.name, mime: f.mime, size: f.size }),
-                )
-              }
-              className="flex cursor-grab items-center gap-3 rounded-lg border bg-card px-3 py-2.5 active:cursor-grabbing"
-            >
-              <span className="grid size-9 shrink-0 place-items-center rounded-md bg-secondary">
-                <Icon className="size-4" />
-              </span>
-              <span className="min-w-0 flex-1">
-                <span className="block truncate text-sm font-medium">{f.name}</span>
-                <span className="block text-xs text-muted-foreground">
-                  {fmtSize(f.size)}
-                  {f.uploader && <> · {f.uploader.name}</>}
-                  {' · '}
-                  {new Date(f.createdAt).toLocaleDateString(i18n.language)}
-                </span>
-              </span>
-              <Button variant="ghost" size="icon" title={t('files.download')} onClick={() => download.mutate(f.id)}>
-                <Download className="size-4" />
-              </Button>
-              <Button
-                variant="destructive"
-                size="icon"
-                title={t('files.delete')}
-                onClick={async () => {
-                  if (await confirm({ title: t('files.deleteConfirm', { name: f.name }), destructive: true, confirmLabel: t('files.delete') }))
-                    remove.mutate(f.id)
-                }}
-              >
-                <Trash2 className="size-4" />
-              </Button>
-            </li>
-          )
-        })}
-        {!filesQ.isLoading && filtered.length === 0 && (
-          <p className="rounded-lg border border-dashed p-6 text-center text-sm text-muted-foreground">
-            {q ? t('start.nothingFound') : t('files.empty')}
-          </p>
-        )}
-      </ul>
+        {items.map((f) => (
+          <FileCard
+            key={f.id}
+            file={f}
+            lang={i18n.language}
+            onOpen={() => setViewing(f)}
+            onDelete={async () => {
+              if (await confirm({ title: t('files.deleteConfirm', { name: f.name }), destructive: true, confirmLabel: t('files.delete') }))
+                remove.mutate(f.id)
+            }}
+          />
+        ))}
+      </div>
+
+      {!filesQ.isLoading && items.length === 0 && (
+        <p className="mt-4 rounded-lg border border-dashed p-6 text-center text-sm text-muted-foreground">
+          {q ? t('start.nothingFound') : t('files.empty')}
+        </p>
+      )}
+
+      {filesQ.hasNextPage && (
+        <div className="mt-4 flex justify-center">
+          <Button variant="outline" size="sm" onClick={() => filesQ.fetchNextPage()} disabled={filesQ.isFetchingNextPage}>
+            {filesQ.isFetchingNextPage ? <Loader2 className="size-3.5 animate-spin" /> : null}
+            {t('files.loadMore')}
+          </Button>
+        </div>
+      )}
+
+      {viewing && <FileViewer file={viewing} onClose={() => setViewing(null)} />}
+    </div>
+  )
+}
+
+function FileCard({ file, lang, onOpen, onDelete }: { file: FileRow; lang: string; onOpen: () => void; onDelete: () => void }) {
+  const { t } = useTranslation()
+  const Icon = iconFor(file.mime)
+  const isImg = file.mime.startsWith('image/')
+
+  const preview = useQuery({
+    queryKey: ['file-preview', file.id],
+    enabled: isImg,
+    staleTime: 50 * 60 * 1000,
+    queryFn: () => api<{ url: string }>(`/api/v1/files/${file.id}/download?inline=1`, {}, 'project').then((r) => r.url),
+  })
+
+  const openDownload = async (e: React.MouseEvent) => {
+    e.stopPropagation()
+    const { url } = await api<{ url: string }>(`/api/v1/files/${file.id}/download`, {}, 'project')
+    window.open(url, '_blank')
+  }
+
+  return (
+    <div
+      onClick={onOpen}
+      draggable
+      onDragStart={(e) =>
+        e.dataTransfer.setData(
+          'application/x-chatick-file',
+          JSON.stringify({ id: file.id, name: file.name, mime: file.mime, size: file.size }),
+        )
+      }
+      className="group flex cursor-pointer items-center gap-3 overflow-hidden rounded-lg border bg-card px-3 py-2.5 transition-colors hover:bg-accent/50 active:cursor-grabbing"
+    >
+      {isImg ? (
+        <span className="grid size-12 shrink-0 place-items-center overflow-hidden rounded-md bg-secondary">
+          {preview.data ? (
+            <img src={preview.data} alt="" className="size-full object-cover" loading="lazy" />
+          ) : (
+            <Loader2 className="size-4 animate-spin text-muted-foreground" />
+          )}
+        </span>
+      ) : (
+        <span className="grid size-12 shrink-0 place-items-center rounded-md bg-secondary">
+          <Icon className="size-5" />
+        </span>
+      )}
+      <span className="min-w-0 flex-1">
+        <span className="block truncate text-sm font-medium">{file.name}</span>
+        <span className="block truncate text-xs text-muted-foreground">
+          {fmtSize(file.size)}
+          {file.uploader && <> · {file.uploader.name}</>} · {new Date(file.createdAt).toLocaleDateString(lang)}
+        </span>
+      </span>
+      <span className="flex shrink-0 items-center opacity-0 transition-opacity group-hover:opacity-100">
+        <Button variant="ghost" size="icon" title={t('files.download')} onClick={openDownload}>
+          <Download className="size-4" />
+        </Button>
+        <Button
+          variant="ghost"
+          size="icon"
+          title={t('files.delete')}
+          onClick={(e) => {
+            e.stopPropagation()
+            onDelete()
+          }}
+        >
+          <Trash2 className="size-4 text-muted-foreground hover:text-destructive" />
+        </Button>
+      </span>
     </div>
   )
 }

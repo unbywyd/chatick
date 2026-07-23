@@ -131,7 +131,14 @@
     "download": "הורדה",
     "delete": "מחיקה",
     "deleteConfirm": "למחוק את «{{name}}»?",
-    "empty": "אין עדיין קבצים"
+    "empty": "אין עדיין קבצים",
+    "loadMore": "לטעון עוד"
+  },
+  "viewer": {
+    "google": "לפתוח ב-Google Viewer",
+    "original": "מקור",
+    "failed": "טעינת הקובץ נכשלה",
+    "noPreview": "אין תצוגה מקדימה לסוג קובץ זה"
   },
   "perms": {
     "title": "הרשאות",
