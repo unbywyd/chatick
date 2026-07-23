@@ -60,7 +60,10 @@ createRoot(document.getElementById('root')!).render(
               <Route path="/" element={<LoginScreen />} />
               <Route path="/login" element={<LoginScreen />} />
               <Route path="/auth" element={<AuthCallback />} />
+              {/* Компания и её табы адресуемы: /start/:companyId/(projects|team|settings) */}
               <Route path="/start" element={<StartScreen />} />
+              <Route path="/start/:companyId" element={<StartScreen />} />
+              <Route path="/start/:companyId/:companyTab" element={<StartScreen />} />
               <Route path="/p/:id" element={<ProjectLayout />}>
                 <Route index element={<Navigate to="tasks" replace />} />
                 <Route path="about" element={<AboutPage />} />

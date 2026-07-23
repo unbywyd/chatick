@@ -209,6 +209,10 @@
     "owner": "Owner"
   },
   "chat": {
+    "noLlmTitle": "AI is not connected",
+    "noLlmText": "The chat runs on the AI dispatcher. Connect your company's LLM provider to start messaging.",
+    "noLlmCta": "Open LLM settings",
+    "noLlmPlaceholder": "Connect an LLM to start chatting…",
     "modeGroup": "Group",
     "modeAi": "AI",
     "groupHint": "Group messages — routed through the AI dispatcher",

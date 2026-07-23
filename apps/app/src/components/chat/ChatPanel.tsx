@@ -1,16 +1,31 @@
 import { useState } from 'react'
-import { Bot, Users, SendHorizontal } from 'lucide-react'
+import { useNavigate, useParams } from 'react-router-dom'
+import { useQuery } from '@tanstack/react-query'
+import { Bot, Users, SendHorizontal, BrainCircuit, Settings } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
+import { api } from '@/lib/api'
 import { cn } from '@/lib/utils'
 import { Logo } from '@/components/Logo'
+import { Button } from '@/components/ui/button'
 
 // Два режима чата (CONCEPT.md): группа (через ИИ-диспетчер) / личный диалог с ИИ
 type ChatMode = 'group' | 'ai'
 
 export function ChatPanel({ projectName }: { projectName?: string }) {
   const { t } = useTranslation()
+  const navigate = useNavigate()
+  const { id: projectId } = useParams()
   const [mode, setMode] = useState<ChatMode>('group')
   const [draft, setDraft] = useState('')
+
+  // Чат живёт на ИИ-диспетчере — без подключённого LLM компании он не работает (SPEC)
+  const llm = useQuery({
+    queryKey: ['llm-status', projectId],
+    queryFn: () => api<{ configured: boolean; companyId: string }>(`/api/v1/projects/${projectId}/llm-status`, {}, 'project'),
+    enabled: Boolean(projectId),
+  })
+
+  const llmMissing = llm.data ? !llm.data.configured : false
 
   return (
     <div className="flex h-full flex-col">
@@ -38,9 +53,28 @@ export function ChatPanel({ projectName }: { projectName?: string }) {
       </header>
 
       <div className="flex-1 overflow-y-auto p-4">
-        <p className="text-center text-sm text-muted-foreground">
-          {mode === 'group' ? t('chat.groupHint') : t('chat.aiHint')}
-        </p>
+        {llmMissing ? (
+          <div className="mx-auto mt-8 max-w-xs rounded-xl border bg-card p-5 text-center">
+            <span className="mx-auto grid size-12 place-items-center rounded-full bg-secondary">
+              <BrainCircuit className="size-6 text-muted-foreground" />
+            </span>
+            <h3 className="mt-3 text-sm font-semibold">{t('chat.noLlmTitle')}</h3>
+            <p className="mt-1 text-xs text-muted-foreground">{t('chat.noLlmText')}</p>
+            <Button
+              variant="brand"
+              size="sm"
+              className="mt-4"
+              onClick={() => navigate(`/start/${llm.data!.companyId}/settings`)}
+            >
+              <Settings className="size-3.5" />
+              {t('chat.noLlmCta')}
+            </Button>
+          </div>
+        ) : (
+          <p className="text-center text-sm text-muted-foreground">
+            {mode === 'group' ? t('chat.groupHint') : t('chat.aiHint')}
+          </p>
+        )}
       </div>
 
       <footer className="border-t p-3">
@@ -56,12 +90,13 @@ export function ChatPanel({ projectName }: { projectName?: string }) {
             value={draft}
             onChange={(e) => setDraft(e.target.value)}
             rows={1}
-            placeholder={mode === 'group' ? t('chat.placeholderGroup') : t('chat.placeholderAi')}
-            className="max-h-40 flex-1 resize-none rounded-md border bg-transparent px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-ring"
+            disabled={llmMissing}
+            placeholder={llmMissing ? t('chat.noLlmPlaceholder') : mode === 'group' ? t('chat.placeholderGroup') : t('chat.placeholderAi')}
+            className="max-h-40 flex-1 resize-none rounded-md border bg-transparent px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-ring disabled:opacity-50"
           />
           <button
             type="submit"
-            disabled={!draft.trim()}
+            disabled={!draft.trim() || llmMissing}
             aria-label={t('chat.send')}
             className="rounded-md bg-brand p-2 text-brand-foreground transition-opacity disabled:opacity-40"
           >

@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react'
-import { useNavigate } from 'react-router-dom'
+import { useNavigate, useParams } from 'react-router-dom'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { useTranslation } from 'react-i18next'
 import { toast } from 'sonner'
@@ -33,7 +33,9 @@ export function StartScreen() {
   const { t } = useTranslation()
   const navigate = useNavigate()
   const qc = useQueryClient()
-  const [companyId, setCompanyId] = useState<string | null>(null)
+  // компания и таб — из URL: /start/:companyId/:companyTab (адресуемо, SPEC)
+  const { companyId = null } = useParams()
+  const setCompanyId = (id: string | null) => navigate(id ? `/start/${id}` : '/start')
 
   useEffect(() => {
     if (!getSessionToken()) navigate('/login', { replace: true })
@@ -47,7 +49,8 @@ export function StartScreen() {
 
   useEffect(() => {
     const list = companiesQ.data?.companies
-    if (list && list.length === 1 && !companyId) setCompanyId(list[0]!.id)
+    if (list && list.length === 1 && !companyId) navigate(`/start/${list[0]!.id}`, { replace: true })
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [companiesQ.data, companyId])
 
   useEffect(() => {
@@ -244,7 +247,12 @@ function CompanyHome({
   onEntered: (projectId: string) => void
 }) {
   const { t } = useTranslation()
-  const [tab, setTab] = useState<'projects' | 'team' | 'settings'>('projects')
+  const navigate = useNavigate()
+  // таб компании — из URL: /start/:companyId/:companyTab (settings адресуем — на него ведёт чат без LLM)
+  const { companyTab } = useParams()
+  const tab = (['projects', 'team', 'settings'] as const).includes(companyTab as never)
+    ? (companyTab as 'projects' | 'team' | 'settings')
+    : 'projects'
   const canManage = company.myRole === 'admin' || company.myRole === 'manager'
 
   return (
@@ -253,7 +261,7 @@ function CompanyHome({
         {(['projects', 'team', 'settings'] as const).map((key) => (
           <button
             key={key}
-            onClick={() => setTab(key)}
+            onClick={() => navigate(key === 'projects' ? `/start/${company.id}` : `/start/${company.id}/${key}`)}
             className={cn(
               '-mb-px border-b-2 px-4 py-2 text-sm font-medium transition-colors',
               tab === key

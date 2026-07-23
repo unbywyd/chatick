@@ -5,8 +5,9 @@ import { and, eq } from 'drizzle-orm'
 import { nanoid } from 'nanoid'
 import { db } from '../db/client.js'
 import { companies, companyMembers, projects, projectMembers, users } from '../db/schema.js'
-import { requireSession, signProjectToken, type SessionEnv } from '../auth.js'
+import { requireSession, requireProject, signProjectToken, type SessionEnv, type ProjectEnv } from '../auth.js'
 import { sendMail } from '../lib/mail.js'
+import { companyLlm } from '../lib/llm.js'
 
 export const projectsRoute = new Hono<SessionEnv>()
 projectsRoute.use('*', requireSession)
@@ -313,6 +314,16 @@ projectsRoute.delete('/:projectId/members/:userId', async (c) => {
     })
 
   return c.json({ ok: true })
+})
+
+// Статус LLM для чата (project-токен): подключён ли ИИ у компании проекта
+projectsRoute.get('/:projectId/llm-status', requireProject, async (c) => {
+  const { projectId } = (c as unknown as { get: (k: 'auth') => ProjectEnv['Variables']['auth'] }).get('auth')
+  if (projectId !== c.req.param('projectId')) return c.json({ error: 'Forbidden' }, 403)
+  const project = await db.query.projects.findFirst({ where: eq(projects.id, projectId) })
+  if (!project) return c.json({ error: 'Not found' }, 404)
+  const llm = await companyLlm(project.companyId)
+  return c.json({ configured: Boolean(llm), companyId: project.companyId })
 })
 
 // Войти в проект: подтвердить правила (если ещё нет) → получить project-JWT (SPEC §5)
