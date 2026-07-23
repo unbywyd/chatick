@@ -9,6 +9,7 @@ import { projectsRoute } from './routes/projects.js'
 import { filesRoute } from './routes/files.js'
 import { credentialsRoute } from './routes/credentials.js'
 import { tasksRoute } from './routes/tasks.js'
+import { messagesRoute } from './routes/messages.js'
 
 export const app = new Hono()
 
@@ -22,9 +23,9 @@ app.route('/api/v1/projects', projectsRoute)
 app.route('/api/v1/files', filesRoute)
 app.route('/api/v1/credentials', credentialsRoute)
 app.route('/api/v1/tasks', tasksRoute)
+app.route('/api/v1/messages', messagesRoute)
 
-// Модули дальше по мере разработки:
-// app.route('/api/v1/messages', messages)   — чат + SSE-стрим
+// Дальше:
 // app.route('/api/v1/tasks', tasks)         — таск-менеджер
 // app.route('/api/v1/files', files)         — файлы (R2)
 // app.route('/api/v1/credentials', creds)   — кредишены (шифрование)

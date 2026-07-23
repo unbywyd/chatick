@@ -213,6 +213,7 @@
     "noLlmText": "הצ׳אט פועל על מנהל ה-AI. חברו ספק LLM של החברה כדי להתחיל לשוחח.",
     "noLlmCta": "לפתוח הגדרות LLM",
     "noLlmPlaceholder": "חברו LLM כדי להתחיל…",
+    "connecting": "מתחבר…",
     "modeGroup": "קבוצה",
     "modeAi": "AI",
     "groupHint": "הודעות קבוצה — עוברות דרך מנהל ה-AI",
