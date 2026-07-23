@@ -86,13 +86,16 @@ messagesRoute.post(
     const { projectId, sub } = c.get('auth')
     const { text, mode, replyToId, attachmentIds, raw } = c.req.valid('json')
 
+    // чисто файловые сообщения (без содержательного текста) не фильтруем — нечего оценивать
+    const attachmentOnly = attachmentIds.length > 0 && (!text.trim() || text.trim() === '📎')
+
     const [row] = await db
       .insert(messages)
       .values({
         projectId,
         authorId: sub,
         mode,
-        status: mode === 'group' && !raw ? 'pending' : 'delivered',
+        status: mode === 'group' && !raw && !attachmentOnly ? 'pending' : 'delivered',
         rawSend: raw,
         text,
         replyToId: replyToId ?? null,
@@ -113,7 +116,7 @@ messagesRoute.post(
 
     if (mode === 'ai') return c.json(message, 201) // личный диалог с ИИ — отдельный слой
 
-    if (raw) {
+    if (raw || attachmentOnly) {
       broadcast(projectId, 'message', message)
       return c.json(message, 201)
     }

@@ -323,9 +323,11 @@ function MessageRow({ message, compact, lang }: { message: ChatMessage; compact:
             )}
           </p>
         )}
-        <div className="msg-md break-words text-sm">
-          <ReactMarkdown>{renderMentions(message.text)}</ReactMarkdown>
-        </div>
+        {!(message.text === '📎' && (message.attachments?.length ?? 0) > 0) && (
+          <div className="msg-md break-words text-sm">
+            <ReactMarkdown>{renderMentions(message.text)}</ReactMarkdown>
+          </div>
+        )}
         {(message.attachments?.length ?? 0) > 0 && <MessageAttachments attachments={message.attachments!} />}
       </div>
     </div>
@@ -333,6 +335,25 @@ function MessageRow({ message, compact, lang }: { message: ChatMessage; compact:
 }
 
 function MessageAttachments({ attachments }: { attachments: NonNullable<ChatMessage['attachments']> }) {
+  const images = attachments.filter((a) => a.mime.startsWith('image/'))
+  const others = attachments.filter((a) => !a.mime.startsWith('image/'))
+
+  // inline-превью картинок (presigned, 1ч)
+  const previews = useQuery({
+    queryKey: ['msg-previews', images.map((a) => a.id).join(',')],
+    enabled: images.length > 0,
+    staleTime: 50 * 60 * 1000,
+    queryFn: async () => {
+      const entries = await Promise.all(
+        images.map(async (a) => {
+          const { url } = await api<{ url: string }>(`/api/v1/files/${a.id}/download?inline=1`, {}, 'project')
+          return [a.id, url] as const
+        }),
+      )
+      return Object.fromEntries(entries) as Record<string, string>
+    },
+  })
+
   const open = async (id: string, inline: boolean) => {
     try {
       const { url } = await api<{ url: string }>(`/api/v1/files/${id}/download${inline ? '?inline=1' : ''}`, {}, 'project')
@@ -341,18 +362,41 @@ function MessageAttachments({ attachments }: { attachments: NonNullable<ChatMess
       toast.error(e instanceof Error ? e.message : String(e))
     }
   }
+
   return (
-    <div className="mt-1.5 flex flex-wrap gap-1.5">
-      {attachments.map((a) => (
-        <button
-          key={a.id}
-          onClick={() => open(a.id, a.mime.startsWith('image/') || a.mime === 'application/pdf')}
-          className="inline-flex max-w-56 items-center gap-1.5 rounded-md border bg-card px-2 py-1 text-xs transition-colors hover:bg-accent"
-          title={a.name}
-        >
-          📎 <span className="truncate">{a.name}</span>
-        </button>
-      ))}
+    <div className="mt-1.5 space-y-1.5">
+      {images.length > 0 && (
+        <div className="flex flex-wrap gap-1.5">
+          {images.map((a) => (
+            <button
+              key={a.id}
+              onClick={() => open(a.id, true)}
+              title={a.name}
+              className="block max-h-52 max-w-64 overflow-hidden rounded-lg border transition-opacity hover:opacity-90"
+            >
+              {previews.data?.[a.id] ? (
+                <img src={previews.data[a.id]} alt={a.name} className="max-h-52 max-w-64 object-cover" loading="lazy" />
+              ) : (
+                <span className="grid h-24 w-32 place-items-center bg-secondary text-xs text-muted-foreground">…</span>
+              )}
+            </button>
+          ))}
+        </div>
+      )}
+      {others.length > 0 && (
+        <div className="flex flex-wrap gap-1.5">
+          {others.map((a) => (
+            <button
+              key={a.id}
+              onClick={() => open(a.id, a.mime === 'application/pdf')}
+              className="inline-flex max-w-56 items-center gap-1.5 rounded-md border bg-card px-2 py-1 text-xs transition-colors hover:bg-accent"
+              title={a.name}
+            >
+              📎 <span className="truncate">{a.name}</span>
+            </button>
+          ))}
+        </div>
+      )}
     </div>
   )
 }

@@ -80,6 +80,7 @@ function dispatcherSystem(project: { chatRules: string }, ai: AiConfig, authorNa
     `LANGUAGE RULE (always enforced): if the message is NOT in ${lang}, HOLD it and provide a faithful ${lang} translation as the suggestion (mark it good to send).`,
     project.chatRules ? `Chat rules set by the team: "${project.chatRules}"` : 'No special chat rules.',
     '',
+    'Judge ONLY the incoming message below — the recent chat is context, NOT the subject of evaluation.',
     'Decide: PASS (deliver to the group as-is) or HOLD (needs a private clarification with the author).',
     'Respond with ONLY JSON:',
     '{"verdict":"pass"} or {"verdict":"hold","reason":"<short reason in the AUTHOR\'S language>","questions":"<what to clarify, author\'s language>","suggestion":"<improved message in the PROJECT language, or empty>"}',

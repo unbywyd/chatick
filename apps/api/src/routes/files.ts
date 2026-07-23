@@ -68,10 +68,14 @@ filesRoute.post('/', async (c) => {
   if (file.size > MAX_FILE_MB * 1024 * 1024) return c.json({ error: `File too large (max ${MAX_FILE_MB}MB)` }, 413)
 
   const fileId = nanoid()
-  const safeName = file.name.replace(/[/\\]/g, '_')
+  // UUID-имена (скриншоты из буфера) → человекочитаемое
+  const looksGenerated = /^[0-9a-f-]{20,}\.[a-z]+$/i.test(file.name) || file.name === 'image.png' || file.name === 'blob'
+  const niceBase = looksGenerated ? `image-${new Date().toISOString().slice(0, 16).replace('T', '_').replace(':', '-')}` : null
+  const displayName = niceBase ? `${niceBase}${file.name.match(/\.[a-z0-9]+$/i)?.[0] ?? '.png'}` : file.name
+  const safeName = displayName.replace(/[/\\]/g, '_')
   const mime = file.type || 'application/octet-stream'
   let buffer = Buffer.from(await file.arrayBuffer())
-  let outName = file.name
+  let outName = displayName
   let outMime = mime
   let key = `${S3_KEY_PREFIX}/${projectId}/${fileId}-${safeName}`
   let originalKey: string | null = null
@@ -91,7 +95,7 @@ filesRoute.post('/', async (c) => {
         )
         buffer = optimized
         outMime = 'image/webp'
-        outName = file.name.replace(/\.[^.]+$/, '') + '.webp'
+        outName = displayName.replace(/\.[^.]+$/, '') + '.webp'
         key = `${S3_KEY_PREFIX}/${projectId}/${fileId}-${outName.replace(/[/\\]/g, '_')}`
       }
     } catch (e) {
