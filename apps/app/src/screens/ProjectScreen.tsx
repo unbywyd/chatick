@@ -9,9 +9,10 @@ import { ChatPanel } from '@/components/chat/ChatPanel'
 import { ThemeToggle } from '@/components/ThemeToggle'
 import { LanguageSelect } from '@/components/LanguageSelect'
 import { AboutTab } from '@/components/tabs/AboutTab'
+import { PermissionsTab } from '@/components/tabs/PermissionsTab'
 
 // Главный экран: чат 40% | табы проекта 60% (см. CONCEPT.md §3)
-const TAB_KEYS = ['about', 'tasks', 'files', 'credentials'] as const
+const TAB_KEYS = ['about', 'tasks', 'files', 'credentials', 'permissions'] as const
 type TabKey = (typeof TAB_KEYS)[number]
 
 type ProjectDetails = {
@@ -54,7 +55,9 @@ export function ProjectScreen() {
       {/* Табы проекта — 60% */}
       <div className="flex flex-1 flex-col">
         <nav className="flex items-center gap-1 border-b px-4 py-2">
-          {TAB_KEYS.map((key) => (
+          {TAB_KEYS.filter(
+            (key) => key !== 'permissions' || project.data?.myRole === 'owner' || project.data?.myRole === 'admin',
+          ).map((key) => (
             <button
               key={key}
               onClick={() => setTab(key)}
@@ -84,6 +87,11 @@ export function ProjectScreen() {
         <main className="flex-1 overflow-y-auto">
           {tab === 'about' ? (
             <AboutTab project={project.data} loading={project.isLoading} />
+          ) : tab === 'permissions' && id ? (
+            <PermissionsTab
+              projectId={id}
+              canEdit={project.data?.myRole === 'owner' || project.data?.myRole === 'admin'}
+            />
           ) : (
             <div className="grid h-full place-items-center text-muted-foreground">
               <p className="text-sm">{t('tabs.placeholder', { tab: t(`tabs.${tab}`) })}</p>

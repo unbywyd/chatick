@@ -13,14 +13,23 @@ projectsRoute.use('*', requireSession)
 
 const CHAT_RULES_MAX = 300 // SPEC §4.2 — попадает в каждый промпт ИИ
 
+// SPEC §4.1: каждый параметр = конкретное действие диспетчера
 const aiConfigSchema = z.object({
-  strictness: z.number().min(0).max(100).default(50),
-  allowFlood: z.boolean().default(false),
-  allowJokes: z.boolean().default(true),
-  allowQuestions: z.boolean().default(true),
-  allowOfftopic: z.boolean().default(false),
-  filters: z.record(z.string(), z.number().min(0).max(100)).default({}),
+  mode: z.enum(['observer', 'assistant', 'moderator']).default('assistant'),
+  language: z.string().min(2).max(8).default('en'), // язык проекта
+  autoTranslate: z.boolean().default(true),
+  answerRepeats: z.boolean().default(true),
+  offtopic: z.enum(['ignore', 'remind', 'hold']).default('remind'),
 })
+
+// SPEC §4.3: per-user пермишены; tasks.read всегда true
+export const TASK_PERMISSIONS = ['tasks.create', 'tasks.edit', 'tasks.delete', 'tasks.changeStatus'] as const
+const permissionsSchema = z.record(z.enum(TASK_PERMISSIONS), z.boolean())
+
+export function defaultPermissions(role: 'owner' | 'admin' | 'member'): Record<string, boolean> {
+  if (role === 'member') return { 'tasks.create': false, 'tasks.edit': false, 'tasks.delete': false, 'tasks.changeStatus': true }
+  return { 'tasks.create': true, 'tasks.edit': true, 'tasks.delete': true, 'tasks.changeStatus': true }
+}
 
 async function companyRoleOf(companyId: string, userId: string) {
   const m = await db.query.companyMembers.findFirst({
@@ -80,7 +89,13 @@ projectsRoute.post(
       .insert(projects)
       .values({ companyId, name, about, slug, chatRules, aiConfig: JSON.stringify(aiConfig) })
       .returning()
-    await db.insert(projectMembers).values({ projectId: project!.id, userId: sub, role: 'owner', rulesAcceptedAt: new Date() })
+    await db.insert(projectMembers).values({
+      projectId: project!.id,
+      userId: sub,
+      role: 'owner',
+      permissions: JSON.stringify(defaultPermissions('owner')),
+      rulesAcceptedAt: new Date(),
+    })
 
     return c.json(project, 201)
   },
@@ -161,14 +176,48 @@ projectsRoute.get('/:projectId/members', async (c) => {
     return c.json({ error: 'Forbidden' }, 403)
 
   const rows = await db
-    .select({ id: projectMembers.id, role: projectMembers.role, user: users })
+    .select({ id: projectMembers.id, role: projectMembers.role, permissions: projectMembers.permissions, user: users })
     .from(projectMembers)
     .innerJoin(users, eq(users.id, projectMembers.userId))
     .where(eq(projectMembers.projectId, projectId))
   return c.json(
-    rows.map((r) => ({ id: r.id, role: r.role, user: { id: r.user.id, name: r.user.name, email: r.user.email, avatarUrl: r.user.avatarUrl } })),
+    rows.map((r) => ({
+      id: r.id,
+      role: r.role,
+      permissions: { ...defaultPermissions(r.role), ...JSON.parse(r.permissions || '{}') },
+      user: { id: r.user.id, name: r.user.name, email: r.user.email, avatarUrl: r.user.avatarUrl },
+    })),
   )
 })
+
+// Пермишены участника (SPEC §4.3) — owner/admin проекта или company admin
+projectsRoute.patch(
+  '/:projectId/members/:userId/permissions',
+  zValidator('json', permissionsSchema),
+  async (c) => {
+    const { sub } = c.get('session')
+    const { projectId, userId } = c.req.param()
+    const project = await db.query.projects.findFirst({ where: eq(projects.id, projectId) })
+    if (!project) return c.json({ error: 'Not found' }, 404)
+
+    const me = await projectRoleOf(projectId, sub)
+    const companyRole = await companyRoleOf(project.companyId, sub)
+    const allowed = me?.role === 'owner' || me?.role === 'admin' || companyRole === 'admin'
+    if (!allowed) return c.json({ error: 'Forbidden' }, 403)
+
+    const target = await projectRoleOf(projectId, userId)
+    if (!target) return c.json({ error: 'Not a project member' }, 404)
+
+    const current = { ...defaultPermissions(target.role), ...JSON.parse(target.permissions || '{}') }
+    const patch = c.req.valid('json')
+    await db
+      .update(projectMembers)
+      .set({ permissions: JSON.stringify({ ...current, ...patch }) })
+      .where(eq(projectMembers.id, target.id))
+
+    return c.json({ ok: true, permissions: { ...current, ...patch } })
+  },
+)
 
 // Включить участника компании в проект — БЕЗ подтверждения, письмо постфактум (SPEC §3.2)
 projectsRoute.post(
@@ -192,7 +241,7 @@ projectsRoute.post(
     const exists = await projectRoleOf(projectId, userId)
     if (exists) return c.json({ error: 'Already a member' }, 409)
 
-    await db.insert(projectMembers).values({ projectId, userId, role })
+    await db.insert(projectMembers).values({ projectId, userId, role, permissions: JSON.stringify(defaultPermissions(role)) })
 
     const target = await db.query.users.findFirst({ where: eq(users.id, userId) })
     if (target)

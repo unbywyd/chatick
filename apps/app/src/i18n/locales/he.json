@@ -44,16 +44,35 @@
     "rulesHint": "מוצגים לכל חבר לפני ההצטרפות ונכללים בכל בקשת AI — הסתפקו בשני משפטים.",
     "rulesPlaceholder": "לדוגמה: נושאי עבודה בלבד. סטטוסים למשימות, לא לצ׳אט.",
     "aiTitle": "מנהל ה-AI",
-    "aiSubtitle": "עד כמה ה-AI ממתן את הצ׳אט הזה",
-    "strictness": "חומרה",
-    "strictnessLow": "רך",
-    "strictnessHigh": "קפדני",
-    "allowFlood": "לאפשר הצפה",
-    "allowJokes": "לאפשר בדיחות",
-    "allowQuestions": "לאפשר שאלות",
-    "allowOfftopic": "לאפשר שאלות מחוץ לנושא",
+    "aiSubtitle": "מה ה-AI עושה עם הודעות בצ׳אט הזה",
+    "language": "שפת הפרויקט",
+    "languageHint": "השפה הקנונית של הצ׳אט הזה",
+    "autoTranslate": "תרגום אוטומטי",
+    "autoTranslateHint": "תרגום הודעות לשפת כל קורא",
+    "answerRepeats": "מענה על שאלות חוזרות",
+    "answerRepeatsHint": "אם התשובה כבר קיימת — ה-AI עונה במקום להטריד אנשים",
+    "offtopic": "הודעות מחוץ לנושא",
     "save": "לשמור",
     "saved": "נשמר"
+  },
+  "aiMode": {
+    "observer": { "title": "משקיף", "desc": "רק מתרגם ועונה בפנייה ישירה" },
+    "assistant": { "title": "עוזר", "desc": "גם עונה מההקשר ומציע פעולות" },
+    "moderator": { "title": "מנחה", "desc": "גם מעכב הודעות לא ברורות, כפילויות ונושאים זרים" }
+  },
+  "offtopic": {
+    "ignore": "להתעלם",
+    "remind": "להזכיר בעדינות",
+    "hold": "לעכב"
+  },
+  "perms": {
+    "title": "הרשאות",
+    "subtitle": "מה כל חבר יכול לעשות עם משימות — בממשק ודרך ה-AI בצ׳אט",
+    "tasks.create": "יצירה",
+    "tasks.edit": "עריכה",
+    "tasks.delete": "מחיקה",
+    "tasks.changeStatus": "סטטוס",
+    "aiNote": "מנהל ה-AI מכבד את ההרשאות: חבר בלי «יצירה» לא יוכל ליצור משימה גם דרך הצ׳אט."
   },
   "team": {
     "button": "צוות",
@@ -106,7 +125,8 @@
     "about": "אודות",
     "tasks": "משימות",
     "files": "קבצים",
-    "credentials": "הרשאות",
+    "credentials": "סודות",
+    "permissions": "הרשאות",
     "placeholder": "לשונית «{{tab}}» — תוכן יתווסף בהמשך"
   },
   "theme": {

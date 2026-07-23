@@ -44,16 +44,35 @@
     "rulesHint": "Shown to every member before joining and included in every AI request — keep it to a couple of sentences.",
     "rulesPlaceholder": "E.g.: Work topics only. Statuses go to tasks, not the chat. English or Russian.",
     "aiTitle": "AI dispatcher",
-    "aiSubtitle": "How strictly the AI moderates this chat",
-    "strictness": "Strictness",
-    "strictnessLow": "Gentle",
-    "strictnessHigh": "Strict",
-    "allowFlood": "Allow flooding",
-    "allowJokes": "Allow jokes",
-    "allowQuestions": "Allow questions",
-    "allowOfftopic": "Allow off-topic questions",
+    "aiSubtitle": "What the AI does with messages in this chat",
+    "language": "Project language",
+    "languageHint": "The canonical language of this chat",
+    "autoTranslate": "Auto-translate",
+    "autoTranslateHint": "Translate messages into each reader's language",
+    "answerRepeats": "Answer repeated questions",
+    "answerRepeatsHint": "If the answer already exists, the AI replies instead of pinging people",
+    "offtopic": "Off-topic messages",
     "save": "Save",
     "saved": "Saved"
+  },
+  "aiMode": {
+    "observer": { "title": "Observer", "desc": "Only translates and answers when asked directly" },
+    "assistant": { "title": "Assistant", "desc": "Also answers from context and suggests actions" },
+    "moderator": { "title": "Moderator", "desc": "Also holds unclear messages, duplicates and off-topic" }
+  },
+  "offtopic": {
+    "ignore": "Ignore",
+    "remind": "Gently remind",
+    "hold": "Hold back"
+  },
+  "perms": {
+    "title": "Permissions",
+    "subtitle": "What each member can do with tasks — in the UI and via the AI in chat",
+    "tasks.create": "Create",
+    "tasks.edit": "Edit",
+    "tasks.delete": "Delete",
+    "tasks.changeStatus": "Status",
+    "aiNote": "The AI dispatcher respects these permissions: a member without “Create” can't create tasks through chat either."
   },
   "team": {
     "button": "Team",
@@ -107,6 +126,7 @@
     "tasks": "Tasks",
     "files": "Files",
     "credentials": "Credentials",
+    "permissions": "Permissions",
     "placeholder": "“{{tab}}” tab — content coming soon"
   },
   "theme": {

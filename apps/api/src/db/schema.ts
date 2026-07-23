@@ -128,6 +128,8 @@ export const projectMembers = pgTable(
     projectId: text('project_id').notNull().references(() => projects.id, { onDelete: 'cascade' }),
     userId: text('user_id').notNull().references(() => users.id, { onDelete: 'cascade' }),
     role: memberRole('role').notNull().default('member'),
+    // per-user пермишены на задачи и пр. (SPEC.md §4.3); JSON: { "tasks.create": true, ... }
+    permissions: text('permissions').notNull().default('{}'),
     // подтверждение правил чата перед вступлением (SPEC.md §4.2)
     rulesAcceptedAt: timestamp('rules_accepted_at', { withTimezone: true }),
     createdAt: createdAt(),

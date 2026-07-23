@@ -1,25 +1,36 @@
 import { useTranslation } from 'react-i18next'
+import { Eye, MessageCircleQuestion, ShieldCheck, ChevronDown } from 'lucide-react'
 import { Switch } from '@/components/ui/switch'
-import { Slider } from '@/components/ui/slider'
 import { Input } from '@/components/ui/input'
+import { Button } from '@/components/ui/button'
+import {
+  DropdownMenu,
+  DropdownMenuTrigger,
+  DropdownMenuContent,
+  DropdownMenuCheckItem,
+} from '@/components/ui/dropdown-menu'
 import { cn } from '@/lib/utils'
 
 export const CHAT_RULES_MAX = 300
 
+// SPEC §4.1: каждый параметр = конкретное действие диспетчера
+export type AiMode = 'observer' | 'assistant' | 'moderator'
+export type Offtopic = 'ignore' | 'remind' | 'hold'
+
 export type AiConfig = {
-  strictness: number
-  allowFlood: boolean
-  allowJokes: boolean
-  allowQuestions: boolean
-  allowOfftopic: boolean
+  mode: AiMode
+  language: string // язык проекта
+  autoTranslate: boolean
+  answerRepeats: boolean
+  offtopic: Offtopic
 }
 
 export const DEFAULT_AI_CONFIG: AiConfig = {
-  strictness: 50,
-  allowFlood: false,
-  allowJokes: true,
-  allowQuestions: true,
-  allowOfftopic: false,
+  mode: 'assistant',
+  language: 'en',
+  autoTranslate: true,
+  answerRepeats: true,
+  offtopic: 'remind',
 }
 
 export type ProjectSettings = {
@@ -29,7 +40,18 @@ export type ProjectSettings = {
   aiConfig: AiConfig
 }
 
-// Форма настроек проекта (SPEC §4): используется при создании и в редактировании
+const PROJECT_LANGUAGES = [
+  { code: 'en', label: 'English' },
+  { code: 'ru', label: 'Русский' },
+  { code: 'he', label: 'עברית' },
+] as const
+
+const MODES: { key: AiMode; icon: typeof Eye }[] = [
+  { key: 'observer', icon: Eye },
+  { key: 'assistant', icon: MessageCircleQuestion },
+  { key: 'moderator', icon: ShieldCheck },
+]
+
 export function ProjectSettingsForm({
   value,
   onChange,
@@ -45,6 +67,7 @@ export function ProjectSettingsForm({
     onChange({ ...value, aiConfig: { ...value.aiConfig, [k]: v } })
 
   const rulesLeft = CHAT_RULES_MAX - value.chatRules.length
+  const lang = PROJECT_LANGUAGES.find((l) => l.code === value.aiConfig.language)
 
   return (
     <div className="space-y-6">
@@ -64,7 +87,7 @@ export function ProjectSettingsForm({
         />
       </Field>
 
-      {/* Правила чата — жёсткий лимит, попадают в каждый промпт ИИ (SPEC §4.2) */}
+      {/* Правила чата: тон, шутки, флуд — человеческим языком; в каждый промпт ИИ (SPEC §4.2) */}
       <Field
         label={t('projectForm.rules')}
         hint={t('projectForm.rulesHint')}
@@ -89,29 +112,83 @@ export function ProjectSettingsForm({
         <h3 className="text-sm font-semibold">{t('projectForm.aiTitle')}</h3>
         <p className="mt-0.5 text-xs text-muted-foreground">{t('projectForm.aiSubtitle')}</p>
 
+        {/* Режим — 3 карточки */}
+        <div className="mt-4 grid gap-2 sm:grid-cols-3">
+          {MODES.map(({ key, icon: Icon }) => (
+            <button
+              key={key}
+              type="button"
+              onClick={() => setAi('mode', key)}
+              className={cn(
+                'rounded-lg border p-3 text-start transition-colors',
+                value.aiConfig.mode === key ? 'border-brand bg-accent' : 'hover:bg-accent/50',
+              )}
+            >
+              <Icon className={cn('size-4', value.aiConfig.mode === key ? 'text-brand' : 'text-muted-foreground')} />
+              <p className="mt-2 text-sm font-medium">{t(`aiMode.${key}.title`)}</p>
+              <p className="mt-0.5 text-xs leading-snug text-muted-foreground">{t(`aiMode.${key}.desc`)}</p>
+            </button>
+          ))}
+        </div>
+
         <div className="mt-4 space-y-4">
-          <div>
-            <div className="mb-2 flex items-center justify-between">
-              <span className="text-sm">{t('projectForm.strictness')}</span>
-              <span className="text-xs tabular-nums text-muted-foreground">{value.aiConfig.strictness}%</span>
+          {/* Язык проекта */}
+          <div className="flex items-center justify-between gap-3">
+            <div>
+              <p className="text-sm">{t('projectForm.language')}</p>
+              <p className="text-xs text-muted-foreground">{t('projectForm.languageHint')}</p>
             </div>
-            <Slider
-              value={[value.aiConfig.strictness]}
-              onValueChange={([v]) => setAi('strictness', v ?? 50)}
-              min={0}
-              max={100}
-              step={5}
-            />
-            <div className="mt-1 flex justify-between text-[10px] text-muted-foreground">
-              <span>{t('projectForm.strictnessLow')}</span>
-              <span>{t('projectForm.strictnessHigh')}</span>
-            </div>
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <Button variant="outline" size="sm" className="gap-1.5">
+                  {lang?.label ?? value.aiConfig.language}
+                  <ChevronDown className="size-3.5 text-muted-foreground" />
+                </Button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="end">
+                {PROJECT_LANGUAGES.map((l) => (
+                  <DropdownMenuCheckItem key={l.code} checked={l.code === value.aiConfig.language} onSelect={() => setAi('language', l.code)}>
+                    {l.label}
+                  </DropdownMenuCheckItem>
+                ))}
+              </DropdownMenuContent>
+            </DropdownMenu>
           </div>
 
-          <ToggleRow label={t('projectForm.allowFlood')} checked={value.aiConfig.allowFlood} onChange={(v) => setAi('allowFlood', v)} />
-          <ToggleRow label={t('projectForm.allowJokes')} checked={value.aiConfig.allowJokes} onChange={(v) => setAi('allowJokes', v)} />
-          <ToggleRow label={t('projectForm.allowQuestions')} checked={value.aiConfig.allowQuestions} onChange={(v) => setAi('allowQuestions', v)} />
-          <ToggleRow label={t('projectForm.allowOfftopic')} checked={value.aiConfig.allowOfftopic} onChange={(v) => setAi('allowOfftopic', v)} />
+          <ToggleRow
+            label={t('projectForm.autoTranslate')}
+            hint={t('projectForm.autoTranslateHint')}
+            checked={value.aiConfig.autoTranslate}
+            onChange={(v) => setAi('autoTranslate', v)}
+          />
+          <ToggleRow
+            label={t('projectForm.answerRepeats')}
+            hint={t('projectForm.answerRepeatsHint')}
+            checked={value.aiConfig.answerRepeats}
+            onChange={(v) => setAi('answerRepeats', v)}
+          />
+
+          {/* Оффтоп — сегмент из 3 действий */}
+          <div>
+            <p className="text-sm">{t('projectForm.offtopic')}</p>
+            <div className="mt-2 flex rounded-md border p-0.5">
+              {(['ignore', 'remind', 'hold'] as const).map((o) => (
+                <button
+                  key={o}
+                  type="button"
+                  onClick={() => setAi('offtopic', o)}
+                  className={cn(
+                    'flex-1 rounded px-2 py-1.5 text-xs transition-colors',
+                    value.aiConfig.offtopic === o
+                      ? 'bg-primary text-primary-foreground'
+                      : 'text-muted-foreground hover:text-foreground',
+                  )}
+                >
+                  {t(`offtopic.${o}`)}
+                </button>
+              ))}
+            </div>
+          </div>
         </div>
       </div>
     </div>
@@ -141,10 +218,23 @@ function Field({
   )
 }
 
-function ToggleRow({ label, checked, onChange }: { label: string; checked: boolean; onChange: (v: boolean) => void }) {
+function ToggleRow({
+  label,
+  hint,
+  checked,
+  onChange,
+}: {
+  label: string
+  hint?: string
+  checked: boolean
+  onChange: (v: boolean) => void
+}) {
   return (
     <label className="flex cursor-pointer items-center justify-between gap-3">
-      <span className="text-sm">{label}</span>
+      <span>
+        <span className="block text-sm">{label}</span>
+        {hint && <span className="block text-xs text-muted-foreground">{hint}</span>}
+      </span>
       <Switch checked={checked} onCheckedChange={onChange} />
     </label>
   )

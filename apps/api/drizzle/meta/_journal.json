@@ -15,6 +15,13 @@
       "when": 1784808875117,
       "tag": "0001_strange_spacker_dave",
       "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "7",
+      "when": 1784812698822,
+      "tag": "0002_bent_dragon_lord",
+      "breakpoints": true
     }
   ]
 }
