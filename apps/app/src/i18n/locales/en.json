@@ -65,6 +65,30 @@
     "remind": "Gently remind",
     "hold": "Hold back"
   },
+  "tasks": {
+    "newPlaceholder": "New task — type a title and press Enter",
+    "search": "Search…",
+    "mine": "My tasks",
+    "due": "Due date",
+    "unassigned": "Unassigned",
+    "descriptionPlaceholder": "Description…",
+    "deleteConfirm": "Delete task {{number}}?",
+    "emptyGroup": "Nothing here",
+    "showDone": "Show done ({{count}})",
+    "hideDone": "Hide done",
+    "status": {
+      "todo": "To do",
+      "in_progress": "In progress",
+      "review": "Review",
+      "done": "Done"
+    },
+    "priority": {
+      "low": "Low",
+      "normal": "Normal",
+      "high": "High",
+      "urgent": "Urgent"
+    }
+  },
   "files": {
     "search": "Search files…",
     "upload": "Upload",

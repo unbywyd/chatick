@@ -179,6 +179,7 @@ export const messages = pgTable(
 // ---------------------------------------------------------------------------
 
 export const taskStatus = pgEnum('task_status', ['todo', 'in_progress', 'review', 'done'])
+export const taskPriority = pgEnum('task_priority', ['low', 'normal', 'high', 'urgent'])
 
 export const tasks = pgTable(
   'tasks',
@@ -189,6 +190,8 @@ export const tasks = pgTable(
     title: text('title').notNull(),
     description: text('description').notNull().default(''),
     status: taskStatus('status').notNull().default('todo'),
+    priority: taskPriority('priority').notNull().default('normal'),
+    dueDate: timestamp('due_date', { withTimezone: true }),
     assigneeId: text('assignee_id').references(() => users.id, { onDelete: 'set null' }),
     createdById: text('created_by_id').references(() => users.id, { onDelete: 'set null' }),
     createdAt: createdAt(),
@@ -197,6 +200,7 @@ export const tasks = pgTable(
   (t) => [
     uniqueIndex('tasks_project_number_idx').on(t.projectId, t.number),
     index('tasks_project_status_idx').on(t.projectId, t.status),
+    index('tasks_assignee_idx').on(t.assigneeId),
   ],
 )
 

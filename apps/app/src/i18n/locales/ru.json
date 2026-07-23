@@ -65,6 +65,30 @@
     "remind": "Мягко напоминать",
     "hold": "Придерживать"
   },
+  "tasks": {
+    "newPlaceholder": "Новая задача — введите название и Enter",
+    "search": "Поиск…",
+    "mine": "Мои задачи",
+    "due": "Дедлайн",
+    "unassigned": "Не назначено",
+    "descriptionPlaceholder": "Описание…",
+    "deleteConfirm": "Удалить задачу {{number}}?",
+    "emptyGroup": "Здесь пусто",
+    "showDone": "Показать выполненные ({{count}})",
+    "hideDone": "Скрыть выполненные",
+    "status": {
+      "todo": "К выполнению",
+      "in_progress": "В работе",
+      "review": "Ревью",
+      "done": "Готово"
+    },
+    "priority": {
+      "low": "Низкий",
+      "normal": "Обычный",
+      "high": "Высокий",
+      "urgent": "Срочный"
+    }
+  },
   "files": {
     "search": "Поиск файлов…",
     "upload": "Загрузить",

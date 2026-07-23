@@ -65,6 +65,30 @@
     "remind": "להזכיר בעדינות",
     "hold": "לעכב"
   },
+  "tasks": {
+    "newPlaceholder": "משימה חדשה — הקלידו כותרת ו-Enter",
+    "search": "חיפוש…",
+    "mine": "המשימות שלי",
+    "due": "תאריך יעד",
+    "unassigned": "לא הוקצה",
+    "descriptionPlaceholder": "תיאור…",
+    "deleteConfirm": "למחוק את המשימה {{number}}?",
+    "emptyGroup": "ריק כאן",
+    "showDone": "להציג בוצעו ({{count}})",
+    "hideDone": "להסתיר בוצעו",
+    "status": {
+      "todo": "לביצוע",
+      "in_progress": "בתהליך",
+      "review": "בבדיקה",
+      "done": "בוצע"
+    },
+    "priority": {
+      "low": "נמוכה",
+      "normal": "רגילה",
+      "high": "גבוהה",
+      "urgent": "דחופה"
+    }
+  },
   "files": {
     "search": "חיפוש קבצים…",
     "upload": "העלאה",

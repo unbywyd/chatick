@@ -3,12 +3,13 @@ import { useNavigate, useParams } from 'react-router-dom'
 import { useQuery } from '@tanstack/react-query'
 import { useTranslation } from 'react-i18next'
 import { ArrowLeftRight } from 'lucide-react'
-import { api, getProjectToken, setProjectToken } from '@/lib/api'
+import { api, getProjectToken, setProjectToken, type Me } from '@/lib/api'
 import { cn } from '@/lib/utils'
 import { ChatPanel } from '@/components/chat/ChatPanel'
 import { ThemeToggle } from '@/components/ThemeToggle'
 import { LanguageSelect } from '@/components/LanguageSelect'
 import { AboutTab } from '@/components/tabs/AboutTab'
+import { TasksTab } from '@/components/tabs/TasksTab'
 import { ProjectTeamTab } from '@/components/tabs/ProjectTeamTab'
 import { FilesTab } from '@/components/tabs/FilesTab'
 import { CredentialsTab } from '@/components/tabs/CredentialsTab'
@@ -42,6 +43,7 @@ export function ProjectScreen() {
     queryFn: () => api<ProjectDetails>(`/api/v1/projects/${id}`),
     enabled: Boolean(id),
   })
+  const me = useQuery({ queryKey: ['me'], queryFn: () => api<Me>('/api/v1/auth/me') })
 
   const switchProject = () => {
     setProjectToken(null) // сессия жива — назад к выбору без релогина (SPEC §5)
@@ -88,6 +90,8 @@ export function ProjectScreen() {
         <main className="flex-1 overflow-y-auto">
           {tab === 'about' ? (
             <AboutTab project={project.data} loading={project.isLoading} />
+          ) : tab === 'tasks' && id ? (
+            <TasksTab projectId={id} meId={me.data?.id} />
           ) : tab === 'files' && id ? (
             <FilesTab projectId={id} />
           ) : tab === 'credentials' && id ? (
