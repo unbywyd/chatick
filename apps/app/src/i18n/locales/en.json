@@ -168,7 +168,10 @@
     },
     "estimate": "Estimate",
     "estimatePlaceholder": "minutes",
-    "minutes": "min"
+    "minutes": "min",
+    "resetFilters": "Reset filters",
+    "progressAll": "Progress",
+    "progressFiltered": "Progress (filtered)"
   },
   "files": {
     "search": "Search files…",

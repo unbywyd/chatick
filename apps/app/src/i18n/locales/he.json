@@ -168,7 +168,10 @@
     },
     "estimate": "הערכה",
     "estimatePlaceholder": "דקות",
-    "minutes": "דק׳"
+    "minutes": "דק׳",
+    "resetFilters": "איפוס מסננים",
+    "progressAll": "התקדמות",
+    "progressFiltered": "התקדמות (מסונן)"
   },
   "files": {
     "search": "חיפוש קבצים…",

@@ -3,7 +3,7 @@ import { useNavigate, useParams } from 'react-router-dom'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { useTranslation } from 'react-i18next'
 import { toast } from 'sonner'
-import { CalendarDays, Flag, LayoutList, Paperclip, Plus, Search, Table2, Timer, User } from 'lucide-react'
+import { CalendarDays, Flag, LayoutList, Paperclip, Plus, Search, Table2, Timer, User, X } from 'lucide-react'
 import { api } from '@/lib/api'
 import { cn } from '@/lib/utils'
 import { Input } from '@/components/ui/input'
@@ -24,6 +24,7 @@ export function TasksTab({ projectId, meId }: { projectId: string; meId?: string
   const qc = useQueryClient()
   const [q, setQ] = useState('')
   const [onlyMine, setOnlyMine] = useState(false)
+  const [assigneeFilter, setAssigneeFilter] = useState<string | null>(null) // фильтр по исполнителю
   const [statusFilter, setStatusFilter] = useState<Status | null>(null)
   const [priorityFilter, setPriorityFilter] = useState<Priority | null>(null)
   const [showDone, setShowDone] = useState(false)
@@ -116,12 +117,38 @@ export function TasksTab({ projectId, meId }: { projectId: string; meId?: string
   const filtered = useMemo(() => {
     let list = tasksQ.data ?? []
     if (onlyMine && meId) list = list.filter((task) => task.assignee?.id === meId)
+    if (assigneeFilter) list = list.filter((task) => task.assignee?.id === assigneeFilter)
     if (statusFilter) list = list.filter((task) => task.status === statusFilter)
     if (priorityFilter) list = list.filter((task) => task.priority === priorityFilter)
     const needle = q.trim().toLowerCase()
     if (needle) list = list.filter((task) => task.title.toLowerCase().includes(needle) || task.number.toLowerCase().includes(needle))
     return list
-  }, [tasksQ.data, onlyMine, meId, statusFilter, priorityFilter, q])
+  }, [tasksQ.data, onlyMine, meId, assigneeFilter, statusFilter, priorityFilter, q])
+
+  const hasFilters = onlyMine || Boolean(assigneeFilter) || Boolean(statusFilter) || Boolean(priorityFilter) || q.trim().length > 0
+  const resetFilters = () => {
+    setOnlyMine(false)
+    setAssigneeFilter(null)
+    setStatusFilter(null)
+    setPriorityFilter(null)
+    setQ('')
+  }
+
+  // Прогресс реализации — относительно активных фильтров (SPEC §8.15).
+  // Знаменатель — отфильтрованный набор с учётом выполненных (showDone не влияет на прогресс).
+  const progress = useMemo(() => {
+    // filtered уже не содержит done, если статус-фильтр не done — берём базовый набор с теми же фильтрами, но без исключения done
+    let base = tasksQ.data ?? []
+    if (onlyMine && meId) base = base.filter((task) => task.assignee?.id === meId)
+    if (assigneeFilter) base = base.filter((task) => task.assignee?.id === assigneeFilter)
+    if (priorityFilter) base = base.filter((task) => task.priority === priorityFilter)
+    const needle = q.trim().toLowerCase()
+    if (needle) base = base.filter((task) => task.title.toLowerCase().includes(needle) || task.number.toLowerCase().includes(needle))
+    if (statusFilter && statusFilter !== 'done') base = base.filter((task) => task.status === statusFilter || task.status === 'done')
+    const total = base.length
+    const done = base.filter((task) => task.status === 'done').length
+    return { total, done, pct: total ? Math.round((done / total) * 100) : 0 }
+  }, [tasksQ.data, onlyMine, meId, assigneeFilter, statusFilter, priorityFilter, q])
 
   const groups = useMemo(() => {
     const visible: Status[] = statusFilter ? [statusFilter] : showDone ? [...STATUSES] : STATUSES.filter((s) => s !== 'done')
@@ -169,6 +196,19 @@ export function TasksTab({ projectId, meId }: { projectId: string; meId?: string
             </Button>
           </form>
 
+          {/* Прогресс реализации (по активным фильтрам) — SPEC §8.15 */}
+          {progress.total > 0 && (
+            <div className="mt-4">
+              <div className="mb-1 flex items-center justify-between text-xs text-muted-foreground">
+                <span>{hasFilters ? t('tasks.progressFiltered') : t('tasks.progressAll')}: {progress.done}/{progress.total}</span>
+                <span className="tabular-nums font-medium text-foreground">{progress.pct}%</span>
+              </div>
+              <div className="h-1.5 w-full overflow-hidden rounded-full bg-secondary">
+                <div className={cn('h-full transition-all', progress.pct === 100 ? 'bg-brand' : 'bg-brand/70')} style={{ width: `${progress.pct}%` }} />
+              </div>
+            </div>
+          )}
+
           {/* Фильтры-чипсы */}
           <div className="mt-3 flex flex-wrap items-center gap-1.5">
             <Chip active={onlyMine} onClick={() => setOnlyMine((v) => !v)}>
@@ -201,6 +241,40 @@ export function TasksTab({ projectId, meId }: { projectId: string; meId?: string
                 ))}
               </DropdownMenuContent>
             </DropdownMenu>
+            {/* Фильтр по исполнителю */}
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <button
+                  className={cn(
+                    'inline-flex items-center gap-1 rounded-full border px-2.5 py-1 text-xs transition-colors',
+                    assigneeFilter ? 'border-brand bg-accent text-accent-foreground' : 'text-muted-foreground hover:text-foreground',
+                  )}
+                >
+                  <User className="size-3" />
+                  {assigneeFilter
+                    ? (membersQ.data?.find((m) => m.user.id === assigneeFilter)?.user.name ?? t('tasks.assigneeLabel'))
+                    : t('tasks.assigneeLabel')}
+                </button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent>
+                {(membersQ.data ?? []).map((m) => (
+                  <DropdownMenuCheckItem
+                    key={m.user.id}
+                    checked={assigneeFilter === m.user.id}
+                    onSelect={() => setAssigneeFilter(assigneeFilter === m.user.id ? null : m.user.id)}
+                  >
+                    {m.user.name || m.user.email}
+                  </DropdownMenuCheckItem>
+                ))}
+              </DropdownMenuContent>
+            </DropdownMenu>
+            {/* Сбросить все фильтры */}
+            {hasFilters && (
+              <button onClick={resetFilters} className="inline-flex items-center gap-1 rounded-full border px-2.5 py-1 text-xs text-muted-foreground hover:text-foreground" title={t('tasks.resetFilters')}>
+                <X className="size-3" />
+                {t('tasks.resetFilters')}
+              </button>
+            )}
             <div className="relative ms-auto w-44">
               <Search className="pointer-events-none absolute start-2.5 top-1/2 size-3.5 -translate-y-1/2 text-muted-foreground" />
               <Input value={q} onChange={(e) => setQ(e.target.value)} placeholder={t('tasks.search')} className="h-8 ps-8 text-xs" />

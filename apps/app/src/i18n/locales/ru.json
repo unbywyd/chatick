@@ -168,7 +168,10 @@
     },
     "estimate": "Оценка",
     "estimatePlaceholder": "минут",
-    "minutes": "мин"
+    "minutes": "мин",
+    "resetFilters": "Сбросить фильтры",
+    "progressAll": "Прогресс",
+    "progressFiltered": "Прогресс (по фильтру)"
   },
   "files": {
     "search": "Поиск файлов…",
