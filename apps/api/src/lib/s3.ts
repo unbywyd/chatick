@@ -1,13 +1,17 @@
 import { S3Client, GetObjectCommand, DeleteObjectCommand } from '@aws-sdk/client-s3'
 import type { Readable } from 'node:stream'
 import { getSignedUrl } from '@aws-sdk/s3-request-presigner'
+import { eq } from 'drizzle-orm'
 import { env } from '../env.js'
+import { db } from '../db/client.js'
+import { projectStorage } from '../db/schema.js'
+import { decrypt } from './crypto.js'
 
 // R2: ключи старого аккаунта, файлы chatick-next живут под префиксом chatick-next/
-// (отдельные бакеты появятся позже — смена 2 env-переменных)
 export const S3_KEY_PREFIX = 'chatick-next'
 
-const s3 = env.S3_ENDPOINT
+// --- Платформенное хранилище (наш дефолт) ---
+const platform = env.S3_ENDPOINT
   ? new S3Client({
       region: env.S3_REGION,
       endpoint: env.S3_ENDPOINT,
@@ -16,8 +20,8 @@ const s3 = env.S3_ENDPOINT
   : null
 
 export function s3Client() {
-  if (!s3 || !env.S3_PRIVATE_BUCKET) throw new Error('S3 is not configured')
-  return s3
+  if (!platform || !env.S3_PRIVATE_BUCKET) throw new Error('S3 is not configured')
+  return platform
 }
 
 export function s3Bucket() {
@@ -25,12 +29,52 @@ export function s3Bucket() {
   return env.S3_PRIVATE_BUCKET
 }
 
+// --- Per-project хранилище (SPEC §8.10) --------------------------------------
+// Разрешает активный клиент+бакет проекта: свой S3/R2 либо платформенный.
+// Кэшируем клиенты кастомных хранилищ по конфиг-отпечатку, чтобы не пересоздавать.
+
+export type ResolvedStorage = {
+  client: S3Client
+  bucket: string
+  keyPrefix: string // platform → S3_KEY_PREFIX; custom → '' (свой бакет целиком наш)
+  isCustom: boolean
+  publicUrl: string | null
+}
+
+const customCache = new Map<string, { fp: string; client: S3Client }>()
+
+export async function resolveStorage(projectId: string): Promise<ResolvedStorage> {
+  const cfg = await db.query.projectStorage.findFirst({ where: eq(projectStorage.projectId, projectId) })
+  if (cfg && cfg.provider === 'custom' && cfg.endpoint && cfg.bucket && cfg.accessKeyEncrypted && cfg.secretKeyEncrypted) {
+    const accessKeyId = decrypt(cfg.accessKeyEncrypted)
+    const secretAccessKey = decrypt(cfg.secretKeyEncrypted)
+    const fp = `${cfg.endpoint}|${cfg.region}|${cfg.bucket}|${accessKeyId.slice(0, 6)}`
+    let cached = customCache.get(projectId)
+    if (!cached || cached.fp !== fp) {
+      const client = new S3Client({ region: cfg.region || 'auto', endpoint: cfg.endpoint, credentials: { accessKeyId, secretAccessKey } })
+      cached = { fp, client }
+      customCache.set(projectId, cached)
+    }
+    return { client: cached.client, bucket: cfg.bucket, keyPrefix: '', isCustom: true, publicUrl: cfg.publicUrl ?? null }
+  }
+  // платформенное
+  return { client: s3Client(), bucket: s3Bucket(), keyPrefix: S3_KEY_PREFIX, isCustom: false, publicUrl: env.S3_PUBLIC_URL ?? null }
+}
+
+/** Хранилище проекта использует НЕ платформу (свой лимит не считаем). */
+export async function isCustomStorage(projectId: string): Promise<boolean> {
+  const cfg = await db.query.projectStorage.findFirst({ where: eq(projectStorage.projectId, projectId) })
+  return Boolean(cfg && cfg.provider === 'custom' && cfg.bucket)
+}
+
+// --- Операции: принимают явный store (per-project) -----------------------------
+
 /** Presigned GET — временная ссылка на скачивание приватного файла. */
-export function presignDownload(key: string, filename: string, expiresIn = 600) {
+export function presignDownload(store: ResolvedStorage, key: string, filename: string, expiresIn = 600) {
   return getSignedUrl(
-    s3Client(),
+    store.client,
     new GetObjectCommand({
-      Bucket: s3Bucket(),
+      Bucket: store.bucket,
       Key: key,
       ResponseContentDisposition: `attachment; filename*=UTF-8''${encodeURIComponent(filename)}`,
     }),
@@ -39,11 +83,11 @@ export function presignDownload(key: string, filename: string, expiresIn = 600) 
 }
 
 /** Presigned GET для просмотра в браузере (inline): превью картинок, PDF во вкладке. */
-export function presignView(key: string, mime: string, expiresIn = 3600) {
+export function presignView(store: ResolvedStorage, key: string, mime: string, expiresIn = 3600) {
   return getSignedUrl(
-    s3Client(),
+    store.client,
     new GetObjectCommand({
-      Bucket: s3Bucket(),
+      Bucket: store.bucket,
       Key: key,
       ResponseContentDisposition: 'inline',
       ResponseContentType: mime,
@@ -52,12 +96,12 @@ export function presignView(key: string, mime: string, expiresIn = 3600) {
   )
 }
 
-export async function deleteObject(key: string) {
-  await s3Client().send(new DeleteObjectCommand({ Bucket: s3Bucket(), Key: key }))
+export async function deleteObject(store: ResolvedStorage, key: string) {
+  await store.client.send(new DeleteObjectCommand({ Bucket: store.bucket, Key: key }))
 }
 
-/** Стрим объекта из R2 (для прокси-отдачи файла через API). */
-export async function getObjectStream(key: string): Promise<{ body: Readable; contentType?: string; contentLength?: number }> {
-  const res = await s3Client().send(new GetObjectCommand({ Bucket: s3Bucket(), Key: key }))
+/** Стрим объекта (для прокси-отдачи файла через API). */
+export async function getObjectStream(store: ResolvedStorage, key: string): Promise<{ body: Readable; contentType?: string; contentLength?: number }> {
+  const res = await store.client.send(new GetObjectCommand({ Bucket: store.bucket, Key: key }))
   return { body: res.Body as Readable, contentType: res.ContentType, contentLength: res.ContentLength }
 }

@@ -480,5 +480,30 @@
   "confirm": {
     "ok": "Подтвердить",
     "cancel": "Отмена"
+  },
+  "storage": {
+    "title": "Хранилище",
+    "save": "Сохранить",
+    "saved": "Настройки хранилища сохранены",
+    "testing": "Проверка соединения…",
+    "customActive": "Своё хранилище (без лимита)",
+    "endpoint": "Endpoint",
+    "region": "Регион",
+    "bucket": "Бакет",
+    "publicUrl": "Публичный URL",
+    "accessKey": "Access Key ID",
+    "secretKey": "Secret Access Key",
+    "keyKeep": "Введите, чтобы заменить текущий ключ",
+    "keyNote": "Ключи хранятся зашифрованными (AES-256-GCM) и больше не показываются.",
+    "provider": {
+      "platform": {
+        "label": "Наше хранилище",
+        "hint": "Наше — 1 ГБ бесплатно"
+      },
+      "custom": {
+        "label": "Свой S3 / R2",
+        "hint": "Ваш бакет — без лимита"
+      }
+    }
   }
 }

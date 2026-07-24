@@ -31,8 +31,9 @@ function TasksPage() {
   return id ? <TasksTab projectId={id} meId={meId} /> : null
 }
 function FilesPage() {
+  const { project } = useProjectCtx()
   const { id } = useParams()
-  return id ? <FilesTab projectId={id} /> : null
+  return id ? <FilesTab projectId={id} isAdmin={project?.myRole === 'owner' || project?.myRole === 'admin'} /> : null
 }
 function ResourcesPage() {
   const { project } = useProjectCtx()

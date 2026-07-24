@@ -10,7 +10,7 @@ import { db } from '../db/client.js'
 import { files, companies, projects, tasks, users } from '../db/schema.js'
 import { requireProject, signFileToken, verifyFileToken, type ProjectEnv } from '../auth.js'
 import { hasPermission } from './projects.js'
-import { s3Client, presignDownload, presignView, deleteObject, getObjectStream, S3_KEY_PREFIX, s3Bucket } from '../lib/s3.js'
+import { presignDownload, presignView, deleteObject, getObjectStream, resolveStorage, isCustomStorage, type ResolvedStorage } from '../lib/s3.js'
 
 // Публичная прокси-отдача файла по file-токену (в URL) — для iframe/img/Google Viewer.
 // Отдельный роут БЕЗ project-middleware: доступ по короткоживущему подписанному токену.
@@ -25,7 +25,8 @@ filesPublicRoute.get('/:fileId/raw', async (c) => {
 
   const key = c.req.query('original') === '1' && file.originalKey ? file.originalKey : file.key
   try {
-    const { body, contentType, contentLength } = await getObjectStream(key)
+    const store = await resolveStorage(file.projectId)
+    const { body, contentType, contentLength } = await getObjectStream(store, key)
     const web = Readable.toWeb(body) as ReadableStream
     c.header('Content-Type', contentType || file.mime)
     c.header('Content-Disposition', `inline; filename*=UTF-8''${encodeURIComponent(file.name)}`)
@@ -150,11 +151,16 @@ filesRoute.get('/', async (c) => {
     uploader: r.uploader ? { id: r.uploader.id, name: r.uploader.name, avatarUrl: r.uploader.avatarUrl } : null,
   }))
 
-  // usage/limit отдаём только на первой странице (эффективный лимит: проект+пул компании)
-  let storage: { used: number; limit: number } | undefined
+  // usage/limit отдаём только на первой странице (эффективный лимит: проект+пул компании).
+  // Своё хранилище (custom) → лимита нет, прогресс-бар не показываем (SPEC §8.10).
+  let storage: { used: number; limit: number; custom?: boolean } | undefined
   if (page === 1) {
-    const project = await db.query.projects.findFirst({ where: eq(projects.id, projectId) })
-    storage = project ? await effectiveLimit(project) : undefined
+    if (await isCustomStorage(projectId)) {
+      storage = { used: 0, limit: 0, custom: true }
+    } else {
+      const project = await db.query.projects.findFirst({ where: eq(projects.id, projectId) })
+      storage = project ? await effectiveLimit(project) : undefined
+    }
   }
 
   return c.json({ items, page, hasMore, storage })
@@ -182,9 +188,10 @@ filesRoute.post('/', async (c) => {
   }
   if (file.size > MAX_FILE_MB * 1024 * 1024) return c.json({ error: `File too large (max ${MAX_FILE_MB}MB)` }, 413)
 
-  // эффективный лимит: min(override проекта, остаток пула компании) — SPEC §7
+  // эффективный лимит: min(override проекта, остаток пула компании) — SPEC §7.
+  // Своё хранилище (custom) — без лимита (SPEC §8.10).
   const project = await db.query.projects.findFirst({ where: eq(projects.id, projectId) })
-  if (project) {
+  if (project && !(await isCustomStorage(projectId))) {
     const { limit, used } = await effectiveLimit(project)
     if (limit > 0 && used + file.size > limit) {
       return c.json({ error: 'Storage limit exceeded', code: 'STORAGE_LIMIT' }, 413)
@@ -201,7 +208,11 @@ filesRoute.post('/', async (c) => {
   let buffer = Buffer.from(await file.arrayBuffer())
   let outName = displayName
   let outMime = mime
-  let key = `${S3_KEY_PREFIX}/${projectId}/${fileId}-${safeName}`
+
+  // активное хранилище проекта: платформа (с префиксом) или свой S3/R2 (SPEC §8.10)
+  const store = await resolveStorage(projectId)
+  const kp = store.keyPrefix ? `${store.keyPrefix}/` : ''
+  let key = `${kp}${projectId}/${fileId}-${safeName}`
   let originalKey: string | null = null
 
   if (!keepOriginal && OPTIMIZABLE.has(mime)) {
@@ -213,21 +224,21 @@ filesRoute.post('/', async (c) => {
         .toBuffer()
       // применяем только если реально выгодно
       if (optimized.length < buffer.length * 0.9) {
-        originalKey = `${S3_KEY_PREFIX}/${projectId}/${fileId}-orig-${safeName}`
-        await s3Client().send(
-          new PutObjectCommand({ Bucket: s3Bucket(), Key: originalKey, Body: buffer, ContentType: mime }),
+        originalKey = `${kp}${projectId}/${fileId}-orig-${safeName}`
+        await store.client.send(
+          new PutObjectCommand({ Bucket: store.bucket, Key: originalKey, Body: buffer, ContentType: mime }),
         )
         buffer = optimized
         outMime = 'image/webp'
         outName = displayName.replace(/\.[^.]+$/, '') + '.webp'
-        key = `${S3_KEY_PREFIX}/${projectId}/${fileId}-${outName.replace(/[/\\]/g, '_')}`
+        key = `${kp}${projectId}/${fileId}-${outName.replace(/[/\\]/g, '_')}`
       }
     } catch (e) {
       console.error('[files] optimize failed, storing original:', e)
     }
   }
 
-  await s3Client().send(new PutObjectCommand({ Bucket: s3Bucket(), Key: key, Body: buffer, ContentType: outMime }))
+  await store.client.send(new PutObjectCommand({ Bucket: store.bucket, Key: key, Body: buffer, ContentType: outMime }))
 
   const [row] = await db
     .insert(files)
@@ -279,7 +290,8 @@ filesRoute.get('/:fileId/download', async (c) => {
   const file = await db.query.files.findFirst({ where: and(eq(files.id, fileId), eq(files.projectId, projectId)) })
   if (!file) return c.json({ error: 'Not found' }, 404)
   const key = wantOriginal && file.originalKey ? file.originalKey : file.key
-  const url = inline ? await presignView(key, file.mime) : await presignDownload(key, file.name)
+  const store = await resolveStorage(projectId)
+  const url = inline ? await presignView(store, key, file.mime) : await presignDownload(store, key, file.name)
   return c.json({ url })
 })
 
@@ -288,7 +300,7 @@ filesRoute.get('/:fileId/download', async (c) => {
 // остальные → физически. R2-объекты чистим сразу в обоих случаях.
 // Файлы, на которые ссылаются чат ИЛИ задача — soft-delete: ссылка остаётся
 // с пометкой «Файл удалён», молча не пропадает (SPEC §8.3).
-async function removeFiles(rows: (typeof files.$inferSelect)[]) {
+async function removeFiles(store: ResolvedStorage, rows: (typeof files.$inferSelect)[]) {
   const attached = rows.filter((f) => f.messageId || f.taskId)
   const detached = rows.filter((f) => !f.messageId && !f.taskId)
   if (attached.length) {
@@ -298,8 +310,8 @@ async function removeFiles(rows: (typeof files.$inferSelect)[]) {
     await db.delete(files).where(inArray(files.id, detached.map((f) => f.id)))
   }
   for (const f of rows) {
-    deleteObject(f.key).catch(() => {})
-    if (f.originalKey) deleteObject(f.originalKey).catch(() => {})
+    deleteObject(store, f.key).catch(() => {})
+    if (f.originalKey) deleteObject(store, f.originalKey).catch(() => {})
   }
 }
 
@@ -313,7 +325,7 @@ filesRoute.post('/bulk-delete', zValidator('json', z.object({ ids: z.array(z.str
   const canDeleteOwn = await hasPermission(projectId, sub, 'files.upload')
   const deletable = rows.filter((f) => canDeleteAny || (canDeleteOwn && f.uploadedById === sub))
 
-  if (deletable.length) await removeFiles(deletable)
+  if (deletable.length) await removeFiles(await resolveStorage(projectId), deletable)
   return c.json({ deleted: deletable.length, skipped: rows.length - deletable.length })
 })
 
@@ -328,6 +340,6 @@ filesRoute.delete('/:fileId', async (c) => {
   const canDeleteOwn = (await hasPermission(projectId, sub, 'files.upload')) && file.uploadedById === sub
   if (!canDeleteAny && !canDeleteOwn) return c.json({ error: 'Forbidden' }, 403)
 
-  await removeFiles([file])
+  await removeFiles(await resolveStorage(projectId), [file])
   return c.json({ ok: true })
 })

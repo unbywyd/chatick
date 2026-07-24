@@ -13,6 +13,7 @@ import {
   FileVideo,
   Loader2,
   Search,
+  Settings2,
   Square,
   Trash2,
   UploadCloud,
@@ -28,6 +29,7 @@ import { useConfirm } from '@/components/ui/confirm'
 import { Popover, PopoverTrigger, PopoverContent } from '@/components/ui/popover'
 import { Calendar } from '@/components/ui/calendar'
 import { FileViewer, type ViewerFile } from '@/components/files/FileViewer'
+import { StorageSettings } from '@/components/files/StorageSettings'
 
 type FileRow = {
   id: string
@@ -41,7 +43,7 @@ type FileRow = {
   taskNumber?: string | null
   uploader: { id: string; name: string; avatarUrl: string | null } | null
 }
-type Page = { items: FileRow[]; page: number; hasMore: boolean; storage?: { used: number; limit: number } }
+type Page = { items: FileRow[]; page: number; hasMore: boolean; storage?: { used: number; limit: number; custom?: boolean } }
 
 const SOURCES = ['all', 'chat', 'task', 'upload'] as const
 const TYPES = ['image', 'video', 'audio', 'doc', 'other'] as const
@@ -67,10 +69,11 @@ function fmtSize(bytes: number) {
   return `${(bytes / 1024 ** 3).toFixed(2)} GB`
 }
 
-export function FilesTab({ projectId }: { projectId: string }) {
+export function FilesTab({ projectId, isAdmin = false }: { projectId: string; isAdmin?: boolean }) {
   const { t, i18n } = useTranslation()
   const navigate = useNavigate()
   const qc = useQueryClient()
+  const [storageSettingsOpen, setStorageSettingsOpen] = useState(false)
   const confirm = useConfirm()
   const [q, setQ] = useState('')
   const [source, setSource] = useState<Source>('all')
@@ -170,23 +173,39 @@ export function FilesTab({ projectId }: { projectId: string }) {
         if (e.dataTransfer.files.length) uploadFiles(e.dataTransfer.files)
       }}
     >
-      {/* Прогресс хранилища */}
+      {/* Прогресс хранилища (для custom — «без лимита», прогресс-бар не рисуем) */}
       {storage && (
         <div className="mb-4">
           <div className="mb-1 flex items-center justify-between text-xs">
             <span className="text-muted-foreground">
-              {t('files.storage')}: {fmtSize(storage.used)}
-              {storage.limit > 0 && <> / {fmtSize(storage.limit)}</>}
+              {storage.custom ? (
+                t('storage.customActive')
+              ) : (
+                <>
+                  {t('files.storage')}: {fmtSize(storage.used)}
+                  {storage.limit > 0 && <> / {fmtSize(storage.limit)}</>}
+                </>
+              )}
             </span>
-            {storage.limit > 0 && <span className={cn('tabular-nums', usedPct > 90 && 'text-destructive')}>{usedPct.toFixed(0)}%</span>}
+            <span className="flex items-center gap-2">
+              {!storage.custom && storage.limit > 0 && (
+                <span className={cn('tabular-nums', usedPct > 90 && 'text-destructive')}>{usedPct.toFixed(0)}%</span>
+              )}
+              {isAdmin && (
+                <button onClick={() => setStorageSettingsOpen(true)} className="text-muted-foreground hover:text-foreground" title={t('storage.title')}>
+                  <Settings2 className="size-3.5" />
+                </button>
+              )}
+            </span>
           </div>
-          {storage.limit > 0 && (
+          {!storage.custom && storage.limit > 0 && (
             <div className="h-1.5 w-full overflow-hidden rounded-full bg-secondary">
               <div className={cn('h-full transition-all', usedPct > 90 ? 'bg-destructive' : 'bg-brand')} style={{ width: `${usedPct}%` }} />
             </div>
           )}
         </div>
       )}
+      {storageSettingsOpen && <StorageSettings projectId={projectId} onClose={() => setStorageSettingsOpen(false)} />}
 
       {/* Табы-источник */}
       <div className="flex gap-1 border-b">

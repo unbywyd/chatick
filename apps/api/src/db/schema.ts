@@ -134,6 +134,25 @@ export const projects = pgTable(
   (t) => [index('projects_company_idx').on(t.companyId)],
 )
 
+// Настройка хранилища проекта (SPEC §8.10): platform (наш, лимит) | custom (свой S3/R2, без лимита).
+// Ключи шифруются (AES-256-GCM), в ответах API — только метаданные.
+export const storageProvider = pgEnum('storage_provider', ['platform', 'custom'])
+
+export const projectStorage = pgTable(
+  'project_storage',
+  {
+    projectId: text('project_id').primaryKey().references(() => projects.id, { onDelete: 'cascade' }),
+    provider: storageProvider('provider').notNull().default('platform'),
+    endpoint: text('endpoint'), // https://<account>.r2.cloudflarestorage.com
+    region: text('region').notNull().default('auto'),
+    bucket: text('bucket'),
+    accessKeyEncrypted: text('access_key_encrypted'),
+    secretKeyEncrypted: text('secret_key_encrypted'),
+    publicUrl: text('public_url'), // опциональный CDN/public base
+    updatedAt: updatedAt(),
+  },
+)
+
 export const projectMembers = pgTable(
   'project_members',
   {

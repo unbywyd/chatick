@@ -478,5 +478,30 @@
   "confirm": {
     "ok": "לאשר",
     "cancel": "ביטול"
+  },
+  "storage": {
+    "title": "אחסון",
+    "save": "שמירה",
+    "saved": "הגדרות האחסון נשמרו",
+    "testing": "בודק חיבור…",
+    "customActive": "אחסון משלכם (ללא הגבלה)",
+    "endpoint": "Endpoint",
+    "region": "אזור",
+    "bucket": "Bucket",
+    "publicUrl": "כתובת ציבורית",
+    "accessKey": "Access Key ID",
+    "secretKey": "Secret Access Key",
+    "keyKeep": "הזינו כדי להחליף את המפתח הנוכחי",
+    "keyNote": "המפתחות מאוחסנים מוצפנים (AES-256-GCM) ולא מוצגים שוב.",
+    "provider": {
+      "platform": {
+        "label": "אחסון הפלטפורמה",
+        "hint": "שלנו — 1GB חינם"
+      },
+      "custom": {
+        "label": "S3 / R2 משלכם",
+        "hint": "ה-bucket שלכם — ללא הגבלה"
+      }
+    }
   }
 }

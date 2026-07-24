@@ -478,5 +478,30 @@
   "confirm": {
     "ok": "Confirm",
     "cancel": "Cancel"
+  },
+  "storage": {
+    "title": "Storage",
+    "save": "Save",
+    "saved": "Storage settings saved",
+    "testing": "Testing connection…",
+    "customActive": "Custom storage (no limit)",
+    "endpoint": "Endpoint",
+    "region": "Region",
+    "bucket": "Bucket",
+    "publicUrl": "Public URL",
+    "accessKey": "Access key ID",
+    "secretKey": "Secret access key",
+    "keyKeep": "Enter to replace the current key",
+    "keyNote": "Keys are stored encrypted (AES-256-GCM) and never shown again.",
+    "provider": {
+      "platform": {
+        "label": "Platform storage",
+        "hint": "Ours — 1 GB free"
+      },
+      "custom": {
+        "label": "Own S3 / R2",
+        "hint": "Your bucket — no limit"
+      }
+    }
   }
 }
