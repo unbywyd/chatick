@@ -326,6 +326,7 @@ export function TasksTab({ projectId, meId }: { projectId: string; meId?: string
           members={membersQ.data ?? []}
           groups={groupsQ.data ?? []}
           meId={meId}
+          canEdit={canEdit}
           onPatch={(body) => patch.mutate({ id: openTask.id, ...body })}
           onDelete={() => remove.mutate(openTask.id)}
           onClose={() => setOpenTaskId(null)}

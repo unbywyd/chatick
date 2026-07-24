@@ -471,3 +471,47 @@ export async function validateTask(
     return null
   }
 }
+
+/**
+ * Заметки ИИ к задаче (SPEC §8.14): факты / проблемы / рекомендации / опровержения.
+ * Генерирует ТОЛЬКО при реальной необходимости — иначе пустой массив.
+ * Тело заметки — markdown. Fail-open: null → нет заметок.
+ */
+export async function generateTaskNotes(
+  projectId: string,
+  input: { title: string; description: string; language: string; teamContext?: string },
+): Promise<{ kind: 'fact' | 'issue' | 'recommendation' | 'rebuttal'; body: string }[] | null> {
+  const cfg = await projectLlm(projectId, 'task_notes')
+  if (!cfg) return null
+  const lang = LANG_NAMES[input.language] ?? input.language
+  const text = await complete(cfg, {
+    system: [
+      `You are a senior reviewer helping a team turn a raw task into a well-formed one. Target language: ${lang}.`,
+      'People often oversimplify, over-complicate, or ask for things that cannot be done. Your job is to sanity-check and help.',
+      'Produce NOTES only when GENUINELY useful — do NOT pad. If the task is clear and fine, return an empty array.',
+      'Note kinds: "fact" (a relevant fact you know that helps), "issue" (a real problem/risk/ambiguity), "recommendation" (a concrete suggestion), "rebuttal" (something stated that is wrong or not feasible, with why).',
+      input.teamContext ? `Team context:\n${input.teamContext}` : '',
+      'Each note body is short markdown (you may use **bold**, lists, `code`).',
+      `Write all note bodies in ${lang}.`,
+      'Respond with ONLY a JSON array: [{"kind":"issue","body":"..."}]. Empty array [] if nothing worth noting. No extra text.',
+    ]
+      .filter(Boolean)
+      .join('\n'),
+    user: JSON.stringify({ title: input.title, description: input.description }),
+    maxTokens: 900,
+  })
+  if (!text) return null
+  try {
+    const clean = text.trim().replace(/^```(?:json)?\s*|\s*```$/g, '')
+    const parsed = JSON.parse(clean) as { kind?: string; body?: string }[]
+    if (!Array.isArray(parsed)) return []
+    const kinds = ['fact', 'issue', 'recommendation', 'rebuttal']
+    return parsed
+      .filter((n) => n && kinds.includes(String(n.kind)) && typeof n.body === 'string' && n.body.trim())
+      .slice(0, 8)
+      .map((n) => ({ kind: n.kind as 'fact', body: n.body!.slice(0, 2000) }))
+  } catch {
+    console.error('[llm] generateTaskNotes: bad JSON:', text.slice(0, 200))
+    return null
+  }
+}

@@ -284,6 +284,23 @@ export const taskComments = pgTable(
   (t) => [index('task_comments_task_idx').on(t.taskId, t.createdAt)],
 )
 
+// Заметки ИИ к задаче (SPEC §8.14): факт / проблема / рекомендация / опровержение.
+// Тело — markdown, генерируется ИИ при создании задачи (если включено generateTaskNotes).
+export const taskNoteKind = pgEnum('task_note_kind', ['fact', 'issue', 'recommendation', 'rebuttal'])
+
+export const taskNotes = pgTable(
+  'task_notes',
+  {
+    id: id(),
+    taskId: text('task_id').notNull().references(() => tasks.id, { onDelete: 'cascade' }),
+    projectId: text('project_id').notNull().references(() => projects.id, { onDelete: 'cascade' }),
+    kind: taskNoteKind('kind').notNull(),
+    body: text('body').notNull(), // markdown
+    createdAt: createdAt(),
+  },
+  (t) => [index('task_notes_task_idx').on(t.taskId, t.createdAt)],
+)
+
 // ---------------------------------------------------------------------------
 // Files & credentials (табы проекта)
 // ---------------------------------------------------------------------------

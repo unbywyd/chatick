@@ -25,6 +25,8 @@ const aiConfigSchema = z.object({
   answerRepeats: z.boolean().default(true),
   // при создании задачи ИИ адаптирует её под язык проекта и слегка улучшает формулировку
   improveTasks: z.boolean().default(false),
+  // при создании задачи ИИ генерирует заметки (факты/проблемы/рекомендации/опровержения) — SPEC §8.14
+  generateTaskNotes: z.boolean().default(false),
 })
 
 // SPEC §4.3 / §8: доменная модель прав. Каждый домен получает УРОВЕНЬ доступа,

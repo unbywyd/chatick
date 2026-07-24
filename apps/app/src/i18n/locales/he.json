@@ -82,7 +82,9 @@
     "answerRepeatsHint": "אם התשובה כבר קיימת — ה-AI עונה במקום להטריד אנשים",
     "offtopic": "הודעות מחוץ לנושא",
     "save": "לשמור",
-    "saved": "נשמר"
+    "saved": "נשמר",
+    "generateTaskNotes": "יצירת הערות AI למשימות",
+    "generateTaskNotesHint": "בעת יצירת משימה ה-AI מוסיף עובדות / בעיות / המלצות — רק כשזה באמת מועיל"
   },
   "aiMode": {
     "observer": {
@@ -555,5 +557,18 @@
     "pricingHint": "מודלים מוכרים יורשים מחירי ברירת מחדל. הגדירו משלכם לעקיפה; רוקנו לאיפוס.",
     "inputPerM": "קלט /1M",
     "outputPerM": "פלט /1M"
+  },
+  "notes": {
+    "title": "הערות AI",
+    "regenerate": "רענון",
+    "regenerated": "נוצרו {{count}} הערות",
+    "generating": "ה-AI מנתח את המשימה…",
+    "empty": "אין הערות",
+    "kind": {
+      "fact": "עובדה",
+      "issue": "בעיה",
+      "recommendation": "המלצה",
+      "rebuttal": "הפרכה"
+    }
   }
 }

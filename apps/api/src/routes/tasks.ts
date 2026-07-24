@@ -3,10 +3,11 @@ import { zValidator } from '@hono/zod-validator'
 import { z } from 'zod'
 import { and, asc, desc, eq, sql } from 'drizzle-orm'
 import { db } from '../db/client.js'
-import { files, projects, taskComments, taskGroups, tasks, users } from '../db/schema.js'
+import { files, projects, taskComments, taskGroups, taskNotes, tasks, users } from '../db/schema.js'
 import { requireProject, type ProjectEnv } from '../auth.js'
 import { hasPermission } from './projects.js'
-import { improveTask, validateTask } from '../lib/llm.js'
+import { improveTask, validateTask, generateTaskNotes } from '../lib/llm.js'
+import { buildTeamContext } from '../lib/memory.js'
 import { notify, extractMentions } from '../lib/notify.js'
 
 // Задачи проекта — project-токен; права per-user (SPEC §4.3) на каждое действие
@@ -127,7 +128,7 @@ tasksRoute.post('/', zValidator('json', z.object(taskShape)), async (c) => {
   // aiConfig.improveTasks: адаптировать под язык проекта + слегка улучшить (fail-open)
   let { title, description } = body
   const project = await db.query.projects.findFirst({ where: eq(projects.id, projectId) })
-  const aiConfig = JSON.parse(project?.aiConfig || '{}') as { improveTasks?: boolean; language?: string }
+  const aiConfig = JSON.parse(project?.aiConfig || '{}') as { improveTasks?: boolean; generateTaskNotes?: boolean; language?: string }
   let aiImproved = false
   if (aiConfig.improveTasks) {
     const improved = await improveTask(projectId, { title, description, language: aiConfig.language ?? 'en' })
@@ -167,7 +168,23 @@ tasksRoute.post('/', zValidator('json', z.object(taskShape)), async (c) => {
 
   const assignee = row!.assigneeId ? await db.query.users.findFirst({ where: eq(users.id, row!.assigneeId) }) : null
   void notifyTask(projectId, sub, row!, { assigneeChanged: Boolean(row!.assigneeId), mentions: true })
-  return c.json({ ...serialize(row!, assignee), aiImproved }, 201)
+
+  // Заметки ИИ (SPEC §8.14): генерируем в фоне, только если включено; broadcast не нужен — клиент подтянет
+  if (aiConfig.generateTaskNotes) {
+    void (async () => {
+      try {
+        const teamContext = await buildTeamContext(projectId)
+        const notes = await generateTaskNotes(projectId, { title, description, language: aiConfig.language ?? 'en', teamContext })
+        if (notes && notes.length) {
+          await db.insert(taskNotes).values(notes.map((n) => ({ taskId: row!.id, projectId, kind: n.kind, body: n.body })))
+        }
+      } catch (e) {
+        console.error('[tasks] generateTaskNotes failed:', e)
+      }
+    })()
+  }
+
+  return c.json({ ...serialize(row!, assignee), aiImproved, notesPending: Boolean(aiConfig.generateTaskNotes) }, 201)
 })
 
 // Обновить: смена только статуса — tasks.changeStatus; всё остальное — tasks.edit
@@ -293,6 +310,47 @@ tasksRoute.delete('/groups/:groupId', async (c) => {
   if (!group) return c.json({ error: 'Not found' }, 404)
   await db.delete(taskGroups).where(eq(taskGroups.id, groupId)) // FK onDelete: set null
   return c.json({ ok: true })
+})
+
+// --- Заметки ИИ к задаче (SPEC §8.14) ----------------------------------------
+
+// Список заметок ИИ по задаче
+tasksRoute.get('/:taskId/notes', async (c) => {
+  const { projectId, sub } = c.get('auth')
+  if (!(await hasPermission(projectId, sub, 'tasks.read'))) return c.json({ error: 'Forbidden' }, 403)
+  const taskId = c.req.param('taskId')
+  const rows = await db
+    .select()
+    .from(taskNotes)
+    .where(and(eq(taskNotes.taskId, taskId), eq(taskNotes.projectId, projectId)))
+    .orderBy(asc(taskNotes.createdAt))
+  return c.json(rows.map((n) => ({ id: n.id, kind: n.kind, body: n.body, createdAt: n.createdAt })))
+})
+
+// Удалить заметку — tasks.edit (можно почистить нерелевантное)
+tasksRoute.delete('/:taskId/notes/:noteId', async (c) => {
+  const { projectId, sub } = c.get('auth')
+  if (!(await hasPermission(projectId, sub, 'tasks.edit'))) return c.json({ error: 'Forbidden' }, 403)
+  const { noteId } = c.req.param()
+  await db.delete(taskNotes).where(and(eq(taskNotes.id, noteId), eq(taskNotes.projectId, projectId)))
+  return c.json({ ok: true })
+})
+
+// Перегенерировать заметки вручную (tasks.edit): удаляет старые ИИ-заметки и создаёт новые
+tasksRoute.post('/:taskId/notes/regenerate', async (c) => {
+  const { projectId, sub } = c.get('auth')
+  if (!(await hasPermission(projectId, sub, 'tasks.edit'))) return c.json({ error: 'Forbidden' }, 403)
+  const taskId = c.req.param('taskId')
+  const task = await db.query.tasks.findFirst({ where: and(eq(tasks.id, taskId), eq(tasks.projectId, projectId)) })
+  if (!task) return c.json({ error: 'Not found' }, 404)
+  const project = await db.query.projects.findFirst({ where: eq(projects.id, projectId) })
+  const language = (JSON.parse(project?.aiConfig || '{}') as { language?: string }).language ?? 'en'
+  const teamContext = await buildTeamContext(projectId)
+  const notes = await generateTaskNotes(projectId, { title: task.title, description: task.description, language, teamContext })
+  if (notes === null) return c.json({ error: 'AI unavailable' }, 503)
+  await db.delete(taskNotes).where(and(eq(taskNotes.taskId, taskId), eq(taskNotes.projectId, projectId)))
+  if (notes.length) await db.insert(taskNotes).values(notes.map((n) => ({ taskId, projectId, kind: n.kind, body: n.body })))
+  return c.json({ count: notes.length })
 })
 
 // --- Комментарии задач (SPEC §8.9) -------------------------------------------

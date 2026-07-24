@@ -31,6 +31,7 @@ import { Calendar } from '@/components/ui/calendar'
 import { FileViewer, type ViewerFile } from '@/components/files/FileViewer'
 import { RichEditor } from '@/components/ui/rich-editor'
 import { TaskComments } from './TaskComments'
+import { TaskNotes } from './TaskNotes'
 import { STATUSES, PRIORITIES, STATUS_ICON, STATUS_COLOR, PRIORITY_DOT, fmtEstimate, type Task, type Member, type TaskGroup } from './types'
 
 type Attachment = {
@@ -49,6 +50,7 @@ export function TaskDrawer({
   members,
   groups = [],
   meId,
+  canEdit = true,
   onPatch,
   onDelete,
   onClose,
@@ -57,6 +59,7 @@ export function TaskDrawer({
   members: Member[]
   groups?: TaskGroup[]
   meId?: string
+  canEdit?: boolean
   onPatch: (body: Record<string, unknown>) => void
   onDelete: () => void
   onClose: () => void
@@ -531,6 +534,9 @@ export function TaskDrawer({
               </details>
             )}
           </section>
+
+          {/* Заметки ИИ (SPEC §8.14) */}
+          <TaskNotes taskId={task.id} canEdit={canEdit} />
 
           {/* Комментарии (SPEC §8.9) */}
           <TaskComments taskId={task.id} members={members} lang={i18n.language} meId={meId} onFilesChanged={refresh} />

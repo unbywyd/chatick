@@ -82,7 +82,9 @@
     "answerRepeatsHint": "If the answer already exists, the AI replies instead of pinging people",
     "offtopic": "Off-topic messages",
     "save": "Save",
-    "saved": "Saved"
+    "saved": "Saved",
+    "generateTaskNotes": "Generate AI notes for tasks",
+    "generateTaskNotesHint": "On task creation the AI adds facts / issues / recommendations only when genuinely useful"
   },
   "aiMode": {
     "observer": {
@@ -555,5 +557,18 @@
     "pricingHint": "Known models inherit default prices. Set your own to override; leave blank to reset.",
     "inputPerM": "Input /1M",
     "outputPerM": "Output /1M"
+  },
+  "notes": {
+    "title": "AI notes",
+    "regenerate": "Regenerate",
+    "regenerated": "{{count}} note(s) generated",
+    "generating": "AI is analysing the task…",
+    "empty": "No notes",
+    "kind": {
+      "fact": "Fact",
+      "issue": "Issue",
+      "recommendation": "Recommendation",
+      "rebuttal": "Rebuttal"
+    }
   }
 }
