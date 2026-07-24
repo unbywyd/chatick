@@ -3,7 +3,7 @@ import { zValidator } from '@hono/zod-validator'
 import { z } from 'zod'
 import { and, asc, desc, eq, sql } from 'drizzle-orm'
 import { db } from '../db/client.js'
-import { files, projects, tasks, users } from '../db/schema.js'
+import { files, projects, taskGroups, tasks, users } from '../db/schema.js'
 import { requireProject, type ProjectEnv } from '../auth.js'
 import { hasPermission } from './projects.js'
 import { improveTask } from '../lib/llm.js'
@@ -24,6 +24,7 @@ const taskShape = {
   sortOrder: z.number().optional(),
   dueDate: z.string().datetime({ offset: true }).nullable().optional(),
   assigneeId: z.string().nullable().optional(),
+  groupId: z.string().nullable().optional(),
 }
 
 // Уведомления по задаче: назначение, смена статуса, упоминания в описании (SPEC §8.9).
@@ -83,6 +84,7 @@ function serialize(row: typeof tasks.$inferSelect, assignee?: typeof users.$infe
   return {
     id: row.id,
     number: row.number,
+    groupId: row.groupId,
     title: row.title,
     description: row.description,
     status: row.status,
@@ -155,6 +157,7 @@ tasksRoute.post('/', zValidator('json', z.object(taskShape)), async (c) => {
       priority: body.priority,
       dueDate: body.dueDate ? new Date(body.dueDate) : null,
       assigneeId: body.assigneeId ?? null,
+      groupId: body.groupId ?? null,
       createdById: sub,
     })
     .returning()
@@ -176,8 +179,8 @@ tasksRoute.patch(
 
     const body = c.req.valid('json')
     const keys = Object.keys(body)
-    // смена статуса (в т.ч. drag между группами с новым sortOrder) и чистая пересортировка — по changeStatus
-    const statusOnly = keys.every((k) => k === 'status' || k === 'sortOrder')
+    // drag: смена статуса/группы/порядка — по changeStatus (лёгкое перемещение на доске)
+    const statusOnly = keys.every((k) => k === 'status' || k === 'sortOrder' || k === 'groupId')
 
     const permitted = statusOnly
       ? (await hasPermission(projectId, sub, 'tasks.changeStatus')) || (await hasPermission(projectId, sub, 'tasks.edit'))
@@ -192,6 +195,7 @@ tasksRoute.patch(
     if (body.sortOrder !== undefined) patch.sortOrder = body.sortOrder
     if (body.dueDate !== undefined) patch.dueDate = body.dueDate ? new Date(body.dueDate) : null
     if (body.assigneeId !== undefined) patch.assigneeId = body.assigneeId
+    if (body.groupId !== undefined) patch.groupId = body.groupId
 
     const [row] = await db.update(tasks).set(patch).where(eq(tasks.id, taskId)).returning()
     const assignee = row!.assigneeId ? await db.query.users.findFirst({ where: eq(users.id, row!.assigneeId) }) : null
@@ -214,5 +218,75 @@ tasksRoute.delete('/:taskId', async (c) => {
   if (!task) return c.json({ error: 'Not found' }, 404)
 
   await db.delete(tasks).where(eq(tasks.id, taskId))
+  return c.json({ ok: true })
+})
+
+// --- Группы задач = спринты (SPEC §8.6) --------------------------------------
+
+const HEX = /^#[0-9a-fA-F]{6}$/
+
+// Список групп проекта
+tasksRoute.get('/groups', async (c) => {
+  const { projectId, sub } = c.get('auth')
+  if (!(await hasPermission(projectId, sub, 'tasks.read'))) return c.json({ error: 'Forbidden' }, 403)
+  const rows = await db
+    .select()
+    .from(taskGroups)
+    .where(eq(taskGroups.projectId, projectId))
+    .orderBy(asc(taskGroups.sortOrder), asc(taskGroups.createdAt))
+  return c.json(rows.map((g) => ({ id: g.id, name: g.name, color: g.color, sortOrder: g.sortOrder })))
+})
+
+// Создать группу — tasks.edit
+tasksRoute.post(
+  '/groups',
+  zValidator('json', z.object({ name: z.string().min(1).max(120), color: z.string().regex(HEX).default('#64748b') })),
+  async (c) => {
+    const { projectId, sub } = c.get('auth')
+    if (!(await hasPermission(projectId, sub, 'tasks.edit'))) return c.json({ error: 'Forbidden' }, 403)
+    const { name, color } = c.req.valid('json')
+    const [{ minSort }] = (await db
+      .select({ minSort: sql<number>`coalesce(min(${taskGroups.sortOrder}), 0)` })
+      .from(taskGroups)
+      .where(eq(taskGroups.projectId, projectId))) as [{ minSort: number }]
+    const [row] = await db
+      .insert(taskGroups)
+      .values({ projectId, name, color, sortOrder: minSort - 1, createdById: sub })
+      .returning()
+    return c.json({ id: row!.id, name: row!.name, color: row!.color, sortOrder: row!.sortOrder }, 201)
+  },
+)
+
+// Обновить группу (имя/цвет/порядок) — tasks.edit
+tasksRoute.patch(
+  '/groups/:groupId',
+  zValidator(
+    'json',
+    z.object({ name: z.string().min(1).max(120).optional(), color: z.string().regex(HEX).optional(), sortOrder: z.number().optional() }),
+  ),
+  async (c) => {
+    const { projectId, sub } = c.get('auth')
+    if (!(await hasPermission(projectId, sub, 'tasks.edit'))) return c.json({ error: 'Forbidden' }, 403)
+    const groupId = c.req.param('groupId')
+    const group = await db.query.taskGroups.findFirst({ where: and(eq(taskGroups.id, groupId), eq(taskGroups.projectId, projectId)) })
+    if (!group) return c.json({ error: 'Not found' }, 404)
+    const b = c.req.valid('json')
+    const patch: Record<string, unknown> = {}
+    if (b.name !== undefined) patch.name = b.name
+    if (b.color !== undefined) patch.color = b.color
+    if (b.sortOrder !== undefined) patch.sortOrder = b.sortOrder
+    const [row] = await db.update(taskGroups).set(patch).where(eq(taskGroups.id, groupId)).returning()
+    return c.json({ id: row!.id, name: row!.name, color: row!.color, sortOrder: row!.sortOrder })
+  },
+)
+
+// Удалить группу — tasks.edit. Задачи не трогаем: groupId → null (остаются «без группы»)
+tasksRoute.delete('/groups/:groupId', async (c) => {
+  const { projectId, sub } = c.get('auth')
+  if (!(await hasPermission(projectId, sub, 'tasks.edit'))) return c.json({ error: 'Forbidden' }, 403)
+  const groupId = c.req.param('groupId')
+  const group = await db.query.taskGroups.findFirst({ where: and(eq(taskGroups.id, groupId), eq(taskGroups.projectId, projectId)) })
+  if (!group) return c.json({ error: 'Not found' }, 404)
+  await db.delete(taskGroups).where(eq(taskGroups.id, groupId)) // FK onDelete: set null
   return c.json({ ok: true })
 })

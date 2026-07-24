@@ -8,6 +8,7 @@ export type Priority = (typeof PRIORITIES)[number]
 export type Task = {
   id: string
   number: string
+  groupId: string | null
   title: string
   description: string
   status: Status
@@ -20,9 +21,17 @@ export type Task = {
   attachmentsCount: number
 }
 
+export type TaskGroup = {
+  id: string
+  name: string
+  color: string
+  sortOrder: number
+}
+
 export type Member = {
   id: string
   role: string
+  permissions?: Record<string, boolean>
   user: { id: string; name: string; email: string; avatarUrl: string | null }
 }
 

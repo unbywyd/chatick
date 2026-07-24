@@ -29,7 +29,7 @@ import { Popover, PopoverTrigger, PopoverContent } from '@/components/ui/popover
 import { Calendar } from '@/components/ui/calendar'
 import { FileViewer, type ViewerFile } from '@/components/files/FileViewer'
 import { RichEditor } from '@/components/ui/rich-editor'
-import { STATUSES, PRIORITIES, STATUS_ICON, STATUS_COLOR, PRIORITY_DOT, type Task, type Member } from './types'
+import { STATUSES, PRIORITIES, STATUS_ICON, STATUS_COLOR, PRIORITY_DOT, type Task, type Member, type TaskGroup } from './types'
 
 type Attachment = {
   id: string
@@ -45,12 +45,14 @@ type Attachment = {
 export function TaskDrawer({
   task,
   members,
+  groups = [],
   onPatch,
   onDelete,
   onClose,
 }: {
   task: Task
   members: Member[]
+  groups?: TaskGroup[]
   onPatch: (body: Record<string, unknown>) => void
   onDelete: () => void
   onClose: () => void
@@ -278,6 +280,41 @@ export function TaskDrawer({
                 </Popover>
               </PropRow>
             </div>
+
+            {/* Спринт (группа) */}
+            {groups.length > 0 && (
+              <PropRow label={t('tasks.sprint')}>
+                <DropdownMenu>
+                  <DropdownMenuTrigger asChild>
+                    <Button variant="outline" size="sm" className="w-full justify-start gap-2">
+                      {(() => {
+                        const g = groups.find((x) => x.id === task.groupId)
+                        return g ? (
+                          <>
+                            <span className="size-3 rounded-full" style={{ backgroundColor: g.color }} />
+                            <span className="truncate">{g.name}</span>
+                          </>
+                        ) : (
+                          <span className="truncate text-muted-foreground">{t('tasks.noGroup')}</span>
+                        )
+                      })()}
+                    </Button>
+                  </DropdownMenuTrigger>
+                  <DropdownMenuContent>
+                    <DropdownMenuItem onSelect={() => onPatch({ groupId: null })}>
+                      <X className="size-3.5" />
+                      {t('tasks.noGroup')}
+                    </DropdownMenuItem>
+                    {groups.map((g) => (
+                      <DropdownMenuCheckItem key={g.id} checked={task.groupId === g.id} onSelect={() => onPatch({ groupId: g.id })}>
+                        <span className="size-3 rounded-full" style={{ backgroundColor: g.color }} />
+                        {g.name}
+                      </DropdownMenuCheckItem>
+                    ))}
+                  </DropdownMenuContent>
+                </DropdownMenu>
+              </PropRow>
+            )}
           </div>
 
           {/* Description — Tiptap с mentions команды */}

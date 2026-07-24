@@ -200,11 +200,29 @@ export const messages = pgTable(
 export const taskStatus = pgEnum('task_status', ['todo', 'in_progress', 'review', 'done'])
 export const taskPriority = pgEnum('task_priority', ['low', 'normal', 'high', 'urgent'])
 
+// Группы задач = спринты (SPEC §8.6): имя + цвет, ручной порядок групп.
+export const taskGroups = pgTable(
+  'task_groups',
+  {
+    id: id(),
+    projectId: text('project_id').notNull().references(() => projects.id, { onDelete: 'cascade' }),
+    name: text('name').notNull(),
+    color: text('color').notNull().default('#64748b'), // hex
+    sortOrder: doublePrecision('sort_order').notNull().default(0),
+    createdById: text('created_by_id').references(() => users.id, { onDelete: 'set null' }),
+    createdAt: createdAt(),
+    updatedAt: updatedAt(),
+  },
+  (t) => [index('task_groups_project_idx').on(t.projectId, t.sortOrder)],
+)
+
 export const tasks = pgTable(
   'tasks',
   {
     id: id(),
     projectId: text('project_id').notNull().references(() => projects.id, { onDelete: 'cascade' }),
+    // группа/спринт (null = без группы); при удалении группы задачи остаются без группы
+    groupId: text('group_id').references(() => taskGroups.id, { onDelete: 'set null' }),
     number: text('number').notNull(), // TASK-42 в рамках проекта
     title: text('title').notNull(),
     description: text('description').notNull().default(''),
@@ -222,6 +240,7 @@ export const tasks = pgTable(
     uniqueIndex('tasks_project_number_idx').on(t.projectId, t.number),
     index('tasks_project_status_idx').on(t.projectId, t.status),
     index('tasks_assignee_idx').on(t.assigneeId),
+    index('tasks_group_idx').on(t.groupId),
   ],
 )
 

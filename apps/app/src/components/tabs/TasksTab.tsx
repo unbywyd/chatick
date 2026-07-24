@@ -3,7 +3,7 @@ import { useNavigate, useParams } from 'react-router-dom'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { useTranslation } from 'react-i18next'
 import { toast } from 'sonner'
-import { CalendarDays, Flag, Paperclip, Plus, Search, User } from 'lucide-react'
+import { CalendarDays, Flag, LayoutList, Paperclip, Plus, Search, Table2, User } from 'lucide-react'
 import { api } from '@/lib/api'
 import { cn } from '@/lib/utils'
 import { Input } from '@/components/ui/input'
@@ -15,7 +15,8 @@ import {
   DropdownMenuCheckItem,
 } from '@/components/ui/dropdown-menu'
 import { TaskDrawer } from './tasks/TaskDrawer'
-import { STATUSES, PRIORITIES, STATUS_ICON, STATUS_COLOR, PRIORITY_COLOR, isOverdue, type Task, type Member, type Status, type Priority } from './tasks/types'
+import { TasksTable } from './tasks/TasksTable'
+import { STATUSES, PRIORITIES, STATUS_ICON, STATUS_COLOR, PRIORITY_COLOR, isOverdue, type Task, type TaskGroup, type Member, type Status, type Priority } from './tasks/types'
 
 // Таб «Задачи»: список по статусам + drawer с деталями и вложениями (SPEC §4.3 — права)
 export function TasksTab({ projectId, meId }: { projectId: string; meId?: string }) {
@@ -34,6 +35,11 @@ export function TasksTab({ projectId, meId }: { projectId: string; meId?: string
     navigate(taskId ? `/p/${projectId}/tasks/${taskId}` : `/p/${projectId}/tasks`)
   const [dragId, setDragId] = useState<string | null>(null)
   const [dropHint, setDropHint] = useState<{ status: Status; beforeId: string | null } | null>(null)
+  const [view, setView] = useState<'list' | 'table'>(() => (localStorage.getItem('tasksView') as 'list' | 'table') || 'list')
+  const setViewPersist = (v: 'list' | 'table') => {
+    setView(v)
+    localStorage.setItem('tasksView', v)
+  }
 
   const tasksQ = useQuery({
     queryKey: ['tasks', projectId],
@@ -43,9 +49,43 @@ export function TasksTab({ projectId, meId }: { projectId: string; meId?: string
     queryKey: ['project-members', projectId],
     queryFn: () => api<Member[]>(`/api/v1/projects/${projectId}/members`),
   })
+  const groupsQ = useQuery({
+    queryKey: ['task-groups', projectId],
+    queryFn: () => api<TaskGroup[]>('/api/v1/tasks/groups', {}, 'project'),
+  })
 
   const onErr = (e: unknown) => toast.error(e instanceof Error ? e.message : String(e))
   const refresh = () => qc.invalidateQueries({ queryKey: ['tasks', projectId] })
+
+  // право редактировать: наличие tasks.edit у участника (owner/admin/member с write+)
+  const canEdit = useMemo(() => {
+    const me = (membersQ.data ?? []).find((m) => m.user.id === meId)
+    return me?.role === 'owner' || me?.role === 'admin' || Boolean(me?.permissions?.['tasks.edit'])
+  }, [membersQ.data, meId])
+
+  const refreshGroups = () => qc.invalidateQueries({ queryKey: ['task-groups', projectId] })
+  const createGroup = useMutation({
+    mutationFn: (name: string) => api<TaskGroup>('/api/v1/tasks/groups', { method: 'POST', body: JSON.stringify({ name }) }, 'project'),
+    onSuccess: refreshGroups,
+    onError: onErr,
+  })
+  const patchGroup = useMutation({
+    mutationFn: ({ id, ...body }: { id: string } & Record<string, unknown>) =>
+      api(`/api/v1/tasks/groups/${id}`, { method: 'PATCH', body: JSON.stringify(body) }, 'project'),
+    onSuccess: refreshGroups,
+    onError: onErr,
+  })
+  const deleteGroup = useMutation({
+    mutationFn: (id: string) => api(`/api/v1/tasks/groups/${id}`, { method: 'DELETE' }, 'project'),
+    onSuccess: () => {
+      refreshGroups()
+      refresh()
+    },
+    onError: onErr,
+  })
+  const reorderGroups = (orderedIds: string[]) => {
+    orderedIds.forEach((id, i) => patchGroup.mutate({ id, sortOrder: i }))
+  }
 
   const create = useMutation({
     mutationFn: (title: string) => api<Task>('/api/v1/tasks', { method: 'POST', body: JSON.stringify({ title }) }, 'project'),
@@ -165,9 +205,48 @@ export function TasksTab({ projectId, meId }: { projectId: string; meId?: string
               <Search className="pointer-events-none absolute start-2.5 top-1/2 size-3.5 -translate-y-1/2 text-muted-foreground" />
               <Input value={q} onChange={(e) => setQ(e.target.value)} placeholder={t('tasks.search')} className="h-8 ps-8 text-xs" />
             </div>
+            {/* Переключатель Список / Таблица */}
+            <div className="inline-flex overflow-hidden rounded-md border">
+              <button
+                onClick={() => setViewPersist('list')}
+                title={t('tasks.viewList')}
+                className={cn('px-2 py-1.5 transition-colors', view === 'list' ? 'bg-primary text-primary-foreground' : 'text-muted-foreground hover:bg-secondary')}
+              >
+                <LayoutList className="size-4" />
+              </button>
+              <button
+                onClick={() => setViewPersist('table')}
+                title={t('tasks.viewTable')}
+                className={cn('px-2 py-1.5 transition-colors', view === 'table' ? 'bg-primary text-primary-foreground' : 'text-muted-foreground hover:bg-secondary')}
+              >
+                <Table2 className="size-4" />
+              </button>
+            </div>
           </div>
 
-          {/* Группы */}
+          {/* Табличный вид: вложенные таблицы по спринт-группам */}
+          {view === 'table' && (
+            <div className="mt-5">
+              {tasksQ.isLoading && <p className="text-sm text-muted-foreground">…</p>}
+              <TasksTable
+                tasks={filtered}
+                groups={groupsQ.data ?? []}
+                members={membersQ.data ?? []}
+                lang={i18n.language}
+                canEdit={canEdit}
+                openTaskId={openTaskId ?? null}
+                onOpen={setOpenTaskId}
+                onPatch={(id, body) => patch.mutate({ id, ...body })}
+                onCreateGroup={(name) => createGroup.mutate(name)}
+                onPatchGroup={(id, body) => patchGroup.mutate({ id, ...body })}
+                onDeleteGroup={(id) => deleteGroup.mutate(id)}
+                onReorderGroups={reorderGroups}
+              />
+            </div>
+          )}
+
+          {/* Списочный вид: по статусам */}
+          {view === 'list' && (
           <div className="mt-5 space-y-6">
             {tasksQ.isLoading && <p className="text-sm text-muted-foreground">…</p>}
             {groups.map(({ status, tasks: list }) => {
@@ -236,6 +315,7 @@ export function TasksTab({ projectId, meId }: { projectId: string; meId?: string
               </button>
             )}
           </div>
+          )}
         </div>
       </div>
 
@@ -244,6 +324,7 @@ export function TasksTab({ projectId, meId }: { projectId: string; meId?: string
         <TaskDrawer
           task={openTask}
           members={membersQ.data ?? []}
+          groups={groupsQ.data ?? []}
           onPatch={(body) => patch.mutate({ id: openTask.id, ...body })}
           onDelete={() => remove.mutate(openTask.id)}
           onClose={() => setOpenTaskId(null)}
