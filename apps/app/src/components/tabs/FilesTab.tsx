@@ -158,7 +158,7 @@ export function FilesTab({ projectId }: { projectId: string }) {
 
   return (
     <div
-      className="mx-auto max-w-4xl p-6"
+      className="mx-auto max-w-6xl p-6"
       onDragOver={(e) => {
         e.preventDefault()
         setDragOver(true)
