@@ -240,7 +240,8 @@
     "domain": {
       "tasks": "Tasks",
       "files": "Files",
-      "resources": "Resources"
+      "resources": "Resources",
+      "documents": "Documents"
     },
     "level": {
       "none": {
@@ -430,7 +431,8 @@
     "notifications": "Notifications",
     "placeholder": "“{{tab}}” tab — content coming soon",
     "ai": "AI & usage",
-    "history": "History"
+    "history": "History",
+    "documents": "Documents"
   },
   "notif": {
     "title": "Notifications",
@@ -664,5 +666,27 @@
     "markProjectRead": "Mark project read",
     "openProject": "Open project",
     "openFailed": "Could not open"
+  },
+  "docs": {
+    "title": "Documents",
+    "subtitle": "Project docs with a rich editor, public links and AI access",
+    "new": "New document",
+    "search": "Search documents…",
+    "empty": "No documents yet",
+    "untitled": "Untitled",
+    "titlePlaceholder": "Document title",
+    "contentPlaceholder": "Start writing… @ to mention",
+    "back": "All documents",
+    "saved": "Saved",
+    "unsaved": "Unsaved changes…",
+    "deleted": "Document deleted",
+    "deleteConfirm": "Delete “{{title}}”?",
+    "makePublic": "Share",
+    "public": "Public",
+    "shared": "Public link created and copied",
+    "unshared": "Public access disabled",
+    "copyLink": "Copy link",
+    "linkCopied": "Link copied",
+    "export": "Export"
   }
 }

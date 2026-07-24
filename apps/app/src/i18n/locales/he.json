@@ -240,7 +240,8 @@
     "domain": {
       "tasks": "משימות",
       "files": "קבצים",
-      "resources": "משאבים"
+      "resources": "משאבים",
+      "documents": "מסמכים"
     },
     "level": {
       "none": {
@@ -430,7 +431,8 @@
     "notifications": "התראות",
     "placeholder": "לשונית «{{tab}}» — תוכן יתווסף בהמשך",
     "ai": "AI ושימוש",
-    "history": "היסטוריה"
+    "history": "היסטוריה",
+    "documents": "מסמכים"
   },
   "notif": {
     "title": "התראות",
@@ -664,5 +666,27 @@
     "markProjectRead": "סמן פרויקט כנקרא",
     "openProject": "פתח פרויקט",
     "openFailed": "לא ניתן לפתוח"
+  },
+  "docs": {
+    "title": "מסמכים",
+    "subtitle": "מסמכי הפרויקט עם עורך, קישורים ציבוריים וגישת AI",
+    "new": "מסמך חדש",
+    "search": "חיפוש מסמכים…",
+    "empty": "אין עדיין מסמכים",
+    "untitled": "ללא שם",
+    "titlePlaceholder": "כותרת המסמך",
+    "contentPlaceholder": "התחילו לכתוב… @ לאזכור",
+    "back": "כל המסמכים",
+    "saved": "נשמר",
+    "unsaved": "יש שינויים שלא נשמרו…",
+    "deleted": "המסמך נמחק",
+    "deleteConfirm": "למחוק את «{{title}}»?",
+    "makePublic": "שיתוף",
+    "public": "ציבורי",
+    "shared": "נוצר קישור ציבורי והועתק",
+    "unshared": "הגישה הציבורית בוטלה",
+    "copyLink": "העתק קישור",
+    "linkCopied": "הקישור הועתק",
+    "export": "ייצוא"
   }
 }

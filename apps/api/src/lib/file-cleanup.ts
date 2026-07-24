@@ -1,6 +1,6 @@
 import { and, eq, isNotNull, lt, sql } from 'drizzle-orm'
 import { db } from '../db/client.js'
-import { files, tasks, taskGroups, credentials } from '../db/schema.js'
+import { files, tasks, taskGroups, credentials, documents } from '../db/schema.js'
 import { resolveStorage, deleteObject } from './s3.js'
 
 const RETENTION_MS = 7 * 24 * 60 * 60 * 1000 // 7 дней в корзине (SPEC §8.21)
@@ -86,7 +86,8 @@ export async function sweepSoftDeleted(): Promise<void> {
     const t = await db.delete(tasks).where(and(isNotNull(tasks.deletedAt), lt(tasks.deletedAt, cutoff))).returning({ id: tasks.id })
     const g = await db.delete(taskGroups).where(and(isNotNull(taskGroups.deletedAt), lt(taskGroups.deletedAt, cutoff))).returning({ id: taskGroups.id })
     const cr = await db.delete(credentials).where(and(isNotNull(credentials.deletedAt), lt(credentials.deletedAt, cutoff))).returning({ id: credentials.id })
-    const total = expiredFiles.length + t.length + g.length + cr.length
+    const dc = await db.delete(documents).where(and(isNotNull(documents.deletedAt), lt(documents.deletedAt, cutoff))).returning({ id: documents.id })
+    const total = expiredFiles.length + t.length + g.length + cr.length + dc.length
     if (total) console.log(`[cleanup] purged ${total} soft-deleted item(s) older than 7d`)
     void sql
   } catch (err) {

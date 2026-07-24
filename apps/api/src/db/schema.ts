@@ -310,6 +310,27 @@ export const taskNotes = pgTable(
   (t) => [index('task_notes_task_idx').on(t.taskId, t.createdAt)],
 )
 
+// Документы проекта (SPEC §8.24): богатый текст (Tiptap/markdown), публичный доступ
+// по ссылке, ЛЛМ читает/пишет их (длинные — частями).
+export const documents = pgTable(
+  'documents',
+  {
+    id: id(),
+    projectId: text('project_id').notNull().references(() => projects.id, { onDelete: 'cascade' }),
+    title: text('title').notNull().default(''),
+    content: text('content').notNull().default(''), // markdown
+    // публичный доступ по ссылке: null = выключен
+    publicSlug: text('public_slug').unique(),
+    createdById: text('created_by_id').references(() => users.id, { onDelete: 'set null' }),
+    updatedById: text('updated_by_id').references(() => users.id, { onDelete: 'set null' }),
+    deletedAt: timestamp('deleted_at', { withTimezone: true }),
+    deletedById: text('deleted_by_id').references(() => users.id, { onDelete: 'set null' }),
+    createdAt: createdAt(),
+    updatedAt: updatedAt(),
+  },
+  (t) => [index('documents_project_idx').on(t.projectId, t.updatedAt)],
+)
+
 // ---------------------------------------------------------------------------
 // Files & credentials (табы проекта)
 // ---------------------------------------------------------------------------

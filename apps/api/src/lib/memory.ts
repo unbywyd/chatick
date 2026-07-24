@@ -1,6 +1,6 @@
 import { and, asc, desc, eq, gt, gte, ilike, lte, or, sql } from 'drizzle-orm'
 import { db } from '../db/client.js'
-import { chatSummaries, credentials, files, messages, projectMembers, projects, resourceSecrets, taskComments, taskGroups, tasks, users } from '../db/schema.js'
+import { chatSummaries, credentials, documents, files, messages, projectMembers, projects, resourceSecrets, taskComments, taskGroups, tasks, users } from '../db/schema.js'
 import { hasPermission } from '../routes/projects.js'
 import { encrypt } from './crypto.js'
 import { notify, extractMentions } from './notify.js'
@@ -275,6 +275,54 @@ export function memoryTools(projectId: string, actorUserId: string): { tools: To
       name: 'list_sprints',
       description: 'List the project sprints/groups (name + how many tasks). Use to know valid sprint names before assigning a task to one.',
       parameters: { type: 'object', properties: {} },
+    },
+    // --- Документы (SPEC §8.24) ---
+    {
+      name: 'list_documents',
+      description: 'List project documents (id, title, size in characters, updated). Optionally filter by title.',
+      parameters: { type: 'object', properties: { query: { type: 'string' } } },
+    },
+    {
+      name: 'read_document',
+      description:
+        'Read a document by id. LONG DOCUMENTS ARE READ IN CHUNKS: pass offset (characters, default 0) and limit (default 4000, max 8000). The response tells you the total length and whether more remains — call again with a bigger offset to continue.',
+      parameters: {
+        type: 'object',
+        properties: {
+          id: { type: 'string' },
+          offset: { type: 'number', description: 'character offset to start from (default 0)' },
+          limit: { type: 'number', description: 'characters to read (default 4000, max 8000)' },
+        },
+        required: ['id'],
+      },
+    },
+    {
+      name: 'create_document',
+      description: 'Create a project document (markdown content). Requires documents.write.',
+      parameters: {
+        type: 'object',
+        properties: { title: { type: 'string' }, content: { type: 'string' } },
+        required: ['title'],
+      },
+    },
+    {
+      name: 'update_document',
+      description: 'Replace a document title and/or its whole content by id. Requires documents.write. For adding to the end use append_to_document.',
+      parameters: {
+        type: 'object',
+        properties: { id: { type: 'string' }, title: { type: 'string' }, content: { type: 'string' } },
+        required: ['id'],
+      },
+    },
+    {
+      name: 'append_to_document',
+      description: 'Append markdown to the END of a document (safe for long docs — no need to resend the whole text). Requires documents.write.',
+      parameters: { type: 'object', properties: { id: { type: 'string' }, content: { type: 'string' } }, required: ['id', 'content'] },
+    },
+    {
+      name: 'delete_document',
+      description: 'Delete a document by id (recoverable for 7 days). Requires documents.delete.',
+      parameters: { type: 'object', properties: { id: { type: 'string' } }, required: ['id'] },
     },
   ]
 
@@ -701,6 +749,84 @@ export function memoryTools(projectId: string, actorUserId: string): { tools: To
       return rows
         .map((r) => `[${r.c.createdAt.toISOString().slice(0, 16)}] ${r.author?.name ?? 'AI'}: ${r.c.body.replace(/@\[([^\]]*)\]\([^)]+\)/g, '@$1').slice(0, 400)}`)
         .join('\n')
+    },
+    // --- Документы (SPEC §8.24) ---
+    list_documents: async (args) => {
+      if (!(await hasPermission(projectId, actorUserId, 'documents.read'))) return 'PERMISSION DENIED: the author cannot read documents.'
+      const q = typeof args.query === 'string' ? args.query.trim() : ''
+      const base = and(eq(documents.projectId, projectId), sql`${documents.deletedAt} is null`)
+      const rows = await db
+        .select()
+        .from(documents)
+        .where(q ? and(base, ilike(documents.title, `%${q}%`)) : base)
+        .orderBy(desc(documents.updatedAt))
+        .limit(50)
+      if (!rows.length) return 'No documents.'
+      return rows.map((d) => `"${d.title || '—'}" (id=${d.id}, ${d.content.length} chars, updated ${d.updatedAt.toISOString().slice(0, 10)})`).join('\n')
+    },
+    read_document: async (args) => {
+      if (!(await hasPermission(projectId, actorUserId, 'documents.read'))) return 'PERMISSION DENIED: the author cannot read documents.'
+      const d = await db.query.documents.findFirst({
+        where: and(eq(documents.id, String(args.id ?? '')), eq(documents.projectId, projectId), sql`${documents.deletedAt} is null`),
+      })
+      if (!d) return 'Document not found.'
+      const total = d.content.length
+      const offset = Math.max(0, Math.floor(Number(args.offset) || 0))
+      const limit = Math.min(8000, Math.max(200, Math.floor(Number(args.limit) || 4000)))
+      const chunk = d.content.slice(offset, offset + limit)
+      const end = offset + chunk.length
+      const more = end < total
+      return [
+        `"${d.title || '—'}" — characters ${offset}..${end} of ${total}${more ? ` (MORE REMAINS: call read_document again with offset=${end})` : ' (end of document)'}`,
+        '',
+        chunk,
+      ].join('\n')
+    },
+    create_document: async (args) => {
+      if (!(await hasPermission(projectId, actorUserId, 'documents.write'))) return 'PERMISSION DENIED: the author cannot write documents.'
+      const title = String(args.title ?? '').slice(0, 300)
+      if (!title) return 'Title is required.'
+      const [row] = await db
+        .insert(documents)
+        .values({ projectId, title, content: String(args.content ?? '').slice(0, 500_000), createdById: actorUserId, updatedById: actorUserId })
+        .returning()
+      void logActivity({ projectId, actorId: actorUserId, action: 'create', entityType: 'document', entityId: row!.id, entityLabel: title })
+      broadcast(projectId, 'documents_changed', {})
+      return `Created document "${title}" (id=${row!.id}).`
+    },
+    update_document: async (args) => {
+      if (!(await hasPermission(projectId, actorUserId, 'documents.write'))) return 'PERMISSION DENIED: the author cannot write documents.'
+      const d = await db.query.documents.findFirst({ where: and(eq(documents.id, String(args.id ?? '')), eq(documents.projectId, projectId)) })
+      if (!d) return 'Document not found.'
+      const patch: Record<string, unknown> = { updatedById: actorUserId }
+      if (typeof args.title === 'string') patch.title = args.title.slice(0, 300)
+      if (typeof args.content === 'string') patch.content = args.content.slice(0, 500_000)
+      if (Object.keys(patch).length === 1) return 'Nothing to update.'
+      await db.update(documents).set(patch).where(eq(documents.id, d.id))
+      void logActivity({ projectId, actorId: actorUserId, action: 'update', entityType: 'document', entityId: d.id, entityLabel: d.title || '—' })
+      broadcast(projectId, 'documents_changed', {})
+      return `Updated document "${d.title || '—'}".`
+    },
+    append_to_document: async (args) => {
+      if (!(await hasPermission(projectId, actorUserId, 'documents.write'))) return 'PERMISSION DENIED: the author cannot write documents.'
+      const d = await db.query.documents.findFirst({ where: and(eq(documents.id, String(args.id ?? '')), eq(documents.projectId, projectId)) })
+      if (!d) return 'Document not found.'
+      const add = String(args.content ?? '')
+      if (!add) return 'Nothing to append.'
+      const next = `${d.content}${d.content.endsWith('\n') ? '' : '\n\n'}${add}`.slice(0, 500_000)
+      await db.update(documents).set({ content: next, updatedById: actorUserId }).where(eq(documents.id, d.id))
+      void logActivity({ projectId, actorId: actorUserId, action: 'update', entityType: 'document', entityId: d.id, entityLabel: d.title || '—' })
+      broadcast(projectId, 'documents_changed', {})
+      return `Appended ${add.length} chars to "${d.title || '—'}".`
+    },
+    delete_document: async (args) => {
+      if (!(await hasPermission(projectId, actorUserId, 'documents.delete'))) return 'PERMISSION DENIED: the author cannot delete documents.'
+      const d = await db.query.documents.findFirst({ where: and(eq(documents.id, String(args.id ?? '')), eq(documents.projectId, projectId)) })
+      if (!d) return 'Document not found.'
+      await db.update(documents).set({ deletedAt: new Date(), deletedById: actorUserId }).where(eq(documents.id, d.id))
+      void logActivity({ projectId, actorId: actorUserId, action: 'delete', entityType: 'document', entityId: d.id, entityLabel: d.title || '—' })
+      broadcast(projectId, 'documents_changed', {})
+      return `Deleted document "${d.title || '—'}" (recoverable for 7 days).`
     },
     list_sprints: async () => {
       if (!(await hasPermission(projectId, actorUserId, 'tasks.read')))

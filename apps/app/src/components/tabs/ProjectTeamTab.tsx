@@ -11,7 +11,7 @@ import { Switch } from '@/components/ui/switch'
 import { useConfirm } from '@/components/ui/confirm'
 
 // Таб «Команда» проекта: участники + доменные права инлайн + добавление из компании (SPEC §3.2, §4.3, §8)
-const DOMAINS = ['tasks', 'files', 'resources'] as const
+const DOMAINS = ['tasks', 'files', 'resources', 'documents'] as const
 type Domain = (typeof DOMAINS)[number]
 const LEVELS = ['none', 'read', 'write', 'crud'] as const
 type Level = (typeof LEVELS)[number]

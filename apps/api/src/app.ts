@@ -14,6 +14,7 @@ import { notificationsRoute } from './routes/notifications.js'
 import { aiRoute } from './routes/ai.js'
 import { activityRoute } from './routes/activity.js'
 import { inboxRoute } from './routes/inbox.js'
+import { documentsRoute, documentsPublicRoute } from './routes/documents.js'
 
 export const app = new Hono()
 
@@ -33,6 +34,8 @@ app.route('/api/v1/notifications', notificationsRoute)
 app.route('/api/v1/ai', aiRoute)
 app.route('/api/v1/activity', activityRoute)
 app.route('/api/v1/inbox', inboxRoute)
+app.route('/api/v1/documents', documentsRoute)
+app.route('/d', documentsPublicRoute) // публичный доступ к документу по слагу
 
 // Дальше:
 // app.route('/api/v1/tasks', tasks)         — таск-менеджер
