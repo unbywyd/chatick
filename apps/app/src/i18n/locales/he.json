@@ -172,7 +172,11 @@
     "resetFilters": "איפוס מסננים",
     "progressAll": "התקדמות",
     "progressFiltered": "התקדמות (מסונן)",
-    "searchAssignee": "חיפוש חבר…"
+    "searchAssignee": "חיפוש חבר…",
+    "backToTasks": "כל המשימות",
+    "share": "שיתוף",
+    "linkCopied": "קישור המשימה הועתק",
+    "fromChat": "מהצ׳אט"
   },
   "files": {
     "search": "חיפוש קבצים…",

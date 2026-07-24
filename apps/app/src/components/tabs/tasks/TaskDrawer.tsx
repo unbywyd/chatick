@@ -1,14 +1,19 @@
 import { useEffect, useRef, useState } from 'react'
+import { useNavigate } from 'react-router-dom'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { useTranslation } from 'react-i18next'
 import { toast } from 'sonner'
 import {
+  ArrowLeft,
   CalendarDays,
   Download,
   ExternalLink,
   File,
   Loader2,
+  MessagesSquare,
   Paperclip,
+  Pencil,
+  Share2,
   Sparkles,
   Trash2,
   User,
@@ -42,6 +47,7 @@ type Attachment = {
   size: number
   createdAt: string
   deleted?: boolean
+  messageId?: string | null
   uploader: { id: string; name: string } | null
 }
 
@@ -67,6 +73,7 @@ export function TaskDrawer({
 }) {
   const { t, i18n } = useTranslation()
   const qc = useQueryClient()
+  const navigate = useNavigate()
   const [title, setTitle] = useState(task.title)
   const [description, setDescription] = useState(task.description)
   const [estimate, setEstimate] = useState(task.estimateMinutes?.toString() ?? '')
@@ -170,47 +177,30 @@ export function TaskDrawer({
   const confirm = useConfirm()
   const canPreviewInline = (mime: string) => mime.startsWith('image/') || mime === 'application/pdf'
 
-  return (
+  // редактирование справа — по умолчанию скрыто (открывается кнопкой «Редактировать»)
+  const [editing, setEditing] = useState(false)
+  useEffect(() => setEditing(false), [task.id]) // при смене задачи закрываем форму
+
+  // файлы, пришедшие из чата (есть messageId) — секция «связь с чатом»
+  const chatFiles = (attachments.data ?? []).filter((a) => a.messageId)
+
+  const share = async () => {
+    const url = `${window.location.origin}${window.location.pathname}#/p/${window.location.hash.split("/")[2]}/tasks/${task.id}`
+    try {
+      await navigator.clipboard.writeText(url)
+      toast.success(t('tasks.linkCopied'))
+    } catch {
+      toast.error(t('composer.clipboardDenied'))
+    }
+  }
+
+  const editForm = (
     <>
-      <div
-        className="absolute inset-y-0 end-0 z-20 flex w-full max-w-md flex-col border-s bg-background shadow-2xl"
-        onDragOver={(e) => {
-          e.preventDefault()
-          setDragOver(true)
-        }}
-        onDragLeave={() => setDragOver(false)}
-        onDrop={(e) => {
-          e.preventDefault()
-          setDragOver(false)
-          if (e.dataTransfer.files.length) upload(e.dataTransfer.files)
-        }}
-      >
-        {/* Header */}
-        <header className="flex items-center gap-2 border-b px-4 py-3">
-          <span className="text-xs font-medium text-muted-foreground">{task.number}</span>
-          <span className="ms-auto" />
-          <Button
-            variant="destructive"
-            size="icon"
-            title={t('files.delete')}
-            onClick={async () => {
-              if (await confirm({ title: t('tasks.deleteConfirm', { number: task.number }), destructive: true, confirmLabel: t('files.delete') }))
-                onDelete()
-            }}
-          >
-            <Trash2 className="size-4" />
-          </Button>
-          <Button variant="ghost" size="icon" onClick={onClose}>
-            <X className="size-4" />
-          </Button>
-        </header>
+      {/* Title */}
+      <Input value={title} onChange={(e) => setTitle(e.target.value)} placeholder={t('tasks.newPlaceholder')} className="text-base font-semibold" />
 
-        <div className="flex-1 space-y-5 overflow-y-auto p-4">
-          {/* Title */}
-          <Input value={title} onChange={(e) => setTitle(e.target.value)} className="border-0 px-0 text-lg font-semibold focus:ring-0" />
-
-          {/* Properties: чипы-кнопки вместо селектов — выбор одним кликом */}
-          <div className="space-y-3">
+      {/* Properties: чипы-кнопки вместо селектов — выбор одним кликом */}
+      <div className="space-y-3">
             <PropRow label={t('tasks.statusLabel')}>
               <div className="flex flex-wrap gap-1.5">
                 {STATUSES.map((s) => {
@@ -417,19 +407,22 @@ export function TaskDrawer({
             </div>
           )}
 
-          <div className="flex items-center justify-between gap-2">
-            <Button variant="outline" size="sm" disabled={validate.isPending || !title.trim()} onClick={() => validate.mutate()}>
-              {validate.isPending ? <Loader2 className="size-3.5 animate-spin" /> : <Sparkles className="size-3.5" />}
-              {t('tasks.checkTask')}
-            </Button>
-            {dirty && (
-              <Button variant="brand" size="sm" onClick={() => onPatch({ title: title.trim() || task.title, description })}>
-                {t('projectForm.save')}
-              </Button>
-            )}
-          </div>
+      <div className="flex items-center justify-between gap-2">
+        <Button variant="outline" size="sm" disabled={validate.isPending || !title.trim()} onClick={() => validate.mutate()}>
+          {validate.isPending ? <Loader2 className="size-3.5 animate-spin" /> : <Sparkles className="size-3.5" />}
+          {t('tasks.checkTask')}
+        </Button>
+        {dirty && (
+          <Button variant="brand" size="sm" onClick={() => onPatch({ title: title.trim() || task.title, description })}>
+            {t('projectForm.save')}
+          </Button>
+        )}
+      </div>
+    </>
+  )
 
-          {/* Attachments */}
+  // Секция вложений (в левой read-колонке)
+  const attachmentsSection = (
           <section>
             <div className="mb-2 flex items-center justify-between">
               <h3 className="flex items-center gap-1.5 text-sm font-semibold">
@@ -557,6 +550,131 @@ export function TaskDrawer({
               </details>
             )}
           </section>
+  )
+
+  // Мета-строка: статус · приоритет · исполнитель · дедлайн · оценка · спринт (read-only)
+  const g = groups.find((x) => x.id === task.groupId)
+  const StatusIcon = STATUS_ICON[task.status]
+  const meta = (
+    <div className="flex flex-wrap items-center gap-x-4 gap-y-2 text-sm">
+      <span className="inline-flex items-center gap-1.5">
+        <StatusIcon className={cn('size-4', STATUS_COLOR[task.status])} />
+        {t(`tasks.status.${task.status}`)}
+      </span>
+      <span className="inline-flex items-center gap-1.5">
+        <span className={cn('size-2 rounded-full', PRIORITY_DOT[task.priority])} />
+        {t(`tasks.priority.${task.priority}`)}
+      </span>
+      <span className="inline-flex items-center gap-1.5 text-muted-foreground">
+        <User className="size-3.5" />
+        {task.assignee?.name ?? t('tasks.unassigned')}
+      </span>
+      {task.dueDate && (
+        <span className="inline-flex items-center gap-1.5 text-muted-foreground">
+          <CalendarDays className="size-3.5" />
+          {new Date(task.dueDate).toLocaleDateString(i18n.language, { day: 'numeric', month: 'short', year: 'numeric' })}
+        </span>
+      )}
+      {task.estimateMinutes ? <span className="text-muted-foreground">⏱ {fmtEstimate(task.estimateMinutes)}</span> : null}
+      {g && (
+        <span className="inline-flex items-center gap-1.5">
+          <span className="size-2.5 rounded-full" style={{ backgroundColor: g.color }} />
+          {g.name}
+        </span>
+      )}
+    </div>
+  )
+
+  return (
+    <div
+      className="relative flex h-full flex-col bg-background"
+      onDragOver={(e) => {
+        e.preventDefault()
+        setDragOver(true)
+      }}
+      onDragLeave={() => setDragOver(false)}
+      onDrop={(e) => {
+        e.preventDefault()
+        setDragOver(false)
+        if (e.dataTransfer.files.length) upload(e.dataTransfer.files)
+      }}
+    >
+      {/* Верхняя панель: назад · номер · поделиться / редактировать / удалить */}
+      <header className="flex items-center gap-2 border-b px-4 py-3">
+        <Button variant="ghost" size="sm" onClick={onClose} className="gap-1.5">
+          <ArrowLeft className="size-4 rtl:-scale-x-100" />
+          <span className="hidden sm:inline">{t('tasks.backToTasks')}</span>
+        </Button>
+        <span className="text-xs font-medium text-muted-foreground">{task.number}</span>
+        <div className="ms-auto flex items-center gap-1">
+          <Button variant="ghost" size="sm" onClick={share} className="gap-1.5" title={t('tasks.share')}>
+            <Share2 className="size-4" />
+            <span className="hidden sm:inline">{t('tasks.share')}</span>
+          </Button>
+          {canEdit && (
+            <Button variant={editing ? 'brand' : 'outline'} size="sm" onClick={() => setEditing((v) => !v)} className="gap-1.5">
+              <Pencil className="size-4" />
+              <span className="hidden sm:inline">{t('about.edit')}</span>
+            </Button>
+          )}
+          {canEdit && (
+            <Button
+              variant="ghost"
+              size="icon"
+              title={t('files.delete')}
+              onClick={async () => {
+                if (await confirm({ title: t('tasks.deleteConfirm', { number: task.number }), destructive: true, confirmLabel: t('files.delete') }))
+                  onDelete()
+              }}
+            >
+              <Trash2 className="size-4 text-muted-foreground hover:text-destructive" />
+            </Button>
+          )}
+        </div>
+      </header>
+
+      {/* Двухколоночный контент; на узких экранах правая форма — оверлеем снизу */}
+      <div className="flex min-h-0 flex-1 overflow-hidden">
+        {/* Левая колонка — чтение */}
+        <div className="min-w-0 flex-1 space-y-6 overflow-y-auto p-4 sm:p-6">
+          <div className="space-y-3">
+            <h1 className="text-xl font-bold tracking-tight">{task.title}</h1>
+            {meta}
+          </div>
+
+          {task.description?.trim() && (
+            <div className="msg-md max-w-none break-words text-sm">
+              <RichEditor value={task.description} onChange={() => {}} mentions={[]} preset="full" readOnly />
+            </div>
+          )}
+
+          {attachmentsSection}
+
+          {/* Связь с чатом: файлы из переписки → переход к сообщению */}
+          {chatFiles.length > 0 && (
+            <section className="space-y-2">
+              <h3 className="flex items-center gap-1.5 text-sm font-semibold">
+                <MessagesSquare className="size-3.5" />
+                {t('tasks.fromChat')}
+              </h3>
+              <ul className="space-y-1">
+                {chatFiles.map((a) => (
+                  <li key={a.id} className="flex items-center gap-2 rounded-md border bg-card px-2.5 py-2 text-sm">
+                    <span className="min-w-0 flex-1 truncate">{a.name}</span>
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      className="gap-1.5"
+                      onClick={() => navigate({ pathname: `/p/${window.location.hash.split("/")[2]}/tasks`, search: `?msg=${a.messageId}` })}
+                    >
+                      <ExternalLink className="size-3.5" />
+                      {t('files.jumpToChat')}
+                    </Button>
+                  </li>
+                ))}
+              </ul>
+            </section>
+          )}
 
           {/* Заметки ИИ (SPEC §8.14) */}
           <TaskNotes taskId={task.id} canEdit={canEdit} />
@@ -564,11 +682,27 @@ export function TaskDrawer({
           {/* Комментарии (SPEC §8.9) */}
           <TaskComments taskId={task.id} members={members} lang={i18n.language} meId={meId} onFilesChanged={refresh} />
         </div>
+
+        {/* Правая колонка — форма редактирования (скрыта до «Редактировать»). Мобила: оверлей снизу */}
+        {editing && (
+          <>
+            <div className="absolute inset-0 z-20 bg-black/40 sm:hidden" onClick={() => setEditing(false)} />
+            <div className="absolute inset-x-0 bottom-0 z-30 max-h-[85%] space-y-4 overflow-y-auto rounded-t-2xl border-t bg-background p-4 shadow-2xl sm:static sm:z-0 sm:max-h-none sm:w-96 sm:rounded-none sm:border-s sm:border-t-0 sm:p-5 sm:shadow-none">
+              <div className="flex items-center justify-between sm:hidden">
+                <h2 className="text-sm font-semibold">{t('about.edit')}</h2>
+                <Button variant="ghost" size="icon" onClick={() => setEditing(false)}>
+                  <X className="size-4" />
+                </Button>
+              </div>
+              {editForm}
+            </div>
+          </>
+        )}
       </div>
 
       {/* Встроенный просмотрщик вложений */}
       {viewing && <FileViewer file={viewing} onClose={() => setViewing(null)} />}
-    </>
+    </div>
   )
 }
 

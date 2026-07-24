@@ -172,7 +172,11 @@
     "resetFilters": "Сбросить фильтры",
     "progressAll": "Прогресс",
     "progressFiltered": "Прогресс (по фильтру)",
-    "searchAssignee": "Поиск участника…"
+    "searchAssignee": "Поиск участника…",
+    "backToTasks": "Все задачи",
+    "share": "Поделиться",
+    "linkCopied": "Ссылка на задачу скопирована",
+    "fromChat": "Из чата"
   },
   "files": {
     "search": "Поиск файлов…",

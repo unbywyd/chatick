@@ -172,7 +172,11 @@
     "resetFilters": "Reset filters",
     "progressAll": "Progress",
     "progressFiltered": "Progress (filtered)",
-    "searchAssignee": "Search member…"
+    "searchAssignee": "Search member…",
+    "backToTasks": "All tasks",
+    "share": "Share",
+    "linkCopied": "Task link copied",
+    "fromChat": "From chat"
   },
   "files": {
     "search": "Search files…",

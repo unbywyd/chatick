@@ -177,9 +177,25 @@ export function TasksTab({ projectId, meId }: { projectId: string; meId?: string
     patch.mutate({ id, status, sortOrder })
   }
 
+  // страница конкретной задачи открывается ВМЕСТО таблицы (по /tasks/:id, ссылкой можно делиться)
+  if (openTask) {
+    return (
+      <TaskDrawer
+        task={openTask}
+        members={membersQ.data ?? []}
+        groups={groupsQ.data ?? []}
+        meId={meId}
+        canEdit={canEdit}
+        onPatch={(body) => patch.mutate({ id: openTask.id, ...body })}
+        onDelete={() => remove.mutate(openTask.id)}
+        onClose={() => setOpenTaskId(null)}
+      />
+    )
+  }
+
   return (
     <div className="relative h-full overflow-hidden">
-      <div className={cn('h-full overflow-y-auto', openTask && 'pe-0 md:pe-[28rem]')}>
+      <div className="h-full overflow-y-auto">
         <div className="mx-auto max-w-6xl p-6">
           {/* Быстрое создание */}
           <form
@@ -392,20 +408,6 @@ export function TasksTab({ projectId, meId }: { projectId: string; meId?: string
           )}
         </div>
       </div>
-
-      {/* Drawer с деталями и вложениями */}
-      {openTask && (
-        <TaskDrawer
-          task={openTask}
-          members={membersQ.data ?? []}
-          groups={groupsQ.data ?? []}
-          meId={meId}
-          canEdit={canEdit}
-          onPatch={(body) => patch.mutate({ id: openTask.id, ...body })}
-          onDelete={() => remove.mutate(openTask.id)}
-          onClose={() => setOpenTaskId(null)}
-        />
-      )}
     </div>
   )
 }

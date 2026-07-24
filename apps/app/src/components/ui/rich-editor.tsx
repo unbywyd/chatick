@@ -68,6 +68,7 @@ export function RichEditor({
   mentions,
   preset = 'full',
   className,
+  readOnly = false,
 }: {
   value: string
   onChange: (markdown: string, mentionIds: string[]) => void
@@ -76,8 +77,10 @@ export function RichEditor({
   mentions: RichMention[]
   preset?: 'full' | 'minimal'
   className?: string
+  readOnly?: boolean
 }) {
   const editor = useEditor({
+    editable: !readOnly,
     extensions: [
       StarterKit.configure(
         preset === 'minimal'
@@ -107,13 +110,23 @@ export function RichEditor({
     },
   })
 
-  // внешний ресет (после отправки value='')
+  // внешний ресет (после отправки value='') + синхронизация в read-only режиме
   useEffect(() => {
-    if (editor && value === '' && !editor.isEmpty) editor.commands.clearContent()
+    if (!editor) return
+    if (readOnly) {
+      editor.commands.setContent(markdownToHtml(value))
+    } else if (value === '' && !editor.isEmpty) {
+      editor.commands.clearContent()
+    }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [value])
+  }, [value, readOnly])
 
   if (!editor) return null
+
+  // read-only: только содержимое, без рамки/тулбара/бабл-меню
+  if (readOnly) {
+    return <EditorContent editor={editor} className="tiptap-readonly" />
+  }
 
   return (
     <div className="rounded-md border transition-shadow focus-within:ring-2 focus-within:ring-ring">
