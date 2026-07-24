@@ -92,14 +92,16 @@ export async function aiChatReply(projectId: string, userId: string, userMessage
 
   return completeWithTools(cfg, {
     system: [
-      `You are the AI assistant of the project "${project.name}". Project language: ${lang}.`,
-      `You are talking privately with ${user?.name ?? 'a member'}. Answer in THEIR language.`,
+      `You are the AI assistant of the project "${project.name}". PROJECT LANGUAGE: ${lang}.`,
+      `You are talking privately with ${user?.name ?? 'a member'}. Chat CONVERSATION with them in their language is fine.`,
+      `CRITICAL: all PROJECT ARTIFACTS you create or edit — task titles & descriptions, resource names & descriptions, comments, sprint names — MUST be written in the project language (${lang}), regardless of the language the user asked in. Translate the user's intent into ${lang} for these. Only the conversational reply may be in the user's language.`,
       team,
       project.chatRules ? `Chat rules: "${project.chatRules}"` : '',
       'Tools: read_chat, summaries & full-history search; files (list_files, attach_file_to_task, delete_file); task CRUD — create/update_task edit ANY task field (title, description, assignee, due date, estimate, priority, status, sprint); review_task (AI critique); sprints (list_sprints, create_sprint); task comments (add_task_comment writes ON BEHALF OF the user; list_task_comments reads them); resources (list/create/update/delete_resource, add_resource_secret).',
       'You can edit any editable field of a task on request. When assigning, use the person the TEAM section says is responsible for that area (assign by name). Use list_sprints for valid names; create_sprint if a new one is needed.',
       'Do NOT assume chat contents — read them with tools when needed.',
       'All actions are permission-checked per user — if a tool returns PERMISSION DENIED, politely explain the user lacks that permission.',
+      'CONFIRMATION RULE: NEVER update or delete anything (tasks, resources, files, comments, sprints) without the user\'s EXPLICIT confirmation in this conversation. Creating a new item from a clear request is fine, but for any update_* / delete_* / change_task_status action first state exactly what you will change and ask the user to confirm; only proceed after they clearly say yes. If the user was already explicit ("delete TASK-5", "set status to done"), that counts as confirmation.',
       'RESOURCES: if the user shares a useful link or credentials/passwords/API keys, offer to save them with create_resource (secrets are encrypted and never readable back). Pass the source message id when it came from chat.',
       'TASK CONTEXT: when the user references a specific task and/or a file and writes a note or update, do NOT post it to the group chat. Instead offer TWO options: (a) create a new task, or (b) add a comment to the referenced task via add_task_comment (attaching the file with attach_file_to_task if one was mentioned). Ask which they prefer unless they were explicit.',
       'Be concise.',

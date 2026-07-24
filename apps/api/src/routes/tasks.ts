@@ -9,6 +9,7 @@ import { hasPermission } from './projects.js'
 import { improveTask, validateTask, generateTaskNotes } from '../lib/llm.js'
 import { buildTeamContext } from '../lib/memory.js'
 import { notify, extractMentions } from '../lib/notify.js'
+import { broadcast } from '../ws.js'
 
 // Задачи проекта — project-токен; права per-user (SPEC §4.3) на каждое действие
 export const tasksRoute = new Hono<ProjectEnv>()
@@ -184,6 +185,7 @@ tasksRoute.post('/', zValidator('json', z.object(taskShape)), async (c) => {
     })()
   }
 
+  broadcast(projectId, 'tasks_changed', {})
   return c.json({ ...serialize(row!, assignee), aiImproved, notesPending: Boolean(aiConfig.generateTaskNotes) }, 201)
 })
 
@@ -225,6 +227,7 @@ tasksRoute.patch(
       statusChanged: body.status !== undefined && body.status !== task.status,
       mentions: body.description !== undefined && body.description !== task.description,
     })
+    broadcast(projectId, 'tasks_changed', {})
     return c.json(serialize(row!, assignee))
   },
 )
@@ -239,6 +242,7 @@ tasksRoute.delete('/:taskId', async (c) => {
   if (!task) return c.json({ error: 'Not found' }, 404)
 
   await db.delete(tasks).where(eq(tasks.id, taskId))
+  broadcast(projectId, 'tasks_changed', {})
   return c.json({ ok: true })
 })
 
@@ -274,6 +278,7 @@ tasksRoute.post(
       .insert(taskGroups)
       .values({ projectId, name, color, sortOrder: minSort - 1, createdById: sub })
       .returning()
+    broadcast(projectId, 'tasks_changed', {})
     return c.json({ id: row!.id, name: row!.name, color: row!.color, sortOrder: row!.sortOrder }, 201)
   },
 )
@@ -297,6 +302,7 @@ tasksRoute.patch(
     if (b.color !== undefined) patch.color = b.color
     if (b.sortOrder !== undefined) patch.sortOrder = b.sortOrder
     const [row] = await db.update(taskGroups).set(patch).where(eq(taskGroups.id, groupId)).returning()
+    broadcast(projectId, 'tasks_changed', {})
     return c.json({ id: row!.id, name: row!.name, color: row!.color, sortOrder: row!.sortOrder })
   },
 )
@@ -309,6 +315,7 @@ tasksRoute.delete('/groups/:groupId', async (c) => {
   const group = await db.query.taskGroups.findFirst({ where: and(eq(taskGroups.id, groupId), eq(taskGroups.projectId, projectId)) })
   if (!group) return c.json({ error: 'Not found' }, 404)
   await db.delete(taskGroups).where(eq(taskGroups.id, groupId)) // FK onDelete: set null
+  broadcast(projectId, 'tasks_changed', {})
   return c.json({ ok: true })
 })
 
@@ -427,6 +434,7 @@ tasksRoute.post(
     if (watchers.length)
       void notify({ projectId, event: 'task_comment', recipientIds: watchers, actorId: sub, actorName, dedupeKey: `task_comment:${row!.id}`, link, preview: body, vars: { ref: task.number } })
 
+    broadcast(projectId, 'task_comments_changed', { taskId })
     const fileMap = await commentFiles([row!.id])
     return c.json(
       {
@@ -450,6 +458,7 @@ tasksRoute.patch('/:taskId/comments/:commentId', zValidator('json', z.object({ b
   if (!comment) return c.json({ error: 'Not found' }, 404)
   if (comment.authorId !== sub) return c.json({ error: 'Forbidden' }, 403)
   const [row] = await db.update(taskComments).set({ body: c.req.valid('json').body }).where(eq(taskComments.id, commentId)).returning()
+  broadcast(projectId, 'task_comments_changed', { taskId: comment.taskId })
   return c.json({ id: row!.id, body: row!.body })
 })
 
@@ -461,6 +470,7 @@ tasksRoute.delete('/:taskId/comments/:commentId', async (c) => {
   if (!comment) return c.json({ error: 'Not found' }, 404)
   if (comment.authorId !== sub && role !== 'owner' && role !== 'admin') return c.json({ error: 'Forbidden' }, 403)
   await db.delete(taskComments).where(eq(taskComments.id, commentId))
+  broadcast(projectId, 'task_comments_changed', { taskId: comment.taskId })
   return c.json({ ok: true })
 })
 

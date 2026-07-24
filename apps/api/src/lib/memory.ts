@@ -5,6 +5,7 @@ import { hasPermission } from '../routes/projects.js'
 import { encrypt } from './crypto.js'
 import { notify, extractMentions } from './notify.js'
 import { projectLlm, complete, validateTask, type ToolDef, type ToolHandler } from './llm.js'
+import { broadcast } from '../ws.js'
 
 // Память ИИ (SPEC §5.6): саммари-цепочка + инструменты + фоновое сжатие.
 
@@ -480,6 +481,7 @@ export function memoryTools(projectId: string, actorUserId: string): { tools: To
       // уведомление о назначении + упоминаниях в описании
       await notifyTaskChange(projectId, actorUserId, row!, { assigned: Boolean(assigneeId), mentions: true })
       const who = assigneeId ? ` → assigned` : ''
+      broadcast(projectId, 'tasks_changed', {})
       return `Created ${row!.number}: "${row!.title}"${who}.`
     },
     update_task: async (args) => {
@@ -510,6 +512,7 @@ export function memoryTools(projectId: string, actorUserId: string): { tools: To
         statusChanged: patch.status !== undefined && patch.status !== t.status,
         mentions: typeof args.description === 'string' && args.description !== t.description,
       })
+      broadcast(projectId, 'tasks_changed', {})
       return `Updated ${t.number}.`
     },
     change_task_status: async (args) => {
@@ -522,6 +525,7 @@ export function memoryTools(projectId: string, actorUserId: string): { tools: To
       const status = String(args.status ?? '')
       if (!['todo', 'in_progress', 'review', 'done'].includes(status)) return 'Invalid status.'
       await db.update(tasks).set({ status: status as 'todo' }).where(eq(tasks.id, t.id))
+      broadcast(projectId, 'tasks_changed', {})
       return `${t.number} → ${status}.`
     },
     delete_task: async (args) => {
@@ -530,6 +534,7 @@ export function memoryTools(projectId: string, actorUserId: string): { tools: To
       const t = await findTask(String(args.number ?? ''))
       if (!t) return 'Task not found.'
       await db.delete(tasks).where(eq(tasks.id, t.id))
+      broadcast(projectId, 'tasks_changed', {})
       return `Deleted ${t.number}.`
     },
 
@@ -619,6 +624,7 @@ export function memoryTools(projectId: string, actorUserId: string): { tools: To
       const color = /^#[0-9a-fA-F]{6}$/.test(String(args.color)) ? String(args.color) : '#64748b'
       const [{ minSort }] = (await db.select({ minSort: sql<number>`coalesce(min(${taskGroups.sortOrder}), 0)` }).from(taskGroups).where(eq(taskGroups.projectId, projectId))) as [{ minSort: number }]
       await db.insert(taskGroups).values({ projectId, name, color, sortOrder: minSort - 1, createdById: actorUserId })
+      broadcast(projectId, 'tasks_changed', {})
       return `Created sprint "${name}".`
     },
     review_task: async (args) => {
@@ -659,6 +665,7 @@ export function memoryTools(projectId: string, actorUserId: string): { tools: To
       const watchers = [t.assigneeId, t.createdById].filter((x): x is string => Boolean(x) && x !== actorUserId && !mentioned.includes(x!))
       if (watchers.length)
         void notify({ projectId, event: 'task_comment', recipientIds: watchers, actorId: actorUserId, actorName: actor?.name || 'Someone', dedupeKey: `task_comment:${row!.id}`, link, preview: body, vars: { ref: t.number } })
+      broadcast(projectId, 'task_comments_changed', { taskId: t.id })
       return `Added a comment to ${t.number}.`
     },
     attach_file_to_task: async (args) => {
