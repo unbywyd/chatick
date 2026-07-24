@@ -171,7 +171,8 @@
     "minutes": "דק׳",
     "resetFilters": "איפוס מסננים",
     "progressAll": "התקדמות",
-    "progressFiltered": "התקדמות (מסונן)"
+    "progressFiltered": "התקדמות (מסונן)",
+    "searchAssignee": "חיפוש חבר…"
   },
   "files": {
     "search": "חיפוש קבצים…",

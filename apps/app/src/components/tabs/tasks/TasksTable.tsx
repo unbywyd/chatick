@@ -286,7 +286,7 @@ function GroupTable({
   const cols: { key: SortKey; label: string; className?: string }[] = [
     { key: 'number', label: t('tasks.col.number'), className: 'w-20' },
     { key: 'title', label: t('tasks.col.title') },
-    { key: 'status', label: t('tasks.col.status'), className: 'w-32' },
+    { key: 'status', label: t('tasks.col.status'), className: 'w-36 whitespace-nowrap' },
     { key: 'priority', label: t('tasks.col.priority'), className: 'w-10' },
     { key: 'estimate', label: t('tasks.col.estimate'), className: 'w-24' },
     { key: 'assignee', label: t('tasks.col.assignee'), className: 'w-40' },
@@ -353,14 +353,14 @@ function GroupTable({
         )}
       </div>
 
-      <div className="overflow-hidden rounded-lg border">
-        <table className="w-full text-sm">
+      <div className="overflow-x-auto rounded-lg border">
+        <table className="w-full min-w-[640px] text-sm">
           <thead>
             <tr className="border-b bg-muted/40 text-xs text-muted-foreground">
               {canEdit && <th className="w-6" />}
               {cols.map((col) => (
                 <th key={col.key} className={cn('px-2 py-1.5 text-start font-medium', col.className)}>
-                  <button className="inline-flex items-center gap-1 hover:text-foreground" onClick={() => onToggleSort(col.key)}>
+                  <button className="inline-flex items-center gap-1 whitespace-nowrap hover:text-foreground" onClick={() => onToggleSort(col.key)}>
                     {col.label}
                     {sort?.key === col.key ? (
                       sort.dir === 'asc' ? <ChevronUp className="size-3" /> : <ChevronDown className="size-3" />
@@ -456,11 +456,11 @@ function TableRow({
         )}
       </td>
       {/* Инлайн-статус */}
-      <td className="px-2 py-1.5 align-middle">
+      <td className="whitespace-nowrap px-2 py-1.5 align-middle">
         <DropdownMenu>
           <DropdownMenuTrigger asChild>
-            <button disabled={!canEdit} className="inline-flex items-center gap-1.5 text-xs disabled:opacity-70">
-              <StatusIcon className={cn('size-3.5', STATUS_COLOR[task.status])} />
+            <button disabled={!canEdit} className="inline-flex items-center gap-1.5 whitespace-nowrap text-xs disabled:opacity-70">
+              <StatusIcon className={cn('size-3.5 shrink-0', STATUS_COLOR[task.status])} />
               {t(`tasks.status.${task.status}`)}
             </button>
           </DropdownMenuTrigger>
@@ -499,43 +499,87 @@ function TableRow({
       <td className="px-2 py-1.5 align-middle text-xs">
         <EstimateCell mins={task.estimateMinutes} canEdit={canEdit} onSave={(m) => onPatch(task.id, { estimateMinutes: m })} />
       </td>
-      {/* Инлайн-ассайни */}
+      {/* Инлайн-ассайни (с поиском по имени при большом составе) */}
       <td className="px-2 py-1.5 align-middle">
-        <DropdownMenu>
-          <DropdownMenuTrigger asChild>
-            <button disabled={!canEdit} className="inline-flex items-center gap-1.5 text-xs disabled:opacity-70">
-              {task.assignee ? (
-                <>
-                  {task.assignee.avatarUrl ? (
-                    <img src={task.assignee.avatarUrl} alt="" className="size-5 rounded-full" referrerPolicy="no-referrer" />
-                  ) : (
-                    <span className="grid size-5 place-items-center rounded-full bg-secondary text-[10px] font-semibold">
-                      {task.assignee.name[0]?.toUpperCase()}
-                    </span>
-                  )}
-                  <span className="line-clamp-1">{task.assignee.name}</span>
-                </>
-              ) : (
-                <span className="text-muted-foreground">{t('tasks.unassigned')}</span>
-              )}
-            </button>
-          </DropdownMenuTrigger>
-          <DropdownMenuContent align="start">
-            <DropdownMenuCheckItem checked={!task.assignee} onSelect={() => onPatch(task.id, { assigneeId: null })}>
-              {t('tasks.unassigned')}
-            </DropdownMenuCheckItem>
-            {members.map((m) => (
-              <DropdownMenuCheckItem key={m.user.id} checked={task.assignee?.id === m.user.id} onSelect={() => onPatch(task.id, { assigneeId: m.user.id })}>
-                {m.user.name || m.user.email}
-              </DropdownMenuCheckItem>
-            ))}
-          </DropdownMenuContent>
-        </DropdownMenu>
+        <AssigneePicker
+          assignee={task.assignee}
+          members={members}
+          canEdit={canEdit}
+          onSelect={(id) => onPatch(task.id, { assigneeId: id })}
+        />
       </td>
       <td className={cn('px-2 py-1.5 align-middle text-xs', overdue ? 'font-medium text-destructive' : 'text-muted-foreground')}>
         {task.dueDate ? new Date(task.dueDate).toLocaleDateString(lang, { day: 'numeric', month: 'short' }) : '—'}
       </td>
     </tr>
+  )
+}
+
+// Выбор исполнителя с поиском по имени (поиск появляется при большом составе).
+function AssigneePicker({
+  assignee,
+  members,
+  canEdit,
+  onSelect,
+}: {
+  assignee: Task['assignee']
+  members: Member[]
+  canEdit: boolean
+  onSelect: (id: string | null) => void
+}) {
+  const { t } = useTranslation()
+  const [q, setQ] = useState('')
+  const showSearch = members.length > 6
+  const needle = q.trim().toLowerCase()
+  const filtered = needle
+    ? members.filter((m) => (m.user.name || m.user.email).toLowerCase().includes(needle))
+    : members
+
+  return (
+    <DropdownMenu onOpenChange={(o) => !o && setQ('')}>
+      <DropdownMenuTrigger asChild>
+        <button disabled={!canEdit} className="inline-flex items-center gap-1.5 text-xs disabled:opacity-70">
+          {assignee ? (
+            <>
+              {assignee.avatarUrl ? (
+                <img src={assignee.avatarUrl} alt="" className="size-5 rounded-full" referrerPolicy="no-referrer" />
+              ) : (
+                <span className="grid size-5 place-items-center rounded-full bg-secondary text-[10px] font-semibold">
+                  {assignee.name[0]?.toUpperCase()}
+                </span>
+              )}
+              <span className="line-clamp-1">{assignee.name}</span>
+            </>
+          ) : (
+            <span className="text-muted-foreground">{t('tasks.unassigned')}</span>
+          )}
+        </button>
+      </DropdownMenuTrigger>
+      <DropdownMenuContent align="start" className="max-h-72 overflow-y-auto">
+        {showSearch && (
+          <div className="p-1">
+            <input
+              autoFocus
+              value={q}
+              onChange={(e) => setQ(e.target.value)}
+              onKeyDown={(e) => e.stopPropagation()}
+              onKeyDownCapture={(e) => e.stopPropagation()} // отключаем typeahead меню, чтобы печатать в поиск
+              placeholder={t('tasks.searchAssignee')}
+              className="h-7 w-full rounded border bg-background px-2 text-xs outline-none focus:ring-2 focus:ring-ring"
+            />
+          </div>
+        )}
+        <DropdownMenuCheckItem checked={!assignee} onSelect={() => onSelect(null)}>
+          {t('tasks.unassigned')}
+        </DropdownMenuCheckItem>
+        {filtered.map((m) => (
+          <DropdownMenuCheckItem key={m.user.id} checked={assignee?.id === m.user.id} onSelect={() => onSelect(m.user.id)}>
+            {m.user.name || m.user.email}
+          </DropdownMenuCheckItem>
+        ))}
+        {filtered.length === 0 && <p className="px-2 py-1.5 text-xs text-muted-foreground">{t('start.nothingFound')}</p>}
+      </DropdownMenuContent>
+    </DropdownMenu>
   )
 }
 

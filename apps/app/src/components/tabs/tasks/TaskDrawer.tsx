@@ -70,6 +70,7 @@ export function TaskDrawer({
   const [title, setTitle] = useState(task.title)
   const [description, setDescription] = useState(task.description)
   const [estimate, setEstimate] = useState(task.estimateMinutes?.toString() ?? '')
+  const [assigneeQuery, setAssigneeQuery] = useState('')
   const [uploading, setUploading] = useState(0)
   const [dragOver, setDragOver] = useState(false)
   const [viewing, setViewing] = useState<ViewerFile | null>(null)
@@ -258,23 +259,41 @@ export function TaskDrawer({
 
             <div className="grid grid-cols-2 gap-2">
               <PropRow label={t('tasks.assigneeLabel')}>
-                <DropdownMenu>
+                <DropdownMenu onOpenChange={(o) => !o && setAssigneeQuery('')}>
                   <DropdownMenuTrigger asChild>
                     <Button variant="outline" size="sm" className="w-full justify-start gap-2">
                       <User className="size-3.5 text-muted-foreground" />
                       <span className="truncate">{task.assignee?.name ?? t('tasks.unassigned')}</span>
                     </Button>
                   </DropdownMenuTrigger>
-                  <DropdownMenuContent>
+                  <DropdownMenuContent className="max-h-72 overflow-y-auto">
+                    {members.length > 6 && (
+                      <div className="p-1">
+                        <input
+                          autoFocus
+                          value={assigneeQuery}
+                          onChange={(e) => setAssigneeQuery(e.target.value)}
+                          onKeyDown={(e) => e.stopPropagation()}
+                          onKeyDownCapture={(e) => e.stopPropagation()}
+                          placeholder={t('tasks.searchAssignee')}
+                          className="h-7 w-full rounded border bg-background px-2 text-xs outline-none focus:ring-2 focus:ring-ring"
+                        />
+                      </div>
+                    )}
                     <DropdownMenuItem onSelect={() => onPatch({ assigneeId: null })}>
                       <X className="size-3.5" />
                       {t('tasks.unassigned')}
                     </DropdownMenuItem>
-                    {members.map((m) => (
-                      <DropdownMenuCheckItem key={m.user.id} checked={task.assignee?.id === m.user.id} onSelect={() => onPatch({ assigneeId: m.user.id })}>
-                        {m.user.name || m.user.email}
-                      </DropdownMenuCheckItem>
-                    ))}
+                    {members
+                      .filter((m) => {
+                        const n = assigneeQuery.trim().toLowerCase()
+                        return !n || (m.user.name || m.user.email).toLowerCase().includes(n)
+                      })
+                      .map((m) => (
+                        <DropdownMenuCheckItem key={m.user.id} checked={task.assignee?.id === m.user.id} onSelect={() => onPatch({ assigneeId: m.user.id })}>
+                          {m.user.name || m.user.email}
+                        </DropdownMenuCheckItem>
+                      ))}
                   </DropdownMenuContent>
                 </DropdownMenu>
               </PropRow>

@@ -171,7 +171,8 @@
     "minutes": "мин",
     "resetFilters": "Сбросить фильтры",
     "progressAll": "Прогресс",
-    "progressFiltered": "Прогресс (по фильтру)"
+    "progressFiltered": "Прогресс (по фильтру)",
+    "searchAssignee": "Поиск участника…"
   },
   "files": {
     "search": "Поиск файлов…",
