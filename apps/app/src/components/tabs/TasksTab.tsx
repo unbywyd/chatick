@@ -1,9 +1,9 @@
-import { useMemo, useState } from 'react'
+import { useMemo, useRef, useState } from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { useTranslation } from 'react-i18next'
 import { toast } from 'sonner'
-import { CalendarDays, Flag, LayoutList, Paperclip, Plus, Search, Table2, Timer, User, X } from 'lucide-react'
+import { CalendarDays, Download, FileSpreadsheet, Flag, HelpCircle, LayoutList, Paperclip, Plus, Search, Table2, Timer, Upload, User, X } from 'lucide-react'
 import { api } from '@/lib/api'
 import { cn } from '@/lib/utils'
 import { Input } from '@/components/ui/input'
@@ -13,10 +13,13 @@ import {
   DropdownMenuTrigger,
   DropdownMenuContent,
   DropdownMenuCheckItem,
+  DropdownMenuItem,
 } from '@/components/ui/dropdown-menu'
 import { Avatar } from '@/components/ui/avatar'
+import { Popover, PopoverTrigger, PopoverContent } from '@/components/ui/popover'
 import { TaskDrawer } from './tasks/TaskDrawer'
 import { TasksTable } from './tasks/TasksTable'
+import { exportTasksToExcel, downloadImportTemplate, parseTasksFromExcel } from './tasks/taskExcel'
 import { STATUSES, PRIORITIES, STATUS_ICON, STATUS_COLOR, PRIORITY_COLOR, isOverdue, fmtEstimate, type Task, type TaskGroup, type Member, type Status, type Priority } from './tasks/types'
 
 // Таб «Задачи»: список по статусам + drawer с деталями и вложениями (SPEC §4.3 — права)
@@ -117,6 +120,51 @@ export function TasksTab({ projectId, meId }: { projectId: string; meId?: string
     },
     onError: onErr,
   })
+
+  // --- Импорт / экспорт Excel ---
+  const importRef = useRef<HTMLInputElement>(null)
+  const projectQ = useQuery({ queryKey: ['project', projectId], queryFn: () => api<{ name: string }>(`/api/v1/projects/${projectId}`) })
+  const projectName = projectQ.data?.name ?? 'project'
+
+  async function runImport(file: File) {
+    try {
+      const { rows, skipped } = await parseTasksFromExcel(file, membersQ.data ?? [], groupsQ.data ?? [])
+      if (!rows.length) {
+        toast.error(t('tasks.importEmpty'))
+        return
+      }
+      let created = 0
+      // последовательно, чтобы не словить рейт-лимит и сохранить порядок номеров
+      for (const r of rows) {
+        try {
+          await api<Task>(
+            '/api/v1/tasks',
+            {
+              method: 'POST',
+              body: JSON.stringify({
+                title: r.title,
+                description: r.description,
+                status: r.status,
+                priority: r.priority,
+                assigneeId: r.assigneeId,
+                groupId: r.groupId,
+                dueDate: r.dueDate,
+                estimateMinutes: r.estimateMinutes,
+              }),
+            },
+            'project',
+          )
+          created++
+        } catch {
+          /* пропускаем ошибочную строку */
+        }
+      }
+      refresh()
+      toast.success(t('tasks.importDone', { created, skipped }))
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : String(e))
+    }
+  }
 
   const filtered = useMemo(() => {
     let list = tasksQ.data ?? []
@@ -381,6 +429,57 @@ export function TasksTab({ projectId, meId }: { projectId: string; meId?: string
                 <Table2 className="size-4" />
               </button>
             </div>
+            {/* Импорт / экспорт Excel */}
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <button title={t('tasks.importExport')} className="rounded-md border px-2 py-1.5 text-muted-foreground transition-colors hover:bg-secondary hover:text-foreground">
+                  <FileSpreadsheet className="size-4" />
+                </button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="end">
+                <DropdownMenuItem onSelect={() => exportTasksToExcel(tasksQ.data ?? [], groupsQ.data ?? [], projectName)}>
+                  <Download className="size-3.5" />
+                  {t('tasks.exportExcel')}
+                </DropdownMenuItem>
+                {canEdit && (
+                  <DropdownMenuItem onSelect={() => importRef.current?.click()}>
+                    <Upload className="size-3.5" />
+                    {t('tasks.importExcel')}
+                  </DropdownMenuItem>
+                )}
+                {canEdit && (
+                  <DropdownMenuItem onSelect={() => downloadImportTemplate()}>
+                    <FileSpreadsheet className="size-3.5" />
+                    {t('tasks.importTemplate')}
+                  </DropdownMenuItem>
+                )}
+              </DropdownMenuContent>
+            </DropdownMenu>
+            {/* Помощь по формату импорта */}
+            <Popover>
+              <PopoverTrigger asChild>
+                <button title={t('tasks.importExport')} className="rounded-md border px-2 py-1.5 text-muted-foreground transition-colors hover:bg-secondary hover:text-foreground">
+                  <HelpCircle className="size-4" />
+                </button>
+              </PopoverTrigger>
+              <PopoverContent align="end" className="w-80 text-xs">
+                <p className="mb-2 whitespace-pre-wrap text-muted-foreground">{t('tasks.importHelp')}</p>
+                <Button variant="outline" size="sm" onClick={() => downloadImportTemplate()}>
+                  <FileSpreadsheet className="size-3.5" />
+                  {t('tasks.importTemplate')}
+                </Button>
+              </PopoverContent>
+            </Popover>
+            <input
+              ref={importRef}
+              type="file"
+              accept=".xlsx,.xls"
+              hidden
+              onChange={(e) => {
+                if (e.target.files?.[0]) runImport(e.target.files[0])
+                e.target.value = ''
+              }}
+            />
           </div>
 
           {/* Табличный вид: вложенные таблицы по спринт-группам */}

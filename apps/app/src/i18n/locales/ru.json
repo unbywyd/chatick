@@ -178,7 +178,14 @@
     "linkCopied": "Ссылка на задачу скопирована",
     "fromChat": "Из чата",
     "editingNow": "Правит {{name}}",
-    "lockedByOther": "Задачу сейчас правит другой участник"
+    "lockedByOther": "Задачу сейчас правит другой участник",
+    "importExport": "Импорт / Экспорт",
+    "exportExcel": "Экспорт в Excel",
+    "importExcel": "Импорт из Excel",
+    "importTemplate": "Скачать шаблон (демо)",
+    "importEmpty": "В файле нет подходящих строк",
+    "importDone": "Импортировано задач: {{created}}, пропущено: {{skipped}}",
+    "importHelp": "Колонки: Number (при импорте игнорируется), Title (обязательно), Description, Status (todo/in_progress/review/done), Priority (low/normal/high/urgent), Assignee (имя или email участника), Due (ГГГГ-ММ-ДД), EstimateMinutes (число), Sprint (имя существующего спринта). Неизвестные исполнители/спринты оставляются пустыми."
   },
   "files": {
     "search": "Поиск файлов…",

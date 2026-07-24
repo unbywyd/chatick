@@ -178,7 +178,14 @@
     "linkCopied": "קישור המשימה הועתק",
     "fromChat": "מהצ׳אט",
     "editingNow": "{{name}} עורך/ת",
-    "lockedByOther": "משתמש אחר עורך את המשימה"
+    "lockedByOther": "משתמש אחר עורך את המשימה",
+    "importExport": "ייבוא / ייצוא",
+    "exportExcel": "ייצוא ל-Excel",
+    "importExcel": "ייבוא מ-Excel",
+    "importTemplate": "הורדת תבנית (דמו)",
+    "importEmpty": "לא נמצאו שורות תקינות בקובץ",
+    "importDone": "יובאו {{created}} משימות, דולגו {{skipped}}",
+    "importHelp": "עמודות: Number (מתעלמים בייבוא), Title (חובה), Description, Status, Priority, Assignee (שם/אימייל), Due (YYYY-MM-DD), EstimateMinutes (מספר), Sprint (שם ספרינט קיים). אחראים/ספרינטים לא ידועים יישארו ריקים."
   },
   "files": {
     "search": "חיפוש קבצים…",

@@ -64,7 +64,7 @@ export function ProjectSwitcher({ projectName }: { projectName?: string }) {
   })
 
   const list = (projects.data ?? []).filter((p) => p.isMember)
-  const showSearch = list.length > 8
+  const showSearch = list.length > 5
   const needle = q.trim().toLowerCase()
   const filtered = needle ? list.filter((p) => p.name.toLowerCase().includes(needle)) : list
 

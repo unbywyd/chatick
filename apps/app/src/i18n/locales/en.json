@@ -178,7 +178,14 @@
     "linkCopied": "Task link copied",
     "fromChat": "From chat",
     "editingNow": "{{name}} is editing",
-    "lockedByOther": "Someone else is editing this task"
+    "lockedByOther": "Someone else is editing this task",
+    "importExport": "Import / Export",
+    "exportExcel": "Export to Excel",
+    "importExcel": "Import from Excel",
+    "importTemplate": "Download template (demo)",
+    "importEmpty": "No valid rows found in the file",
+    "importDone": "Imported {{created}} task(s), skipped {{skipped}}",
+    "importHelp": "Columns: Number (ignored on import), Title (required), Description, Status (todo/in_progress/review/done), Priority (low/normal/high/urgent), Assignee (member name or email), Due (YYYY-MM-DD), EstimateMinutes (number), Sprint (existing sprint name). Unknown assignees/sprints are left empty."
   },
   "files": {
     "search": "Search files…",
