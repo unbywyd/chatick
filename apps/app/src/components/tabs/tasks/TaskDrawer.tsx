@@ -28,6 +28,7 @@ import {
 import { Popover, PopoverTrigger, PopoverContent } from '@/components/ui/popover'
 import { Calendar } from '@/components/ui/calendar'
 import { FileViewer, type ViewerFile } from '@/components/files/FileViewer'
+import { RichEditor } from '@/components/ui/rich-editor'
 import { STATUSES, PRIORITIES, STATUS_ICON, STATUS_COLOR, PRIORITY_DOT, type Task, type Member } from './types'
 
 type Attachment = {
@@ -277,13 +278,13 @@ export function TaskDrawer({
             </div>
           </div>
 
-          {/* Description */}
-          <textarea
+          {/* Description — Tiptap с mentions команды */}
+          <RichEditor
             value={description}
-            onChange={(e) => setDescription(e.target.value)}
-            rows={5}
+            onChange={(md) => setDescription(md)}
             placeholder={t('tasks.descriptionPlaceholder')}
-            className="w-full resize-y rounded-md border bg-transparent px-3 py-2 text-sm outline-none placeholder:text-muted-foreground focus:ring-2 focus:ring-ring"
+            mentions={members.map((m) => ({ id: m.user.id, label: m.user.name || m.user.email, avatarUrl: m.user.avatarUrl }))}
+            preset="full"
           />
           {dirty && (
             <div className="flex justify-end">
