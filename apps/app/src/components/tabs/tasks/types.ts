@@ -13,6 +13,7 @@ export type Task = {
   description: string
   status: Status
   priority: Priority
+  estimateMinutes: number | null
   sortOrder: number
   dueDate: string | null
   assignee: { id: string; name: string; avatarUrl: string | null } | null
@@ -67,4 +68,12 @@ export const PRIORITY_DOT: Record<Priority, string> = {
 
 export function isOverdue(t: Task) {
   return Boolean(t.dueDate && t.status !== 'done' && new Date(t.dueDate).getTime() < Date.now())
+}
+
+// Оценка времени: минуты → компактно «2ч 30м» / «45м» / «3ч» (SPEC §8.13)
+export function fmtEstimate(mins: number | null): string {
+  if (!mins || mins <= 0) return ''
+  const h = Math.floor(mins / 60)
+  const m = mins % 60
+  return [h ? `${h}ч` : '', m ? `${m}м` : ''].filter(Boolean).join(' ')
 }

@@ -149,7 +149,8 @@
       "status": "Status",
       "priority": "!",
       "assignee": "Assignee",
-      "due": "Due"
+      "due": "Due",
+      "estimate": "Est."
     },
     "status": {
       "todo": "To do",
@@ -162,7 +163,10 @@
       "normal": "Normal",
       "high": "High",
       "urgent": "Urgent"
-    }
+    },
+    "estimate": "Estimate",
+    "estimatePlaceholder": "minutes",
+    "minutes": "min"
   },
   "files": {
     "search": "Search files…",

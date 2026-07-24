@@ -25,6 +25,7 @@ const taskShape = {
   dueDate: z.string().datetime({ offset: true }).nullable().optional(),
   assigneeId: z.string().nullable().optional(),
   groupId: z.string().nullable().optional(),
+  estimateMinutes: z.number().int().min(0).max(100000).nullable().optional(),
 }
 
 // Уведомления по задаче: назначение, смена статуса, упоминания в описании (SPEC §8.9).
@@ -89,6 +90,7 @@ function serialize(row: typeof tasks.$inferSelect, assignee?: typeof users.$infe
     description: row.description,
     status: row.status,
     priority: row.priority,
+    estimateMinutes: row.estimateMinutes ? Number(row.estimateMinutes) : null,
     sortOrder: row.sortOrder,
     dueDate: row.dueDate,
     assignee: assignee ? { id: assignee.id, name: assignee.name, avatarUrl: assignee.avatarUrl } : null,
@@ -158,6 +160,7 @@ tasksRoute.post('/', zValidator('json', z.object(taskShape)), async (c) => {
       dueDate: body.dueDate ? new Date(body.dueDate) : null,
       assigneeId: body.assigneeId ?? null,
       groupId: body.groupId ?? null,
+      estimateMinutes: body.estimateMinutes != null ? String(body.estimateMinutes) : null,
       createdById: sub,
     })
     .returning()
@@ -196,6 +199,7 @@ tasksRoute.patch(
     if (body.dueDate !== undefined) patch.dueDate = body.dueDate ? new Date(body.dueDate) : null
     if (body.assigneeId !== undefined) patch.assigneeId = body.assigneeId
     if (body.groupId !== undefined) patch.groupId = body.groupId
+    if (body.estimateMinutes !== undefined) patch.estimateMinutes = body.estimateMinutes != null ? String(body.estimateMinutes) : null
 
     const [row] = await db.update(tasks).set(patch).where(eq(tasks.id, taskId)).returning()
     const assignee = row!.assigneeId ? await db.query.users.findFirst({ where: eq(users.id, row!.assigneeId) }) : null

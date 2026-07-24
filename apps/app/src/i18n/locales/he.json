@@ -149,7 +149,8 @@
       "status": "סטטוס",
       "priority": "!",
       "assignee": "אחראי",
-      "due": "יעד"
+      "due": "יעד",
+      "estimate": "הער׳"
     },
     "status": {
       "todo": "לביצוע",
@@ -162,7 +163,10 @@
       "normal": "רגילה",
       "high": "גבוהה",
       "urgent": "דחופה"
-    }
+    },
+    "estimate": "הערכה",
+    "estimatePlaceholder": "דקות",
+    "minutes": "דק׳"
   },
   "files": {
     "search": "חיפוש קבצים…",

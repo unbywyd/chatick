@@ -32,6 +32,7 @@ import {
   STATUS_COLOR,
   PRIORITY_COLOR,
   isOverdue,
+  fmtEstimate,
   type Task,
   type TaskGroup,
   type Member,
@@ -42,7 +43,7 @@ import {
 // Табличный вид задач (SPEC §8.6): вложенные таблицы по группам-спринтам,
 // сортировка по колонкам, инлайн-смена статуса/ассайни, drag строк и групп.
 
-type SortKey = 'number' | 'title' | 'status' | 'priority' | 'assignee' | 'dueDate'
+type SortKey = 'number' | 'title' | 'status' | 'priority' | 'estimate' | 'assignee' | 'dueDate'
 type SortDir = 'asc' | 'desc'
 
 const STATUS_RANK: Record<Status, number> = { todo: 0, in_progress: 1, review: 2, done: 3 }
@@ -100,6 +101,9 @@ export function TasksTable({
           break
         case 'priority':
           d = PRIORITY_RANK[a.priority] - PRIORITY_RANK[b.priority]
+          break
+        case 'estimate':
+          d = (a.estimateMinutes ?? Infinity) - (b.estimateMinutes ?? Infinity)
           break
         case 'assignee':
           d = (a.assignee?.name ?? '').localeCompare(b.assignee?.name ?? '')
@@ -284,6 +288,7 @@ function GroupTable({
     { key: 'title', label: t('tasks.col.title') },
     { key: 'status', label: t('tasks.col.status'), className: 'w-32' },
     { key: 'priority', label: t('tasks.col.priority'), className: 'w-10' },
+    { key: 'estimate', label: t('tasks.col.estimate'), className: 'w-24' },
     { key: 'assignee', label: t('tasks.col.assignee'), className: 'w-40' },
     { key: 'dueDate', label: t('tasks.col.due'), className: 'w-24' },
   ]
@@ -490,6 +495,10 @@ function TableRow({
           </DropdownMenuContent>
         </DropdownMenu>
       </td>
+      {/* Инлайн-оценка времени */}
+      <td className="px-2 py-1.5 align-middle text-xs">
+        <EstimateCell mins={task.estimateMinutes} canEdit={canEdit} onSave={(m) => onPatch(task.id, { estimateMinutes: m })} />
+      </td>
       {/* Инлайн-ассайни */}
       <td className="px-2 py-1.5 align-middle">
         <DropdownMenu>
@@ -527,5 +536,42 @@ function TableRow({
         {task.dueDate ? new Date(task.dueDate).toLocaleDateString(lang, { day: 'numeric', month: 'short' }) : '—'}
       </td>
     </tr>
+  )
+}
+
+// Инлайн-ячейка оценки времени: показывает «2ч 30м», по клику — ввод минут
+function EstimateCell({ mins, canEdit, onSave }: { mins: number | null; canEdit: boolean; onSave: (m: number | null) => void }) {
+  const [editing, setEditing] = useState(false)
+  const [val, setVal] = useState(mins?.toString() ?? '')
+  if (editing && canEdit) {
+    return (
+      <input
+        autoFocus
+        type="number"
+        min={0}
+        value={val}
+        onChange={(e) => setVal(e.target.value)}
+        onBlur={() => {
+          setEditing(false)
+          const next = val === '' ? null : Math.max(0, Number(val) || 0)
+          if (next !== mins) onSave(next)
+        }}
+        onKeyDown={(e) => e.key === 'Enter' && (e.target as HTMLInputElement).blur()}
+        placeholder="мин"
+        className="w-16 rounded border bg-background px-1 py-0.5 text-xs"
+      />
+    )
+  }
+  return (
+    <button
+      disabled={!canEdit}
+      onClick={() => {
+        setVal(mins?.toString() ?? '')
+        setEditing(true)
+      }}
+      className="text-muted-foreground hover:text-foreground disabled:hover:text-muted-foreground"
+    >
+      {mins ? fmtEstimate(mins) : '—'}
+    </button>
   )
 }

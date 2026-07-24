@@ -31,7 +31,7 @@ import { Calendar } from '@/components/ui/calendar'
 import { FileViewer, type ViewerFile } from '@/components/files/FileViewer'
 import { RichEditor } from '@/components/ui/rich-editor'
 import { TaskComments } from './TaskComments'
-import { STATUSES, PRIORITIES, STATUS_ICON, STATUS_COLOR, PRIORITY_DOT, type Task, type Member, type TaskGroup } from './types'
+import { STATUSES, PRIORITIES, STATUS_ICON, STATUS_COLOR, PRIORITY_DOT, fmtEstimate, type Task, type Member, type TaskGroup } from './types'
 
 type Attachment = {
   id: string
@@ -65,6 +65,7 @@ export function TaskDrawer({
   const qc = useQueryClient()
   const [title, setTitle] = useState(task.title)
   const [description, setDescription] = useState(task.description)
+  const [estimate, setEstimate] = useState(task.estimateMinutes?.toString() ?? '')
   const [uploading, setUploading] = useState(0)
   const [dragOver, setDragOver] = useState(false)
   const [viewing, setViewing] = useState<ViewerFile | null>(null)
@@ -87,7 +88,8 @@ export function TaskDrawer({
   useEffect(() => {
     setTitle(task.title)
     setDescription(task.description)
-  }, [task.id, task.title, task.description])
+    setEstimate(task.estimateMinutes?.toString() ?? '')
+  }, [task.id, task.title, task.description, task.estimateMinutes])
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
@@ -297,6 +299,25 @@ export function TaskDrawer({
                 </Popover>
               </PropRow>
             </div>
+
+            {/* Оценка времени (SPEC §8.13) */}
+            <PropRow label={t('tasks.estimate')}>
+              <div className="flex items-center gap-2">
+                <input
+                  type="number"
+                  min={0}
+                  value={estimate}
+                  onChange={(e) => setEstimate(e.target.value)}
+                  onBlur={() => {
+                    const next = estimate === '' ? null : Math.max(0, Number(estimate) || 0)
+                    if (next !== (task.estimateMinutes ?? null)) onPatch({ estimateMinutes: next })
+                  }}
+                  placeholder={t('tasks.estimatePlaceholder')}
+                  className="h-8 w-28 rounded-md border bg-background px-2 text-sm outline-none focus:ring-2 focus:ring-ring"
+                />
+                <span className="text-xs text-muted-foreground">{t('tasks.minutes')}{task.estimateMinutes ? ` · ${fmtEstimate(task.estimateMinutes)}` : ''}</span>
+              </div>
+            </PropRow>
 
             {/* Спринт (группа) */}
             {groups.length > 0 && (

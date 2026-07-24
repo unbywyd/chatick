@@ -250,6 +250,8 @@ export const tasks = pgTable(
     description: text('description').notNull().default(''),
     status: taskStatus('status').notNull().default('todo'),
     priority: taskPriority('priority').notNull().default('normal'),
+    // оценка времени на выполнение в минутах (SPEC §8.13); null = не задана
+    estimateMinutes: text('estimate_minutes'),
     // ручной порядок внутри статус-группы (drag&drop); меньше = выше
     sortOrder: doublePrecision('sort_order').notNull().default(0),
     dueDate: timestamp('due_date', { withTimezone: true }),

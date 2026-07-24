@@ -3,7 +3,7 @@ import { useNavigate, useParams } from 'react-router-dom'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { useTranslation } from 'react-i18next'
 import { toast } from 'sonner'
-import { CalendarDays, Flag, LayoutList, Paperclip, Plus, Search, Table2, User } from 'lucide-react'
+import { CalendarDays, Flag, LayoutList, Paperclip, Plus, Search, Table2, Timer, User } from 'lucide-react'
 import { api } from '@/lib/api'
 import { cn } from '@/lib/utils'
 import { Input } from '@/components/ui/input'
@@ -16,7 +16,7 @@ import {
 } from '@/components/ui/dropdown-menu'
 import { TaskDrawer } from './tasks/TaskDrawer'
 import { TasksTable } from './tasks/TasksTable'
-import { STATUSES, PRIORITIES, STATUS_ICON, STATUS_COLOR, PRIORITY_COLOR, isOverdue, type Task, type TaskGroup, type Member, type Status, type Priority } from './tasks/types'
+import { STATUSES, PRIORITIES, STATUS_ICON, STATUS_COLOR, PRIORITY_COLOR, isOverdue, fmtEstimate, type Task, type TaskGroup, type Member, type Status, type Priority } from './tasks/types'
 
 // Таб «Задачи»: список по статусам + drawer с деталями и вложениями (SPEC §4.3 — права)
 export function TasksTab({ projectId, meId }: { projectId: string; meId?: string }) {
@@ -436,6 +436,12 @@ function TaskRow({
           </span>
         )}
         {task.priority !== 'normal' && <Flag className={cn('size-3.5', PRIORITY_COLOR[task.priority])} />}
+        {task.estimateMinutes ? (
+          <span className="inline-flex items-center gap-0.5">
+            <Timer className="size-3" />
+            {fmtEstimate(task.estimateMinutes)}
+          </span>
+        ) : null}
         {task.dueDate && (
           <span className={cn('inline-flex items-center gap-0.5', overdue && 'font-medium text-destructive')}>
             <CalendarDays className="size-3" />

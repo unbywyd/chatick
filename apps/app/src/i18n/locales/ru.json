@@ -149,7 +149,8 @@
       "status": "Статус",
       "priority": "!",
       "assignee": "Исполнитель",
-      "due": "Срок"
+      "due": "Срок",
+      "estimate": "Оц."
     },
     "status": {
       "todo": "К выполнению",
@@ -162,7 +163,10 @@
       "normal": "Обычный",
       "high": "Высокий",
       "urgent": "Срочный"
-    }
+    },
+    "estimate": "Оценка",
+    "estimatePlaceholder": "минут",
+    "minutes": "мин"
   },
   "files": {
     "search": "Поиск файлов…",
