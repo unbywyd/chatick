@@ -241,7 +241,6 @@ export function FilesTab({ projectId, isAdmin = false }: { projectId: string; is
           <UploadCloud className="size-4" />
           {t('files.upload')}
         </Button>
-        <ClipboardBanner compact onImage={(files) => uploadFiles(files)} />
         <input ref={inputRef} type="file" multiple className="hidden" onChange={(e) => { if (e.target.files?.length) uploadFiles(e.target.files); e.target.value = '' }} />
       </div>
 
@@ -296,14 +295,17 @@ export function FilesTab({ projectId, isAdmin = false }: { projectId: string; is
       )}
 
       {!selectMode && (
-        <div className={cn('mt-4 rounded-lg border-2 border-dashed p-6 text-center text-sm transition-colors', dragOver ? 'border-brand bg-accent text-foreground' : 'text-muted-foreground', uploading.length > 0 && 'border-brand/50')}>
+        <div className={cn('mt-4 flex flex-col items-center gap-3 rounded-lg border-2 border-dashed p-6 text-center text-sm transition-colors', dragOver ? 'border-brand bg-accent text-foreground' : 'text-muted-foreground', uploading.length > 0 && 'border-brand/50')}>
           {uploading.length > 0 ? (
             <span className="inline-flex items-center gap-2">
               <Loader2 className="size-4 animate-spin text-brand" />
               {t('files.uploading', { count: uploading.length })}
             </span>
           ) : (
-            t('files.dropHint')
+            <>
+              <span>{t('files.dropHint')}</span>
+              <ClipboardBanner onImage={(files) => uploadFiles(files)} />
+            </>
           )}
         </div>
       )}
