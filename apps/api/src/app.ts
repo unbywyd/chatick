@@ -10,6 +10,7 @@ import { filesRoute, filesPublicRoute } from './routes/files.js'
 import { resourcesRoute } from './routes/resources.js'
 import { tasksRoute } from './routes/tasks.js'
 import { messagesRoute } from './routes/messages.js'
+import { notificationsRoute } from './routes/notifications.js'
 
 export const app = new Hono()
 
@@ -25,6 +26,7 @@ app.route('/files', filesPublicRoute) // публичная прокси-отд�
 app.route('/api/v1/resources', resourcesRoute)
 app.route('/api/v1/tasks', tasksRoute)
 app.route('/api/v1/messages', messagesRoute)
+app.route('/api/v1/notifications', notificationsRoute)
 
 // Дальше:
 // app.route('/api/v1/tasks', tasks)         — таск-менеджер

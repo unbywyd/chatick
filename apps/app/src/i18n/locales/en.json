@@ -325,7 +325,34 @@
     "files": "Files",
     "resources": "Resources",
     "team": "Team",
+    "notifications": "Notifications",
     "placeholder": "“{{tab}}” tab — content coming soon"
+  },
+  "notif": {
+    "title": "Notifications",
+    "subtitle": "Choose what you get emailed about, and set up task reminders",
+    "subscriptions": "Email me when…",
+    "event": {
+      "chat_mention": { "label": "I'm mentioned in chat", "hint": "Someone @mentions you in a chat message" },
+      "task_mention": { "label": "I'm mentioned in a task", "hint": "Someone @mentions you in a task description" },
+      "comment_mention": { "label": "I'm mentioned in a comment", "hint": "Someone @mentions you in a task comment" },
+      "task_assigned": { "label": "A task is assigned to me", "hint": "You become the assignee of a task" },
+      "task_status": { "label": "My task's status changes", "hint": "The status of a task assigned to you changes" },
+      "task_comment": { "label": "A new comment on my task", "hint": "Someone comments on a task assigned to you" }
+    },
+    "reminders": "Open-task reminders",
+    "remindersHint": "Email a list of open tasks on a schedule. Only admins can change this.",
+    "cadence": "Frequency",
+    "cadenceOpt": { "hourly": "Every N hours", "daily": "Daily", "weekly": "Weekly" },
+    "everyHours": "Every",
+    "dayOfWeek": "On",
+    "atHour": "At",
+    "weekday": { "0": "Sunday", "1": "Monday", "2": "Tuesday", "3": "Wednesday", "4": "Thursday", "5": "Friday", "6": "Saturday" },
+    "audience": "Send to",
+    "audienceOpt": { "all_members": "All members", "assignees": "Assignees only" },
+    "statuses": "Statuses counted as “open”",
+    "save": "Save reminders",
+    "saved": "Saved"
   },
   "projTeam": {
     "title": "Project team",

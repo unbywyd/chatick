@@ -8,6 +8,28 @@ import { requireProject, type ProjectEnv } from '../auth.js'
 import { broadcast, sendToUser } from '../ws.js'
 import { evaluateMessage, sandboxReply, aiChatReply } from '../lib/dispatcher.js'
 import { maybeCompress } from '../lib/memory.js'
+import { notify, extractMentions } from '../lib/notify.js'
+
+// Письмо тем, кого упомянули в доставленном групповом сообщении (SPEC §8.9).
+async function notifyChatMentions(
+  projectId: string,
+  messageId: string,
+  text: string,
+  author: { id: string; name: string } | null | undefined,
+) {
+  const mentioned = extractMentions(text)
+  if (!mentioned.length) return
+  await notify({
+    projectId,
+    event: 'chat_mention',
+    recipientIds: mentioned,
+    actorId: author?.id ?? null,
+    actorName: author?.name || 'Someone',
+    dedupeKey: `chat_mention:${messageId}`,
+    link: `/p/${projectId}?msg=${messageId}`,
+    preview: text,
+  })
+}
 
 // Чат (SPEC §5.5): pending → диспетчер → delivered | held(sandbox) → выбор → delivered.
 // Вложения (files.messageId) прикрепляются до отправки и едут с финальным вариантом.
@@ -194,6 +216,7 @@ messagesRoute.post(
 
     if (raw || attachmentOnly) {
       broadcast(projectId, 'message', message)
+      void notifyChatMentions(projectId, row!.id, text, author)
       void maybeCompress(projectId)
       return c.json(message, 201)
     }
@@ -207,6 +230,7 @@ messagesRoute.post(
       if (verdict.verdict === 'pass') {
         const [updated] = await db.update(messages).set({ status: 'delivered' }).where(eq(messages.id, row!.id)).returning()
         broadcast(projectId, 'message', serialize(updated!, author, atts.get(row!.id)))
+        void notifyChatMentions(projectId, row!.id, text, author)
         broadcast(projectId, 'checking_done', { userId: sub }, { except: sub })
         void maybeCompress(projectId) // фоновое сжатие памяти (SPEC §5.6)
       } else {
@@ -333,6 +357,7 @@ messagesRoute.post(
     const atts = await attachmentsOf([msg.id])
     const message = serialize(updated!, author, atts.get(msg.id))
     broadcast(projectId, 'message', message)
+    void notifyChatMentions(projectId, msg.id, finalText, author)
     return c.json(message)
   },
 )

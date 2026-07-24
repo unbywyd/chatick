@@ -344,3 +344,73 @@ export const credentialAccessLog = pgTable(
   },
   (t) => [index('cred_log_project_created_idx').on(t.projectId, t.createdAt)],
 )
+
+// ---------------------------------------------------------------------------
+// Notifications (SPEC §8.9) — email при упоминании / назначении задачи и пр.
+// ---------------------------------------------------------------------------
+
+// Типы событий, на которые можно подписаться/отписаться (per-project, per-user).
+export const notificationEvent = pgEnum('notification_event', [
+  'chat_mention', // тебя упомянули в чате
+  'task_mention', // упомянули в описании задачи
+  'comment_mention', // упомянули в комментарии
+  'task_assigned', // тебе назначили задачу
+  'task_status', // изменился статус твоей/назначенной задачи
+  'task_comment', // новый комментарий к задаче, где ты автор/ассайни
+])
+
+// Подписки: строка = (user, project, event) отключён. По умолчанию всё включено;
+// запись появляется ТОЛЬКО когда пользователь отписался — так дефолт = «включено».
+export const notificationOptOuts = pgTable(
+  'notification_opt_outs',
+  {
+    id: id(),
+    userId: text('user_id').notNull().references(() => users.id, { onDelete: 'cascade' }),
+    projectId: text('project_id').notNull().references(() => projects.id, { onDelete: 'cascade' }),
+    event: notificationEvent('event').notNull(),
+    createdAt: createdAt(),
+  },
+  (t) => [uniqueIndex('notif_optout_idx').on(t.userId, t.projectId, t.event)],
+)
+
+// Лог отправленных уведомлений — для дедупа (не слать одно и то же дважды).
+export const notificationLog = pgTable(
+  'notification_log',
+  {
+    id: id(),
+    userId: text('user_id').notNull().references(() => users.id, { onDelete: 'cascade' }),
+    projectId: text('project_id').notNull().references(() => projects.id, { onDelete: 'cascade' }),
+    event: notificationEvent('event').notNull(),
+    // ключ дедупа: например `${event}:${messageId}:${userId}`
+    dedupeKey: text('dedupe_key').notNull(),
+    createdAt: createdAt(),
+  },
+  (t) => [uniqueIndex('notif_log_dedupe_idx').on(t.dedupeKey)],
+)
+
+// Напоминания о задачах в TODO (SPEC §8.9): per-project таймер → письмо со списком.
+export const reminderCadence = pgEnum('reminder_cadence', ['hourly', 'daily', 'weekly'])
+// Кому слать список открытых задач.
+export const reminderAudience = pgEnum('reminder_audience', ['all_members', 'assignees'])
+
+export const taskReminders = pgTable(
+  'task_reminders',
+  {
+    id: id(),
+    projectId: text('project_id').notNull().references(() => projects.id, { onDelete: 'cascade' }),
+    enabled: boolean('enabled').notNull().default(true),
+    cadence: reminderCadence('cadence').notNull().default('daily'),
+    // hourly: каждые N часов; daily/weekly: в hourOfDay (UTC)
+    everyHours: text('every_hours').notNull().default('3'),
+    hourOfDay: text('hour_of_day').notNull().default('9'), // 0..23 UTC
+    dayOfWeek: text('day_of_week').notNull().default('1'), // weekly: 0=вс..6=сб
+    audience: reminderAudience('audience').notNull().default('all_members'),
+    // какие статусы считать «открытыми» — CSV из task_status; по умолчанию только todo
+    statuses: text('statuses').notNull().default('todo'),
+    lastSentAt: timestamp('last_sent_at', { withTimezone: true }),
+    createdById: text('created_by_id').references(() => users.id, { onDelete: 'set null' }),
+    createdAt: createdAt(),
+    updatedAt: updatedAt(),
+  },
+  (t) => [uniqueIndex('task_reminders_project_idx').on(t.projectId)],
+)

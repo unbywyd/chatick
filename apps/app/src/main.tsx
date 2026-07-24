@@ -15,6 +15,7 @@ import { TasksTab } from './components/tabs/TasksTab'
 import { FilesTab } from './components/tabs/FilesTab'
 import { ResourcesTab } from './components/tabs/ResourcesTab'
 import { ProjectTeamTab } from './components/tabs/ProjectTeamTab'
+import { NotificationsTab } from './components/tabs/NotificationsTab'
 
 // HashRouter — единый роутинг для веба и Electron (file://) без доп. настроек.
 const queryClient = new QueryClient()
@@ -49,6 +50,13 @@ function TeamPage() {
     />
   ) : null
 }
+function NotificationsPage() {
+  const { project } = useProjectCtx()
+  const { id } = useParams()
+  return id ? (
+    <NotificationsTab projectId={id} isAdmin={project?.myRole === 'owner' || project?.myRole === 'admin'} />
+  ) : null
+}
 
 createRoot(document.getElementById('root')!).render(
   <StrictMode>
@@ -72,6 +80,7 @@ createRoot(document.getElementById('root')!).render(
                 <Route path="files" element={<FilesPage />} />
                 <Route path="resources" element={<ResourcesPage />} />
                 <Route path="team" element={<TeamPage />} />
+                <Route path="notifications" element={<NotificationsPage />} />
               </Route>
             </Routes>
           </HashRouter>

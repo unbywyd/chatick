@@ -7,6 +7,7 @@ import { files, projects, tasks, users } from '../db/schema.js'
 import { requireProject, type ProjectEnv } from '../auth.js'
 import { hasPermission } from './projects.js'
 import { improveTask } from '../lib/llm.js'
+import { notify, extractMentions } from '../lib/notify.js'
 
 // Задачи проекта — project-токен; права per-user (SPEC §4.3) на каждое действие
 export const tasksRoute = new Hono<ProjectEnv>()
@@ -23,6 +24,59 @@ const taskShape = {
   sortOrder: z.number().optional(),
   dueDate: z.string().datetime({ offset: true }).nullable().optional(),
   assigneeId: z.string().nullable().optional(),
+}
+
+// Уведомления по задаче: назначение, смена статуса, упоминания в описании (SPEC §8.9).
+async function notifyTask(
+  projectId: string,
+  actorId: string,
+  task: typeof tasks.$inferSelect,
+  opts: { assigneeChanged?: boolean; statusChanged?: boolean; mentions?: boolean },
+) {
+  const actor = await db.query.users.findFirst({ where: eq(users.id, actorId) })
+  const actorName = actor?.name || 'Someone'
+  const link = `/p/${projectId}?task=${task.id}`
+
+  if (opts.assigneeChanged && task.assigneeId) {
+    await notify({
+      projectId,
+      event: 'task_assigned',
+      recipientIds: [task.assigneeId],
+      actorId,
+      actorName,
+      dedupeKey: `task_assigned:${task.id}:${task.assigneeId}`,
+      link,
+      preview: task.title,
+    })
+  }
+  if (opts.statusChanged && task.assigneeId) {
+    await notify({
+      projectId,
+      event: 'task_status',
+      recipientIds: [task.assigneeId],
+      actorId,
+      actorName,
+      dedupeKey: `task_status:${task.id}:${task.status}:${task.assigneeId}`,
+      link,
+      preview: task.title,
+      vars: { ref: task.number, status: task.status },
+    })
+  }
+  if (opts.mentions) {
+    const mentioned = extractMentions(task.description)
+    if (mentioned.length) {
+      await notify({
+        projectId,
+        event: 'task_mention',
+        recipientIds: mentioned,
+        actorId,
+        actorName,
+        dedupeKey: `task_mention:${task.id}`,
+        link,
+        preview: task.title,
+      })
+    }
+  }
 }
 
 function serialize(row: typeof tasks.$inferSelect, assignee?: typeof users.$inferSelect | null) {
@@ -106,6 +160,7 @@ tasksRoute.post('/', zValidator('json', z.object(taskShape)), async (c) => {
     .returning()
 
   const assignee = row!.assigneeId ? await db.query.users.findFirst({ where: eq(users.id, row!.assigneeId) }) : null
+  void notifyTask(projectId, sub, row!, { assigneeChanged: Boolean(row!.assigneeId), mentions: true })
   return c.json({ ...serialize(row!, assignee), aiImproved }, 201)
 })
 
@@ -140,6 +195,11 @@ tasksRoute.patch(
 
     const [row] = await db.update(tasks).set(patch).where(eq(tasks.id, taskId)).returning()
     const assignee = row!.assigneeId ? await db.query.users.findFirst({ where: eq(users.id, row!.assigneeId) }) : null
+    void notifyTask(projectId, sub, row!, {
+      assigneeChanged: body.assigneeId !== undefined && body.assigneeId !== task.assigneeId && Boolean(row!.assigneeId),
+      statusChanged: body.status !== undefined && body.status !== task.status,
+      mentions: body.description !== undefined && body.description !== task.description,
+    })
     return c.json(serialize(row!, assignee))
   },
 )
