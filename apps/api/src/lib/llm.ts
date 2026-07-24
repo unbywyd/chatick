@@ -343,3 +343,41 @@ export async function improveTask(
     return null
   }
 }
+
+/**
+ * Валидация задачи в форме («Проверить мою задачу», SPEC §8.6):
+ * ИИ даёт короткий совет по улучшению + предлагает улучшенный вариант title/description
+ * (для «применить»). Ничего не сохраняет. Fail-open: null → «ИИ недоступен».
+ */
+export async function validateTask(
+  projectId: string,
+  input: { title: string; description: string; language: string },
+): Promise<{ advice: string; suggestedTitle: string; suggestedDescription: string } | null> {
+  const cfg = await projectLlm(projectId)
+  if (!cfg) return null
+  const lang = LANG_NAMES[input.language] ?? input.language
+  const text = await complete(cfg, {
+    system: [
+      `You review a task before it is saved to a tracker. Target language: ${lang}.`,
+      'Give brief, actionable feedback: is the title clear and action-oriented? is the description specific enough (acceptance criteria, scope)? what is missing or ambiguous?',
+      'Then propose an improved title and description WITHOUT inventing new requirements — only clarify and tidy what is given.',
+      `Write "advice" and the suggestions in ${lang}.`,
+      'Respond with ONLY a JSON object: {"advice": "...", "suggestedTitle": "...", "suggestedDescription": "..."}. No markdown, no extra text.',
+    ].join('\n'),
+    user: JSON.stringify({ title: input.title, description: input.description }),
+    maxTokens: 800,
+  })
+  if (!text) return null
+  try {
+    const clean = text.trim().replace(/^```(?:json)?\s*|\s*```$/g, '')
+    const parsed = JSON.parse(clean) as { advice?: string; suggestedTitle?: string; suggestedDescription?: string }
+    return {
+      advice: (parsed.advice ?? '').slice(0, 2000),
+      suggestedTitle: (parsed.suggestedTitle ?? input.title).slice(0, 300),
+      suggestedDescription: (parsed.suggestedDescription ?? input.description).slice(0, 10_000),
+    }
+  } catch {
+    console.error('[llm] validateTask: bad JSON:', text.slice(0, 200))
+    return null
+  }
+}

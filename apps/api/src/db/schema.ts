@@ -244,6 +244,22 @@ export const tasks = pgTable(
   ],
 )
 
+// Комментарии к задачам (SPEC §8.9): минимальный Tiptap + mentions + ответы + файлы.
+export const taskComments = pgTable(
+  'task_comments',
+  {
+    id: id(),
+    taskId: text('task_id').notNull().references(() => tasks.id, { onDelete: 'cascade' }),
+    projectId: text('project_id').notNull().references(() => projects.id, { onDelete: 'cascade' }),
+    authorId: text('author_id').references(() => users.id, { onDelete: 'set null' }),
+    body: text('body').notNull(), // markdown с mention-разметкой @[label](id)
+    replyToId: text('reply_to_id'), // ответ на другой комментарий (без FK — переживает удаление)
+    createdAt: createdAt(),
+    updatedAt: updatedAt(),
+  },
+  (t) => [index('task_comments_task_idx').on(t.taskId, t.createdAt)],
+)
+
 // ---------------------------------------------------------------------------
 // Files & credentials (табы проекта)
 // ---------------------------------------------------------------------------
@@ -255,6 +271,8 @@ export const files = pgTable(
     projectId: text('project_id').notNull().references(() => projects.id, { onDelete: 'cascade' }),
     // вложение задачи: файл прикреплён прямо в таске (null = общий файл проекта)
     taskId: text('task_id').references(() => tasks.id, { onDelete: 'set null' }),
+    // вложение комментария задачи: файл привязан к комментарию (и к задаче через taskId)
+    commentId: text('comment_id').references(() => taskComments.id, { onDelete: 'set null' }),
     // вложение сообщения чата (SPEC §5.5.4)
     messageId: text('message_id').references(() => messages.id, { onDelete: 'set null' }),
     // картинки оптимизируются (webp); оригинал сохраняется отдельным ключом, если просили

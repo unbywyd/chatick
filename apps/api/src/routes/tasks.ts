@@ -3,10 +3,10 @@ import { zValidator } from '@hono/zod-validator'
 import { z } from 'zod'
 import { and, asc, desc, eq, sql } from 'drizzle-orm'
 import { db } from '../db/client.js'
-import { files, projects, taskGroups, tasks, users } from '../db/schema.js'
+import { files, projects, taskComments, taskGroups, tasks, users } from '../db/schema.js'
 import { requireProject, type ProjectEnv } from '../auth.js'
 import { hasPermission } from './projects.js'
-import { improveTask } from '../lib/llm.js'
+import { improveTask, validateTask } from '../lib/llm.js'
 import { notify, extractMentions } from '../lib/notify.js'
 
 // Задачи проекта — project-токен; права per-user (SPEC §4.3) на каждое действие
@@ -289,4 +289,128 @@ tasksRoute.delete('/groups/:groupId', async (c) => {
   if (!group) return c.json({ error: 'Not found' }, 404)
   await db.delete(taskGroups).where(eq(taskGroups.id, groupId)) // FK onDelete: set null
   return c.json({ ok: true })
+})
+
+// --- Комментарии задач (SPEC §8.9) -------------------------------------------
+
+async function commentFiles(commentIds: string[]) {
+  if (!commentIds.length) return new Map<string, { id: string; name: string; mime: string; deleted: boolean }[]>()
+  const rows = await db.query.files.findMany({ where: sql`${files.commentId} in (${sql.join(commentIds.map((id) => sql`${id}`), sql`, `)})` })
+  const map = new Map<string, { id: string; name: string; mime: string; deleted: boolean }[]>()
+  for (const f of rows) {
+    if (!f.commentId) continue
+    const arr = map.get(f.commentId) ?? []
+    arr.push({ id: f.id, name: f.name, mime: f.mime, deleted: Boolean(f.deletedAt) })
+    map.set(f.commentId, arr)
+  }
+  return map
+}
+
+// Список комментариев задачи
+tasksRoute.get('/:taskId/comments', async (c) => {
+  const { projectId, sub } = c.get('auth')
+  if (!(await hasPermission(projectId, sub, 'tasks.read'))) return c.json({ error: 'Forbidden' }, 403)
+  const taskId = c.req.param('taskId')
+  const rows = await db
+    .select({ comment: taskComments, author: users })
+    .from(taskComments)
+    .leftJoin(users, eq(users.id, taskComments.authorId))
+    .where(and(eq(taskComments.taskId, taskId), eq(taskComments.projectId, projectId)))
+    .orderBy(asc(taskComments.createdAt))
+  const fileMap = await commentFiles(rows.map((r) => r.comment.id))
+  return c.json(
+    rows.map((r) => ({
+      id: r.comment.id,
+      body: r.comment.body,
+      replyToId: r.comment.replyToId,
+      createdAt: r.comment.createdAt,
+      author: r.author ? { id: r.author.id, name: r.author.name, avatarUrl: r.author.avatarUrl } : null,
+      files: fileMap.get(r.comment.id) ?? [],
+    })),
+  )
+})
+
+// Создать комментарий — нужен tasks.read (комментировать может любой, кто видит задачи).
+// attachmentIds: файлы проекта (без владельца-сообщения) привязываются к комментарию и задаче.
+tasksRoute.post(
+  '/:taskId/comments',
+  zValidator('json', z.object({ body: z.string().min(1).max(10_000), replyToId: z.string().nullable().optional(), attachmentIds: z.array(z.string()).default([]) })),
+  async (c) => {
+    const { projectId, sub } = c.get('auth')
+    if (!(await hasPermission(projectId, sub, 'tasks.read'))) return c.json({ error: 'Forbidden' }, 403)
+    const taskId = c.req.param('taskId')
+    const task = await db.query.tasks.findFirst({ where: and(eq(tasks.id, taskId), eq(tasks.projectId, projectId)) })
+    if (!task) return c.json({ error: 'Not found' }, 404)
+
+    const { body, replyToId, attachmentIds } = c.req.valid('json')
+    const [row] = await db.insert(taskComments).values({ taskId, projectId, authorId: sub, body, replyToId: replyToId ?? null }).returning()
+
+    // привязать файлы к комментарию + задаче (файл появляется и в разделе Files задачи)
+    if (attachmentIds.length) {
+      await db
+        .update(files)
+        .set({ commentId: row!.id, taskId })
+        .where(and(sql`${files.id} in (${sql.join(attachmentIds.map((id) => sql`${id}`), sql`, `)})`, eq(files.projectId, projectId), eq(files.uploadedById, sub)))
+    }
+
+    const author = await db.query.users.findFirst({ where: eq(users.id, sub) })
+    const actorName = author?.name || 'Someone'
+    const link = `/p/${projectId}?task=${taskId}`
+
+    // уведомления: упоминания в комментарии + автору/ассайни задачи о новом комментарии
+    const mentioned = extractMentions(body)
+    if (mentioned.length)
+      void notify({ projectId, event: 'comment_mention', recipientIds: mentioned, actorId: sub, actorName, dedupeKey: `comment_mention:${row!.id}`, link, preview: body })
+    const watchers = [task.assigneeId, task.createdById].filter((x): x is string => Boolean(x) && x !== sub && !mentioned.includes(x!))
+    if (watchers.length)
+      void notify({ projectId, event: 'task_comment', recipientIds: watchers, actorId: sub, actorName, dedupeKey: `task_comment:${row!.id}`, link, preview: body, vars: { ref: task.number } })
+
+    const fileMap = await commentFiles([row!.id])
+    return c.json(
+      {
+        id: row!.id,
+        body: row!.body,
+        replyToId: row!.replyToId,
+        createdAt: row!.createdAt,
+        author: author ? { id: author.id, name: author.name, avatarUrl: author.avatarUrl } : null,
+        files: fileMap.get(row!.id) ?? [],
+      },
+      201,
+    )
+  },
+)
+
+// Редактировать комментарий — только автор
+tasksRoute.patch('/:taskId/comments/:commentId', zValidator('json', z.object({ body: z.string().min(1).max(10_000) })), async (c) => {
+  const { projectId, sub } = c.get('auth')
+  const commentId = c.req.param('commentId')
+  const comment = await db.query.taskComments.findFirst({ where: and(eq(taskComments.id, commentId), eq(taskComments.projectId, projectId)) })
+  if (!comment) return c.json({ error: 'Not found' }, 404)
+  if (comment.authorId !== sub) return c.json({ error: 'Forbidden' }, 403)
+  const [row] = await db.update(taskComments).set({ body: c.req.valid('json').body }).where(eq(taskComments.id, commentId)).returning()
+  return c.json({ id: row!.id, body: row!.body })
+})
+
+// Удалить комментарий — автор, owner или admin
+tasksRoute.delete('/:taskId/comments/:commentId', async (c) => {
+  const { projectId, sub, role } = c.get('auth')
+  const commentId = c.req.param('commentId')
+  const comment = await db.query.taskComments.findFirst({ where: and(eq(taskComments.id, commentId), eq(taskComments.projectId, projectId)) })
+  if (!comment) return c.json({ error: 'Not found' }, 404)
+  if (comment.authorId !== sub && role !== 'owner' && role !== 'admin') return c.json({ error: 'Forbidden' }, 403)
+  await db.delete(taskComments).where(eq(taskComments.id, commentId))
+  return c.json({ ok: true })
+})
+
+// ИИ-валидация задачи в форме создания/редактирования (SPEC §8.6): «Проверить мою задачу».
+// Не сохраняет ничего — возвращает совет + улучшенный вариант для apply.
+tasksRoute.post('/validate', zValidator('json', z.object({ title: z.string().default(''), description: z.string().default('') })), async (c) => {
+  const { projectId, sub } = c.get('auth')
+  if (!(await hasPermission(projectId, sub, 'tasks.read'))) return c.json({ error: 'Forbidden' }, 403)
+  const project = await db.query.projects.findFirst({ where: eq(projects.id, projectId) })
+  const language = (JSON.parse(project?.aiConfig || '{}') as { language?: string }).language ?? 'en'
+  const { title, description } = c.req.valid('json')
+  const result = await validateTask(projectId, { title, description, language })
+  if (!result) return c.json({ error: 'AI unavailable' }, 503)
+  return c.json(result)
 })

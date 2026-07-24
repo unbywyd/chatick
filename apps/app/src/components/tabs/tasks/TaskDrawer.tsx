@@ -9,6 +9,7 @@ import {
   File,
   Loader2,
   Paperclip,
+  Sparkles,
   Trash2,
   User,
   X,
@@ -29,6 +30,7 @@ import { Popover, PopoverTrigger, PopoverContent } from '@/components/ui/popover
 import { Calendar } from '@/components/ui/calendar'
 import { FileViewer, type ViewerFile } from '@/components/files/FileViewer'
 import { RichEditor } from '@/components/ui/rich-editor'
+import { TaskComments } from './TaskComments'
 import { STATUSES, PRIORITIES, STATUS_ICON, STATUS_COLOR, PRIORITY_DOT, type Task, type Member, type TaskGroup } from './types'
 
 type Attachment = {
@@ -46,6 +48,7 @@ export function TaskDrawer({
   task,
   members,
   groups = [],
+  meId,
   onPatch,
   onDelete,
   onClose,
@@ -53,6 +56,7 @@ export function TaskDrawer({
   task: Task
   members: Member[]
   groups?: TaskGroup[]
+  meId?: string
   onPatch: (body: Record<string, unknown>) => void
   onDelete: () => void
   onClose: () => void
@@ -65,6 +69,19 @@ export function TaskDrawer({
   const [dragOver, setDragOver] = useState(false)
   const [viewing, setViewing] = useState<ViewerFile | null>(null)
   const inputRef = useRef<HTMLInputElement>(null)
+  const [aiCheck, setAiCheck] = useState<{ advice: string; suggestedTitle: string; suggestedDescription: string } | null>(null)
+
+  // ИИ-валидация задачи («Проверить мою задачу», SPEC §8.6)
+  const validate = useMutation({
+    mutationFn: () =>
+      api<{ advice: string; suggestedTitle: string; suggestedDescription: string }>(
+        '/api/v1/tasks/validate',
+        { method: 'POST', body: JSON.stringify({ title, description }) },
+        'project',
+      ),
+    onSuccess: (r) => setAiCheck(r),
+    onError: (e) => toast.error(e instanceof Error ? e.message : String(e)),
+  })
 
   // при переключении на другую задачу — сбросить черновики
   useEffect(() => {
@@ -325,13 +342,45 @@ export function TaskDrawer({
             mentions={members.map((m) => ({ id: m.user.id, label: m.user.name || m.user.email, avatarUrl: m.user.avatarUrl }))}
             preset="full"
           />
-          {dirty && (
-            <div className="flex justify-end">
+
+          {/* ИИ-совет по задаче */}
+          {aiCheck && (
+            <div className="space-y-2 rounded-lg border border-brand/40 bg-brand/5 p-3">
+              <div className="flex items-center gap-1.5 text-sm font-medium">
+                <Sparkles className="size-4 text-brand" />
+                {t('tasks.aiAdvice')}
+              </div>
+              <p className="whitespace-pre-wrap text-sm text-muted-foreground">{aiCheck.advice}</p>
+              <div className="flex flex-wrap gap-2">
+                <Button
+                  variant="brand"
+                  size="sm"
+                  onClick={() => {
+                    setTitle(aiCheck.suggestedTitle)
+                    setDescription(aiCheck.suggestedDescription)
+                    setAiCheck(null)
+                  }}
+                >
+                  {t('tasks.applySuggestion')}
+                </Button>
+                <Button variant="ghost" size="sm" onClick={() => setAiCheck(null)}>
+                  {t('files.cancel')}
+                </Button>
+              </div>
+            </div>
+          )}
+
+          <div className="flex items-center justify-between gap-2">
+            <Button variant="outline" size="sm" disabled={validate.isPending || !title.trim()} onClick={() => validate.mutate()}>
+              {validate.isPending ? <Loader2 className="size-3.5 animate-spin" /> : <Sparkles className="size-3.5" />}
+              {t('tasks.checkTask')}
+            </Button>
+            {dirty && (
               <Button variant="brand" size="sm" onClick={() => onPatch({ title: title.trim() || task.title, description })}>
                 {t('projectForm.save')}
               </Button>
-            </div>
-          )}
+            )}
+          </div>
 
           {/* Attachments */}
           <section>
@@ -461,6 +510,9 @@ export function TaskDrawer({
               </details>
             )}
           </section>
+
+          {/* Комментарии (SPEC §8.9) */}
+          <TaskComments taskId={task.id} members={members} lang={i18n.language} meId={meId} onFilesChanged={refresh} />
         </div>
       </div>
 
