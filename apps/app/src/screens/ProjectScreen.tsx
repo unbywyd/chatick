@@ -12,7 +12,7 @@ import { ProfileMenu } from '@/components/ProfileMenu'
 
 // Layout проекта (CONCEPT.md §3): чат 40% постоянен, табы — вложенные роуты (Outlet),
 // каждый таб имеет свой URL — прямые ссылки работают: /p/:id/tasks, /p/:id/files, ...
-const TAB_KEYS = ['tasks', 'files', 'resources', 'team', 'about'] as const
+const TAB_KEYS = ['tasks', 'files', 'resources', 'team', 'history', 'about'] as const
 
 export type ProjectDetails = {
   id: string

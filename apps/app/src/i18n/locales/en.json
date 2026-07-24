@@ -420,7 +420,8 @@
     "team": "Team",
     "notifications": "Notifications",
     "placeholder": "“{{tab}}” tab — content coming soon",
-    "ai": "AI & usage"
+    "ai": "AI & usage",
+    "history": "History"
   },
   "notif": {
     "title": "Notifications",
@@ -607,5 +608,41 @@
   "projSwitch": {
     "search": "Search projects…",
     "needRules": "This project needs rules acceptance — open it from the company screen"
+  },
+  "history": {
+    "title": "History & trash",
+    "subtitle": "Everything that happened in the project — and recover deleted items",
+    "activity": "Activity",
+    "trash": "Trash",
+    "search": "Search history…",
+    "empty": "No activity yet",
+    "ai": "AI",
+    "allTypes": "All types",
+    "allActions": "All actions",
+    "allActors": "All members",
+    "restore": "Restore",
+    "restored": "Restored",
+    "trashNote": "Deleted items are kept for 7 days, then permanently removed.",
+    "trashEmpty": "Trash is empty",
+    "entity": {
+      "task": "task",
+      "resource": "resource",
+      "file": "file",
+      "comment": "comment",
+      "sprint": "sprint",
+      "member": "member",
+      "project": "project",
+      "ai": "AI"
+    },
+    "action": {
+      "create": "created",
+      "update": "updated",
+      "delete": "deleted",
+      "restore": "restored",
+      "status": "changed status of",
+      "assign": "reassigned",
+      "comment": "commented on",
+      "upload": "uploaded"
+    }
   }
 }
