@@ -207,6 +207,8 @@ export const messages = pgTable(
     recipientId: text('recipient_id').references(() => users.id, { onDelete: 'cascade' }),
     // прикреплённые задачи (пины) — JSON массив id задач
     taskRefs: text('task_refs'),
+    // системное автосообщение о событии задачи (SPEC §8.23): task_done | task_assigned
+    systemEvent: text('system_event'),
     text: text('text').notNull(),
     // переводы: { "ru": "...", "he": "...", "en": "..." } — лениво заполняет ИИ
     translations: text('translations'), // JSON

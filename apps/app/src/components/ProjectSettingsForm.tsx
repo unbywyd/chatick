@@ -24,6 +24,7 @@ export type AiConfig = {
   answerRepeats: boolean
   improveTasks: boolean // ИИ адаптирует новые задачи под язык проекта и улучшает формулировку
   generateTaskNotes: boolean // ИИ генерирует заметки (факты/проблемы/рекомендации) к задаче
+  autoPostTaskEvents: boolean // автосообщения в чат о событиях задач (SPEC §8.23)
 }
 
 export const DEFAULT_AI_CONFIG: AiConfig = {
@@ -33,6 +34,7 @@ export const DEFAULT_AI_CONFIG: AiConfig = {
   answerRepeats: true,
   improveTasks: false,
   generateTaskNotes: false,
+  autoPostTaskEvents: true,
 }
 
 export type ProjectSettings = {
@@ -209,6 +211,12 @@ export function ProjectSettingsForm({
             hint={t('projectForm.generateTaskNotesHint')}
             checked={value.aiConfig.generateTaskNotes}
             onChange={(v) => setAi('generateTaskNotes', v)}
+          />
+          <ToggleRow
+            label={t('projectForm.autoPostTaskEvents')}
+            hint={t('projectForm.autoPostTaskEventsHint')}
+            checked={value.aiConfig.autoPostTaskEvents}
+            onChange={(v) => setAi('autoPostTaskEvents', v)}
           />
         </div>
       )}

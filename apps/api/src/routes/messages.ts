@@ -74,6 +74,7 @@ function serialize(
     createdAt: row.createdAt,
     attachments,
     taskPins,
+    systemEvent: row.systemEvent, // системное автосообщение о задаче (SPEC §8.23)
     authorId: row.authorId,
     author: author ? { id: author.id, name: author.name, avatarUrl: author.avatarUrl } : null, // null = ИИ
   }

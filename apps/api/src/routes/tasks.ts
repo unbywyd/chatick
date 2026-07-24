@@ -11,6 +11,7 @@ import { buildTeamContext } from '../lib/memory.js'
 import { notify, extractMentions } from '../lib/notify.js'
 import { broadcast } from '../ws.js'
 import { logActivity } from '../lib/audit.js'
+import { postTaskDone, postTaskAssigned } from '../lib/task-events.js'
 
 // Задачи проекта — project-токен; права per-user (SPEC §4.3) на каждое действие
 export const tasksRoute = new Hono<ProjectEnv>()
@@ -188,6 +189,8 @@ tasksRoute.post('/', zValidator('json', z.object(taskShape)), async (c) => {
 
   broadcast(projectId, 'tasks_changed', {})
   void logActivity({ projectId, actorId: sub, action: 'create', entityType: 'task', entityId: row!.id, entityLabel: `${row!.number}: ${row!.title}` })
+  // назначил на кого-то при создании → автосообщение в чат (SPEC §8.23)
+  if (row!.assigneeId) void postTaskAssigned(projectId, sub, row!.assigneeId, row!)
   return c.json({ ...serialize(row!, assignee), aiImproved, notesPending: Boolean(aiConfig.generateTaskNotes) }, 201)
 })
 
@@ -232,6 +235,12 @@ tasksRoute.patch(
     broadcast(projectId, 'tasks_changed', {})
     const act = body.status !== undefined && body.status !== task.status ? 'status' : body.assigneeId !== undefined ? 'assign' : 'update'
     void logActivity({ projectId, actorId: sub, action: act, entityType: 'task', entityId: row!.id, entityLabel: `${row!.number}: ${row!.title}`, meta: { changed: Object.keys(patch) } })
+
+    // Автосообщения в чат о событиях задач (SPEC §8.23)
+    if (body.status === 'done' && task.status !== 'done') void postTaskDone(projectId, sub, row!)
+    if (body.assigneeId !== undefined && body.assigneeId && body.assigneeId !== task.assigneeId)
+      void postTaskAssigned(projectId, sub, body.assigneeId, row!)
+
     return c.json(serialize(row!, assignee))
   },
 )

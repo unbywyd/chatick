@@ -15,6 +15,7 @@ export type ChatMessage = {
   createdAt: string
   attachments?: MessageAttachment[]
   taskPins?: TaskPin[]
+  systemEvent?: string | null // task_done | task_assigned (SPEC §8.23)
   authorId?: string | null
   author: { id: string; name: string; avatarUrl: string | null } | null // null = ИИ
 }

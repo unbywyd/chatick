@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useNavigate, useParams, useSearchParams } from 'react-router-dom'
 import { useInfiniteQuery, useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { ArrowDown, Bot, CheckSquare, Users, BrainCircuit, Loader2, Search, Settings, Trash2, X } from 'lucide-react'
+import { ArrowDown, Bot, CheckSquare, Users, BrainCircuit, Loader2, Search, Settings, Trash2, UserPlus, X } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
 import ReactMarkdown from 'react-markdown'
 import { toast } from 'sonner'
@@ -517,6 +517,18 @@ function MessageRow({
             {message.rawSend && (
               <span className="rounded-full bg-orange-400/15 px-1.5 py-0.5 text-[10px] text-orange-400">
                 ⚠ {t('chat.rawBadge')}
+              </span>
+            )}
+            {/* системное автосообщение о задаче (SPEC §8.23) */}
+            {message.systemEvent && (
+              <span
+                className={cn(
+                  'inline-flex items-center gap-1 rounded-full px-1.5 py-0.5 text-[10px]',
+                  message.systemEvent === 'task_done' ? 'bg-brand/15 text-brand' : 'bg-sky-400/15 text-sky-400',
+                )}
+              >
+                {message.systemEvent === 'task_done' ? <CheckSquare className="size-3" /> : <UserPlus className="size-3" />}
+                {t(`chat.systemEvent.${message.systemEvent}`)}
               </span>
             )}
           </p>

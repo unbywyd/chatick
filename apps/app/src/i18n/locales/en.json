@@ -84,7 +84,9 @@
     "save": "Save",
     "saved": "Saved",
     "generateTaskNotes": "Generate AI notes for tasks",
-    "generateTaskNotesHint": "On task creation the AI adds facts / issues / recommendations only when genuinely useful"
+    "generateTaskNotesHint": "On task creation the AI adds facts / issues / recommendations only when genuinely useful",
+    "autoPostTaskEvents": "Post task events to chat",
+    "autoPostTaskEventsHint": "When someone finishes or assigns a task, a message with a link to it is posted in the chat"
   },
   "aiMode": {
     "observer": {
@@ -371,7 +373,11 @@
     "backToLatest": "Back to latest",
     "verifying": "Checking your message…",
     "typing_one": "{{names}} is typing…",
-    "typing_other": "{{names}} are typing…"
+    "typing_other": "{{names}} are typing…",
+    "systemEvent": {
+      "task_done": "completed",
+      "task_assigned": "assigned"
+    }
   },
   "composer": {
     "dropHere": "Drop to attach",

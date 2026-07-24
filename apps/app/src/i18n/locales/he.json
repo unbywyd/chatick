@@ -84,7 +84,9 @@
     "save": "לשמור",
     "saved": "נשמר",
     "generateTaskNotes": "יצירת הערות AI למשימות",
-    "generateTaskNotesHint": "בעת יצירת משימה ה-AI מוסיף עובדות / בעיות / המלצות — רק כשזה באמת מועיל"
+    "generateTaskNotesHint": "בעת יצירת משימה ה-AI מוסיף עובדות / בעיות / המלצות — רק כשזה באמת מועיל",
+    "autoPostTaskEvents": "פרסום אירועי משימות בצ׳אט",
+    "autoPostTaskEventsHint": "כשמישהו מסיים או מקצה משימה, מתפרסמת הודעה עם קישור אליה"
   },
   "aiMode": {
     "observer": {
@@ -371,7 +373,11 @@
     "backToLatest": "לאחרונים",
     "verifying": "בודקים את ההודעה שלך…",
     "typing_one": "{{names}} כותב…",
-    "typing_other": "{{names}} כותבים…"
+    "typing_other": "{{names}} כותבים…",
+    "systemEvent": {
+      "task_done": "סיים משימה",
+      "task_assigned": "הקצה משימה"
+    }
   },
   "composer": {
     "dropHere": "שחררו כדי לצרף",
