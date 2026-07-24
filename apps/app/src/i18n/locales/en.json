@@ -139,7 +139,12 @@
     "loadMore": "Load more",
     "storage": "Storage",
     "period": "Period",
+    "from": "From",
+    "to": "To",
     "clearFilter": "Clear",
+    "jumpToChat": "Go to message in chat",
+    "source": { "all": "All", "chat": "From chat", "task": "From tasks", "upload": "Uploaded" },
+    "type": { "image": "Images", "video": "Video", "audio": "Audio", "doc": "Documents", "other": "Other" },
     "select": "Select files",
     "selectAll": "Select all",
     "selectedCount": "{{count}} selected",
@@ -251,6 +256,10 @@
     "rawBadge": "unverified",
     "redirectedToAi": "Your question to the AI moved to the private AI channel",
     "deleteMessage": "Delete message",
+    "fileDeleted": "File deleted",
+    "jumpFailed": "Couldn't open the message",
+    "inHistory": "Viewing history",
+    "backToLatest": "Back to latest",
     "verifying": "Checking your message…",
     "typing_one": "{{names}} is typing…",
     "typing_other": "{{names}} are typing…"
@@ -259,8 +268,7 @@
   "chatSearch": {
     "title": "Search chat",
     "placeholder": "Search messages…",
-    "hint": "Type to search messages, files and links",
-    "type": { "all": "All", "files": "Files", "links": "Links" }
+    "hint": "Type to search messages"
   },
   "aiChannel": {
     "title": "AI channel",

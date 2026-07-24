@@ -1,6 +1,6 @@
 import { Hono } from 'hono'
 import { Readable } from 'node:stream'
-import { and, desc, eq, gte, ilike, inArray, lte, sql } from 'drizzle-orm'
+import { and, desc, eq, gte, ilike, inArray, isNull, lte, sql } from 'drizzle-orm'
 import { nanoid } from 'nanoid'
 import { zValidator } from '@hono/zod-validator'
 import { z } from 'zod'
@@ -86,17 +86,35 @@ async function effectiveLimit(project: typeof projects.$inferSelect): Promise<{ 
   return { limit, used }
 }
 
-// Список файлов проекта (фильтры: taskId, q, from/to по дате; пагинация; + usage/limit)
+// mime → категория для чипов-фильтров
+function typeCond(type: string) {
+  if (type === 'image') return sql`${files.mime} like 'image/%'`
+  if (type === 'video') return sql`${files.mime} like 'video/%'`
+  if (type === 'audio') return sql`${files.mime} like 'audio/%'`
+  if (type === 'doc') return sql`(${files.mime} ~* 'pdf|word|excel|sheet|presentation|document|text|csv')`
+  if (type === 'other')
+    return sql`(${files.mime} not like 'image/%' and ${files.mime} not like 'video/%' and ${files.mime} not like 'audio/%' and ${files.mime} !~* 'pdf|word|excel|sheet|presentation|document|text|csv')`
+  return undefined
+}
+
+// Список файлов проекта (фильтры: taskId, source, type, q, from/to; пагинация; + usage/limit)
 filesRoute.get('/', async (c) => {
   const { projectId } = c.get('auth')
   const taskId = c.req.query('taskId')
+  const source = c.req.query('source') // chat | task | upload
+  const type = c.req.query('type') // image | video | audio | doc | other
   const q = (c.req.query('q') ?? '').trim()
   const from = c.req.query('from')
   const to = c.req.query('to')
   const page = Math.max(1, Number(c.req.query('page')) || 1)
 
-  const conds = [eq(files.projectId, projectId)]
+  const conds = [eq(files.projectId, projectId), isNull(files.deletedAt)]
   if (taskId) conds.push(eq(files.taskId, taskId))
+  if (source === 'chat') conds.push(sql`${files.messageId} is not null`)
+  if (source === 'task') conds.push(sql`${files.taskId} is not null`)
+  if (source === 'upload') conds.push(sql`${files.messageId} is null and ${files.taskId} is null`)
+  const tc = type ? typeCond(type) : undefined
+  if (tc) conds.push(tc)
   if (q) conds.push(ilike(files.name, `%${q}%`))
   if (from && !isNaN(Date.parse(from))) conds.push(gte(files.createdAt, new Date(from)))
   if (to && !isNaN(Date.parse(to))) conds.push(lte(files.createdAt, new Date(to + 'T23:59:59')))
@@ -120,6 +138,7 @@ filesRoute.get('/', async (c) => {
     createdAt: r.file.createdAt,
     taskId: r.file.taskId,
     taskNumber: r.taskNumber,
+    messageId: r.file.messageId, // для «перейти к переписке»
     hasOriginal: Boolean(r.file.originalKey),
     uploader: r.uploader ? { id: r.uploader.id, name: r.uploader.name, avatarUrl: r.uploader.avatarUrl } : null,
   }))
@@ -257,21 +276,32 @@ filesRoute.get('/:fileId/download', async (c) => {
 })
 
 // Массовое удаление (owner/admin — любые; иначе только свои)
+// Удаление: файлы-вложения сообщений → soft-delete (в чате «файл удалён»);
+// остальные → физически. R2-объекты чистим сразу в обоих случаях.
+async function removeFiles(rows: (typeof files.$inferSelect)[]) {
+  const attached = rows.filter((f) => f.messageId)
+  const detached = rows.filter((f) => !f.messageId)
+  if (attached.length) {
+    await db.update(files).set({ deletedAt: new Date() }).where(inArray(files.id, attached.map((f) => f.id)))
+  }
+  if (detached.length) {
+    await db.delete(files).where(inArray(files.id, detached.map((f) => f.id)))
+  }
+  for (const f of rows) {
+    deleteObject(f.key).catch(() => {})
+    if (f.originalKey) deleteObject(f.originalKey).catch(() => {})
+  }
+}
+
 filesRoute.post('/bulk-delete', zValidator('json', z.object({ ids: z.array(z.string()).min(1).max(500) })), async (c) => {
   const { projectId, sub, role } = c.get('auth')
   const { ids } = c.req.valid('json')
 
-  const rows = await db.query.files.findMany({ where: and(eq(files.projectId, projectId), inArray(files.id, ids)) })
+  const rows = await db.query.files.findMany({ where: and(eq(files.projectId, projectId), inArray(files.id, ids), isNull(files.deletedAt)) })
   const isAdmin = role === 'owner' || role === 'admin'
   const deletable = rows.filter((f) => isAdmin || f.uploadedById === sub)
 
-  if (deletable.length) {
-    await db.delete(files).where(inArray(files.id, deletable.map((f) => f.id)))
-    for (const f of deletable) {
-      deleteObject(f.key).catch(() => {})
-      if (f.originalKey) deleteObject(f.originalKey).catch(() => {})
-    }
-  }
+  if (deletable.length) await removeFiles(deletable)
   return c.json({ deleted: deletable.length, skipped: rows.length - deletable.length })
 })
 
@@ -285,8 +315,6 @@ filesRoute.delete('/:fileId', async (c) => {
   const allowed = file.uploadedById === sub || role === 'owner' || role === 'admin'
   if (!allowed) return c.json({ error: 'Forbidden' }, 403)
 
-  await db.delete(files).where(eq(files.id, fileId))
-  deleteObject(file.key).catch((e) => console.error('[s3] delete failed:', e)) // best-effort
-  if (file.originalKey) deleteObject(file.originalKey).catch(() => {})
+  await removeFiles([file])
   return c.json({ ok: true })
 })

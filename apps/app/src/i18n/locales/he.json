@@ -139,7 +139,12 @@
     "loadMore": "לטעון עוד",
     "storage": "אחסון",
     "period": "תקופה",
+    "from": "מ-",
+    "to": "עד",
     "clearFilter": "לנקות",
+    "jumpToChat": "מעבר להודעה בצ׳אט",
+    "source": { "all": "הכול", "chat": "מהצ׳אט", "task": "ממשימות", "upload": "הועלו" },
+    "type": { "image": "תמונות", "video": "וידאו", "audio": "אודיו", "doc": "מסמכים", "other": "אחר" },
     "select": "בחירת קבצים",
     "selectAll": "לבחור הכול",
     "selectedCount": "נבחרו: {{count}}",
@@ -251,6 +256,10 @@
     "rawBadge": "לא נבדק",
     "redirectedToAi": "השאלה ל-AI עברה לערוץ ה-AI הפרטי",
     "deleteMessage": "למחוק הודעה",
+    "fileDeleted": "הקובץ נמחק",
+    "jumpFailed": "לא ניתן לפתוח את ההודעה",
+    "inHistory": "צפייה בהיסטוריה",
+    "backToLatest": "לאחרונים",
     "verifying": "בודקים את ההודעה שלך…",
     "typing_one": "{{names}} כותב…",
     "typing_other": "{{names}} כותבים…"
@@ -259,8 +268,7 @@
   "chatSearch": {
     "title": "חיפוש בצ׳אט",
     "placeholder": "חיפוש הודעות…",
-    "hint": "הקלידו כדי לחפש הודעות, קבצים וקישורים",
-    "type": { "all": "הכול", "files": "קבצים", "links": "קישורים" }
+    "hint": "הקלידו כדי לחפש הודעות"
   },
   "aiChannel": {
     "title": "ערוץ AI",

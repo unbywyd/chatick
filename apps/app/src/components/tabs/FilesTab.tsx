@@ -18,11 +18,15 @@ import {
   UploadCloud,
   X,
 } from 'lucide-react'
+import { CalendarDays, MessagesSquare } from 'lucide-react'
+import { useNavigate } from 'react-router-dom'
 import { api, API_URL, getProjectToken } from '@/lib/api'
 import { cn } from '@/lib/utils'
 import { Input } from '@/components/ui/input'
 import { Button } from '@/components/ui/button'
 import { useConfirm } from '@/components/ui/confirm'
+import { Popover, PopoverTrigger, PopoverContent } from '@/components/ui/popover'
+import { Calendar } from '@/components/ui/calendar'
 import { FileViewer, type ViewerFile } from '@/components/files/FileViewer'
 
 type FileRow = {
@@ -32,9 +36,21 @@ type FileRow = {
   size: number
   createdAt: string
   hasOriginal?: boolean
+  messageId?: string | null
+  taskId?: string | null
+  taskNumber?: string | null
   uploader: { id: string; name: string; avatarUrl: string | null } | null
 }
 type Page = { items: FileRow[]; page: number; hasMore: boolean; storage?: { used: number; limit: number } }
+
+const SOURCES = ['all', 'chat', 'task', 'upload'] as const
+const TYPES = ['image', 'video', 'audio', 'doc', 'other'] as const
+type Source = (typeof SOURCES)[number]
+type FileType = (typeof TYPES)[number]
+
+function fmtDate(d: string | undefined, lang: string) {
+  return d ? new Date(d).toLocaleDateString(lang) : ''
+}
 
 function iconFor(mime: string) {
   if (mime.startsWith('image/')) return FileImage
@@ -53,11 +69,14 @@ function fmtSize(bytes: number) {
 
 export function FilesTab({ projectId }: { projectId: string }) {
   const { t, i18n } = useTranslation()
+  const navigate = useNavigate()
   const qc = useQueryClient()
   const confirm = useConfirm()
   const [q, setQ] = useState('')
-  const [from, setFrom] = useState('')
-  const [to, setTo] = useState('')
+  const [source, setSource] = useState<Source>('all')
+  const [type, setType] = useState<FileType | null>(null)
+  const [fromDate, setFromDate] = useState<Date | undefined>()
+  const [toDate, setToDate] = useState<Date | undefined>()
   const [dragOver, setDragOver] = useState(false)
   const [uploading, setUploading] = useState<string[]>([])
   const [viewing, setViewing] = useState<ViewerFile | null>(null)
@@ -65,10 +84,13 @@ export function FilesTab({ projectId }: { projectId: string }) {
   const [selected, setSelected] = useState<Set<string>>(new Set())
   const inputRef = useRef<HTMLInputElement>(null)
 
+  const iso = (d?: Date) => (d ? `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}` : '')
   const query = new URLSearchParams()
   if (q) query.set('q', q)
-  if (from) query.set('from', from)
-  if (to) query.set('to', to)
+  if (source !== 'all') query.set('source', source)
+  if (type) query.set('type', type)
+  if (fromDate) query.set('from', iso(fromDate))
+  if (toDate) query.set('to', iso(toDate))
   const qs = query.toString()
 
   const filesQ = useInfiniteQuery({
@@ -131,7 +153,8 @@ export function FilesTab({ projectId }: { projectId: string }) {
     })
   const allSelected = items.length > 0 && items.every((f) => selected.has(f.id))
   const toggleAll = () => setSelected(allSelected ? new Set() : new Set(items.map((f) => f.id)))
-  const hasFilter = Boolean(q || from || to)
+  const hasFilter = Boolean(q || type || fromDate || toDate)
+  const clearFilters = () => { setQ(''); setType(null); setFromDate(undefined); setToDate(undefined) }
 
   return (
     <div
@@ -165,8 +188,24 @@ export function FilesTab({ projectId }: { projectId: string }) {
         </div>
       )}
 
+      {/* Табы-источник */}
+      <div className="flex gap-1 border-b">
+        {SOURCES.map((s) => (
+          <button
+            key={s}
+            onClick={() => setSource(s)}
+            className={cn(
+              '-mb-px border-b-2 px-3 py-2 text-sm font-medium transition-colors',
+              source === s ? 'border-brand text-foreground' : 'border-transparent text-muted-foreground hover:text-foreground',
+            )}
+          >
+            {t(`files.source.${s}`)}
+          </button>
+        ))}
+      </div>
+
       {/* Строка действий */}
-      <div className="flex items-center gap-2">
+      <div className="mt-3 flex items-center gap-2">
         <div className="relative flex-1">
           <Search className="pointer-events-none absolute start-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
           <Input value={q} onChange={(e) => setQ(e.target.value)} placeholder={t('files.search')} className="ps-9" />
@@ -181,14 +220,26 @@ export function FilesTab({ projectId }: { projectId: string }) {
         <input ref={inputRef} type="file" multiple className="hidden" onChange={(e) => { if (e.target.files?.length) uploadFiles(e.target.files); e.target.value = '' }} />
       </div>
 
-      {/* Фильтр по периоду */}
-      <div className="mt-2 flex flex-wrap items-center gap-2 text-xs">
-        <span className="text-muted-foreground">{t('files.period')}:</span>
-        <input type="date" value={from} onChange={(e) => setFrom(e.target.value)} className="h-8 rounded-md border bg-transparent px-2 text-foreground" />
-        <span className="text-muted-foreground">—</span>
-        <input type="date" value={to} onChange={(e) => setTo(e.target.value)} className="h-8 rounded-md border bg-transparent px-2 text-foreground" />
+      {/* Чипы-тип + период (календарь) */}
+      <div className="mt-2 flex flex-wrap items-center gap-1.5">
+        {TYPES.map((tp) => (
+          <button
+            key={tp}
+            onClick={() => setType(type === tp ? null : tp)}
+            className={cn(
+              'rounded-full border px-2.5 py-1 text-xs transition-colors',
+              type === tp ? 'border-brand bg-accent text-accent-foreground' : 'text-muted-foreground hover:text-foreground',
+            )}
+          >
+            {t(`files.type.${tp}`)}
+          </button>
+        ))}
+        <span className="mx-1 h-4 w-px bg-border" />
+        <DatePick label={t('files.from')} value={fromDate} onChange={setFromDate} lang={i18n.language} />
+        <span className="text-xs text-muted-foreground">—</span>
+        <DatePick label={t('files.to')} value={toDate} onChange={setToDate} lang={i18n.language} />
         {hasFilter && (
-          <Button variant="ghost" size="sm" onClick={() => { setQ(''); setFrom(''); setTo('') }}>
+          <Button variant="ghost" size="sm" onClick={clearFilters}>
             <X className="size-3.5" />
             {t('files.clearFilter')}
           </Button>
@@ -243,6 +294,7 @@ export function FilesTab({ projectId }: { projectId: string }) {
             selected={selected.has(f.id)}
             onToggle={() => toggle(f.id)}
             onOpen={() => setViewing(f)}
+            onJumpToChat={f.messageId ? () => navigate({ search: `?msg=${f.messageId}` }) : undefined}
             onDelete={async () => {
               if (await confirm({ title: t('files.deleteConfirm', { name: f.name }), destructive: true, confirmLabel: t('files.delete') }))
                 remove.mutate(f.id)
@@ -278,6 +330,7 @@ function FileCard({
   selected,
   onToggle,
   onOpen,
+  onJumpToChat,
   onDelete,
 }: {
   file: FileRow
@@ -286,6 +339,7 @@ function FileCard({
   selected: boolean
   onToggle: () => void
   onOpen: () => void
+  onJumpToChat?: () => void
   onDelete: () => void
 }) {
   const { t } = useTranslation()
@@ -333,13 +387,22 @@ function FileCard({
       )}
       <span className="min-w-0 flex-1">
         <span className="block truncate text-sm font-medium">{file.name}</span>
-        <span className="block truncate text-xs text-muted-foreground">
-          {fmtSize(file.size)}
-          {file.uploader && <> · {file.uploader.name}</>} · {new Date(file.createdAt).toLocaleDateString(lang)}
+        <span className="flex items-center gap-1.5 truncate text-xs text-muted-foreground">
+          {file.messageId && <span className="rounded bg-brand/15 px-1 text-[10px] text-brand">{t('files.source.chat')}</span>}
+          {file.taskNumber && <span className="rounded bg-secondary px-1 text-[10px]">{file.taskNumber}</span>}
+          <span className="truncate">
+            {fmtSize(file.size)}
+            {file.uploader && <> · {file.uploader.name}</>} · {fmtDate(file.createdAt, lang)}
+          </span>
         </span>
       </span>
       {!selectMode && (
         <span className="flex shrink-0 items-center opacity-0 transition-opacity group-hover:opacity-100">
+          {onJumpToChat && (
+            <Button variant="ghost" size="icon" title={t('files.jumpToChat')} onClick={(e) => { e.stopPropagation(); onJumpToChat() }}>
+              <MessagesSquare className="size-4" />
+            </Button>
+          )}
           <Button variant="ghost" size="icon" title={t('files.download')} onClick={openDownload}>
             <Download className="size-4" />
           </Button>
@@ -349,5 +412,27 @@ function FileCard({
         </span>
       )}
     </div>
+  )
+}
+
+// Пикер даты через нормальный календарь (поповер)
+function DatePick({ label, value, onChange, lang }: { label: string; value?: Date; onChange: (d?: Date) => void; lang: string }) {
+  return (
+    <Popover>
+      <PopoverTrigger asChild>
+        <Button variant="outline" size="sm" className="gap-1.5">
+          <CalendarDays className="size-3.5 text-muted-foreground" />
+          {value ? value.toLocaleDateString(lang, { day: 'numeric', month: 'short', year: '2-digit' }) : label}
+        </Button>
+      </PopoverTrigger>
+      <PopoverContent align="start" className="w-auto">
+        <Calendar selected={value} onSelect={onChange} />
+        {value && (
+          <Button variant="ghost" size="sm" className="mt-1 w-full" onClick={() => onChange(undefined)}>
+            <X className="size-3.5" /> {label}
+          </Button>
+        )}
+      </PopoverContent>
+    </Popover>
   )
 }

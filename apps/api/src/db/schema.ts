@@ -245,6 +245,8 @@ export const files = pgTable(
     key: text('key').notNull(), // S3 object key
     mime: text('mime').notNull().default('application/octet-stream'),
     size: text('size').notNull().default('0'),
+    // soft-delete: файл убран из менеджера, но в чате остаётся «файл удалён»
+    deletedAt: timestamp('deleted_at', { withTimezone: true }),
     createdAt: createdAt(),
   },
   (t) => [

@@ -1,7 +1,7 @@
 import { Hono } from 'hono'
 import { zValidator } from '@hono/zod-validator'
 import { z } from 'zod'
-import { and, asc, desc, eq, ilike, inArray, lt, sql } from 'drizzle-orm'
+import { and, asc, desc, eq, gt, ilike, inArray, lt, lte, sql } from 'drizzle-orm'
 import { db } from '../db/client.js'
 import { files, messages, sandboxMessages, tasks, users } from '../db/schema.js'
 import { requireProject, type ProjectEnv } from '../auth.js'
@@ -14,7 +14,7 @@ import { maybeCompress } from '../lib/memory.js'
 export const messagesRoute = new Hono<ProjectEnv>()
 messagesRoute.use('*', requireProject)
 
-type Attachment = { id: string; name: string; mime: string; size: number }
+type Attachment = { id: string; name: string; mime: string; size: number; deleted?: boolean }
 type TaskPin = { id: string; number: string; title: string; status: string }
 
 async function taskPinsOf(ids: string[], projectId: string): Promise<TaskPin[]> {
@@ -25,11 +25,12 @@ async function taskPinsOf(ids: string[], projectId: string): Promise<TaskPin[]> 
 
 async function attachmentsOf(messageIds: string[]): Promise<Map<string, Attachment[]>> {
   if (messageIds.length === 0) return new Map()
+  // включаем и soft-deleted — в чате показываем «файл удалён»
   const rows = await db.select().from(files).where(inArray(files.messageId, messageIds))
   const map = new Map<string, Attachment[]>()
   for (const f of rows) {
     const list = map.get(f.messageId!) ?? []
-    list.push({ id: f.id, name: f.name, mime: f.mime, size: Number(f.size) })
+    list.push({ id: f.id, name: f.name, mime: f.mime, size: Number(f.size), deleted: Boolean(f.deletedAt) })
     map.set(f.messageId!, list)
   }
   return map
@@ -56,6 +57,18 @@ function serialize(
   }
 }
 
+// Обогатить строки вложениями и пинами → сериализованные сообщения (asc)
+async function enrich(rows: { msg: typeof messages.$inferSelect; author: typeof users.$inferSelect | null }[], projectId: string) {
+  const atts = await attachmentsOf(rows.map((r) => r.msg.id))
+  const allTaskIds = [...new Set(rows.flatMap((r) => (r.msg.taskRefs ? (JSON.parse(r.msg.taskRefs) as string[]) : [])))]
+  const pinMap = new Map((await taskPinsOf(allTaskIds, projectId)).map((p) => [p.id, p]))
+  const pinsFor = (refs: string | null) => (refs ? (JSON.parse(refs) as string[]).map((id) => pinMap.get(id)).filter(Boolean) as TaskPin[] : [])
+  return rows.map((r) => serialize(r.msg, r.author, atts.get(r.msg.id), pinsFor(r.msg.taskRefs)))
+}
+
+const canSee = (m: typeof messages.$inferSelect, sub: string) =>
+  m.mode === 'ai' ? m.authorId === sub || m.recipientId === sub : m.status === 'delivered' || m.authorId === sub
+
 // История: delivered группы + свои ai/held/pending; курсор before
 messagesRoute.get('/', zValidator('query', z.object({ before: z.string().optional() })), async (c) => {
   const { projectId, sub } = c.get('auth')
@@ -73,20 +86,39 @@ messagesRoute.get('/', zValidator('query', z.object({ before: z.string().optiona
     .orderBy(desc(messages.createdAt))
     .limit(80)
 
-  // видимость: group delivered — всем; свои любые; ai-режим — только участнику диалога
-  const visible = rows
-    .filter((r) => {
-      if (r.msg.mode === 'ai') return r.msg.authorId === sub || r.msg.recipientId === sub
-      return r.msg.status === 'delivered' || r.msg.authorId === sub
-    })
-    .slice(0, 50)
-  const atts = await attachmentsOf(visible.map((r) => r.msg.id))
-  // task-пины батчом
-  const allTaskIds = [...new Set(visible.flatMap((r) => (r.msg.taskRefs ? (JSON.parse(r.msg.taskRefs) as string[]) : [])))]
-  const pinMap = new Map((await taskPinsOf(allTaskIds, projectId)).map((p) => [p.id, p]))
-  const pinsFor = (refs: string | null) => (refs ? (JSON.parse(refs) as string[]).map((id) => pinMap.get(id)).filter(Boolean) as TaskPin[] : [])
+  const visible = rows.filter((r) => canSee(r.msg, sub)).slice(0, 50)
+  const enriched = await enrich(visible, projectId)
+  return c.json(enriched.reverse())
+})
 
-  return c.json(visible.map((r) => serialize(r.msg, r.author, atts.get(r.msg.id), pinsFor(r.msg.taskRefs))).reverse())
+// Контекст вокруг сообщения (для «перейти к переписке»): окно ±25 сообщений
+messagesRoute.get('/context', zValidator('query', z.object({ around: z.string() })), async (c) => {
+  const { projectId, sub } = c.get('auth')
+  const { around } = c.req.valid('query')
+
+  const target = await db.query.messages.findFirst({ where: and(eq(messages.id, around), eq(messages.projectId, projectId)) })
+  if (!target) return c.json({ error: 'Not found' }, 404)
+
+  const olderRows = await db
+    .select({ msg: messages, author: users })
+    .from(messages)
+    .leftJoin(users, eq(users.id, messages.authorId))
+    .where(and(eq(messages.projectId, projectId), eq(messages.mode, 'group'), lte(messages.createdAt, target.createdAt)))
+    .orderBy(desc(messages.createdAt))
+    .limit(26)
+  const newerRows = await db
+    .select({ msg: messages, author: users })
+    .from(messages)
+    .leftJoin(users, eq(users.id, messages.authorId))
+    .where(and(eq(messages.projectId, projectId), eq(messages.mode, 'group'), gt(messages.createdAt, target.createdAt)))
+    .orderBy(asc(messages.createdAt))
+    .limit(26)
+
+  const hasOlder = olderRows.length > 25
+  const hasNewer = newerRows.length > 25
+  const merged = [...olderRows.slice(0, 25).reverse(), ...newerRows.slice(0, 25)].filter((r) => canSee(r.msg, sub))
+  const enriched = await enrich(merged, projectId)
+  return c.json({ messages: enriched, hasOlder, hasNewer })
 })
 
 // Отправка: pending → (асинхронно) диспетчер → delivered|held

@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import { useNavigate, useParams } from 'react-router-dom'
+import { useNavigate, useParams, useSearchParams } from 'react-router-dom'
 import { useInfiniteQuery, useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { ArrowDown, Bot, CheckSquare, Users, BrainCircuit, Loader2, Search, Settings, Trash2, X } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
@@ -36,6 +36,7 @@ export function ChatPanel({
   const { t, i18n } = useTranslation()
   const navigate = useNavigate()
   const { id: projectId } = useParams()
+  const [searchParams, setSearchParams] = useSearchParams()
   const qc = useQueryClient()
   // «ИИ» — не отдельный таб, а оверлей поверх группового чата (единый паттерн с sandbox)
   const [aiOpen, setAiOpen] = useState(false)
@@ -50,6 +51,9 @@ export function ChatPanel({
   const bottomRef = useRef<HTMLDivElement>(null)
   const [atBottom, setAtBottom] = useState(true)
   const [newBelow, setNewBelow] = useState(false)
+  // режим «перехода к сообщению»: окно контекста + подсветка
+  const [contextView, setContextView] = useState<{ messages: ChatMessage[] } | null>(null)
+  const [highlightId, setHighlightId] = useState<string | null>(null)
 
   const llm = useQuery({
     queryKey: ['llm-status', projectId],
@@ -124,6 +128,8 @@ export function ChatPanel({
   }, [historyMessages, live])
   const allMessages = useMemo(() => merged.filter((m) => m.mode === 'group'), [merged])
   const aiMessages = useMemo(() => merged.filter((m) => m.mode === 'ai'), [merged])
+  // лента: окно контекста (режим истории) либо обычная лента
+  const feed = contextView?.messages ?? allMessages
 
   // held-сообщение из истории (после перезагрузки) — снова открыть sandbox
   useEffect(() => {
@@ -137,10 +143,10 @@ export function ChatPanel({
   useEffect(() => {
     const grew = allMessages.length > prevCount.current
     prevCount.current = allMessages.length
-    if (!grew) return
+    if (!grew || contextView) return // в режиме истории не дёргаем вниз
     if (atBottom) bottomRef.current?.scrollIntoView({ behavior: 'smooth' })
     else setNewBelow(true)
-  }, [allMessages.length, atBottom])
+  }, [allMessages.length, atBottom, contextView])
 
   // при первом заходе — сразу вниз
   const didInitialScroll = useRef(false)
@@ -173,6 +179,44 @@ export function ChatPanel({
   const scrollToBottom = () => {
     setNewBelow(false)
     bottomRef.current?.scrollIntoView({ behavior: 'smooth' })
+  }
+
+  // Перейти к сообщению: загрузить окно контекста, показать его, подсветить и доскроллить
+  const jumpTo = useCallback(
+    async (messageId: string) => {
+      setSearchOpen(false)
+      try {
+        const ctx = await api<{ messages: ChatMessage[] }>(`/api/v1/messages/context?around=${messageId}`, {}, 'project')
+        setContextView({ messages: ctx.messages })
+        setHighlightId(messageId)
+        requestAnimationFrame(() => {
+          const el = document.getElementById(`msg-${messageId}`)
+          el?.scrollIntoView({ behavior: 'auto', block: 'center' })
+        })
+        // подсветка гаснет через 2.5с
+        setTimeout(() => setHighlightId(null), 2500)
+      } catch {
+        toast.error(t('chat.jumpFailed'))
+      }
+    },
+    [t],
+  )
+
+  // дип-линк ?msg=<id> (из файл-менеджера) → прыжок к сообщению
+  useEffect(() => {
+    const msg = searchParams.get('msg')
+    if (msg) {
+      jumpTo(msg)
+      searchParams.delete('msg')
+      setSearchParams(searchParams, { replace: true })
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [searchParams.get('msg')])
+
+  const exitContext = () => {
+    setContextView(null)
+    setHighlightId(null)
+    requestAnimationFrame(() => bottomRef.current?.scrollIntoView())
   }
 
   const send = async (
@@ -274,16 +318,26 @@ export function ChatPanel({
           </div>
         ) : (
           <div>
-            {history.isFetchingNextPage && (
+            {/* Баннер режима истории */}
+            {contextView && (
+              <div className="sticky top-0 z-10 mb-2 flex items-center justify-between rounded-md border bg-card/95 px-3 py-1.5 text-xs backdrop-blur">
+                <span className="text-muted-foreground">{t('chat.inHistory')}</span>
+                <Button variant="ghost" size="sm" onClick={exitContext}>
+                  <ArrowDown className="size-3.5" />
+                  {t('chat.backToLatest')}
+                </Button>
+              </div>
+            )}
+            {!contextView && history.isFetchingNextPage && (
               <p className="flex justify-center py-2">
                 <Loader2 className="size-4 animate-spin text-muted-foreground" />
               </p>
             )}
-            {allMessages.length === 0 && !history.isLoading && (
+            {feed.length === 0 && !history.isLoading && (
               <p className="pt-6 text-center text-sm text-muted-foreground">{t('chat.groupHint')}</p>
             )}
-            {allMessages.map((m, i) => {
-              const prev = allMessages[i - 1]
+            {feed.map((m, i) => {
+              const prev = feed[i - 1]
               const sameDay = prev && isSameDay(new Date(prev.createdAt), new Date(m.createdAt))
               // компактим только того же автора в пределах 5 минут и одного дня
               const compact =
@@ -293,7 +347,7 @@ export function ChatPanel({
                 Boolean(m.author) &&
                 new Date(m.createdAt).getTime() - new Date(prev!.createdAt).getTime() < 5 * 60 * 1000
               return (
-                <div key={m.id}>
+                <div key={m.id} id={`msg-${m.id}`} className={cn('rounded-md transition-colors', highlightId === m.id && 'bg-brand/15')}>
                   {!sameDay && <DayDivider date={new Date(m.createdAt)} lang={i18n.language} />}
                   <MessageRow
                     message={m}
@@ -334,7 +388,7 @@ export function ChatPanel({
       </div>
 
       {/* Поиск по чату */}
-      {searchOpen && projectId && <ChatSearch projectId={projectId} lang={i18n.language} onClose={() => setSearchOpen(false)} />}
+      {searchOpen && projectId && <ChatSearch projectId={projectId} lang={i18n.language} onJump={jumpTo} onClose={() => setSearchOpen(false)} />}
 
       {/* Личный ИИ-канал — оверлей поверх чата (тот же паттерн, что sandbox) */}
       {aiOpen && !sandboxId && (
@@ -502,8 +556,11 @@ function MessageTaskPins({ pins }: { pins: NonNullable<ChatMessage['taskPins']> 
 }
 
 function MessageAttachments({ attachments }: { attachments: NonNullable<ChatMessage['attachments']> }) {
-  const images = attachments.filter((a) => a.mime.startsWith('image/'))
-  const others = attachments.filter((a) => !a.mime.startsWith('image/'))
+  const { t } = useTranslation()
+  const live = attachments.filter((a) => !a.deleted)
+  const deleted = attachments.filter((a) => a.deleted)
+  const images = live.filter((a) => a.mime.startsWith('image/'))
+  const others = live.filter((a) => !a.mime.startsWith('image/'))
   const [viewing, setViewing] = useState<ViewerFile | null>(null)
 
   // inline-превью картинок (через прокси-URL)
@@ -556,18 +613,20 @@ function MessageAttachments({ attachments }: { attachments: NonNullable<ChatMess
           ))}
         </div>
       )}
+      {deleted.map((a) => (
+        <span key={a.id} className="inline-flex items-center gap-1.5 rounded-md border border-dashed px-2 py-1 text-xs text-muted-foreground">
+          🚫 {t('chat.fileDeleted')}
+        </span>
+      ))}
       {viewing && <FileViewer file={viewing} onClose={() => setViewing(null)} />}
     </div>
   )
 }
 
-// Поиск по чату: текст / только с файлами / только со ссылками
-function ChatSearch({ projectId, lang, onClose }: { projectId: string; lang: string; onClose: () => void }) {
+// Поиск по чату — текст сообщений, клик по результату → переход к переписке
+function ChatSearch({ projectId, lang, onJump, onClose }: { projectId: string; lang: string; onJump: (id: string) => void; onClose: () => void }) {
   const { t } = useTranslation()
   const [q, setQ] = useState('')
-  const [type, setType] = useState<'all' | 'files' | 'links'>('all')
-  const [from, setFrom] = useState('')
-  const [to, setTo] = useState('')
   const [debounced, setDebounced] = useState('')
 
   useEffect(() => {
@@ -575,16 +634,11 @@ function ChatSearch({ projectId, lang, onClose }: { projectId: string; lang: str
     return () => clearTimeout(id)
   }, [q])
 
-  const hasCriteria = debounced.trim().length > 0 || type !== 'all' || Boolean(from) || Boolean(to)
+  const hasCriteria = debounced.trim().length > 0
   const results = useQuery({
-    queryKey: ['chat-search', projectId, debounced, type, from, to],
+    queryKey: ['chat-search', projectId, debounced],
     enabled: hasCriteria,
-    queryFn: () => {
-      const p = new URLSearchParams({ q: debounced, type })
-      if (from) p.set('from', from)
-      if (to) p.set('to', to)
-      return api<ChatMessage[]>(`/api/v1/messages/search?${p}`, {}, 'project')
-    },
+    queryFn: () => api<ChatMessage[]>(`/api/v1/messages/search?q=${encodeURIComponent(debounced)}`, {}, 'project'),
   })
 
   return (
@@ -605,36 +659,14 @@ function ChatSearch({ projectId, lang, onClose }: { projectId: string; lang: str
         </Button>
       </header>
 
-      <div className="flex flex-wrap items-center gap-1.5 border-b px-3 py-2">
-        {(['all', 'files', 'links'] as const).map((tp) => (
-          <button
-            key={tp}
-            onClick={() => setType(tp)}
-            className={cn(
-              'rounded-full border px-2.5 py-1 text-xs transition-colors',
-              type === tp ? 'border-brand bg-accent text-accent-foreground' : 'text-muted-foreground hover:text-foreground',
-            )}
-          >
-            {t(`chatSearch.type.${tp}`)}
-          </button>
-        ))}
-        <span className="mx-1 h-4 w-px bg-border" />
-        <span className="text-xs text-muted-foreground">{t('files.period')}:</span>
-        <input type="date" value={from} onChange={(e) => setFrom(e.target.value)} className="h-7 rounded-md border bg-transparent px-2 text-xs text-foreground" />
-        <span className="text-xs text-muted-foreground">—</span>
-        <input type="date" value={to} onChange={(e) => setTo(e.target.value)} className="h-7 rounded-md border bg-transparent px-2 text-xs text-foreground" />
-        {(from || to || q) && (
-          <Button variant="ghost" size="sm" onClick={() => { setQ(''); setFrom(''); setTo('') }}>
-            <X className="size-3.5" />
-            {t('files.clearFilter')}
-          </Button>
-        )}
-      </div>
-
       <div className="flex-1 space-y-1 overflow-y-auto p-3">
         {results.isFetching && <p className="py-4 text-center text-sm text-muted-foreground">…</p>}
         {results.data?.map((m) => (
-          <div key={m.id} className="rounded-lg border bg-card px-3 py-2">
+          <button
+            key={m.id}
+            onClick={() => onJump(m.id)}
+            className="block w-full rounded-lg border bg-card px-3 py-2 text-start transition-colors hover:bg-accent"
+          >
             <p className="mb-0.5 flex items-baseline gap-2 text-xs">
               <span className="font-semibold">{m.author?.name ?? 'AI'}</span>
               <span className="text-muted-foreground">{new Date(m.createdAt).toLocaleString(lang)}</span>
@@ -645,7 +677,7 @@ function ChatSearch({ projectId, lang, onClose }: { projectId: string; lang: str
             {(m.attachments?.length ?? 0) > 0 && (
               <p className="mt-1 text-xs text-muted-foreground">📎 {m.attachments!.map((a) => a.name).join(', ')}</p>
             )}
-          </div>
+          </button>
         ))}
         {results.data && results.data.length === 0 && hasCriteria && (
           <p className="py-6 text-center text-sm text-muted-foreground">{t('start.nothingFound')}</p>

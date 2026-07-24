@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from 'react'
 import { API_URL, getProjectToken } from '@/lib/api'
 
 export type PresenceUser = { id: string; name: string; avatarUrl: string | null }
-export type MessageAttachment = { id: string; name: string; mime: string; size: number }
+export type MessageAttachment = { id: string; name: string; mime: string; size: number; deleted?: boolean }
 export type TaskPin = { id: string; number: string; title: string; status: string }
 export type ChatMessage = {
   id: string
