@@ -10,7 +10,8 @@ import { db } from '../db/client.js'
 import { files, companies, projects, tasks, users } from '../db/schema.js'
 import { requireProject, signFileToken, verifyFileToken, type ProjectEnv } from '../auth.js'
 import { hasPermission } from './projects.js'
-import { presignDownload, presignView, deleteObject, getObjectStream, resolveStorage, isCustomStorage, type ResolvedStorage } from '../lib/s3.js'
+import { logActivity } from '../lib/audit.js'
+import { presignDownload, presignView, getObjectStream, resolveStorage, isCustomStorage, type ResolvedStorage } from '../lib/s3.js'
 
 // Публичная прокси-отдача файла по file-токену (в URL) — для iframe/img/Google Viewer.
 // Отдельный роут БЕЗ project-middleware: доступ по короткоживущему подписанному токену.
@@ -306,23 +307,14 @@ filesRoute.get('/:fileId/download', async (c) => {
   return c.json({ url })
 })
 
-// Массовое удаление (owner/admin — любые; иначе только свои)
-// Удаление: файлы-вложения сообщений → soft-delete (в чате «файл удалён»);
-// остальные → физически. R2-объекты чистим сразу в обоих случаях.
-// Файлы, на которые ссылаются чат ИЛИ задача — soft-delete: ссылка остаётся
-// с пометкой «Файл удалён», молча не пропадает (SPEC §8.3).
-async function removeFiles(store: ResolvedStorage, rows: (typeof files.$inferSelect)[]) {
-  const attached = rows.filter((f) => f.messageId || f.taskId)
-  const detached = rows.filter((f) => !f.messageId && !f.taskId)
-  if (attached.length) {
-    await db.update(files).set({ deletedAt: new Date() }).where(inArray(files.id, attached.map((f) => f.id)))
-  }
-  if (detached.length) {
-    await db.delete(files).where(inArray(files.id, detached.map((f) => f.id)))
-  }
+// Удаление файлов — ВСЕГДА soft-delete (SPEC §8.21): восстановимо 7 дней, затем крон
+// сносит запись и объект в хранилище. Ссылка в чате/задаче остаётся «Файл удалён» (SPEC §8.3).
+// store оставлен в сигнатуре для совместимости вызовов (объект не трогаем до крона).
+async function removeFiles(_store: ResolvedStorage, rows: (typeof files.$inferSelect)[], actorId: string) {
+  if (!rows.length) return
+  await db.update(files).set({ deletedAt: new Date(), deletedById: actorId }).where(inArray(files.id, rows.map((f) => f.id)))
   for (const f of rows) {
-    deleteObject(store, f.key).catch(() => {})
-    if (f.originalKey) deleteObject(store, f.originalKey).catch(() => {})
+    void logActivity({ projectId: f.projectId, actorId, action: 'delete', entityType: 'file', entityId: f.id, entityLabel: f.name })
   }
 }
 
@@ -336,7 +328,7 @@ filesRoute.post('/bulk-delete', zValidator('json', z.object({ ids: z.array(z.str
   const canDeleteOwn = await hasPermission(projectId, sub, 'files.upload')
   const deletable = rows.filter((f) => canDeleteAny || (canDeleteOwn && f.uploadedById === sub))
 
-  if (deletable.length) await removeFiles(await resolveStorage(projectId), deletable)
+  if (deletable.length) await removeFiles(await resolveStorage(projectId), deletable, sub)
   return c.json({ deleted: deletable.length, skipped: rows.length - deletable.length })
 })
 
@@ -351,6 +343,40 @@ filesRoute.delete('/:fileId', async (c) => {
   const canDeleteOwn = (await hasPermission(projectId, sub, 'files.upload')) && file.uploadedById === sub
   if (!canDeleteAny && !canDeleteOwn) return c.json({ error: 'Forbidden' }, 403)
 
-  await removeFiles(await resolveStorage(projectId), [file])
+  await removeFiles(await resolveStorage(projectId), [file], sub)
   return c.json({ ok: true })
+})
+
+// Восстановить файл из корзины
+filesRoute.post('/:fileId/restore', async (c) => {
+  const { projectId, sub, role } = c.get('auth')
+  const fileId = c.req.param('fileId')
+  const file = await db.query.files.findFirst({ where: and(eq(files.id, fileId), eq(files.projectId, projectId)) })
+  if (!file) return c.json({ error: 'Not found' }, 404)
+  const allowed = (await hasPermission(projectId, sub, 'files.delete')) || role === 'owner' || role === 'admin' || file.uploadedById === sub
+  if (!allowed) return c.json({ error: 'Forbidden' }, 403)
+  await db.update(files).set({ deletedAt: null, deletedById: null }).where(eq(files.id, fileId))
+  void logActivity({ projectId, actorId: sub, action: 'restore', entityType: 'file', entityId: file.id, entityLabel: file.name })
+  return c.json({ ok: true })
+})
+
+// Корзина файлов
+filesRoute.get('/trash', async (c) => {
+  const { projectId, sub } = c.get('auth')
+  if (!(await hasPermission(projectId, sub, 'files.read'))) return c.json({ error: 'Forbidden' }, 403)
+  const rows = await db
+    .select({ file: files, deleter: users })
+    .from(files)
+    .leftJoin(users, eq(users.id, files.deletedById))
+    .where(and(eq(files.projectId, projectId), sql`${files.deletedAt} is not null`, isNull(files.pendingUntil)))
+    .orderBy(desc(files.deletedAt))
+    .limit(200)
+  return c.json(
+    rows.map((r) => ({
+      id: r.file.id,
+      name: r.file.name,
+      deletedAt: r.file.deletedAt,
+      deletedBy: r.deleter ? { id: r.deleter.id, name: r.deleter.name, avatarUrl: r.deleter.avatarUrl } : null,
+    })),
+  )
 })

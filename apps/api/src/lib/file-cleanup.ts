@@ -11,10 +11,12 @@ const RETENTION_MS = 7 * 24 * 60 * 60 * 1000 // 7 дней в корзине (SP
 
 export async function sweepPendingFiles(): Promise<number> {
   try {
+    // ТОЛЬКО просроченные временные (не привязанные) — soft-deleted (deletedAt) сюда НЕ попадают,
+    // они чистятся отдельно через 7 дней (SPEC §8.21)
     const expired = await db
       .select()
       .from(files)
-      .where(and(isNotNull(files.pendingUntil), lt(files.pendingUntil, new Date())))
+      .where(and(isNotNull(files.pendingUntil), lt(files.pendingUntil, new Date()), sql`${files.deletedAt} is null`))
       .limit(500)
     if (!expired.length) return 0
 

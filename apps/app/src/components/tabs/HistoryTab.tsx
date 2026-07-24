@@ -147,10 +147,21 @@ function TrashView({ projectId, isAdmin, lang }: { projectId: string; isAdmin: b
   const onErr = (e: unknown) => toast.error(e instanceof Error ? e.message : String(e))
 
   const tasks = useQuery({ queryKey: ['trash-tasks', projectId], queryFn: () => api<TrashItem[]>('/api/v1/tasks/trash', {}, 'project') })
+  const filesT = useQuery({ queryKey: ['trash-files', projectId], queryFn: () => api<TrashItem[]>('/api/v1/files/trash', {}, 'project').catch(() => [] as TrashItem[]) })
   const resources = useQuery({
     queryKey: ['trash-resources', projectId],
     queryFn: () => api<TrashItem[]>('/api/v1/resources/trash', {}, 'project').catch(() => [] as TrashItem[]),
     enabled: isAdmin,
+  })
+
+  const restoreFile = useMutation({
+    mutationFn: (id: string) => api(`/api/v1/files/${id}/restore`, { method: 'POST' }, 'project'),
+    onSuccess: () => {
+      toast.success(t('history.restored'))
+      qc.invalidateQueries({ queryKey: ['trash-files', projectId] })
+      qc.invalidateQueries({ queryKey: ['files', projectId] })
+    },
+    onError: onErr,
   })
 
   const restoreTask = useMutation({
@@ -189,7 +200,7 @@ function TrashView({ projectId, isAdmin, lang }: { projectId: string; isAdmin: b
     </li>
   )
 
-  const empty = (tasks.data?.length ?? 0) === 0 && (resources.data?.length ?? 0) === 0
+  const empty = (tasks.data?.length ?? 0) === 0 && (resources.data?.length ?? 0) === 0 && (filesT.data?.length ?? 0) === 0
 
   return (
     <div className="space-y-4">
@@ -200,6 +211,16 @@ function TrashView({ projectId, isAdmin, lang }: { projectId: string; isAdmin: b
           <ul className="space-y-1">
             {tasks.data.map((it) => (
               <Row key={it.id} item={it} label={`${it.number ?? ''} ${it.title ?? ''}`.trim()} onRestore={() => restoreTask.mutate(it.id)} />
+            ))}
+          </ul>
+        </section>
+      )}
+      {filesT.data && filesT.data.length > 0 && (
+        <section className="space-y-1">
+          <h3 className="text-sm font-semibold">{t('tabs.files')}</h3>
+          <ul className="space-y-1">
+            {filesT.data.map((it) => (
+              <Row key={it.id} item={it} label={it.name ?? ''} onRestore={() => restoreFile.mutate(it.id)} />
             ))}
           </ul>
         </section>
