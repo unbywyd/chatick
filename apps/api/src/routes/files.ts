@@ -183,8 +183,13 @@ filesRoute.post('/', async (c) => {
   const file = body['file']
   const taskId = typeof body['taskId'] === 'string' && body['taskId'] ? body['taskId'] : null
   const keepOriginal = body['keepOriginal'] === '1'
-  // временный файл композера: не виден в менеджере, чистится кроном если не отправлен (SPEC §8.17)
-  const pending = body['pending'] === '1'
+  // ЕДИНОЕ правило (SPEC §8.17): файл временный по умолчанию и чистится кроном,
+  // ПОКА не привязан к сущности. Постоянным сразу становится, только если:
+  //  - прикреплён к существующей задаче (taskId), ИЛИ
+  //  - это прямая загрузка в файл-менеджер (manager=1).
+  // Композеры (чат/комментарий/что угодно) ничего не шлют → временный до отправки.
+  const isManagerUpload = body['manager'] === '1'
+  const pending = !taskId && !isManagerUpload
   if (!(file instanceof File)) return c.json({ error: 'file field is required' }, 400)
   if (taskId) {
     const task = await db.query.tasks.findFirst({ where: and(eq(tasks.id, taskId), eq(tasks.projectId, projectId)) })
@@ -256,8 +261,8 @@ filesRoute.post('/', async (c) => {
       mime: outMime,
       size: String(buffer.length),
       originalKey,
-      // временный: 24ч на отправку, иначе удалит крон (для вложений задач не помечаем — они уже привязаны)
-      pendingUntil: pending && !taskId ? new Date(Date.now() + 24 * 60 * 60 * 1000) : null,
+      // временный: 24ч на отправку/привязку, иначе удалит крон (SPEC §8.17)
+      pendingUntil: pending ? new Date(Date.now() + 24 * 60 * 60 * 1000) : null,
     })
     .returning()
   return c.json(

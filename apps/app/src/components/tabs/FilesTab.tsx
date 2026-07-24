@@ -115,6 +115,7 @@ export function FilesTab({ projectId, isAdmin = false }: { projectId: string; is
       try {
         const fd = new FormData()
         fd.append('file', file)
+        fd.append('manager', '1') // прямая загрузка в менеджер → постоянный (SPEC §8.17)
         const res = await fetch(`${API_URL}/api/v1/files`, {
           method: 'POST',
           headers: { Authorization: `Bearer ${getProjectToken()}` },

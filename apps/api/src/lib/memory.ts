@@ -468,7 +468,7 @@ export function memoryTools(projectId: string, actorUserId: string): { tools: To
       if (!t) return 'Task not found.'
       const file = await db.query.files.findFirst({ where: and(eq(files.id, fileId), eq(files.projectId, projectId)) })
       if (!file) return 'File not found.'
-      await db.update(files).set({ taskId: t.id }).where(eq(files.id, fileId))
+      await db.update(files).set({ taskId: t.id, pendingUntil: null }).where(eq(files.id, fileId))
       return `Attached "${file.name}" to ${t.number}.`
     },
   }
