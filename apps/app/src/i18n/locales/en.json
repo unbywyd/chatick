@@ -596,5 +596,9 @@
     "changePhoto": "Change photo",
     "logout": "Sign out",
     "logoutConfirm": "Sign out of your account?"
+  },
+  "projSwitch": {
+    "search": "Search projects…",
+    "needRules": "This project needs rules acceptance — open it from the company screen"
   }
 }

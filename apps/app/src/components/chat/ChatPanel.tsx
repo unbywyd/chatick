@@ -8,6 +8,7 @@ import { toast } from 'sonner'
 import { api } from '@/lib/api'
 import { cn } from '@/lib/utils'
 import { Logo } from '@/components/Logo'
+import { ProjectSwitcher } from './ProjectSwitcher'
 import { Button } from '@/components/ui/button'
 import { useProjectSocket, type ChatMessage } from '@/hooks/useProjectSocket'
 import { Composer, AI_MENTION_ID } from './Composer'
@@ -265,7 +266,7 @@ export function ChatPanel({
       <header className="flex items-center justify-between gap-2 border-b px-4 py-2">
         <div className="flex min-w-0 items-center gap-2">
           <Logo />
-          {projectName && <span className="truncate text-xs text-muted-foreground">/ {projectName}</span>}
+          <ProjectSwitcher projectName={projectName} />
         </div>
         <div className="flex items-center gap-3">
           {/* Presence: кто онлайн — аватарки с тултипом */}
