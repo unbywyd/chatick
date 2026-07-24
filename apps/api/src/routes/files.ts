@@ -110,7 +110,11 @@ filesRoute.get('/', async (c) => {
   const to = c.req.query('to')
   const page = Math.max(1, Number(c.req.query('page')) || 1)
 
-  const conds = [eq(files.projectId, projectId), isNull(files.deletedAt)]
+  // при просмотре файлов задачи показываем и удалённые (как «Файл удалён») — SPEC §8.3
+  const includeDeleted = taskId && c.req.query('includeDeleted') === '1'
+  const conds = includeDeleted
+    ? [eq(files.projectId, projectId)]
+    : [eq(files.projectId, projectId), isNull(files.deletedAt)]
   if (taskId) conds.push(eq(files.taskId, taskId))
   if (source === 'chat') conds.push(sql`${files.messageId} is not null`)
   if (source === 'task') conds.push(sql`${files.taskId} is not null`)
@@ -142,6 +146,7 @@ filesRoute.get('/', async (c) => {
     taskNumber: r.taskNumber,
     messageId: r.file.messageId, // для «перейти к переписке»
     hasOriginal: Boolean(r.file.originalKey),
+    deleted: Boolean(r.file.deletedAt), // ссылка сохранена, файл удалён из менеджера
     uploader: r.uploader ? { id: r.uploader.id, name: r.uploader.name, avatarUrl: r.uploader.avatarUrl } : null,
   }))
 
@@ -281,9 +286,11 @@ filesRoute.get('/:fileId/download', async (c) => {
 // Массовое удаление (owner/admin — любые; иначе только свои)
 // Удаление: файлы-вложения сообщений → soft-delete (в чате «файл удалён»);
 // остальные → физически. R2-объекты чистим сразу в обоих случаях.
+// Файлы, на которые ссылаются чат ИЛИ задача — soft-delete: ссылка остаётся
+// с пометкой «Файл удалён», молча не пропадает (SPEC §8.3).
 async function removeFiles(rows: (typeof files.$inferSelect)[]) {
-  const attached = rows.filter((f) => f.messageId)
-  const detached = rows.filter((f) => !f.messageId)
+  const attached = rows.filter((f) => f.messageId || f.taskId)
+  const detached = rows.filter((f) => !f.messageId && !f.taskId)
   if (attached.length) {
     await db.update(files).set({ deletedAt: new Date() }).where(inArray(files.id, attached.map((f) => f.id)))
   }

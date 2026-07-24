@@ -37,6 +37,7 @@ type Attachment = {
   mime: string
   size: number
   createdAt: string
+  deleted?: boolean
   uploader: { id: string; name: string } | null
 }
 
@@ -79,14 +80,15 @@ export function TaskDrawer({
 
   const attachments = useQuery({
     queryKey: ['task-files', task.id],
-    queryFn: () => api<{ items: Attachment[] }>(`/api/v1/files?taskId=${task.id}`, {}, 'project').then((r) => r.items),
+    // includeDeleted: показываем удалённые как «Файл удалён», ссылка не пропадает (SPEC §8.3)
+    queryFn: () => api<{ items: Attachment[] }>(`/api/v1/files?taskId=${task.id}&includeDeleted=1`, {}, 'project').then((r) => r.items),
   })
   // превью-URL картинок (inline presigned, 1ч)
   const previews = useQuery({
     queryKey: ['task-file-previews', task.id, attachments.data?.map((a) => a.id).join(',')],
-    enabled: Boolean(attachments.data?.some((a) => a.mime.startsWith('image/'))),
+    enabled: Boolean(attachments.data?.some((a) => a.mime.startsWith('image/') && !a.deleted)),
     queryFn: async () => {
-      const images = attachments.data!.filter((a) => a.mime.startsWith('image/'))
+      const images = attachments.data!.filter((a) => a.mime.startsWith('image/') && !a.deleted)
       const entries = await Promise.all(
         images.map(async (a) => {
           const { url } = await api<{ url: string }>(`/api/v1/files/${a.id}/view-url`, {}, 'project')
@@ -324,11 +326,11 @@ export function TaskDrawer({
                 dragOver ? 'border-brand bg-accent' : 'border-transparent',
               )}
             >
-              {/* Превью картинок сеткой */}
-              {(attachments.data ?? []).some((a) => a.mime.startsWith('image/')) && (
+              {/* Превью картинок сеткой (удалённые — не показываем как превью) */}
+              {(attachments.data ?? []).some((a) => a.mime.startsWith('image/') && !a.deleted) && (
                 <div className="mb-2 grid grid-cols-3 gap-2">
                   {attachments.data!
-                    .filter((a) => a.mime.startsWith('image/'))
+                    .filter((a) => a.mime.startsWith('image/') && !a.deleted)
                     .map((a) => (
                       <button
                         key={a.id}
@@ -348,10 +350,10 @@ export function TaskDrawer({
                 </div>
               )}
 
-              {/* Остальные файлы списком */}
+              {/* Остальные файлы списком (не картинки, не удалённые) */}
               <ul className="space-y-1">
                 {(attachments.data ?? [])
-                  .filter((a) => !a.mime.startsWith('image/'))
+                  .filter((a) => !a.mime.startsWith('image/') && !a.deleted)
                   .map((a) => (
                     <li key={a.id} className="flex items-center gap-2 rounded-md border bg-card px-2.5 py-2">
                       <File className="size-4 shrink-0 text-muted-foreground" />
@@ -371,6 +373,24 @@ export function TaskDrawer({
                   ))}
               </ul>
 
+              {/* Удалённые из менеджера — ссылка сохранена, файл недоступен (SPEC §8.3) */}
+              {(attachments.data ?? []).some((a) => a.deleted) && (
+                <ul className="mt-1 space-y-1">
+                  {(attachments.data ?? [])
+                    .filter((a) => a.deleted)
+                    .map((a) => (
+                      <li
+                        key={a.id}
+                        className="flex items-center gap-2 rounded-md border border-dashed px-2.5 py-2 text-sm text-muted-foreground"
+                        title={a.name}
+                      >
+                        🚫 <span className="min-w-0 flex-1 truncate line-through">{a.name}</span>
+                        <span className="whitespace-nowrap text-xs">{t('chat.fileDeleted')}</span>
+                      </li>
+                    ))}
+                </ul>
+              )}
+
               {(attachments.data?.length ?? 0) === 0 && uploading === 0 && (
                 <p className="p-3 text-center text-xs text-muted-foreground">{t('tasks.attachHint')}</p>
               )}
@@ -383,12 +403,12 @@ export function TaskDrawer({
             </div>
 
             {/* Удаление картинок — по ховеру в лайтбоксе сложно; кнопка под сеткой */}
-            {(attachments.data ?? []).filter((a) => a.mime.startsWith('image/')).length > 0 && (
+            {(attachments.data ?? []).filter((a) => a.mime.startsWith('image/') && !a.deleted).length > 0 && (
               <details className="mt-1">
                 <summary className="cursor-pointer text-xs text-muted-foreground">{t('tasks.manageImages')}</summary>
                 <ul className="mt-1 space-y-1">
                   {attachments.data!
-                    .filter((a) => a.mime.startsWith('image/'))
+                    .filter((a) => a.mime.startsWith('image/') && !a.deleted)
                     .map((a) => (
                       <li key={a.id} className="flex items-center gap-2 text-xs">
                         <span className="min-w-0 flex-1 truncate">{a.name}</span>

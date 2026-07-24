@@ -104,7 +104,7 @@ tasksRoute.get('/', async (c) => {
     .select({
       task: tasks,
       assignee: users,
-      attachmentsCount: sql<number>`(select count(*)::int from ${files} where ${files.taskId} = ${tasks.id})`,
+      attachmentsCount: sql<number>`(select count(*)::int from ${files} where ${files.taskId} = ${tasks.id} and ${files.deletedAt} is null)`,
     })
     .from(tasks)
     .leftJoin(users, eq(users.id, tasks.assigneeId))
