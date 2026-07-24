@@ -185,7 +185,10 @@
     "importTemplate": "הורדת תבנית (דמו)",
     "importEmpty": "לא נמצאו שורות תקינות בקובץ",
     "importDone": "יובאו {{created}} משימות, דולגו {{skipped}}",
-    "importHelp": "עמודות: Number (מתעלמים בייבוא), Title (חובה), Description, Status, Priority, Assignee (שם/אימייל), Due (YYYY-MM-DD), EstimateMinutes (מספר), Sprint (שם ספרינט קיים). אחראים/ספרינטים לא ידועים יישארו ריקים."
+    "importHelp": "עמודות: Number (מתעלמים בייבוא), Title (חובה), Description, Status, Priority, Assignee (שם/אימייל), Due (YYYY-MM-DD), EstimateMinutes (מספר), Sprint (שם ספרינט קיים). אחראים/ספרינטים לא ידועים יישארו ריקים.",
+    "markDone": "סמן כבוצע",
+    "assignToMe": "הקצה לי",
+    "copyLink": "העתק קישור"
   },
   "files": {
     "search": "חיפוש קבצים…",

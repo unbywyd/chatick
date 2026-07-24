@@ -185,7 +185,10 @@
     "importTemplate": "Скачать шаблон (демо)",
     "importEmpty": "В файле нет подходящих строк",
     "importDone": "Импортировано задач: {{created}}, пропущено: {{skipped}}",
-    "importHelp": "Колонки: Number (при импорте игнорируется), Title (обязательно), Description, Status (todo/in_progress/review/done), Priority (low/normal/high/urgent), Assignee (имя или email участника), Due (ГГГГ-ММ-ДД), EstimateMinutes (число), Sprint (имя существующего спринта). Неизвестные исполнители/спринты оставляются пустыми."
+    "importHelp": "Колонки: Number (при импорте игнорируется), Title (обязательно), Description, Status (todo/in_progress/review/done), Priority (low/normal/high/urgent), Assignee (имя или email участника), Due (ГГГГ-ММ-ДД), EstimateMinutes (число), Sprint (имя существующего спринта). Неизвестные исполнители/спринты оставляются пустыми.",
+    "markDone": "Пометить готово",
+    "assignToMe": "Назначить на меня",
+    "copyLink": "Копировать ссылку"
   },
   "files": {
     "search": "Поиск файлов…",

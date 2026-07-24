@@ -26,6 +26,7 @@ import {
 } from '@/components/ui/dropdown-menu'
 import { useConfirm } from '@/components/ui/confirm'
 import { Avatar } from '@/components/ui/avatar'
+import { TaskContextMenu } from './TaskContextMenu'
 import {
   STATUSES,
   PRIORITIES,
@@ -56,9 +57,11 @@ export function TasksTable({
   members,
   lang,
   canEdit,
+  meId,
   openTaskId,
   onOpen,
   onPatch,
+  onDelete,
   onCreateGroup,
   onPatchGroup,
   onDeleteGroup,
@@ -69,9 +72,11 @@ export function TasksTable({
   members: Member[]
   lang: string
   canEdit: boolean
+  meId?: string
   openTaskId: string | null
   onOpen: (id: string) => void
   onPatch: (id: string, body: Record<string, unknown>) => void
+  onDelete: (id: string) => void
   onCreateGroup: (name: string) => void
   onPatchGroup: (id: string, body: Record<string, unknown>) => void
   onDeleteGroup: (id: string) => void
@@ -193,8 +198,10 @@ export function TasksTable({
               sort={sort}
               onToggleSort={toggleSort}
               openTaskId={openTaskId}
+              meId={meId}
               onOpen={onOpen}
               onPatch={onPatch}
+              onDelete={onDelete}
               onPatchGroup={onPatchGroup}
               onDeleteGroup={onDeleteGroup}
             />
@@ -207,11 +214,13 @@ export function TasksTable({
             members={members}
             lang={lang}
             canEdit={canEdit}
+            meId={meId}
             sort={sort}
             onToggleSort={toggleSort}
             openTaskId={openTaskId}
             onOpen={onOpen}
             onPatch={onPatch}
+            onDelete={onDelete}
             onPatchGroup={onPatchGroup}
             onDeleteGroup={onDeleteGroup}
           />
@@ -251,11 +260,13 @@ function GroupTable({
   members,
   lang,
   canEdit,
+  meId,
   sort,
   onToggleSort,
   openTaskId,
   onOpen,
   onPatch,
+  onDelete,
   onPatchGroup,
   onDeleteGroup,
 }: {
@@ -264,11 +275,13 @@ function GroupTable({
   members: Member[]
   lang: string
   canEdit: boolean
+  meId?: string
   sort: { key: SortKey; dir: SortDir } | null
   onToggleSort: (k: SortKey) => void
   openTaskId: string | null
   onOpen: (id: string) => void
   onPatch: (id: string, body: Record<string, unknown>) => void
+  onDelete: (id: string) => void
   onPatchGroup: (id: string, body: Record<string, unknown>) => void
   onDeleteGroup: (id: string) => void
 }) {
@@ -382,9 +395,11 @@ function GroupTable({
                   members={members}
                   lang={lang}
                   canEdit={canEdit}
+                  meId={meId}
                   active={openTaskId === task.id}
                   onOpen={() => onOpen(task.id)}
                   onPatch={onPatch}
+                  onDelete={onDelete}
                 />
               ))}
               {tasks.length === 0 && (
@@ -415,17 +430,21 @@ function TableRow({
   members,
   lang,
   canEdit,
+  meId,
   active,
   onOpen,
   onPatch,
+  onDelete,
 }: {
   task: Task
   members: Member[]
   lang: string
   canEdit: boolean
+  meId?: string
   active: boolean
   onOpen: () => void
   onPatch: (id: string, body: Record<string, unknown>) => void
+  onDelete: (id: string) => void
 }) {
   const { t } = useTranslation()
   const { setNodeRef, transform, transition, isDragging, attributes, listeners } = useSortable({ id: `task:${task.id}` })
@@ -434,6 +453,7 @@ function TableRow({
   const overdue = isOverdue(task)
 
   return (
+    <TaskContextMenu task={task} canEdit={canEdit} meId={meId} onPatch={(body) => onPatch(task.id, body)} onDelete={() => onDelete(task.id)}>
     <tr
       ref={setNodeRef}
       style={style}
@@ -513,6 +533,7 @@ function TableRow({
         {task.dueDate ? new Date(task.dueDate).toLocaleDateString(lang, { day: 'numeric', month: 'short' }) : '—'}
       </td>
     </tr>
+    </TaskContextMenu>
   )
 }
 

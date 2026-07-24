@@ -19,6 +19,7 @@ import { Avatar } from '@/components/ui/avatar'
 import { Popover, PopoverTrigger, PopoverContent } from '@/components/ui/popover'
 import { TaskDrawer } from './tasks/TaskDrawer'
 import { TasksTable } from './tasks/TasksTable'
+import { TaskContextMenu } from './tasks/TaskContextMenu'
 import { exportTasksToExcel, downloadImportTemplate, parseTasksFromExcel } from './tasks/taskExcel'
 import { STATUSES, PRIORITIES, STATUS_ICON, STATUS_COLOR, PRIORITY_COLOR, isOverdue, fmtEstimate, type Task, type TaskGroup, type Member, type Status, type Priority } from './tasks/types'
 
@@ -492,9 +493,11 @@ export function TasksTab({ projectId, meId }: { projectId: string; meId?: string
                 members={membersQ.data ?? []}
                 lang={i18n.language}
                 canEdit={canEdit}
+                meId={meId}
                 openTaskId={openTaskId ?? null}
                 onOpen={setOpenTaskId}
                 onPatch={(id, body) => patch.mutate({ id, ...body })}
+                onDelete={(id) => remove.mutate(id)}
                 onCreateGroup={(name) => createGroup.mutate(name)}
                 onPatchGroup={(id, body) => patchGroup.mutate({ id, ...body })}
                 onDeleteGroup={(id) => deleteGroup.mutate(id)}
@@ -539,10 +542,14 @@ export function TasksTab({ projectId, meId }: { projectId: string; meId?: string
                         task={task}
                         lang={i18n.language}
                         active={openTaskId === task.id}
+                        canEdit={canEdit}
+                        meId={meId}
                         dragging={dragId === task.id}
                         dropBefore={dropHint?.status === status && dropHint.beforeId === task.id}
                         onOpen={() => setOpenTaskId(task.id)}
                         onStatus={(s) => patch.mutate({ id: task.id, status: s })}
+                        onPatch={(body) => patch.mutate({ id: task.id, ...body })}
+                        onDelete={() => remove.mutate(task.id)}
                         onDragStart={() => setDragId(task.id)}
                         onDragEnd={() => {
                           setDragId(null)
@@ -600,10 +607,14 @@ function TaskRow({
   task,
   lang,
   active,
+  canEdit,
+  meId,
   dragging,
   dropBefore,
   onOpen,
   onStatus,
+  onPatch,
+  onDelete,
   onDragStart,
   onDragEnd,
   onDragOverRow,
@@ -612,10 +623,14 @@ function TaskRow({
   task: Task
   lang: string
   active: boolean
+  canEdit: boolean
+  meId?: string
   dragging: boolean
   dropBefore: boolean
   onOpen: () => void
   onStatus: (s: Status) => void
+  onPatch: (body: Record<string, unknown>) => void
+  onDelete: () => void
   onDragStart: () => void
   onDragEnd: () => void
   onDragOverRow: (e: React.DragEvent) => void
@@ -626,6 +641,7 @@ function TaskRow({
   const StatusIcon = STATUS_ICON[task.status]
 
   return (
+    <TaskContextMenu task={task} canEdit={canEdit} meId={meId} onPatch={onPatch} onDelete={onDelete}>
     <li
       draggable
       onDragStart={(e) => {
@@ -696,5 +712,6 @@ function TaskRow({
         {task.assignee && <Avatar name={task.assignee.name} src={task.assignee.avatarUrl} size={22} title={task.assignee.name} />}
       </span>
     </li>
+    </TaskContextMenu>
   )
 }
