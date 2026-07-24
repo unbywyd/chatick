@@ -93,7 +93,7 @@ function ReminderConfig({ projectId, isAdmin }: { projectId: string; isAdmin: bo
   const [form, setForm] = useState<Reminder>({
     enabled: false,
     cadence: 'daily',
-    everyHours: '3',
+    everyHours: '12',
     hourOfDay: '9',
     dayOfWeek: '1',
     audience: 'all_members',
@@ -111,7 +111,7 @@ function ReminderConfig({ projectId, isAdmin }: { projectId: string; isAdmin: bo
         body: JSON.stringify({
           enabled: form.enabled,
           cadence: form.cadence,
-          everyHours: Number(form.everyHours),
+          everyHours: Math.min(24, Math.max(12, Number(form.everyHours) || 12)),
           hourOfDay: Number(form.hourOfDay),
           dayOfWeek: Number(form.dayOfWeek),
           audience: form.audience,
@@ -174,12 +174,13 @@ function ReminderConfig({ projectId, isAdmin }: { projectId: string; isAdmin: bo
             {t('notif.everyHours')}
             <input
               type="number"
-              min={1}
+              min={12}
               max={24}
               value={form.everyHours}
               onChange={(e) => setForm({ ...form, everyHours: e.target.value })}
               className="w-20 rounded-md border bg-background px-2 py-1 text-sm"
             />
+            <span className="text-xs text-muted-foreground">{t('notif.minInterval')}</span>
           </label>
         ) : (
           <div className="flex flex-wrap items-center gap-4">

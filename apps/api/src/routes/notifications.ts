@@ -68,7 +68,8 @@ notificationsRoute.get('/reminders', async (c) => {
 const reminderSchema = z.object({
   enabled: z.boolean(),
   cadence: z.enum(['hourly', 'daily', 'weekly']),
-  everyHours: z.number().int().min(1).max(24),
+  // антиспам: не чаще раза в полдня (SPEC §8.9)
+  everyHours: z.number().int().min(12).max(24),
   hourOfDay: z.number().int().min(0).max(23),
   dayOfWeek: z.number().int().min(0).max(6),
   audience: z.enum(['all_members', 'assignees']),

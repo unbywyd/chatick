@@ -1,7 +1,9 @@
 import { and, asc, desc, eq, gt, gte, ilike, lte, or, sql } from 'drizzle-orm'
 import { db } from '../db/client.js'
-import { chatSummaries, files, messages, projects, tasks, users } from '../db/schema.js'
+import { chatSummaries, credentials, files, messages, projects, resourceSecrets, taskComments, tasks, users } from '../db/schema.js'
 import { hasPermission } from '../routes/projects.js'
+import { encrypt } from './crypto.js'
+import { notify, extractMentions } from './notify.js'
 import { projectLlm, complete, type ToolDef, type ToolHandler } from './llm.js'
 
 // Память ИИ (SPEC §5.6): саммари-цепочка + инструменты + фоновое сжатие.
@@ -146,6 +148,49 @@ export function memoryTools(projectId: string, actorUserId: string): { tools: To
       name: 'delete_task',
       description: 'Delete a task by number. Requires tasks.delete.',
       parameters: { type: 'object', properties: { number: { type: 'string' } }, required: ['number'] },
+    },
+    // --- Ресурсы (SPEC §8.1) --- значения секретов НИКОГДА не читаются ИИ
+    {
+      name: 'list_resources',
+      description: 'List project resources (name, id, url, description, secret count). Secret VALUES are never returned. Requires resources.read.',
+      parameters: { type: 'object', properties: { query: { type: 'string' } } },
+    },
+    {
+      name: 'create_resource',
+      description:
+        'Save a resource (a link + description, optionally with named secrets like passwords/API keys shared in chat). Use when someone shares credentials or a useful link. Secrets are stored ENCRYPTED and can never be read back by the AI. Requires resources.manage.',
+      parameters: {
+        type: 'object',
+        properties: {
+          name: { type: 'string' },
+          url: { type: 'string' },
+          description: { type: 'string' },
+          secrets: {
+            type: 'array',
+            description: 'named secret values to store encrypted',
+            items: { type: 'object', properties: { label: { type: 'string' }, value: { type: 'string' } }, required: ['value'] },
+          },
+          fromMessageId: { type: 'string', description: 'id of the chat message this came from (marks it "from chat")' },
+        },
+        required: ['name'],
+      },
+    },
+    // --- Комментарии к задачам (SPEC §8.9) — от лица пользователя ---
+    {
+      name: 'add_task_comment',
+      description:
+        'Add a comment to a task (by number) ON BEHALF OF THE USER. Use when the user wants to record a note/update on a task rather than post to chat. Requires tasks.read.',
+      parameters: {
+        type: 'object',
+        properties: { number: { type: 'string' }, body: { type: 'string' } },
+        required: ['number', 'body'],
+      },
+    },
+    {
+      name: 'attach_file_to_task',
+      description:
+        'Attach an existing project file (by id, e.g. one shared in chat) to a task (by number). The file then appears in the task Files section. Requires files.upload + tasks.edit.',
+      parameters: { type: 'object', properties: { fileId: { type: 'string' }, number: { type: 'string' } }, required: ['fileId', 'number'] },
     },
   ]
 
@@ -323,6 +368,87 @@ export function memoryTools(projectId: string, actorUserId: string): { tools: To
       if (!t) return 'Task not found.'
       await db.delete(tasks).where(eq(tasks.id, t.id))
       return `Deleted ${t.number}.`
+    },
+
+    // --- Ресурсы ---
+    list_resources: async (args) => {
+      if (!(await hasPermission(projectId, actorUserId, 'resources.read')))
+        return 'PERMISSION DENIED: the author cannot read resources. Politely refuse.'
+      const q = typeof args.query === 'string' ? args.query.trim() : ''
+      const rows = await db.query.credentials.findMany({
+        where: q ? and(eq(credentials.projectId, projectId), ilike(credentials.name, `%${q}%`)) : eq(credentials.projectId, projectId),
+      })
+      if (!rows.length) return 'No resources.'
+      const withCounts = await Promise.all(
+        rows.map(async (r) => {
+          const [{ n }] = (await db
+            .select({ n: sql<number>`count(*)::int` })
+            .from(resourceSecrets)
+            .where(eq(resourceSecrets.resourceId, r.id))) as [{ n: number }]
+          return `"${r.name}" (id=${r.id})${r.url ? ` ${r.url}` : ''}${r.description ? ` — ${r.description}` : ''} [${n} secret(s)]`
+        }),
+      )
+      return withCounts.join('\n')
+    },
+    create_resource: async (args) => {
+      if (!(await hasPermission(projectId, actorUserId, 'resources.manage')))
+        return 'PERMISSION DENIED: the author cannot manage resources. Politely refuse.'
+      const name = String(args.name ?? '').slice(0, 200)
+      if (!name) return 'Resource name is required.'
+      const fromMessageId = typeof args.fromMessageId === 'string' && args.fromMessageId ? args.fromMessageId : null
+      const [res] = await db
+        .insert(credentials)
+        .values({
+          projectId,
+          name,
+          url: typeof args.url === 'string' && args.url ? args.url.slice(0, 2000) : null,
+          description: String(args.description ?? '').slice(0, 5000),
+          source: fromMessageId ? 'chat' : 'manual',
+          messageId: fromMessageId,
+          createdById: actorUserId,
+        })
+        .returning()
+      let secretCount = 0
+      if (Array.isArray(args.secrets)) {
+        for (const s of args.secrets as { label?: string; value?: string }[]) {
+          if (!s || typeof s.value !== 'string' || !s.value) continue
+          await db.insert(resourceSecrets).values({ resourceId: res!.id, label: String(s.label ?? '').slice(0, 120), valueEncrypted: encrypt(s.value) })
+          secretCount++
+        }
+      }
+      return `Saved resource "${res!.name}"${secretCount ? ` with ${secretCount} secret(s) (stored encrypted)` : ''}.`
+    },
+
+    // --- Комментарии задач (от лица пользователя) ---
+    add_task_comment: async (args) => {
+      if (!(await hasPermission(projectId, actorUserId, 'tasks.read')))
+        return 'PERMISSION DENIED: the author cannot access tasks. Politely refuse.'
+      const t = await findTask(String(args.number ?? ''))
+      if (!t) return 'Task not found.'
+      const body = String(args.body ?? '').slice(0, 10_000)
+      if (!body) return 'Comment body is required.'
+      const [row] = await db.insert(taskComments).values({ taskId: t.id, projectId, authorId: actorUserId, body }).returning()
+      // уведомления о упоминаниях/комментарии
+      const actor = await db.query.users.findFirst({ where: eq(users.id, actorUserId) })
+      const link = `/p/${projectId}?task=${t.id}`
+      const mentioned = extractMentions(body)
+      if (mentioned.length)
+        void notify({ projectId, event: 'comment_mention', recipientIds: mentioned, actorId: actorUserId, actorName: actor?.name || 'Someone', dedupeKey: `comment_mention:${row!.id}`, link, preview: body })
+      const watchers = [t.assigneeId, t.createdById].filter((x): x is string => Boolean(x) && x !== actorUserId && !mentioned.includes(x!))
+      if (watchers.length)
+        void notify({ projectId, event: 'task_comment', recipientIds: watchers, actorId: actorUserId, actorName: actor?.name || 'Someone', dedupeKey: `task_comment:${row!.id}`, link, preview: body, vars: { ref: t.number } })
+      return `Added a comment to ${t.number}.`
+    },
+    attach_file_to_task: async (args) => {
+      if (!(await hasPermission(projectId, actorUserId, 'files.upload')) || !(await hasPermission(projectId, actorUserId, 'tasks.edit')))
+        return 'PERMISSION DENIED: attaching a file to a task requires files.upload and tasks.edit. Politely refuse.'
+      const fileId = String(args.fileId ?? '')
+      const t = await findTask(String(args.number ?? ''))
+      if (!t) return 'Task not found.'
+      const file = await db.query.files.findFirst({ where: and(eq(files.id, fileId), eq(files.projectId, projectId)) })
+      if (!file) return 'File not found.'
+      await db.update(files).set({ taskId: t.id }).where(eq(files.id, fileId))
+      return `Attached "${file.name}" to ${t.number}.`
     },
   }
 

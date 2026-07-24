@@ -85,9 +85,18 @@
     "saved": "Saved"
   },
   "aiMode": {
-    "observer": { "title": "Observer", "desc": "Only translates and answers when asked directly" },
-    "assistant": { "title": "Assistant", "desc": "Also answers from context and suggests actions" },
-    "moderator": { "title": "Moderator", "desc": "Also holds unclear messages, duplicates and off-topic" }
+    "observer": {
+      "title": "Observer",
+      "desc": "Only translates and answers when asked directly"
+    },
+    "assistant": {
+      "title": "Assistant",
+      "desc": "Also answers from context and suggests actions"
+    },
+    "moderator": {
+      "title": "Moderator",
+      "desc": "Also holds unclear messages, duplicates and off-topic"
+    }
   },
   "offtopic": {
     "ignore": "Ignore",
@@ -171,8 +180,19 @@
     "to": "To",
     "clearFilter": "Clear",
     "jumpToChat": "Go to message in chat",
-    "source": { "all": "All", "chat": "From chat", "task": "From tasks", "upload": "Uploaded" },
-    "type": { "image": "Images", "video": "Video", "audio": "Audio", "doc": "Documents", "other": "Other" },
+    "source": {
+      "all": "All",
+      "chat": "From chat",
+      "task": "From tasks",
+      "upload": "Uploaded"
+    },
+    "type": {
+      "image": "Images",
+      "video": "Video",
+      "audio": "Audio",
+      "doc": "Documents",
+      "other": "Other"
+    },
     "select": "Select files",
     "selectAll": "Select all",
     "selectedCount": "{{count}} selected",
@@ -195,10 +215,22 @@
       "resources": "Resources"
     },
     "level": {
-      "none": { "label": "None", "hint": "No access" },
-      "read": { "label": "Read", "hint": "View only" },
-      "write": { "label": "Write", "hint": "View, create and edit (delete own only)" },
-      "crud": { "label": "Full", "hint": "Full access, including deleting others' items" }
+      "none": {
+        "label": "None",
+        "hint": "No access"
+      },
+      "read": {
+        "label": "Read",
+        "hint": "View only"
+      },
+      "write": {
+        "label": "Write",
+        "hint": "View, create and edit (delete own only)"
+      },
+      "crud": {
+        "label": "Full",
+        "hint": "Full access, including deleting others' items"
+      }
     },
     "aiNote": "The AI dispatcher respects these permissions: a member with Read-only can't create tasks through chat either. Secret values are never shared with the AI."
   },
@@ -315,7 +347,9 @@
     "typing_one": "{{names}} is typing…",
     "typing_other": "{{names}} are typing…"
   },
-  "composer": { "dropHere": "Drop to attach" },
+  "composer": {
+    "dropHere": "Drop to attach"
+  },
   "chatSearch": {
     "title": "Search chat",
     "placeholder": "Search messages…",
@@ -366,26 +400,60 @@
     "subtitle": "Choose what you get emailed about, and set up task reminders",
     "subscriptions": "Email me when…",
     "event": {
-      "chat_mention": { "label": "I'm mentioned in chat", "hint": "Someone @mentions you in a chat message" },
-      "task_mention": { "label": "I'm mentioned in a task", "hint": "Someone @mentions you in a task description" },
-      "comment_mention": { "label": "I'm mentioned in a comment", "hint": "Someone @mentions you in a task comment" },
-      "task_assigned": { "label": "A task is assigned to me", "hint": "You become the assignee of a task" },
-      "task_status": { "label": "My task's status changes", "hint": "The status of a task assigned to you changes" },
-      "task_comment": { "label": "A new comment on my task", "hint": "Someone comments on a task assigned to you" }
+      "chat_mention": {
+        "label": "I'm mentioned in chat",
+        "hint": "Someone @mentions you in a chat message"
+      },
+      "task_mention": {
+        "label": "I'm mentioned in a task",
+        "hint": "Someone @mentions you in a task description"
+      },
+      "comment_mention": {
+        "label": "I'm mentioned in a comment",
+        "hint": "Someone @mentions you in a task comment"
+      },
+      "task_assigned": {
+        "label": "A task is assigned to me",
+        "hint": "You become the assignee of a task"
+      },
+      "task_status": {
+        "label": "My task's status changes",
+        "hint": "The status of a task assigned to you changes"
+      },
+      "task_comment": {
+        "label": "A new comment on my task",
+        "hint": "Someone comments on a task assigned to you"
+      }
     },
     "reminders": "Open-task reminders",
     "remindersHint": "Email a list of open tasks on a schedule. Only admins can change this.",
     "cadence": "Frequency",
-    "cadenceOpt": { "hourly": "Every N hours", "daily": "Daily", "weekly": "Weekly" },
+    "cadenceOpt": {
+      "hourly": "Every N hours",
+      "daily": "Daily",
+      "weekly": "Weekly"
+    },
     "everyHours": "Every",
     "dayOfWeek": "On",
     "atHour": "At",
-    "weekday": { "0": "Sunday", "1": "Monday", "2": "Tuesday", "3": "Wednesday", "4": "Thursday", "5": "Friday", "6": "Saturday" },
+    "weekday": {
+      "0": "Sunday",
+      "1": "Monday",
+      "2": "Tuesday",
+      "3": "Wednesday",
+      "4": "Thursday",
+      "5": "Friday",
+      "6": "Saturday"
+    },
     "audience": "Send to",
-    "audienceOpt": { "all_members": "All members", "assignees": "Assignees only" },
+    "audienceOpt": {
+      "all_members": "All members",
+      "assignees": "Assignees only"
+    },
     "statuses": "Statuses counted as “open”",
     "save": "Save reminders",
-    "saved": "Saved"
+    "saved": "Saved",
+    "minInterval": "(min every 12h)"
   },
   "projTeam": {
     "title": "Project team",

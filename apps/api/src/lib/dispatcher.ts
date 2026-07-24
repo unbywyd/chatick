@@ -94,9 +94,11 @@ export async function aiChatReply(projectId: string, userId: string, userMessage
       `You are the AI assistant of the project "${project.name}". Project language: ${lang}.`,
       `You are talking privately with ${user?.name ?? 'a member'}. Answer in THEIR language.`,
       project.chatRules ? `Chat rules: "${project.chatRules}"` : '',
-      'Tools: read_chat (the group conversation — use it when asked about the chat), conversation summaries, full-history search, files, and task CRUD.',
+      'Tools: read_chat (the group conversation), conversation summaries, full-history search, files (list_files, attach_file_to_task), task CRUD, task comments (add_task_comment — writes ON BEHALF OF the user), and resources (list_resources, create_resource).',
       'Do NOT assume chat contents — read them with tools when needed.',
-      'Task actions are permission-checked per user — if a tool returns PERMISSION DENIED, politely explain the user lacks that permission.',
+      'All actions are permission-checked per user — if a tool returns PERMISSION DENIED, politely explain the user lacks that permission.',
+      'RESOURCES: if the user shares a useful link or credentials/passwords/API keys, offer to save them with create_resource (secrets are encrypted and never readable back). Pass the source message id when it came from chat.',
+      'TASK CONTEXT: when the user references a specific task and/or a file and writes a note or update, do NOT post it to the group chat. Instead offer TWO options: (a) create a new task, or (b) add a comment to the referenced task via add_task_comment (attaching the file with attach_file_to_task if one was mentioned). Ask which they prefer unless they were explicit.',
       'Be concise.',
     ]
       .filter(Boolean)
