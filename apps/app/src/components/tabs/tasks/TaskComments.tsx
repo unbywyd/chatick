@@ -138,24 +138,32 @@ export function TaskComments({
                 )}
                 <span className="text-xs font-medium">{c.author?.name ?? 'AI'}</span>
                 <span className="text-xs text-muted-foreground">{new Date(c.createdAt).toLocaleString(lang)}</span>
-                <div className="ms-auto flex items-center gap-0.5">
-                  <button className="text-muted-foreground hover:text-foreground" title={t('tasks.reply')} onClick={() => setReplyTo(c)}>
-                    <CornerUpLeft className="size-3.5" />
+                <div className="ms-auto flex items-center gap-1">
+                  <button
+                    className="grid size-7 place-items-center rounded-md text-muted-foreground transition-colors hover:bg-secondary hover:text-foreground"
+                    title={t('tasks.reply')}
+                    onClick={() => setReplyTo(c)}
+                  >
+                    <CornerUpLeft className="size-4" />
                   </button>
                   {mine && (
-                    <button className="text-muted-foreground hover:text-foreground" title={t('about.edit')} onClick={() => setEditing(c.id)}>
-                      <Pencil className="size-3.5" />
+                    <button
+                      className="grid size-7 place-items-center rounded-md text-muted-foreground transition-colors hover:bg-secondary hover:text-foreground"
+                      title={t('about.edit')}
+                      onClick={() => setEditing(c.id)}
+                    >
+                      <Pencil className="size-4" />
                     </button>
                   )}
                   {mine && (
                     <button
-                      className="text-muted-foreground hover:text-destructive"
+                      className="grid size-7 place-items-center rounded-md text-muted-foreground transition-colors hover:bg-destructive/10 hover:text-destructive"
                       title={t('files.delete')}
                       onClick={async () => {
                         if (await confirm({ title: t('tasks.deleteCommentConfirm'), destructive: true, confirmLabel: t('files.delete') })) remove.mutate(c.id)
                       }}
                     >
-                      <Trash2 className="size-3.5" />
+                      <Trash2 className="size-4" />
                     </button>
                   )}
                 </div>
