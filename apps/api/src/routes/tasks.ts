@@ -411,7 +411,7 @@ tasksRoute.post(
     if (attachmentIds.length) {
       await db
         .update(files)
-        .set({ commentId: row!.id, taskId })
+        .set({ commentId: row!.id, taskId, pendingUntil: null })
         .where(and(sql`${files.id} in (${sql.join(attachmentIds.map((id) => sql`${id}`), sql`, `)})`, eq(files.projectId, projectId), eq(files.uploadedById, sub)))
     }
 

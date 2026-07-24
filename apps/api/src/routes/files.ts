@@ -116,6 +116,8 @@ filesRoute.get('/', async (c) => {
   const conds = includeDeleted
     ? [eq(files.projectId, projectId)]
     : [eq(files.projectId, projectId), isNull(files.deletedAt)]
+  // временные (неотправленные) вложения композера не показываем в менеджере (SPEC §8.17)
+  conds.push(isNull(files.pendingUntil))
   if (taskId) conds.push(eq(files.taskId, taskId))
   if (source === 'chat') conds.push(sql`${files.messageId} is not null`)
   if (source === 'task') conds.push(sql`${files.taskId} is not null`)
@@ -181,6 +183,8 @@ filesRoute.post('/', async (c) => {
   const file = body['file']
   const taskId = typeof body['taskId'] === 'string' && body['taskId'] ? body['taskId'] : null
   const keepOriginal = body['keepOriginal'] === '1'
+  // временный файл композера: не виден в менеджере, чистится кроном если не отправлен (SPEC §8.17)
+  const pending = body['pending'] === '1'
   if (!(file instanceof File)) return c.json({ error: 'file field is required' }, 400)
   if (taskId) {
     const task = await db.query.tasks.findFirst({ where: and(eq(tasks.id, taskId), eq(tasks.projectId, projectId)) })
@@ -252,6 +256,8 @@ filesRoute.post('/', async (c) => {
       mime: outMime,
       size: String(buffer.length),
       originalKey,
+      // временный: 24ч на отправку, иначе удалит крон (для вложений задач не помечаем — они уже привязаны)
+      pendingUntil: pending && !taskId ? new Date(Date.now() + 24 * 60 * 60 * 1000) : null,
     })
     .returning()
   return c.json(

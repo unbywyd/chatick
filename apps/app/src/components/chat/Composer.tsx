@@ -63,6 +63,7 @@ export function Composer({
         const fd = new FormData()
         fd.append('file', file)
         if (keepOriginal) fd.append('keepOriginal', '1')
+        fd.append('pending', '1') // временный до отправки сообщения (SPEC §8.17)
         const res = await fetch(`${API_URL}/api/v1/files`, {
           method: 'POST',
           headers: { Authorization: `Bearer ${getProjectToken()}` },

@@ -71,6 +71,7 @@ export function TaskComments({
     for (const file of pending) {
       const fd = new FormData()
       fd.append('file', file)
+      fd.append('pending', '1') // временный до отправки комментария (SPEC §8.17)
       const res = await fetch(`${API_URL}/api/v1/files`, { method: 'POST', headers: { Authorization: `Bearer ${getProjectToken()}` }, body: fd })
       if (!res.ok) {
         const b = (await res.json().catch(() => ({}))) as { error?: string }

@@ -186,11 +186,12 @@ messagesRoute.post(
       })
       .returning()
 
-    // привязать вложения (только свои файлы проекта без владельца-сообщения)
+    // привязать вложения (только свои файлы проекта без владельца-сообщения);
+    // снимаем временный флаг — файл становится постоянным (SPEC §8.17)
     if (attachmentIds.length) {
       await db
         .update(files)
-        .set({ messageId: row!.id })
+        .set({ messageId: row!.id, pendingUntil: null })
         .where(and(inArray(files.id, attachmentIds), eq(files.projectId, projectId), eq(files.uploadedById, sub)))
     }
 

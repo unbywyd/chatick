@@ -325,12 +325,16 @@ export const files = pgTable(
     size: text('size').notNull().default('0'),
     // soft-delete: файл убран из менеджера, но в чате остаётся «файл удалён»
     deletedAt: timestamp('deleted_at', { withTimezone: true }),
+    // временный файл: загружен в композер, но сообщение/комментарий ещё не отправлены.
+    // Не виден в менеджере; если до этого времени не привязан — удаляется кроном (SPEC §8.17).
+    pendingUntil: timestamp('pending_until', { withTimezone: true }),
     createdAt: createdAt(),
   },
   (t) => [
     index('files_project_idx').on(t.projectId),
     index('files_task_idx').on(t.taskId),
     index('files_message_idx').on(t.messageId),
+    index('files_pending_idx').on(t.pendingUntil),
   ],
 )
 
