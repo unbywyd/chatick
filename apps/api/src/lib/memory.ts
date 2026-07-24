@@ -1,6 +1,6 @@
 import { and, asc, desc, eq, gt, gte, ilike, lte, or, sql } from 'drizzle-orm'
 import { db } from '../db/client.js'
-import { chatSummaries, credentials, files, messages, projectMembers, projects, resourceSecrets, taskComments, tasks, users } from '../db/schema.js'
+import { chatSummaries, credentials, files, messages, projectMembers, projects, resourceSecrets, taskComments, taskGroups, tasks, users } from '../db/schema.js'
 import { hasPermission } from '../routes/projects.js'
 import { encrypt } from './crypto.js'
 import { notify, extractMentions } from './notify.js'
@@ -131,20 +131,27 @@ export function memoryTools(projectId: string, actorUserId: string): { tools: To
     },
     {
       name: 'create_task',
-      description: "Create a task. Requires the author's tasks.create permission.",
+      description:
+        "Create a task. You can set assignee (by member name or email), due date, time estimate, priority, status and sprint. Requires the author's tasks.create permission.",
       parameters: {
         type: 'object',
         properties: {
           title: { type: 'string' },
           description: { type: 'string' },
           priority: { type: 'string', enum: ['low', 'normal', 'high', 'urgent'] },
+          status: { type: 'string', enum: ['todo', 'in_progress', 'review', 'done'] },
+          assignee: { type: 'string', description: 'member name or email to assign; omit for unassigned' },
+          dueDate: { type: 'string', description: 'due date, ISO or YYYY-MM-DD' },
+          estimateMinutes: { type: 'number', description: 'time estimate in minutes' },
+          sprint: { type: 'string', description: 'sprint/group name (created if missing is NOT done — use an existing one)' },
         },
         required: ['title'],
       },
     },
     {
       name: 'update_task',
-      description: "Update a task's title/description/priority by number. Requires tasks.edit.",
+      description:
+        'Update a task by number: title/description/priority/status/assignee/due date/estimate/sprint. Only pass fields to change. Requires tasks.edit (status-only change needs tasks.changeStatus).',
       parameters: {
         type: 'object',
         properties: {
@@ -152,6 +159,11 @@ export function memoryTools(projectId: string, actorUserId: string): { tools: To
           title: { type: 'string' },
           description: { type: 'string' },
           priority: { type: 'string', enum: ['low', 'normal', 'high', 'urgent'] },
+          status: { type: 'string', enum: ['todo', 'in_progress', 'review', 'done'] },
+          assignee: { type: 'string', description: 'member name/email, or "none" to unassign' },
+          dueDate: { type: 'string', description: 'ISO or YYYY-MM-DD, or "none" to clear' },
+          estimateMinutes: { type: 'number' },
+          sprint: { type: 'string', description: 'existing sprint name, or "none" to remove' },
         },
         required: ['number'],
       },
@@ -208,15 +220,74 @@ export function memoryTools(projectId: string, actorUserId: string): { tools: To
       },
     },
     {
+      name: 'list_task_comments',
+      description: 'Read the comments on a task (by number) — author, time, text. Requires tasks.read.',
+      parameters: { type: 'object', properties: { number: { type: 'string' } }, required: ['number'] },
+    },
+    {
       name: 'attach_file_to_task',
       description:
         'Attach an existing project file (by id, e.g. one shared in chat) to a task (by number). The file then appears in the task Files section. Requires files.upload + tasks.edit.',
       parameters: { type: 'object', properties: { fileId: { type: 'string' }, number: { type: 'string' } }, required: ['fileId', 'number'] },
     },
+    {
+      name: 'list_sprints',
+      description: 'List the project sprints/groups (name + how many tasks). Use to know valid sprint names before assigning a task to one.',
+      parameters: { type: 'object', properties: {} },
+    },
   ]
 
   const findTask = (number: string) =>
     db.query.tasks.findFirst({ where: and(eq(tasks.projectId, projectId), eq(tasks.number, number.toUpperCase())) })
+
+  // разрешить исполнителя по имени/email → userId (или null для «none»/пусто)
+  async function resolveAssignee(name: unknown): Promise<string | null | undefined> {
+    if (name === undefined) return undefined // не менять
+    const s = String(name).trim().toLowerCase()
+    if (!s || s === 'none' || s === 'unassigned') return null
+    const rows = await db
+      .select({ id: users.id, name: users.name, email: users.email })
+      .from(projectMembers)
+      .innerJoin(users, eq(users.id, projectMembers.userId))
+      .where(eq(projectMembers.projectId, projectId))
+    const m = rows.find((r) => r.name.toLowerCase() === s || r.email.toLowerCase() === s) ?? rows.find((r) => r.name.toLowerCase().includes(s))
+    return m?.id ?? null
+  }
+  // разрешить спринт по имени → groupId (или null для «none»)
+  async function resolveSprint(name: unknown): Promise<string | null | undefined> {
+    if (name === undefined) return undefined
+    const s = String(name).trim().toLowerCase()
+    if (!s || s === 'none') return null
+    const rows = await db.select({ id: taskGroups.id, name: taskGroups.name }).from(taskGroups).where(eq(taskGroups.projectId, projectId))
+    return rows.find((r) => r.name.toLowerCase() === s)?.id ?? rows.find((r) => r.name.toLowerCase().includes(s))?.id ?? null
+  }
+  const parseDue = (v: unknown): Date | null | undefined => {
+    if (v === undefined) return undefined
+    const s = String(v).trim().toLowerCase()
+    if (!s || s === 'none') return null
+    const d = new Date(s.length <= 10 ? s + 'T12:00:00' : s)
+    return isNaN(d.getTime()) ? undefined : d
+  }
+  // уведомления по задаче при ИИ-действии (назначение / статус / упоминания)
+  async function notifyTaskChange(
+    pid: string,
+    actorId: string,
+    task: typeof tasks.$inferSelect,
+    opts: { assigned?: boolean; statusChanged?: boolean; mentions?: boolean },
+  ) {
+    const actor = await db.query.users.findFirst({ where: eq(users.id, actorId) })
+    const actorName = actor?.name || 'Someone'
+    const link = `/p/${pid}?task=${task.id}`
+    if (opts.assigned && task.assigneeId)
+      void notify({ projectId: pid, event: 'task_assigned', recipientIds: [task.assigneeId], actorId, actorName, dedupeKey: `task_assigned:${task.id}:${task.assigneeId}`, link, preview: task.title })
+    if (opts.statusChanged && task.assigneeId)
+      void notify({ projectId: pid, event: 'task_status', recipientIds: [task.assigneeId], actorId, actorName, dedupeKey: `task_status:${task.id}:${task.status}:${task.assigneeId}`, link, preview: task.title, vars: { ref: task.number, status: task.status } })
+    if (opts.mentions) {
+      const mentioned = extractMentions(task.description)
+      if (mentioned.length)
+        void notify({ projectId: pid, event: 'task_mention', recipientIds: mentioned, actorId, actorName, dedupeKey: `task_mention:${task.id}`, link, preview: task.title })
+    }
+  }
 
   const handlers: Record<string, ToolHandler> = {
     read_chat: async (args) => {
@@ -294,11 +365,13 @@ export function memoryTools(projectId: string, actorUserId: string): { tools: To
     },
     list_files: async (args) => {
       const q = typeof args.query === 'string' ? args.query.trim() : ''
+      // только «настоящие» файлы: не удалённые и не временные (неотправленные вложения)
+      const base = and(eq(files.projectId, projectId), sql`${files.deletedAt} is null`, sql`${files.pendingUntil} is null`)
       const rows = await db
         .select({ file: files, uploader: users })
         .from(files)
         .leftJoin(users, eq(users.id, files.uploadedById))
-        .where(q ? and(eq(files.projectId, projectId), ilike(files.name, `%${q}%`)) : eq(files.projectId, projectId))
+        .where(q ? and(base, ilike(files.name, `%${q}%`)) : base)
         .orderBy(desc(files.createdAt))
         .limit(30)
       if (!rows.length) return 'No files.'
@@ -308,6 +381,7 @@ export function memoryTools(projectId: string, actorUserId: string): { tools: To
         .join('\n')
     },
     list_tasks: async (args) => {
+      if (!(await hasPermission(projectId, actorUserId, 'tasks.read'))) return 'PERMISSION DENIED: the author cannot read tasks.'
       const status = typeof args.status === 'string' ? args.status : null
       const rows = await db
         .select({ task: tasks, assignee: users })
@@ -322,10 +396,11 @@ export function memoryTools(projectId: string, actorUserId: string): { tools: To
         .limit(50)
       if (!rows.length) return 'No tasks.'
       return rows
-        .map(
-          (r) =>
-            `${r.task.number} [${r.task.status}/${r.task.priority}] "${r.task.title}"${r.assignee ? ` → ${r.assignee.name}` : ''}${r.task.dueDate ? ` due ${r.task.dueDate.toISOString().slice(0, 10)}` : ''}`,
-        )
+        .map((r) => {
+          const est = r.task.estimateMinutes ? ` est ${r.task.estimateMinutes}m` : ''
+          const due = r.task.dueDate ? ` due ${r.task.dueDate.toISOString().slice(0, 10)}` : ''
+          return `${r.task.number} [${r.task.status}/${r.task.priority}] "${r.task.title}"${r.assignee ? ` → ${r.assignee.name}` : ''}${due}${est}`
+        })
         .join('\n')
     },
     get_task: async (args) => {
@@ -343,6 +418,9 @@ export function memoryTools(projectId: string, actorUserId: string): { tools: To
         })
         .from(tasks)
         .where(eq(tasks.projectId, projectId))) as [{ next: number; minSort: number }]
+      const assigneeId = await resolveAssignee(args.assignee)
+      const groupId = await resolveSprint(args.sprint)
+      const due = parseDue(args.dueDate)
       const [row] = await db
         .insert(tasks)
         .values({
@@ -352,22 +430,47 @@ export function memoryTools(projectId: string, actorUserId: string): { tools: To
           title: String(args.title ?? '').slice(0, 300),
           description: String(args.description ?? '').slice(0, 10_000),
           priority: (['low', 'normal', 'high', 'urgent'].includes(String(args.priority)) ? args.priority : 'normal') as 'normal',
+          status: (['todo', 'in_progress', 'review', 'done'].includes(String(args.status)) ? args.status : 'todo') as 'todo',
+          assigneeId: assigneeId ?? null,
+          groupId: groupId ?? null,
+          dueDate: due ?? null,
+          estimateMinutes: typeof args.estimateMinutes === 'number' ? String(Math.max(0, Math.round(args.estimateMinutes))) : null,
           createdById: actorUserId,
         })
         .returning()
-      return `Created ${row!.number}: "${row!.title}"`
+      // уведомление о назначении + упоминаниях в описании
+      await notifyTaskChange(projectId, actorUserId, row!, { assigned: Boolean(assigneeId), mentions: true })
+      const who = assigneeId ? ` → assigned` : ''
+      return `Created ${row!.number}: "${row!.title}"${who}.`
     },
     update_task: async (args) => {
-      if (!(await hasPermission(projectId, actorUserId, 'tasks.edit')))
-        return 'PERMISSION DENIED: the author does not have the tasks.edit permission. Politely refuse.'
       const t = await findTask(String(args.number ?? ''))
       if (!t) return 'Task not found.'
+      // смена только статуса допускается по changeStatus; остальное — по edit
+      const onlyStatus = Object.keys(args).every((k) => k === 'number' || k === 'status')
+      const allowed = onlyStatus
+        ? (await hasPermission(projectId, actorUserId, 'tasks.changeStatus')) || (await hasPermission(projectId, actorUserId, 'tasks.edit'))
+        : await hasPermission(projectId, actorUserId, 'tasks.edit')
+      if (!allowed) return 'PERMISSION DENIED: the author cannot edit this task. Politely refuse.'
       const patch: Record<string, unknown> = {}
       if (typeof args.title === 'string') patch.title = args.title.slice(0, 300)
       if (typeof args.description === 'string') patch.description = args.description.slice(0, 10_000)
       if (['low', 'normal', 'high', 'urgent'].includes(String(args.priority))) patch.priority = args.priority
+      if (['todo', 'in_progress', 'review', 'done'].includes(String(args.status))) patch.status = args.status
+      const assigneeId = await resolveAssignee(args.assignee)
+      if (assigneeId !== undefined) patch.assigneeId = assigneeId
+      const groupId = await resolveSprint(args.sprint)
+      if (groupId !== undefined) patch.groupId = groupId
+      const due = parseDue(args.dueDate)
+      if (due !== undefined) patch.dueDate = due
+      if (typeof args.estimateMinutes === 'number') patch.estimateMinutes = String(Math.max(0, Math.round(args.estimateMinutes)))
       if (!Object.keys(patch).length) return 'Nothing to update.'
-      await db.update(tasks).set(patch).where(eq(tasks.id, t.id))
+      const [row] = await db.update(tasks).set(patch).where(eq(tasks.id, t.id)).returning()
+      await notifyTaskChange(projectId, actorUserId, row!, {
+        assigned: assigneeId !== undefined && assigneeId !== t.assigneeId && Boolean(assigneeId),
+        statusChanged: patch.status !== undefined && patch.status !== t.status,
+        mentions: typeof args.description === 'string' && args.description !== t.description,
+      })
       return `Updated ${t.number}.`
     },
     change_task_status: async (args) => {
@@ -470,6 +573,37 @@ export function memoryTools(projectId: string, actorUserId: string): { tools: To
       if (!file) return 'File not found.'
       await db.update(files).set({ taskId: t.id, pendingUntil: null }).where(eq(files.id, fileId))
       return `Attached "${file.name}" to ${t.number}.`
+    },
+    list_task_comments: async (args) => {
+      if (!(await hasPermission(projectId, actorUserId, 'tasks.read')))
+        return 'PERMISSION DENIED: the author cannot read tasks. Politely refuse.'
+      const t = await findTask(String(args.number ?? ''))
+      if (!t) return 'Task not found.'
+      const rows = await db
+        .select({ c: taskComments, author: users })
+        .from(taskComments)
+        .leftJoin(users, eq(users.id, taskComments.authorId))
+        .where(and(eq(taskComments.taskId, t.id), eq(taskComments.projectId, projectId)))
+        .orderBy(asc(taskComments.createdAt))
+        .limit(50)
+      if (!rows.length) return `${t.number} has no comments.`
+      return rows
+        .map((r) => `[${r.c.createdAt.toISOString().slice(0, 16)}] ${r.author?.name ?? 'AI'}: ${r.c.body.replace(/@\[([^\]]*)\]\([^)]+\)/g, '@$1').slice(0, 400)}`)
+        .join('\n')
+    },
+    list_sprints: async () => {
+      if (!(await hasPermission(projectId, actorUserId, 'tasks.read')))
+        return 'PERMISSION DENIED: the author cannot read tasks. Politely refuse.'
+      const rows = await db
+        .select({
+          name: taskGroups.name,
+          count: sql<number>`(select count(*)::int from ${tasks} where ${tasks.groupId} = ${taskGroups.id})`,
+        })
+        .from(taskGroups)
+        .where(eq(taskGroups.projectId, projectId))
+        .orderBy(asc(taskGroups.sortOrder))
+      if (!rows.length) return 'No sprints.'
+      return rows.map((r) => `"${r.name}" (${r.count} tasks)`).join('\n')
     },
   }
 
