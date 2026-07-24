@@ -357,7 +357,10 @@
     "typing_other": "{{names}} כותבים…"
   },
   "composer": {
-    "dropHere": "שחררו כדי לצרף"
+    "dropHere": "שחררו כדי לצרף",
+    "pasteFromClipboard": "הדבקה מהלוח",
+    "clipboardEmpty": "הלוח ריק",
+    "clipboardDenied": "אין גישה ללוח"
   },
   "chatSearch": {
     "title": "חיפוש בצ׳אט",

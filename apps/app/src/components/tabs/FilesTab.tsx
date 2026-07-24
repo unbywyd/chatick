@@ -30,6 +30,7 @@ import { Popover, PopoverTrigger, PopoverContent } from '@/components/ui/popover
 import { Calendar } from '@/components/ui/calendar'
 import { FileViewer, type ViewerFile } from '@/components/files/FileViewer'
 import { StorageSettings } from '@/components/files/StorageSettings'
+import { usePasteFiles } from '@/hooks/usePasteFiles'
 
 type FileRow = {
   id: string
@@ -130,6 +131,9 @@ export function FilesTab({ projectId, isAdmin = false }: { projectId: string; is
       }
     }
   }
+
+  // вставка файлов/картинок из буфера (SPEC §8.16)
+  usePasteFiles(uploadFiles)
 
   const remove = useMutation({
     mutationFn: (fileId: string) => api(`/api/v1/files/${fileId}`, { method: 'DELETE' }, 'project'),

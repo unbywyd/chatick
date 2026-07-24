@@ -32,6 +32,7 @@ import { FileViewer, type ViewerFile } from '@/components/files/FileViewer'
 import { RichEditor } from '@/components/ui/rich-editor'
 import { TaskComments } from './TaskComments'
 import { TaskNotes } from './TaskNotes'
+import { usePasteFiles } from '@/hooks/usePasteFiles'
 import { STATUSES, PRIORITIES, STATUS_ICON, STATUS_COLOR, PRIORITY_DOT, fmtEstimate, type Task, type Member, type TaskGroup } from './types'
 
 type Attachment = {
@@ -153,6 +154,9 @@ export function TaskDrawer({
       }
     }
   }
+
+  // вставка файлов/картинок из буфера прямо в задачу (SPEC §8.16)
+  usePasteFiles(upload)
 
   const open = (att: Attachment) => setViewing({ id: att.id, name: att.name, mime: att.mime })
 

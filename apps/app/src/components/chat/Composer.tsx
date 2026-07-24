@@ -5,12 +5,13 @@ import StarterKit from '@tiptap/starter-kit'
 import Placeholder from '@tiptap/extension-placeholder'
 import Mention from '@tiptap/extension-mention'
 import tippy, { type Instance } from 'tippy.js'
-import { Bold, CheckSquare, ChevronUp, Code, FileText, Image as ImageIcon, Italic, List, Loader2, Paperclip, SendHorizontal, ShieldOff, Strikethrough, X } from 'lucide-react'
+import { Bold, CheckSquare, ChevronUp, ClipboardPaste, Code, FileText, Image as ImageIcon, Italic, List, Loader2, Paperclip, SendHorizontal, ShieldOff, Strikethrough, X } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
 import { toast } from 'sonner'
 import { useQuery } from '@tanstack/react-query'
 import { api, API_URL, getProjectToken } from '@/lib/api'
 import { cn } from '@/lib/utils'
+import { filesFromClipboard } from '@/lib/clipboard'
 import { MentionList, type MentionItem, type MentionListRef } from './MentionList'
 
 export const AI_MENTION_ID = 'ai'
@@ -142,12 +143,49 @@ export function Composer({
         }
         return false
       },
+      // вставка из буфера: картинки/файлы → загрузка как вложения (SPEC §8.16); текст — как обычно
+      handlePaste: (_view, event) => {
+        const files = filesFromClipboard(event.clipboardData)
+        if (files.length) {
+          event.preventDefault()
+          void uploadFiles(files)
+          return true
+        }
+        return false
+      },
     },
   })
 
   useEffect(() => {
     editor?.setEditable(!disabled)
   }, [editor, disabled])
+
+  // Ручная вставка из буфера (SPEC §8.16): картинка → вложение, текст → в редактор.
+  async function pasteFromClipboard() {
+    try {
+      if (navigator.clipboard && 'read' in navigator.clipboard) {
+        const items = await navigator.clipboard.read()
+        const files: File[] = []
+        for (const item of items) {
+          const imgType = item.types.find((ty) => ty.startsWith('image/'))
+          if (imgType) {
+            const blob = await item.getType(imgType)
+            files.push(new File([blob], `pasted-image.${imgType.split('/')[1] || 'png'}`, { type: imgType }))
+          }
+        }
+        if (files.length) {
+          await uploadFiles(files)
+          return
+        }
+      }
+      // текст → вставить в редактор
+      const text = await navigator.clipboard.readText().catch(() => '')
+      if (text && editor) editor.chain().focus().insertContent(text).run()
+      else if (!text) toast.info(t('composer.clipboardEmpty'))
+    } catch {
+      toast.error(t('composer.clipboardDenied'))
+    }
+  }
 
   const submit = (raw = false) => {
     if (!editor) return
@@ -298,6 +336,15 @@ export function Composer({
           className="rounded-md p-2 text-muted-foreground transition-colors hover:text-foreground disabled:opacity-40"
         >
           <Paperclip className="size-4" />
+        </button>
+        <button
+          type="button"
+          onClick={pasteFromClipboard}
+          disabled={disabled}
+          title={t('composer.pasteFromClipboard')}
+          className="rounded-md p-2 text-muted-foreground transition-colors hover:text-foreground disabled:opacity-40"
+        >
+          <ClipboardPaste className="size-4" />
         </button>
         <button
           type="button"

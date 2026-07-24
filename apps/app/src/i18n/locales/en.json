@@ -357,7 +357,10 @@
     "typing_other": "{{names}} are typing…"
   },
   "composer": {
-    "dropHere": "Drop to attach"
+    "dropHere": "Drop to attach",
+    "pasteFromClipboard": "Paste from clipboard",
+    "clipboardEmpty": "Clipboard is empty",
+    "clipboardDenied": "Clipboard access denied"
   },
   "chatSearch": {
     "title": "Search chat",

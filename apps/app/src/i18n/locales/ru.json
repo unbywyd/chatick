@@ -359,7 +359,10 @@
     "typing_other": "{{names}} пишут…"
   },
   "composer": {
-    "dropHere": "Отпустите, чтобы прикрепить"
+    "dropHere": "Отпустите, чтобы прикрепить",
+    "pasteFromClipboard": "Вставить из буфера",
+    "clipboardEmpty": "Буфер обмена пуст",
+    "clipboardDenied": "Нет доступа к буферу обмена"
   },
   "chatSearch": {
     "title": "Поиск в чате",
