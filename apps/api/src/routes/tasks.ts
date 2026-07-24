@@ -10,6 +10,7 @@ import { improveTask, validateTask, generateTaskNotes } from '../lib/llm.js'
 import { buildTeamContext } from '../lib/memory.js'
 import { notify, extractMentions } from '../lib/notify.js'
 import { broadcast } from '../ws.js'
+import { logActivity } from '../lib/audit.js'
 
 // Задачи проекта — project-токен; права per-user (SPEC §4.3) на каждое действие
 export const tasksRoute = new Hono<ProjectEnv>()
@@ -114,7 +115,7 @@ tasksRoute.get('/', async (c) => {
     })
     .from(tasks)
     .leftJoin(users, eq(users.id, tasks.assigneeId))
-    .where(eq(tasks.projectId, projectId))
+    .where(and(eq(tasks.projectId, projectId), sql`${tasks.deletedAt} is null`))
     .orderBy(asc(tasks.sortOrder), desc(tasks.createdAt))
   return c.json(rows.map((r) => ({ ...serialize(r.task, r.assignee), attachmentsCount: r.attachmentsCount })))
 })
@@ -186,6 +187,7 @@ tasksRoute.post('/', zValidator('json', z.object(taskShape)), async (c) => {
   }
 
   broadcast(projectId, 'tasks_changed', {})
+  void logActivity({ projectId, actorId: sub, action: 'create', entityType: 'task', entityId: row!.id, entityLabel: `${row!.number}: ${row!.title}` })
   return c.json({ ...serialize(row!, assignee), aiImproved, notesPending: Boolean(aiConfig.generateTaskNotes) }, 201)
 })
 
@@ -228,6 +230,8 @@ tasksRoute.patch(
       mentions: body.description !== undefined && body.description !== task.description,
     })
     broadcast(projectId, 'tasks_changed', {})
+    const act = body.status !== undefined && body.status !== task.status ? 'status' : body.assigneeId !== undefined ? 'assign' : 'update'
+    void logActivity({ projectId, actorId: sub, action: act, entityType: 'task', entityId: row!.id, entityLabel: `${row!.number}: ${row!.title}`, meta: { changed: Object.keys(patch) } })
     return c.json(serialize(row!, assignee))
   },
 )
@@ -241,7 +245,43 @@ tasksRoute.delete('/:taskId', async (c) => {
   const task = await db.query.tasks.findFirst({ where: and(eq(tasks.id, taskId), eq(tasks.projectId, projectId)) })
   if (!task) return c.json({ error: 'Not found' }, 404)
 
-  await db.delete(tasks).where(eq(tasks.id, taskId))
+  // soft-delete (SPEC §8.21): восстановимо 7 дней
+  await db.update(tasks).set({ deletedAt: new Date(), deletedById: sub }).where(eq(tasks.id, taskId))
+  void logActivity({ projectId, actorId: sub, action: 'delete', entityType: 'task', entityId: task.id, entityLabel: `${task.number}: ${task.title}` })
+  broadcast(projectId, 'tasks_changed', {})
+  return c.json({ ok: true })
+})
+
+// Корзина: удалённые задачи (восстановимые)
+tasksRoute.get('/trash', async (c) => {
+  const { projectId, sub } = c.get('auth')
+  if (!(await hasPermission(projectId, sub, 'tasks.read'))) return c.json({ error: 'Forbidden' }, 403)
+  const rows = await db
+    .select({ task: tasks, deleter: users })
+    .from(tasks)
+    .leftJoin(users, eq(users.id, tasks.deletedById))
+    .where(and(eq(tasks.projectId, projectId), sql`${tasks.deletedAt} is not null`))
+    .orderBy(desc(tasks.deletedAt))
+  return c.json(
+    rows.map((r) => ({
+      id: r.task.id,
+      number: r.task.number,
+      title: r.task.title,
+      deletedAt: r.task.deletedAt,
+      deletedBy: r.deleter ? { id: r.deleter.id, name: r.deleter.name, avatarUrl: r.deleter.avatarUrl } : null,
+    })),
+  )
+})
+
+// Восстановить задачу из корзины
+tasksRoute.post('/:taskId/restore', async (c) => {
+  const { projectId, sub } = c.get('auth')
+  if (!(await hasPermission(projectId, sub, 'tasks.delete'))) return c.json({ error: 'Forbidden' }, 403)
+  const taskId = c.req.param('taskId')
+  const task = await db.query.tasks.findFirst({ where: and(eq(tasks.id, taskId), eq(tasks.projectId, projectId)) })
+  if (!task) return c.json({ error: 'Not found' }, 404)
+  await db.update(tasks).set({ deletedAt: null, deletedById: null }).where(eq(tasks.id, taskId))
+  void logActivity({ projectId, actorId: sub, action: 'restore', entityType: 'task', entityId: task.id, entityLabel: `${task.number}: ${task.title}` })
   broadcast(projectId, 'tasks_changed', {})
   return c.json({ ok: true })
 })

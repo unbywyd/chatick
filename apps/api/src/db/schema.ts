@@ -233,6 +233,8 @@ export const taskGroups = pgTable(
     color: text('color').notNull().default('#64748b'), // hex
     sortOrder: doublePrecision('sort_order').notNull().default(0),
     createdById: text('created_by_id').references(() => users.id, { onDelete: 'set null' }),
+    deletedAt: timestamp('deleted_at', { withTimezone: true }),
+    deletedById: text('deleted_by_id').references(() => users.id, { onDelete: 'set null' }),
     createdAt: createdAt(),
     updatedAt: updatedAt(),
   },
@@ -258,6 +260,9 @@ export const tasks = pgTable(
     dueDate: timestamp('due_date', { withTimezone: true }),
     assigneeId: text('assignee_id').references(() => users.id, { onDelete: 'set null' }),
     createdById: text('created_by_id').references(() => users.id, { onDelete: 'set null' }),
+    // soft-delete (SPEC §8.21): восстановимо 7 дней, потом крон удаляет окончательно
+    deletedAt: timestamp('deleted_at', { withTimezone: true }),
+    deletedById: text('deleted_by_id').references(() => users.id, { onDelete: 'set null' }),
     createdAt: createdAt(),
     updatedAt: updatedAt(),
   },
@@ -266,6 +271,7 @@ export const tasks = pgTable(
     index('tasks_project_status_idx').on(t.projectId, t.status),
     index('tasks_assignee_idx').on(t.assigneeId),
     index('tasks_group_idx').on(t.groupId),
+    index('tasks_deleted_idx').on(t.deletedAt),
   ],
 )
 
@@ -326,6 +332,7 @@ export const files = pgTable(
     size: text('size').notNull().default('0'),
     // soft-delete: файл убран из менеджера, но в чате остаётся «файл удалён»
     deletedAt: timestamp('deleted_at', { withTimezone: true }),
+    deletedById: text('deleted_by_id').references(() => users.id, { onDelete: 'set null' }),
     // временный файл: загружен в композер, но сообщение/комментарий ещё не отправлены.
     // Не виден в менеджере; если до этого времени не привязан — удаляется кроном (SPEC §8.17).
     pendingUntil: timestamp('pending_until', { withTimezone: true }),
@@ -391,6 +398,8 @@ export const credentials = pgTable(
     source: resourceSource('source').notNull().default('manual'),
     messageId: text('message_id'), // связь на сообщение, если из чата (без FK — переживает удаление)
     createdById: text('created_by_id').references(() => users.id, { onDelete: 'set null' }),
+    deletedAt: timestamp('deleted_at', { withTimezone: true }),
+    deletedById: text('deleted_by_id').references(() => users.id, { onDelete: 'set null' }),
     createdAt: createdAt(),
     updatedAt: updatedAt(),
   },
@@ -426,6 +435,29 @@ export const credentialAccessLog = pgTable(
     createdAt: createdAt(),
   },
   (t) => [index('cred_log_project_created_idx').on(t.projectId, t.createdAt)],
+)
+
+// Универсальный журнал действий (SPEC §8.21): кто/что/когда по всем сущностям.
+// Хранится ВЕЧНО. entityType: task | file | resource | comment | sprint | member | project | ai...
+export const activityAction = pgEnum('activity_action', ['create', 'update', 'delete', 'restore', 'status', 'assign', 'comment', 'upload'])
+
+export const activityLog = pgTable(
+  'activity_log',
+  {
+    id: id(),
+    projectId: text('project_id').notNull().references(() => projects.id, { onDelete: 'cascade' }),
+    actorId: text('actor_id').references(() => users.id, { onDelete: 'set null' }), // null = ИИ/система
+    action: activityAction('action').notNull(),
+    entityType: text('entity_type').notNull(), // task | file | resource | comment | sprint | member | ...
+    entityId: text('entity_id'), // без FK: лог переживает удаление сущности
+    entityLabel: text('entity_label').notNull().default(''), // человекочитаемо: «TASK-42: Deploy API»
+    meta: text('meta'), // JSON: доп. детали (что изменилось и т.п.)
+    createdAt: createdAt(),
+  },
+  (t) => [
+    index('activity_project_created_idx').on(t.projectId, t.createdAt),
+    index('activity_entity_idx').on(t.entityType, t.entityId),
+  ],
 )
 
 // ---------------------------------------------------------------------------

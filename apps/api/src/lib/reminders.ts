@@ -3,7 +3,7 @@ import { db } from '../db/client.js'
 import { taskReminders, tasks, projects, projectMembers, users } from '../db/schema.js'
 import { sendMail } from './mail.js'
 import { env } from '../env.js'
-import { sweepPendingFiles } from './file-cleanup.js'
+import { sweepPendingFiles, sweepSoftDeleted } from './file-cleanup.js'
 
 // Планировщик напоминаний об открытых задачах (SPEC §8.9).
 // Тик раз в 5 минут: для каждого включённого конфига проверяем, наступил ли срок,
@@ -132,6 +132,7 @@ export function startReminderScheduler() {
     setInterval(() => {
       void tick()
       void sweepPendingFiles() // чистим просроченные временные вложения (SPEC §8.17)
+      void sweepSoftDeleted() // окончательно удаляем корзину старше 7 дней (SPEC §8.21)
     }, TICK_MS)
   }, 60_000)
   console.log('⏰ task-reminder scheduler started')

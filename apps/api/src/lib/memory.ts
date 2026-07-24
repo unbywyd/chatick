@@ -6,6 +6,7 @@ import { encrypt } from './crypto.js'
 import { notify, extractMentions } from './notify.js'
 import { projectLlm, complete, validateTask, type ToolDef, type ToolHandler } from './llm.js'
 import { broadcast } from '../ws.js'
+import { logActivity } from './audit.js'
 
 // Память ИИ (SPEC §5.6): саммари-цепочка + инструменты + фоновое сжатие.
 
@@ -278,7 +279,7 @@ export function memoryTools(projectId: string, actorUserId: string): { tools: To
   ]
 
   const findTask = (number: string) =>
-    db.query.tasks.findFirst({ where: and(eq(tasks.projectId, projectId), eq(tasks.number, number.toUpperCase())) })
+    db.query.tasks.findFirst({ where: and(eq(tasks.projectId, projectId), eq(tasks.number, number.toUpperCase()), sql`${tasks.deletedAt} is null`) })
 
   // разрешить исполнителя по имени/email → userId (или null для «none»/пусто)
   async function resolveAssignee(name: unknown): Promise<string | null | undefined> {
@@ -429,8 +430,8 @@ export function memoryTools(projectId: string, actorUserId: string): { tools: To
         .leftJoin(users, eq(users.id, tasks.assigneeId))
         .where(
           status
-            ? and(eq(tasks.projectId, projectId), eq(tasks.status, status as 'todo'))
-            : eq(tasks.projectId, projectId),
+            ? and(eq(tasks.projectId, projectId), eq(tasks.status, status as 'todo'), sql`${tasks.deletedAt} is null`)
+            : and(eq(tasks.projectId, projectId), sql`${tasks.deletedAt} is null`),
         )
         .orderBy(desc(tasks.createdAt))
         .limit(50)
@@ -533,9 +534,11 @@ export function memoryTools(projectId: string, actorUserId: string): { tools: To
         return 'PERMISSION DENIED: the author does not have the tasks.delete permission. Politely refuse.'
       const t = await findTask(String(args.number ?? ''))
       if (!t) return 'Task not found.'
-      await db.delete(tasks).where(eq(tasks.id, t.id))
+      // soft-delete (восстановимо 7 дней, SPEC §8.21)
+      await db.update(tasks).set({ deletedAt: new Date(), deletedById: actorUserId }).where(eq(tasks.id, t.id))
+      void logActivity({ projectId, actorId: actorUserId, action: 'delete', entityType: 'task', entityId: t.id, entityLabel: `${t.number}: ${t.title}` })
       broadcast(projectId, 'tasks_changed', {})
-      return `Deleted ${t.number}.`
+      return `Deleted ${t.number} (recoverable for 7 days).`
     },
 
     // --- Ресурсы ---
@@ -544,7 +547,9 @@ export function memoryTools(projectId: string, actorUserId: string): { tools: To
         return 'PERMISSION DENIED: the author cannot read resources. Politely refuse.'
       const q = typeof args.query === 'string' ? args.query.trim() : ''
       const rows = await db.query.credentials.findMany({
-        where: q ? and(eq(credentials.projectId, projectId), ilike(credentials.name, `%${q}%`)) : eq(credentials.projectId, projectId),
+        where: q
+          ? and(eq(credentials.projectId, projectId), ilike(credentials.name, `%${q}%`), sql`${credentials.deletedAt} is null`)
+          : and(eq(credentials.projectId, projectId), sql`${credentials.deletedAt} is null`),
       })
       if (!rows.length) return 'No resources.'
       const withCounts = await Promise.all(
@@ -614,8 +619,9 @@ export function memoryTools(projectId: string, actorUserId: string): { tools: To
         return 'PERMISSION DENIED: the author cannot manage resources.'
       const res = await db.query.credentials.findFirst({ where: and(eq(credentials.id, String(args.id ?? '')), eq(credentials.projectId, projectId)) })
       if (!res) return 'Resource not found.'
-      await db.delete(credentials).where(eq(credentials.id, res.id)) // секреты каскадом
-      return `Deleted resource "${res.name}".`
+      await db.update(credentials).set({ deletedAt: new Date(), deletedById: actorUserId }).where(eq(credentials.id, res.id))
+      void logActivity({ projectId, actorId: actorUserId, action: 'delete', entityType: 'resource', entityId: res.id, entityLabel: res.name })
+      return `Deleted resource "${res.name}" (recoverable for 7 days).`
     },
     create_sprint: async (args) => {
       if (!(await hasPermission(projectId, actorUserId, 'tasks.edit'))) return 'PERMISSION DENIED: creating sprints requires tasks.edit.'

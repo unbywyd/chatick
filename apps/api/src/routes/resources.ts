@@ -1,12 +1,13 @@
 import { Hono } from 'hono'
 import { zValidator } from '@hono/zod-validator'
 import { z } from 'zod'
-import { and, desc, eq } from 'drizzle-orm'
+import { and, desc, eq, sql } from 'drizzle-orm'
 import { db } from '../db/client.js'
 import { credentials, resourceSecrets, credentialAccessLog, users } from '../db/schema.js'
 import { requireProject, type ProjectEnv } from '../auth.js'
 import { encrypt, decrypt } from '../lib/crypto.js'
 import { hasPermission } from './projects.js'
+import { logActivity } from '../lib/audit.js'
 
 // Ресурсы (SPEC §8.1): ссылка + описание + опциональные секреты.
 // Секреты — самая чувствительная часть: значения только AES-256-GCM,
@@ -30,7 +31,7 @@ resourcesRoute.get('/', async (c) => {
     .select({ r: credentials, creator: users })
     .from(credentials)
     .leftJoin(users, eq(users.id, credentials.createdById))
-    .where(eq(credentials.projectId, projectId))
+    .where(and(eq(credentials.projectId, projectId), sql`${credentials.deletedAt} is null`))
     .orderBy(desc(credentials.createdAt))
 
   // счётчики секретов батчом
@@ -132,8 +133,35 @@ resourcesRoute.delete('/:id', async (c) => {
   const id = c.req.param('id')
   const r = await db.query.credentials.findFirst({ where: and(eq(credentials.id, id), eq(credentials.projectId, projectId)) })
   if (!r) return c.json({ error: 'Not found' }, 404)
-  await db.delete(credentials).where(eq(credentials.id, id))
+  // soft-delete (SPEC §8.21): восстановимо 7 дней
+  await db.update(credentials).set({ deletedAt: new Date(), deletedById: sub }).where(eq(credentials.id, id))
   await audit(projectId, sub, 'delete', id, r.name)
+  void logActivity({ projectId, actorId: sub, action: 'delete', entityType: 'resource', entityId: id, entityLabel: r.name })
+  return c.json({ ok: true })
+})
+
+// Корзина ресурсов
+resourcesRoute.get('/trash', async (c) => {
+  const { projectId, sub } = c.get('auth')
+  if (!(await hasPermission(projectId, sub, 'credentials.manage'))) return c.json({ error: 'Forbidden' }, 403)
+  const rows = await db
+    .select({ r: credentials, deleter: users })
+    .from(credentials)
+    .leftJoin(users, eq(users.id, credentials.deletedById))
+    .where(and(eq(credentials.projectId, projectId), sql`${credentials.deletedAt} is not null`))
+    .orderBy(desc(credentials.deletedAt))
+  return c.json(rows.map((x) => ({ id: x.r.id, name: x.r.name, deletedAt: x.r.deletedAt, deletedBy: x.deleter ? { id: x.deleter.id, name: x.deleter.name, avatarUrl: x.deleter.avatarUrl } : null })))
+})
+
+// Восстановить ресурс
+resourcesRoute.post('/:id/restore', async (c) => {
+  const { projectId, sub } = c.get('auth')
+  if (!(await hasPermission(projectId, sub, 'credentials.manage'))) return c.json({ error: 'Forbidden' }, 403)
+  const id = c.req.param('id')
+  const r = await db.query.credentials.findFirst({ where: and(eq(credentials.id, id), eq(credentials.projectId, projectId)) })
+  if (!r) return c.json({ error: 'Not found' }, 404)
+  await db.update(credentials).set({ deletedAt: null, deletedById: null }).where(eq(credentials.id, id))
+  void logActivity({ projectId, actorId: sub, action: 'restore', entityType: 'resource', entityId: id, entityLabel: r.name })
   return c.json({ ok: true })
 })
 
