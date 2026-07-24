@@ -1,7 +1,9 @@
 import { eq } from 'drizzle-orm'
 import { db } from '../db/client.js'
-import { companies, projects } from '../db/schema.js'
+import { companies, projectAi, projects } from '../db/schema.js'
 import { decrypt } from './crypto.js'
+import { env } from '../env.js'
+import { logAiUsage, trialBudgetExceeded, type TokenUsage } from './ai-usage.js'
 
 // BYO-LLM: каждая компания подключает своего провайдера (ключ шифрован в БД).
 // Единый тонкий адаптер: anthropic — нативный API, остальные — OpenAI-compatible.
@@ -43,7 +45,13 @@ export const LLM_PROVIDERS = {
 
 export type LlmProvider = keyof typeof LLM_PROVIDERS
 
-export type LlmConfig = { provider: LlmProvider; model: string; apiKey: string }
+export type LlmConfig = {
+  provider: LlmProvider
+  model: string
+  apiKey: string
+  // контекст учёта (SPEC §8.11): если задан — вызовы логируются в ai_usage_log
+  usage?: { projectId: string; source: 'company' | 'trial' | 'custom'; feature?: string }
+}
 
 /** Настройки LLM компании (расшифрованный ключ) — null, если не настроено. */
 export async function companyLlm(companyId: string): Promise<LlmConfig | null> {
@@ -63,10 +71,59 @@ export async function companyLlm(companyId: string): Promise<LlmConfig | null> {
   }
 }
 
-/** Настройки LLM по проекту (через его компанию). */
-export async function projectLlm(projectId: string): Promise<LlmConfig | null> {
+/**
+ * Настройки LLM по проекту (SPEC §8.11): источник trial | custom | company.
+ * - trial: наш пробный ключ (внутри DeepSeek), пока не исчерпан бюджет $ проекта;
+ * - custom: свой провайдер/ключ проекта;
+ * - company (дефолт): ключ компании.
+ * feature — тег для лога использования.
+ */
+export async function projectLlm(projectId: string, feature?: string): Promise<LlmConfig | null> {
   const project = await db.query.projects.findFirst({ where: eq(projects.id, projectId) })
-  return project ? companyLlm(project.companyId) : null
+  if (!project) return null
+  const ai = await db.query.projectAi.findFirst({ where: eq(projectAi.projectId, projectId) })
+  const source = ai?.source ?? 'company'
+
+  if (source === 'trial' && env.AI_TRIAL_KEY && !(await trialBudgetExceeded(projectId))) {
+    const provider = (env.AI_TRIAL_PROVIDER as LlmProvider) in LLM_PROVIDERS ? (env.AI_TRIAL_PROVIDER as LlmProvider) : 'deepseek'
+    return {
+      provider,
+      model: env.AI_TRIAL_MODEL || LLM_PROVIDERS[provider].defaultModel,
+      apiKey: env.AI_TRIAL_KEY,
+      usage: { projectId, source: 'trial', feature },
+    }
+  }
+
+  if (source === 'custom' && ai?.provider && ai.keyEncrypted && LLM_PROVIDERS[ai.provider as LlmProvider]) {
+    try {
+      const provider = ai.provider as LlmProvider
+      return {
+        provider,
+        model: ai.model || LLM_PROVIDERS[provider].defaultModel,
+        apiKey: decrypt(ai.keyEncrypted),
+        usage: { projectId, source: 'custom', feature },
+      }
+    } catch {
+      console.error('[llm] custom key decryption failed for project', projectId)
+    }
+  }
+
+  // company (дефолт / фолбэк, если trial исчерпан или custom не настроен)
+  const cfg = await companyLlm(project.companyId)
+  return cfg ? { ...cfg, usage: { projectId, source: 'company', feature } } : null
+}
+
+// Извлекает токены из ответа (Anthropic / OpenAI-совместимые) и логирует, если задан usage-контекст.
+function accumulate(acc: TokenUsage, raw: unknown): void {
+  const u = raw as { input_tokens?: number; output_tokens?: number; prompt_tokens?: number; completion_tokens?: number } | undefined
+  if (!u) return
+  acc.tokensIn += u.input_tokens ?? u.prompt_tokens ?? 0
+  acc.tokensOut += u.output_tokens ?? u.completion_tokens ?? 0
+}
+function flushUsage(cfg: LlmConfig, acc: TokenUsage): void {
+  if (cfg.usage && (acc.tokensIn || acc.tokensOut)) {
+    void logAiUsage({ projectId: cfg.usage.projectId, source: cfg.usage.source, model: cfg.model, usage: acc, feature: cfg.usage.feature })
+  }
 }
 
 export async function complete(
@@ -94,7 +151,10 @@ export async function complete(
         console.error('[llm] anthropic failed:', res.status, await res.text().catch(() => ''))
         return null
       }
-      const data = (await res.json()) as { content?: { type: string; text?: string }[] }
+      const data = (await res.json()) as { content?: { type: string; text?: string }[]; usage?: unknown }
+      const acc: TokenUsage = { tokensIn: 0, tokensOut: 0 }
+      accumulate(acc, data.usage)
+      flushUsage(cfg, acc)
       return data.content?.find((b) => b.type === 'text')?.text ?? null
     }
 
@@ -115,7 +175,10 @@ export async function complete(
       console.error('[llm] openai-compat failed:', res.status, await res.text().catch(() => ''))
       return null
     }
-    const data = (await res.json()) as { choices?: { message?: { content?: string } }[] }
+    const data = (await res.json()) as { choices?: { message?: { content?: string } }[]; usage?: unknown }
+    const acc: TokenUsage = { tokensIn: 0, tokensOut: 0 }
+    accumulate(acc, data.usage)
+    flushUsage(cfg, acc)
     return data.choices?.[0]?.message?.content ?? null
   } catch (err) {
     console.error('[llm] error:', err)
@@ -150,6 +213,7 @@ export async function completeWithTools(
   const p = LLM_PROVIDERS[cfg.provider]
   const maxIter = opts.maxIterations ?? 5
   try {
+    const acc: TokenUsage = { tokensIn: 0, tokensOut: 0 }
     if (p.kind === 'anthropic') {
       const tools = opts.tools.map((t) => ({ name: t.name, description: t.description, input_schema: t.parameters }))
       const msgs: unknown[] = [{ role: 'user', content: opts.user }]
@@ -166,8 +230,11 @@ export async function completeWithTools(
         const data = (await res.json()) as {
           stop_reason?: string
           content: ({ type: 'text'; text: string } | { type: 'tool_use'; id: string; name: string; input: Record<string, unknown> })[]
+          usage?: unknown
         }
+        accumulate(acc, data.usage)
         if (data.stop_reason !== 'tool_use') {
+          flushUsage(cfg, acc)
           return data.content.find((b) => b.type === 'text')?.text ?? null
         }
         msgs.push({ role: 'assistant', content: data.content })
@@ -182,6 +249,7 @@ export async function completeWithTools(
         )
         msgs.push({ role: 'user', content: results })
       }
+      flushUsage(cfg, acc)
       return null // не сошлось за maxIter
     }
 
@@ -203,10 +271,18 @@ export async function completeWithTools(
       }
       const data = (await res.json()) as {
         choices?: { message?: { content?: string; tool_calls?: { id: string; function: { name: string; arguments: string } }[] } }[]
+        usage?: unknown
       }
+      accumulate(acc, data.usage)
       const msg = data.choices?.[0]?.message
-      if (!msg) return null
-      if (!msg.tool_calls?.length) return msg.content ?? null
+      if (!msg) {
+        flushUsage(cfg, acc)
+        return null
+      }
+      if (!msg.tool_calls?.length) {
+        flushUsage(cfg, acc)
+        return msg.content ?? null
+      }
       msgs.push({ role: 'assistant', content: msg.content ?? null, tool_calls: msg.tool_calls })
       for (const call of msg.tool_calls) {
         let args: Record<string, unknown> = {}
@@ -217,6 +293,7 @@ export async function completeWithTools(
         msgs.push({ role: 'tool', tool_call_id: call.id, content: result })
       }
     }
+    flushUsage(cfg, acc)
     return null
   } catch (err) {
     console.error('[llm] tools error:', err)
@@ -255,6 +332,7 @@ export async function completeStream(
                 { role: 'user', content: opts.user },
               ],
               stream: true,
+              stream_options: { include_usage: true }, // токены в финальном чанке
             },
       ),
     })
@@ -264,6 +342,7 @@ export async function completeStream(
     }
 
     let full = ''
+    const acc: TokenUsage = { tokensIn: 0, tokensOut: 0 }
     const reader = res.body.getReader()
     const decoder = new TextDecoder()
     let buf = ''
@@ -279,20 +358,31 @@ export async function completeStream(
         if (!data || data === '[DONE]') continue
         try {
           const json = JSON.parse(data) as Record<string, unknown>
-          const delta = isAnthropic
-            ? ((json as { type?: string; delta?: { type?: string; text?: string } }).type === 'content_block_delta'
-                ? (json as { delta?: { text?: string } }).delta?.text
-                : undefined)
-            : (json as { choices?: { delta?: { content?: string } }[] }).choices?.[0]?.delta?.content
-          if (delta) {
-            full += delta
-            onChunk(delta)
+          if (isAnthropic) {
+            // usage: message_start.message.usage (input) + message_delta.usage (output)
+            const j = json as { type?: string; message?: { usage?: unknown }; usage?: unknown; delta?: { text?: string } }
+            if (j.type === 'message_start') accumulate(acc, j.message?.usage)
+            if (j.type === 'message_delta') accumulate(acc, j.usage)
+            const delta = j.type === 'content_block_delta' ? (json as { delta?: { text?: string } }).delta?.text : undefined
+            if (delta) {
+              full += delta
+              onChunk(delta)
+            }
+          } else {
+            const j = json as { choices?: { delta?: { content?: string } }[]; usage?: unknown }
+            if (j.usage) accumulate(acc, j.usage) // финальный чанк с include_usage
+            const delta = j.choices?.[0]?.delta?.content
+            if (delta) {
+              full += delta
+              onChunk(delta)
+            }
           }
         } catch {
           /* пропускаем неполные чанки */
         }
       }
     }
+    flushUsage(cfg, acc)
     return full || null
   } catch (err) {
     console.error('[llm] stream error:', err)
@@ -317,7 +407,7 @@ export async function improveTask(
   projectId: string,
   input: { title: string; description: string; language: string },
 ): Promise<{ title: string; description: string } | null> {
-  const cfg = await projectLlm(projectId)
+  const cfg = await projectLlm(projectId, 'improve_task')
   if (!cfg) return null
 
   const lang = LANG_NAMES[input.language] ?? input.language
@@ -353,7 +443,7 @@ export async function validateTask(
   projectId: string,
   input: { title: string; description: string; language: string },
 ): Promise<{ advice: string; suggestedTitle: string; suggestedDescription: string } | null> {
-  const cfg = await projectLlm(projectId)
+  const cfg = await projectLlm(projectId, 'validate_task')
   if (!cfg) return null
   const lang = LANG_NAMES[input.language] ?? input.language
   const text = await complete(cfg, {

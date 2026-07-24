@@ -11,6 +11,7 @@ import { resourcesRoute } from './routes/resources.js'
 import { tasksRoute } from './routes/tasks.js'
 import { messagesRoute } from './routes/messages.js'
 import { notificationsRoute } from './routes/notifications.js'
+import { aiRoute } from './routes/ai.js'
 
 export const app = new Hono()
 
@@ -27,6 +28,7 @@ app.route('/api/v1/resources', resourcesRoute)
 app.route('/api/v1/tasks', tasksRoute)
 app.route('/api/v1/messages', messagesRoute)
 app.route('/api/v1/notifications', notificationsRoute)
+app.route('/api/v1/ai', aiRoute)
 
 // Дальше:
 // app.route('/api/v1/tasks', tasks)         — таск-менеджер

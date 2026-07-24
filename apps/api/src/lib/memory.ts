@@ -512,7 +512,7 @@ export async function maybeCompress(projectId: string): Promise<void> {
   try {
     const project = await db.query.projects.findFirst({ where: eq(projects.id, projectId) })
     if (!project) return
-    const cfg = await projectLlm(projectId)
+    const cfg = await projectLlm(projectId, 'summary')
     if (!cfg) return
     const aiConfig = JSON.parse(project.aiConfig || '{}') as { language?: string }
     const langName = LANG_NAMES[aiConfig.language ?? 'en'] ?? 'English'

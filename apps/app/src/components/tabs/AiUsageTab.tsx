@@ -1,0 +1,279 @@
+import { useState, useEffect } from 'react'
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
+import { useTranslation } from 'react-i18next'
+import { toast } from 'sonner'
+import { Bot, Cpu } from 'lucide-react'
+import { api } from '@/lib/api'
+import { cn } from '@/lib/utils'
+import { Button } from '@/components/ui/button'
+
+// ИИ-агент проекта + учёт использования (SPEC §8.11).
+type Config = {
+  source: 'company' | 'trial' | 'custom'
+  provider: string
+  model: string
+  hasKey: boolean
+  trialBudget: number
+  trialAvailable: boolean
+  spentUsd: number
+  providers: { id: string; label: string; defaultModel: string }[]
+}
+type UsageRow = { model: string; source: string; calls: number; tokensIn: number; tokensOut: number; costUsd: number | null }
+type LogRow = { id: string; model: string; source: string; feature: string | null; tokensIn: number; tokensOut: number; costUsd: number | null; createdAt: string }
+type PriceRow = { model: string; inputPerM: number | null; outputPerM: number | null; custom: boolean; hasDefault: boolean }
+
+const fmtUsd = (n: number | null) => (n === null ? '—' : n < 0.01 ? `$${n.toFixed(4)}` : `$${n.toFixed(2)}`)
+const fmtTok = (n: number) => (n >= 1000 ? `${(n / 1000).toFixed(1)}k` : String(n))
+
+export function AiUsageTab({ projectId, isAdmin }: { projectId: string; isAdmin: boolean }) {
+  const { t, i18n } = useTranslation()
+  const qc = useQueryClient()
+  const onErr = (e: unknown) => toast.error(e instanceof Error ? e.message : String(e))
+
+  const cfgQ = useQuery({ queryKey: ['ai-config', projectId], queryFn: () => api<Config>('/api/v1/ai/config', {}, 'project') })
+  const usageQ = useQuery({ queryKey: ['ai-usage', projectId], queryFn: () => api<{ spentUsd: number; byModel: UsageRow[] }>('/api/v1/ai/usage', {}, 'project') })
+  const logQ = useQuery({ queryKey: ['ai-log', projectId], queryFn: () => api<LogRow[]>('/api/v1/ai/usage/log', {}, 'project') })
+  const priceQ = useQuery({ queryKey: ['ai-pricing', projectId], queryFn: () => api<PriceRow[]>('/api/v1/ai/pricing', {}, 'project') })
+
+  const cfg = cfgQ.data
+  const trialPct = cfg && cfg.trialBudget > 0 ? Math.min(100, (cfg.spentUsd / cfg.trialBudget) * 100) : 0
+
+  const [source, setSource] = useState<'company' | 'trial' | 'custom'>('company')
+  const [provider, setProvider] = useState('')
+  const [model, setModel] = useState('')
+  const [apiKey, setApiKey] = useState('')
+
+  useEffect(() => {
+    if (!cfg) return
+    setSource(cfg.source)
+    setProvider(cfg.provider || cfg.providers[0]?.id || '')
+    setModel(cfg.model)
+  }, [cfg])
+
+  const saveCfg = useMutation({
+    mutationFn: () =>
+      api('/api/v1/ai/config', { method: 'PUT', body: JSON.stringify({ source, provider, model: model || undefined, apiKey: apiKey || undefined }) }, 'project'),
+    onSuccess: () => {
+      toast.success(t('ai.saved'))
+      setApiKey('')
+      qc.invalidateQueries({ queryKey: ['ai-config', projectId] })
+    },
+    onError: onErr,
+  })
+
+  return (
+    <div className="mx-auto max-w-3xl space-y-8 p-6">
+      <div>
+        <h1 className="flex items-center gap-2 text-xl font-bold tracking-tight">
+          <Bot className="size-5" />
+          {t('ai.title')}
+        </h1>
+        <p className="mt-1 text-sm text-muted-foreground">{t('ai.subtitle')}</p>
+      </div>
+
+      {/* Источник ИИ */}
+      <section className="space-y-4 rounded-xl border bg-card p-4">
+        <h2 className="text-sm font-semibold">{t('ai.source')}</h2>
+        <div className="grid gap-2 sm:grid-cols-3">
+          {(['company', 'trial', 'custom'] as const).map((s) => {
+            const disabled = s === 'trial' && !cfg?.trialAvailable
+            return (
+              <button
+                key={s}
+                disabled={!isAdmin || disabled}
+                onClick={() => setSource(s)}
+                className={cn(
+                  'rounded-lg border p-3 text-start text-sm transition-colors disabled:opacity-50',
+                  source === s ? 'border-brand bg-accent' : 'hover:bg-secondary',
+                )}
+              >
+                <div className="font-medium">{t(`ai.sourceOpt.${s}.label`)}</div>
+                <div className="mt-0.5 text-xs text-muted-foreground">{t(`ai.sourceOpt.${s}.hint`)}</div>
+              </button>
+            )
+          })}
+        </div>
+
+        {/* Пробный бюджет */}
+        {source === 'trial' && cfg && (
+          <div>
+            <div className="mb-1 flex items-center justify-between text-xs">
+              <span className="text-muted-foreground">{t('ai.trialUsed', { spent: fmtUsd(cfg.spentUsd), budget: fmtUsd(cfg.trialBudget) })}</span>
+              <span className={cn('tabular-nums', trialPct > 90 && 'text-destructive')}>{trialPct.toFixed(0)}%</span>
+            </div>
+            <div className="h-1.5 w-full overflow-hidden rounded-full bg-secondary">
+              <div className={cn('h-full transition-all', trialPct > 90 ? 'bg-destructive' : 'bg-brand')} style={{ width: `${trialPct}%` }} />
+            </div>
+            {trialPct >= 100 && <p className="mt-1 text-xs text-destructive">{t('ai.trialExhausted')}</p>}
+          </div>
+        )}
+
+        {/* Свой агент */}
+        {source === 'custom' && cfg && (
+          <div className="space-y-3">
+            <label className="block">
+              <span className="mb-1 block text-xs font-medium text-muted-foreground">{t('ai.provider')}</span>
+              <select value={provider} onChange={(e) => setProvider(e.target.value)} disabled={!isAdmin} className="h-9 w-full rounded-md border bg-background px-2 text-sm">
+                {cfg.providers.map((p) => (
+                  <option key={p.id} value={p.id}>
+                    {p.label}
+                  </option>
+                ))}
+              </select>
+            </label>
+            <label className="block">
+              <span className="mb-1 block text-xs font-medium text-muted-foreground">{t('ai.model')}</span>
+              <input value={model} onChange={(e) => setModel(e.target.value)} disabled={!isAdmin} placeholder={cfg.providers.find((p) => p.id === provider)?.defaultModel} className="h-9 w-full rounded-md border bg-background px-3 text-sm" />
+            </label>
+            <label className="block">
+              <span className="mb-1 block text-xs font-medium text-muted-foreground">{t('ai.apiKey')}</span>
+              <input type="password" value={apiKey} onChange={(e) => setApiKey(e.target.value)} disabled={!isAdmin} placeholder={cfg.hasKey ? t('ai.keyKeep') : ''} className="h-9 w-full rounded-md border bg-background px-3 text-sm" />
+            </label>
+            <p className="text-xs text-muted-foreground">{t('ai.keyNote')}</p>
+          </div>
+        )}
+
+        {isAdmin && (
+          <Button variant="brand" onClick={() => saveCfg.mutate()} disabled={saveCfg.isPending}>
+            {t('ai.save')}
+          </Button>
+        )}
+      </section>
+
+      {/* Использование по моделям */}
+      <section className="space-y-3 rounded-xl border bg-card p-4">
+        <h2 className="flex items-center gap-2 text-sm font-semibold">
+          <Cpu className="size-4" />
+          {t('ai.usage')}
+          <span className="ms-auto text-xs font-normal text-muted-foreground">{t('ai.totalSpent', { total: fmtUsd(usageQ.data?.spentUsd ?? 0) })}</span>
+        </h2>
+        {(usageQ.data?.byModel.length ?? 0) === 0 ? (
+          <p className="text-xs text-muted-foreground">{t('ai.noUsage')}</p>
+        ) : (
+          <div className="overflow-x-auto">
+            <table className="w-full text-sm">
+              <thead>
+                <tr className="border-b text-xs text-muted-foreground">
+                  <th className="px-2 py-1.5 text-start">{t('ai.model')}</th>
+                  <th className="px-2 py-1.5 text-start">{t('ai.sourceCol')}</th>
+                  <th className="px-2 py-1.5 text-end">{t('ai.calls')}</th>
+                  <th className="px-2 py-1.5 text-end">{t('ai.tokensIn')}</th>
+                  <th className="px-2 py-1.5 text-end">{t('ai.tokensOut')}</th>
+                  <th className="px-2 py-1.5 text-end">{t('ai.cost')}</th>
+                </tr>
+              </thead>
+              <tbody>
+                {usageQ.data!.byModel.map((r, i) => (
+                  <tr key={i} className="border-b last:border-0">
+                    <td className="px-2 py-1.5 font-mono text-xs">{r.model}</td>
+                    <td className="px-2 py-1.5 text-xs text-muted-foreground">{t(`ai.sourceOpt.${r.source}.label`)}</td>
+                    <td className="px-2 py-1.5 text-end tabular-nums">{r.calls}</td>
+                    <td className="px-2 py-1.5 text-end tabular-nums">{fmtTok(r.tokensIn)}</td>
+                    <td className="px-2 py-1.5 text-end tabular-nums">{fmtTok(r.tokensOut)}</td>
+                    <td className="px-2 py-1.5 text-end tabular-nums">{r.costUsd === null ? t('ai.noPrice') : fmtUsd(r.costUsd)}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
+      </section>
+
+      {/* Прайсинг моделей */}
+      {isAdmin && <PricingEditor projectId={projectId} rows={priceQ.data ?? []} onSaved={() => { qc.invalidateQueries({ queryKey: ['ai-pricing', projectId] }); qc.invalidateQueries({ queryKey: ['ai-usage', projectId] }) }} />}
+
+      {/* Лог вызовов */}
+      <section className="space-y-3 rounded-xl border bg-card p-4">
+        <h2 className="text-sm font-semibold">{t('ai.log')}</h2>
+        {(logQ.data?.length ?? 0) === 0 ? (
+          <p className="text-xs text-muted-foreground">{t('ai.noUsage')}</p>
+        ) : (
+          <ul className="space-y-1 text-xs">
+            {logQ.data!.map((r) => (
+              <li key={r.id} className="flex items-center gap-2 border-b py-1 last:border-0">
+                <span className="text-muted-foreground">{new Date(r.createdAt).toLocaleString(i18n.language)}</span>
+                <span className="font-mono">{r.model}</span>
+                {r.feature && <span className="rounded bg-secondary px-1">{r.feature}</span>}
+                <span className="ms-auto tabular-nums text-muted-foreground">↓{fmtTok(r.tokensIn)} ↑{fmtTok(r.tokensOut)}</span>
+                <span className="tabular-nums">{r.costUsd === null ? '—' : fmtUsd(r.costUsd)}</span>
+              </li>
+            ))}
+          </ul>
+        )}
+      </section>
+    </div>
+  )
+}
+
+function PricingEditor({ projectId, rows, onSaved }: { projectId: string; rows: PriceRow[]; onSaved: () => void }) {
+  const { t } = useTranslation()
+  const onErr = (e: unknown) => toast.error(e instanceof Error ? e.message : String(e))
+  const save = useMutation({
+    mutationFn: (b: { model: string; inputPerM: number | null; outputPerM: number | null }) =>
+      api('/api/v1/ai/pricing', { method: 'PUT', body: JSON.stringify(b) }, 'project'),
+    onSuccess: onSaved,
+    onError: onErr,
+  })
+
+  return (
+    <section className="space-y-3 rounded-xl border bg-card p-4">
+      <h2 className="text-sm font-semibold">{t('ai.pricing')}</h2>
+      <p className="text-xs text-muted-foreground">{t('ai.pricingHint')}</p>
+      <div className="overflow-x-auto">
+        <table className="w-full text-sm">
+          <thead>
+            <tr className="border-b text-xs text-muted-foreground">
+              <th className="px-2 py-1.5 text-start">{t('ai.model')}</th>
+              <th className="px-2 py-1.5 text-end">{t('ai.inputPerM')}</th>
+              <th className="px-2 py-1.5 text-end">{t('ai.outputPerM')}</th>
+              <th className="w-8" />
+            </tr>
+          </thead>
+          <tbody>
+            {rows.map((r) => (
+              <PriceRowEditor key={r.model} row={r} onSave={(inp, out) => save.mutate({ model: r.model, inputPerM: inp, outputPerM: out })} />
+            ))}
+          </tbody>
+        </table>
+      </div>
+    </section>
+  )
+}
+
+function PriceRowEditor({ row, onSave }: { row: PriceRow; onSave: (inp: number | null, out: number | null) => void }) {
+  const { t } = useTranslation()
+  const [inp, setInp] = useState(row.inputPerM?.toString() ?? '')
+  const [out, setOut] = useState(row.outputPerM?.toString() ?? '')
+  useEffect(() => {
+    setInp(row.inputPerM?.toString() ?? '')
+    setOut(row.outputPerM?.toString() ?? '')
+  }, [row.inputPerM, row.outputPerM])
+
+  const dirty = inp !== (row.inputPerM?.toString() ?? '') || out !== (row.outputPerM?.toString() ?? '')
+
+  return (
+    <tr className="border-b last:border-0">
+      <td className="px-2 py-1.5 font-mono text-xs">
+        {row.model}
+        {row.custom && <span className="ms-1 rounded bg-brand/15 px-1 text-[10px] text-brand">custom</span>}
+      </td>
+      <td className="px-2 py-1.5 text-end">
+        <input value={inp} onChange={(e) => setInp(e.target.value)} placeholder={row.hasDefault ? '' : '—'} className="w-20 rounded border bg-background px-1.5 py-0.5 text-end text-xs" />
+      </td>
+      <td className="px-2 py-1.5 text-end">
+        <input value={out} onChange={(e) => setOut(e.target.value)} placeholder={row.hasDefault ? '' : '—'} className="w-20 rounded border bg-background px-1.5 py-0.5 text-end text-xs" />
+      </td>
+      <td className="px-1">
+        {dirty && (
+          <button
+            title={t('ai.save')}
+            onClick={() => onSave(inp === '' ? null : Number(inp), out === '' ? null : Number(out))}
+            className="text-xs text-brand hover:underline"
+          >
+            {t('ai.save')}
+          </button>
+        )}
+      </td>
+    </tr>
+  )
+}

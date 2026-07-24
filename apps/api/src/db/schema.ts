@@ -444,6 +444,59 @@ export const notificationLog = pgTable(
   (t) => [uniqueIndex('notif_log_dedupe_idx').on(t.dedupeKey)],
 )
 
+// ---------------------------------------------------------------------------
+// ИИ-агент проекта + учёт использования (SPEC §8.11)
+// ---------------------------------------------------------------------------
+
+// Источник ИИ проекта: trial (наш пробный, бюджет $2) | custom (свой ключ) | company (ключ компании, дефолт).
+export const aiSource = pgEnum('ai_source', ['company', 'trial', 'custom'])
+
+export const projectAi = pgTable(
+  'project_ai',
+  {
+    projectId: text('project_id').primaryKey().references(() => projects.id, { onDelete: 'cascade' }),
+    source: aiSource('source').notNull().default('company'),
+    // custom: свой провайдер/модель/ключ (ключ шифрован)
+    provider: text('provider'),
+    model: text('model'),
+    keyEncrypted: text('key_encrypted'),
+    updatedAt: updatedAt(),
+  },
+)
+
+// Лог использования ИИ: по каждому вызову — модель, токены, стоимость (в центах, 6 знаков).
+export const aiUsageLog = pgTable(
+  'ai_usage_log',
+  {
+    id: id(),
+    projectId: text('project_id').notNull().references(() => projects.id, { onDelete: 'cascade' }),
+    source: aiSource('source').notNull(),
+    model: text('model').notNull(),
+    tokensIn: text('tokens_in').notNull().default('0'),
+    tokensOut: text('tokens_out').notNull().default('0'),
+    // стоимость в USD (строкой, чтобы не терять точность); null = цена модели неизвестна
+    costUsd: text('cost_usd'),
+    feature: text('feature'), // dispatcher | chat | summary | improve_task | validate_task
+    createdAt: createdAt(),
+  },
+  (t) => [index('ai_usage_project_idx').on(t.projectId, t.createdAt)],
+)
+
+// Прайсинг моделей: цена за 1M токенов (USD). Глобальный дефолт (projectId=null) +
+// per-project override. Известные модели — сидятся; для неизвестных цены нет, пока не зададут.
+export const modelPricing = pgTable(
+  'model_pricing',
+  {
+    id: id(),
+    projectId: text('project_id').references(() => projects.id, { onDelete: 'cascade' }), // null = глобальный дефолт
+    model: text('model').notNull(),
+    inputPerM: text('input_per_m').notNull(), // USD за 1M входящих токенов
+    outputPerM: text('output_per_m').notNull(), // USD за 1M исходящих
+    updatedAt: updatedAt(),
+  },
+  (t) => [uniqueIndex('model_pricing_idx').on(t.projectId, t.model)],
+)
+
 // Напоминания о задачах в TODO (SPEC §8.9): per-project таймер → письмо со списком.
 export const reminderCadence = pgEnum('reminder_cadence', ['hourly', 'daily', 'weekly'])
 // Кому слать список открытых задач.

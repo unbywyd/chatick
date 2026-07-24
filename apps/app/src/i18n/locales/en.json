@@ -393,7 +393,8 @@
     "resources": "Resources",
     "team": "Team",
     "notifications": "Notifications",
-    "placeholder": "“{{tab}}” tab — content coming soon"
+    "placeholder": "“{{tab}}” tab — content coming soon",
+    "ai": "AI & usage"
   },
   "notif": {
     "title": "Notifications",
@@ -503,5 +504,47 @@
         "hint": "Your bucket — no limit"
       }
     }
+  },
+  "ai": {
+    "title": "AI agent & usage",
+    "subtitle": "Choose which AI powers this project and track token usage & cost",
+    "source": "AI source",
+    "sourceOpt": {
+      "company": {
+        "label": "Company key",
+        "hint": "Use the company-wide LLM key"
+      },
+      "trial": {
+        "label": "Free trial",
+        "hint": "Our trial AI, limited budget per project"
+      },
+      "custom": {
+        "label": "Own agent",
+        "hint": "Your own provider & API key"
+      }
+    },
+    "sourceCol": "Source",
+    "trialUsed": "{{spent}} of {{budget}} used",
+    "trialExhausted": "Trial budget used up — switch to your own agent to continue.",
+    "provider": "Provider",
+    "model": "Model",
+    "apiKey": "API key",
+    "keyKeep": "Enter to replace the current key",
+    "keyNote": "The key is stored encrypted (AES-256-GCM) and never shown again.",
+    "save": "Save",
+    "saved": "AI settings saved",
+    "usage": "Usage by model",
+    "totalSpent": "Total: {{total}}",
+    "noUsage": "No usage yet",
+    "noPrice": "no price",
+    "calls": "Calls",
+    "tokensIn": "Tokens in",
+    "tokensOut": "Tokens out",
+    "cost": "Cost",
+    "log": "Recent calls",
+    "pricing": "Model pricing (USD per 1M tokens)",
+    "pricingHint": "Known models inherit default prices. Set your own to override; leave blank to reset.",
+    "inputPerM": "Input /1M",
+    "outputPerM": "Output /1M"
   }
 }

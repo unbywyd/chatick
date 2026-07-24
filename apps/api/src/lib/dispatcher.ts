@@ -62,7 +62,7 @@ function parseJson<T>(text: string | null): T | null {
 export async function aiChatReply(projectId: string, userId: string, userMessage: string): Promise<string | null> {
   const project = await db.query.projects.findFirst({ where: eq(projects.id, projectId) })
   if (!project) return null
-  const cfg = await projectLlm(projectId)
+  const cfg = await projectLlm(projectId, 'chat')
   if (!cfg) return null
 
   const ai = JSON.parse(project.aiConfig || '{}') as AiConfig
@@ -160,7 +160,7 @@ export async function evaluateMessage(messageId: string): Promise<Verdict> {
   // observer не фильтрует вовсе
   if ((ai.mode ?? 'assistant') === 'observer') return { verdict: 'pass' }
 
-  const cfg = await projectLlm(msg.projectId)
+  const cfg = await projectLlm(msg.projectId, 'dispatcher')
   if (!cfg) return { verdict: 'pass' }
 
   const author = msg.authorId ? await db.query.users.findFirst({ where: eq(users.id, msg.authorId) }) : null
@@ -199,7 +199,7 @@ export async function sandboxReply(
   if (!msg) return null
   const project = await db.query.projects.findFirst({ where: eq(projects.id, msg.projectId) })
   if (!project) return null
-  const cfg = await projectLlm(msg.projectId)
+  const cfg = await projectLlm(msg.projectId, 'dispatcher')
   if (!cfg) return null
 
   const ai = JSON.parse(project.aiConfig || '{}') as AiConfig
