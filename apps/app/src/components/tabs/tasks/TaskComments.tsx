@@ -8,6 +8,7 @@ import { api, API_URL, getProjectToken } from '@/lib/api'
 import { cn } from '@/lib/utils'
 import { Button } from '@/components/ui/button'
 import { RichEditor } from '@/components/ui/rich-editor'
+import { ClipboardBanner } from '@/components/ui/clipboard-banner'
 import { useConfirm } from '@/components/ui/confirm'
 import type { Member } from './types'
 
@@ -247,10 +248,20 @@ export function TaskComments({
               e.target.value = ''
             }}
           />
-          <Button variant="ghost" size="sm" onClick={() => fileRef.current?.click()}>
-            <Paperclip className="size-3.5" />
-            {t('tasks.attach')}
-          </Button>
+          <div className="flex items-center gap-2">
+            <Button variant="ghost" size="sm" onClick={() => fileRef.current?.click()}>
+              <Paperclip className="size-3.5" />
+              {t('tasks.attach')}
+            </Button>
+            <ClipboardBanner
+              compact
+              onImage={(files) => setPending((p) => [...p, ...files])}
+              onText={(text) => {
+                setBody((b) => (b ? b + '\n' + text : text))
+                setEditorKey((k) => k + 1) // пересоздать редактор с новым значением
+              }}
+            />
+          </div>
           <Button variant="brand" size="sm" disabled={!body.trim() || submit.isPending} onClick={() => submit.mutate()}>
             {t('tasks.send')}
           </Button>

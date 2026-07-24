@@ -31,3 +31,31 @@ export function textPreview(text: string, maxLines = 2, maxChars = 120): string 
   if (text.length > s.length) s += '…'
   return s
 }
+
+export type ClipboardContent =
+  | { kind: 'image'; files: File[]; previewUrl: string }
+  | { kind: 'text'; text: string }
+  | { kind: 'empty' }
+  | { kind: 'denied' }
+
+/** Читает системный буфер (async Clipboard API). Требует жеста пользователя / разрешения. */
+export async function readClipboard(): Promise<ClipboardContent> {
+  try {
+    if (navigator.clipboard && 'read' in navigator.clipboard) {
+      const items = await navigator.clipboard.read()
+      const files: File[] = []
+      for (const item of items) {
+        const imgType = item.types.find((ty) => ty.startsWith('image/'))
+        if (imgType) {
+          const blob = await item.getType(imgType)
+          files.push(new File([blob], `pasted-image.${imgType.split('/')[1] || 'png'}`, { type: imgType }))
+        }
+      }
+      if (files.length) return { kind: 'image', files, previewUrl: URL.createObjectURL(files[0]!) }
+    }
+    const text = await navigator.clipboard.readText().catch(() => '')
+    return text ? { kind: 'text', text } : { kind: 'empty' }
+  } catch {
+    return { kind: 'denied' }
+  }
+}

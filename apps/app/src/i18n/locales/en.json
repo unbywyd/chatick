@@ -581,5 +581,11 @@
       "recommendation": "Recommendation",
       "rebuttal": "Rebuttal"
     }
+  },
+  "clipboard": {
+    "paste": "Paste from clipboard",
+    "insert": "Insert",
+    "empty": "Clipboard is empty",
+    "denied": "Clipboard access denied"
   }
 }

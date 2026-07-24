@@ -581,5 +581,11 @@
       "recommendation": "המלצה",
       "rebuttal": "הפרכה"
     }
+  },
+  "clipboard": {
+    "paste": "הדבקה מהלוח",
+    "insert": "הדבקה",
+    "empty": "הלוח ריק",
+    "denied": "אין גישה ללוח"
   }
 }

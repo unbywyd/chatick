@@ -30,6 +30,7 @@ import { Popover, PopoverTrigger, PopoverContent } from '@/components/ui/popover
 import { Calendar } from '@/components/ui/calendar'
 import { FileViewer, type ViewerFile } from '@/components/files/FileViewer'
 import { StorageSettings } from '@/components/files/StorageSettings'
+import { ClipboardBanner } from '@/components/ui/clipboard-banner'
 import { usePasteFiles } from '@/hooks/usePasteFiles'
 
 type FileRow = {
@@ -240,6 +241,7 @@ export function FilesTab({ projectId, isAdmin = false }: { projectId: string; is
           <UploadCloud className="size-4" />
           {t('files.upload')}
         </Button>
+        <ClipboardBanner compact onImage={(files) => uploadFiles(files)} />
         <input ref={inputRef} type="file" multiple className="hidden" onChange={(e) => { if (e.target.files?.length) uploadFiles(e.target.files); e.target.value = '' }} />
       </div>
 
