@@ -308,16 +308,26 @@ messagesRoute.post(
 // Поиск по сообщениям чата: текст / только с файлами / только со ссылками
 messagesRoute.get(
   '/search',
-  zValidator('query', z.object({ q: z.string().default(''), type: z.enum(['all', 'files', 'links']).default('all') })),
+  zValidator(
+    'query',
+    z.object({
+      q: z.string().default(''),
+      type: z.enum(['all', 'files', 'links']).default('all'),
+      from: z.string().optional(),
+      to: z.string().optional(),
+    }),
+  ),
   async (c) => {
     const { projectId, sub } = c.get('auth')
-    const { q, type } = c.req.valid('query')
+    const { q, type, from, to } = c.req.valid('query')
     const needle = q.trim()
 
     // базовый where: доставленные групповые + свои
     const conds = [eq(messages.projectId, projectId), eq(messages.mode, 'group'), eq(messages.status, 'delivered')]
     if (needle) conds.push(ilike(messages.text, `%${needle}%`))
     if (type === 'links') conds.push(sql`${messages.text} ~* 'https?://'`)
+    if (from && !isNaN(Date.parse(from))) conds.push(sql`${messages.createdAt} >= ${new Date(from)}`)
+    if (to && !isNaN(Date.parse(to))) conds.push(sql`${messages.createdAt} <= ${new Date(to + 'T23:59:59')}`)
 
     const rows = await db
       .select({ msg: messages, author: users, attCount: sql<number>`(select count(*)::int from ${files} where ${files.messageId} = ${messages.id})` })

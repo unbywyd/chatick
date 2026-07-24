@@ -566,6 +566,8 @@ function ChatSearch({ projectId, lang, onClose }: { projectId: string; lang: str
   const { t } = useTranslation()
   const [q, setQ] = useState('')
   const [type, setType] = useState<'all' | 'files' | 'links'>('all')
+  const [from, setFrom] = useState('')
+  const [to, setTo] = useState('')
   const [debounced, setDebounced] = useState('')
 
   useEffect(() => {
@@ -573,10 +575,16 @@ function ChatSearch({ projectId, lang, onClose }: { projectId: string; lang: str
     return () => clearTimeout(id)
   }, [q])
 
+  const hasCriteria = debounced.trim().length > 0 || type !== 'all' || Boolean(from) || Boolean(to)
   const results = useQuery({
-    queryKey: ['chat-search', projectId, debounced, type],
-    enabled: debounced.trim().length > 0 || type !== 'all',
-    queryFn: () => api<ChatMessage[]>(`/api/v1/messages/search?q=${encodeURIComponent(debounced)}&type=${type}`, {}, 'project'),
+    queryKey: ['chat-search', projectId, debounced, type, from, to],
+    enabled: hasCriteria,
+    queryFn: () => {
+      const p = new URLSearchParams({ q: debounced, type })
+      if (from) p.set('from', from)
+      if (to) p.set('to', to)
+      return api<ChatMessage[]>(`/api/v1/messages/search?${p}`, {}, 'project')
+    },
   })
 
   return (
@@ -597,7 +605,7 @@ function ChatSearch({ projectId, lang, onClose }: { projectId: string; lang: str
         </Button>
       </header>
 
-      <div className="flex gap-1.5 border-b px-3 py-2">
+      <div className="flex flex-wrap items-center gap-1.5 border-b px-3 py-2">
         {(['all', 'files', 'links'] as const).map((tp) => (
           <button
             key={tp}
@@ -610,6 +618,17 @@ function ChatSearch({ projectId, lang, onClose }: { projectId: string; lang: str
             {t(`chatSearch.type.${tp}`)}
           </button>
         ))}
+        <span className="mx-1 h-4 w-px bg-border" />
+        <span className="text-xs text-muted-foreground">{t('files.period')}:</span>
+        <input type="date" value={from} onChange={(e) => setFrom(e.target.value)} className="h-7 rounded-md border bg-transparent px-2 text-xs text-foreground" />
+        <span className="text-xs text-muted-foreground">—</span>
+        <input type="date" value={to} onChange={(e) => setTo(e.target.value)} className="h-7 rounded-md border bg-transparent px-2 text-xs text-foreground" />
+        {(from || to || q) && (
+          <Button variant="ghost" size="sm" onClick={() => { setQ(''); setFrom(''); setTo('') }}>
+            <X className="size-3.5" />
+            {t('files.clearFilter')}
+          </Button>
+        )}
       </div>
 
       <div className="flex-1 space-y-1 overflow-y-auto p-3">
@@ -628,7 +647,7 @@ function ChatSearch({ projectId, lang, onClose }: { projectId: string; lang: str
             )}
           </div>
         ))}
-        {results.data && results.data.length === 0 && (debounced.trim() || type !== 'all') && (
+        {results.data && results.data.length === 0 && hasCriteria && (
           <p className="py-6 text-center text-sm text-muted-foreground">{t('start.nothingFound')}</p>
         )}
         {!results.data && !results.isFetching && (
