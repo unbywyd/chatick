@@ -8,6 +8,7 @@ import { api, API_URL, getProjectToken } from '@/lib/api'
 import { cn } from '@/lib/utils'
 import { Button } from '@/components/ui/button'
 import { RichEditor } from '@/components/ui/rich-editor'
+import { Avatar } from '@/components/ui/avatar'
 import { ClipboardBanner } from '@/components/ui/clipboard-banner'
 import { useConfirm } from '@/components/ui/confirm'
 import type { Member } from './types'
@@ -131,13 +132,7 @@ export function TaskComments({
           return (
             <li key={c.id} className="rounded-lg border bg-card px-3 py-2">
               <div className="mb-1 flex items-center gap-2">
-                {c.author?.avatarUrl ? (
-                  <img src={c.author.avatarUrl} alt="" className="size-5 rounded-full" referrerPolicy="no-referrer" />
-                ) : (
-                  <span className="grid size-5 place-items-center rounded-full bg-secondary text-[10px] font-semibold">
-                    {(c.author?.name ?? '?')[0]?.toUpperCase()}
-                  </span>
-                )}
+                <Avatar name={c.author?.name ?? 'AI'} src={c.author?.avatarUrl} size={20} />
                 <span className="text-xs font-medium">{c.author?.name ?? 'AI'}</span>
                 <span className="text-xs text-muted-foreground">{new Date(c.createdAt).toLocaleString(lang)}</span>
                 <div className="ms-auto flex items-center gap-1">

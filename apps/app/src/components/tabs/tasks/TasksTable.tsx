@@ -25,6 +25,7 @@ import {
   DropdownMenuCheckItem,
 } from '@/components/ui/dropdown-menu'
 import { useConfirm } from '@/components/ui/confirm'
+import { Avatar } from '@/components/ui/avatar'
 import {
   STATUSES,
   PRIORITIES,
@@ -541,13 +542,7 @@ function AssigneePicker({
         <button disabled={!canEdit} className="inline-flex items-center gap-1.5 text-xs disabled:opacity-70">
           {assignee ? (
             <>
-              {assignee.avatarUrl ? (
-                <img src={assignee.avatarUrl} alt="" className="size-5 rounded-full" referrerPolicy="no-referrer" />
-              ) : (
-                <span className="grid size-5 place-items-center rounded-full bg-secondary text-[10px] font-semibold">
-                  {assignee.name[0]?.toUpperCase()}
-                </span>
-              )}
+              <Avatar name={assignee.name} src={assignee.avatarUrl} size={20} />
               <span className="line-clamp-1">{assignee.name}</span>
             </>
           ) : (
@@ -574,6 +569,7 @@ function AssigneePicker({
         </DropdownMenuCheckItem>
         {filtered.map((m) => (
           <DropdownMenuCheckItem key={m.user.id} checked={assignee?.id === m.user.id} onSelect={() => onSelect(m.user.id)}>
+            <Avatar name={m.user.name || m.user.email} src={m.user.avatarUrl} size={18} />
             {m.user.name || m.user.email}
           </DropdownMenuCheckItem>
         ))}

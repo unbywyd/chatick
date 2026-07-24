@@ -14,6 +14,7 @@ import {
   DropdownMenuContent,
   DropdownMenuCheckItem,
 } from '@/components/ui/dropdown-menu'
+import { Avatar } from '@/components/ui/avatar'
 import { TaskDrawer } from './tasks/TaskDrawer'
 import { TasksTable } from './tasks/TasksTable'
 import { STATUSES, PRIORITIES, STATUS_ICON, STATUS_COLOR, PRIORITY_COLOR, isOverdue, fmtEstimate, type Task, type TaskGroup, type Member, type Status, type Priority } from './tasks/types'
@@ -25,6 +26,8 @@ export function TasksTab({ projectId, meId }: { projectId: string; meId?: string
   const [q, setQ] = useState('')
   const [onlyMine, setOnlyMine] = useState(false)
   const [assigneeFilter, setAssigneeFilter] = useState<string | null>(null) // фильтр по исполнителю
+  const [assigneeSearch, setAssigneeSearch] = useState('')
+  const [newSprintId, setNewSprintId] = useState<string | null>(null) // спринт для новой задачи
   const [statusFilter, setStatusFilter] = useState<Status | null>(null)
   const [priorityFilter, setPriorityFilter] = useState<Priority | null>(null)
   const [showDone, setShowDone] = useState(false)
@@ -58,11 +61,12 @@ export function TasksTab({ projectId, meId }: { projectId: string; meId?: string
   const onErr = (e: unknown) => toast.error(e instanceof Error ? e.message : String(e))
   const refresh = () => qc.invalidateQueries({ queryKey: ['tasks', projectId] })
 
+  const me = useMemo(() => (membersQ.data ?? []).find((m) => m.user.id === meId), [membersQ.data, meId])
   // право редактировать: наличие tasks.edit у участника (owner/admin/member с write+)
-  const canEdit = useMemo(() => {
-    const me = (membersQ.data ?? []).find((m) => m.user.id === meId)
-    return me?.role === 'owner' || me?.role === 'admin' || Boolean(me?.permissions?.['tasks.edit'])
-  }, [membersQ.data, meId])
+  const canEdit = useMemo(
+    () => me?.role === 'owner' || me?.role === 'admin' || Boolean(me?.permissions?.['tasks.edit']),
+    [me],
+  )
 
   const refreshGroups = () => qc.invalidateQueries({ queryKey: ['task-groups', projectId] })
   const createGroup = useMutation({
@@ -89,7 +93,7 @@ export function TasksTab({ projectId, meId }: { projectId: string; meId?: string
   }
 
   const create = useMutation({
-    mutationFn: (title: string) => api<Task>('/api/v1/tasks', { method: 'POST', body: JSON.stringify({ title }) }, 'project'),
+    mutationFn: (title: string) => api<Task>('/api/v1/tasks', { method: 'POST', body: JSON.stringify({ title, groupId: newSprintId }) }, 'project'),
     onSuccess: (created) => {
       setNewTitle('')
       refresh()
@@ -205,6 +209,40 @@ export function TasksTab({ projectId, meId }: { projectId: string; meId?: string
               if (newTitle.trim()) create.mutate(newTitle.trim())
             }}
           >
+            {/* выбор спринта для новой задачи — только если есть хотя бы один спринт */}
+            {(groupsQ.data?.length ?? 0) > 0 && (
+              <DropdownMenu>
+                <DropdownMenuTrigger asChild>
+                  <button
+                    type="button"
+                    className="inline-flex shrink-0 items-center gap-1.5 rounded-md border px-2.5 text-sm text-muted-foreground hover:text-foreground"
+                  >
+                    {(() => {
+                      const g = groupsQ.data?.find((x) => x.id === newSprintId)
+                      return g ? (
+                        <>
+                          <span className="size-2.5 rounded-full" style={{ backgroundColor: g.color }} />
+                          <span className="max-w-28 truncate">{g.name}</span>
+                        </>
+                      ) : (
+                        <span>{t('tasks.noGroup')}</span>
+                      )
+                    })()}
+                  </button>
+                </DropdownMenuTrigger>
+                <DropdownMenuContent align="start">
+                  <DropdownMenuCheckItem checked={!newSprintId} onSelect={() => setNewSprintId(null)}>
+                    {t('tasks.noGroup')}
+                  </DropdownMenuCheckItem>
+                  {(groupsQ.data ?? []).map((g) => (
+                    <DropdownMenuCheckItem key={g.id} checked={newSprintId === g.id} onSelect={() => setNewSprintId(g.id)}>
+                      <span className="size-2.5 rounded-full" style={{ backgroundColor: g.color }} />
+                      {g.name}
+                    </DropdownMenuCheckItem>
+                  ))}
+                </DropdownMenuContent>
+              </DropdownMenu>
+            )}
             <Input value={newTitle} onChange={(e) => setNewTitle(e.target.value)} placeholder={t('tasks.newPlaceholder')} />
             <Button variant="brand" type="submit" disabled={!newTitle.trim() || create.isPending}>
               <Plus className="size-4" />
@@ -228,14 +266,18 @@ export function TasksTab({ projectId, meId }: { projectId: string; meId?: string
           {/* Фильтры-чипсы */}
           <div className="mt-3 flex flex-wrap items-center gap-1.5">
             <Chip active={onlyMine} onClick={() => setOnlyMine((v) => !v)}>
-              <User className="size-3" />
+              <Avatar name={me?.user.name} src={me?.user.avatarUrl} size={16} />
               {t('tasks.mine')}
             </Chip>
-            {STATUSES.map((s) => (
-              <Chip key={s} active={statusFilter === s} onClick={() => setStatusFilter(statusFilter === s ? null : s)}>
-                {t(`tasks.status.${s}`)}
-              </Chip>
-            ))}
+            {STATUSES.map((s) => {
+              const Icon = STATUS_ICON[s]
+              return (
+                <Chip key={s} active={statusFilter === s} onClick={() => setStatusFilter(statusFilter === s ? null : s)}>
+                  <Icon className={cn('size-3.5', STATUS_COLOR[s])} />
+                  {t(`tasks.status.${s}`)}
+                </Chip>
+              )
+            })}
             <DropdownMenu>
               <DropdownMenuTrigger asChild>
                 <button
@@ -257,8 +299,8 @@ export function TasksTab({ projectId, meId }: { projectId: string; meId?: string
                 ))}
               </DropdownMenuContent>
             </DropdownMenu>
-            {/* Фильтр по исполнителю */}
-            <DropdownMenu>
+            {/* Фильтр по исполнителю (с поиском и аватарами) */}
+            <DropdownMenu onOpenChange={(o) => !o && setAssigneeSearch('')}>
               <DropdownMenuTrigger asChild>
                 <button
                   className={cn(
@@ -266,22 +308,49 @@ export function TasksTab({ projectId, meId }: { projectId: string; meId?: string
                     assigneeFilter ? 'border-brand bg-accent text-accent-foreground' : 'text-muted-foreground hover:text-foreground',
                   )}
                 >
-                  <User className="size-3" />
+                  {assigneeFilter ? (
+                    <Avatar
+                      name={membersQ.data?.find((m) => m.user.id === assigneeFilter)?.user.name}
+                      src={membersQ.data?.find((m) => m.user.id === assigneeFilter)?.user.avatarUrl}
+                      size={16}
+                    />
+                  ) : (
+                    <User className="size-3" />
+                  )}
                   {assigneeFilter
                     ? (membersQ.data?.find((m) => m.user.id === assigneeFilter)?.user.name ?? t('tasks.assigneeLabel'))
                     : t('tasks.assigneeLabel')}
                 </button>
               </DropdownMenuTrigger>
-              <DropdownMenuContent>
-                {(membersQ.data ?? []).map((m) => (
-                  <DropdownMenuCheckItem
-                    key={m.user.id}
-                    checked={assigneeFilter === m.user.id}
-                    onSelect={() => setAssigneeFilter(assigneeFilter === m.user.id ? null : m.user.id)}
-                  >
-                    {m.user.name || m.user.email}
-                  </DropdownMenuCheckItem>
-                ))}
+              <DropdownMenuContent className="max-h-72 overflow-y-auto">
+                {(membersQ.data?.length ?? 0) > 6 && (
+                  <div className="p-1">
+                    <input
+                      autoFocus
+                      value={assigneeSearch}
+                      onChange={(e) => setAssigneeSearch(e.target.value)}
+                      onKeyDown={(e) => e.stopPropagation()}
+                      onKeyDownCapture={(e) => e.stopPropagation()}
+                      placeholder={t('tasks.searchAssignee')}
+                      className="h-7 w-full rounded border bg-background px-2 text-xs outline-none focus:ring-2 focus:ring-ring"
+                    />
+                  </div>
+                )}
+                {(membersQ.data ?? [])
+                  .filter((m) => {
+                    const n = assigneeSearch.trim().toLowerCase()
+                    return !n || (m.user.name || m.user.email).toLowerCase().includes(n)
+                  })
+                  .map((m) => (
+                    <DropdownMenuCheckItem
+                      key={m.user.id}
+                      checked={assigneeFilter === m.user.id}
+                      onSelect={() => setAssigneeFilter(assigneeFilter === m.user.id ? null : m.user.id)}
+                    >
+                      <Avatar name={m.user.name} src={m.user.avatarUrl} size={18} />
+                      {m.user.name || m.user.email}
+                    </DropdownMenuCheckItem>
+                  ))}
               </DropdownMenuContent>
             </DropdownMenu>
             {/* Сбросить все фильтры */}
@@ -525,14 +594,7 @@ function TaskRow({
             {new Date(task.dueDate).toLocaleDateString(lang, { day: 'numeric', month: 'short' })}
           </span>
         )}
-        {task.assignee &&
-          (task.assignee.avatarUrl ? (
-            <img src={task.assignee.avatarUrl} alt={task.assignee.name} title={task.assignee.name} className="size-5.5 rounded-full" referrerPolicy="no-referrer" />
-          ) : (
-            <span title={task.assignee.name} className="grid size-5.5 place-items-center rounded-full bg-secondary text-[10px] font-semibold text-foreground">
-              {task.assignee.name[0]?.toUpperCase()}
-            </span>
-          ))}
+        {task.assignee && <Avatar name={task.assignee.name} src={task.assignee.avatarUrl} size={22} title={task.assignee.name} />}
       </span>
     </li>
   )

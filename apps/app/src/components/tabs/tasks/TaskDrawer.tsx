@@ -35,6 +35,7 @@ import { Popover, PopoverTrigger, PopoverContent } from '@/components/ui/popover
 import { Calendar } from '@/components/ui/calendar'
 import { FileViewer, type ViewerFile } from '@/components/files/FileViewer'
 import { RichEditor } from '@/components/ui/rich-editor'
+import { Avatar } from '@/components/ui/avatar'
 import { TaskComments } from './TaskComments'
 import { TaskNotes } from './TaskNotes'
 import { usePasteFiles } from '@/hooks/usePasteFiles'
@@ -281,7 +282,11 @@ export function TaskDrawer({
                 <DropdownMenu onOpenChange={(o) => !o && setAssigneeQuery('')}>
                   <DropdownMenuTrigger asChild>
                     <Button variant="outline" size="sm" className="w-full justify-start gap-2">
-                      <User className="size-3.5 text-muted-foreground" />
+                      {task.assignee ? (
+                        <Avatar name={task.assignee.name} src={task.assignee.avatarUrl} size={18} />
+                      ) : (
+                        <User className="size-3.5 text-muted-foreground" />
+                      )}
                       <span className="truncate">{task.assignee?.name ?? t('tasks.unassigned')}</span>
                     </Button>
                   </DropdownMenuTrigger>
@@ -310,6 +315,7 @@ export function TaskDrawer({
                       })
                       .map((m) => (
                         <DropdownMenuCheckItem key={m.user.id} checked={task.assignee?.id === m.user.id} onSelect={() => onPatch({ assigneeId: m.user.id })}>
+                          <Avatar name={m.user.name || m.user.email} src={m.user.avatarUrl} size={18} />
                           {m.user.name || m.user.email}
                         </DropdownMenuCheckItem>
                       ))}
@@ -595,7 +601,7 @@ export function TaskDrawer({
         {t(`tasks.priority.${task.priority}`)}
       </span>
       <span className="inline-flex items-center gap-1.5 text-muted-foreground">
-        <User className="size-3.5" />
+        {task.assignee ? <Avatar name={task.assignee.name} src={task.assignee.avatarUrl} size={18} /> : <User className="size-3.5" />}
         {task.assignee?.name ?? t('tasks.unassigned')}
       </span>
       {task.dueDate && (
@@ -638,11 +644,7 @@ export function TaskDrawer({
         {/* Кто сейчас правит задачу (SPEC §8.18) */}
         {lockedBy && (
           <span className="inline-flex items-center gap-1.5 rounded-full bg-amber-500/15 px-2 py-1 text-xs text-amber-500" title={t('tasks.editingNow', { name: lockedBy.name })}>
-            {lockedBy.avatarUrl ? (
-              <img src={lockedBy.avatarUrl} alt="" className="size-4 rounded-full" referrerPolicy="no-referrer" />
-            ) : (
-              <span className="grid size-4 place-items-center rounded-full bg-amber-500/30 text-[9px] font-semibold">{lockedBy.name[0]?.toUpperCase()}</span>
-            )}
+            <Avatar name={lockedBy.name} src={lockedBy.avatarUrl} size={16} />
             <span className="hidden sm:inline">{t('tasks.editingNow', { name: lockedBy.name })}</span>
           </span>
         )}
