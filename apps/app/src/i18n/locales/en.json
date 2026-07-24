@@ -250,10 +250,12 @@
     "rawSendHint": "Skip the AI check — marked as unverified",
     "rawBadge": "unverified",
     "redirectedToAi": "Your question to the AI moved to the private AI channel",
+    "deleteMessage": "Delete message",
     "verifying": "Checking your message…",
     "typing_one": "{{names}} is typing…",
     "typing_other": "{{names}} are typing…"
   },
+  "composer": { "dropHere": "Drop to attach" },
   "chatSearch": {
     "title": "Search chat",
     "placeholder": "Search messages…",

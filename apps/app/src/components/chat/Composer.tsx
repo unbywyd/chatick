@@ -5,10 +5,11 @@ import StarterKit from '@tiptap/starter-kit'
 import Placeholder from '@tiptap/extension-placeholder'
 import Mention from '@tiptap/extension-mention'
 import tippy, { type Instance } from 'tippy.js'
-import { Bold, ChevronUp, Code, FileText, Image as ImageIcon, Italic, List, Loader2, Paperclip, SendHorizontal, ShieldOff, Strikethrough, X } from 'lucide-react'
+import { Bold, CheckSquare, ChevronUp, Code, FileText, Image as ImageIcon, Italic, List, Loader2, Paperclip, SendHorizontal, ShieldOff, Strikethrough, X } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
 import { toast } from 'sonner'
-import { API_URL, getProjectToken } from '@/lib/api'
+import { useQuery } from '@tanstack/react-query'
+import { api, API_URL, getProjectToken } from '@/lib/api'
 import { cn } from '@/lib/utils'
 import { MentionList, type MentionItem, type MentionListRef } from './MentionList'
 
@@ -27,15 +28,31 @@ export function Composer({
   disabled?: boolean
   placeholder: string
   mentions: MentionItem[]
-  onSend: (payload: { markdown: string; mentionIds: string[]; attachmentIds: string[]; raw?: boolean }) => void
+  onSend: (payload: { markdown: string; mentionIds: string[]; attachmentIds: string[]; taskRefs: string[]; raw?: boolean }) => void
 }) {
   const { t } = useTranslation()
   const [attachments, setAttachments] = useState<PendingAttachment[]>([])
+  const [taskPins, setTaskPins] = useState<{ id: string; number: string; title: string }[]>([])
   const [uploading, setUploading] = useState(0)
   const [sendMenu, setSendMenu] = useState(false)
+  const [dropActive, setDropActive] = useState(false) // подсветка зоны при наведении файла/задачи
   // «отправить оригинал» — как в WhatsApp: без сжатия картинок
   const [keepOriginal, setKeepOriginal] = useState(false)
   const fileRef = useRef<HTMLInputElement>(null)
+
+  // превью-URL для картинок-вложений (в чипах)
+  const previews = useQuery({
+    queryKey: ['composer-previews', attachments.map((a) => a.id).join(',')],
+    enabled: attachments.some((a) => a.mime.startsWith('image/')),
+    staleTime: 50 * 60 * 1000,
+    queryFn: async () => {
+      const imgs = attachments.filter((a) => a.mime.startsWith('image/'))
+      const entries = await Promise.all(
+        imgs.map(async (a) => [a.id, (await api<{ url: string }>(`/api/v1/files/${a.id}/view-url`, {}, 'project')).url] as const),
+      )
+      return Object.fromEntries(entries) as Record<string, string>
+    },
+  })
 
   // вложения грузятся сразу (files API), к сообщению привяжутся при отправке (SPEC §5.5.4)
   async function uploadFiles(list: FileList | File[]) {
@@ -135,37 +152,55 @@ export function Composer({
   const submit = (raw = false) => {
     if (!editor) return
     const markdown = editor.isEmpty ? '' : serializeToMarkdown(editor.getJSON())
-    if (!markdown.trim() && attachments.length === 0) return
+    if (!markdown.trim() && attachments.length === 0 && taskPins.length === 0) return
     const mentionIds = collectMentions(editor.getJSON())
-    onSend({ markdown: markdown || '📎', mentionIds, attachmentIds: attachments.map((a) => a.id), raw })
+    onSend({
+      markdown: markdown || '📎',
+      mentionIds,
+      attachmentIds: attachments.map((a) => a.id),
+      taskRefs: taskPins.map((p) => p.id),
+      raw,
+    })
     editor.commands.clearContent()
     setAttachments([])
+    setTaskPins([])
     setSendMenu(false)
   }
 
   if (!editor) return null
 
+  const hasPins = attachments.length > 0 || taskPins.length > 0 || uploading > 0
+
   return (
     <div
-      className={cn('rounded-md border transition-shadow focus-within:ring-2 focus-within:ring-ring', disabled && 'opacity-50')}
-      onDragOver={(e) => e.preventDefault()}
+      className={cn(
+        'rounded-md border transition-all focus-within:ring-2 focus-within:ring-ring',
+        disabled && 'opacity-50',
+        dropActive && 'border-brand ring-2 ring-brand/50',
+      )}
+      onDragOver={(e) => {
+        e.preventDefault()
+        if (!disabled) setDropActive(true)
+      }}
+      onDragLeave={(e) => {
+        // не мигать при переходе между дочерними
+        const related = e.relatedTarget
+        if (!(related instanceof globalThis.Node) || !e.currentTarget.contains(related)) setDropActive(false)
+      }}
       onDrop={(e) => {
         e.preventDefault()
+        setDropActive(false)
         if (disabled) return
-        // D&D задач: строки таба «Задачи» кладут application/x-chatick-task
+        // D&D задачи → пин (не текст)
         const taskData = e.dataTransfer.getData('application/x-chatick-task')
-        if (taskData && editor) {
+        if (taskData) {
           try {
-            const task = JSON.parse(taskData) as { id: string; number: string; title: string; projectId: string }
-            editor
-              .chain()
-              .focus()
-              .insertContent(`[${task.number}: ${task.title}](#/p/${task.projectId}/tasks/${task.id}) `)
-              .run()
+            const task = JSON.parse(taskData) as { id: string; number: string; title: string }
+            setTaskPins((prev) => (prev.some((x) => x.id === task.id) ? prev : [...prev, { id: task.id, number: task.number, title: task.title }]))
             return
           } catch { /* fallthrough */ }
         }
-        // D&D файла из файл-менеджера: application/x-chatick-file
+        // D&D файла из менеджера
         const fileData = e.dataTransfer.getData('application/x-chatick-file')
         if (fileData) {
           try {
@@ -177,18 +212,38 @@ export function Composer({
         if (e.dataTransfer.files.length) uploadFiles(e.dataTransfer.files)
       }}
     >
-      {/* Чипы вложений */}
-      {(attachments.length > 0 || uploading > 0) && (
+      {/* Подсказка при наведении */}
+      {dropActive && (
+        <div className="pointer-events-none border-b bg-accent/50 px-3 py-2 text-center text-xs font-medium text-brand">
+          {t('composer.dropHere')}
+        </div>
+      )}
+
+      {/* Чипы вложений и task-пинов — одним рядом */}
+      {hasPins && (
         <div className="flex flex-wrap gap-1.5 border-b px-2.5 py-2">
+          {taskPins.map((p) => (
+            <span key={p.id} className="inline-flex max-w-52 items-center gap-1.5 rounded-full border border-brand/40 bg-accent px-2 py-1 text-xs">
+              <CheckSquare className="size-3 shrink-0 text-brand" />
+              <span className="truncate">
+                <span className="font-medium">{p.number}</span> {p.title}
+              </span>
+              <button type="button" onClick={() => setTaskPins((prev) => prev.filter((x) => x.id !== p.id))} className="text-muted-foreground hover:text-destructive">
+                <X className="size-3" />
+              </button>
+            </span>
+          ))}
           {attachments.map((a) => (
-            <span key={a.id} className="inline-flex max-w-48 items-center gap-1.5 rounded-full border bg-secondary px-2 py-1 text-xs">
-              {a.mime.startsWith('image/') ? <ImageIcon className="size-3 shrink-0" /> : <FileText className="size-3 shrink-0" />}
+            <span key={a.id} className="inline-flex max-w-48 items-center gap-1.5 rounded-full border bg-secondary py-1 pe-2 ps-1 text-xs">
+              {a.mime.startsWith('image/') && previews.data?.[a.id] ? (
+                <img src={previews.data[a.id]} alt="" className="size-5 shrink-0 rounded-full object-cover" />
+              ) : a.mime.startsWith('image/') ? (
+                <ImageIcon className="size-4 shrink-0 ps-0.5" />
+              ) : (
+                <FileText className="size-4 shrink-0 ps-0.5" />
+              )}
               <span className="truncate">{a.name}</span>
-              <button
-                type="button"
-                onClick={() => setAttachments((prev) => prev.filter((x) => x.id !== a.id))}
-                className="text-muted-foreground hover:text-destructive"
-              >
+              <button type="button" onClick={() => setAttachments((prev) => prev.filter((x) => x.id !== a.id))} className="text-muted-foreground hover:text-destructive">
                 <X className="size-3" />
               </button>
             </span>

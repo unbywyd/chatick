@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
-import { useInfiniteQuery, useQuery, useQueryClient } from '@tanstack/react-query'
-import { ArrowDown, Bot, Users, BrainCircuit, Loader2, Search, Settings, X } from 'lucide-react'
+import { useInfiniteQuery, useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
+import { ArrowDown, Bot, CheckSquare, Users, BrainCircuit, Loader2, Search, Settings, Trash2, X } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
 import ReactMarkdown from 'react-markdown'
 import { toast } from 'sonner'
@@ -22,7 +22,17 @@ type Member = { id: string; role: string; user: { id: string; name: string; emai
 const mentionRe = /@\[([^\]]+)\]\(([^)]+)\)/g
 const renderMentions = (text: string) => text.replace(mentionRe, '**@$1**')
 
-export function ChatPanel({ projectName, aiMode = 'assistant' }: { projectName?: string; aiMode?: 'observer' | 'assistant' | 'moderator' }) {
+export function ChatPanel({
+  projectName,
+  aiMode = 'assistant',
+  myRole,
+  meId,
+}: {
+  projectName?: string
+  aiMode?: 'observer' | 'assistant' | 'moderator'
+  myRole?: 'owner' | 'admin' | 'member' | null
+  meId?: string
+}) {
   const { t, i18n } = useTranslation()
   const navigate = useNavigate()
   const { id: projectId } = useParams()
@@ -98,6 +108,10 @@ export function ChatPanel({ projectName, aiMode = 'assistant' }: { projectName?:
       setSandboxId(messageId)
     },
     onSandboxChunk: ({ delta }) => setSandboxStream((prev) => prev + delta),
+    onMessageDeleted: ({ messageId }) => {
+      setLive((prev) => prev.filter((m) => m.id !== messageId))
+      qc.invalidateQueries({ queryKey: ['messages', projectId] })
+    },
   })
 
   // история + live, дедуп по id; в ленте только delivered (SPEC §5.5.1 — до вердикта не показываем)
@@ -162,14 +176,14 @@ export function ChatPanel({ projectName, aiMode = 'assistant' }: { projectName?:
   }
 
   const send = async (
-    { markdown, mentionIds, attachmentIds, raw }: { markdown: string; mentionIds: string[]; attachmentIds: string[]; raw?: boolean },
+    { markdown, mentionIds, attachmentIds, taskRefs, raw }: { markdown: string; mentionIds: string[]; attachmentIds: string[]; taskRefs?: string[]; raw?: boolean },
     sendMode: ChatMode = 'group',
   ) => {
     try {
       if (sendMode === 'group' && !raw) setMyPending(true) // «проверяется…» до вердикта
       const created = await api<ChatMessage & { redirectedToAi?: boolean }>(
         '/api/v1/messages',
-        { method: 'POST', body: JSON.stringify({ text: markdown, mode: sendMode, attachmentIds, raw: Boolean(raw) }) },
+        { method: 'POST', body: JSON.stringify({ text: markdown, mode: sendMode, attachmentIds, taskRefs: taskRefs ?? [], raw: Boolean(raw) }) },
         'project',
       )
       if (created.status === 'delivered') {
@@ -185,6 +199,12 @@ export function ChatPanel({ projectName, aiMode = 'assistant' }: { projectName?:
       toast.error(e instanceof Error ? e.message : String(e))
     }
   }
+
+  const deleteMessage = useMutation({
+    mutationFn: (id: string) => api(`/api/v1/messages/${id}/remove`, { method: 'POST' }, 'project'),
+    onSuccess: (_r, id) => setLive((prev) => prev.filter((m) => m.id !== id)),
+    onError: (e) => toast.error(e instanceof Error ? e.message : String(e)),
+  })
 
   const mentionItems = useMemo(
     () =>
@@ -275,7 +295,13 @@ export function ChatPanel({ projectName, aiMode = 'assistant' }: { projectName?:
               return (
                 <div key={m.id}>
                   {!sameDay && <DayDivider date={new Date(m.createdAt)} lang={i18n.language} />}
-                  <MessageRow message={m} compact={compact} lang={i18n.language} />
+                  <MessageRow
+                    message={m}
+                    compact={compact}
+                    lang={i18n.language}
+                    canDelete={myRole === 'owner' || myRole === 'admin' || (Boolean(m.author) && m.author?.id === meId)}
+                    onDelete={() => deleteMessage.mutate(m.id)}
+                  />
                 </div>
               )
             })}
@@ -380,7 +406,19 @@ function DayDivider({ date, lang }: { date: Date; lang: string }) {
   )
 }
 
-function MessageRow({ message, compact, lang }: { message: ChatMessage; compact: boolean; lang: string }) {
+function MessageRow({
+  message,
+  compact,
+  lang,
+  canDelete,
+  onDelete,
+}: {
+  message: ChatMessage
+  compact: boolean
+  lang: string
+  canDelete: boolean
+  onDelete: () => void
+}) {
   const { t } = useTranslation()
   const isAi = !message.author
   const time = new Date(message.createdAt).toLocaleTimeString(lang, { hour: '2-digit', minute: '2-digit' })
@@ -388,10 +426,19 @@ function MessageRow({ message, compact, lang }: { message: ChatMessage; compact:
   return (
     <div
       className={cn(
-        'group flex gap-2.5 rounded-md px-2 py-1 transition-colors hover:bg-accent/40',
+        'group relative flex gap-2.5 rounded-md px-2 py-1 transition-colors hover:bg-accent/40',
         compact ? 'mt-px' : 'mt-2.5',
       )}
     >
+      {canDelete && (
+        <button
+          onClick={onDelete}
+          title={t('chat.deleteMessage')}
+          className="absolute end-1 top-1 hidden rounded p-1 text-muted-foreground hover:text-destructive group-hover:block"
+        >
+          <Trash2 className="size-3.5" />
+        </button>
+      )}
       <span className="w-7 shrink-0 select-none">
         {compact ? (
           <span className="hidden text-[10px] leading-6 text-muted-foreground group-hover:block">{time}</span>
@@ -425,7 +472,31 @@ function MessageRow({ message, compact, lang }: { message: ChatMessage; compact:
           </div>
         )}
         {(message.attachments?.length ?? 0) > 0 && <MessageAttachments attachments={message.attachments!} />}
+        {(message.taskPins?.length ?? 0) > 0 && <MessageTaskPins pins={message.taskPins!} />}
       </div>
+    </div>
+  )
+}
+
+// Прикреплённые задачи-пины — карточки-ссылки на задачу
+function MessageTaskPins({ pins }: { pins: NonNullable<ChatMessage['taskPins']> }) {
+  const navigate = useNavigate()
+  const { id: projectId } = useParams()
+  return (
+    <div className="mt-1.5 flex flex-wrap gap-1.5">
+      {pins.map((p) => (
+        <button
+          key={p.id}
+          onClick={() => navigate(`/p/${projectId}/tasks/${p.id}`)}
+          className="inline-flex max-w-64 items-center gap-1.5 rounded-md border border-brand/40 bg-accent px-2 py-1 text-xs transition-colors hover:bg-accent/70"
+          title={p.title}
+        >
+          <CheckSquare className="size-3.5 shrink-0 text-brand" />
+          <span className="truncate">
+            <span className="font-medium">{p.number}</span> {p.title}
+          </span>
+        </button>
+      ))}
     </div>
   )
 }

@@ -182,6 +182,8 @@ export const messages = pgTable(
     rawSend: boolean('raw_send').notNull().default(false),
     // ai-режим приватен: ответ ИИ адресован конкретному юзеру
     recipientId: text('recipient_id').references(() => users.id, { onDelete: 'cascade' }),
+    // прикреплённые задачи (пины) — JSON массив id задач
+    taskRefs: text('task_refs'),
     text: text('text').notNull(),
     // переводы: { "ru": "...", "he": "...", "en": "..." } — лениво заполняет ИИ
     translations: text('translations'), // JSON

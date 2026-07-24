@@ -53,6 +53,8 @@ export function ProjectLayout() {
         <ChatPanel
           projectName={project.data?.name}
           aiMode={(project.data?.aiConfig as { mode?: 'observer' | 'assistant' | 'moderator' })?.mode ?? 'assistant'}
+          myRole={project.data?.myRole}
+          meId={me.data?.id}
         />
       </div>
 

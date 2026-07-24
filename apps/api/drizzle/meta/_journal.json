@@ -85,6 +85,13 @@
       "when": 1784831834635,
       "tag": "0011_wet_tempest",
       "breakpoints": true
+    },
+    {
+      "idx": 12,
+      "version": "7",
+      "when": 1784871868938,
+      "tag": "0012_wealthy_radioactive_man",
+      "breakpoints": true
     }
   ]
 }

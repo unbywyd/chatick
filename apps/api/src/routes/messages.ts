@@ -3,7 +3,7 @@ import { zValidator } from '@hono/zod-validator'
 import { z } from 'zod'
 import { and, asc, desc, eq, ilike, inArray, lt, sql } from 'drizzle-orm'
 import { db } from '../db/client.js'
-import { files, messages, sandboxMessages, users } from '../db/schema.js'
+import { files, messages, sandboxMessages, tasks, users } from '../db/schema.js'
 import { requireProject, type ProjectEnv } from '../auth.js'
 import { broadcast, sendToUser } from '../ws.js'
 import { evaluateMessage, sandboxReply, aiChatReply } from '../lib/dispatcher.js'
@@ -15,6 +15,13 @@ export const messagesRoute = new Hono<ProjectEnv>()
 messagesRoute.use('*', requireProject)
 
 type Attachment = { id: string; name: string; mime: string; size: number }
+type TaskPin = { id: string; number: string; title: string; status: string }
+
+async function taskPinsOf(ids: string[], projectId: string): Promise<TaskPin[]> {
+  if (!ids.length) return []
+  const rows = await db.query.tasks.findMany({ where: and(eq(tasks.projectId, projectId), inArray(tasks.id, ids)) })
+  return rows.map((t) => ({ id: t.id, number: t.number, title: t.title, status: t.status }))
+}
 
 async function attachmentsOf(messageIds: string[]): Promise<Map<string, Attachment[]>> {
   if (messageIds.length === 0) return new Map()
@@ -32,6 +39,7 @@ function serialize(
   row: typeof messages.$inferSelect,
   author?: typeof users.$inferSelect | null,
   attachments: Attachment[] = [],
+  taskPins: TaskPin[] = [],
 ) {
   return {
     id: row.id,
@@ -42,6 +50,8 @@ function serialize(
     replyToId: row.replyToId,
     createdAt: row.createdAt,
     attachments,
+    taskPins,
+    authorId: row.authorId,
     author: author ? { id: author.id, name: author.name, avatarUrl: author.avatarUrl } : null, // null = ИИ
   }
 }
@@ -71,7 +81,12 @@ messagesRoute.get('/', zValidator('query', z.object({ before: z.string().optiona
     })
     .slice(0, 50)
   const atts = await attachmentsOf(visible.map((r) => r.msg.id))
-  return c.json(visible.map((r) => serialize(r.msg, r.author, atts.get(r.msg.id))).reverse())
+  // task-пины батчом
+  const allTaskIds = [...new Set(visible.flatMap((r) => (r.msg.taskRefs ? (JSON.parse(r.msg.taskRefs) as string[]) : [])))]
+  const pinMap = new Map((await taskPinsOf(allTaskIds, projectId)).map((p) => [p.id, p]))
+  const pinsFor = (refs: string | null) => (refs ? (JSON.parse(refs) as string[]).map((id) => pinMap.get(id)).filter(Boolean) as TaskPin[] : [])
+
+  return c.json(visible.map((r) => serialize(r.msg, r.author, atts.get(r.msg.id), pinsFor(r.msg.taskRefs))).reverse())
 })
 
 // Отправка: pending → (асинхронно) диспетчер → delivered|held
@@ -84,13 +99,14 @@ messagesRoute.post(
       mode: z.enum(['group', 'ai']).default('group'),
       replyToId: z.string().nullable().optional(),
       attachmentIds: z.array(z.string()).max(10).default([]),
+      taskRefs: z.array(z.string()).max(10).default([]), // прикреплённые задачи (пины)
       // raw: минуя диспетчер, с пометкой «без проверки» (split-кнопка «Отправить как есть»)
       raw: z.boolean().default(false),
     }),
   ),
   async (c) => {
     const { projectId, sub } = c.get('auth')
-    const { text, replyToId, attachmentIds, raw } = c.req.valid('json')
+    const { text, replyToId, attachmentIds, taskRefs, raw } = c.req.valid('json')
     let { mode } = c.req.valid('json')
 
     // @AI в группе → сообщение уходит в личный ИИ-канал, группа его не видит (по решению 2026-07-23)
@@ -98,8 +114,8 @@ messagesRoute.post(
     const redirectedToAi = mode === 'group' && mentionsAi
     if (redirectedToAi) mode = 'ai'
 
-    // чисто файловые сообщения (без содержательного текста) не фильтруем — нечего оценивать
-    const attachmentOnly = attachmentIds.length > 0 && (!text.trim() || text.trim() === '📎')
+    // файловые/пиновые сообщения (без содержательного текста) не фильтруем — нечего оценивать
+    const attachmentOnly = (attachmentIds.length > 0 || taskRefs.length > 0) && (!text.trim() || text.trim() === '📎')
 
     const [row] = await db
       .insert(messages)
@@ -111,6 +127,7 @@ messagesRoute.post(
         status: mode === 'group' && !raw && !attachmentOnly ? 'pending' : 'delivered',
         rawSend: raw,
         text,
+        taskRefs: taskRefs.length ? JSON.stringify(taskRefs) : null,
         replyToId: replyToId ?? null,
       })
       .returning()
@@ -125,7 +142,8 @@ messagesRoute.post(
 
     const author = await db.query.users.findFirst({ where: eq(users.id, sub) })
     const atts = await attachmentsOf([row!.id])
-    const message = serialize(row!, author, atts.get(row!.id))
+    const pins = await taskPinsOf(taskRefs, projectId)
+    const message = serialize(row!, author, atts.get(row!.id), pins)
 
     if (mode === 'ai') {
       // личный диалог с ИИ: память + инструменты, CRUD в пределах пермишенов юзера (SPEC §5.6)
@@ -333,6 +351,23 @@ messagesRoute.delete('/ai', async (c) => {
         sql`(${messages.authorId} = ${sub} or ${messages.recipientId} = ${sub})`,
       ),
     )
+  return c.json({ ok: true })
+})
+
+// Удалить сообщение из группы — автор, owner или admin проекта
+messagesRoute.post('/:messageId/remove', async (c) => {
+  const { projectId, sub, role } = c.get('auth')
+  const messageId = c.req.param('messageId')
+  const msg = await db.query.messages.findFirst({
+    where: and(eq(messages.id, messageId), eq(messages.projectId, projectId), eq(messages.mode, 'group')),
+  })
+  if (!msg) return c.json({ error: 'Not found' }, 404)
+  const allowed = msg.authorId === sub || role === 'owner' || role === 'admin'
+  if (!allowed) return c.json({ error: 'Forbidden' }, 403)
+
+  await db.update(files).set({ messageId: null }).where(eq(files.messageId, msg.id))
+  await db.delete(messages).where(eq(messages.id, msg.id))
+  broadcast(projectId, 'message_deleted', { messageId })
   return c.json({ ok: true })
 })
 

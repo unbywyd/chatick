@@ -250,12 +250,14 @@
     "rawSendHint": "Минуя проверку ИИ — с пометкой «без проверки»",
     "rawBadge": "без проверки",
     "redirectedToAi": "Вопрос ИИ перенесён в личный ИИ-канал",
+    "deleteMessage": "Удалить сообщение",
     "verifying": "Проверяем ваше сообщение…",
     "typing_one": "{{names}} пишет…",
     "typing_few": "{{names}} пишут…",
     "typing_many": "{{names}} пишут…",
     "typing_other": "{{names}} пишут…"
   },
+  "composer": { "dropHere": "Отпустите, чтобы прикрепить" },
   "chatSearch": {
     "title": "Поиск в чате",
     "placeholder": "Поиск сообщений…",
