@@ -44,6 +44,57 @@ export function sendToUser(projectId: string, userId: string, event: string, pay
   }
 }
 
+// --- Блокировка редактирования задачи (эфемерная, в памяти) ---
+// key = `${projectId}:${taskId}` → { userId, user, expiresAt }
+type Lock = { userId: string; user: PresenceUser; expiresAt: number }
+const taskLocks = new Map<string, Lock>()
+const LOCK_TTL = 90_000 // сбрасывается, если клиент не продлил (heartbeat)
+
+function lockKey(projectId: string, taskId: string) {
+  return `${projectId}:${taskId}`
+}
+
+async function acquireLock(client: Client, taskId: string): Promise<boolean> {
+  const key = lockKey(client.projectId, taskId)
+  const existing = taskLocks.get(key)
+  const now = Date.now()
+  if (existing && existing.userId !== client.userId && existing.expiresAt > now) return false // занято другим
+  const u = await db.query.users.findFirst({ where: eq(users.id, client.userId) })
+  const user: PresenceUser = { id: client.userId, name: u?.name ?? '', avatarUrl: u?.avatarUrl ?? null }
+  taskLocks.set(key, { userId: client.userId, user, expiresAt: now + LOCK_TTL })
+  broadcast(client.projectId, 'task_lock', { taskId, user })
+  return true
+}
+
+function releaseLock(client: Client, taskId: string) {
+  const key = lockKey(client.projectId, taskId)
+  const existing = taskLocks.get(key)
+  if (existing && existing.userId === client.userId) {
+    taskLocks.delete(key)
+    broadcast(client.projectId, 'task_lock', { taskId, user: null })
+  }
+}
+
+function releaseAllLocksOf(client: Client) {
+  for (const [key, lock] of taskLocks) {
+    if (key.startsWith(client.projectId + ':') && lock.userId === client.userId) {
+      taskLocks.delete(key)
+      const taskId = key.slice(client.projectId.length + 1)
+      broadcast(client.projectId, 'task_lock', { taskId, user: null })
+    }
+  }
+}
+
+/** Текущие локи проекта — для первичной синхронизации при открытии доски. */
+export function locksOf(projectId: string): { taskId: string; user: PresenceUser }[] {
+  const now = Date.now()
+  const out: { taskId: string; user: PresenceUser }[] = []
+  for (const [key, lock] of taskLocks) {
+    if (key.startsWith(projectId + ':') && lock.expiresAt > now) out.push({ taskId: key.slice(projectId.length + 1), user: lock.user })
+  }
+  return out
+}
+
 async function presenceList(projectId: string): Promise<PresenceUser[]> {
   const ids = [...new Set([...(rooms.get(projectId) ?? [])].map((c) => c.userId))]
   if (ids.length === 0) return []
@@ -70,6 +121,25 @@ export function attachWs(server: Server) {
     const client: Client = { ws, userId: payload.sub, projectId: payload.projectId }
     roomClients(client.projectId).add(client)
     void pushPresence(client.projectId)
+    // отдать текущие локи новому клиенту
+    for (const l of locksOf(client.projectId)) ws.send(JSON.stringify({ event: 'task_lock', payload: { taskId: l.taskId, user: l.user } }))
+
+    // входящие команды: захват/освобождение/продление лока редактирования задачи
+    ws.on('message', (data) => {
+      try {
+        const { event, taskId } = JSON.parse(String(data)) as { event?: string; taskId?: string }
+        if (!taskId) return
+        if (event === 'lock' || event === 'lock_heartbeat') {
+          void acquireLock(client, taskId).then((ok) => {
+            if (!ok) ws.send(JSON.stringify({ event: 'task_lock_denied', payload: { taskId } }))
+          })
+        } else if (event === 'unlock') {
+          releaseLock(client, taskId)
+        }
+      } catch {
+        /* ignore */
+      }
+    })
 
     // keep-alive: nginx proxy_read_timeout большой, но пинги не помешают
     const ping = setInterval(() => {
@@ -78,6 +148,7 @@ export function attachWs(server: Server) {
 
     ws.on('close', () => {
       clearInterval(ping)
+      releaseAllLocksOf(client)
       const set = rooms.get(client.projectId)
       set?.delete(client)
       if (set?.size === 0) rooms.delete(client.projectId)

@@ -38,6 +38,7 @@ import { RichEditor } from '@/components/ui/rich-editor'
 import { TaskComments } from './TaskComments'
 import { TaskNotes } from './TaskNotes'
 import { usePasteFiles } from '@/hooks/usePasteFiles'
+import { useProjectSocket } from '@/hooks/useProjectSocket'
 import { STATUSES, PRIORITIES, STATUS_ICON, STATUS_COLOR, PRIORITY_DOT, fmtEstimate, type Task, type Member, type TaskGroup } from './types'
 
 type Attachment = {
@@ -180,6 +181,34 @@ export function TaskDrawer({
   // редактирование справа — по умолчанию скрыто (открывается кнопкой «Редактировать»)
   const [editing, setEditing] = useState(false)
   useEffect(() => setEditing(false), [task.id]) // при смене задачи закрываем форму
+
+  // Блокировка редактирования: кто сейчас правит эту задачу (SPEC §8.18)
+  const [lockedBy, setLockedBy] = useState<{ id: string; name: string; avatarUrl: string | null } | null>(null)
+  const { lockTask, unlockTask, heartbeatLock } = useProjectSocket(window.location.hash.split('/')[2], {
+    onMessage: () => {},
+    onTaskLock: (p) => {
+      if (p.taskId !== task.id) return
+      setLockedBy(p.user && p.user.id !== meId ? p.user : null)
+    },
+    onTaskLockDenied: (p) => {
+      if (p.taskId === task.id) {
+        setEditing(false)
+        toast.error(t('tasks.lockedByOther'))
+      }
+    },
+  })
+
+  // захват лока на время редактирования + heartbeat; освобождение при закрытии
+  useEffect(() => {
+    if (!editing) return
+    lockTask(task.id)
+    const hb = setInterval(() => heartbeatLock(task.id), 30_000)
+    return () => {
+      clearInterval(hb)
+      unlockTask(task.id)
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [editing, task.id])
 
   // файлы, пришедшие из чата (есть messageId) — секция «связь с чатом»
   const chatFiles = (attachments.data ?? []).filter((a) => a.messageId)
@@ -606,13 +635,31 @@ export function TaskDrawer({
           <span className="hidden sm:inline">{t('tasks.backToTasks')}</span>
         </Button>
         <span className="text-xs font-medium text-muted-foreground">{task.number}</span>
+        {/* Кто сейчас правит задачу (SPEC §8.18) */}
+        {lockedBy && (
+          <span className="inline-flex items-center gap-1.5 rounded-full bg-amber-500/15 px-2 py-1 text-xs text-amber-500" title={t('tasks.editingNow', { name: lockedBy.name })}>
+            {lockedBy.avatarUrl ? (
+              <img src={lockedBy.avatarUrl} alt="" className="size-4 rounded-full" referrerPolicy="no-referrer" />
+            ) : (
+              <span className="grid size-4 place-items-center rounded-full bg-amber-500/30 text-[9px] font-semibold">{lockedBy.name[0]?.toUpperCase()}</span>
+            )}
+            <span className="hidden sm:inline">{t('tasks.editingNow', { name: lockedBy.name })}</span>
+          </span>
+        )}
         <div className="ms-auto flex items-center gap-1">
           <Button variant="ghost" size="sm" onClick={share} className="gap-1.5" title={t('tasks.share')}>
             <Share2 className="size-4" />
             <span className="hidden sm:inline">{t('tasks.share')}</span>
           </Button>
           {canEdit && (
-            <Button variant={editing ? 'brand' : 'outline'} size="sm" onClick={() => setEditing((v) => !v)} className="gap-1.5">
+            <Button
+              variant={editing ? 'brand' : 'outline'}
+              size="sm"
+              disabled={Boolean(lockedBy)}
+              title={lockedBy ? t('tasks.lockedByOther') : undefined}
+              onClick={() => setEditing((v) => !v)}
+              className="gap-1.5"
+            >
               <Pencil className="size-4" />
               <span className="hidden sm:inline">{t('about.edit')}</span>
             </Button>

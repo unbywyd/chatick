@@ -176,7 +176,9 @@
     "backToTasks": "All tasks",
     "share": "Share",
     "linkCopied": "Task link copied",
-    "fromChat": "From chat"
+    "fromChat": "From chat",
+    "editingNow": "{{name}} is editing",
+    "lockedByOther": "Someone else is editing this task"
   },
   "files": {
     "search": "Search files…",

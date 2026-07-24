@@ -176,7 +176,9 @@
     "backToTasks": "Все задачи",
     "share": "Поделиться",
     "linkCopied": "Ссылка на задачу скопирована",
-    "fromChat": "Из чата"
+    "fromChat": "Из чата",
+    "editingNow": "Правит {{name}}",
+    "lockedByOther": "Задачу сейчас правит другой участник"
   },
   "files": {
     "search": "Поиск файлов…",

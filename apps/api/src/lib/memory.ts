@@ -143,7 +143,7 @@ export function memoryTools(projectId: string, actorUserId: string): { tools: To
           status: { type: 'string', enum: ['todo', 'in_progress', 'review', 'done'] },
           assignee: { type: 'string', description: 'member name or email to assign; omit for unassigned' },
           dueDate: { type: 'string', description: 'due date, ISO or YYYY-MM-DD' },
-          estimateMinutes: { type: 'number', description: 'time estimate in minutes' },
+          estimateMinutes: { type: 'number', description: 'REQUIRED: time estimate in minutes assuming the person works WITH an AI assistant (realistic, usually shorter)' },
           sprint: { type: 'string', description: 'sprint/group name (created if missing is NOT done — use an existing one)' },
         },
         required: ['title'],
