@@ -589,5 +589,12 @@
     "insert": "Insert",
     "empty": "Clipboard is empty",
     "denied": "Clipboard access denied"
+  },
+  "profile": {
+    "saved": "Name updated",
+    "photoUpdated": "Photo updated",
+    "changePhoto": "Change photo",
+    "logout": "Sign out",
+    "logoutConfirm": "Sign out of your account?"
   }
 }

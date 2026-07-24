@@ -589,5 +589,12 @@
     "insert": "הדבקה",
     "empty": "הלוח ריק",
     "denied": "אין גישה ללוח"
+  },
+  "profile": {
+    "saved": "השם עודכן",
+    "photoUpdated": "התמונה עודכנה",
+    "changePhoto": "החלפת תמונה",
+    "logout": "התנתקות",
+    "logoutConfirm": "להתנתק מהחשבון?"
   }
 }

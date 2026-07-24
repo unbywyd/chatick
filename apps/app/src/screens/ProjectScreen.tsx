@@ -8,10 +8,11 @@ import { cn } from '@/lib/utils'
 import { ChatPanel } from '@/components/chat/ChatPanel'
 import { ThemeToggle } from '@/components/ThemeToggle'
 import { LanguageSelect } from '@/components/LanguageSelect'
+import { ProfileMenu } from '@/components/ProfileMenu'
 
 // Layout проекта (CONCEPT.md §3): чат 40% постоянен, табы — вложенные роуты (Outlet),
 // каждый таб имеет свой URL — прямые ссылки работают: /p/:id/tasks, /p/:id/files, ...
-const TAB_KEYS = ['tasks', 'files', 'resources', 'team', 'notifications', 'ai', 'about'] as const
+const TAB_KEYS = ['tasks', 'files', 'resources', 'team', 'about'] as const
 
 export type ProjectDetails = {
   id: string
@@ -88,6 +89,11 @@ export function ProjectLayout() {
             </button>
             <LanguageSelect />
             <ThemeToggle />
+            <ProfileMenu
+              me={me.data}
+              projectId={id}
+              isAdmin={project.data?.myRole === 'owner' || project.data?.myRole === 'admin'}
+            />
           </div>
         </nav>
         <main className="min-h-0 flex-1 overflow-y-auto">

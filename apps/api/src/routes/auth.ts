@@ -1,9 +1,15 @@
 import { Hono } from 'hono'
 import { eq } from 'drizzle-orm'
+import { zValidator } from '@hono/zod-validator'
+import { z } from 'zod'
+import { nanoid } from 'nanoid'
+import sharp from 'sharp'
+import { PutObjectCommand } from '@aws-sdk/client-s3'
 import { db } from '../db/client.js'
 import { users } from '../db/schema.js'
 import { signSessionToken, requireSession, type SessionEnv } from '../auth.js'
 import { env } from '../env.js'
+import { s3Client, s3Bucket, getObjectStream, S3_KEY_PREFIX } from '../lib/s3.js'
 
 export const auth = new Hono<SessionEnv>()
 
@@ -97,4 +103,52 @@ auth.get('/me', requireSession, async (c) => {
     phone: user.phone,
     avatarUrl: user.avatarUrl,
   })
+})
+
+// PATCH /api/v1/auth/me — смена имени
+auth.patch('/me', requireSession, zValidator('json', z.object({ name: z.string().min(1).max(120) })), async (c) => {
+  const { sub } = c.get('session')
+  const { name } = c.req.valid('json')
+  await db.update(users).set({ name: name.trim() }).where(eq(users.id, sub))
+  return c.json({ ok: true, name: name.trim() })
+})
+
+// POST /api/v1/auth/me/avatar — загрузка аватара (webp, приватный бакет; раздаём через /avatar/:userId)
+auth.post('/me/avatar', requireSession, async (c) => {
+  const { sub } = c.get('session')
+  const body = await c.req.parseBody()
+  const file = body['file']
+  if (!(file instanceof File)) return c.json({ error: 'file field is required' }, 400)
+  if (file.size > 5 * 1024 * 1024) return c.json({ error: 'File too large (max 5MB)' }, 413)
+  try {
+    const buffer = await sharp(Buffer.from(await file.arrayBuffer()), { failOn: 'none' })
+      .rotate()
+      .resize(256, 256, { fit: 'cover' })
+      .webp({ quality: 85 })
+      .toBuffer()
+    const key = `${S3_KEY_PREFIX}/avatars/${sub}-${nanoid(6)}.webp`
+    await s3Client().send(new PutObjectCommand({ Bucket: s3Bucket(), Key: key, Body: buffer, ContentType: 'image/webp' }))
+    // версия в URL, чтобы обойти кэш при смене
+    const url = `${process.env.API_PUBLIC_URL || 'https://api.chatick.com'}/api/v1/auth/avatar/${sub}?v=${Date.now()}`
+    await db.update(users).set({ avatarUrl: url, avatarKey: key }).where(eq(users.id, sub))
+    return c.json({ avatarUrl: url })
+  } catch (e) {
+    console.error('[avatar] upload failed:', e)
+    return c.json({ error: 'Failed to process image' }, 500)
+  }
+})
+
+// GET /api/v1/auth/avatar/:userId — публичная прокси-раздача аватара из приватного бакета
+auth.get('/avatar/:userId', async (c) => {
+  const user = await db.query.users.findFirst({ where: eq(users.id, c.req.param('userId')) })
+  if (!user?.avatarKey) return c.json({ error: 'Not found' }, 404)
+  try {
+    const { body, contentType } = await getObjectStream({ client: s3Client(), bucket: s3Bucket(), keyPrefix: S3_KEY_PREFIX, isCustom: false, publicUrl: null }, user.avatarKey)
+    c.header('Content-Type', contentType || 'image/webp')
+    c.header('Cache-Control', 'public, max-age=86400')
+    const { Readable } = await import('node:stream')
+    return c.body(Readable.toWeb(body) as ReadableStream)
+  } catch {
+    return c.json({ error: 'Not found' }, 404)
+  }
 })

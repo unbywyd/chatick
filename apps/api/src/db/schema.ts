@@ -25,6 +25,7 @@ export const users = pgTable(
     passwordHash: text('password_hash'),
     googleId: text('google_id'),
     avatarUrl: text('avatar_url'),
+    avatarKey: text('avatar_key'), // S3-ключ загруженного аватара (раздаётся через /auth/avatar/:id)
     isAdmin: boolean('is_admin').notNull().default(false),
     createdAt: createdAt(),
     updatedAt: updatedAt(),
