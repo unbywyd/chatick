@@ -99,6 +99,13 @@
       "when": 1784875339520,
       "tag": "0013_free_thunderbird",
       "breakpoints": true
+    },
+    {
+      "idx": 14,
+      "version": "7",
+      "when": 1784878318847,
+      "tag": "0014_late_scourge",
+      "breakpoints": true
     }
   ]
 }

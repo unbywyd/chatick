@@ -169,6 +169,24 @@
     "credentials.manage": "סודות: ניהול",
     "aiNote": "מנהל ה-AI מכבד את ההרשאות. ערכי סודות לעולם לא מועברים ל-AI."
   },
+  "resources": {
+    "search": "חיפוש משאבים…",
+    "add": "הוספת משאב",
+    "addTitle": "משאב חדש",
+    "editTitle": "עריכת משאב",
+    "namePlaceholder": "שם, למשל «עיצוב ב-Figma»",
+    "urlPlaceholder": "קישור (אופציונלי)",
+    "descPlaceholder": "תיאור (אופציונלי)",
+    "secrets": "סודות",
+    "secret": "סוד",
+    "addSecret": "הוספת סוד",
+    "secretLabel": "תווית",
+    "secretValue": "ערך",
+    "deleteSecretConfirm": "למחוק את הסוד הזה?",
+    "deleteConfirm": "למחוק את המשאב «{{name}}»?",
+    "empty": "אין עדיין משאבים",
+    "note": "משאב הוא קישור + תיאור עם סודות אופציונליים. ה-AI יכול לשמור כאן אוטומטית קישורים/סודות ששיתפו בצ׳אט."
+  },
   "creds": {
     "search": "חיפוש סודות…",
     "add": "הוספה",
@@ -300,7 +318,7 @@
     "about": "אודות",
     "tasks": "משימות",
     "files": "קבצים",
-    "credentials": "סודות",
+    "resources": "משאבים",
     "team": "צוות",
     "placeholder": "לשונית «{{tab}}» — תוכן יתווסף בהמשך"
   },

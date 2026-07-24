@@ -291,19 +291,40 @@ export const sandboxMessages = pgTable(
   (t) => [index('sandbox_message_idx').on(t.messageId, t.createdAt)],
 )
 
+// Ресурс (SPEC §8.1): опциональная ссылка + описание + под ним опциональные секреты.
+// (таблица исторически credentials — переименована логически в «Ресурсы»)
+export const resourceSource = pgEnum('resource_source', ['manual', 'chat'])
+
 export const credentials = pgTable(
   'credentials',
   {
     id: id(),
     projectId: text('project_id').notNull().references(() => projects.id, { onDelete: 'cascade' }),
-    name: text('name').notNull(), // «Прод сервер SSH», «Админка WP»
-    // значение шифруется на уровне приложения (AES-256-GCM), в БД — ciphertext
-    valueEncrypted: text('value_encrypted').notNull(),
+    name: text('name').notNull(), // «Прод сервер SSH», «Дизайн в Figma»
+    url: text('url'), // опциональная ссылка
+    description: text('description').notNull().default(''),
+    // legacy single-value (миграция старых кредов в первый секрет); новые — в resource_secrets
+    valueEncrypted: text('value_encrypted'),
+    source: resourceSource('source').notNull().default('manual'),
+    messageId: text('message_id'), // связь на сообщение, если из чата (без FK — переживает удаление)
     createdById: text('created_by_id').references(() => users.id, { onDelete: 'set null' }),
     createdAt: createdAt(),
     updatedAt: updatedAt(),
   },
   (t) => [index('credentials_project_idx').on(t.projectId)],
+)
+
+// Секреты под ресурсом (много): label + шифрованное значение
+export const resourceSecrets = pgTable(
+  'resource_secrets',
+  {
+    id: id(),
+    resourceId: text('resource_id').notNull().references(() => credentials.id, { onDelete: 'cascade' }),
+    label: text('label').notNull().default(''), // «Пароль», «API key»
+    valueEncrypted: text('value_encrypted').notNull(),
+    createdAt: createdAt(),
+  },
+  (t) => [index('resource_secrets_idx').on(t.resourceId)],
 )
 
 // Аудит доступа к кредишенам: кто/когда раскрывал, создавал, менял, удалял.

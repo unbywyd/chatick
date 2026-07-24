@@ -200,6 +200,16 @@ export function Composer({
             return
           } catch { /* fallthrough */ }
         }
+        // D&D ресурса → ссылка-ярлык в текст
+        const resData = e.dataTransfer.getData('application/x-chatick-resource')
+        if (resData && editor) {
+          try {
+            const r = JSON.parse(resData) as { id: string; name: string }
+            const pid = window.location.hash.split('/')[2]
+            editor.chain().focus().insertContent(`[🔗 ${r.name}](#/p/${pid}/resources) `).run()
+            return
+          } catch { /* fallthrough */ }
+        }
         // D&D файла из менеджера
         const fileData = e.dataTransfer.getData('application/x-chatick-file')
         if (fileData) {

@@ -169,6 +169,24 @@
     "credentials.manage": "Creds: manage",
     "aiNote": "The AI dispatcher respects these permissions: a member without “Create” can't create tasks through chat either. Credential values are never shared with the AI."
   },
+  "resources": {
+    "search": "Search resources…",
+    "add": "Add resource",
+    "addTitle": "New resource",
+    "editTitle": "Edit resource",
+    "namePlaceholder": "Name, e.g. “Figma design”",
+    "urlPlaceholder": "Link (optional)",
+    "descPlaceholder": "Description (optional)",
+    "secrets": "Secrets",
+    "secret": "Secret",
+    "addSecret": "Add secret",
+    "secretLabel": "Label",
+    "secretValue": "Value",
+    "deleteSecretConfirm": "Delete this secret?",
+    "deleteConfirm": "Delete resource “{{name}}”?",
+    "empty": "No resources yet",
+    "note": "A resource is a link + description with optional secrets. The AI can save links/credentials shared in chat here automatically."
+  },
   "creds": {
     "search": "Search credentials…",
     "add": "Add",
@@ -300,7 +318,7 @@
     "about": "About",
     "tasks": "Tasks",
     "files": "Files",
-    "credentials": "Credentials",
+    "resources": "Resources",
     "team": "Team",
     "placeholder": "“{{tab}}” tab — content coming soon"
   },

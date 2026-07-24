@@ -13,7 +13,7 @@ import { StartScreen } from './screens/StartScreen'
 import { AboutTab } from './components/tabs/AboutTab'
 import { TasksTab } from './components/tabs/TasksTab'
 import { FilesTab } from './components/tabs/FilesTab'
-import { CredentialsTab } from './components/tabs/CredentialsTab'
+import { ResourcesTab } from './components/tabs/ResourcesTab'
 import { ProjectTeamTab } from './components/tabs/ProjectTeamTab'
 
 // HashRouter — единый роутинг для веба и Electron (file://) без доп. настроек.
@@ -33,10 +33,10 @@ function FilesPage() {
   const { id } = useParams()
   return id ? <FilesTab projectId={id} /> : null
 }
-function CredentialsPage() {
+function ResourcesPage() {
   const { project } = useProjectCtx()
   const { id } = useParams()
-  return id ? <CredentialsTab projectId={id} isAdmin={project?.myRole === 'owner' || project?.myRole === 'admin'} /> : null
+  return id ? <ResourcesTab projectId={id} isAdmin={project?.myRole === 'owner' || project?.myRole === 'admin'} /> : null
 }
 function TeamPage() {
   const { project } = useProjectCtx()
@@ -70,7 +70,7 @@ createRoot(document.getElementById('root')!).render(
                 {/* :taskId — прямая ссылка на задачу (drawer открыт по URL) */}
                 <Route path="tasks/:taskId?" element={<TasksPage />} />
                 <Route path="files" element={<FilesPage />} />
-                <Route path="credentials" element={<CredentialsPage />} />
+                <Route path="resources" element={<ResourcesPage />} />
                 <Route path="team" element={<TeamPage />} />
               </Route>
             </Routes>
