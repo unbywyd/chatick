@@ -10,21 +10,16 @@ import { Button } from '@/components/ui/button'
 import { Switch } from '@/components/ui/switch'
 import { useConfirm } from '@/components/ui/confirm'
 
-// Таб «Команда» проекта: участники + права инлайн + добавление из компании (SPEC §3.2, §4.3)
-const PERMS = [
-  'tasks.create',
-  'tasks.edit',
-  'tasks.delete',
-  'tasks.changeStatus',
-  'credentials.read',
-  'credentials.manage',
-] as const
-type Perm = (typeof PERMS)[number]
+// Таб «Команда» проекта: участники + доменные права инлайн + добавление из компании (SPEC §3.2, §4.3, §8)
+const DOMAINS = ['tasks', 'files', 'resources'] as const
+type Domain = (typeof DOMAINS)[number]
+const LEVELS = ['none', 'read', 'write', 'crud'] as const
+type Level = (typeof LEVELS)[number]
 
 type Member = {
   id: string
   role: 'owner' | 'admin' | 'member'
-  permissions: Record<Perm, boolean>
+  domains: Record<Domain, Level>
   user: { id: string; name: string; email: string; avatarUrl: string | null }
 }
 type CompanyMember = {
@@ -65,11 +60,11 @@ export function ProjectTeamTab({
   const onErr = (e: unknown) => toast.error(e instanceof Error ? e.message : String(e))
   const refresh = () => qc.invalidateQueries({ queryKey: ['project-members', projectId] })
 
-  const setPerm = useMutation({
-    mutationFn: ({ userId, perm, value }: { userId: string; perm: Perm; value: boolean }) =>
+  const setLevel = useMutation({
+    mutationFn: ({ userId, domain, level }: { userId: string; domain: Domain; level: Level }) =>
       api(`/api/v1/projects/${projectId}/members/${userId}/permissions`, {
         method: 'PATCH',
-        body: JSON.stringify({ [perm]: value }),
+        body: JSON.stringify({ [domain]: level }),
       }),
     onSuccess: refresh,
     onError: onErr,
@@ -171,20 +166,38 @@ export function ProjectTeamTab({
                 )}
               </div>
 
-              {/* Права инлайн */}
+              {/* Доменные права инлайн: домен → уровень (none/read/write/crud) */}
               {isExpanded && (
-                <div className="grid gap-3 border-t px-4 py-3 sm:grid-cols-2">
-                  {PERMS.map((p) => (
-                    <label key={p} className="flex cursor-pointer items-center justify-between gap-3">
-                      <span className="text-sm">{t(`perms.${p}`)}</span>
-                      <Switch
-                        checked={m.permissions[p]}
-                        disabled={!canEdit || isOwner}
-                        onCheckedChange={(v) => setPerm.mutate({ userId: m.user.id, perm: p, value: v })}
-                      />
-                    </label>
+                <div className="space-y-2.5 border-t px-4 py-3">
+                  {DOMAINS.map((d) => (
+                    <div key={d} className="flex items-center justify-between gap-3">
+                      <span className="text-sm font-medium">{t(`perms.domain.${d}`)}</span>
+                      <div className="inline-flex overflow-hidden rounded-md border">
+                        {LEVELS.map((lvl) => {
+                          const active = m.domains[d] === lvl
+                          return (
+                            <button
+                              key={lvl}
+                              type="button"
+                              disabled={!canEdit || isOwner}
+                              onClick={() => setLevel.mutate({ userId: m.user.id, domain: d, level: lvl })}
+                              className={cn(
+                                'px-2.5 py-1 text-xs transition-colors disabled:opacity-50',
+                                active
+                                  ? 'bg-primary text-primary-foreground'
+                                  : 'bg-card text-muted-foreground hover:bg-secondary',
+                                lvl !== 'none' && 'border-s',
+                              )}
+                              title={t(`perms.level.${lvl}.hint`)}
+                            >
+                              {t(`perms.level.${lvl}.label`)}
+                            </button>
+                          )
+                        })}
+                      </div>
+                    </div>
                   ))}
-                  <p className="text-xs text-muted-foreground sm:col-span-2">{t('perms.aiNote')}</p>
+                  <p className="text-xs text-muted-foreground">{t('perms.aiNote')}</p>
                 </div>
               )}
             </li>

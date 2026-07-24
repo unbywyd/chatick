@@ -9,6 +9,7 @@ import { PutObjectCommand } from '@aws-sdk/client-s3'
 import { db } from '../db/client.js'
 import { files, companies, projects, tasks, users } from '../db/schema.js'
 import { requireProject, signFileToken, verifyFileToken, type ProjectEnv } from '../auth.js'
+import { hasPermission } from './projects.js'
 import { s3Client, presignDownload, presignView, deleteObject, getObjectStream, S3_KEY_PREFIX, s3Bucket } from '../lib/s3.js'
 
 // Публичная прокси-отдача файла по file-токену (в URL) — для iframe/img/Google Viewer.
@@ -99,7 +100,8 @@ function typeCond(type: string) {
 
 // Список файлов проекта (фильтры: taskId, source, type, q, from/to; пагинация; + usage/limit)
 filesRoute.get('/', async (c) => {
-  const { projectId } = c.get('auth')
+  const { projectId, sub } = c.get('auth')
+  if (!(await hasPermission(projectId, sub, 'files.read'))) return c.json({ error: 'Forbidden' }, 403)
   const taskId = c.req.query('taskId')
   const source = c.req.query('source') // chat | task | upload
   const type = c.req.query('type') // image | video | audio | doc | other
@@ -162,6 +164,7 @@ const WEBP_QUALITY = 82
 // Картинки по умолчанию: resize ≤2048px + webp; оригинал сохраняется рядом (originalKey).
 filesRoute.post('/', async (c) => {
   const { projectId, sub } = c.get('auth')
+  if (!(await hasPermission(projectId, sub, 'files.upload'))) return c.json({ error: 'Forbidden' }, 403)
 
   const body = await c.req.parseBody()
   const file = body['file']
@@ -298,8 +301,10 @@ filesRoute.post('/bulk-delete', zValidator('json', z.object({ ids: z.array(z.str
   const { ids } = c.req.valid('json')
 
   const rows = await db.query.files.findMany({ where: and(eq(files.projectId, projectId), inArray(files.id, ids), isNull(files.deletedAt)) })
-  const isAdmin = role === 'owner' || role === 'admin'
-  const deletable = rows.filter((f) => isAdmin || f.uploadedById === sub)
+  // files.delete (crud) — удалять любые; иначе только свои загрузки (нужен write)
+  const canDeleteAny = (await hasPermission(projectId, sub, 'files.delete')) || role === 'owner' || role === 'admin'
+  const canDeleteOwn = await hasPermission(projectId, sub, 'files.upload')
+  const deletable = rows.filter((f) => canDeleteAny || (canDeleteOwn && f.uploadedById === sub))
 
   if (deletable.length) await removeFiles(deletable)
   return c.json({ deleted: deletable.length, skipped: rows.length - deletable.length })
@@ -312,8 +317,9 @@ filesRoute.delete('/:fileId', async (c) => {
   const file = await db.query.files.findFirst({ where: and(eq(files.id, fileId), eq(files.projectId, projectId)) })
   if (!file) return c.json({ error: 'Not found' }, 404)
 
-  const allowed = file.uploadedById === sub || role === 'owner' || role === 'admin'
-  if (!allowed) return c.json({ error: 'Forbidden' }, 403)
+  const canDeleteAny = (await hasPermission(projectId, sub, 'files.delete')) || role === 'owner' || role === 'admin'
+  const canDeleteOwn = (await hasPermission(projectId, sub, 'files.upload')) && file.uploadedById === sub
+  if (!canDeleteAny && !canDeleteOwn) return c.json({ error: 'Forbidden' }, 403)
 
   await removeFiles([file])
   return c.json({ ok: true })

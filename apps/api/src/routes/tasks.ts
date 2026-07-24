@@ -44,7 +44,8 @@ function serialize(row: typeof tasks.$inferSelect, assignee?: typeof users.$infe
 
 // Список задач проекта (фильтры — на клиенте, объём в рамках проекта небольшой)
 tasksRoute.get('/', async (c) => {
-  const { projectId } = c.get('auth')
+  const { projectId, sub } = c.get('auth')
+  if (!(await hasPermission(projectId, sub, 'tasks.read'))) return c.json({ error: 'Forbidden' }, 403)
   const rows = await db
     .select({
       task: tasks,

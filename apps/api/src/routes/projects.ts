@@ -25,46 +25,126 @@ const aiConfigSchema = z.object({
   improveTasks: z.boolean().default(false),
 })
 
-// SPEC §4.3: per-user пермишены; tasks.read всегда true
+// SPEC §4.3 / §8: доменная модель прав. Каждый домен получает УРОВЕНЬ доступа,
+// а конкретные булевы действия (tasks.create и т.п.) выводятся из уровня.
+// Это питает и ручной CRUD, и ИИ-инструменты (Фаза 10) — единая проверка.
+export const PERMISSION_DOMAINS = ['tasks', 'files', 'resources'] as const
+export type PermissionDomain = (typeof PERMISSION_DOMAINS)[number]
+
+// none < read < write < crud. write = создавать/менять свои, crud = + удалять/чужое.
+export const PERMISSION_LEVELS = ['none', 'read', 'write', 'crud'] as const
+export type PermissionLevel = (typeof PERMISSION_LEVELS)[number]
+const LEVEL_RANK: Record<PermissionLevel, number> = { none: 0, read: 1, write: 2, crud: 3 }
+
+export type DomainPermissions = Record<PermissionDomain, PermissionLevel>
+
+// Гранулярные действия, которые проверяет код. Каждое требует минимального уровня в своём домене.
 export const PROJECT_PERMISSIONS = [
+  'tasks.read',
   'tasks.create',
   'tasks.edit',
   'tasks.delete',
   'tasks.changeStatus',
-  'credentials.read', // видеть и раскрывать значения
-  'credentials.manage', // создавать/менять/удалять
+  'files.read',
+  'files.upload',
+  'files.delete',
+  'resources.read', // видеть ресурсы и раскрывать секреты
+  'resources.manage', // создавать/менять/удалять ресурсы и секреты
+  // legacy-алиасы (совместимость со старым кодом/данными)
+  'credentials.read',
+  'credentials.manage',
 ] as const
 export type ProjectPermission = (typeof PROJECT_PERMISSIONS)[number]
-const permissionsSchema = z.record(z.enum(PROJECT_PERMISSIONS), z.boolean())
 
-export function defaultPermissions(role: 'owner' | 'admin' | 'member'): Record<ProjectPermission, boolean> {
-  if (role === 'member')
-    return {
-      'tasks.create': false,
-      'tasks.edit': false,
-      'tasks.delete': false,
-      'tasks.changeStatus': true,
-      'credentials.read': true,
-      'credentials.manage': false,
-    }
-  return {
-    'tasks.create': true,
-    'tasks.edit': true,
-    'tasks.delete': true,
-    'tasks.changeStatus': true,
-    'credentials.read': true,
-    'credentials.manage': true,
-  }
+// действие → [домен, минимальный уровень]
+const ACTION_REQUIREMENT: Record<ProjectPermission, [PermissionDomain, PermissionLevel]> = {
+  'tasks.read': ['tasks', 'read'],
+  'tasks.changeStatus': ['tasks', 'read'], // менять статус может любой с доступом на чтение задач
+  'tasks.create': ['tasks', 'write'],
+  'tasks.edit': ['tasks', 'write'],
+  'tasks.delete': ['tasks', 'crud'],
+  'files.read': ['files', 'read'],
+  'files.upload': ['files', 'write'],
+  'files.delete': ['files', 'crud'],
+  'resources.read': ['resources', 'read'],
+  'resources.manage': ['resources', 'write'],
+  'credentials.read': ['resources', 'read'],
+  'credentials.manage': ['resources', 'write'],
 }
 
-/** Эффективный пермишен участника (дефолты роли + оверрайды). */
-export async function hasPermission(projectId: string, userId: string, perm: ProjectPermission): Promise<boolean> {
+const levelSchema = z.enum(PERMISSION_LEVELS)
+const domainPermissionsSchema = z.object({
+  tasks: levelSchema,
+  files: levelSchema,
+  resources: levelSchema,
+})
+// PATCH принимает частичный набор доменных уровней
+const permissionsSchema = domainPermissionsSchema.partial()
+
+export function defaultDomainPermissions(role: 'owner' | 'admin' | 'member'): DomainPermissions {
+  if (role === 'member') return { tasks: 'read', files: 'write', resources: 'read' }
+  return { tasks: 'crud', files: 'crud', resources: 'crud' }
+}
+
+/** Разворачивает доменные уровни в плоский набор булевых действий (для UI и legacy). */
+export function expandPermissions(domains: DomainPermissions): Record<ProjectPermission, boolean> {
+  const out = {} as Record<ProjectPermission, boolean>
+  for (const action of PROJECT_PERMISSIONS) {
+    const [domain, min] = ACTION_REQUIREMENT[action]
+    out[action] = LEVEL_RANK[domains[domain]] >= LEVEL_RANK[min]
+  }
+  return out
+}
+
+/**
+ * Читает сохранённые права участника. Поддерживает и НОВЫЙ формат
+ * ({tasks,files,resources}: уровень), и СТАРЫЙ (плоские булевы оверрайды).
+ */
+function resolveDomains(role: 'owner' | 'admin' | 'member', raw: string | null): DomainPermissions {
+  const base = defaultDomainPermissions(role)
+  if (!raw) return base
+  let parsed: Record<string, unknown> = {}
+  try {
+    parsed = JSON.parse(raw)
+  } catch {
+    return base
+  }
+  // Новый формат: значения-строки уровней
+  const out = { ...base }
+  for (const d of PERMISSION_DOMAINS) {
+    const v = parsed[d]
+    if (typeof v === 'string' && (PERMISSION_LEVELS as readonly string[]).includes(v)) {
+      out[d] = v as PermissionLevel
+    }
+  }
+  // Старый формат: булевы оверрайды повышают уровень, если явно true
+  if (parsed['tasks.delete'] === true) out.tasks = 'crud'
+  else if (parsed['tasks.create'] === true || parsed['tasks.edit'] === true)
+    out.tasks = LEVEL_RANK[out.tasks] < LEVEL_RANK.write ? 'write' : out.tasks
+  if (parsed['credentials.manage'] === true) out.resources = LEVEL_RANK[out.resources] < LEVEL_RANK.write ? 'write' : out.resources
+  else if (parsed['credentials.read'] === true) out.resources = LEVEL_RANK[out.resources] < LEVEL_RANK.read ? 'read' : out.resources
+  return out
+}
+
+/** Эффективные доменные уровни участника. */
+export async function memberDomains(projectId: string, userId: string): Promise<DomainPermissions | null> {
   const m = await db.query.projectMembers.findFirst({
     where: and(eq(projectMembers.projectId, projectId), eq(projectMembers.userId, userId)),
   })
-  if (!m) return false
-  const effective = { ...defaultPermissions(m.role), ...JSON.parse(m.permissions || '{}') }
-  return Boolean(effective[perm])
+  if (!m) return null
+  return resolveDomains(m.role, m.permissions)
+}
+
+/** Эффективный плоский пермишен участника (для существующих проверок в коде). */
+export async function hasPermission(projectId: string, userId: string, perm: ProjectPermission): Promise<boolean> {
+  const domains = await memberDomains(projectId, userId)
+  if (!domains) return false
+  return expandPermissions(domains)[perm]
+}
+
+// Обратная совместимость: старое имя ещё используется в коде.
+export function defaultPermissions(role: 'owner' | 'admin' | 'member'): Record<ProjectPermission, boolean> {
+  return expandPermissions(defaultDomainPermissions(role))
 }
 
 async function companyRoleOf(companyId: string, userId: string) {
@@ -219,12 +299,16 @@ projectsRoute.get('/:projectId/members', async (c) => {
     .innerJoin(users, eq(users.id, projectMembers.userId))
     .where(eq(projectMembers.projectId, projectId))
   return c.json(
-    rows.map((r) => ({
-      id: r.id,
-      role: r.role,
-      permissions: { ...defaultPermissions(r.role), ...JSON.parse(r.permissions || '{}') },
-      user: { id: r.user.id, name: r.user.name, email: r.user.email, avatarUrl: r.user.avatarUrl },
-    })),
+    rows.map((r) => {
+      const domains = resolveDomains(r.role, r.permissions)
+      return {
+        id: r.id,
+        role: r.role,
+        domains, // {tasks,files,resources}: уровень — основной формат для UI
+        permissions: expandPermissions(domains), // плоские булевы — совместимость
+        user: { id: r.user.id, name: r.user.name, email: r.user.email, avatarUrl: r.user.avatarUrl },
+      }
+    }),
   )
 })
 
@@ -245,15 +329,15 @@ projectsRoute.patch(
 
     const target = await projectRoleOf(projectId, userId)
     if (!target) return c.json({ error: 'Not a project member' }, 404)
+    if (target.role === 'owner') return c.json({ error: 'Owner permissions are fixed' }, 400)
 
-    const current = { ...defaultPermissions(target.role), ...JSON.parse(target.permissions || '{}') }
+    const current = resolveDomains(target.role, target.permissions)
     const patch = c.req.valid('json')
-    await db
-      .update(projectMembers)
-      .set({ permissions: JSON.stringify({ ...current, ...patch }) })
-      .where(eq(projectMembers.id, target.id))
+    const next: DomainPermissions = { ...current, ...patch }
+    // сохраняем ЧИСТЫЙ новый формат — уровни доменов
+    await db.update(projectMembers).set({ permissions: JSON.stringify(next) }).where(eq(projectMembers.id, target.id))
 
-    return c.json({ ok: true, permissions: { ...current, ...patch } })
+    return c.json({ ok: true, domains: next, permissions: expandPermissions(next) })
   },
 )
 
