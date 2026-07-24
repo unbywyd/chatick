@@ -20,6 +20,8 @@ type Member = {
   id: string
   role: 'owner' | 'admin' | 'member'
   domains: Record<Domain, Level>
+  jobTitle: string
+  responsibility: string
   user: { id: string; name: string; email: string; avatarUrl: string | null }
 }
 type CompanyMember = {
@@ -66,6 +68,13 @@ export function ProjectTeamTab({
         method: 'PATCH',
         body: JSON.stringify({ [domain]: level }),
       }),
+    onSuccess: refresh,
+    onError: onErr,
+  })
+
+  const setProfile = useMutation({
+    mutationFn: ({ userId, ...body }: { userId: string; jobTitle?: string; responsibility?: string }) =>
+      api(`/api/v1/projects/${projectId}/members/${userId}/profile`, { method: 'PATCH', body: JSON.stringify(body) }),
     onSuccess: refresh,
     onError: onErr,
   })
@@ -169,6 +178,12 @@ export function ProjectTeamTab({
               {/* Доменные права инлайн: домен → уровень (none/read/write/crud) */}
               {isExpanded && (
                 <div className="space-y-2.5 border-t px-4 py-3">
+                  {/* Должность и зона ответственности (опрокидывается в ИИ) — SPEC §8.12 */}
+                  <ProfileFields
+                    member={m}
+                    canEdit={canEdit}
+                    onSave={(jobTitle, responsibility) => setProfile.mutate({ userId: m.user.id, jobTitle, responsibility })}
+                  />
                   {DOMAINS.map((d) => (
                     <div key={d} className="flex items-center justify-between gap-3">
                       <span className="text-sm font-medium">{t(`perms.domain.${d}`)}</span>
@@ -204,6 +219,57 @@ export function ProjectTeamTab({
           )
         })}
       </ul>
+    </div>
+  )
+}
+
+// Должность + зона ответственности участника (SPEC §8.12)
+function ProfileFields({
+  member,
+  canEdit,
+  onSave,
+}: {
+  member: Member
+  canEdit: boolean
+  onSave: (jobTitle: string, responsibility: string) => void
+}) {
+  const { t } = useTranslation()
+  const [jobTitle, setJobTitle] = useState(member.jobTitle)
+  const [responsibility, setResponsibility] = useState(member.responsibility)
+  const dirty = jobTitle !== member.jobTitle || responsibility !== member.responsibility
+
+  return (
+    <div className="space-y-2 rounded-md bg-muted/30 p-2.5">
+      <div className="grid gap-2 sm:grid-cols-2">
+        <label className="block">
+          <span className="mb-0.5 block text-xs text-muted-foreground">{t('projTeam.jobTitle')}</span>
+          <input
+            value={jobTitle}
+            disabled={!canEdit}
+            maxLength={200}
+            onChange={(e) => setJobTitle(e.target.value)}
+            placeholder={t('projTeam.jobTitlePlaceholder')}
+            className="h-8 w-full rounded border bg-background px-2 text-sm outline-none focus:ring-2 focus:ring-ring disabled:opacity-70"
+          />
+        </label>
+        <label className="block">
+          <span className="mb-0.5 block text-xs text-muted-foreground">{t('projTeam.responsibility')}</span>
+          <input
+            value={responsibility}
+            disabled={!canEdit}
+            maxLength={400}
+            onChange={(e) => setResponsibility(e.target.value)}
+            placeholder={t('projTeam.responsibilityPlaceholder')}
+            className="h-8 w-full rounded border bg-background px-2 text-sm outline-none focus:ring-2 focus:ring-ring disabled:opacity-70"
+          />
+        </label>
+      </div>
+      <p className="text-xs text-muted-foreground">{t('projTeam.profileAiNote')}</p>
+      {canEdit && dirty && (
+        <Button variant="brand" size="sm" onClick={() => onSave(jobTitle, responsibility)}>
+          {t('projectForm.save')}
+        </Button>
+      )}
     </div>
   )
 }

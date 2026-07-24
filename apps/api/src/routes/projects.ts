@@ -296,7 +296,14 @@ projectsRoute.get('/:projectId/members', async (c) => {
     return c.json({ error: 'Forbidden' }, 403)
 
   const rows = await db
-    .select({ id: projectMembers.id, role: projectMembers.role, permissions: projectMembers.permissions, user: users })
+    .select({
+      id: projectMembers.id,
+      role: projectMembers.role,
+      permissions: projectMembers.permissions,
+      jobTitle: projectMembers.jobTitle,
+      responsibility: projectMembers.responsibility,
+      user: users,
+    })
     .from(projectMembers)
     .innerJoin(users, eq(users.id, projectMembers.userId))
     .where(eq(projectMembers.projectId, projectId))
@@ -308,11 +315,36 @@ projectsRoute.get('/:projectId/members', async (c) => {
         role: r.role,
         domains, // {tasks,files,resources}: уровень — основной формат для UI
         permissions: expandPermissions(domains), // плоские булевы — совместимость
+        jobTitle: r.jobTitle,
+        responsibility: r.responsibility,
         user: { id: r.user.id, name: r.user.name, email: r.user.email, avatarUrl: r.user.avatarUrl },
       }
     }),
   )
 })
+
+// Профиль участника в проекте: должность + зона ответственности (SPEC §8.12) — owner/admin
+projectsRoute.patch(
+  '/:projectId/members/:userId/profile',
+  zValidator('json', z.object({ jobTitle: z.string().max(200).optional(), responsibility: z.string().max(400).optional() })),
+  async (c) => {
+    const { sub } = c.get('session')
+    const { projectId, userId } = c.req.param()
+    const project = await db.query.projects.findFirst({ where: eq(projects.id, projectId) })
+    if (!project) return c.json({ error: 'Not found' }, 404)
+    const me = await projectRoleOf(projectId, sub)
+    const companyRole = await companyRoleOf(project.companyId, sub)
+    if (!(me?.role === 'owner' || me?.role === 'admin' || companyRole === 'admin')) return c.json({ error: 'Forbidden' }, 403)
+    const target = await projectRoleOf(projectId, userId)
+    if (!target) return c.json({ error: 'Not a project member' }, 404)
+    const b = c.req.valid('json')
+    const patch: Record<string, unknown> = {}
+    if (b.jobTitle !== undefined) patch.jobTitle = b.jobTitle
+    if (b.responsibility !== undefined) patch.responsibility = b.responsibility
+    await db.update(projectMembers).set(patch).where(eq(projectMembers.id, target.id))
+    return c.json({ ok: true })
+  },
+)
 
 // Пермишены участника (SPEC §4.3) — owner/admin проекта или company admin
 projectsRoute.patch(

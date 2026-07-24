@@ -162,6 +162,9 @@ export const projectMembers = pgTable(
     role: memberRole('role').notNull().default('member'),
     // per-user пермишены на задачи и пр. (SPEC.md §4.3); JSON: { "tasks.create": true, ... }
     permissions: text('permissions').notNull().default('{}'),
+    // должность и зона ответственности (SPEC §8.12) — короткий текст, опрокидывается в контекст ИИ
+    jobTitle: text('job_title').notNull().default(''),
+    responsibility: text('responsibility').notNull().default(''),
     // подтверждение правил чата перед вступлением (SPEC.md §4.2)
     rulesAcceptedAt: timestamp('rules_accepted_at', { withTimezone: true }),
     createdAt: createdAt(),

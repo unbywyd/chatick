@@ -470,7 +470,12 @@
     "permissions": "Права",
     "remove": "Убрать из проекта",
     "removeConfirm": "Убрать {{name}} из проекта?",
-    "removeNote": "Участник получит письмо-уведомление."
+    "removeNote": "Участник получит письмо-уведомление.",
+    "jobTitle": "Должность",
+    "jobTitlePlaceholder": "напр. Backend-разработчик",
+    "responsibility": "Отвечает за",
+    "responsibilityPlaceholder": "напр. API и деплой",
+    "profileAiNote": "Передаётся ИИ, чтобы он знал, кто за что отвечает."
   },
   "theme": {
     "light": "Светлая",

@@ -1,6 +1,6 @@
 import { and, asc, desc, eq, gt, gte, ilike, lte, or, sql } from 'drizzle-orm'
 import { db } from '../db/client.js'
-import { chatSummaries, credentials, files, messages, projects, resourceSecrets, taskComments, tasks, users } from '../db/schema.js'
+import { chatSummaries, credentials, files, messages, projectMembers, projects, resourceSecrets, taskComments, tasks, users } from '../db/schema.js'
 import { hasPermission } from '../routes/projects.js'
 import { encrypt } from './crypto.js'
 import { notify, extractMentions } from './notify.js'
@@ -11,6 +11,25 @@ import { projectLlm, complete, type ToolDef, type ToolHandler } from './llm.js'
 const TAIL_SIZE = 30 // живой хвост в промпте
 
 // --- Промпт-контекст: оглавление + последнее саммари + живой хвост ----------
+
+/**
+ * Ростер команды с должностями и зонами ответственности (SPEC §8.12).
+ * Опрокидывается в контекст ИИ, чтобы он знал, кто за что отвечает.
+ */
+export async function buildTeamContext(projectId: string): Promise<string> {
+  const rows = await db
+    .select({ name: users.name, email: users.email, jobTitle: projectMembers.jobTitle, responsibility: projectMembers.responsibility, role: projectMembers.role })
+    .from(projectMembers)
+    .innerJoin(users, eq(users.id, projectMembers.userId))
+    .where(eq(projectMembers.projectId, projectId))
+  if (!rows.length) return ''
+  const lines = rows.map((r) => {
+    const who = r.name || r.email
+    const bits = [r.jobTitle, r.responsibility && `responsible for: ${r.responsibility}`].filter(Boolean).join('; ')
+    return `- ${who} (${r.role})${bits ? ` — ${bits}` : ''}`
+  })
+  return ['TEAM (who does what — use to route tasks/questions to the right person):', ...lines].join('\n')
+}
 
 export async function buildMemoryContext(projectId: string): Promise<string> {
   const [summaries, tail] = await Promise.all([
@@ -29,6 +48,8 @@ export async function buildMemoryContext(projectId: string): Promise<string> {
   ])
 
   const parts: string[] = []
+  const team = await buildTeamContext(projectId)
+  if (team) parts.push(team, '')
   if (summaries.length > 0) {
     parts.push(
       'CONVERSATION INDEX (older history, use get_summary/search_messages tools for details):',

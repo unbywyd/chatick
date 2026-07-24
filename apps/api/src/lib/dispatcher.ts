@@ -2,7 +2,7 @@ import { and, desc, eq, sql } from 'drizzle-orm'
 import { db } from '../db/client.js'
 import { messages, projects, sandboxMessages, users } from '../db/schema.js'
 import { projectLlm, complete, completeStream, completeWithTools } from './llm.js'
-import { buildMemoryContext, memoryTools } from './memory.js'
+import { buildMemoryContext, buildTeamContext, memoryTools } from './memory.js'
 
 // ИИ-диспетчер (SPEC §5.5): оценка сообщений группы (PASS/HOLD) и sandbox-диалог.
 // Все ответы модели — строгий JSON; парсинг устойчив к ```json обёрткам.
@@ -68,6 +68,7 @@ export async function aiChatReply(projectId: string, userId: string, userMessage
   const ai = JSON.parse(project.aiConfig || '{}') as AiConfig
   const lang = LANG_NAMES[ai.language ?? 'en'] ?? 'English'
   const user = await db.query.users.findFirst({ where: eq(users.id, userId) })
+  const team = await buildTeamContext(projectId) // кто за что отвечает (SPEC §8.12)
   const { tools, handlers } = memoryTools(projectId, userId)
 
   // контекст = история ЭТОГО ai-диалога (не групповой чат — его ИИ читает сам через read_chat)
@@ -93,6 +94,7 @@ export async function aiChatReply(projectId: string, userId: string, userMessage
     system: [
       `You are the AI assistant of the project "${project.name}". Project language: ${lang}.`,
       `You are talking privately with ${user?.name ?? 'a member'}. Answer in THEIR language.`,
+      team,
       project.chatRules ? `Chat rules: "${project.chatRules}"` : '',
       'Tools: read_chat (the group conversation), conversation summaries, full-history search, files (list_files, attach_file_to_task), task CRUD, task comments (add_task_comment — writes ON BEHALF OF the user), and resources (list_resources, create_resource).',
       'Do NOT assume chat contents — read them with tools when needed.',

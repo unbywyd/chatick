@@ -468,7 +468,12 @@
     "permissions": "Permissions",
     "remove": "Remove from project",
     "removeConfirm": "Remove {{name}} from the project?",
-    "removeNote": "They will receive a notification email."
+    "removeNote": "They will receive a notification email.",
+    "jobTitle": "Job title",
+    "jobTitlePlaceholder": "e.g. Backend developer",
+    "responsibility": "Responsible for",
+    "responsibilityPlaceholder": "e.g. API & deployments",
+    "profileAiNote": "Shared with the AI so it knows who does what."
   },
   "theme": {
     "light": "Light",

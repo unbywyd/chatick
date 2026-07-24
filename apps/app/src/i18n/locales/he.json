@@ -468,7 +468,12 @@
     "permissions": "הרשאות",
     "remove": "להסיר מהפרויקט",
     "removeConfirm": "להסיר את {{name}} מהפרויקט?",
-    "removeNote": "החבר יקבל אימייל."
+    "removeNote": "החבר יקבל אימייל.",
+    "jobTitle": "תפקיד",
+    "jobTitlePlaceholder": "למשל מפתח/ת Backend",
+    "responsibility": "אחראי/ת על",
+    "responsibilityPlaceholder": "למשל API ופריסות",
+    "profileAiNote": "משותף עם ה-AI כדי שיֵדע מי אחראי על מה."
   },
   "theme": {
     "light": "בהיר",
