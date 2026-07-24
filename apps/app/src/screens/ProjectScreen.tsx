@@ -2,7 +2,7 @@ import { useEffect } from 'react'
 import { NavLink, Outlet, useNavigate, useOutletContext, useParams } from 'react-router-dom'
 import { useQuery } from '@tanstack/react-query'
 import { useTranslation } from 'react-i18next'
-import { ArrowLeftRight } from 'lucide-react'
+import { Building2 } from 'lucide-react'
 import { api, getProjectToken, setProjectToken, type Me } from '@/lib/api'
 import { cn } from '@/lib/utils'
 import { ChatPanel } from '@/components/chat/ChatPanel'
@@ -83,7 +83,7 @@ export function ProjectLayout() {
               title={t('project.switch')}
               className="flex items-center gap-1.5 rounded-md border px-2.5 py-1.5 text-xs text-muted-foreground hover:text-foreground"
             >
-              <ArrowLeftRight className="size-3.5" />
+              <Building2 className="size-3.5" />
               {t('project.switch')}
             </button>
             <LanguageSelect />
