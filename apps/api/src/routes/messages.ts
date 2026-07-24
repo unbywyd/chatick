@@ -3,7 +3,7 @@ import { zValidator } from '@hono/zod-validator'
 import { z } from 'zod'
 import { and, asc, desc, eq, gt, ilike, inArray, lt, lte, sql } from 'drizzle-orm'
 import { db } from '../db/client.js'
-import { files, messages, sandboxMessages, tasks, users } from '../db/schema.js'
+import { chatSummaries, files, messages, sandboxMessages, tasks, users } from '../db/schema.js'
 import { requireProject, type ProjectEnv } from '../auth.js'
 import { broadcast, sendToUser } from '../ws.js'
 import { evaluateMessage, sandboxReply, aiChatReply } from '../lib/dispatcher.js'
@@ -362,45 +362,68 @@ messagesRoute.post(
   },
 )
 
-// Поиск по сообщениям чата: текст / только с файлами / только со ссылками
+// Поиск по сообщениям чата: только ТЕКСТ (файлы/ссылки живут в Файлах/Ресурсах — SPEC §8.4)
 messagesRoute.get(
   '/search',
   zValidator(
     'query',
     z.object({
       q: z.string().default(''),
-      type: z.enum(['all', 'files', 'links']).default('all'),
       from: z.string().optional(),
       to: z.string().optional(),
     }),
   ),
   async (c) => {
-    const { projectId, sub } = c.get('auth')
-    const { q, type, from, to } = c.req.valid('query')
+    const { projectId } = c.get('auth')
+    const { q, from, to } = c.req.valid('query')
     const needle = q.trim()
 
-    // базовый where: доставленные групповые + свои
     const conds = [eq(messages.projectId, projectId), eq(messages.mode, 'group'), eq(messages.status, 'delivered')]
     if (needle) conds.push(ilike(messages.text, `%${needle}%`))
-    if (type === 'links') conds.push(sql`${messages.text} ~* 'https?://'`)
     if (from && !isNaN(Date.parse(from))) conds.push(sql`${messages.createdAt} >= ${new Date(from)}`)
     if (to && !isNaN(Date.parse(to))) conds.push(sql`${messages.createdAt} <= ${new Date(to + 'T23:59:59')}`)
 
     const rows = await db
-      .select({ msg: messages, author: users, attCount: sql<number>`(select count(*)::int from ${files} where ${files.messageId} = ${messages.id})` })
+      .select({ msg: messages, author: users })
       .from(messages)
       .leftJoin(users, eq(users.id, messages.authorId))
       .where(and(...conds))
       .orderBy(desc(messages.createdAt))
-      .limit(type === 'files' ? 200 : 40)
+      .limit(40)
 
-    let result = rows
-    if (type === 'files') result = rows.filter((r) => r.attCount > 0).slice(0, 40)
+    const atts = await attachmentsOf(rows.map((r) => r.msg.id))
+    return c.json(rows.map((r) => ({ ...serialize(r.msg, r.author, atts.get(r.msg.id)) })))
+  },
+)
 
-    const atts = await attachmentsOf(result.map((r) => r.msg.id))
+// История (SPEC §8.5): дневные саммари бесед, для ручного просмотра между датами.
+messagesRoute.get(
+  '/history',
+  zValidator('query', z.object({ q: z.string().optional(), from: z.string().optional(), to: z.string().optional() })),
+  async (c) => {
+    const { projectId } = c.get('auth')
+    const { q, from, to } = c.req.valid('query')
+    const conds = [eq(chatSummaries.projectId, projectId)]
+    if (q && q.trim())
+      conds.push(sql`(${chatSummaries.name} ilike ${'%' + q.trim() + '%'} or ${chatSummaries.content} ilike ${'%' + q.trim() + '%'})`)
+    if (from && !isNaN(Date.parse(from))) conds.push(sql`${chatSummaries.toAt} >= ${new Date(from)}`)
+    if (to && !isNaN(Date.parse(to))) conds.push(sql`${chatSummaries.fromAt} <= ${new Date(to + 'T23:59:59')}`)
+
+    const rows = await db
+      .select()
+      .from(chatSummaries)
+      .where(and(...conds))
+      .orderBy(desc(chatSummaries.toAt))
+      .limit(200)
+
     return c.json(
-      result.map((r) => ({
-        ...serialize(r.msg, r.author, atts.get(r.msg.id)),
+      rows.map((s) => ({
+        id: s.id,
+        name: s.name,
+        content: s.content,
+        fromAt: s.fromAt,
+        toAt: s.toAt,
+        messageCount: Number(s.messageCount),
       })),
     )
   },

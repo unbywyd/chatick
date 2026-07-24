@@ -291,7 +291,12 @@
   "chatSearch": {
     "title": "חיפוש בצ׳אט",
     "placeholder": "חיפוש הודעות…",
-    "hint": "הקלידו כדי לחפש הודעות"
+    "hint": "הקלידו כדי לחפש הודעות",
+    "tabMessages": "הודעות",
+    "tabHistory": "היסטוריה",
+    "historyPlaceholder": "חיפוש בהיסטוריה…",
+    "historyEmpty": "אין עדיין היסטוריה — סיכומים מופיעים ככל שהשיחה גדלה",
+    "msgCount": "{{count}} הודעות"
   },
   "aiChannel": {
     "title": "ערוץ AI",

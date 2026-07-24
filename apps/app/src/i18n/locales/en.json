@@ -291,7 +291,12 @@
   "chatSearch": {
     "title": "Search chat",
     "placeholder": "Search messages…",
-    "hint": "Type to search messages"
+    "hint": "Type to search messages",
+    "tabMessages": "Messages",
+    "tabHistory": "History",
+    "historyPlaceholder": "Search history…",
+    "historyEmpty": "No history yet — summaries appear as the conversation grows",
+    "msgCount": "{{count}} messages"
   },
   "aiChannel": {
     "title": "AI channel",

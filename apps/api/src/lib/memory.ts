@@ -1,4 +1,4 @@
-import { and, asc, desc, eq, gt, ilike, sql } from 'drizzle-orm'
+import { and, asc, desc, eq, gt, gte, ilike, lte, or, sql } from 'drizzle-orm'
 import { db } from '../db/client.js'
 import { chatSummaries, files, messages, projects, tasks, users } from '../db/schema.js'
 import { hasPermission } from '../routes/projects.js'
@@ -7,8 +7,6 @@ import { projectLlm, complete, type ToolDef, type ToolHandler } from './llm.js'
 // Память ИИ (SPEC §5.6): саммари-цепочка + инструменты + фоновое сжатие.
 
 const TAIL_SIZE = 30 // живой хвост в промпте
-const COMPRESS_THRESHOLD = 60 // порог несжатых
-const COMPRESS_CHUNK = 40 // сколько сжимаем за раз
 
 // --- Промпт-контекст: оглавление + последнее саммари + живой хвост ----------
 
@@ -74,6 +72,19 @@ export function memoryTools(projectId: string, actorUserId: string): { tools: To
       name: 'get_summary',
       description: 'Get the full text of one conversation summary by its id.',
       parameters: { type: 'object', properties: { id: { type: 'string' } }, required: ['id'] },
+    },
+    {
+      name: 'search_summaries',
+      description:
+        'Search the History (daily conversation summaries). Filter by text and/or a date range (ISO YYYY-MM-DD). Use to recall what happened on/around a date without scanning raw messages.',
+      parameters: {
+        type: 'object',
+        properties: {
+          query: { type: 'string', description: 'optional text to match in summary name/content' },
+          from: { type: 'string', description: 'optional start date YYYY-MM-DD' },
+          to: { type: 'string', description: 'optional end date YYYY-MM-DD' },
+        },
+      },
     },
     {
       name: 'search_messages',
@@ -182,6 +193,25 @@ export function memoryTools(projectId: string, actorUserId: string): { tools: To
         where: and(eq(chatSummaries.id, String(args.id)), eq(chatSummaries.projectId, projectId)),
       })
       return s ? `"${s.name}"\n${s.content}` : 'Summary not found.'
+    },
+    search_summaries: async (args) => {
+      const q = String(args.query ?? '').trim()
+      const from = String(args.from ?? '').trim()
+      const to = String(args.to ?? '').trim()
+      const conds = [eq(chatSummaries.projectId, projectId)]
+      if (q) conds.push(or(ilike(chatSummaries.name, `%${q}%`), ilike(chatSummaries.content, `%${q}%`))!)
+      if (from && !isNaN(Date.parse(from))) conds.push(gte(chatSummaries.toAt, new Date(from)))
+      if (to && !isNaN(Date.parse(to))) conds.push(lte(chatSummaries.fromAt, new Date(to + 'T23:59:59')))
+      const rows = await db
+        .select()
+        .from(chatSummaries)
+        .where(and(...conds))
+        .orderBy(desc(chatSummaries.toAt))
+        .limit(15)
+      if (!rows.length) return 'No summaries found for that filter.'
+      return rows
+        .map((s) => `[${s.id}] "${s.name}" (${s.fromAt.toISOString().slice(0, 10)}..${s.toAt.toISOString().slice(0, 10)})\n${s.content.slice(0, 400)}`)
+        .join('\n\n')
     },
     search_messages: async (args) => {
       const q = String(args.query ?? '').trim()
@@ -299,18 +329,71 @@ export function memoryTools(projectId: string, actorUserId: string): { tools: To
   return { tools, handlers }
 }
 
-// --- Фоновое сжатие ----------------------------------------------------------
+// --- Фоновое сжатие: саммари ПО ДНЯМ на языке проекта (SPEC §8.5) -------------
 
-/** Сжать старшие сообщения в саммари, если несжатых накопилось больше порога. Fail-safe. */
+const LANG_NAMES: Record<string, string> = { en: 'English', ru: 'Russian', he: 'Hebrew' }
+// Токен-эвристика: ~4 символа на токен; целимся ≤ ~2500 токенов исходника на саммари.
+const MAX_CHARS_PER_SUMMARY = 10_000
+const UTC_DAY = (d: Date) => d.toISOString().slice(0, 10)
+
+type MsgRow = { msg: typeof messages.$inferSelect; author: typeof users.$inferSelect | null }
+
+async function summarizeChunk(
+  cfg: NonNullable<Awaited<ReturnType<typeof projectLlm>>>,
+  langName: string,
+  day: string,
+  chunk: MsgRow[],
+  part: number,
+  total: number,
+): Promise<void> {
+  const transcript = chunk
+    .map((r) => `[${r.msg.createdAt.toISOString().slice(11, 16)}] ${r.author?.name ?? 'AI'}: ${r.msg.text}`)
+    .join('\n')
+
+  const raw = await complete(cfg, {
+    system: [
+      `You compress one day of team chat into a summary for long-term memory. Date: ${day}${total > 1 ? ` (part ${part}/${total})` : ''}.`,
+      'Capture: decisions, facts, statuses, questions+answers, mentioned files/tasks, who did what. Omit chit-chat.',
+      'First line: a SHORT conversation name (3-6 words, no quotes). Then a blank line. Then the summary (bullet points ok).',
+      `IMPORTANT: write BOTH the name and the summary strictly in ${langName}, regardless of the chat's original language.`,
+    ].join('\n'),
+    user: transcript,
+    maxTokens: 900,
+  })
+  if (!raw) throw new Error('empty summary')
+
+  const [firstLine, ...restLines] = raw.trim().split('\n')
+  let name = (firstLine ?? 'Conversation').replace(/^["#\s]+|["\s]+$/g, '').slice(0, 120) || 'Conversation'
+  if (total > 1) name = `${name} (${part}/${total})`
+  const content = restLines.join('\n').trim() || raw.trim()
+
+  await db.insert(chatSummaries).values({
+    projectId: chunk[0]!.msg.projectId,
+    name,
+    content,
+    fromAt: chunk[0]!.msg.createdAt,
+    toAt: chunk[chunk.length - 1]!.msg.createdAt,
+    messageCount: String(chunk.length),
+  })
+}
+
+/**
+ * Сжать сообщения в саммари ПО ДНЯМ. За вызов обрабатывает один самый старый
+ * ПОЛНОСТЬЮ ЗАВЕРШЁННЫЙ день (сегодняшний не трогаем — он ещё дописывается).
+ * Крупный день дробится на несколько саммари по токен-бюджету. Fail-safe.
+ */
 export async function maybeCompress(projectId: string): Promise<void> {
   try {
     const project = await db.query.projects.findFirst({ where: eq(projects.id, projectId) })
     if (!project) return
     const cfg = await projectLlm(projectId)
     if (!cfg) return
+    const aiConfig = JSON.parse(project.aiConfig || '{}') as { language?: string }
+    const langName = LANG_NAMES[aiConfig.language ?? 'en'] ?? 'English'
 
     const cursor = project.lastSummarizedAt ?? new Date(0)
-    const uncompressed = await db
+    // берём достаточно, чтобы точно захватить весь старый день
+    const rows = await db
       .select({ msg: messages, author: users })
       .from(messages)
       .leftJoin(users, eq(users.id, messages.authorId))
@@ -323,40 +406,40 @@ export async function maybeCompress(projectId: string): Promise<void> {
         ),
       )
       .orderBy(asc(messages.createdAt))
-      .limit(COMPRESS_THRESHOLD + 1)
+      .limit(1000)
 
-    if (uncompressed.length <= COMPRESS_THRESHOLD) return
+    if (rows.length === 0) return
 
-    const chunk = uncompressed.slice(0, COMPRESS_CHUNK)
-    const transcript = chunk.map((r) => `[${r.msg.createdAt.toISOString().slice(0, 16)}] ${r.author?.name ?? 'AI'}: ${r.msg.text}`).join('\n')
+    const today = UTC_DAY(new Date())
+    const oldestDay = UTC_DAY(rows[0]!.msg.createdAt)
+    // если весь несжатый остаток — это сегодня, ждём (день не завершён)
+    if (oldestDay === today) return
 
-    const raw = await complete(cfg, {
-      system: [
-        'You compress a chunk of team chat into a summary for long-term memory.',
-        'Capture: decisions, facts, statuses, questions+answers, mentioned files/tasks, who did what. Omit chit-chat.',
-        'First line: a SHORT conversation name (3-6 words, no quotes). Then a blank line. Then the summary (bullet points ok).',
-        'Write in the language predominantly used in the chunk.',
-      ].join('\n'),
-      user: transcript,
-      maxTokens: 900,
-    })
-    if (!raw) return
+    const dayRows = rows.filter((r) => UTC_DAY(r.msg.createdAt) === oldestDay)
 
-    const [firstLine, ...restLines] = raw.trim().split('\n')
-    const name = (firstLine ?? 'Conversation').replace(/^["#\s]+|["\s]+$/g, '').slice(0, 120) || 'Conversation'
-    const content = restLines.join('\n').trim() || raw.trim()
+    // дробим день на части по символьному бюджету
+    const chunks: MsgRow[][] = []
+    let cur: MsgRow[] = []
+    let curChars = 0
+    for (const r of dayRows) {
+      const len = (r.msg.text?.length ?? 0) + 32
+      if (cur.length && curChars + len > MAX_CHARS_PER_SUMMARY) {
+        chunks.push(cur)
+        cur = []
+        curChars = 0
+      }
+      cur.push(r)
+      curChars += len
+    }
+    if (cur.length) chunks.push(cur)
 
-    const last = chunk[chunk.length - 1]!
-    await db.insert(chatSummaries).values({
-      projectId,
-      name,
-      content,
-      fromAt: chunk[0]!.msg.createdAt,
-      toAt: last.msg.createdAt,
-      messageCount: String(chunk.length),
-    })
-    await db.update(projects).set({ lastSummarizedAt: last.msg.createdAt }).where(eq(projects.id, projectId))
-    console.log(`[memory] compressed ${chunk.length} msgs of ${projectId} → "${name}"`)
+    for (let i = 0; i < chunks.length; i++) {
+      await summarizeChunk(cfg, langName, oldestDay, chunks[i]!, i + 1, chunks.length)
+    }
+
+    const lastTs = dayRows[dayRows.length - 1]!.msg.createdAt
+    await db.update(projects).set({ lastSummarizedAt: lastTs }).where(eq(projects.id, projectId))
+    console.log(`[memory] summarized day ${oldestDay} of ${projectId}: ${dayRows.length} msgs → ${chunks.length} summary(ies)`)
   } catch (e) {
     console.error('[memory] compress failed:', e)
   }

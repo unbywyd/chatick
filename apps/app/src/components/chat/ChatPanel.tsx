@@ -623,69 +623,126 @@ function MessageAttachments({ attachments }: { attachments: NonNullable<ChatMess
   )
 }
 
-// Поиск по чату — текст сообщений, клик по результату → переход к переписке
+type Summary = { id: string; name: string; content: string; fromAt: string; toAt: string; messageCount: number }
+
+// Поиск по чату — текст сообщений + История (дневные саммари между датами) — SPEC §8.4/§8.5
 function ChatSearch({ projectId, lang, onJump, onClose }: { projectId: string; lang: string; onJump: (id: string) => void; onClose: () => void }) {
   const { t } = useTranslation()
+  const [tab, setTab] = useState<'messages' | 'history'>('messages')
   const [q, setQ] = useState('')
   const [debounced, setDebounced] = useState('')
+  const [from, setFrom] = useState('')
+  const [to, setTo] = useState('')
 
   useEffect(() => {
     const id = setTimeout(() => setDebounced(q), 300)
     return () => clearTimeout(id)
   }, [q])
 
-  const hasCriteria = debounced.trim().length > 0
+  const dateQs = [from ? `from=${from}` : '', to ? `to=${to}` : ''].filter(Boolean).join('&')
+
+  const hasCriteria = debounced.trim().length > 0 || Boolean(from) || Boolean(to)
   const results = useQuery({
-    queryKey: ['chat-search', projectId, debounced],
-    enabled: hasCriteria,
-    queryFn: () => api<ChatMessage[]>(`/api/v1/messages/search?q=${encodeURIComponent(debounced)}`, {}, 'project'),
+    queryKey: ['chat-search', projectId, debounced, from, to],
+    enabled: tab === 'messages' && hasCriteria,
+    queryFn: () =>
+      api<ChatMessage[]>(`/api/v1/messages/search?q=${encodeURIComponent(debounced)}${dateQs ? '&' + dateQs : ''}`, {}, 'project'),
+  })
+
+  // История загружается всегда (по датам/тексту), т.к. это самостоятельный режим просмотра
+  const history = useQuery({
+    queryKey: ['chat-history', projectId, debounced, from, to],
+    enabled: tab === 'history',
+    queryFn: () =>
+      api<Summary[]>(`/api/v1/messages/history?q=${encodeURIComponent(debounced)}${dateQs ? '&' + dateQs : ''}`, {}, 'project'),
   })
 
   return (
     <div className="absolute inset-0 z-40 flex flex-col bg-background/98 backdrop-blur-sm">
-      <header className="flex items-center gap-2 border-b p-3">
-        <div className="relative flex-1">
-          <Search className="pointer-events-none absolute start-2.5 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
-          <input
-            autoFocus
-            value={q}
-            onChange={(e) => setQ(e.target.value)}
-            placeholder={t('chatSearch.placeholder')}
-            className="h-9 w-full rounded-md border bg-transparent ps-9 pe-3 text-sm outline-none focus:ring-2 focus:ring-ring"
-          />
+      <header className="space-y-2 border-b p-3">
+        <div className="flex items-center gap-2">
+          <div className="relative flex-1">
+            <Search className="pointer-events-none absolute start-2.5 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
+            <input
+              autoFocus
+              value={q}
+              onChange={(e) => setQ(e.target.value)}
+              placeholder={tab === 'messages' ? t('chatSearch.placeholder') : t('chatSearch.historyPlaceholder')}
+              className="h-9 w-full rounded-md border bg-transparent ps-9 pe-3 text-sm outline-none focus:ring-2 focus:ring-ring"
+            />
+          </div>
+          <Button variant="ghost" size="icon" onClick={onClose}>
+            <X className="size-4" />
+          </Button>
         </div>
-        <Button variant="ghost" size="icon" onClick={onClose}>
-          <X className="size-4" />
-        </Button>
+        <div className="flex flex-wrap items-center gap-2">
+          <div className="inline-flex overflow-hidden rounded-md border text-xs">
+            <button
+              onClick={() => setTab('messages')}
+              className={cn('px-3 py-1.5 transition-colors', tab === 'messages' ? 'bg-primary text-primary-foreground' : 'hover:bg-secondary')}
+            >
+              {t('chatSearch.tabMessages')}
+            </button>
+            <button
+              onClick={() => setTab('history')}
+              className={cn('px-3 py-1.5 transition-colors', tab === 'history' ? 'bg-primary text-primary-foreground' : 'hover:bg-secondary')}
+            >
+              {t('chatSearch.tabHistory')}
+            </button>
+          </div>
+          <input type="date" value={from} onChange={(e) => setFrom(e.target.value)} className="h-8 rounded-md border bg-transparent px-2 text-xs" />
+          <span className="text-xs text-muted-foreground">–</span>
+          <input type="date" value={to} onChange={(e) => setTo(e.target.value)} className="h-8 rounded-md border bg-transparent px-2 text-xs" />
+        </div>
       </header>
 
-      <div className="flex-1 space-y-1 overflow-y-auto p-3">
-        {results.isFetching && <p className="py-4 text-center text-sm text-muted-foreground">…</p>}
-        {results.data?.map((m) => (
-          <button
-            key={m.id}
-            onClick={() => onJump(m.id)}
-            className="block w-full rounded-lg border bg-card px-3 py-2 text-start transition-colors hover:bg-accent"
-          >
-            <p className="mb-0.5 flex items-baseline gap-2 text-xs">
-              <span className="font-semibold">{m.author?.name ?? 'AI'}</span>
-              <span className="text-muted-foreground">{new Date(m.createdAt).toLocaleString(lang)}</span>
-            </p>
-            <div className="msg-md line-clamp-3 break-words text-sm">
-              <ReactMarkdown>{renderMentions(m.text)}</ReactMarkdown>
+      {tab === 'messages' ? (
+        <div className="flex-1 space-y-1 overflow-y-auto p-3">
+          {results.isFetching && <p className="py-4 text-center text-sm text-muted-foreground">…</p>}
+          {results.data?.map((m) => (
+            <button
+              key={m.id}
+              onClick={() => onJump(m.id)}
+              className="block w-full rounded-lg border bg-card px-3 py-2 text-start transition-colors hover:bg-accent"
+            >
+              <p className="mb-0.5 flex items-baseline gap-2 text-xs">
+                <span className="font-semibold">{m.author?.name ?? 'AI'}</span>
+                <span className="text-muted-foreground">{new Date(m.createdAt).toLocaleString(lang)}</span>
+              </p>
+              <div className="msg-md line-clamp-3 break-words text-sm">
+                <ReactMarkdown>{renderMentions(m.text)}</ReactMarkdown>
+              </div>
+              {(m.attachments?.length ?? 0) > 0 && (
+                <p className="mt-1 text-xs text-muted-foreground">📎 {m.attachments!.map((a) => a.name).join(', ')}</p>
+              )}
+            </button>
+          ))}
+          {results.data && results.data.length === 0 && hasCriteria && (
+            <p className="py-6 text-center text-sm text-muted-foreground">{t('start.nothingFound')}</p>
+          )}
+          {!hasCriteria && <p className="py-6 text-center text-sm text-muted-foreground">{t('chatSearch.hint')}</p>}
+        </div>
+      ) : (
+        <div className="flex-1 space-y-2 overflow-y-auto p-3">
+          {history.isFetching && <p className="py-4 text-center text-sm text-muted-foreground">…</p>}
+          {history.data?.map((s) => (
+            <div key={s.id} className="rounded-lg border bg-card px-3 py-2.5">
+              <p className="mb-1 flex items-baseline justify-between gap-2">
+                <span className="text-sm font-semibold">{s.name}</span>
+                <span className="whitespace-nowrap text-xs text-muted-foreground">
+                  {new Date(s.fromAt).toLocaleDateString(lang)}
+                  {new Date(s.fromAt).toDateString() !== new Date(s.toAt).toDateString() && ` – ${new Date(s.toAt).toLocaleDateString(lang)}`}
+                </span>
+              </p>
+              <div className="msg-md whitespace-pre-wrap break-words text-sm text-muted-foreground">{s.content}</div>
+              <p className="mt-1.5 text-xs text-muted-foreground">{t('chatSearch.msgCount', { count: s.messageCount })}</p>
             </div>
-            {(m.attachments?.length ?? 0) > 0 && (
-              <p className="mt-1 text-xs text-muted-foreground">📎 {m.attachments!.map((a) => a.name).join(', ')}</p>
-            )}
-          </button>
-        ))}
-        {results.data && results.data.length === 0 && hasCriteria && (
-          <p className="py-6 text-center text-sm text-muted-foreground">{t('start.nothingFound')}</p>
-        )}
-        {!results.data && !results.isFetching && (
-          <p className="py-6 text-center text-sm text-muted-foreground">{t('chatSearch.hint')}</p>
-        )}
-      </div>
+          ))}
+          {history.data && history.data.length === 0 && (
+            <p className="py-6 text-center text-sm text-muted-foreground">{t('chatSearch.historyEmpty')}</p>
+          )}
+        </div>
+      )}
     </div>
   )
 }
