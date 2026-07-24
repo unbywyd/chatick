@@ -488,6 +488,41 @@ export const notificationOptOuts = pgTable(
   (t) => [uniqueIndex('notif_optout_idx').on(t.userId, t.projectId, t.event)],
 )
 
+// ГЛОБАЛЬНЫЕ in-app уведомления (SPEC §8.22): основной канал вместо мгновенных писем.
+// Пользователь видит уведомления из ВСЕХ своих проектов; группировка по проекту — на клиенте.
+export const notifications = pgTable(
+  'notifications',
+  {
+    id: id(),
+    userId: text('user_id').notNull().references(() => users.id, { onDelete: 'cascade' }),
+    projectId: text('project_id').notNull().references(() => projects.id, { onDelete: 'cascade' }),
+    event: notificationEvent('event').notNull(),
+    actorId: text('actor_id').references(() => users.id, { onDelete: 'set null' }), // null = ИИ/система
+    title: text('title').notNull(), // «Artyom упомянул вас»
+    body: text('body').notNull().default(''), // превью текста
+    // куда вести по клику: относительный путь внутри приложения (/p/<id>/tasks/<taskId> и т.п.)
+    link: text('link').notNull().default(''),
+    entityType: text('entity_type'), // task | message | comment
+    entityId: text('entity_id'),
+    readAt: timestamp('read_at', { withTimezone: true }),
+    createdAt: createdAt(),
+  },
+  (t) => [
+    index('notifications_user_read_idx').on(t.userId, t.readAt),
+    index('notifications_user_created_idx').on(t.userId, t.createdAt),
+  ],
+)
+
+// Персональные настройки уведомлений (глобальные, per-user).
+export const userNotificationPrefs = pgTable('user_notification_prefs', {
+  userId: text('user_id').primaryKey().references(() => users.id, { onDelete: 'cascade' }),
+  // суточный email-дайджест непрочитанных (вместо мгновенных писем)
+  dailyDigest: boolean('daily_digest').notNull().default(true),
+  digestHourUtc: text('digest_hour_utc').notNull().default('9'),
+  lastDigestAt: timestamp('last_digest_at', { withTimezone: true }),
+  updatedAt: updatedAt(),
+})
+
 // Лог отправленных уведомлений — для дедупа (не слать одно и то же дважды).
 export const notificationLog = pgTable(
   'notification_log',

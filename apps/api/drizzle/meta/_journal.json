@@ -183,6 +183,13 @@
       "when": 1784900786754,
       "tag": "0025_special_sue_storm",
       "breakpoints": true
+    },
+    {
+      "idx": 26,
+      "version": "7",
+      "when": 1784924688714,
+      "tag": "0026_omniscient_scarlet_spider",
+      "breakpoints": true
     }
   ]
 }

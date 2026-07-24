@@ -1,8 +1,7 @@
 import { and, eq, inArray } from 'drizzle-orm'
 import { db } from '../db/client.js'
-import { users, projects, projectMembers, notificationOptOuts, notificationLog } from '../db/schema.js'
-import { sendMail } from './mail.js'
-import { env } from '../env.js'
+import { users, projects, projectMembers, notificationOptOuts, notificationLog, notifications } from '../db/schema.js'
+import { sendToUser } from '../ws.js'
 
 // Единая точка отправки уведомлений (SPEC §8.9).
 // Проверяет: (1) участник проекта, (2) не отписан от события, (3) не дубль.
@@ -94,6 +93,9 @@ type NotifyParams = {
   preview?: string
   /** доп. переменные для шаблона: ref, status */
   vars?: Record<string, string>
+  /** на какую сущность ведёт уведомление (для иконки/навигации) */
+  entityType?: 'task' | 'message' | 'comment'
+  entityId?: string
 }
 
 export async function notify(params: NotifyParams): Promise<void> {
@@ -128,10 +130,9 @@ export async function notify(params: NotifyParams): Promise<void> {
     const recipients = await db.query.users.findMany({ where: inArray(users.id, targets) })
     const actorName = params.actorName || 'Someone'
     const previewText = params.preview ? stripMentions(params.preview) : ''
-    const url = params.link ? `${env.APP_URL.replace(/\/$/, '')}/#${params.link}` : env.APP_URL
 
     for (const user of recipients) {
-      // дедуп: один и тот же dedupeKey не шлём повторно
+      // дедуп: один и тот же dedupeKey не создаём повторно
       const dedupeKey = params.dedupeKey ? `${params.dedupeKey}:${user.id}` : `${event}:${projectId}:${user.id}:${Date.now()}`
       if (params.dedupeKey) {
         const exists = await db.query.notificationLog.findFirst({ where: eq(notificationLog.dedupeKey, dedupeKey) })
@@ -140,17 +141,27 @@ export async function notify(params: NotifyParams): Promise<void> {
 
       const lang = langOf(user.locale)
       const vars = { actor: actorName, project: project.name, ...(params.vars || {}) }
-      const subject = tr(lang, event, vars)
-      const bodyLines = [subject]
-      if (previewText) bodyLines.push('', previewText.slice(0, 500))
-      bodyLines.push('', `${tr(lang, 'open', vars)}: ${url}`, '', tr(lang, 'footer', vars))
 
-      await sendMail({ to: user.email, subject, text: bodyLines.join('\n') })
+      // ГЛАВНОЕ: создаём ВНУТРЕННЕЕ уведомление (SPEC §8.22). Почта — суточным дайджестом.
+      await db.insert(notifications).values({
+        userId: user.id,
+        projectId,
+        event,
+        actorId: actorId ?? null,
+        title: tr(lang, event, vars),
+        body: previewText.slice(0, 500),
+        link: params.link ?? '',
+        entityType: params.entityType ?? null,
+        entityId: params.entityId ?? null,
+      })
 
-      // фиксируем в логе (только если дедуп-ключ задан)
+      // фиксируем в логе дедупа
       if (params.dedupeKey) {
         await db.insert(notificationLog).values({ userId: user.id, projectId, event, dedupeKey }).onConflictDoNothing()
       }
+
+      // realtime: подсветить колокольчик у получателя, если он онлайн
+      sendToUser(projectId, user.id, 'notification', { projectId })
     }
   } catch (err) {
     console.error('[notify] failed:', err)

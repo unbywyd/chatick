@@ -57,9 +57,13 @@ export function NotificationsTab({ projectId, isAdmin }: { projectId: string; is
         <p className="mt-1 text-sm text-muted-foreground">{t('notif.subtitle')}</p>
       </div>
 
+      {/* Суточный email-дайджест (глобально, вместо мгновенных писем) */}
+      <DigestSettings />
+
       {/* Личные подписки */}
       <section className="space-y-2.5 rounded-xl border bg-card p-4">
         <h2 className="text-sm font-semibold">{t('notif.subscriptions')}</h2>
+        <p className="text-xs text-muted-foreground">{t('notif.subscriptionsHint')}</p>
         {EVENTS.map((ev) => (
           <label key={ev} className="flex cursor-pointer items-center justify-between gap-3 py-1">
             <div>
@@ -256,6 +260,56 @@ function ReminderConfig({ projectId, isAdmin }: { projectId: string; isAdmin: bo
         <Button variant="brand" onClick={() => save.mutate()} disabled={save.isPending}>
           {t('notif.save')}
         </Button>
+      )}
+    </section>
+  )
+}
+
+// Суточный email-дайджест (SPEC §8.22): вместо письма на каждое событие — одно письмо в сутки.
+function DigestSettings() {
+  const { t } = useTranslation()
+  const qc = useQueryClient()
+  const prefs = useQuery({
+    queryKey: ['inbox-prefs'],
+    queryFn: () => api<{ dailyDigest: boolean; digestHourUtc: number }>('/api/v1/inbox/prefs'),
+  })
+  const save = useMutation({
+    mutationFn: (b: { dailyDigest: boolean; digestHourUtc: number }) =>
+      api('/api/v1/inbox/prefs', { method: 'PUT', body: JSON.stringify(b) }),
+    onSuccess: () => {
+      toast.success(t('notif.saved'))
+      qc.invalidateQueries({ queryKey: ['inbox-prefs'] })
+    },
+    onError: (e) => toast.error(e instanceof Error ? e.message : String(e)),
+  })
+
+  const daily = prefs.data?.dailyDigest ?? true
+  const hour = prefs.data?.digestHourUtc ?? 9
+
+  return (
+    <section className="space-y-3 rounded-xl border bg-card p-4">
+      <div className="flex items-center justify-between gap-3">
+        <div>
+          <h2 className="text-sm font-semibold">{t('notif.digest')}</h2>
+          <p className="text-xs text-muted-foreground">{t('notif.digestHint')}</p>
+        </div>
+        <Switch checked={daily} onCheckedChange={(v) => save.mutate({ dailyDigest: v, digestHourUtc: hour })} />
+      </div>
+      {daily && (
+        <label className="flex items-center gap-2 text-sm">
+          {t('notif.atHour')}
+          <select
+            value={String(hour)}
+            onChange={(e) => save.mutate({ dailyDigest: true, digestHourUtc: Number(e.target.value) })}
+            className="rounded-md border bg-background px-2 py-1 text-sm"
+          >
+            {Array.from({ length: 24 }, (_, h) => (
+              <option key={h} value={h}>
+                {String(h).padStart(2, '0')}:00 UTC
+              </option>
+            ))}
+          </select>
+        </label>
       )}
     </section>
   )

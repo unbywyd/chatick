@@ -428,8 +428,8 @@
   },
   "notif": {
     "title": "Notifications",
-    "subtitle": "Choose what you get emailed about, and set up task reminders",
-    "subscriptions": "Email me when…",
+    "subtitle": "Choose what you get notified about; email arrives as one daily digest",
+    "subscriptions": "Notify me when…",
     "event": {
       "chat_mention": {
         "label": "I'm mentioned in chat",
@@ -484,7 +484,10 @@
     "statuses": "Statuses counted as “open”",
     "save": "Save reminders",
     "saved": "Saved",
-    "minInterval": "(min every 12h)"
+    "minInterval": "(min every 12h)",
+    "subscriptionsHint": "These appear in the bell. Email is sent once a day as a digest, not per event.",
+    "digest": "Daily email digest",
+    "digestHint": "One email a day summarising your unread notifications — instead of an email per event."
   },
   "projTeam": {
     "title": "Project team",
@@ -647,5 +650,13 @@
       "comment": "commented on",
       "upload": "uploaded"
     }
+  },
+  "inbox": {
+    "title": "Notifications",
+    "empty": "Nothing new",
+    "markAllRead": "Mark all read",
+    "markProjectRead": "Mark project read",
+    "openProject": "Open project",
+    "openFailed": "Could not open"
   }
 }

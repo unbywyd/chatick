@@ -40,7 +40,7 @@ async function notifyTask(
 ) {
   const actor = await db.query.users.findFirst({ where: eq(users.id, actorId) })
   const actorName = actor?.name || 'Someone'
-  const link = `/p/${projectId}?task=${task.id}`
+  const link = `/p/${projectId}/tasks/${task.id}`
 
   if (opts.assigneeChanged && task.assigneeId) {
     await notify({
@@ -464,7 +464,7 @@ tasksRoute.post(
 
     const author = await db.query.users.findFirst({ where: eq(users.id, sub) })
     const actorName = author?.name || 'Someone'
-    const link = `/p/${projectId}?task=${taskId}`
+    const link = `/p/${projectId}/tasks/${taskId}`
 
     // уведомления: упоминания в комментарии + автору/ассайни задачи о новом комментарии
     const mentioned = extractMentions(body)

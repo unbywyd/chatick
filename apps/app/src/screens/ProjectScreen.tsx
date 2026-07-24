@@ -9,6 +9,7 @@ import { ChatPanel } from '@/components/chat/ChatPanel'
 import { ThemeToggle } from '@/components/ThemeToggle'
 import { LanguageSelect } from '@/components/LanguageSelect'
 import { ProfileMenu } from '@/components/ProfileMenu'
+import { NotificationBell } from '@/components/NotificationBell'
 
 // Layout проекта (CONCEPT.md §3): чат 40% постоянен, табы — вложенные роуты (Outlet),
 // каждый таб имеет свой URL — прямые ссылки работают: /p/:id/tasks, /p/:id/files, ...
@@ -87,6 +88,7 @@ export function ProjectLayout() {
               <Building2 className="size-3.5" />
               {t('project.switch')}
             </button>
+            <NotificationBell currentProjectId={id} />
             <LanguageSelect />
             <ThemeToggle />
             <ProfileMenu

@@ -83,6 +83,8 @@ export function useProjectSocket(projectId: string | undefined, events: SocketEv
           if (event === 'task_lock_denied') {
             eventsRef.current.onTaskLockDenied?.(payload as { taskId: string })
           }
+          // новое in-app уведомление → обновить колокольчик (SPEC §8.22)
+          if (event === 'notification') qc.invalidateQueries({ queryKey: ['inbox'] })
         } catch {
           /* ignore */
         }
