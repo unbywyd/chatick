@@ -4,7 +4,7 @@ import { chatSummaries, credentials, files, messages, projectMembers, projects, 
 import { hasPermission } from '../routes/projects.js'
 import { encrypt } from './crypto.js'
 import { notify, extractMentions } from './notify.js'
-import { projectLlm, complete, type ToolDef, type ToolHandler } from './llm.js'
+import { projectLlm, complete, validateTask, type ToolDef, type ToolHandler } from './llm.js'
 
 // Память ИИ (SPEC §5.6): саммари-цепочка + инструменты + фоновое сжатие.
 
@@ -207,6 +207,45 @@ export function memoryTools(projectId: string, actorUserId: string): { tools: To
         },
         required: ['name'],
       },
+    },
+    {
+      name: 'update_resource',
+      description: 'Update a resource (by id) — name / url / description. Requires resources.manage.',
+      parameters: {
+        type: 'object',
+        properties: { id: { type: 'string' }, name: { type: 'string' }, url: { type: 'string' }, description: { type: 'string' } },
+        required: ['id'],
+      },
+    },
+    {
+      name: 'add_resource_secret',
+      description: 'Add a named secret (password/API key) to an existing resource (by id). Stored ENCRYPTED, never readable back. Requires resources.manage.',
+      parameters: {
+        type: 'object',
+        properties: { id: { type: 'string' }, label: { type: 'string' }, value: { type: 'string' } },
+        required: ['id', 'value'],
+      },
+    },
+    {
+      name: 'delete_resource',
+      description: 'Delete a resource and its secrets (by id). Requires resources.manage.',
+      parameters: { type: 'object', properties: { id: { type: 'string' } }, required: ['id'] },
+    },
+    // --- Спринты, ревью, заметки, файлы ---
+    {
+      name: 'create_sprint',
+      description: 'Create a sprint/group (name, optional hex color). Requires tasks.edit. Then use update_task to move tasks into it.',
+      parameters: { type: 'object', properties: { name: { type: 'string' }, color: { type: 'string', description: 'hex like #64748b' } }, required: ['name'] },
+    },
+    {
+      name: 'review_task',
+      description: 'AI-review a task (by number): is the title/description clear, specific, feasible? Returns advice. Read-only, changes nothing.',
+      parameters: { type: 'object', properties: { number: { type: 'string' } }, required: ['number'] },
+    },
+    {
+      name: 'delete_file',
+      description: 'Delete a project file by id. Chat/task-linked files become "file deleted" (link kept). Requires files.delete.',
+      parameters: { type: 'object', properties: { fileId: { type: 'string' } }, required: ['fileId'] },
     },
     // --- Комментарии к задачам (SPEC §8.9) — от лица пользователя ---
     {
@@ -541,6 +580,65 @@ export function memoryTools(projectId: string, actorUserId: string): { tools: To
         }
       }
       return `Saved resource "${res!.name}"${secretCount ? ` with ${secretCount} secret(s) (stored encrypted)` : ''}.`
+    },
+    update_resource: async (args) => {
+      if (!(await hasPermission(projectId, actorUserId, 'resources.manage')))
+        return 'PERMISSION DENIED: the author cannot manage resources.'
+      const res = await db.query.credentials.findFirst({ where: and(eq(credentials.id, String(args.id ?? '')), eq(credentials.projectId, projectId)) })
+      if (!res) return 'Resource not found.'
+      const patch: Record<string, unknown> = {}
+      if (typeof args.name === 'string') patch.name = args.name.slice(0, 200)
+      if (typeof args.url === 'string') patch.url = args.url.slice(0, 2000) || null
+      if (typeof args.description === 'string') patch.description = args.description.slice(0, 5000)
+      if (!Object.keys(patch).length) return 'Nothing to update.'
+      await db.update(credentials).set(patch).where(eq(credentials.id, res.id))
+      return `Updated resource "${res.name}".`
+    },
+    add_resource_secret: async (args) => {
+      if (!(await hasPermission(projectId, actorUserId, 'resources.manage')))
+        return 'PERMISSION DENIED: the author cannot manage resources.'
+      const res = await db.query.credentials.findFirst({ where: and(eq(credentials.id, String(args.id ?? '')), eq(credentials.projectId, projectId)) })
+      if (!res) return 'Resource not found.'
+      const value = String(args.value ?? '')
+      if (!value) return 'Secret value is required.'
+      await db.insert(resourceSecrets).values({ resourceId: res.id, label: String(args.label ?? '').slice(0, 120), valueEncrypted: encrypt(value) })
+      return `Added a secret to "${res.name}" (stored encrypted).`
+    },
+    delete_resource: async (args) => {
+      if (!(await hasPermission(projectId, actorUserId, 'resources.manage')))
+        return 'PERMISSION DENIED: the author cannot manage resources.'
+      const res = await db.query.credentials.findFirst({ where: and(eq(credentials.id, String(args.id ?? '')), eq(credentials.projectId, projectId)) })
+      if (!res) return 'Resource not found.'
+      await db.delete(credentials).where(eq(credentials.id, res.id)) // секреты каскадом
+      return `Deleted resource "${res.name}".`
+    },
+    create_sprint: async (args) => {
+      if (!(await hasPermission(projectId, actorUserId, 'tasks.edit'))) return 'PERMISSION DENIED: creating sprints requires tasks.edit.'
+      const name = String(args.name ?? '').slice(0, 120)
+      if (!name) return 'Sprint name is required.'
+      const color = /^#[0-9a-fA-F]{6}$/.test(String(args.color)) ? String(args.color) : '#64748b'
+      const [{ minSort }] = (await db.select({ minSort: sql<number>`coalesce(min(${taskGroups.sortOrder}), 0)` }).from(taskGroups).where(eq(taskGroups.projectId, projectId))) as [{ minSort: number }]
+      await db.insert(taskGroups).values({ projectId, name, color, sortOrder: minSort - 1, createdById: actorUserId })
+      return `Created sprint "${name}".`
+    },
+    review_task: async (args) => {
+      if (!(await hasPermission(projectId, actorUserId, 'tasks.read'))) return 'PERMISSION DENIED: the author cannot read tasks.'
+      const t = await findTask(String(args.number ?? ''))
+      if (!t) return 'Task not found.'
+      const project = await db.query.projects.findFirst({ where: eq(projects.id, projectId) })
+      const language = (JSON.parse(project?.aiConfig || '{}') as { language?: string }).language ?? 'en'
+      const r = await validateTask(projectId, { title: t.title, description: t.description, language })
+      if (!r) return 'AI review unavailable.'
+      return `Review of ${t.number}:\n${r.advice}`
+    },
+    delete_file: async (args) => {
+      if (!(await hasPermission(projectId, actorUserId, 'files.delete'))) return 'PERMISSION DENIED: deleting files requires files.delete.'
+      const file = await db.query.files.findFirst({ where: and(eq(files.id, String(args.fileId ?? '')), eq(files.projectId, projectId)) })
+      if (!file) return 'File not found.'
+      // как в UI: файлы из чата/задачи — soft-delete (ссылка «файл удалён»), прочие — физически
+      if (file.messageId || file.taskId) await db.update(files).set({ deletedAt: new Date() }).where(eq(files.id, file.id))
+      else await db.delete(files).where(eq(files.id, file.id))
+      return `Deleted "${file.name}".`
     },
 
     // --- Комментарии задач (от лица пользователя) ---
