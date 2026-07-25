@@ -1,7 +1,7 @@
 import { and, eq, isNull, sql } from 'drizzle-orm'
 import { db } from '../db/client.js'
 import { notifications, projects, users, userNotificationPrefs } from '../db/schema.js'
-import { sendMail } from './mail.js'
+import { sendDigestMail } from './mails.js'
 import { env } from '../env.js'
 
 // Суточный email-дайджест непрочитанных уведомлений (SPEC §8.22).
@@ -78,24 +78,14 @@ export async function sendDailyDigests(): Promise<void> {
         byProject.set(it.project.id, g)
       }
 
-      const lang = langOf(user.locale)
-      const s = STR[lang]
-      const text = [
-        s.intro,
-        '',
-        ...[...byProject.values()].flatMap((g) => [`${g.name} (${g.lines.length})`, ...g.lines, '']),
-        `${s.open}: ${env.APP_URL}`,
-        '',
-        s.footer,
-      ].join('\n')
-
-      // ссылка на настройки уведомлений = штатная отписка (снижает жалобы на спам)
-      const unsubscribeUrl = `${env.APP_URL}/#/settings/notifications`
-      await sendMail({
+      await sendDigestMail({
         to: user.email,
-        subject: fmt(s.subject, { count: String(r.count) }),
-        text: `${text}\n${s.unsubscribe}: ${unsubscribeUrl}`,
-        unsubscribeUrl,
+        locale: user.locale,
+        count: r.count,
+        groups: [...byProject.values()].map((g) => ({
+          name: g.name,
+          lines: g.lines.map((l) => l.trim().replace(/^• /, '')),
+        })),
       })
 
       // отметить время отправки

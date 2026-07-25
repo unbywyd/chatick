@@ -109,7 +109,31 @@ createRoot(document.getElementById('root')!).render(
             </Routes>
           </HashRouter>
         </ConfirmProvider>
-        <Toaster richColors position="top-right" />
+        {/* Тоасты в токенах темы (richColors игнорирует тему и светит белым
+            в тёмном интерфейсе). Снизу справа — чтобы не перекрывать шапку. */}
+        <Toaster
+          position="bottom-right"
+          duration={3000}
+          gap={8}
+          offset={16}
+          toastOptions={{
+            unstyled: true,
+            classNames: {
+              toast:
+                'group pointer-events-auto flex w-full items-center gap-2.5 rounded-lg border border-border bg-card px-3.5 py-2.5 text-sm text-card-foreground shadow-lg',
+              title: 'font-medium',
+              description: 'text-muted-foreground',
+              icon: 'shrink-0',
+              actionButton: 'ms-auto rounded-md bg-primary px-2 py-1 text-xs font-medium text-primary-foreground',
+              cancelButton: 'ms-auto rounded-md bg-secondary px-2 py-1 text-xs font-medium',
+              closeButton: 'border-border bg-card text-muted-foreground',
+              success: '[&_[data-icon]]:text-brand',
+              error: 'border-destructive/40 [&_[data-icon]]:text-destructive',
+              warning: '[&_[data-icon]]:text-amber-500',
+              info: '[&_[data-icon]]:text-muted-foreground',
+            },
+          }}
+        />
       </QueryClientProvider>
     </ThemeProvider>
   </StrictMode>,

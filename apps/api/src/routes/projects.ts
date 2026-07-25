@@ -8,7 +8,7 @@ import { companies, companyMembers, projects, projectMembers, projectStorage, us
 import { encrypt } from '../lib/crypto.js'
 import { PutObjectCommand, DeleteObjectCommand, S3Client } from '@aws-sdk/client-s3'
 import { requireSession, requireProject, signProjectToken, type SessionEnv, type ProjectEnv } from '../auth.js'
-import { sendMail } from '../lib/mail.js'
+import { sendAddedToProjectMail, sendRemovedFromProjectMail } from '../lib/mails.js'
 import { companyLlm } from '../lib/llm.js'
 
 export const projectsRoute = new Hono<SessionEnv>()
@@ -412,10 +412,11 @@ projectsRoute.post(
 
     const target = await db.query.users.findFirst({ where: eq(users.id, userId) })
     if (target)
-      await sendMail({
+      await sendAddedToProjectMail({
         to: target.email,
-        subject: `You've been added to "${project.name}" on Chatick`,
-        text: `You've been added to the project "${project.name}".\nOpen Chatick to join the conversation.`,
+        locale: target.locale,
+        projectId,
+        projectName: project.name,
       })
 
     return c.json({ ok: true }, 201)
@@ -438,10 +439,10 @@ projectsRoute.delete('/:projectId/members/:userId', async (c) => {
 
   const target = await db.query.users.findFirst({ where: eq(users.id, userId) })
   if (target)
-    await sendMail({
+    await sendRemovedFromProjectMail({
       to: target.email,
-      subject: `You've been removed from "${project.name}" on Chatick`,
-      text: `You've been removed from the project "${project.name}".`,
+      locale: target.locale,
+      projectName: project.name,
     })
 
   return c.json({ ok: true })

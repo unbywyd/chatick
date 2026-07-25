@@ -205,12 +205,12 @@ function DocumentEditor({
     onSuccess: (r) => {
       qc.invalidateQueries({ queryKey: ['document', docId] })
       qc.invalidateQueries({ queryKey: ['documents', projectId] })
+      // о выключении не сообщаем — состояние видно по самой кнопке.
+      // о включении говорим: ссылка молча уходит в буфер обмена
       if (r.publicSlug) {
         const url = `${API_URL}/d/${r.publicSlug}`
         navigator.clipboard.writeText(url).catch(() => {})
         toast.success(t('docs.shared'))
-      } else {
-        toast.success(t('docs.unshared'))
       }
     },
     onError: onErr,

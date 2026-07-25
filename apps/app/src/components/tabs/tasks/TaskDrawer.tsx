@@ -458,7 +458,7 @@ export function TaskDrawer({
 
   // Секция вложений (в левой read-колонке)
   const attachmentsSection = (
-          <section>
+          <section className="rounded-xl border bg-card p-4">
             <div className="mb-2 flex items-center justify-between">
               <h3 className="flex items-center gap-1.5 text-sm font-semibold">
                 <Paperclip className="size-3.5" />
@@ -483,8 +483,9 @@ export function TaskDrawer({
 
             <div
               className={cn(
+                // рамка видна всегда: иначе зона загрузки не читается как зона
                 'rounded-lg border-2 border-dashed p-2 transition-colors',
-                dragOver ? 'border-brand bg-accent' : 'border-transparent',
+                dragOver ? 'border-brand bg-accent' : 'border-border',
               )}
             >
               {/* Превью картинок сеткой (удалённые — не показываем как превью) */}
@@ -686,13 +687,13 @@ export function TaskDrawer({
       <div className="flex min-h-0 flex-1 overflow-hidden">
         {/* Левая колонка — чтение */}
         <div className="min-w-0 flex-1 space-y-6 overflow-y-auto p-4 sm:p-6">
-          <div className="space-y-3">
+          <div className="space-y-3 border-b pb-5">
             <h1 className="text-xl font-bold tracking-tight">{task.title}</h1>
             {meta}
           </div>
 
           {task.description?.trim() && (
-            <div className="msg-md max-w-none break-words text-sm">
+            <div className="msg-md max-w-none break-words rounded-xl border bg-card p-4 text-sm">
               <RichEditor value={task.description} onChange={() => {}} mentions={[]} preset="full" readOnly />
             </div>
           )}
@@ -726,10 +727,14 @@ export function TaskDrawer({
           )}
 
           {/* Заметки ИИ (SPEC §8.14) */}
-          <TaskNotes taskId={task.id} canEdit={canEdit} />
+          <div className="rounded-xl border bg-card p-4">
+            <TaskNotes taskId={task.id} canEdit={canEdit} />
+          </div>
 
           {/* Комментарии (SPEC §8.9) */}
-          <TaskComments taskId={task.id} members={members} lang={i18n.language} meId={meId} onFilesChanged={refresh} />
+          <div className="rounded-xl border bg-card p-4">
+            <TaskComments taskId={task.id} members={members} lang={i18n.language} meId={meId} onFilesChanged={refresh} />
+          </div>
         </div>
 
         {/* Правая колонка — форма редактирования (скрыта до «Редактировать»). Мобила: оверлей снизу */}

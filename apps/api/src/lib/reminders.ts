@@ -1,7 +1,7 @@
 import { and, eq, inArray } from 'drizzle-orm'
 import { db } from '../db/client.js'
 import { taskReminders, tasks, projects, projectMembers, users } from '../db/schema.js'
-import { sendMail } from './mail.js'
+import { sendTaskReminderMail } from './mails.js'
 import { env } from '../env.js'
 import { sweepPendingFiles, sweepSoftDeleted } from './file-cleanup.js'
 import { sendDailyDigests } from './digest.js'
@@ -42,20 +42,20 @@ const langOf = (l: string | null | undefined): Lang => {
 }
 const fmt = (s: string, v: Record<string, string>) => s.replace(/\{(\w+)\}/g, (_, k) => v[k] ?? '')
 
+// Жёсткий предел: не чаще одного письма в сутки, что бы ни стояло в конфиге.
+// Почтовые напоминания чаще раза в день — прямой путь в спам и в раздражение.
+const MIN_GAP_MS = 23 * 3600_000
+
 /** Наступил ли срок для конфига относительно now (UTC) и lastSentAt. */
 function isDue(r: typeof taskReminders.$inferSelect, now: Date): boolean {
   const last = r.lastSentAt ? new Date(r.lastSentAt) : null
   const sinceLast = last ? now.getTime() - last.getTime() : Infinity
 
-  if (r.cadence === 'hourly') {
-    const everyMs = Math.max(1, Number(r.everyHours) || 3) * 3600_000
-    return sinceLast >= everyMs
-  }
-  // daily / weekly: срабатывает в hourOfDay (UTC), не чаще раза за период
+  // hourly оставлен только ради старых записей в БД — трактуем его как daily
   const hour = Number(r.hourOfDay) || 0
   if (now.getUTCHours() !== hour) return false
   if (r.cadence === 'weekly' && now.getUTCDay() !== (Number(r.dayOfWeek) || 0)) return false
-  const minGap = (r.cadence === 'weekly' ? 6 * 24 : 23) * 3600_000 // защита от повторной отправки в тот же час
+  const minGap = r.cadence === 'weekly' ? 6 * 24 * 3600_000 : MIN_GAP_MS
   return sinceLast >= minGap
 }
 
@@ -97,17 +97,13 @@ async function runReminder(r: typeof taskReminders.$inferSelect) {
     // для assignees показываем только задачи этого человека; для all — все
     const list = r.audience === 'assignees' ? openTasks.filter((t) => t.assigneeId === user.id) : openTasks
     if (!list.length) continue
-    const lines = list.map((t) => `• ${t.number} — ${t.title} [${t.status}]`)
-    const text = [
-      fmt(s.intro, { project: project.name }),
-      '',
-      ...lines,
-      '',
-      `${s.open}: ${url}`,
-      '',
-      s.footer,
-    ].join('\n')
-    await sendMail({ to: user.email, subject: fmt(s.subject, { project: project.name }), text })
+    await sendTaskReminderMail({
+      to: user.email,
+      locale: user.locale,
+      projectId: r.projectId,
+      projectName: project.name,
+      tasks: list.map((t) => ({ number: t.number, title: t.title, status: t.status })),
+    })
   }
 
   await db.update(taskReminders).set({ lastSentAt: new Date() }).where(eq(taskReminders.id, r.id))

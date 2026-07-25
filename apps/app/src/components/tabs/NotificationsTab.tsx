@@ -158,8 +158,10 @@ function ReminderConfig({ projectId, isAdmin }: { projectId: string; isAdmin: bo
         {/* Частота */}
         <div className="space-y-1.5">
           <label className="text-xs font-medium text-muted-foreground">{t('notif.cadence')}</label>
+          {/* «каждые N часов» убрано намеренно: письма чаще раза в сутки
+              раздражают и портят репутацию домена (сервер это тоже не пустит) */}
           <div className="inline-flex overflow-hidden rounded-md border">
-            {(['hourly', 'daily', 'weekly'] as const).map((cd) => (
+            {(['daily', 'weekly'] as const).map((cd) => (
               <button
                 key={cd}
                 type="button"
