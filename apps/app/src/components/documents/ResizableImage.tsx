@@ -2,6 +2,7 @@ import Image from '@tiptap/extension-image'
 import { NodeViewWrapper, ReactNodeViewRenderer, type NodeViewProps } from '@tiptap/react'
 import { useRef, useState } from 'react'
 import { cn } from '@/lib/utils'
+import { withDocImageAuth } from '@/lib/api'
 
 // Изображение с ресайзом и выравниванием (SPEC §8.25).
 // Штатный @tiptap/extension-image ресайза не умеет — расширяем атрибутами
@@ -69,7 +70,9 @@ function ImageView({ node, updateAttributes, selected, editor }: NodeViewProps) 
     >
       <div ref={wrapRef} className="relative">
         <img
-          src={src}
+          // токен подставляем только на показ: в Y.Doc и в сохранённом HTML
+          // src лежит без него, иначе токен протух бы прямо в документе
+          src={withDocImageAuth(src)}
           alt={alt ?? ''}
           title={title ?? ''}
           draggable={false}

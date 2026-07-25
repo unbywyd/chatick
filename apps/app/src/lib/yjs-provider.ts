@@ -1,6 +1,6 @@
 import * as Y from 'yjs'
 import { Awareness, encodeAwarenessUpdate, applyAwarenessUpdate, removeAwarenessStates } from 'y-protocols/awareness'
-import { writeSyncStep1, writeUpdate, readSyncMessage } from 'y-protocols/sync'
+import { writeSyncStep1, writeUpdate, readSyncMessage, messageYjsSyncStep2 } from 'y-protocols/sync'
 import * as encoding from 'lib0/encoding'
 import * as decoding from 'lib0/decoding'
 import { API_URL, getProjectToken } from './api'
@@ -122,9 +122,13 @@ export class CollabProvider {
           const reply = encoding.createEncoder()
           encoding.writeVarUint(reply, MESSAGE_SYNC)
           // origin=this: апдейт с сервера не уйдёт обратно через onDocUpdate
-          readSyncMessage(dec, reply, this.doc, this)
+          const subtype = readSyncMessage(dec, reply, this.doc, this)
           if (encoding.length(reply) > 1) this.send(encoding.toUint8Array(reply))
-          if (!this.synced) {
+          // Синхронизированы ТОЛЬКО после SyncStep2 (1) — именно он несёт
+          // содержимое. Считать синком серверный SyncStep1 (0) нельзя: на этот
+          // момент документ ещё пуст, и мы бы залили HTML-снимок поверх
+          // существующего контента, задваивая его на каждой перезагрузке.
+          if (!this.synced && subtype === messageYjsSyncStep2) {
             this.synced = true
             this.emit()
           }

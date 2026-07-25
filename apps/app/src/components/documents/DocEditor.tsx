@@ -174,7 +174,9 @@ export function DocEditor({
     }
     if (value.trim()) {
       meta.set('seeded', true)
-      editor.commands.setContent(withDocImageAuth(value))
+      // без токена: Y.Doc общий и живёт долго, токен в нём протухнет.
+      // На показ токен подставляет CSS-независимый слой рендера (см. ниже).
+      editor.commands.setContent(value)
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [editor, provider, synced, documentId])
@@ -197,8 +199,9 @@ export function DocEditor({
     }
   }
 
-  // Стабильная ссылка: авторизуется документом, не короткоживущим file-токеном,
-  // поэтому картинка не отваливается через час и видна по публичной ссылке.
+  // Стабильная ссылка БЕЗ токена: авторизуется документом, а не короткоживущим
+  // file-токеном. Токен добавляется только на рендере (см. ResizableImage),
+  // чтобы не осесть в общем Y.Doc и в сохранённом HTML.
   function insertImageById(fileId: string) {
     editor?.chain().focus().setImage({ src: docImageUrl(documentId, fileId) }).run()
   }
