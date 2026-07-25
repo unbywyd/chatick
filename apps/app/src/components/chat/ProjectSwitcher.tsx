@@ -92,7 +92,15 @@ export function ProjectSwitcher({ projectName }: { projectName?: string }) {
         )}
         {filtered.map((p) => (
           <DropdownMenuItem key={p.id} onSelect={() => p.id !== projectId && enter.mutate(p.id)}>
-            <Check className={cn('size-3.5', p.id === projectId ? 'opacity-100 text-brand' : 'opacity-0')} />
+            {/* активный проект — чёрная галка в лаймовом круге: тонкая лаймовая
+                иконка на светлом фоне была практически не видна */}
+            {p.id === projectId ? (
+              <span className="grid size-4 shrink-0 place-items-center rounded-full bg-brand">
+                <Check className="size-2.5 text-brand-foreground" strokeWidth={3} />
+              </span>
+            ) : (
+              <span className="size-4 shrink-0" />
+            )}
             <span className="truncate">{p.name}</span>
           </DropdownMenuItem>
         ))}

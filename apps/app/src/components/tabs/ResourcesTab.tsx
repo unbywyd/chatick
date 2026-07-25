@@ -92,7 +92,11 @@ export function ResourcesTab({ projectId, isAdmin }: { projectId: string; isAdmi
 
       <ul className="mt-4 space-y-1.5">
         {list.isLoading && <p className="text-sm text-muted-foreground">…</p>}
-        {filtered.map((r) => (
+        {/* редактируемый ресурс скрыт: его заменяет форма выше, иначе одна
+            и та же запись видна дважды и это путает */}
+        {filtered
+          .filter((r) => !(editing && editing !== 'new' && editing.id === r.id))
+          .map((r) => (
           <li
             key={r.id}
             draggable

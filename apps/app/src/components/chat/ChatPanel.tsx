@@ -523,8 +523,11 @@ function MessageRow({
             {message.systemEvent && (
               <span
                 className={cn(
-                  'inline-flex items-center gap-1 rounded-full px-1.5 py-0.5 text-[10px]',
-                  message.systemEvent === 'task_done' ? 'bg-brand/15 text-brand' : 'bg-sky-400/15 text-sky-400',
+                  // на лаймовой подложке текст тёмный: светлый лайм на светлом фоне нечитаем
+                  'inline-flex items-center gap-1 rounded-full px-1.5 py-0.5 text-[10px] font-medium',
+                  message.systemEvent === 'task_done'
+                    ? 'bg-brand text-brand-foreground'
+                    : 'bg-sky-500 text-white',
                 )}
               >
                 {message.systemEvent === 'task_done' ? <CheckSquare className="size-3" /> : <UserPlus className="size-3" />}
