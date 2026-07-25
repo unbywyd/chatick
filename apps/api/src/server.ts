@@ -12,6 +12,17 @@ const server = serve({ fetch: app.fetch, port: env.PORT, hostname: env.HOST }, (
 
 attachWs(server as Server)
 attachYjs(server as Server)
+
+// Апгрейд на неизвестный путь никто не обработает — закрываем, чтобы сокет не висел.
+// Слушатель добавлен последним, поэтому отрабатывает после хабов /ws и /yjs.
+;(server as Server).on('upgrade', (req, socket) => {
+  const { pathname } = new URL(req.url ?? '', 'http://localhost')
+  if (pathname !== '/ws' && pathname !== '/yjs') {
+    socket.write('HTTP/1.1 404 Not Found\r\n\r\n')
+    socket.destroy()
+  }
+})
+
 startReminderScheduler()
 
 // При рестарте (pm2 restart / деплой) успеваем сохранить незаписанные правки документов.

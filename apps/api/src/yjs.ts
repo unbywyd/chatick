@@ -155,7 +155,14 @@ function closeConn(documentId: string, room: Room, ws: WebSocket) {
 }
 
 export function attachYjs(server: Server) {
-  const wss = new WebSocketServer({ server, path: '/yjs' })
+  // noServer: маршрутизацию апгрейда делаем сами, иначе хабы /ws и /yjs
+  // перехватывают события друг друга и отвечают 400
+  const wss = new WebSocketServer({ noServer: true })
+  server.on('upgrade', (req, socket, head) => {
+    const { pathname } = new URL(req.url ?? '', 'http://localhost')
+    if (pathname !== '/yjs') return
+    wss.handleUpgrade(req, socket, head, (ws) => wss.emit('connection', ws, req))
+  })
 
   wss.on('connection', async (ws, req) => {
     const url = new URL(req.url ?? '', 'http://localhost')

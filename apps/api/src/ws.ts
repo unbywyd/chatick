@@ -120,7 +120,14 @@ async function pushDocPresence(projectId: string, docId: string) {
 }
 
 export function attachWs(server: Server) {
-  const wss = new WebSocketServer({ server, path: '/ws' })
+  // noServer + ручной роутинг апгрейда: два WebSocketServer с опцией `server`
+  // вешают каждый свой обработчик 'upgrade' и рвут чужие пути с 400 (см. yjs.ts).
+  const wss = new WebSocketServer({ noServer: true })
+  server.on('upgrade', (req, socket, head) => {
+    const { pathname } = new URL(req.url ?? '', 'http://localhost')
+    if (pathname !== '/ws') return // не наш путь — пусть обработает другой хаб
+    wss.handleUpgrade(req, socket, head, (ws) => wss.emit('connection', ws, req))
+  })
 
   wss.on('connection', async (ws, req) => {
     const url = new URL(req.url ?? '', 'http://localhost')
