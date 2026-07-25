@@ -143,7 +143,7 @@ export async function complete(
         },
         body: JSON.stringify({
           model: cfg.model,
-          max_tokens: opts.maxTokens ?? 1024,
+          max_tokens: opts.maxTokens ?? 2000,
           system: opts.system,
           messages: [{ role: 'user', content: opts.user }],
         }),
@@ -165,7 +165,7 @@ export async function complete(
       headers: { Authorization: `Bearer ${cfg.apiKey}`, 'content-type': 'application/json' },
       body: JSON.stringify({
         model: cfg.model,
-        max_tokens: opts.maxTokens ?? 1024,
+        max_tokens: opts.maxTokens ?? 2000,
         messages: [
           { role: 'system', content: opts.system },
           { role: 'user', content: opts.user },
@@ -320,14 +320,14 @@ export async function completeStream(
         isAnthropic
           ? {
               model: cfg.model,
-              max_tokens: opts.maxTokens ?? 1024,
+              max_tokens: opts.maxTokens ?? 2000,
               system: opts.system,
               messages: [{ role: 'user', content: opts.user }],
               stream: true,
             }
           : {
               model: cfg.model,
-              max_tokens: opts.maxTokens ?? 1024,
+              max_tokens: opts.maxTokens ?? 2000,
               messages: [
                 { role: 'system', content: opts.system },
                 { role: 'user', content: opts.user },
@@ -420,7 +420,9 @@ export async function improveTask(
       'Respond with ONLY a JSON object: {"title": "...", "description": "..."} (description may be ""). No markdown, no extra text.',
     ].join('\n'),
     user: JSON.stringify({ title: input.title, description: input.description }),
-    maxTokens: 600,
+    // JSON на языке проекта: кириллица/иврит дороже латиницы по токенам,
+    // при тесном лимите ответ обрывается и результат теряется целиком
+    maxTokens: 1500,
   })
   if (!text) return null
   try {
@@ -499,7 +501,7 @@ export async function generateTaskNotes(
       .filter(Boolean)
       .join('\n'),
     user: JSON.stringify({ title: input.title, description: input.description }),
-    maxTokens: 900,
+    maxTokens: 2000, // массив заметок на языке проекта — см. комментарий выше
   })
   if (!text) return null
   try {

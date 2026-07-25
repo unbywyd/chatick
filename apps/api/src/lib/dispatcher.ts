@@ -182,10 +182,12 @@ export async function evaluateMessage(messageId: string): Promise<Verdict> {
   const raw = await complete(cfg, {
     system: dispatcherSystem(project, ai, author?.name ?? 'Unknown'),
     user: `${context}\n\nINCOMING MESSAGE (judge only this):\n${msg.text}`,
-    // Ответ содержит reason/questions на языке автора. Кириллица и иврит съедают
-    // в разы больше токенов, чем латиница, и при 500 JSON обрывался на середине —
-    // вердикт hold терялся, сообщение уходило в чат без проверки.
-    maxTokens: 1200,
+    // Ответ содержит reason/questions/suggestion на языке автора. Кириллица и
+    // иврит съедают в разы больше токенов, чем латиница, и при 500 JSON
+    // обрывался на середине — вердикт hold терялся, сообщение уходило без
+    // проверки. Ограничивает только ДЛИНУ ОТВЕТА (не контекст), а ответ здесь
+    // короткий — 2000 хватает с большим запасом даже для длинных suggestion.
+    maxTokens: 2000,
   })
 
   // Сбой LLM (нет ответа) — это НЕ «сообщение чистое». Чат не блокируем, но
