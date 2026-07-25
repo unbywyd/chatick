@@ -4,7 +4,7 @@ import { useQueryClient } from '@tanstack/react-query'
 import { useTranslation } from 'react-i18next'
 import { toast } from 'sonner'
 import { Bell, Bot, Camera, Check, LogOut, Pencil, X } from 'lucide-react'
-import { api, API_URL, getProjectToken, setSessionToken, setProjectToken, type Me } from '@/lib/api'
+import { api, API_URL, getSessionToken, setSessionToken, setProjectToken, type Me } from '@/lib/api'
 import { Avatar } from '@/components/ui/avatar'
 import {
   DropdownMenu,
@@ -49,9 +49,11 @@ export function ProfileMenu({ me, projectId, isAdmin }: { me?: Me; projectId?: s
     try {
       const fd = new FormData()
       fd.append('file', file)
+      // эндпоинт требует session-токен (профиль — не проектная сущность);
+      // на стартовом экране project-токена вообще нет
       const res = await fetch(`${API_URL}/api/v1/auth/me/avatar`, {
         method: 'POST',
-        headers: { Authorization: `Bearer ${getProjectToken()}` },
+        headers: { Authorization: `Bearer ${getSessionToken()}` },
         body: fd,
       })
       if (!res.ok) throw new Error(((await res.json().catch(() => ({}))) as { error?: string }).error ?? res.statusText)

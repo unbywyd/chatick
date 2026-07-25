@@ -3,7 +3,8 @@ import { useNavigate, useParams } from 'react-router-dom'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { useTranslation } from 'react-i18next'
 import { toast } from 'sonner'
-import { Building2, Plus, FolderKanban, LogOut, Check, Mail, Search, X } from 'lucide-react'
+import { Building2, Plus, FolderKanban, Check, Mail, Search, X } from 'lucide-react'
+import { ProfileMenu } from '@/components/ProfileMenu'
 import {
   api,
   logout,
@@ -81,20 +82,10 @@ export function StartScreen() {
           )}
         </div>
         <div className="flex items-center gap-2">
-          {me.data && <span className="me-2 hidden text-xs text-muted-foreground sm:block">{me.data.email}</span>}
           <LanguageSelect />
           <ThemeToggle />
-          <Button
-            variant="ghost"
-            size="icon"
-            title={t('start.logout')}
-            onClick={() => {
-              logout()
-              navigate('/login')
-            }}
-          >
-            <LogOut className="size-3.5" />
-          </Button>
+          {/* профиль (фото, имя, выход) доступен и до входа в проект — SPEC §8.19 */}
+          <ProfileMenu me={me.data} />
         </div>
       </header>
 
@@ -316,6 +307,24 @@ function ProjectsTab({
     return needle ? list.filter((p) => p.name.toLowerCase().includes(needle)) : list
   }, [projectsQ.data, q])
 
+  // Админ/менеджер компании видит все проекты, но участником не является.
+  // Позволяем добавить себя — иначе такой проект невозможно открыть.
+  const join = useMutation({
+    mutationFn: async (projectId: string) => {
+      const me = await api<Me>('/api/v1/auth/me')
+      await api(`/api/v1/projects/${projectId}/members`, {
+        method: 'POST',
+        body: JSON.stringify({ userId: me.id, role: 'admin' }),
+      })
+      return projectId
+    },
+    onSuccess: (projectId) => {
+      qc.invalidateQueries({ queryKey: ['projects', company.id] })
+      enter.mutate({ projectId })
+    },
+    onError: (e) => toast.error(e instanceof Error ? e.message : String(e)),
+  })
+
   const createProject = useMutation({
     mutationFn: (v: ProjectSettings) =>
       api<{ id: string }>('/api/v1/projects', {
@@ -390,25 +399,41 @@ function ProjectsTab({
       <div className="space-y-2">
         {projectsQ.isLoading && <p className="text-sm text-muted-foreground">…</p>}
         {filtered.map((p) => (
-          <button
+          <div
             key={p.id}
-            onClick={() => enter.mutate({ projectId: p.id })}
-            disabled={!p.isMember}
             className={cn(
-              'flex w-full items-center gap-3 rounded-lg border bg-card p-3 text-start transition-colors',
-              p.isMember ? 'hover:bg-accent' : 'opacity-50',
+              'flex w-full items-center gap-3 rounded-lg border bg-card p-3 transition-colors',
+              p.isMember && 'hover:bg-accent',
             )}
           >
-            <span className="grid size-9 place-items-center rounded-md bg-secondary">
-              <FolderKanban className="size-4" />
-            </span>
-            <span className="min-w-0 flex-1">
-              <span className="block truncate text-sm font-medium">{p.name}</span>
-              <span className="block text-xs text-muted-foreground">
-                {p.isMember ? t(`roles.${p.myRole}`) : t('start.notMember')}
+            <button
+              onClick={() => p.isMember && enter.mutate({ projectId: p.id })}
+              disabled={!p.isMember}
+              className={cn('flex min-w-0 flex-1 items-center gap-3 text-start', !p.isMember && 'opacity-50')}
+            >
+              <span className="grid size-9 shrink-0 place-items-center rounded-md bg-secondary">
+                <FolderKanban className="size-4" />
               </span>
-            </span>
-          </button>
+              <span className="min-w-0 flex-1">
+                <span className="block truncate text-sm font-medium">{p.name}</span>
+                <span className="block text-xs text-muted-foreground">
+                  {p.isMember ? t(`roles.${p.myRole}`) : t('start.notMember')}
+                </span>
+              </span>
+            </button>
+            {/* Админ/менеджер компании видит все проекты, но не состоит в них —
+                даём добавить себя, иначе проект открыть нечем */}
+            {!p.isMember && canManage && (
+              <Button
+                size="sm"
+                variant="outline"
+                disabled={join.isPending}
+                onClick={() => join.mutate(p.id)}
+              >
+                {t('start.joinProject')}
+              </Button>
+            )}
+          </div>
         ))}
         {!projectsQ.isLoading && filtered.length === 0 && (
           <p className="rounded-lg border border-dashed p-6 text-center text-sm text-muted-foreground">

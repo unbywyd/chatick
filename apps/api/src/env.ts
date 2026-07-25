@@ -45,6 +45,8 @@ const envSchema = z.object({
   SMTP_USER: z.string().optional(),
   SMTP_PASSWORD: z.string().optional(),
   SMTP_FROM_EMAIL: z.string().optional(),
+  SMTP_FROM_NAME: z.string().optional(), // отображаемое имя отправителя
+  SMTP_REPLY_TO: z.string().optional(), // куда уходят ответы (не на noreply)
 
   APP_URL: z.string().default('http://localhost:5173'),
 })

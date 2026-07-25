@@ -28,7 +28,8 @@
     "createProject": "Новый проект",
     "projectName": "Название проекта",
     "searchProjects": "Поиск проектов…",
-    "nothingFound": "Ничего не найдено"
+    "nothingFound": "Ничего не найдено",
+    "joinProject": "Присоединиться"
   },
   "companyTabs": {
     "projects": "Проекты",
@@ -700,5 +701,11 @@
     "noImages": "В проекте пока нет изображений",
     "saving": "Сохранение…",
     "allSaved": "Все изменения сохранены"
+  },
+  "invite": {
+    "joining": "Присоединяем к компании…",
+    "accepted": "Приглашение принято",
+    "failedTitle": "Не удалось принять приглашение",
+    "goToApp": "Перейти в Chatick"
   }
 }

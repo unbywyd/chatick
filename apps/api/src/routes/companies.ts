@@ -6,7 +6,7 @@ import { nanoid } from 'nanoid'
 import { db } from '../db/client.js'
 import { companies, companyMembers, companyInvites, users } from '../db/schema.js'
 import { requireSession, type SessionEnv } from '../auth.js'
-import { sendMail } from '../lib/mail.js'
+import { sendInviteMail } from '../lib/mail-invite.js'
 import { encrypt } from '../lib/crypto.js'
 import { LLM_PROVIDERS, testLlm, type LlmProvider } from '../lib/llm.js'
 import { env } from '../env.js'
@@ -209,10 +209,13 @@ companiesRoute.post(
       .returning()
 
     const company = await db.query.companies.findFirst({ where: eq(companies.id, companyId) })
-    await sendMail({
+    const inviter = await db.query.users.findFirst({ where: eq(users.id, sub) })
+    await sendInviteMail({
       to: email,
-      subject: `You've been invited to ${company?.name} on Chatick`,
-      text: `You've been invited to join "${company?.name}" on Chatick as ${role}.\n\nAccept the invite: ${env.APP_URL}/#/invite/${token}\n\nIf you don't have an account yet, sign in with Google using this email.`,
+      companyName: company?.name ?? '',
+      role,
+      token,
+      inviterLocale: inviter?.locale,
     })
 
     return c.json(invite, 201)
@@ -242,10 +245,13 @@ companiesRoute.post('/:companyId/invites/:inviteId/resend', async (c) => {
   if (!invite) return c.json({ error: 'Not found' }, 404)
 
   const company = await db.query.companies.findFirst({ where: eq(companies.id, companyId) })
-  await sendMail({
+  const inviter = await db.query.users.findFirst({ where: eq(users.id, sub) })
+  await sendInviteMail({
     to: invite.email,
-    subject: `Reminder: invitation to ${company?.name} on Chatick`,
-    text: `You've been invited to join "${company?.name}" on Chatick as ${invite.role}.\n\nAccept the invite: ${env.APP_URL}/#/invite/${invite.token}`,
+    companyName: company?.name ?? '',
+    role: invite.role,
+    token: invite.token,
+    inviterLocale: inviter?.locale,
   })
   return c.json({ ok: true })
 })

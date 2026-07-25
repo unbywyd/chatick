@@ -2,7 +2,7 @@ import { useEffect } from 'react'
 import { useNavigate, useSearchParams } from 'react-router-dom'
 import { useTranslation } from 'react-i18next'
 import { toast } from 'sonner'
-import { API_URL, getSessionToken, setSessionToken } from '@/lib/api'
+import { API_URL, consumePendingInvite, getSessionToken, setSessionToken } from '@/lib/api'
 import { Logo } from '@/components/Logo'
 import { ThemeToggle } from '@/components/ThemeToggle'
 import { LanguageSelect } from '@/components/LanguageSelect'
@@ -52,7 +52,9 @@ export function AuthCallback() {
     const error = params.get('error')
     if (token) {
       setSessionToken(token)
-      navigate('/start', { replace: true })
+      // пришёл по ссылке-приглашению и был отправлен на вход — возвращаем его туда
+      const invite = consumePendingInvite()
+      navigate(invite ? `/invite/${invite}` : '/start', { replace: true })
     } else {
       toast.error(t('login.failed') + (error ? ` (${error})` : ''))
       navigate('/login', { replace: true })

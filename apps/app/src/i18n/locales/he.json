@@ -28,7 +28,8 @@
     "createProject": "פרויקט חדש",
     "projectName": "שם הפרויקט",
     "searchProjects": "חיפוש פרויקטים…",
-    "nothingFound": "לא נמצא כלום"
+    "nothingFound": "לא נמצא כלום",
+    "joinProject": "הצטרפות"
   },
   "companyTabs": {
     "projects": "פרויקטים",
@@ -698,5 +699,11 @@
     "noImages": "אין עדיין תמונות בפרויקט",
     "saving": "שומר…",
     "allSaved": "כל השינויים נשמרו"
+  },
+  "invite": {
+    "joining": "מצרפים אותך לחברה…",
+    "accepted": "ההזמנה התקבלה",
+    "failedTitle": "לא ניתן לקבל את ההזמנה",
+    "goToApp": "מעבר ל-Chatick"
   }
 }

@@ -8,24 +8,27 @@ import { env } from '../env.js'
 // Мгновенных писем НЕТ — одно письмо в сутки со сводкой по проектам.
 
 type Lang = 'en' | 'ru' | 'he'
-const STR: Record<Lang, { subject: string; intro: string; open: string; footer: string }> = {
+const STR: Record<Lang, { subject: string; intro: string; open: string; footer: string; unsubscribe: string }> = {
   en: {
     subject: 'Your Chatick digest — {{count}} unread',
     intro: 'While you were away:',
     open: 'Open Chatick',
     footer: 'You get one digest a day. Turn it off in notification settings.',
+    unsubscribe: 'Unsubscribe',
   },
   ru: {
     subject: 'Сводка Chatick — {{count}} непрочитанных',
     intro: 'Пока вас не было:',
     open: 'Открыть Chatick',
     footer: 'Это одно письмо в сутки. Отключить можно в настройках уведомлений.',
+    unsubscribe: 'Отписаться',
   },
   he: {
     subject: 'סיכום Chatick — {{count}} שלא נקראו',
     intro: 'בזמן שלא היית:',
     open: 'פתח את Chatick',
     footer: 'זהו סיכום יומי אחד. ניתן לכבות בהגדרות ההתראות.',
+    unsubscribe: 'ביטול הרשמה',
   },
 }
 const langOf = (l: string | null | undefined): Lang => {
@@ -86,7 +89,14 @@ export async function sendDailyDigests(): Promise<void> {
         s.footer,
       ].join('\n')
 
-      await sendMail({ to: user.email, subject: fmt(s.subject, { count: String(r.count) }), text })
+      // ссылка на настройки уведомлений = штатная отписка (снижает жалобы на спам)
+      const unsubscribeUrl = `${env.APP_URL}/#/settings/notifications`
+      await sendMail({
+        to: user.email,
+        subject: fmt(s.subject, { count: String(r.count) }),
+        text: `${text}\n${s.unsubscribe}: ${unsubscribeUrl}`,
+        unsubscribeUrl,
+      })
 
       // отметить время отправки
       if (prefs) {

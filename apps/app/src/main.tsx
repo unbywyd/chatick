@@ -9,6 +9,7 @@ import { ThemeProvider } from './providers/theme'
 import { ConfirmProvider } from './components/ui/confirm'
 import { ProjectLayout, useProjectCtx } from './screens/ProjectScreen'
 import { LoginScreen, AuthCallback } from './screens/LoginScreen'
+import { InviteScreen } from './screens/InviteScreen'
 import { StartScreen } from './screens/StartScreen'
 import { AboutTab } from './components/tabs/AboutTab'
 import { TasksTab } from './components/tabs/TasksTab'
@@ -86,6 +87,8 @@ createRoot(document.getElementById('root')!).render(
               <Route path="/" element={<LoginScreen />} />
               <Route path="/login" element={<LoginScreen />} />
               <Route path="/auth" element={<AuthCallback />} />
+              {/* приём приглашения по ссылке из письма */}
+              <Route path="/invite/:token" element={<InviteScreen />} />
               {/* Компания и её табы адресуемы: /start/:companyId/(projects|team|settings) */}
               <Route path="/start" element={<StartScreen />} />
               <Route path="/start/:companyId" element={<StartScreen />} />

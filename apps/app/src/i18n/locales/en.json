@@ -28,7 +28,8 @@
     "createProject": "New project",
     "projectName": "Project name",
     "searchProjects": "Search projects…",
-    "nothingFound": "Nothing found"
+    "nothingFound": "Nothing found",
+    "joinProject": "Join"
   },
   "companyTabs": {
     "projects": "Projects",
@@ -698,5 +699,11 @@
     "noImages": "No images in the project yet",
     "saving": "Saving…",
     "allSaved": "All changes saved"
+  },
+  "invite": {
+    "joining": "Joining the company…",
+    "accepted": "Invite accepted",
+    "failedTitle": "Could not accept the invite",
+    "goToApp": "Go to Chatick"
   }
 }

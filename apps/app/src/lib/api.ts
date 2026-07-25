@@ -12,6 +12,15 @@ export const getProjectToken = () => localStorage.getItem(PROJECT_KEY)
 export const setProjectToken = (t: string | null) =>
   t ? localStorage.setItem(PROJECT_KEY, t) : localStorage.removeItem(PROJECT_KEY)
 
+// Приглашение, открытое до входа: запоминаем токен и возвращаемся к нему после логина.
+const PENDING_INVITE_KEY = 'chatick_pending_invite'
+export const setPendingInvite = (token: string) => localStorage.setItem(PENDING_INVITE_KEY, token)
+export function consumePendingInvite(): string | null {
+  const token = localStorage.getItem(PENDING_INVITE_KEY)
+  if (token) localStorage.removeItem(PENDING_INVITE_KEY)
+  return token
+}
+
 export function logout() {
   setSessionToken(null)
   setProjectToken(null)
