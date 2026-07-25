@@ -139,6 +139,33 @@
     z-index: 60;
   }
 
+  /* Курсоры соредакторов (SPEC §8.25 шаг 2, CollaborationCaret) */
+  .collaboration-carets__caret {
+    border-inline: 1px solid;
+    margin-inline: -1px;
+    pointer-events: none;
+    position: relative;
+    word-break: normal;
+  }
+  .collaboration-carets__label {
+    border-radius: 3px 3px 3px 0;
+    color: #fff;
+    font-size: 11px;
+    font-style: normal;
+    font-weight: 600;
+    left: -1px;
+    line-height: 1;
+    padding: 2px 5px;
+    position: absolute;
+    top: -1.35em;
+    user-select: none;
+    white-space: nowrap;
+  }
+  .collaboration-carets__selection {
+    /* цвет задаётся инлайново самим расширением */
+    pointer-events: none;
+  }
+
   /* редактор документов (SPEC §8.25) — «как в Google Docs» */
   .doc-editor {
     font-size: 1rem;

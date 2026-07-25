@@ -21,11 +21,14 @@
     "drizzle-orm": "^0.45.2",
     "hono": "^4.7.0",
     "jose": "^6.2.3",
+    "lib0": "^0.2.117",
     "nanoid": "^6.0.0",
     "nodemailer": "^9.0.3",
     "postgres": "^3.4.9",
     "sharp": "^0.35.3",
     "ws": "^8.21.1",
+    "y-protocols": "^1.0.7",
+    "yjs": "^13.6.31",
     "zod": "^4.4.3"
   },
   "devDependencies": {

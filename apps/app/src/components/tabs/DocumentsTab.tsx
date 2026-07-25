@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { useTranslation } from 'react-i18next'
 import { toast } from 'sonner'
@@ -174,13 +174,30 @@ function DocumentEditor({
     onError: onErr,
   })
 
-  // автосохранение через 2с после последнего изменения
+  // актуальные значения для сохранения при размонтировании
+  const dirtyRef = useRef(dirty)
+  dirtyRef.current = dirty
+  const saveRef = useRef(() => save.mutate())
+  saveRef.current = () => save.mutate()
+
+  // HTML-снимок в documents.content (SPEC §8.25 шаг 2).
+  // Сам текст синхронизируется через Yjs, снимок нужен для версий, публичной
+  // страницы, экспорта и ИИ. Пишем реже (8с) — иначе несколько соредакторов
+  // забьют БД конкурирующими PATCH-ами.
   useEffect(() => {
     if (!dirty) return
-    const id = setTimeout(() => save.mutate(), 2000)
+    const id = setTimeout(() => save.mutate(), 8000)
     return () => clearTimeout(id)
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [dirty, title, content])
+
+  // уходя со страницы — дописать снимок, чтобы версия не отстала
+  useEffect(() => {
+    return () => {
+      if (dirtyRef.current) saveRef.current()
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
 
   const share = useMutation({
     mutationFn: (enabled: boolean) => api<{ publicSlug: string | null }>(`/api/v1/documents/${docId}/share`, { method: 'POST', body: JSON.stringify({ enabled }) }, 'project'),
@@ -317,6 +334,7 @@ pre{background:#f4f4f5;padding:.85rem;border-radius:6px;overflow-x:auto}</style>
               mentions={members.map((m) => ({ id: m.user.id, label: m.user.name || m.user.email, avatarUrl: m.user.avatarUrl }))}
               projectId={projectId}
               documentId={docId}
+              me={me.data ? { id: me.data.id, name: me.data.name } : null}
             />
           )}
         </div>

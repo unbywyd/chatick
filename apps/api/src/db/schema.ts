@@ -318,7 +318,10 @@ export const documents = pgTable(
     id: id(),
     projectId: text('project_id').notNull().references(() => projects.id, { onDelete: 'cascade' }),
     title: text('title').notNull().default(''),
-    content: text('content').notNull().default(''), // HTML (богатый редактор, SPEC §8.25)
+    content: text('content').notNull().default(''), // HTML-снимок (версии, /d/:slug, ИИ, экспорт)
+    // Состояние Yjs — источник правды для редактора при совместной работе (SPEC §8.25 шаг 2).
+    // HTML в content обновляется снимком при сохранении, чтобы всё остальное работало как раньше.
+    ycontent: text('ycontent'), // base64 Y.encodeStateAsUpdate
     // публичный доступ по ссылке: null = выключен
     publicSlug: text('public_slug').unique(),
     createdById: text('created_by_id').references(() => users.id, { onDelete: 'set null' }),

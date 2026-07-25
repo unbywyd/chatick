@@ -11,6 +11,8 @@ import Underline from '@tiptap/extension-underline'
 import Highlight from '@tiptap/extension-highlight'
 import TextAlign from '@tiptap/extension-text-align'
 import { Table, TableRow, TableCell, TableHeader } from '@tiptap/extension-table'
+import Collaboration from '@tiptap/extension-collaboration'
+import CollaborationCaret from '@tiptap/extension-collaboration-caret'
 import {
   AlignCenter,
   AlignLeft,
@@ -37,6 +39,7 @@ import {
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { API_URL, docImageUrl, getProjectToken, stripDocImageAuth, withDocImageAuth } from '@/lib/api'
+import { CollabProvider, userColor } from '@/lib/yjs-provider'
 import { mentionSuggestion, type RichMention } from '@/components/ui/rich-editor'
 import { ImagePicker } from './ImagePicker'
 import { ResizableImage } from './ResizableImage'
@@ -50,6 +53,7 @@ export function DocEditor({
   mentions,
   projectId,
   documentId,
+  me,
   placeholder,
   editable = true,
 }: {
@@ -58,62 +62,102 @@ export function DocEditor({
   mentions: RichMention[]
   projectId: string
   documentId: string
+  me?: { id: string; name: string } | null
   placeholder?: string
   editable?: boolean
 }) {
   const [pickerOpen, setPickerOpen] = useState(false)
   const uploadRef = useRef<HTMLInputElement>(null)
 
-  const editor = useEditor({
-    editable,
-    extensions: [
-      StarterKit.configure({ horizontalRule: { HTMLAttributes: { class: 'doc-hr' } } }),
-      Placeholder.configure({ placeholder: placeholder ?? '' }),
-      Link.configure({ openOnClick: false, HTMLAttributes: { class: 'text-brand underline' } }),
-      Underline,
-      Highlight.configure({ multicolor: false }),
-      TextAlign.configure({ types: ['heading', 'paragraph'] }),
-      ResizableImage.configure({ inline: false, allowBase64: false, HTMLAttributes: { class: 'doc-image' } }),
-      Table.configure({ resizable: true }),
-      TableRow,
-      TableHeader,
-      TableCell,
-      TaskList,
-      TaskItem.configure({ nested: true }),
-      Mention.configure({ HTMLAttributes: { class: 'mention' }, suggestion: mentionSuggestion(() => mentions) as never }),
-    ],
-    content: withDocImageAuth(value),
-    editorProps: {
-      attributes: { class: 'doc-editor min-h-[50vh] px-4 py-3 outline-none' },
-      // вставка изображения из буфера → загрузка в файлы проекта → вставка по ссылке
-      handlePaste: (_view, event) => {
-        const items = Array.from(event.clipboardData?.items ?? [])
-        const img = items.find((i) => i.kind === 'file' && i.type.startsWith('image/'))
-        if (!img) return false
-        const file = img.getAsFile()
-        if (!file) return false
-        event.preventDefault()
-        void uploadAndInsert(file)
-        return true
-      },
-      handleDrop: (_view, event) => {
-        const files = Array.from((event as DragEvent).dataTransfer?.files ?? [])
-        const image = files.find((f) => f.type.startsWith('image/'))
-        if (!image) return false
-        event.preventDefault()
-        void uploadAndInsert(image)
-        return true
-      },
-    },
-    // токен из URL картинок снимаем — в сохранённый контент он попасть не должен
-    onUpdate: ({ editor }) => onChange(stripDocImageAuth(editor.getHTML())),
-  })
-
-  // при переключении на другой документ — перезагрузить контент
+  // Совместное редактирование (SPEC §8.25 шаг 2): один провайдер на документ.
+  const [provider, setProvider] = useState<CollabProvider | null>(null)
+  const [synced, setSynced] = useState(false)
   useEffect(() => {
-    editor?.commands.setContent(withDocImageAuth(value))
+    const p = new CollabProvider(documentId)
+    setProvider(p)
+    setSynced(false)
+    const off = p.onStatus((_c, s) => setSynced(s))
+    return () => {
+      off()
+      p.destroy()
+      setProvider(null)
+    }
+  }, [documentId])
+
+  const editor = useEditor(
+    {
+      editable: editable && synced, // до первой синхронизации не даём печатать
+      extensions: [
+        // history выключаем: с Collaboration за отмену отвечает Yjs (общая история)
+        StarterKit.configure({ horizontalRule: { HTMLAttributes: { class: 'doc-hr' } }, undoRedo: false }),
+        Placeholder.configure({ placeholder: placeholder ?? '' }),
+        Link.configure({ openOnClick: false, HTMLAttributes: { class: 'text-brand underline' } }),
+        Underline,
+        Highlight.configure({ multicolor: false }),
+        TextAlign.configure({ types: ['heading', 'paragraph'] }),
+        ResizableImage.configure({ inline: false, allowBase64: false, HTMLAttributes: { class: 'doc-image' } }),
+        Table.configure({ resizable: true }),
+        TableRow,
+        TableHeader,
+        TableCell,
+        TaskList,
+        TaskItem.configure({ nested: true }),
+        Mention.configure({ HTMLAttributes: { class: 'mention' }, suggestion: mentionSuggestion(() => mentions) as never }),
+        ...(provider
+          ? [
+              Collaboration.configure({ document: provider.doc }),
+              CollaborationCaret.configure({
+                provider,
+                user: { name: me?.name || '…', color: userColor(me?.id ?? '') },
+              }),
+            ]
+          : []),
+      ],
+      // content НЕ задаём: при Collaboration источник правды — Y.Doc,
+      // иначе контент задвоится у каждого подключившегося
+      editorProps: {
+        attributes: { class: 'doc-editor min-h-[50vh] px-4 py-3 outline-none' },
+        // вставка изображения из буфера → загрузка в файлы проекта → вставка по ссылке
+        handlePaste: (_view, event) => {
+          const items = Array.from(event.clipboardData?.items ?? [])
+          const img = items.find((i) => i.kind === 'file' && i.type.startsWith('image/'))
+          if (!img) return false
+          const file = img.getAsFile()
+          if (!file) return false
+          event.preventDefault()
+          void uploadAndInsert(file)
+          return true
+        },
+        handleDrop: (_view, event) => {
+          const files = Array.from((event as DragEvent).dataTransfer?.files ?? [])
+          const image = files.find((f) => f.type.startsWith('image/'))
+          if (!image) return false
+          event.preventDefault()
+          void uploadAndInsert(image)
+          return true
+        },
+      },
+      // токен из URL картинок снимаем — в сохранённый контент он попасть не должен
+      onUpdate: ({ editor }) => onChange(stripDocImageAuth(editor.getHTML())),
+    },
+    [provider, documentId], // пересоздаём редактор при смене документа/провайдера
+  )
+
+  // Первое наполнение: документ создан до co-editing (или пустая комната) —
+  // заливаем HTML-снимок в Y.Doc ОДИН раз. Флаг живёт в самом Y.Doc, поэтому
+  // при одновременном открытии двумя клиентами контент не задвоится.
+  const seededRef = useRef<string | null>(null)
+  useEffect(() => {
+    if (!editor || !provider || !synced || seededRef.current === documentId) return
+    seededRef.current = documentId
+    const meta = provider.doc.getMap<boolean>('meta')
+    const empty = provider.doc.getXmlFragment('default').length === 0
+    if (empty && !meta.get('seeded') && value.trim()) {
+      meta.set('seeded', true)
+      editor.commands.setContent(withDocImageAuth(value))
+    }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [documentId, editor])
+  }, [editor, provider, synced, documentId])
 
   async function uploadAndInsert(file: File) {
     try {
