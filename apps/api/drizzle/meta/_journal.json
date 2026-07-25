@@ -225,6 +225,13 @@
       "when": 1784975293054,
       "tag": "0031_happy_smasher",
       "breakpoints": true
+    },
+    {
+      "idx": 32,
+      "version": "7",
+      "when": 1784981104981,
+      "tag": "0032_wise_wendell_vaughn",
+      "breakpoints": true
     }
   ]
 }

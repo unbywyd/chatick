@@ -39,7 +39,8 @@
   "companyTabs": {
     "projects": "פרויקטים",
     "team": "צוות",
-    "settings": "הגדרות"
+    "settings": "הגדרות",
+    "connect": "חיבור"
   },
   "llm": {
     "title": "ספק AI (LLM)",
@@ -735,6 +736,11 @@
     "closeTunnel": "סגירה",
     "closed": "החיבור נסגר",
     "noSessions": "אין חיבורים פעילים",
-    "menuItem": "חיבור עוזר AI"
+    "menuItem": "חיבור עוזר AI",
+    "companyTitle": "חיבור עוזר AI לכל החברה",
+    "companySubtitle": "העוזר יוכל לעבוד בכל פרויקטי החברה שאתם חברים בהם — הוא בוחר את הפרויקט בעצמו.",
+    "requestsCompanyAccess": "מבקש גישה לכל הפרויקטים בחברת {{company}}.",
+    "companyScopeNote": "הוא פועל בשמכם ורק בפרויקטים שאתם חברים בהם. כל פעולה נרשמת בהיסטוריית הפרויקט תחת שמכם.",
+    "wholeCompany": "כל החברה"
   }
 }

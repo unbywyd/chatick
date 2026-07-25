@@ -39,7 +39,8 @@
   "companyTabs": {
     "projects": "Projects",
     "team": "Team",
-    "settings": "Settings"
+    "settings": "Settings",
+    "connect": "Connect"
   },
   "llm": {
     "title": "AI provider (LLM)",
@@ -735,6 +736,11 @@
     "closeTunnel": "Close",
     "closed": "Connection closed",
     "noSessions": "No active connections",
-    "menuItem": "Connect AI assistant"
+    "menuItem": "Connect AI assistant",
+    "companyTitle": "Connect an AI assistant to the whole company",
+    "companySubtitle": "The assistant will be able to work in every project of this company that you are a member of — it picks the project itself.",
+    "requestsCompanyAccess": "is asking for access to all projects in {{company}}.",
+    "companyScopeNote": "It acts as you, only in projects you belong to, and every action is recorded in the project history under your name.",
+    "wholeCompany": "Whole company"
   }
 }

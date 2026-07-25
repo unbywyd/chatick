@@ -680,9 +680,10 @@ export const bridgeAuthCodes = pgTable(
     // длинный секрет, по которому ИИ опрашивает статус — человеку не показывается
     deviceCode: text('device_code').notNull().unique(),
     status: text('status').notNull().default('pending'), // pending | approved | denied
-    // заполняются в момент подтверждения человеком
+    // заполняются в момент подтверждения человеком; область — проект ЛИБО компания
     userId: text('user_id').references(() => users.id, { onDelete: 'cascade' }),
     projectId: text('project_id').references(() => projects.id, { onDelete: 'cascade' }),
+    companyId: text('company_id').references(() => companies.id, { onDelete: 'cascade' }),
     // как ИИ представился — показываем человеку, чтобы он понимал, что одобряет
     clientName: text('client_name').notNull().default('AI assistant'),
     expiresAt: timestamp('expires_at', { withTimezone: true }).notNull(),
@@ -702,9 +703,10 @@ export const bridgeSessions = pgTable(
     userId: text('user_id')
       .notNull()
       .references(() => users.id, { onDelete: 'cascade' }),
-    projectId: text('project_id')
-      .notNull()
-      .references(() => projects.id, { onDelete: 'cascade' }),
+    // Область действия туннеля. Либо один проект, либо вся компания:
+    // менеджеру нужен доступ ко всем её проектам, а не к одному (SPEC §8.27).
+    projectId: text('project_id').references(() => projects.id, { onDelete: 'cascade' }),
+    companyId: text('company_id').references(() => companies.id, { onDelete: 'cascade' }),
     clientName: text('client_name').notNull().default('AI assistant'),
     // туннель сам закрывается после простоя — забытая сессия не живёт вечно
     lastUsedAt: timestamp('last_used_at', { withTimezone: true }).notNull().defaultNow(),

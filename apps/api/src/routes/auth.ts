@@ -1,12 +1,12 @@
 import { Hono } from 'hono'
-import { eq } from 'drizzle-orm'
+import { and, eq } from 'drizzle-orm'
 import { zValidator } from '@hono/zod-validator'
 import { z } from 'zod'
 import { nanoid } from 'nanoid'
 import sharp from 'sharp'
 import { PutObjectCommand } from '@aws-sdk/client-s3'
 import { db } from '../db/client.js'
-import { users } from '../db/schema.js'
+import { companyMembers, users } from '../db/schema.js'
 import { signSessionToken, requireSession, type SessionEnv } from '../auth.js'
 import { env } from '../env.js'
 import { s3Client, s3Bucket, getObjectStream, S3_KEY_PREFIX } from '../lib/s3.js'
@@ -168,14 +168,31 @@ auth.post('/bridge/approve', requireSession, async (c) => {
   const body = (await c.req.json().catch(() => ({}))) as Record<string, unknown>
   const code = typeof body.code === 'string' ? body.code : ''
   const projectId = typeof body.projectId === 'string' ? body.projectId : ''
-  if (!code || !projectId) return c.json({ error: 'code and projectId are required' }, 400)
+  const companyId = typeof body.companyId === 'string' ? body.companyId : ''
+  if (!code || (!projectId && !companyId)) {
+    return c.json({ error: 'code and either projectId or companyId are required' }, 400)
+  }
+
+  const { approveUserCode } = await import('../lib/bridge-auth.js')
+
+  // Доступ ко ВСЕЙ компании — только админам и менеджерам: обычный участник
+  // не должен раздавать ассистенту проекты, которыми сам не управляет.
+  if (companyId) {
+    const membership = await db.query.companyMembers.findFirst({
+      where: and(eq(companyMembers.companyId, companyId), eq(companyMembers.userId, sub)),
+    })
+    if (!membership || (membership.role !== 'admin' && membership.role !== 'manager')) {
+      return c.json({ error: 'Only company admins and managers can grant company-wide access' }, 403)
+    }
+    const ok = await approveUserCode(code, sub, { companyId })
+    return ok ? c.json({ ok: true }) : c.json({ error: 'Code not found or expired' }, 404)
+  }
 
   // одобрять можно только тот проект, в котором человек реально состоит
   const { memberDomains } = await import('./projects.js')
   if (!(await memberDomains(projectId, sub))) return c.json({ error: 'You are not a member of this project' }, 403)
 
-  const { approveUserCode } = await import('../lib/bridge-auth.js')
-  const ok = await approveUserCode(code, sub, projectId)
+  const ok = await approveUserCode(code, sub, { projectId })
   if (!ok) return c.json({ error: 'Code not found or expired' }, 404)
   return c.json({ ok: true })
 })

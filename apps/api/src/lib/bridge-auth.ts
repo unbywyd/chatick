@@ -1,7 +1,7 @@
 import { createHash, randomBytes } from 'node:crypto'
 import { and, eq, isNull, lt, sql } from 'drizzle-orm'
 import { db } from '../db/client.js'
-import { bridgeAuthCodes, bridgeSessions, projects, users } from '../db/schema.js'
+import { bridgeAuthCodes, bridgeSessions, companies, companyMembers, projects, users } from '../db/schema.js'
 import { memberDomains, type DomainPermissions } from '../routes/projects.js'
 
 // Авторизация моста для внешнего ИИ (SPEC §8.27).
@@ -30,10 +30,22 @@ function humanCode(): string {
 export type BridgeIdentity = {
   sessionId: string
   userId: string
-  projectId: string
+  /** Туннель на один проект: projectId задан. Туннель на компанию: null. */
+  projectId: string | null
+  companyId: string | null
   user: { id: string; name: string; email: string }
-  project: { id: string; name: string }
-  permissions: DomainPermissions
+  project: { id: string; name: string } | null
+  company: { id: string; name: string } | null
+  /** Права в текущем проекте; для company-туннеля вычисляются при выборе проекта. */
+  permissions: DomainPermissions | null
+}
+
+/** Роль пользователя в компании (для company-туннеля). */
+async function companyRoleOf(companyId: string, userId: string): Promise<string | null> {
+  const m = await db.query.companyMembers.findFirst({
+    where: and(eq(companyMembers.companyId, companyId), eq(companyMembers.userId, userId)),
+  })
+  return m?.role ?? null
 }
 
 /** Шаг 1 (ИИ): запросить код. Токена здесь ещё нет. */
@@ -58,13 +70,25 @@ export async function lookupUserCode(userCode: string) {
   return { id: row.id, clientName: row.clientName }
 }
 
-/** Шаг 3 (человек): подтвердить доступ к конкретному проекту. */
-export async function approveUserCode(userCode: string, userId: string, projectId: string) {
+/**
+ * Шаг 3 (человек): подтвердить доступ.
+ * scope — один проект или вся компания (для админов/менеджеров компании).
+ */
+export async function approveUserCode(
+  userCode: string,
+  userId: string,
+  scope: { projectId: string; companyId?: never } | { companyId: string; projectId?: never },
+) {
   const code = await lookupUserCode(userCode)
   if (!code) return false
   await db
     .update(bridgeAuthCodes)
-    .set({ status: 'approved', userId, projectId })
+    .set({
+      status: 'approved',
+      userId,
+      projectId: scope.projectId ?? null,
+      companyId: scope.companyId ?? null,
+    })
     .where(eq(bridgeAuthCodes.id, code.id))
   return true
 }
@@ -87,7 +111,7 @@ export async function pollDeviceAuth(
   if (!row) return { status: 'expired' }
   if (row.expiresAt.getTime() < Date.now()) return { status: 'expired' }
   if (row.status === 'denied') return { status: 'denied' }
-  if (row.status !== 'approved' || !row.userId || !row.projectId) return { status: 'pending' }
+  if (row.status !== 'approved' || !row.userId || (!row.projectId && !row.companyId)) return { status: 'pending' }
 
   const token = `ck_${randomBytes(32).toString('base64url')}`
   const now = Date.now()
@@ -97,6 +121,7 @@ export async function pollDeviceAuth(
       tokenHash: hash(token),
       userId: row.userId,
       projectId: row.projectId,
+      companyId: row.companyId,
       clientName: row.clientName,
       expiresAt: new Date(now + SESSION_TTL_MS),
     })
@@ -105,25 +130,55 @@ export async function pollDeviceAuth(
   // код одноразовый
   await db.delete(bridgeAuthCodes).where(eq(bridgeAuthCodes.id, row.id))
 
-  const identity = await identityOf(session!.id, row.userId, row.projectId)
+  const identity = await identityOf(session!.id, row.userId, row.projectId, row.companyId)
   if (!identity) return { status: 'expired' }
   return { status: 'approved', token, identity }
 }
 
-async function identityOf(sessionId: string, userId: string, projectId: string): Promise<BridgeIdentity | null> {
-  const [user, project, permissions] = await Promise.all([
-    db.query.users.findFirst({ where: eq(users.id, userId) }),
+async function identityOf(
+  sessionId: string,
+  userId: string,
+  projectId: string | null,
+  companyId: string | null,
+): Promise<BridgeIdentity | null> {
+  const user = await db.query.users.findFirst({ where: eq(users.id, userId) })
+  if (!user) return null
+  const base = {
+    sessionId,
+    userId,
+    user: { id: user.id, name: user.name, email: user.email },
+  }
+
+  // Туннель на компанию: конкретный проект выбирается в каждом запросе,
+  // права проверяются там же — членство могли отозвать после открытия.
+  if (companyId) {
+    const company = await db.query.companies.findFirst({ where: eq(companies.id, companyId) })
+    const role = await companyRoleOf(companyId, userId)
+    // доступ ко всей компании имеет смысл только для admin/manager
+    if (!company || (role !== 'admin' && role !== 'manager')) return null
+    return {
+      ...base,
+      projectId: null,
+      companyId,
+      project: null,
+      company: { id: company.id, name: company.name },
+      permissions: null,
+    }
+  }
+
+  if (!projectId) return null
+  const [project, permissions] = await Promise.all([
     db.query.projects.findFirst({ where: eq(projects.id, projectId) }),
     memberDomains(projectId, userId),
   ])
   // участие в проекте могли отозвать уже после открытия туннеля
-  if (!user || !project || !permissions) return null
+  if (!project || !permissions) return null
   return {
-    sessionId,
-    userId,
+    ...base,
     projectId,
-    user: { id: user.id, name: user.name, email: user.email },
+    companyId: project.companyId,
     project: { id: project.id, name: project.name },
+    company: null,
     permissions,
   }
 }
@@ -145,7 +200,7 @@ export async function authenticateBridge(token: string | undefined | null): Prom
   }
 
   await db.update(bridgeSessions).set({ lastUsedAt: new Date() }).where(eq(bridgeSessions.id, row.id))
-  return identityOf(row.id, row.userId, row.projectId)
+  return identityOf(row.id, row.userId, row.projectId, row.companyId)
 }
 
 /** Закрыть туннель (человеком со страницы подключения или самим ИИ). */
@@ -158,10 +213,12 @@ export async function closeSession(sessionId: string, userId: string) {
 
 /** Активные туннели пользователя — для страницы подключения. */
 export async function listSessions(userId: string) {
+  // left join: у company-туннеля projectId пуст, inner join его бы потерял
   const rows = await db
-    .select({ s: bridgeSessions, project: projects })
+    .select({ s: bridgeSessions, project: projects, company: companies })
     .from(bridgeSessions)
-    .innerJoin(projects, eq(projects.id, bridgeSessions.projectId))
+    .leftJoin(projects, eq(projects.id, bridgeSessions.projectId))
+    .leftJoin(companies, eq(companies.id, bridgeSessions.companyId))
     .where(and(eq(bridgeSessions.userId, userId), isNull(bridgeSessions.revokedAt)))
   const now = Date.now()
   return rows
@@ -169,7 +226,9 @@ export async function listSessions(userId: string) {
     .map((r) => ({
       id: r.s.id,
       clientName: r.s.clientName,
-      project: { id: r.project.id, name: r.project.name },
+      scope: r.s.companyId ? ('company' as const) : ('project' as const),
+      project: r.project ? { id: r.project.id, name: r.project.name } : null,
+      company: r.company ? { id: r.company.id, name: r.company.name } : null,
       lastUsedAt: r.s.lastUsedAt,
       expiresAt: r.s.expiresAt,
       createdAt: r.s.createdAt,

@@ -60,7 +60,12 @@ You are NOT connected yet. Connect first, then re-read the authenticated guide.
 /** Полная инструкция для авторизованного ИИ: кто он, что может, как звать API. */
 export function guideDoc(id: BridgeIdentity): string {
   const b = base()
-  const perms = expandPermissions(id.permissions)
+  // Туннель на всю компанию: конкретный проект выбирается в каждом запросе,
+  // поэтому и права перечислить заранее нельзя — они свои в каждом проекте.
+  if (!id.projectId || !id.project || !id.permissions) return companyGuideDoc(id)
+  const permissions = id.permissions
+  const project = id.project
+  const perms = expandPermissions(permissions)
   const can = (p: keyof typeof perms) => (perms[p] ? 'YES' : 'NO')
 
   // Явно перечисляем запреты: агенту дешевле прочитать, чем ловить 403
@@ -70,7 +75,7 @@ export function guideDoc(id: BridgeIdentity): string {
 
   return `# Chatick — connected as ${id.user.name || id.user.email}
 
-Project: ${id.project.name} (id: ${id.projectId})
+Project: ${project.name} (id: ${id.projectId})
 Acting as: ${id.user.name || id.user.email} <${id.user.email}> (id: ${id.userId})
 
 Every call below acts as this person, respects their permissions, and is
@@ -82,7 +87,7 @@ Base URL: ${b}/x
 
 ## Your permissions in this project
 
-  tasks: ${id.permissions.tasks}   files: ${id.permissions.files}   resources: ${id.permissions.resources}   documents: ${id.permissions.documents}
+  tasks: ${permissions.tasks}   files: ${permissions.files}   resources: ${permissions.resources}   documents: ${permissions.documents}
 
   create/edit tasks .... ${can('tasks.create')} / ${can('tasks.edit')}
   delete tasks ......... ${can('tasks.delete')}
@@ -160,5 +165,73 @@ ${denied.length ? `\n  NOT ALLOWED: ${denied.join(', ')}\n  Do not attempt these
                                and responsibilities, sprints, task counts
 
 Start with GET /x/context if you need to understand the project before acting.
+`
+}
+
+
+/** Инструкция для company-туннеля: доступ ко всем проектам компании сразу. */
+function companyGuideDoc(id: BridgeIdentity): string {
+  const b = base()
+  return `# Chatick — connected as ${id.user.name || id.user.email}
+
+Company: ${id.company?.name ?? ''} (id: ${id.companyId})
+Acting as: ${id.user.name || id.user.email} <${id.user.email}> (id: ${id.userId})
+
+This is a COMPANY-WIDE connection: you can work across every project in this
+company that this person is a member of.
+
+    -H 'authorization: Bearer <token>'
+
+Base URL: ${b}/x
+
+## Choosing a project — read this first
+
+Every project-scoped call needs a project. Add \`?project=<projectId>\`:
+
+    curl -s '${b}/x/tasks?project=<projectId>&assignee=me' -H 'authorization: Bearer <token>'
+
+Start here to see what is available and your permissions in each:
+
+    GET /x/projects
+
+Without ?project= a call returns 400 telling you the same thing.
+
+## Rules
+
+- "me" means ${id.user.name || id.user.email}.
+- Permissions are checked PER PROJECT. Company access does not grant access to
+  a project this person was never added to — such calls return 403.
+- Destructive actions (delete, bulk status changes) need explicit human
+  confirmation first. Ask, then act.
+- Write content in each project's own language (GET /x/context tells you).
+- On 401 the tunnel is closed — re-run the device flow (GET ${b}/x).
+
+## Endpoints
+
+Everything below behaves exactly as in a single-project connection, but takes
+\`?project=<projectId>\`:
+
+  GET    /x/projects                    list projects + your permissions in each
+  GET    /x/context?project=<id>        description, rules, members, task counts
+  GET    /x/tasks?project=<id>&assignee=me&status=todo
+  GET    /x/tasks/<taskId>?project=<id>
+  POST   /x/tasks?project=<id>          {"title","assignee?","status?",...}
+  PATCH  /x/tasks/<taskId>?project=<id>
+  DELETE /x/tasks/<taskId>?project=<id>
+  GET / POST  /x/tasks/<taskId>/comments?project=<id>
+  GET / POST  /x/sprints?project=<id>
+  GET / POST / PATCH / DELETE  /x/documents...?project=<id>
+  POST   /x/documents/<id>/append?project=<id>
+  GET / POST  /x/messages?project=<id>
+  GET    /x/files?project=<id>          POST multipart to upload
+  GET    /x/resources?project=<id>      metadata only; secret values never exposed
+
+  POST   /x/disconnect                  close this tunnel when you are done
+
+Example — what is on my plate across the company:
+
+    for p in $(curl -s ${b}/x/projects -H 'authorization: Bearer <token>' | jq -r '.items[].id'); do
+      curl -s "${b}/x/tasks?project=$p&assignee=me&status=todo" -H 'authorization: Bearer <token>'
+    done
 `
 }

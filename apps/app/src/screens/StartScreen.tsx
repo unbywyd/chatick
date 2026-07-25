@@ -24,6 +24,7 @@ import { Input } from '@/components/ui/input'
 import { Button } from '@/components/ui/button'
 import { TeamTab } from '@/components/company/TeamTab'
 import { LlmSettings } from '@/components/company/LlmSettings'
+import { CompanyConnectTab } from '@/components/company/CompanyConnectTab'
 import {
   ProjectSettingsForm,
   DEFAULT_AI_CONFIG,
@@ -243,15 +244,19 @@ function CompanyHome({
   const navigate = useNavigate()
   // таб компании — из URL: /start/:companyId/:companyTab (settings адресуем — на него ведёт чат без LLM)
   const { companyTab } = useParams()
-  const tab = (['projects', 'team', 'settings'] as const).includes(companyTab as never)
-    ? (companyTab as 'projects' | 'team' | 'settings')
+  const tab = (['projects', 'team', 'connect', 'settings'] as const).includes(companyTab as never)
+    ? (companyTab as 'projects' | 'team' | 'connect' | 'settings')
     : 'projects'
   const canManage = company.myRole === 'admin' || company.myRole === 'manager'
+  // доступ ко всей компании выдают только те, кто ей управляет
+  const tabs = canManage
+    ? (['projects', 'team', 'connect', 'settings'] as const)
+    : (['projects', 'team', 'settings'] as const)
 
   return (
     <div className="space-y-6">
       <nav className="flex gap-1 border-b pb-0">
-        {(['projects', 'team', 'settings'] as const).map((key) => (
+        {tabs.map((key) => (
           <button
             key={key}
             onClick={() => navigate(key === 'projects' ? `/start/${company.id}` : `/start/${company.id}/${key}`)}
@@ -271,6 +276,8 @@ function CompanyHome({
         <ProjectsTab company={company} canManage={canManage} onEntered={onEntered} />
       ) : tab === 'team' ? (
         <TeamTab company={company} meId={meId} />
+      ) : tab === 'connect' && canManage ? (
+        <CompanyConnectTab company={company} />
       ) : (
         <LlmSettings companyId={company.id} isAdmin={company.myRole === 'admin'} />
       )}

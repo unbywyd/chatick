@@ -13,7 +13,7 @@ import {
   tasks,
   users,
 } from '../db/schema.js'
-import { hasPermission, type ProjectPermission } from './projects.js'
+import { hasPermission, memberDomains, type ProjectPermission } from './projects.js'
 import { authenticateBridge, closeSession, startDeviceAuth, pollDeviceAuth, type BridgeIdentity } from '../lib/bridge-auth.js'
 import { connectDoc, guideDoc } from '../lib/bridge-docs.js'
 import { logActivity } from '../lib/audit.js'
@@ -94,27 +94,82 @@ bridgeRoute.use('/*', async (c, next) => {
 
 const auth = (c: { get: (k: 'bridge') => BridgeIdentity }) => c.get('bridge')
 
-/** Единая проверка прав: тот же механизм, что и для живого пользователя. */
-async function require(c: { get: (k: 'bridge') => BridgeIdentity }, perm: ProjectPermission) {
+type Ctx = { get: (k: 'bridge') => BridgeIdentity; req: { query: (k: string) => string | undefined } }
+
+/**
+ * Проект текущего запроса.
+ * Туннель на проект — он и есть. Туннель на компанию — берём ?project= и
+ * проверяем, что человек действительно в нём состоит: доступ к компании не
+ * означает доступ к проектам, куда его не включили.
+ */
+async function resolveProject(c: Ctx): Promise<{ projectId: string } | { error: string; status: 400 | 403 | 404 }> {
   const id = auth(c)
-  const ok = await hasPermission(id.projectId, id.userId, perm)
+  if (id.projectId) return { projectId: id.projectId }
+
+  const asked = c.req.query('project')
+  if (!asked) {
+    return {
+      error:
+        'This is a company-wide connection: pass ?project=<id> (or projectId in the body). Call GET /x/projects to list available projects.',
+      status: 400,
+    }
+  }
+  const project = await db.query.projects.findFirst({ where: eq(projects.id, asked) })
+  if (!project || project.companyId !== id.companyId) return { error: 'Project not found in this company', status: 404 }
+  if (!(await memberDomains(asked, id.userId))) {
+    return { error: 'You are not a member of that project', status: 403 }
+  }
+  return { projectId: asked }
+}
+
+/** Единая проверка прав: тот же механизм, что и для живого пользователя. */
+async function require(c: Ctx, perm: ProjectPermission, projectId: string) {
+  const id = auth(c)
+  const ok = await hasPermission(projectId, id.userId, perm)
   return ok ? null : { error: `Forbidden: your account lacks ${perm} in this project`, permission: perm }
 }
 
 bridgeRoute.get('/guide', (c) => c.text(guideDoc(auth(c as never))))
 
+// Список доступных проектов. Для company-туннеля это отправная точка:
+// из него ИИ узнаёт, какие ?project= вообще можно передавать.
+bridgeRoute.get('/projects', async (c) => {
+  const id = auth(c as never)
+
+  const rows = id.companyId
+    ? await db.query.projects.findMany({ where: eq(projects.companyId, id.companyId) })
+    : id.projectId
+      ? await db.query.projects.findMany({ where: eq(projects.id, id.projectId) })
+      : []
+
+  const items = []
+  for (const p of rows) {
+    // показываем только проекты, где человек действительно состоит
+    const perms = await memberDomains(p.id, id.userId)
+    if (!perms) continue
+    items.push({ id: p.id, name: p.name, about: p.about, permissions: perms })
+  }
+  return c.json({
+    items,
+    scope: id.companyId ? 'company' : 'project',
+    hint: id.companyId ? 'Pass ?project=<id> on every project-scoped call.' : undefined,
+  })
+})
+
 // --- Контекст проекта -------------------------------------------------------
 
 bridgeRoute.get('/context', async (c) => {
   const id = auth(c as never)
-  const project = await db.query.projects.findFirst({ where: eq(projects.id, id.projectId) })
+  const scope = await resolveProject(c as never)
+  if ('error' in scope) return c.json({ error: scope.error }, scope.status)
+  const project = await db.query.projects.findFirst({ where: eq(projects.id, scope.projectId) })
   if (!project) return c.json({ error: 'Not found' }, 404)
 
   const members = await db
     .select({ m: projectMembers, u: users })
     .from(projectMembers)
     .innerJoin(users, eq(users.id, projectMembers.userId))
-    .where(eq(projectMembers.projectId, id.projectId))
+    .where(eq(projectMembers.projectId, scope.projectId))
 
   const [counts] = await db
     .select({
@@ -126,10 +181,10 @@ bridgeRoute.get('/context', async (c) => {
       mine: sql<number>`count(*) filter (where ${tasks.assigneeId} = ${id.userId} and ${tasks.status} <> 'done')::int`,
     })
     .from(tasks)
-    .where(and(eq(tasks.projectId, id.projectId), isNull(tasks.deletedAt)))
+    .where(and(eq(tasks.projectId, scope.projectId), isNull(tasks.deletedAt)))
 
   const sprints = await db.query.taskGroups.findMany({
-    where: and(eq(taskGroups.projectId, id.projectId), isNull(taskGroups.deletedAt)),
+    where: and(eq(taskGroups.projectId, scope.projectId), isNull(taskGroups.deletedAt)),
   })
 
   const aiConfig = JSON.parse(project.aiConfig || '{}') as { language?: string }
@@ -137,7 +192,7 @@ bridgeRoute.get('/context', async (c) => {
   return c.json({
     project: { id: project.id, name: project.name, about: project.about, language: aiConfig.language ?? 'en' },
     chatRules: project.chatRules,
-    you: { ...id.user, permissions: id.permissions },
+    you: { ...id.user, permissions: await memberDomains(scope.projectId, id.userId) },
     members: members.map((r) => ({
       id: r.u.id,
       name: r.u.name,
@@ -155,7 +210,7 @@ bridgeRoute.get('/context', async (c) => {
 // --- Хелперы ----------------------------------------------------------------
 
 /** «me», id, имя или email → userId. */
-async function resolveAssignee(id: BridgeIdentity, value: unknown): Promise<string | null | undefined> {
+async function resolveAssignee(id: BridgeIdentity, projectId: string, value: unknown): Promise<string | null | undefined> {
   if (value === null) return null // явный сброс
   if (typeof value !== 'string' || !value.trim()) return undefined
   const v = value.trim()
@@ -165,7 +220,7 @@ async function resolveAssignee(id: BridgeIdentity, value: unknown): Promise<stri
     .select({ u: users })
     .from(projectMembers)
     .innerJoin(users, eq(users.id, projectMembers.userId))
-    .where(eq(projectMembers.projectId, id.projectId))
+    .where(eq(projectMembers.projectId, projectId))
   const lower = v.toLowerCase()
   const hit =
     rows.find((r) => r.u.id === v) ??
@@ -216,13 +271,15 @@ const taskView = (t: typeof tasks.$inferSelect, assignee?: { id: string; name: s
 
 bridgeRoute.get('/tasks', async (c) => {
   const id = auth(c as never)
-  const denied = await require(c as never, 'tasks.read')
+  const scope = await resolveProject(c as never)
+  if ('error' in scope) return c.json({ error: scope.error }, scope.status)
+  const denied = await require(c as never, 'tasks.read', scope.projectId)
   if (denied) return c.json(denied, 403)
 
-  const conds = [eq(tasks.projectId, id.projectId), isNull(tasks.deletedAt)]
+  const conds = [eq(tasks.projectId, scope.projectId), isNull(tasks.deletedAt)]
   const assignee = c.req.query('assignee')
   if (assignee) {
-    const resolved = await resolveAssignee(id, assignee)
+    const resolved = await resolveAssignee(id, scope.projectId, assignee)
     if (resolved === undefined) return c.json({ error: `Unknown assignee: ${assignee}` }, 400)
     conds.push(resolved === null ? isNull(tasks.assigneeId) : eq(tasks.assigneeId, resolved))
   }
@@ -250,13 +307,15 @@ bridgeRoute.get('/tasks', async (c) => {
 
 bridgeRoute.get('/tasks/:id', async (c) => {
   const id = auth(c as never)
-  const denied = await require(c as never, 'tasks.read')
+  const scope = await resolveProject(c as never)
+  if ('error' in scope) return c.json({ error: scope.error }, scope.status)
+  const denied = await require(c as never, 'tasks.read', scope.projectId)
   if (denied) return c.json(denied, 403)
   const row = await db
     .select({ t: tasks, u: users })
     .from(tasks)
     .leftJoin(users, eq(users.id, tasks.assigneeId))
-    .where(and(eq(tasks.id, c.req.param('id')), eq(tasks.projectId, id.projectId), isNull(tasks.deletedAt)))
+    .where(and(eq(tasks.id, c.req.param('id')), eq(tasks.projectId, scope.projectId), isNull(tasks.deletedAt)))
     .limit(1)
   if (!row.length) return c.json({ error: 'Not found' }, 404)
   return c.json(taskView(row[0]!.t, row[0]!.u))
@@ -264,14 +323,16 @@ bridgeRoute.get('/tasks/:id', async (c) => {
 
 bridgeRoute.post('/tasks', async (c) => {
   const id = auth(c as never)
-  const denied = await require(c as never, 'tasks.create')
+  const scope = await resolveProject(c as never)
+  if ('error' in scope) return c.json({ error: scope.error }, scope.status)
+  const denied = await require(c as never, 'tasks.create', scope.projectId)
   if (denied) return c.json(denied, 403)
 
   const b = (await c.req.json().catch(() => ({}))) as Record<string, unknown>
   const title = typeof b.title === 'string' ? b.title.trim() : ''
   if (!title) return c.json({ error: 'title is required' }, 400)
 
-  const assigneeId = await resolveAssignee(id, b.assignee)
+  const assigneeId = await resolveAssignee(id, scope.projectId, b.assignee)
   if (b.assignee !== undefined && assigneeId === undefined) return c.json({ error: `Unknown assignee: ${String(b.assignee)}` }, 400)
   const dueDate = parseDue(b.dueDate)
 
@@ -280,12 +341,12 @@ bridgeRoute.post('/tasks', async (c) => {
   const [{ next }] = (await db
     .select({ next: sql<number>`coalesce(max(cast(substring(${tasks.number} from 6) as int)), 0) + 1` })
     .from(tasks)
-    .where(eq(tasks.projectId, id.projectId))) as [{ next: number }]
+    .where(eq(tasks.projectId, scope.projectId))) as [{ next: number }]
 
   const [row] = await db
     .insert(tasks)
     .values({
-      projectId: id.projectId,
+      projectId: scope.projectId,
       number: `TASK-${next}`,
       title: title.slice(0, 300),
       description: typeof b.description === 'string' ? b.description : '',
@@ -304,14 +365,14 @@ bridgeRoute.post('/tasks', async (c) => {
     .returning()
 
   void logActivity({
-    projectId: id.projectId,
+    projectId: scope.projectId,
     actorId: id.userId,
     action: 'create',
     entityType: 'task',
     entityId: row!.id,
     entityLabel: `${row!.number} ${row!.title}`,
   })
-  broadcast(id.projectId, 'tasks_changed', {})
+  broadcast(scope.projectId, 'tasks_changed', {})
   // подтягиваем исполнителя, чтобы агент сразу видел, на кого задача ушла
   const who = row!.assigneeId ? await db.query.users.findFirst({ where: eq(users.id, row!.assigneeId) }) : null
   return c.json(taskView(row!, who), 201)
@@ -319,12 +380,14 @@ bridgeRoute.post('/tasks', async (c) => {
 
 bridgeRoute.patch('/tasks/:id', async (c) => {
   const id = auth(c as never)
-  const denied = await require(c as never, 'tasks.edit')
+  const scope = await resolveProject(c as never)
+  if ('error' in scope) return c.json({ error: scope.error }, scope.status)
+  const denied = await require(c as never, 'tasks.edit', scope.projectId)
   if (denied) return c.json(denied, 403)
 
   const taskId = c.req.param('id')
   const existing = await db.query.tasks.findFirst({
-    where: and(eq(tasks.id, taskId), eq(tasks.projectId, id.projectId), isNull(tasks.deletedAt)),
+    where: and(eq(tasks.id, taskId), eq(tasks.projectId, scope.projectId), isNull(tasks.deletedAt)),
   })
   if (!existing) return c.json({ error: 'Not found' }, 404)
 
@@ -337,7 +400,7 @@ bridgeRoute.patch('/tasks/:id', async (c) => {
   if (b.estimateMinutes !== undefined) patch.estimateMinutes = b.estimateMinutes == null ? null : String(b.estimateMinutes)
   if (b.sprintId !== undefined) patch.groupId = b.sprintId ?? null
   if (b.assignee !== undefined) {
-    const resolved = await resolveAssignee(id, b.assignee)
+    const resolved = await resolveAssignee(id, scope.projectId, b.assignee)
     if (resolved === undefined) return c.json({ error: `Unknown assignee: ${String(b.assignee)}` }, 400)
     patch.assigneeId = resolved
   }
@@ -350,38 +413,40 @@ bridgeRoute.patch('/tasks/:id', async (c) => {
 
   const [row] = await db.update(tasks).set(patch).where(eq(tasks.id, taskId)).returning()
   void logActivity({
-    projectId: id.projectId,
+    projectId: scope.projectId,
     actorId: id.userId,
     action: 'update',
     entityType: 'task',
     entityId: taskId,
     entityLabel: `${row!.number} ${row!.title}`,
   })
-  broadcast(id.projectId, 'tasks_changed', {})
+  broadcast(scope.projectId, 'tasks_changed', {})
   const who = row!.assigneeId ? await db.query.users.findFirst({ where: eq(users.id, row!.assigneeId) }) : null
   return c.json(taskView(row!, who))
 })
 
 bridgeRoute.delete('/tasks/:id', async (c) => {
   const id = auth(c as never)
-  const denied = await require(c as never, 'tasks.delete')
+  const scope = await resolveProject(c as never)
+  if ('error' in scope) return c.json({ error: scope.error }, scope.status)
+  const denied = await require(c as never, 'tasks.delete', scope.projectId)
   if (denied) return c.json(denied, 403)
   const taskId = c.req.param('id')
   const existing = await db.query.tasks.findFirst({
-    where: and(eq(tasks.id, taskId), eq(tasks.projectId, id.projectId), isNull(tasks.deletedAt)),
+    where: and(eq(tasks.id, taskId), eq(tasks.projectId, scope.projectId), isNull(tasks.deletedAt)),
   })
   if (!existing) return c.json({ error: 'Not found' }, 404)
 
   await db.update(tasks).set({ deletedAt: new Date(), deletedById: id.userId }).where(eq(tasks.id, taskId))
   void logActivity({
-    projectId: id.projectId,
+    projectId: scope.projectId,
     actorId: id.userId,
     action: 'delete',
     entityType: 'task',
     entityId: taskId,
     entityLabel: `${existing.number} ${existing.title}`,
   })
-  broadcast(id.projectId, 'tasks_changed', {})
+  broadcast(scope.projectId, 'tasks_changed', {})
   return c.json({ ok: true, restorableForDays: 7 })
 })
 
@@ -389,7 +454,9 @@ bridgeRoute.delete('/tasks/:id', async (c) => {
 
 bridgeRoute.get('/tasks/:id/comments', async (c) => {
   const id = auth(c as never)
-  const denied = await require(c as never, 'tasks.read')
+  const scope = await resolveProject(c as never)
+  if ('error' in scope) return c.json({ error: scope.error }, scope.status)
+  const denied = await require(c as never, 'tasks.read', scope.projectId)
   if (denied) return c.json(denied, 403)
   const rows = await db
     .select({ c: taskComments, u: users })
@@ -404,7 +471,9 @@ bridgeRoute.get('/tasks/:id/comments', async (c) => {
 
 bridgeRoute.post('/tasks/:id/comments', async (c) => {
   const id = auth(c as never)
-  const denied = await require(c as never, 'tasks.read')
+  const scope = await resolveProject(c as never)
+  if ('error' in scope) return c.json({ error: scope.error }, scope.status)
+  const denied = await require(c as never, 'tasks.read', scope.projectId)
   if (denied) return c.json(denied, 403)
   const b = (await c.req.json().catch(() => ({}))) as Record<string, unknown>
   const text = typeof b.text === 'string' ? b.text.trim() : ''
@@ -412,12 +481,12 @@ bridgeRoute.post('/tasks/:id/comments', async (c) => {
 
   const taskId = c.req.param('id')
   const task = await db.query.tasks.findFirst({
-    where: and(eq(tasks.id, taskId), eq(tasks.projectId, id.projectId), isNull(tasks.deletedAt)),
+    where: and(eq(tasks.id, taskId), eq(tasks.projectId, scope.projectId), isNull(tasks.deletedAt)),
   })
   if (!task) return c.json({ error: 'Not found' }, 404)
 
-  const [row] = await db.insert(taskComments).values({ taskId, projectId: id.projectId, authorId: id.userId, body: text }).returning()
-  broadcast(id.projectId, 'task_comments_changed', { taskId })
+  const [row] = await db.insert(taskComments).values({ taskId, projectId: scope.projectId, authorId: id.userId, body: text }).returning()
+  broadcast(scope.projectId, 'task_comments_changed', { taskId })
   return c.json({ id: row!.id, createdAt: row!.createdAt }, 201)
 })
 
@@ -425,26 +494,30 @@ bridgeRoute.post('/tasks/:id/comments', async (c) => {
 
 bridgeRoute.get('/sprints', async (c) => {
   const id = auth(c as never)
-  const denied = await require(c as never, 'tasks.read')
+  const scope = await resolveProject(c as never)
+  if ('error' in scope) return c.json({ error: scope.error }, scope.status)
+  const denied = await require(c as never, 'tasks.read', scope.projectId)
   if (denied) return c.json(denied, 403)
   const rows = await db.query.taskGroups.findMany({
-    where: and(eq(taskGroups.projectId, id.projectId), isNull(taskGroups.deletedAt)),
+    where: and(eq(taskGroups.projectId, scope.projectId), isNull(taskGroups.deletedAt)),
   })
   return c.json({ items: rows.map((s) => ({ id: s.id, name: s.name })) })
 })
 
 bridgeRoute.post('/sprints', async (c) => {
   const id = auth(c as never)
-  const denied = await require(c as never, 'tasks.create')
+  const scope = await resolveProject(c as never)
+  if ('error' in scope) return c.json({ error: scope.error }, scope.status)
+  const denied = await require(c as never, 'tasks.create', scope.projectId)
   if (denied) return c.json(denied, 403)
   const b = (await c.req.json().catch(() => ({}))) as Record<string, unknown>
   const name = typeof b.name === 'string' ? b.name.trim() : ''
   if (!name) return c.json({ error: 'name is required' }, 400)
   const [row] = await db
     .insert(taskGroups)
-    .values({ projectId: id.projectId, name: name.slice(0, 120), createdById: id.userId })
+    .values({ projectId: scope.projectId, name: name.slice(0, 120), createdById: id.userId })
     .returning()
-  broadcast(id.projectId, 'tasks_changed', {})
+  broadcast(scope.projectId, 'tasks_changed', {})
   return c.json({ id: row!.id, name: row!.name }, 201)
 })
 
@@ -452,10 +525,12 @@ bridgeRoute.post('/sprints', async (c) => {
 
 bridgeRoute.get('/documents', async (c) => {
   const id = auth(c as never)
-  const denied = await require(c as never, 'documents.read')
+  const scope = await resolveProject(c as never)
+  if ('error' in scope) return c.json({ error: scope.error }, scope.status)
+  const denied = await require(c as never, 'documents.read', scope.projectId)
   if (denied) return c.json(denied, 403)
   const q = c.req.query('q')?.trim()
-  const base = and(eq(documents.projectId, id.projectId), isNull(documents.deletedAt))
+  const base = and(eq(documents.projectId, scope.projectId), isNull(documents.deletedAt))
   const rows = await db.query.documents.findMany({
     where: q ? and(base, ilike(documents.title, `%${q}%`)) : base,
     orderBy: desc(documents.updatedAt),
@@ -471,10 +546,12 @@ bridgeRoute.get('/documents', async (c) => {
 
 bridgeRoute.get('/documents/:id', async (c) => {
   const id = auth(c as never)
-  const denied = await require(c as never, 'documents.read')
+  const scope = await resolveProject(c as never)
+  if ('error' in scope) return c.json({ error: scope.error }, scope.status)
+  const denied = await require(c as never, 'documents.read', scope.projectId)
   if (denied) return c.json(denied, 403)
   const d = await db.query.documents.findFirst({
-    where: and(eq(documents.id, c.req.param('id')), eq(documents.projectId, id.projectId), isNull(documents.deletedAt)),
+    where: and(eq(documents.id, c.req.param('id')), eq(documents.projectId, scope.projectId), isNull(documents.deletedAt)),
   })
   if (!d) return c.json({ error: 'Not found' }, 404)
 
@@ -499,7 +576,9 @@ bridgeRoute.get('/documents/:id', async (c) => {
 
 bridgeRoute.post('/documents', async (c) => {
   const id = auth(c as never)
-  const denied = await require(c as never, 'documents.write')
+  const scope = await resolveProject(c as never)
+  if ('error' in scope) return c.json({ error: scope.error }, scope.status)
+  const denied = await require(c as never, 'documents.write', scope.projectId)
   if (denied) return c.json(denied, 403)
   const b = (await c.req.json().catch(() => ({}))) as Record<string, unknown>
   const title = typeof b.title === 'string' ? b.title.trim() : ''
@@ -507,7 +586,7 @@ bridgeRoute.post('/documents', async (c) => {
   const [row] = await db
     .insert(documents)
     .values({
-      projectId: id.projectId,
+      projectId: scope.projectId,
       title: title.slice(0, 300),
       content: typeof b.content === 'string' ? b.content.slice(0, 500_000) : '',
       createdById: id.userId,
@@ -515,24 +594,26 @@ bridgeRoute.post('/documents', async (c) => {
     })
     .returning()
   void logActivity({
-    projectId: id.projectId,
+    projectId: scope.projectId,
     actorId: id.userId,
     action: 'create',
     entityType: 'document',
     entityId: row!.id,
     entityLabel: row!.title,
   })
-  broadcast(id.projectId, 'documents_changed', {})
+  broadcast(scope.projectId, 'documents_changed', {})
   return c.json({ id: row!.id, title: row!.title }, 201)
 })
 
 bridgeRoute.patch('/documents/:id', async (c) => {
   const id = auth(c as never)
-  const denied = await require(c as never, 'documents.write')
+  const scope = await resolveProject(c as never)
+  if ('error' in scope) return c.json({ error: scope.error }, scope.status)
+  const denied = await require(c as never, 'documents.write', scope.projectId)
   if (denied) return c.json(denied, 403)
   const docId = c.req.param('id')
   const d = await db.query.documents.findFirst({
-    where: and(eq(documents.id, docId), eq(documents.projectId, id.projectId), isNull(documents.deletedAt)),
+    where: and(eq(documents.id, docId), eq(documents.projectId, scope.projectId), isNull(documents.deletedAt)),
   })
   if (!d) return c.json({ error: 'Not found' }, 404)
 
@@ -548,24 +629,26 @@ bridgeRoute.patch('/documents/:id', async (c) => {
 
   const [row] = await db.update(documents).set(patch).where(eq(documents.id, docId)).returning()
   void logActivity({
-    projectId: id.projectId,
+    projectId: scope.projectId,
     actorId: id.userId,
     action: 'update',
     entityType: 'document',
     entityId: docId,
     entityLabel: row!.title,
   })
-  broadcast(id.projectId, 'documents_changed', { id: docId })
+  broadcast(scope.projectId, 'documents_changed', { id: docId })
   return c.json({ id: row!.id, title: row!.title })
 })
 
 bridgeRoute.post('/documents/:id/append', async (c) => {
   const id = auth(c as never)
-  const denied = await require(c as never, 'documents.write')
+  const scope = await resolveProject(c as never)
+  if ('error' in scope) return c.json({ error: scope.error }, scope.status)
+  const denied = await require(c as never, 'documents.write', scope.projectId)
   if (denied) return c.json(denied, 403)
   const docId = c.req.param('id')
   const d = await db.query.documents.findFirst({
-    where: and(eq(documents.id, docId), eq(documents.projectId, id.projectId), isNull(documents.deletedAt)),
+    where: and(eq(documents.id, docId), eq(documents.projectId, scope.projectId), isNull(documents.deletedAt)),
   })
   if (!d) return c.json({ error: 'Not found' }, 404)
   const b = (await c.req.json().catch(() => ({}))) as Record<string, unknown>
@@ -576,29 +659,31 @@ bridgeRoute.post('/documents/:id/append', async (c) => {
   await snapshot(docId, d.title, d.content, id.userId, 'before AI bridge append').catch(() => {})
   const next = `${d.content}${add}`.slice(0, 500_000)
   await db.update(documents).set({ content: next, updatedById: id.userId }).where(eq(documents.id, docId))
-  broadcast(id.projectId, 'documents_changed', { id: docId })
+  broadcast(scope.projectId, 'documents_changed', { id: docId })
   return c.json({ ok: true, totalChars: next.length })
 })
 
 bridgeRoute.delete('/documents/:id', async (c) => {
   const id = auth(c as never)
-  const denied = await require(c as never, 'documents.delete')
+  const scope = await resolveProject(c as never)
+  if ('error' in scope) return c.json({ error: scope.error }, scope.status)
+  const denied = await require(c as never, 'documents.delete', scope.projectId)
   if (denied) return c.json(denied, 403)
   const docId = c.req.param('id')
   const d = await db.query.documents.findFirst({
-    where: and(eq(documents.id, docId), eq(documents.projectId, id.projectId), isNull(documents.deletedAt)),
+    where: and(eq(documents.id, docId), eq(documents.projectId, scope.projectId), isNull(documents.deletedAt)),
   })
   if (!d) return c.json({ error: 'Not found' }, 404)
   await db.update(documents).set({ deletedAt: new Date(), deletedById: id.userId }).where(eq(documents.id, docId))
   void logActivity({
-    projectId: id.projectId,
+    projectId: scope.projectId,
     actorId: id.userId,
     action: 'delete',
     entityType: 'document',
     entityId: docId,
     entityLabel: d.title,
   })
-  broadcast(id.projectId, 'documents_changed', {})
+  broadcast(scope.projectId, 'documents_changed', {})
   return c.json({ ok: true, restorableForDays: 7 })
 })
 
@@ -606,9 +691,11 @@ bridgeRoute.delete('/documents/:id', async (c) => {
 
 bridgeRoute.get('/messages', async (c) => {
   const id = auth(c as never)
+  const scope = await resolveProject(c as never)
+  if ('error' in scope) return c.json({ error: scope.error }, scope.status)
   const limit = Math.min(200, Math.max(1, Number(c.req.query('limit')) || 50))
   const before = c.req.query('before')
-  const conds = [eq(messages.projectId, id.projectId), eq(messages.mode, 'group' as const)]
+  const conds = [eq(messages.projectId, scope.projectId), eq(messages.mode, 'group' as const)]
   if (before && !isNaN(Date.parse(before))) conds.push(lt(messages.createdAt, new Date(before)))
   const rows = await db
     .select({ m: messages, u: users })
@@ -629,13 +716,15 @@ bridgeRoute.get('/messages', async (c) => {
 
 bridgeRoute.post('/messages', async (c) => {
   const id = auth(c as never)
+  const scope = await resolveProject(c as never)
+  if ('error' in scope) return c.json({ error: scope.error }, scope.status)
   const b = (await c.req.json().catch(() => ({}))) as Record<string, unknown>
   const text = typeof b.text === 'string' ? b.text.trim() : ''
   if (!text) return c.json({ error: 'text is required' }, 400)
   const [row] = await db
     .insert(messages)
     .values({
-      projectId: id.projectId,
+      projectId: scope.projectId,
       authorId: id.userId,
       mode: 'group',
       status: 'delivered',
@@ -643,7 +732,7 @@ bridgeRoute.post('/messages', async (c) => {
       text: text.slice(0, 4000),
     })
     .returning()
-  broadcast(id.projectId, 'message', {
+  broadcast(scope.projectId, 'message', {
     id: row!.id,
     mode: 'group',
     status: 'delivered',
@@ -660,10 +749,12 @@ bridgeRoute.post('/messages', async (c) => {
 
 bridgeRoute.get('/resources', async (c) => {
   const id = auth(c as never)
-  const denied = await require(c as never, 'resources.read')
+  const scope = await resolveProject(c as never)
+  if ('error' in scope) return c.json({ error: scope.error }, scope.status)
+  const denied = await require(c as never, 'resources.read', scope.projectId)
   if (denied) return c.json(denied, 403)
   const rows = await db.query.credentials.findMany({
-    where: and(eq(credentials.projectId, id.projectId), isNull(credentials.deletedAt)),
+    where: and(eq(credentials.projectId, scope.projectId), isNull(credentials.deletedAt)),
   })
   return c.json({
     items: rows.map((r: typeof credentials.$inferSelect) => ({ id: r.id, name: r.name, url: r.url, description: r.description })),
@@ -675,9 +766,11 @@ bridgeRoute.get('/resources', async (c) => {
 
 bridgeRoute.get('/files', async (c) => {
   const id = auth(c as never)
-  const denied = await require(c as never, 'files.read')
+  const scope = await resolveProject(c as never)
+  if ('error' in scope) return c.json({ error: scope.error }, scope.status)
+  const denied = await require(c as never, 'files.read', scope.projectId)
   if (denied) return c.json(denied, 403)
-  const conds = [eq(files.projectId, id.projectId), isNull(files.deletedAt), isNull(files.pendingUntil)]
+  const conds = [eq(files.projectId, scope.projectId), isNull(files.deletedAt), isNull(files.pendingUntil)]
   const taskId = c.req.query('taskId')
   if (taskId) conds.push(eq(files.taskId, taskId))
   const q = c.req.query('q')?.trim()
@@ -710,7 +803,9 @@ bridgeRoute.get('/files', async (c) => {
 // эту логику в мосте — гарантированный рассинхрон.
 bridgeRoute.post('/files', async (c) => {
   const id = auth(c as never)
-  const denied = await require(c as never, 'files.upload')
+  const scope = await resolveProject(c as never)
+  if ('error' in scope) return c.json({ error: scope.error }, scope.status)
+  const denied = await require(c as never, 'files.upload', scope.projectId)
   if (denied) return c.json(denied, 403)
 
   const { filesRoute } = await import('./files.js')
@@ -718,7 +813,7 @@ bridgeRoute.post('/files', async (c) => {
   const token = await signProjectToken({
     sub: id.userId,
     email: id.user.email,
-    projectId: id.projectId,
+    projectId: scope.projectId,
     role: 'member',
   })
 
@@ -734,7 +829,7 @@ bridgeRoute.post('/files', async (c) => {
   const payload = (await res.json().catch(() => ({}))) as Record<string, unknown>
   if (res.ok && payload.id) {
     void logActivity({
-      projectId: id.projectId,
+      projectId: scope.projectId,
       actorId: id.userId,
       action: 'create',
       entityType: 'file',
@@ -747,11 +842,13 @@ bridgeRoute.post('/files', async (c) => {
 
 bridgeRoute.get('/files/:id/content', async (c) => {
   const id = auth(c as never)
-  const denied = await require(c as never, 'files.read')
+  const scope = await resolveProject(c as never)
+  if ('error' in scope) return c.json({ error: scope.error }, scope.status)
+  const denied = await require(c as never, 'files.read', scope.projectId)
   if (denied) return c.json(denied, 403)
 
   const file = await db.query.files.findFirst({
-    where: and(eq(files.id, c.req.param('id')), eq(files.projectId, id.projectId)),
+    where: and(eq(files.id, c.req.param('id')), eq(files.projectId, scope.projectId)),
   })
   if (!file || file.deletedAt) return c.json({ error: 'Not found' }, 404)
 
@@ -772,15 +869,17 @@ bridgeRoute.get('/files/:id/content', async (c) => {
 
 bridgeRoute.delete('/files/:id', async (c) => {
   const id = auth(c as never)
-  const denied = await require(c as never, 'files.delete')
+  const scope = await resolveProject(c as never)
+  if ('error' in scope) return c.json({ error: scope.error }, scope.status)
+  const denied = await require(c as never, 'files.delete', scope.projectId)
   if (denied) return c.json(denied, 403)
   const file = await db.query.files.findFirst({
-    where: and(eq(files.id, c.req.param('id')), eq(files.projectId, id.projectId)),
+    where: and(eq(files.id, c.req.param('id')), eq(files.projectId, scope.projectId)),
   })
   if (!file || file.deletedAt) return c.json({ error: 'Not found' }, 404)
   await db.update(files).set({ deletedAt: new Date(), deletedById: id.userId }).where(eq(files.id, file.id))
   void logActivity({
-    projectId: id.projectId,
+    projectId: scope.projectId,
     actorId: id.userId,
     action: 'delete',
     entityType: 'file',
