@@ -17,3 +17,4 @@ out/
 .DS_Store
 *.log
 release/
+apps/api/_ytest.ts
