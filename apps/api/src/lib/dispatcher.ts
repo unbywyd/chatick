@@ -182,7 +182,10 @@ export async function evaluateMessage(messageId: string): Promise<Verdict> {
   const raw = await complete(cfg, {
     system: dispatcherSystem(project, ai, author?.name ?? 'Unknown'),
     user: `${context}\n\nINCOMING MESSAGE (judge only this):\n${msg.text}`,
-    maxTokens: 500,
+    // Ответ содержит reason/questions на языке автора. Кириллица и иврит съедают
+    // в разы больше токенов, чем латиница, и при 500 JSON обрывался на середине —
+    // вердикт hold терялся, сообщение уходило в чат без проверки.
+    maxTokens: 1200,
   })
 
   // Сбой LLM (нет ответа) — это НЕ «сообщение чистое». Чат не блокируем, но
@@ -195,11 +198,27 @@ export async function evaluateMessage(messageId: string): Promise<Verdict> {
 
   const parsed = parseJson<Verdict>(raw)
   if (!parsed || (parsed.verdict !== 'pass' && parsed.verdict !== 'hold')) {
-    // JSON битый, но намерение hold в тексте видно — не даём фильтру протечь
+    // Ответ мог оборваться по лимиту токенов на середине строки. Вердикт и
+    // причина обычно уже пришли — вытаскиваем их, вместо того чтобы пропускать
+    // нарушение только потому, что не закрылась кавычка.
     if (raw && /"verdict"\s*:\s*"hold"/.test(raw)) {
-      return { verdict: 'hold', reason: 'The AI flagged this message but the details were lost. Please rephrase or ask the AI below.' }
+      const reason = raw.match(/"reason"\s*:\s*"((?:[^"\\]|\\.)*)"/)?.[1]
+      const questions = raw.match(/"questions"\s*:\s*"((?:[^"\\]|\\.)*)"/)?.[1]
+      const unescape = (s?: string) => s?.replace(/\\"/g, '"').replace(/\\n/g, '\n')
+      return {
+        verdict: 'hold',
+        reason:
+          unescape(reason) ??
+          'The AI flagged this message but the details were lost. Please rephrase or ask the AI below.',
+        ...(questions ? { questions: unescape(questions) } : {}),
+      }
     }
-    console.error(`[dispatcher] unparseable verdict for project ${msg.projectId} — message passed UNCHECKED`)
+    // так же вытаскиваем усечённый pass, чтобы не помечать его «без проверки»
+    if (raw && /"verdict"\s*:\s*"pass"/.test(raw)) return { verdict: 'pass' }
+
+    console.error(
+      `[dispatcher] unparseable verdict for project ${msg.projectId} — message passed UNCHECKED. Raw: ${String(raw).slice(0, 300)}`,
+    )
     return { verdict: 'pass', unchecked: true }
   }
   return parsed
