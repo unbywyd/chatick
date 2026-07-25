@@ -81,6 +81,36 @@ filesPublicRoute.get('/doc/:documentId/:fileId', async (c) => {
   }
 })
 
+// Стабильная отдача инлайн-картинки внутри приложения (задачи, комментарии).
+// Как и в документах, короткоживущий file-токен не годится: ссылка сохраняется
+// в тексте задачи/комментария навсегда. Авторизация — project-токен в ?t=.
+filesPublicRoute.get('/inline/:fileId', async (c) => {
+  const bearer = c.req.header('Authorization')?.replace(/^Bearer\s+/i, '') ?? c.req.query('t')
+  const payload = bearer ? await verifyToken(bearer) : null
+  if (!payload || payload.typ !== 'project') return c.json({ error: 'Unauthorized' }, 401)
+  if (!(await hasPermission(payload.projectId, payload.sub, 'files.read'))) return c.json({ error: 'Forbidden' }, 403)
+
+  const file = await db.query.files.findFirst({
+    where: and(eq(files.id, c.req.param('fileId')), eq(files.projectId, payload.projectId)),
+  })
+  if (!file || file.deletedAt) return c.json({ error: 'Not found' }, 404)
+
+  try {
+    const store = await resolveStorage(file.projectId)
+    const { body, contentType, contentLength } = await getObjectStream(store, file.key)
+    const web = Readable.toWeb(body) as ReadableStream
+    c.header('Content-Type', contentType || file.mime)
+    c.header('Content-Disposition', `inline; filename*=UTF-8''${encodeURIComponent(file.name)}`)
+    if (contentLength) c.header('Content-Length', String(contentLength))
+    c.header('Cache-Control', 'private, max-age=3600')
+    c.header('Access-Control-Allow-Origin', '*')
+    return c.body(web)
+  } catch (e) {
+    console.error('[files] inline image failed:', e)
+    return c.json({ error: 'Read failed' }, 500)
+  }
+})
+
 // Файлы проекта (таб «Файлы») — project-токен, скоуп жёстко из токена.
 // Загрузка проксируется через API (R2-токен не может ставить CORS на бакет,
 // прямой браузерный PUT недоступен). До 100MB — ок для сервера.

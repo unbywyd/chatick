@@ -8,7 +8,7 @@ import { documents, documentVersions, users } from '../db/schema.js'
 import { requireProject, type ProjectEnv } from '../auth.js'
 import { hasPermission } from './projects.js'
 import { logActivity } from '../lib/audit.js'
-import { sanitizeHtml } from '../lib/sanitize-html.js'
+import { htmlToText, sanitizeHtml } from '../lib/sanitize-html.js'
 import { broadcast } from '../ws.js'
 
 // Документы проекта (SPEC §8.24). Project-токен + отдельный публичный роут по слагу.
@@ -42,7 +42,7 @@ documentsRoute.get('/', async (c) => {
     rows.map((r) => ({
       id: r.d.id,
       title: r.d.title || '—',
-      preview: r.d.content.replace(/[#*_`>\-\[\]]/g, '').slice(0, 160),
+      preview: htmlToText(r.d.content).slice(0, 160),
       publicSlug: r.d.publicSlug,
       updatedAt: r.d.updatedAt,
       author: r.author ? { id: r.author.id, name: r.author.name, avatarUrl: r.author.avatarUrl } : null,

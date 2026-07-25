@@ -3,6 +3,7 @@ import { db } from '../db/client.js'
 import { chatSummaries, credentials, documents, files, messages, projectMembers, projects, resourceSecrets, taskComments, taskGroups, tasks, users } from '../db/schema.js'
 import { hasPermission } from '../routes/projects.js'
 import { snapshot } from '../routes/documents.js'
+import { htmlToText } from './sanitize-html.js'
 import { encrypt } from './crypto.js'
 import { notify, extractMentions } from './notify.js'
 import { projectLlm, complete, validateTask, type ToolDef, type ToolHandler } from './llm.js'
@@ -286,13 +287,14 @@ export function memoryTools(projectId: string, actorUserId: string): { tools: To
     {
       name: 'read_document',
       description:
-        'Read a document by id. LONG DOCUMENTS ARE READ IN CHUNKS: pass offset (characters, default 0) and limit (default 4000, max 8000). The response tells you the total length and whether more remains — call again with a bigger offset to continue.',
+        'Read a document by id. Returns plain text by default — use format="html" only when you need the exact markup to edit it. LONG DOCUMENTS ARE READ IN CHUNKS: pass offset (characters, default 0) and limit (default 4000, max 8000). The response tells you the total length and whether more remains — call again with a bigger offset to continue.',
       parameters: {
         type: 'object',
         properties: {
           id: { type: 'string' },
           offset: { type: 'number', description: 'character offset to start from (default 0)' },
           limit: { type: 'number', description: 'characters to read (default 4000, max 8000)' },
+          format: { type: 'string', enum: ['text', 'html'], description: 'text (default) or html when you need the markup' },
         },
         required: ['id'],
       },
@@ -765,7 +767,13 @@ export function memoryTools(projectId: string, actorUserId: string): { tools: To
         .orderBy(desc(documents.updatedAt))
         .limit(50)
       if (!rows.length) return 'No documents.'
-      return rows.map((d) => `"${d.title || '—'}" (id=${d.id}, ${d.content.length} chars, updated ${d.updatedAt.toISOString().slice(0, 10)})`).join('\n')
+      return rows
+        .map((d) => {
+          const text = htmlToText(d.content)
+          const preview = text.slice(0, 120)
+          return `"${d.title || '—'}" (id=${d.id}, ${text.length} chars, updated ${d.updatedAt.toISOString().slice(0, 10)})${preview ? ` — ${preview}${text.length > 120 ? '…' : ''}` : ''}`
+        })
+        .join('\n')
     },
     read_document: async (args) => {
       if (!(await hasPermission(projectId, actorUserId, 'documents.read'))) return 'PERMISSION DENIED: the author cannot read documents.'
@@ -773,14 +781,18 @@ export function memoryTools(projectId: string, actorUserId: string): { tools: To
         where: and(eq(documents.id, String(args.id ?? '')), eq(documents.projectId, projectId), sql`${documents.deletedAt} is null`),
       })
       if (!d) return 'Document not found.'
-      const total = d.content.length
+      // По умолчанию отдаём простой текст: резать HTML по символам нельзя —
+      // чанк оборвётся посреди тега. HTML нужен только для точечного редактирования.
+      const asHtml = args.format === 'html'
+      const body = asHtml ? d.content : htmlToText(d.content)
+      const total = body.length
       const offset = Math.max(0, Math.floor(Number(args.offset) || 0))
       const limit = Math.min(8000, Math.max(200, Math.floor(Number(args.limit) || 4000)))
-      const chunk = d.content.slice(offset, offset + limit)
+      const chunk = body.slice(offset, offset + limit)
       const end = offset + chunk.length
       const more = end < total
       return [
-        `"${d.title || '—'}" — characters ${offset}..${end} of ${total}${more ? ` (MORE REMAINS: call read_document again with offset=${end})` : ' (end of document)'}`,
+        `"${d.title || '—'}" [${asHtml ? 'HTML' : 'text'}] — characters ${offset}..${end} of ${total}${more ? ` (MORE REMAINS: call read_document again with offset=${end})` : ' (end of document)'}`,
         '',
         chunk,
       ].join('\n')

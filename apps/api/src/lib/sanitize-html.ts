@@ -61,6 +61,24 @@ function cleanAttrs(tag: string, attrsRaw: string): string {
   return out.length ? ' ' + out.join(' ') : ''
 }
 
+// Простой текст из HTML — для превью в списках и для контекста ИИ.
+// Блочные теги превращаются в пробел, чтобы слова не слипались.
+export function htmlToText(html: string): string {
+  return html
+    .replace(/<(script|style)[\s\S]*?<\/\1\s*>/gi, '')
+    .replace(/<br\s*\/?>/gi, ' ')
+    .replace(/<\/(p|div|li|h[1-6]|tr|blockquote|pre)>/gi, ' ')
+    .replace(/<[^>]+>/g, '')
+    .replace(/&nbsp;/gi, ' ')
+    .replace(/&lt;/gi, '<')
+    .replace(/&gt;/gi, '>')
+    .replace(/&quot;/gi, '"')
+    .replace(/&#39;/g, "'")
+    .replace(/&amp;/gi, '&')
+    .replace(/\s+/g, ' ')
+    .trim()
+}
+
 export function sanitizeHtml(html: string): string {
   // вырезаем целиком опасные блоки вместе с содержимым
   const stripped = html.replace(/<(script|style|iframe|object|embed|noscript)[\s\S]*?<\/\1\s*>/gi, '')

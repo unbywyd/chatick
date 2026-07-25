@@ -229,6 +229,17 @@
     background: var(--brand);
     cursor: col-resize;
   }
+  /* инлайн-картинки в задачах и комментариях (SPEC §8.25) */
+  .tiptap-editor img,
+  .tiptap-readonly img,
+  .msg-md img {
+    max-width: 100%;
+    height: auto;
+    border-radius: 6px;
+    display: block;
+    margin: 0.4em 0;
+  }
+  .tiptap-editor img.ProseMirror-selectednode { outline: 2px solid var(--brand) }
   .mention {
     color: var(--brand);
     background: color-mix(in oklab, var(--brand) 12%, transparent);

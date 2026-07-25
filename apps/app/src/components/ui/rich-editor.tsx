@@ -1,4 +1,4 @@
-import { useEffect } from 'react'
+import { useEffect, useRef } from 'react'
 import { useEditor, EditorContent, ReactRenderer } from '@tiptap/react'
 import { BubbleMenu } from '@tiptap/react/menus'
 import StarterKit from '@tiptap/starter-kit'
@@ -7,9 +7,11 @@ import Mention from '@tiptap/extension-mention'
 import Link from '@tiptap/extension-link'
 import TaskList from '@tiptap/extension-task-list'
 import TaskItem from '@tiptap/extension-task-item'
+import Image from '@tiptap/extension-image'
 import tippy, { type Instance } from 'tippy.js'
-import { Bold, Code, Heading2, Italic, Link2, List, ListChecks, ListOrdered, Quote, Strikethrough } from 'lucide-react'
+import { Bold, Code, Heading2, ImageIcon, Italic, Link2, List, ListChecks, ListOrdered, Quote, Strikethrough } from 'lucide-react'
 import { cn } from '@/lib/utils'
+import { stripInlineImageAuth, uploadInlineImage, withInlineImageAuth } from '@/lib/api'
 import { MentionList, type MentionItem, type MentionListRef } from '@/components/chat/MentionList'
 
 export type RichMention = { id: string; label: string; avatarUrl?: string | null }
@@ -79,6 +81,7 @@ export function RichEditor({
   className?: string
   readOnly?: boolean
 }) {
+  const fileRef = useRef<HTMLInputElement>(null)
   const editor = useEditor({
     editable: !readOnly,
     extensions: [
@@ -91,8 +94,9 @@ export function RichEditor({
       Link.configure({ openOnClick: false, HTMLAttributes: { class: 'text-brand underline' } }),
       ...(preset === 'full' ? [TaskList, TaskItem.configure({ nested: true })] : []),
       Mention.configure({ HTMLAttributes: { class: 'mention' }, suggestion: mentionSuggestion(() => mentions) as never }),
+      Image.configure({ inline: false, allowBase64: false, HTMLAttributes: { class: 'inline-doc-image' } }),
     ],
-    content: markdownToHtml(value),
+    content: markdownToHtml(withInlineImageAuth(value)),
     editorProps: {
       attributes: { class: cn('tiptap-editor max-h-[50vh] min-h-16 overflow-y-auto px-3 py-2 text-sm outline-none', className) },
       handleKeyDown: (_v, event) => {
@@ -103,18 +107,48 @@ export function RichEditor({
         }
         return false
       },
+      // вставка картинки из буфера (SPEC §8.25) — загружаем и вставляем ссылкой
+      handlePaste: (_v, event) => {
+        if (readOnly) return false
+        const item = Array.from(event.clipboardData?.items ?? []).find(
+          (i) => i.kind === 'file' && i.type.startsWith('image/'),
+        )
+        const file = item?.getAsFile()
+        if (!file) return false
+        event.preventDefault()
+        void insertImage(file)
+        return true
+      },
+      handleDrop: (_v, event) => {
+        if (readOnly) return false
+        const file = Array.from((event as DragEvent).dataTransfer?.files ?? []).find((f) => f.type.startsWith('image/'))
+        if (!file) return false
+        event.preventDefault()
+        void insertImage(file)
+        return true
+      },
     },
     onUpdate: ({ editor }) => {
       const json = editor.getJSON() as MdNode
-      onChange(serializeToMarkdown(json), collectMentions(json))
+      // токен доступа к картинкам в сохранённый текст попасть не должен
+      onChange(stripInlineImageAuth(serializeToMarkdown(json)), collectMentions(json))
     },
   })
+
+  async function insertImage(file: File) {
+    try {
+      const { url } = await uploadInlineImage(file)
+      editor?.chain().focus().setImage({ src: withInlineImageAuth(url) }).run()
+    } catch {
+      /* тихо: пользователь увидит, что картинка не вставилась */
+    }
+  }
 
   // внешний ресет (после отправки value='') + синхронизация в read-only режиме
   useEffect(() => {
     if (!editor) return
     if (readOnly) {
-      editor.commands.setContent(markdownToHtml(value))
+      editor.commands.setContent(markdownToHtml(withInlineImageAuth(value)))
     } else if (value === '' && !editor.isEmpty) {
       editor.commands.clearContent()
     }
@@ -129,7 +163,7 @@ export function RichEditor({
   }
 
   return (
-    <div className="rounded-md border transition-shadow focus-within:ring-2 focus-within:ring-ring">
+    <div className="relative rounded-md border transition-shadow focus-within:ring-2 focus-within:ring-ring">
       <BubbleMenu editor={editor} className="tiptap-bubble">
         <div className="flex rounded-md border bg-popover p-0.5 shadow-lg">
           <Tool active={editor.isActive('bold')} onClick={() => editor.chain().focus().toggleBold().run()}><Bold className="size-3.5" /></Tool>
@@ -159,8 +193,33 @@ export function RichEditor({
           <Tool active={editor.isActive('taskList')} onClick={() => editor.chain().focus().toggleTaskList().run()}><ListChecks className="size-3.5" /></Tool>
           <Tool active={editor.isActive('blockquote')} onClick={() => editor.chain().focus().toggleBlockquote().run()}><Quote className="size-3.5" /></Tool>
           <Tool active={editor.isActive('codeBlock')} onClick={() => editor.chain().focus().toggleCodeBlock().run()}><Code className="size-3.5" /></Tool>
+          <Tool active={false} onClick={() => fileRef.current?.click()}><ImageIcon className="size-3.5" /></Tool>
         </div>
       )}
+
+      {/* в minimal (комментарии) тулбара нет — картинку кладём кнопкой в углу */}
+      {preset === 'minimal' && (
+        <button
+          type="button"
+          title="Image"
+          onMouseDown={(e) => e.preventDefault()}
+          onClick={() => fileRef.current?.click()}
+          className="absolute end-1.5 top-1.5 z-10 rounded p-1 text-muted-foreground transition-colors hover:bg-secondary hover:text-foreground"
+        >
+          <ImageIcon className="size-3.5" />
+        </button>
+      )}
+
+      <input
+        ref={fileRef}
+        type="file"
+        accept="image/*"
+        hidden
+        onChange={(e) => {
+          if (e.target.files?.[0]) void insertImage(e.target.files[0])
+          e.target.value = ''
+        }}
+      />
 
       <EditorContent editor={editor} />
     </div>
@@ -217,6 +276,8 @@ export function serializeToMarkdown(doc: MdNode): string {
     else if (node.type === 'orderedList') blocks.push((node.content ?? []).map((li, i) => `${i + 1}. ` + inline(li.content?.[0]?.content)).join('\n'))
     else if (node.type === 'taskList')
       blocks.push((node.content ?? []).map((li) => `- [${li.attrs?.checked ? 'x' : ' '}] ` + inline(li.content?.[0]?.content)).join('\n'))
+    // инлайн-изображения (SPEC §8.25): хранятся в markdown как ![alt](src)
+    else if (node.type === 'image' && node.attrs?.src) blocks.push(`![${node.attrs?.alt ?? ''}](${node.attrs.src})`)
   }
   return blocks.join('\n\n').trim()
 }
@@ -238,8 +299,13 @@ function markdownToHtml(md: string): string {
   return md
     .split('\n\n')
     .map((block) => {
+      // одиночная картинка — отдельный блок (иначе Tiptap завернёт её в <p>)
+      const img = block.match(/^!\[([^\]]*)\]\(([^)]+)\)$/)
+      if (img) return `<img src="${esc(img[2]!)}" alt="${esc(img[1] ?? '')}">`
       let b = esc(block)
       b = b.replace(/@\[([^\]]+)\]\(([^)]+)\)/g, '<span data-type="mention" data-id="$2" data-label="$1">@$1</span>')
+      // картинки — строго до ссылок, иначе ссылочная замена съест ![...](...)
+      b = b.replace(/!\[([^\]]*)\]\(([^)]+)\)/g, '<img src="$2" alt="$1">')
       b = b.replace(/\[([^\]]+)\]\(([^)]+)\)/g, '<a href="$2">$1</a>')
       b = b.replace(/\*\*([^*]+)\*\*/g, '<strong>$1</strong>').replace(/\*([^*]+)\*/g, '<em>$1</em>')
       b = b.replace(/~~([^~]+)~~/g, '<s>$1</s>').replace(/`([^`]+)`/g, '<code>$1</code>')
