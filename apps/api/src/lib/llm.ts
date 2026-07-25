@@ -31,7 +31,8 @@ export const LLM_PROVIDERS = {
   },
   deepseek: {
     label: 'DeepSeek',
-    defaultModel: 'deepseek-chat',
+    // deepseek-chat снят провайдером: остались только v4-pro и v4-flash
+    defaultModel: 'deepseek-v4-flash',
     kind: 'openai' as const,
     baseUrl: 'https://api.deepseek.com/v1',
   },

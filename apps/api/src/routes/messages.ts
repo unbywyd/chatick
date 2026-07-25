@@ -230,7 +230,14 @@ messagesRoute.post(
     void (async () => {
       const verdict = await evaluateMessage(row!.id)
       if (verdict.verdict === 'pass') {
-        const [updated] = await db.update(messages).set({ status: 'delivered' }).where(eq(messages.id, row!.id)).returning()
+        // Проверка не отработала (сбой ИИ) — доставляем, но честно помечаем
+        // «без проверки», иначе неработающая модерация выглядит как работающая.
+        const unchecked = verdict.unchecked === true
+        const [updated] = await db
+          .update(messages)
+          .set({ status: 'delivered', ...(unchecked ? { rawSend: true } : {}) })
+          .where(eq(messages.id, row!.id))
+          .returning()
         broadcast(projectId, 'message', serialize(updated!, author, atts.get(row!.id)))
         void notifyChatMentions(projectId, row!.id, text, author)
         broadcast(projectId, 'checking_done', { userId: sub }, { except: sub })

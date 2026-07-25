@@ -153,10 +153,15 @@ function dispatcherSystem(project: { chatRules: string }, ai: AiConfig, authorNa
 }
 
 export type Verdict =
-  | { verdict: 'pass' }
+  // unchecked=true означает «проверка НЕ отработала» (сбой LLM), а не «сообщение чистое»
+  | { verdict: 'pass'; unchecked?: boolean }
   | { verdict: 'hold'; reason: string; questions?: string; suggestion?: string }
 
-/** Оценка входящего группового сообщения. Fail-open: нет LLM / сбой → pass. */
+/**
+ * Оценка входящего группового сообщения.
+ * Fail-open по решению продукта: сбой ИИ не должен блокировать общение команды.
+ * Но такой пропуск помечается unchecked — тихая деградация недопустима.
+ */
 export async function evaluateMessage(messageId: string): Promise<Verdict> {
   const msg = await db.query.messages.findFirst({ where: eq(messages.id, messageId) })
   if (!msg) return { verdict: 'pass' }
@@ -179,13 +184,23 @@ export async function evaluateMessage(messageId: string): Promise<Verdict> {
     user: `${context}\n\nINCOMING MESSAGE (judge only this):\n${msg.text}`,
     maxTokens: 500,
   })
+
+  // Сбой LLM (нет ответа) — это НЕ «сообщение чистое». Чат не блокируем, но
+  // помечаем сообщение как непроверенное, иначе тихая деградация выглядит
+  // как работающая модерация: правила нарушаются, а никто не знает почему.
+  if (raw === null) {
+    console.error(`[dispatcher] LLM unavailable for project ${msg.projectId} — message passed UNCHECKED`)
+    return { verdict: 'pass', unchecked: true }
+  }
+
   const parsed = parseJson<Verdict>(raw)
   if (!parsed || (parsed.verdict !== 'pass' && parsed.verdict !== 'hold')) {
     // JSON битый, но намерение hold в тексте видно — не даём фильтру протечь
     if (raw && /"verdict"\s*:\s*"hold"/.test(raw)) {
       return { verdict: 'hold', reason: 'The AI flagged this message but the details were lost. Please rephrase or ask the AI below.' }
     }
-    return { verdict: 'pass' }
+    console.error(`[dispatcher] unparseable verdict for project ${msg.projectId} — message passed UNCHECKED`)
+    return { verdict: 'pass', unchecked: true }
   }
   return parsed
 }
