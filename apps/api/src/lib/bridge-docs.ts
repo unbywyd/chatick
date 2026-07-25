@@ -152,7 +152,10 @@ ${denied.length ? `\n  NOT ALLOWED: ${denied.join(', ')}\n  Do not attempt these
 ## Chat
 
   GET    /x/messages?limit=50&before=<iso>
-  POST   /x/messages           {"text"}   posts as the human, bypassing the AI dispatcher
+  POST   /x/messages           {"text","attachmentIds?":["<fileId>"]}
+         Posts as the human, bypassing the AI dispatcher.
+         To attach files: upload them with POST /x/files first (without taskId),
+         then pass the returned ids here. Text may be empty if there are files.
 
 ## Resources
 
@@ -222,7 +225,7 @@ Everything below behaves exactly as in a single-project connection, but takes
   GET / POST  /x/sprints?project=<id>
   GET / POST / PATCH / DELETE  /x/documents...?project=<id>
   POST   /x/documents/<id>/append?project=<id>
-  GET / POST  /x/messages?project=<id>
+  GET / POST  /x/messages?project=<id>   POST takes {"text","attachmentIds?"}
   GET    /x/files?project=<id>          POST multipart to upload
   GET    /x/resources?project=<id>      metadata only; secret values never exposed
 

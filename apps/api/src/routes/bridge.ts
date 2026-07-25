@@ -720,7 +720,14 @@ bridgeRoute.post('/messages', async (c) => {
   if ('error' in scope) return c.json({ error: scope.error }, scope.status)
   const b = (await c.req.json().catch(() => ({}))) as Record<string, unknown>
   const text = typeof b.text === 'string' ? b.text.trim() : ''
-  if (!text) return c.json({ error: 'text is required' }, 400)
+  // вложения: как в задачах — сначала POST /x/files, потом их id сюда
+  const attachmentIds = Array.isArray(b.attachmentIds)
+    ? (b.attachmentIds as unknown[]).filter((x): x is string => typeof x === 'string').slice(0, 10)
+    : []
+  if (!text && !attachmentIds.length) {
+    return c.json({ error: 'text or attachmentIds is required' }, 400)
+  }
+
   const [row] = await db
     .insert(messages)
     .values({
@@ -729,9 +736,28 @@ bridgeRoute.post('/messages', async (c) => {
       mode: 'group',
       status: 'delivered',
       rawSend: true, // минуя диспетчер: это уже осмысленное сообщение
-      text: text.slice(0, 4000),
+      text: (text || '📎').slice(0, 4000),
     })
     .returning()
+
+  // Привязываем только свои файлы этого проекта и снимаем временный флаг —
+  // файл становится постоянным, как и при отправке из композера (SPEC §8.17).
+  let attachments: { id: string; name: string; mime: string; size: number }[] = []
+  if (attachmentIds.length) {
+    await db
+      .update(files)
+      .set({ messageId: row!.id, pendingUntil: null })
+      .where(
+        and(
+          inArray(files.id, attachmentIds),
+          eq(files.projectId, scope.projectId),
+          eq(files.uploadedById, id.userId),
+        ),
+      )
+    const rows = await db.select().from(files).where(eq(files.messageId, row!.id))
+    attachments = rows.map((f) => ({ id: f.id, name: f.name, mime: f.mime, size: Number(f.size) }))
+  }
+
   broadcast(scope.projectId, 'message', {
     id: row!.id,
     mode: 'group',
@@ -739,10 +765,11 @@ bridgeRoute.post('/messages', async (c) => {
     text: row!.text,
     replyToId: null,
     createdAt: row!.createdAt,
+    attachments,
     authorId: id.userId,
     author: { id: id.user.id, name: id.user.name, avatarUrl: null },
   })
-  return c.json({ id: row!.id }, 201)
+  return c.json({ id: row!.id, attachments }, 201)
 })
 
 // --- Ресурсы (только метаданные: значения секретов через мост не отдаём) -----
