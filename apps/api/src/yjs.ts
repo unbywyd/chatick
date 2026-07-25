@@ -165,23 +165,36 @@ export function attachYjs(server: Server) {
   })
 
   wss.on('connection', async (ws, req) => {
+    // Обработчик асинхронный (verifyToken + загрузка комнаты), а клиент шлёт
+    // SyncStep1 сразу после open. Без буфера эти кадры теряются и документ
+    // приходит пустым — поэтому копим их с первой же миллисекунды.
+    const pending: Uint8Array[] = []
+    let ready = false
+    const bufferEarly = (data: ArrayBuffer | Buffer) => {
+      if (!ready) pending.push(data instanceof Buffer ? new Uint8Array(data) : new Uint8Array(data))
+    }
+    ws.on('message', bufferEarly)
+
     const url = new URL(req.url ?? '', 'http://localhost')
     const token = url.searchParams.get('token')
     const documentId = url.searchParams.get('doc')
     const payload = token ? await verifyToken(token) : null
 
     if (!payload || payload.typ !== 'project' || !documentId) {
+      pending.length = 0
       ws.close(4001, 'unauthorized')
       return
     }
     // право на запись в документы обязательно — иначе это не co-editing, а инъекция
     if (!(await hasPermission(payload.projectId, payload.sub, 'documents.write'))) {
+      pending.length = 0
       ws.close(4003, 'forbidden')
       return
     }
 
     const room = await getRoom(documentId, payload.projectId)
     if (!room) {
+      pending.length = 0
       ws.close(4004, 'not found')
       return
     }
@@ -207,9 +220,8 @@ export function attachYjs(server: Server) {
       send(ws, encoding.toUint8Array(aEnc))
     }
 
-    ws.on('message', (data: ArrayBuffer | Buffer) => {
+    const handleFrame = (bytes: Uint8Array) => {
       try {
-        const bytes = data instanceof Buffer ? new Uint8Array(data) : new Uint8Array(data)
         const dec = decoding.createDecoder(bytes)
         const type = decoding.readVarUint(dec)
 
@@ -220,14 +232,22 @@ export function attachYjs(server: Server) {
           syncProtocol.readSyncMessage(dec, reply, room.doc, ws)
           if (encoding.length(reply) > 1) send(ws, encoding.toUint8Array(reply))
         } else if (type === MESSAGE_AWARENESS) {
-          // applyAwarenessUpdate с origin=ws: обработчик 'update' ниже запишет
+          // applyAwarenessUpdate с origin=ws: обработчик 'update' выше запишет
           // clientID в набор этого соединения, чтобы убрать курсор при обрыве
           awarenessProtocol.applyAwarenessUpdate(room.awareness, decoding.readVarUint8Array(dec), ws)
         }
       } catch (e) {
         console.error('[yjs] message failed:', e)
       }
-    })
+    }
+
+    // переключаемся с буфера на обычную обработку и проигрываем накопленное
+    ws.off('message', bufferEarly)
+    ready = true
+    ws.on('message', (data: ArrayBuffer | Buffer) =>
+      handleFrame(data instanceof Buffer ? new Uint8Array(data) : new Uint8Array(data)),
+    )
+    for (const frame of pending) handleFrame(frame)
 
     const ping = setInterval(() => {
       if (ws.readyState === WebSocket.OPEN) ws.ping()
