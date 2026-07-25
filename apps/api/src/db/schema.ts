@@ -1,4 +1,4 @@
-import { pgTable, text, timestamp, boolean, uniqueIndex, index, pgEnum, doublePrecision } from 'drizzle-orm/pg-core'
+import { pgTable, text, timestamp, boolean, uniqueIndex, index, integer, pgEnum, doublePrecision } from 'drizzle-orm/pg-core'
 import { nanoid } from 'nanoid'
 
 // ---------------------------------------------------------------------------
@@ -318,7 +318,7 @@ export const documents = pgTable(
     id: id(),
     projectId: text('project_id').notNull().references(() => projects.id, { onDelete: 'cascade' }),
     title: text('title').notNull().default(''),
-    content: text('content').notNull().default(''), // markdown
+    content: text('content').notNull().default(''), // HTML (богатый редактор, SPEC §8.25)
     // публичный доступ по ссылке: null = выключен
     publicSlug: text('public_slug').unique(),
     createdById: text('created_by_id').references(() => users.id, { onDelete: 'set null' }),
@@ -329,6 +329,26 @@ export const documents = pgTable(
     updatedAt: updatedAt(),
   },
   (t) => [index('documents_project_idx').on(t.projectId, t.updatedAt)],
+)
+
+// Версии документа (SPEC §8.25): снапшот контента, история и откат.
+// Пишется не на каждое автосохранение, а при существенном изменении/паузе — см. routes/documents.ts.
+export const documentVersions = pgTable(
+  'document_versions',
+  {
+    id: id(),
+    documentId: text('document_id')
+      .notNull()
+      .references(() => documents.id, { onDelete: 'cascade' }),
+    version: integer('version').notNull(), // порядковый номер внутри документа, с 1
+    title: text('title').notNull().default(''),
+    content: text('content').notNull().default(''),
+    authorId: text('author_id').references(() => users.id, { onDelete: 'set null' }),
+    // помечает снапшот, созданный автоматически перед откатом (чтобы откат тоже был обратим)
+    note: text('note').notNull().default(''),
+    createdAt: createdAt(),
+  },
+  (t) => [index('document_versions_doc_idx').on(t.documentId, t.version)],
 )
 
 // ---------------------------------------------------------------------------

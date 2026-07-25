@@ -12,6 +12,7 @@ type Client = {
   ws: WebSocket
   userId: string
   projectId: string
+  docId?: string // открытый сейчас документ (SPEC §8.25)
 }
 
 type PresenceUser = { id: string; name: string; avatarUrl: string | null }
@@ -106,6 +107,18 @@ async function pushPresence(projectId: string) {
   broadcast(projectId, 'presence', await presenceList(projectId))
 }
 
+// --- Presence внутри документа (SPEC §8.25): кто сейчас открыл документ ---
+async function docPresenceList(projectId: string, docId: string): Promise<PresenceUser[]> {
+  const ids = [...new Set([...(rooms.get(projectId) ?? [])].filter((c) => c.docId === docId).map((c) => c.userId))]
+  if (ids.length === 0) return []
+  const rows = await Promise.all(ids.map((id) => db.query.users.findFirst({ where: eq(users.id, id) })))
+  return rows.filter(Boolean).map((u) => ({ id: u!.id, name: u!.name, avatarUrl: u!.avatarUrl }))
+}
+
+async function pushDocPresence(projectId: string, docId: string) {
+  broadcast(projectId, 'doc_presence', { docId, users: await docPresenceList(projectId, docId) })
+}
+
 export function attachWs(server: Server) {
   const wss = new WebSocketServer({ server, path: '/ws' })
 
@@ -124,10 +137,26 @@ export function attachWs(server: Server) {
     // отдать текущие локи новому клиенту
     for (const l of locksOf(client.projectId)) ws.send(JSON.stringify({ event: 'task_lock', payload: { taskId: l.taskId, user: l.user } }))
 
-    // входящие команды: захват/освобождение/продление лока редактирования задачи
+    // входящие команды: лок редактирования задачи + presence внутри документа
     ws.on('message', (data) => {
       try {
-        const { event, taskId } = JSON.parse(String(data)) as { event?: string; taskId?: string }
+        const { event, taskId, docId } = JSON.parse(String(data)) as { event?: string; taskId?: string; docId?: string }
+
+        // документ открыт/закрыт — обновляем список «кто здесь» (SPEC §8.25)
+        if (event === 'doc_open' && docId) {
+          const prev = client.docId
+          client.docId = docId
+          if (prev && prev !== docId) void pushDocPresence(client.projectId, prev)
+          void pushDocPresence(client.projectId, docId)
+          return
+        }
+        if (event === 'doc_close') {
+          const prev = client.docId
+          client.docId = undefined
+          if (prev) void pushDocPresence(client.projectId, prev)
+          return
+        }
+
         if (!taskId) return
         if (event === 'lock' || event === 'lock_heartbeat') {
           void acquireLock(client, taskId).then((ok) => {
@@ -151,8 +180,10 @@ export function attachWs(server: Server) {
       releaseAllLocksOf(client)
       const set = rooms.get(client.projectId)
       set?.delete(client)
+      const openDoc = client.docId
       if (set?.size === 0) rooms.delete(client.projectId)
       void pushPresence(client.projectId)
+      if (openDoc) void pushDocPresence(client.projectId, openDoc)
     })
     ws.on('error', () => ws.close())
   })

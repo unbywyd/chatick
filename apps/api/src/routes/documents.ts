@@ -4,10 +4,11 @@ import { z } from 'zod'
 import { and, desc, eq, ilike, sql } from 'drizzle-orm'
 import { nanoid } from 'nanoid'
 import { db } from '../db/client.js'
-import { documents, users } from '../db/schema.js'
+import { documents, documentVersions, users } from '../db/schema.js'
 import { requireProject, type ProjectEnv } from '../auth.js'
 import { hasPermission } from './projects.js'
 import { logActivity } from '../lib/audit.js'
+import { sanitizeHtml } from '../lib/sanitize-html.js'
 import { broadcast } from '../ws.js'
 
 // Документы проекта (SPEC §8.24). Project-токен + отдельный публичный роут по слагу.
@@ -91,11 +92,95 @@ documentsRoute.patch(
     if (b.title !== undefined) patch.title = b.title
     if (b.content !== undefined) patch.content = b.content
     const [row] = await db.update(documents).set(patch).where(eq(documents.id, id)).returning()
+    // снапшот версии (сам решает, создавать новую или дописать текущую)
+    void snapshot(id, row!.title, row!.content, sub).catch((e) => console.error('[documents] snapshot failed:', e))
     void logActivity({ projectId, actorId: sub, action: 'update', entityType: 'document', entityId: id, entityLabel: row!.title || '—' })
-    broadcast(projectId, 'documents_changed', {})
+    broadcast(projectId, 'documents_changed', { id }, { except: sub })
     return c.json(serialize(row!))
   },
 )
+
+// --- Версии документа (SPEC §8.25) ---
+
+// Новый снапшот пишем не на каждое автосохранение: только если прошло > VERSION_GAP_MS
+// с последней версии, либо правит другой автор. Иначе история захламляется.
+const VERSION_GAP_MS = 3 * 60_000
+
+export async function snapshot(documentId: string, title: string, content: string, authorId: string, note = '') {
+  const last = await db.query.documentVersions.findFirst({
+    where: eq(documentVersions.documentId, documentId),
+    orderBy: desc(documentVersions.version),
+  })
+  const fresh = last && Date.now() - last.createdAt.getTime() < VERSION_GAP_MS && last.authorId === authorId
+  // ничего не изменилось — версия не нужна
+  if (last && last.content === content && last.title === title) return
+  if (fresh && !note) {
+    // в пределах окна дописываем последнюю версию, а не плодим новые
+    await db.update(documentVersions).set({ title, content }).where(eq(documentVersions.id, last.id))
+    return
+  }
+  await db.insert(documentVersions).values({ documentId, version: (last?.version ?? 0) + 1, title, content, authorId, note })
+}
+
+// Список версий (без контента)
+documentsRoute.get('/:id/versions', async (c) => {
+  const { projectId, sub } = c.get('auth')
+  if (!(await hasPermission(projectId, sub, 'documents.read'))) return c.json({ error: 'Forbidden' }, 403)
+  const id = c.req.param('id')
+  const d = await db.query.documents.findFirst({ where: and(eq(documents.id, id), eq(documents.projectId, projectId)) })
+  if (!d) return c.json({ error: 'Not found' }, 404)
+  const rows = await db
+    .select({ v: documentVersions, author: users })
+    .from(documentVersions)
+    .leftJoin(users, eq(users.id, documentVersions.authorId))
+    .where(eq(documentVersions.documentId, id))
+    .orderBy(desc(documentVersions.version))
+    .limit(100)
+  return c.json(
+    rows.map((r) => ({
+      id: r.v.id,
+      version: r.v.version,
+      title: r.v.title,
+      note: r.v.note,
+      createdAt: r.v.createdAt,
+      size: r.v.content.length,
+      author: r.author ? { id: r.author.id, name: r.author.name, avatarUrl: r.author.avatarUrl } : null,
+    })),
+  )
+})
+
+// Контент конкретной версии (для просмотра/сравнения)
+documentsRoute.get('/:id/versions/:versionId', async (c) => {
+  const { projectId, sub } = c.get('auth')
+  if (!(await hasPermission(projectId, sub, 'documents.read'))) return c.json({ error: 'Forbidden' }, 403)
+  const id = c.req.param('id')
+  const d = await db.query.documents.findFirst({ where: and(eq(documents.id, id), eq(documents.projectId, projectId)) })
+  if (!d) return c.json({ error: 'Not found' }, 404)
+  const v = await db.query.documentVersions.findFirst({
+    where: and(eq(documentVersions.id, c.req.param('versionId')), eq(documentVersions.documentId, id)),
+  })
+  if (!v) return c.json({ error: 'Not found' }, 404)
+  return c.json({ id: v.id, version: v.version, title: v.title, content: v.content, createdAt: v.createdAt })
+})
+
+// Откат к версии — текущее состояние тоже снапшотим, чтобы откат был обратим
+documentsRoute.post('/:id/versions/:versionId/restore', async (c) => {
+  const { projectId, sub } = c.get('auth')
+  if (!(await hasPermission(projectId, sub, 'documents.write'))) return c.json({ error: 'Forbidden' }, 403)
+  const id = c.req.param('id')
+  const d = await db.query.documents.findFirst({ where: and(eq(documents.id, id), eq(documents.projectId, projectId)) })
+  if (!d) return c.json({ error: 'Not found' }, 404)
+  const v = await db.query.documentVersions.findFirst({
+    where: and(eq(documentVersions.id, c.req.param('versionId')), eq(documentVersions.documentId, id)),
+  })
+  if (!v) return c.json({ error: 'Not found' }, 404)
+
+  await snapshot(id, d.title, d.content, sub, `before restore to v${v.version}`)
+  const [row] = await db.update(documents).set({ title: v.title, content: v.content, updatedById: sub }).where(eq(documents.id, id)).returning()
+  void logActivity({ projectId, actorId: sub, action: 'update', entityType: 'document', entityId: id, entityLabel: `${row!.title || '—'} → v${v.version}` })
+  broadcast(projectId, 'documents_changed', { id })
+  return c.json(serialize(row!))
+})
 
 // Публичный доступ по ссылке: включить/выключить
 documentsRoute.post('/:id/share', zValidator('json', z.object({ enabled: z.boolean() })), async (c) => {
@@ -143,15 +228,37 @@ documentsPublicRoute.get('/:slug', async (c) => {
 <title>${esc(d.title || 'Document')}</title>
 <style>
   :root { color-scheme: light dark }
-  body { font: 16px/1.65 system-ui, sans-serif; max-width: 46rem; margin: 0 auto; padding: 2.5rem 1.25rem 4rem }
+  body { font: 16px/1.7 system-ui, -apple-system, Segoe UI, sans-serif; max-width: 48rem; margin: 0 auto; padding: 2.5rem 1.25rem 4rem }
   h1 { font-size: 1.9rem; line-height: 1.2; margin: 0 0 .35rem }
   .meta { color: #888; font-size: .85rem; margin-bottom: 2rem }
-  .content { white-space: pre-wrap; word-wrap: break-word }
-  footer { margin-top: 3rem; color: #999; font-size: .8rem }
+  .content > :first-child { margin-top: 0 }
+  .content h1, .content h2, .content h3 { line-height: 1.25; margin: 1.6em 0 .5em }
+  .content h1 { font-size: 1.6rem } .content h2 { font-size: 1.3rem } .content h3 { font-size: 1.1rem }
+  .content p, .content ul, .content ol, .content blockquote, .content pre { margin: 0 0 1em }
+  .content img { max-width: 100%; height: auto; border-radius: 6px }
+  .content a { color: #2563eb }
+  .content blockquote { border-left: 3px solid #d0d0d0; margin-left: 0; padding-left: 1rem; color: #666 }
+  .content pre { background: #f4f4f5; padding: .85rem 1rem; border-radius: 6px; overflow-x: auto }
+  .content code { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: .9em }
+  .content mark { background: #fef08a; padding: 0 .15em }
+  .content hr { border: 0; border-top: 1px solid #ddd; margin: 2em 0 }
+  .table-wrap { overflow-x: auto }
+  .content table { border-collapse: collapse; width: 100% }
+  .content th, .content td { border: 1px solid #ddd; padding: .45rem .6rem; text-align: left; vertical-align: top }
+  .content th { background: #f4f4f5; font-weight: 600 }
+  .content ul[data-type="taskList"] { list-style: none; padding-left: .25rem }
+  footer { margin-top: 3rem; color: #999; font-size: .8rem; border-top: 1px solid #e5e5e5; padding-top: 1rem }
+  @media (prefers-color-scheme: dark) {
+    .content pre, .content th { background: #1f1f22 }
+    .content blockquote { border-color: #444; color: #aaa }
+    .content th, .content td { border-color: #333 }
+    .content mark { background: #854d0e; color: #fff }
+    footer { border-color: #2a2a2a }
+  }
 </style>
 <h1>${esc(d.title || 'Document')}</h1>
 <div class="meta">Updated ${d.updatedAt.toISOString().slice(0, 10)}</div>
-<div class="content">${esc(d.content)}</div>
+<div class="content">${sanitizeHtml(d.content)}</div>
 <footer>Shared via Chatick</footer>`
   return c.html(html)
 })

@@ -17,6 +17,26 @@ export function logout() {
   setProjectToken(null)
 }
 
+// Ссылка на изображение внутри документа (SPEC §8.25).
+// В HTML документа сохраняется БЕЗ токена — доступ авторизуется самим документом.
+// Приватный документ в приложении: токен добавляется только на рендере (см. withDocImageAuth).
+export const docImageUrl = (documentId: string, fileId: string) => `${API_URL}/files/doc/${documentId}/${fileId}`
+
+// <img> не умеет слать Authorization → для приватного документа подставляем project-токен в URL.
+// Делается на лету при показе, в сохранённый контент токен не попадает.
+export function withDocImageAuth(html: string): string {
+  const token = getProjectToken()
+  if (!token) return html
+  return html.replace(
+    new RegExp(`(src=")(${API_URL.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}/files/doc/[^"?]+)(")`, 'g'),
+    (_m, a: string, url: string, b: string) => `${a}${url}?t=${encodeURIComponent(token)}${b}`,
+  )
+}
+
+// Обратная операция — снять токен перед сохранением, чтобы он не осел в контенте.
+export const stripDocImageAuth = (html: string) =>
+  html.replace(/(src="[^"]*\/files\/doc\/[^"?]+)\?t=[^"]*(")/g, '$1$2')
+
 export class ApiError extends Error {
   constructor(
     public status: number,

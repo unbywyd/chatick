@@ -132,6 +132,95 @@
     background: none;
     padding: 0;
   }
+  /* редактор документов (SPEC §8.25) — «как в Google Docs» */
+  .doc-editor {
+    font-size: 1rem;
+    line-height: 1.7;
+  }
+  .doc-editor p.is-editor-empty:first-child::before {
+    content: attr(data-placeholder);
+    float: left;
+    color: var(--muted-foreground);
+    pointer-events: none;
+    height: 0;
+  }
+  [dir=rtl] .doc-editor p.is-editor-empty:first-child::before {
+    float: right;
+  }
+  .doc-editor > :first-child {
+    margin-top: 0;
+  }
+  .doc-editor h1 { font-size: 1.7em; font-weight: 700; line-height: 1.25; margin: 1.2em 0 0.4em }
+  .doc-editor h2 { font-size: 1.35em; font-weight: 700; line-height: 1.3; margin: 1.1em 0 0.35em }
+  .doc-editor h3 { font-size: 1.15em; font-weight: 600; line-height: 1.35; margin: 1em 0 0.3em }
+  .doc-editor p { margin: 0 0 0.75em }
+  .doc-editor ul { list-style: disc; padding-inline-start: 1.4em; margin: 0 0 0.75em }
+  .doc-editor ol { list-style: decimal; padding-inline-start: 1.4em; margin: 0 0 0.75em }
+  .doc-editor ul[data-type='taskList'] { list-style: none; padding-inline-start: 0.25em }
+  .doc-editor ul[data-type='taskList'] li { display: flex; gap: 0.5em; align-items: flex-start }
+  .doc-editor blockquote {
+    border-inline-start: 3px solid var(--border);
+    padding-inline-start: 1em;
+    margin: 0 0 0.75em;
+    color: var(--muted-foreground);
+  }
+  .doc-editor code {
+    background: var(--secondary);
+    border-radius: 4px;
+    padding: 0.1em 0.3em;
+    font-size: 0.85em;
+  }
+  .doc-editor pre {
+    background: var(--secondary);
+    border-radius: 8px;
+    padding: 0.7em 0.9em;
+    margin: 0 0 0.75em;
+    overflow-x: auto;
+  }
+  .doc-editor pre code { background: none; padding: 0 }
+  .doc-editor mark { background: color-mix(in oklab, #facc15 55%, transparent); border-radius: 3px; padding: 0 0.15em }
+  .doc-editor hr { border: 0; border-top: 1px solid var(--border); margin: 1.5em 0 }
+  .doc-editor img.doc-image {
+    max-width: 100%;
+    height: auto;
+    border-radius: 8px;
+    display: block;
+    margin: 0.5em 0;
+  }
+  .doc-editor img.ProseMirror-selectednode { outline: 2px solid var(--brand) }
+  /* таблицы */
+  .doc-editor table {
+    border-collapse: collapse;
+    width: 100%;
+    margin: 0 0 0.9em;
+    table-layout: fixed;
+    overflow: hidden;
+  }
+  .doc-editor th,
+  .doc-editor td {
+    border: 1px solid var(--border);
+    padding: 0.4em 0.6em;
+    vertical-align: top;
+    position: relative;
+    min-width: 3em;
+  }
+  .doc-editor th { background: var(--secondary); font-weight: 600; text-align: start }
+  .doc-editor .selectedCell::after {
+    content: '';
+    position: absolute;
+    inset: 0;
+    background: color-mix(in oklab, var(--brand) 14%, transparent);
+    pointer-events: none;
+  }
+  .doc-editor .column-resize-handle {
+    position: absolute;
+    inset-inline-end: -2px;
+    top: 0;
+    bottom: 0;
+    width: 4px;
+    background: var(--brand);
+    cursor: col-resize;
+  }
   .mention {
     color: var(--brand);
     background: color-mix(in oklab, var(--brand) 12%, transparent);

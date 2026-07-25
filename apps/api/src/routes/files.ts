@@ -7,8 +7,8 @@ import { z } from 'zod'
 import sharp from 'sharp'
 import { PutObjectCommand } from '@aws-sdk/client-s3'
 import { db } from '../db/client.js'
-import { files, companies, projects, tasks, users } from '../db/schema.js'
-import { requireProject, signFileToken, verifyFileToken, type ProjectEnv } from '../auth.js'
+import { files, companies, documents, projects, tasks, users } from '../db/schema.js'
+import { requireProject, signFileToken, verifyFileToken, verifyToken, type ProjectEnv } from '../auth.js'
 import { hasPermission } from './projects.js'
 import { logActivity } from '../lib/audit.js'
 import { presignDownload, presignView, getObjectStream, resolveStorage, isCustomStorage, type ResolvedStorage } from '../lib/s3.js'
@@ -37,6 +37,46 @@ filesPublicRoute.get('/:fileId/raw', async (c) => {
     return c.body(web)
   } catch (e) {
     console.error('[files] proxy failed:', e)
+    return c.json({ error: 'Read failed' }, 500)
+  }
+})
+
+// Стабильная отдача изображения, встроенного в документ (SPEC §8.25).
+// file-токен живёт 1 час — для картинок внутри сохранённого HTML он не годится,
+// поэтому доступ авторизуется самим документом: публичный документ → картинки публичны,
+// приватный → нужен project-токен того же проекта.
+filesPublicRoute.get('/doc/:documentId/:fileId', async (c) => {
+  const documentId = c.req.param('documentId')
+  const fileId = c.req.param('fileId')
+
+  const doc = await db.query.documents.findFirst({
+    where: and(eq(documents.id, documentId), sql`${documents.deletedAt} is null`),
+  })
+  if (!doc) return c.json({ error: 'Not found' }, 404)
+
+  // приватный документ — требуем project-токен на тот же проект
+  if (!doc.publicSlug) {
+    const bearer = c.req.header('Authorization')?.replace(/^Bearer\s+/i, '') ?? c.req.query('t')
+    const payload = bearer ? await verifyToken(bearer) : null
+    if (!payload || payload.typ !== 'project' || payload.projectId !== doc.projectId) return c.json({ error: 'Unauthorized' }, 401)
+    if (!(await hasPermission(doc.projectId, payload.sub, 'documents.read'))) return c.json({ error: 'Forbidden' }, 403)
+  }
+
+  const file = await db.query.files.findFirst({ where: and(eq(files.id, fileId), eq(files.projectId, doc.projectId)) })
+  if (!file || file.deletedAt) return c.json({ error: 'Not found' }, 404)
+
+  try {
+    const store = await resolveStorage(file.projectId)
+    const { body, contentType, contentLength } = await getObjectStream(store, file.key)
+    const web = Readable.toWeb(body) as ReadableStream
+    c.header('Content-Type', contentType || file.mime)
+    c.header('Content-Disposition', `inline; filename*=UTF-8''${encodeURIComponent(file.name)}`)
+    if (contentLength) c.header('Content-Length', String(contentLength))
+    c.header('Cache-Control', doc.publicSlug ? 'public, max-age=86400' : 'private, max-age=3600')
+    c.header('Access-Control-Allow-Origin', '*')
+    return c.body(web)
+  } catch (e) {
+    console.error('[files] doc image failed:', e)
     return c.json({ error: 'Read failed' }, 500)
   }
 })

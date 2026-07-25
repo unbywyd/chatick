@@ -2,6 +2,7 @@ import { and, asc, desc, eq, gt, gte, ilike, lte, or, sql } from 'drizzle-orm'
 import { db } from '../db/client.js'
 import { chatSummaries, credentials, documents, files, messages, projectMembers, projects, resourceSecrets, taskComments, taskGroups, tasks, users } from '../db/schema.js'
 import { hasPermission } from '../routes/projects.js'
+import { snapshot } from '../routes/documents.js'
 import { encrypt } from './crypto.js'
 import { notify, extractMentions } from './notify.js'
 import { projectLlm, complete, validateTask, type ToolDef, type ToolHandler } from './llm.js'
@@ -298,7 +299,8 @@ export function memoryTools(projectId: string, actorUserId: string): { tools: To
     },
     {
       name: 'create_document',
-      description: 'Create a project document (markdown content). Requires documents.write.',
+      description:
+        'Create a project document. Content is HTML (the editor is rich text): use <h1>/<h2>/<h3>, <p>, <ul>/<ol>/<li>, <strong>, <em>, <blockquote>, <pre><code>, <table>. Do NOT send markdown. Requires documents.write.',
       parameters: {
         type: 'object',
         properties: { title: { type: 'string' }, content: { type: 'string' } },
@@ -307,7 +309,8 @@ export function memoryTools(projectId: string, actorUserId: string): { tools: To
     },
     {
       name: 'update_document',
-      description: 'Replace a document title and/or its whole content by id. Requires documents.write. For adding to the end use append_to_document.',
+      description:
+        'Replace a document title and/or its whole content by id. Content is HTML, not markdown. Requires documents.write. For adding to the end use append_to_document. Destructive — ask the user to confirm first.',
       parameters: {
         type: 'object',
         properties: { id: { type: 'string' }, title: { type: 'string' }, content: { type: 'string' } },
@@ -316,7 +319,7 @@ export function memoryTools(projectId: string, actorUserId: string): { tools: To
     },
     {
       name: 'append_to_document',
-      description: 'Append markdown to the END of a document (safe for long docs — no need to resend the whole text). Requires documents.write.',
+      description: 'Append HTML to the END of a document (safe for long docs — no need to resend the whole text). Requires documents.write.',
       parameters: { type: 'object', properties: { id: { type: 'string' }, content: { type: 'string' } }, required: ['id', 'content'] },
     },
     {
@@ -802,9 +805,11 @@ export function memoryTools(projectId: string, actorUserId: string): { tools: To
       if (typeof args.title === 'string') patch.title = args.title.slice(0, 300)
       if (typeof args.content === 'string') patch.content = args.content.slice(0, 500_000)
       if (Object.keys(patch).length === 1) return 'Nothing to update.'
+      // правку ИИ обязательно версионируем: перезапись всего документа должна быть обратима
+      await snapshot(d.id, d.title, d.content, actorUserId, 'before AI edit').catch(() => {})
       await db.update(documents).set(patch).where(eq(documents.id, d.id))
       void logActivity({ projectId, actorId: actorUserId, action: 'update', entityType: 'document', entityId: d.id, entityLabel: d.title || '—' })
-      broadcast(projectId, 'documents_changed', {})
+      broadcast(projectId, 'documents_changed', { id: d.id })
       return `Updated document "${d.title || '—'}".`
     },
     append_to_document: async (args) => {
@@ -813,10 +818,11 @@ export function memoryTools(projectId: string, actorUserId: string): { tools: To
       if (!d) return 'Document not found.'
       const add = String(args.content ?? '')
       if (!add) return 'Nothing to append.'
-      const next = `${d.content}${d.content.endsWith('\n') ? '' : '\n\n'}${add}`.slice(0, 500_000)
+      const next = `${d.content}${add}`.slice(0, 500_000)
+      await snapshot(d.id, d.title, d.content, actorUserId, 'before AI append').catch(() => {})
       await db.update(documents).set({ content: next, updatedById: actorUserId }).where(eq(documents.id, d.id))
       void logActivity({ projectId, actorId: actorUserId, action: 'update', entityType: 'document', entityId: d.id, entityLabel: d.title || '—' })
-      broadcast(projectId, 'documents_changed', {})
+      broadcast(projectId, 'documents_changed', { id: d.id })
       return `Appended ${add.length} chars to "${d.title || '—'}".`
     },
     delete_document: async (args) => {

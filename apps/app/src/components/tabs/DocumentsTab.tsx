@@ -2,13 +2,14 @@ import { useEffect, useState } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { useTranslation } from 'react-i18next'
 import { toast } from 'sonner'
-import { ArrowLeft, Download, FileText, Globe, Link2, Plus, Search, Trash2 } from 'lucide-react'
-import { api, API_URL } from '@/lib/api'
+import { ArrowLeft, Download, FileText, Globe, History, Link2, Plus, RotateCcw, Search, Trash2 } from 'lucide-react'
+import { api, API_URL, withDocImageAuth, type Me } from '@/lib/api'
+import { useDocPresence } from '@/hooks/useProjectSocket'
 import { cn } from '@/lib/utils'
 import { Avatar } from '@/components/ui/avatar'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
-import { RichEditor } from '@/components/ui/rich-editor'
+import { DocEditor } from '@/components/documents/DocEditor'
 import { useConfirm } from '@/components/ui/confirm'
 import {
   DropdownMenu,
@@ -150,6 +151,9 @@ function DocumentEditor({
   const [title, setTitle] = useState('')
   const [content, setContent] = useState('')
   const [dirty, setDirty] = useState(false)
+  const [showHistory, setShowHistory] = useState(false)
+  const me = useQuery({ queryKey: ['me'], queryFn: () => api<Me>('/api/v1/auth/me') })
+  const viewers = useDocPresence(projectId, docId, me.data?.id)
 
   useEffect(() => {
     if (doc.data) {
@@ -194,13 +198,21 @@ function DocumentEditor({
     onError: onErr,
   })
 
-  const download = (kind: 'md' | 'html') => {
+  // Экспорт. .doc — это HTML с Word-заголовками: Word открывает его как документ,
+  // сохраняя форматирование (таблицы, списки, картинки) без внешних зависимостей.
+  const download = (kind: 'html' | 'doc') => {
     const safe = (title || 'document').replace(/[^\w\-]+/g, '_').slice(0, 40)
-    const body =
-      kind === 'md'
-        ? `# ${title}\n\n${content}`
-        : `<!doctype html><meta charset="utf-8"><title>${title}</title><body><h1>${title}</h1><pre style="white-space:pre-wrap;font-family:system-ui">${content.replace(/[<>&]/g, (ch) => ({ '<': '&lt;', '>': '&gt;', '&': '&amp;' })[ch]!)}</pre></body>`
-    const blob = new Blob([body], { type: kind === 'md' ? 'text/markdown' : 'text/html' })
+    const esc = (s: string) => s.replace(/[<>&]/g, (ch) => ({ '<': '&lt;', '>': '&gt;', '&': '&amp;' })[ch]!)
+    // картинки должны открыться и вне приложения → отдаём с токеном
+    const body = withDocImageAuth(content)
+    const page = `<!doctype html><html><head><meta charset="utf-8"><title>${esc(title)}</title>
+<style>body{font:16px/1.7 system-ui,sans-serif;max-width:48rem;margin:0 auto;padding:2rem}
+img{max-width:100%;height:auto}table{border-collapse:collapse;width:100%}
+th,td{border:1px solid #ddd;padding:.45rem .6rem;text-align:left}th{background:#f4f4f5}
+blockquote{border-left:3px solid #ccc;margin-left:0;padding-left:1rem;color:#666}
+pre{background:#f4f4f5;padding:.85rem;border-radius:6px;overflow-x:auto}</style>
+</head><body><h1>${esc(title)}</h1>${body}</body></html>`
+    const blob = new Blob([page], { type: kind === 'doc' ? 'application/msword' : 'text/html' })
     const a = document.createElement('a')
     a.href = URL.createObjectURL(blob)
     a.download = `${safe}.${kind}`
@@ -218,6 +230,19 @@ function DocumentEditor({
           <span className="hidden sm:inline">{t('docs.back')}</span>
         </Button>
         {dirty && <span className="text-xs text-muted-foreground">{t('docs.unsaved')}</span>}
+
+        {/* Кто ещё открыл этот документ (SPEC §8.25) */}
+        {viewers.length > 0 && (
+          <div className="flex items-center -space-x-1.5" title={viewers.map((v) => v.name).join(', ')}>
+            {viewers.slice(0, 4).map((v) => (
+              <span key={v.id} className="rounded-full ring-2 ring-background">
+                <Avatar name={v.name} src={v.avatarUrl} size={22} />
+              </span>
+            ))}
+            {viewers.length > 4 && <span className="ps-2.5 text-xs text-muted-foreground">+{viewers.length - 4}</span>}
+          </div>
+        )}
+
         <div className="ms-auto flex items-center gap-1">
           {publicUrl && (
             <Button
@@ -249,17 +274,26 @@ function DocumentEditor({
               </button>
             </DropdownMenuTrigger>
             <DropdownMenuContent align="end">
-              <DropdownMenuItem onSelect={() => download('md')}>Markdown (.md)</DropdownMenuItem>
+              <DropdownMenuItem onSelect={() => download('doc')}>Word (.doc)</DropdownMenuItem>
               <DropdownMenuItem onSelect={() => download('html')}>HTML (.html)</DropdownMenuItem>
             </DropdownMenuContent>
           </DropdownMenu>
+          <Button
+            variant={showHistory ? 'outline' : 'ghost'}
+            size="icon"
+            title={t('docs.history')}
+            onClick={() => setShowHistory((v) => !v)}
+          >
+            <History className="size-4" />
+          </Button>
           <Button variant="ghost" size="icon" title={t('files.delete')} onClick={() => onDelete(docId, title)}>
             <Trash2 className="size-4 text-muted-foreground hover:text-destructive" />
           </Button>
         </div>
       </header>
 
-      <div className="min-h-0 flex-1 overflow-y-auto">
+      <div className="flex min-h-0 flex-1">
+        <div className="min-h-0 flex-1 overflow-y-auto">
         <div className="mx-auto max-w-3xl space-y-3 p-4 sm:p-6">
           <input
             value={title}
@@ -271,19 +305,144 @@ function DocumentEditor({
             className={cn('w-full border-0 bg-transparent text-2xl font-bold outline-none placeholder:text-muted-foreground')}
           />
           {doc.data && (
-            <RichEditor
+            <DocEditor
               value={doc.data.content}
-              onChange={(md) => {
-                setContent(md)
+              onChange={(html) => {
+                setContent(html)
                 setDirty(true)
               }}
               placeholder={t('docs.contentPlaceholder')}
               mentions={members.map((m) => ({ id: m.user.id, label: m.user.name || m.user.email, avatarUrl: m.user.avatarUrl }))}
-              preset="full"
+              projectId={projectId}
+              documentId={docId}
             />
           )}
         </div>
+        </div>
+
+        {showHistory && (
+          <DocHistory
+            docId={docId}
+            projectId={projectId}
+            onClose={() => setShowHistory(false)}
+            onRestored={() => {
+              qc.invalidateQueries({ queryKey: ['document', docId] })
+              qc.invalidateQueries({ queryKey: ['documents', projectId] })
+            }}
+          />
+        )}
       </div>
     </div>
+  )
+}
+
+// --- История версий документа (SPEC §8.25) ---
+type DocVersion = {
+  id: string
+  version: number
+  title: string
+  note: string
+  createdAt: string
+  size: number
+  author: { id: string; name: string; avatarUrl: string | null } | null
+}
+
+function DocHistory({
+  docId,
+  projectId,
+  onClose,
+  onRestored,
+}: {
+  docId: string
+  projectId: string
+  onClose: () => void
+  onRestored: () => void
+}) {
+  const { t, i18n } = useTranslation()
+  const confirm = useConfirm()
+  const [preview, setPreview] = useState<{ version: number; content: string } | null>(null)
+
+  const versions = useQuery({
+    queryKey: ['document-versions', docId],
+    queryFn: () => api<DocVersion[]>(`/api/v1/documents/${docId}/versions`, {}, 'project'),
+  })
+
+  const restore = useMutation({
+    mutationFn: (versionId: string) => api(`/api/v1/documents/${docId}/versions/${versionId}/restore`, { method: 'POST' }, 'project'),
+    onSuccess: () => {
+      toast.success(t('docs.restored'))
+      setPreview(null)
+      onRestored()
+      versions.refetch()
+    },
+    onError: (e: unknown) => toast.error(e instanceof Error ? e.message : String(e)),
+  })
+
+  const open = async (v: DocVersion) => {
+    const full = await api<{ content: string }>(`/api/v1/documents/${docId}/versions/${v.id}`, {}, 'project')
+    setPreview({ version: v.version, content: full.content })
+  }
+
+  return (
+    <aside className="flex w-72 shrink-0 flex-col border-s bg-card/50">
+      <div className="flex items-center justify-between border-b px-3 py-2.5">
+        <h2 className="flex items-center gap-1.5 text-sm font-semibold">
+          <History className="size-4" />
+          {t('docs.history')}
+        </h2>
+        <Button variant="ghost" size="sm" onClick={onClose}>
+          {t('docs.close')}
+        </Button>
+      </div>
+
+      <ul className="min-h-0 flex-1 overflow-y-auto p-1.5">
+        {versions.isLoading && <p className="p-3 text-xs text-muted-foreground">…</p>}
+        {(versions.data ?? []).map((v) => (
+          <li key={v.id}>
+            <div className="rounded-md px-2 py-2 transition-colors hover:bg-accent">
+              <button onClick={() => void open(v)} className="w-full text-start">
+                <span className="flex items-center gap-2">
+                  {v.author && <Avatar name={v.author.name} src={v.author.avatarUrl} size={18} />}
+                  <span className="truncate text-xs font-medium">v{v.version}</span>
+                  <span className="ms-auto text-[11px] text-muted-foreground">
+                    {new Date(v.createdAt).toLocaleString(i18n.language, { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' })}
+                  </span>
+                </span>
+                {v.note && <span className="mt-0.5 block truncate text-[11px] text-muted-foreground">{v.note}</span>}
+              </button>
+              <button
+                onClick={async () => {
+                  if (await confirm({ title: t('docs.restoreConfirm', { version: v.version }), confirmLabel: t('docs.restore') }))
+                    restore.mutate(v.id)
+                }}
+                className="mt-1 flex items-center gap-1 text-[11px] text-muted-foreground hover:text-brand"
+              >
+                <RotateCcw className="size-3" />
+                {t('docs.restore')}
+              </button>
+            </div>
+          </li>
+        ))}
+        {versions.data && versions.data.length === 0 && <p className="p-3 text-xs text-muted-foreground">{t('docs.noVersions')}</p>}
+      </ul>
+
+      {/* Просмотр содержимого выбранной версии */}
+      {preview && (
+        <div className="fixed inset-0 z-50 grid place-items-center bg-black/40 p-4" onClick={() => setPreview(null)}>
+          <div className="flex max-h-[80vh] w-full max-w-2xl flex-col rounded-xl border bg-card shadow-xl" onClick={(e) => e.stopPropagation()}>
+            <div className="flex items-center justify-between border-b px-4 py-2.5">
+              <h3 className="text-sm font-semibold">v{preview.version}</h3>
+              <Button variant="ghost" size="sm" onClick={() => setPreview(null)}>
+                {t('docs.close')}
+              </Button>
+            </div>
+            <div
+              className="tiptap-readonly min-h-0 flex-1 overflow-y-auto p-4"
+              dangerouslySetInnerHTML={{ __html: withDocImageAuth(preview.content) }}
+            />
+          </div>
+        </div>
+      )}
+    </aside>
   )
 }

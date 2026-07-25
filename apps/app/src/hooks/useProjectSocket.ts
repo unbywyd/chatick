@@ -30,6 +30,7 @@ export type SocketEvents = {
   onMessageDeleted?: (p: { messageId: string }) => void
   onTaskLock?: (p: TaskLockEvent) => void
   onTaskLockDenied?: (p: { taskId: string }) => void
+  onDocPresence?: (p: { docId: string; users: PresenceUser[] }) => void
 }
 
 // Realtime проекта: presence + сообщения + пайплайн-события. Реконнект с бэкоффом.
@@ -84,6 +85,15 @@ export function useProjectSocket(projectId: string | undefined, events: SocketEv
           if (event === 'task_lock_denied') {
             eventsRef.current.onTaskLockDenied?.(payload as { taskId: string })
           }
+          // документы: кто-то изменил содержимое / кто открыл документ (SPEC §8.25)
+          if (event === 'documents_changed') {
+            const p = payload as { id?: string }
+            qc.invalidateQueries({ queryKey: ['documents', projectId] })
+            if (p.id) qc.invalidateQueries({ queryKey: ['document', p.id] })
+          }
+          if (event === 'doc_presence') {
+            eventsRef.current.onDocPresence?.(payload as { docId: string; users: PresenceUser[] })
+          }
           // новое in-app уведомление → обновить колокольчик (SPEC §8.22)
           if (event === 'notification') qc.invalidateQueries({ queryKey: ['inbox'] })
         } catch {
@@ -112,6 +122,42 @@ export function useProjectSocket(projectId: string | undefined, events: SocketEv
     const ws = wsRef.current
     if (ws && ws.readyState === WebSocket.OPEN) ws.send(JSON.stringify({ event, taskId }))
   }
+  const sendDoc = (event: 'doc_open' | 'doc_close', docId: string) => {
+    const ws = wsRef.current
+    if (ws && ws.readyState === WebSocket.OPEN) ws.send(JSON.stringify({ event, docId }))
+  }
 
-  return { online, connected, lockTask: (id: string) => sendLock('lock', id), unlockTask: (id: string) => sendLock('unlock', id), heartbeatLock: (id: string) => sendLock('lock_heartbeat', id) }
+  return {
+    online,
+    connected,
+    lockTask: (id: string) => sendLock('lock', id),
+    unlockTask: (id: string) => sendLock('unlock', id),
+    heartbeatLock: (id: string) => sendLock('lock_heartbeat', id),
+    openDoc: (id: string) => sendDoc('doc_open', id),
+    closeDoc: (id: string) => sendDoc('doc_close', id),
+  }
+}
+
+// Presence внутри одного документа: пока открыт редактор, держим собственный
+// сокет и сообщаем серверу, какой документ смотрим (SPEC §8.25).
+// Себя из списка убираем — показываем «кто ещё здесь».
+export function useDocPresence(projectId: string | undefined, docId: string | undefined, myId?: string): PresenceUser[] {
+  const [viewers, setViewers] = useState<PresenceUser[]>([])
+
+  const { openDoc, closeDoc, connected } = useProjectSocket(docId ? projectId : undefined, {
+    onMessage: () => {},
+    onDocPresence: (p) => {
+      if (p.docId !== docId) return
+      setViewers(myId ? p.users.filter((u) => u.id !== myId) : p.users)
+    },
+  })
+
+  useEffect(() => {
+    if (!docId || !connected) return
+    openDoc(docId)
+    return () => closeDoc(docId)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [docId, connected])
+
+  return viewers
 }

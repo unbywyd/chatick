@@ -136,6 +136,15 @@ importers:
       '@tanstack/react-query':
         specifier: ^5.90.0
         version: 5.101.4(react@19.2.8)
+      '@tiptap/extension-code-block-lowlight':
+        specifier: ^3.29.0
+        version: 3.29.0(@tiptap/core@3.28.0(@tiptap/pm@3.28.0))(@tiptap/extension-code-block@3.28.0(@tiptap/core@3.28.0(@tiptap/pm@3.28.0))(@tiptap/pm@3.28.0))(@tiptap/pm@3.28.0)(highlight.js@11.11.1)(lowlight@3.3.0)
+      '@tiptap/extension-highlight':
+        specifier: ^3.29.0
+        version: 3.29.0(@tiptap/core@3.28.0(@tiptap/pm@3.28.0))
+      '@tiptap/extension-image':
+        specifier: ^3.29.0
+        version: 3.29.0(@tiptap/core@3.28.0(@tiptap/pm@3.28.0))
       '@tiptap/extension-link':
         specifier: ^3.28.0
         version: 3.28.0(@tiptap/core@3.28.0(@tiptap/pm@3.28.0))(@tiptap/pm@3.28.0)
@@ -145,12 +154,21 @@ importers:
       '@tiptap/extension-placeholder':
         specifier: ^3.28.0
         version: 3.28.0(@tiptap/extensions@3.28.0(@tiptap/core@3.28.0(@tiptap/pm@3.28.0))(@tiptap/pm@3.28.0))
+      '@tiptap/extension-table':
+        specifier: ^3.29.0
+        version: 3.29.0(@tiptap/core@3.28.0(@tiptap/pm@3.28.0))(@tiptap/pm@3.28.0)
       '@tiptap/extension-task-item':
         specifier: ^3.28.0
         version: 3.28.0(@tiptap/extension-list@3.28.0(@tiptap/core@3.28.0(@tiptap/pm@3.28.0))(@tiptap/pm@3.28.0))
       '@tiptap/extension-task-list':
         specifier: ^3.28.0
         version: 3.28.0(@tiptap/extension-list@3.28.0(@tiptap/core@3.28.0(@tiptap/pm@3.28.0))(@tiptap/pm@3.28.0))
+      '@tiptap/extension-text-align':
+        specifier: ^3.29.0
+        version: 3.29.0(@tiptap/core@3.28.0(@tiptap/pm@3.28.0))
+      '@tiptap/extension-underline':
+        specifier: ^3.29.0
+        version: 3.29.0(@tiptap/core@3.28.0(@tiptap/pm@3.28.0))
       '@tiptap/react':
         specifier: ^3.28.0
         version: 3.28.0(@floating-ui/dom@1.8.0)(@tiptap/core@3.28.0(@tiptap/pm@3.28.0))(@tiptap/pm@3.28.0)(@types/react-dom@19.2.3(@types/react@19.2.17))(@types/react@19.2.17)(react-dom@19.2.8(react@19.2.8))(react@19.2.8)
@@ -175,6 +193,9 @@ importers:
       i18next-browser-languagedetector:
         specifier: ^8.2.1
         version: 8.2.1
+      lowlight:
+        specifier: ^3.3.0
+        version: 3.3.0
       lucide-react:
         specifier: ^1.25.0
         version: 1.26.0(react@19.2.8)
@@ -2432,6 +2453,15 @@ packages:
     peerDependencies:
       '@tiptap/extension-list': 3.28.0
 
+  '@tiptap/extension-code-block-lowlight@3.29.0':
+    resolution: {integrity: sha512-6nsf1YAq/U/6bjId2PKdd709t5BhcKqIoqm3FInl6zoYWqbN1DcKJjdqfPp2XmSTOx6YT96vLSbBlOPQlFicXA==}
+    peerDependencies:
+      '@tiptap/core': 3.29.0
+      '@tiptap/extension-code-block': 3.29.0
+      '@tiptap/pm': 3.29.0
+      highlight.js: ^11
+      lowlight: ^2 || ^3
+
   '@tiptap/extension-code-block@3.28.0':
     resolution: {integrity: sha512-bHITDzT0umTLh+SiEVQzIXkCMt/TzbPM1+HQy9ZxgQDHAJj/vdmfNAnP3RCOrz4lETXyhNQ2b6kxeu3lWckxyA==}
     peerDependencies:
@@ -2475,11 +2505,21 @@ packages:
     peerDependencies:
       '@tiptap/core': 3.28.0
 
+  '@tiptap/extension-highlight@3.29.0':
+    resolution: {integrity: sha512-4Gcqn8Sg8kAKe+cEHzdXijalV803WUjvloZvlqrTAJmcORFNOipc+r9ylSEmCLb6j0oLc1O7tJXIEX59khNX/A==}
+    peerDependencies:
+      '@tiptap/core': 3.29.0
+
   '@tiptap/extension-horizontal-rule@3.28.0':
     resolution: {integrity: sha512-neBCMWprkppQUoLWyeJZDHqBw+xKX2oNhLD9MbFlhKIr092zgfP4mpCvQnSkn1OHl156KzZMp070+NyLBjgQ7A==}
     peerDependencies:
       '@tiptap/core': 3.28.0
       '@tiptap/pm': 3.28.0
+
+  '@tiptap/extension-image@3.29.0':
+    resolution: {integrity: sha512-A+9Oxsobh4IRWpYj8+y4c0ujhZPY0z9PqvzyuV5GCqiUTRcTRnFI4a4PZDXO/GcCCQXfznfu8gbMtaEyEQW5+w==}
+    peerDependencies:
+      '@tiptap/core': 3.29.0
 
   '@tiptap/extension-italic@3.28.0':
     resolution: {integrity: sha512-Yur/ELz6dNVKQC7m8wGjtoLFxamGjJmA0rUEEOacTH6J39aFmcSxYkEGNDkYHbZFyHFYqbej6eI3VE0h08O0mg==}
@@ -2535,6 +2575,12 @@ packages:
     peerDependencies:
       '@tiptap/core': 3.28.0
 
+  '@tiptap/extension-table@3.29.0':
+    resolution: {integrity: sha512-EwWZ5XDrAx1Us61eq9Gv5EblLmH14l8Al6X2VpFVI00TTu4qDwlW5wfnTsAkfAU0Ri0LyxLYb3lBfOvC8NV7uw==}
+    peerDependencies:
+      '@tiptap/core': 3.29.0
+      '@tiptap/pm': 3.29.0
+
   '@tiptap/extension-task-item@3.28.0':
     resolution: {integrity: sha512-jLOk+CaPR8DzTFe+qdB78OxCPyb2TLISNWGL3zZvDSvngwCuQYYibcAa2L6yYN3bpooNKc3nY+kCfdevI/v21w==}
     peerDependencies:
@@ -2545,15 +2591,20 @@ packages:
     peerDependencies:
       '@tiptap/extension-list': 3.28.0
 
+  '@tiptap/extension-text-align@3.29.0':
+    resolution: {integrity: sha512-/1htV3teqRJ7i7trAuORDg62LV0CQ1qskbMcP3SB7grsw6H1G54zwdaJVXeiIXmQKDF7FoZgY7u/v/TJckthEw==}
+    peerDependencies:
+      '@tiptap/core': 3.29.0
+
   '@tiptap/extension-text@3.28.0':
     resolution: {integrity: sha512-Jqp1LgfY1mnp4TQHoy+vnHyfn6qnnAM6nHgGwbY5zA8b/Xf1Etll6pziTx9p1J1qcfAgSrnjOyAmA++H7VQqww==}
     peerDependencies:
       '@tiptap/core': 3.28.0
 
-  '@tiptap/extension-underline@3.28.0':
-    resolution: {integrity: sha512-rwxCS6vTh2DJkNIYQX7JSrrRSmm76e2y48aZeuZO5ShkvLWMuJ3/zqDHRxAQVDiJhuE2Cp8NrTmPYlUc9YrT0A==}
+  '@tiptap/extension-underline@3.29.0':
+    resolution: {integrity: sha512-DSPTogdvxmoX/L0U5KgBC9jWffRvYkGiyh1tp28gn+QaARh4iJn79pAZpi1m1bEhal/0Mq5m4ukbiO7FWInwaA==}
     peerDependencies:
-      '@tiptap/core': 3.28.0
+      '@tiptap/core': 3.29.0
 
   '@tiptap/extensions@3.28.0':
     resolution: {integrity: sha512-DJT1khCK+O/pT1gQlAnoKAx6zwDkgv7GtnhSfkqm1/4KHC3x+SSJnBIgBl9oGHymA+DxWbW1EULU4V3d/kT2uQ==}
@@ -3630,6 +3681,10 @@ packages:
   hastscript@9.0.1:
     resolution: {integrity: sha512-g7df9rMFX/SPi34tyGCyUBREQoKkapwdY/T04Qn9TDWfHhAYt4/I0gMVirzK5wEzeUqIjEB+LXC/ypb7Aqno5w==}
 
+  highlight.js@11.11.1:
+    resolution: {integrity: sha512-Xwwo44whKBVCYoliBQwaPvtd/2tYFkRQtXDWj1nackaV2JPXx3L0+Jvd8/qCJ2p+ML0/XVkJ2q+Mr+UVdpJK5w==}
+    engines: {node: '>=12.0.0'}
+
   hono@4.12.31:
     resolution: {integrity: sha512-zJIHFrl6bq3RDd2YusFNCDlM8qUprxKswyi/OPzPyzKDdyBXDqWx8bZlZ7R+saTdSTatUmb3O7K4SspGPaEOQg==}
     engines: {node: '>=16.9.0'}
@@ -3898,6 +3953,9 @@ packages:
   lowercase-keys@2.0.0:
     resolution: {integrity: sha512-tqNXrS78oMOE73NMxK4EMLQsQowWf8jKooH9g7xPavRT706R6bkQJ6DY2Te7QukaZsulxa30wQ7bk0pm4XiHmA==}
     engines: {node: '>=8'}
+
+  lowlight@3.3.0:
+    resolution: {integrity: sha512-0JNhgFoPvP6U6lE/UdVsSq99tn6DhjjpAj5MxG49ewd2mOBVtwWYIT8ClyABhq198aXXODMU6Ox8DrGy/CpTZQ==}
 
   lru-cache@11.5.2:
     resolution: {integrity: sha512-4pfM1Ff0x50o0tQwb5ucw/RzNyD0/YJME6IVcStalZuMWxdt3sR3huStTtxz4PUmvZfRguvDejasvQ2kifR11g==}
@@ -7317,6 +7375,14 @@ snapshots:
     dependencies:
       '@tiptap/extension-list': 3.28.0(@tiptap/core@3.28.0(@tiptap/pm@3.28.0))(@tiptap/pm@3.28.0)
 
+  '@tiptap/extension-code-block-lowlight@3.29.0(@tiptap/core@3.28.0(@tiptap/pm@3.28.0))(@tiptap/extension-code-block@3.28.0(@tiptap/core@3.28.0(@tiptap/pm@3.28.0))(@tiptap/pm@3.28.0))(@tiptap/pm@3.28.0)(highlight.js@11.11.1)(lowlight@3.3.0)':
+    dependencies:
+      '@tiptap/core': 3.28.0(@tiptap/pm@3.28.0)
+      '@tiptap/extension-code-block': 3.28.0(@tiptap/core@3.28.0(@tiptap/pm@3.28.0))(@tiptap/pm@3.28.0)
+      '@tiptap/pm': 3.28.0
+      highlight.js: 11.11.1
+      lowlight: 3.3.0
+
   '@tiptap/extension-code-block@3.28.0(@tiptap/core@3.28.0(@tiptap/pm@3.28.0))(@tiptap/pm@3.28.0)':
     dependencies:
       '@tiptap/core': 3.28.0(@tiptap/pm@3.28.0)
@@ -7353,10 +7419,18 @@ snapshots:
     dependencies:
       '@tiptap/core': 3.28.0(@tiptap/pm@3.28.0)
 
+  '@tiptap/extension-highlight@3.29.0(@tiptap/core@3.28.0(@tiptap/pm@3.28.0))':
+    dependencies:
+      '@tiptap/core': 3.28.0(@tiptap/pm@3.28.0)
+
   '@tiptap/extension-horizontal-rule@3.28.0(@tiptap/core@3.28.0(@tiptap/pm@3.28.0))(@tiptap/pm@3.28.0)':
     dependencies:
       '@tiptap/core': 3.28.0(@tiptap/pm@3.28.0)
       '@tiptap/pm': 3.28.0
+
+  '@tiptap/extension-image@3.29.0(@tiptap/core@3.28.0(@tiptap/pm@3.28.0))':
+    dependencies:
+      '@tiptap/core': 3.28.0(@tiptap/pm@3.28.0)
 
   '@tiptap/extension-italic@3.28.0(@tiptap/core@3.28.0(@tiptap/pm@3.28.0))':
     dependencies:
@@ -7403,6 +7477,11 @@ snapshots:
     dependencies:
       '@tiptap/core': 3.28.0(@tiptap/pm@3.28.0)
 
+  '@tiptap/extension-table@3.29.0(@tiptap/core@3.28.0(@tiptap/pm@3.28.0))(@tiptap/pm@3.28.0)':
+    dependencies:
+      '@tiptap/core': 3.28.0(@tiptap/pm@3.28.0)
+      '@tiptap/pm': 3.28.0
+
   '@tiptap/extension-task-item@3.28.0(@tiptap/extension-list@3.28.0(@tiptap/core@3.28.0(@tiptap/pm@3.28.0))(@tiptap/pm@3.28.0))':
     dependencies:
       '@tiptap/extension-list': 3.28.0(@tiptap/core@3.28.0(@tiptap/pm@3.28.0))(@tiptap/pm@3.28.0)
@@ -7411,11 +7490,15 @@ snapshots:
     dependencies:
       '@tiptap/extension-list': 3.28.0(@tiptap/core@3.28.0(@tiptap/pm@3.28.0))(@tiptap/pm@3.28.0)
 
+  '@tiptap/extension-text-align@3.29.0(@tiptap/core@3.28.0(@tiptap/pm@3.28.0))':
+    dependencies:
+      '@tiptap/core': 3.28.0(@tiptap/pm@3.28.0)
+
   '@tiptap/extension-text@3.28.0(@tiptap/core@3.28.0(@tiptap/pm@3.28.0))':
     dependencies:
       '@tiptap/core': 3.28.0(@tiptap/pm@3.28.0)
 
-  '@tiptap/extension-underline@3.28.0(@tiptap/core@3.28.0(@tiptap/pm@3.28.0))':
+  '@tiptap/extension-underline@3.29.0(@tiptap/core@3.28.0(@tiptap/pm@3.28.0))':
     dependencies:
       '@tiptap/core': 3.28.0(@tiptap/pm@3.28.0)
 
@@ -7480,7 +7563,7 @@ snapshots:
       '@tiptap/extension-paragraph': 3.28.0(@tiptap/core@3.28.0(@tiptap/pm@3.28.0))
       '@tiptap/extension-strike': 3.28.0(@tiptap/core@3.28.0(@tiptap/pm@3.28.0))
       '@tiptap/extension-text': 3.28.0(@tiptap/core@3.28.0(@tiptap/pm@3.28.0))
-      '@tiptap/extension-underline': 3.28.0(@tiptap/core@3.28.0(@tiptap/pm@3.28.0))
+      '@tiptap/extension-underline': 3.29.0(@tiptap/core@3.28.0(@tiptap/pm@3.28.0))
       '@tiptap/extensions': 3.28.0(@tiptap/core@3.28.0(@tiptap/pm@3.28.0))(@tiptap/pm@3.28.0)
       '@tiptap/pm': 3.28.0
 
@@ -8807,6 +8890,8 @@ snapshots:
       property-information: 7.2.0
       space-separated-tokens: 2.0.2
 
+  highlight.js@11.11.1: {}
+
   hono@4.12.31: {}
 
   hosted-git-info@4.1.0:
@@ -9007,6 +9092,12 @@ snapshots:
   longest-streak@3.1.0: {}
 
   lowercase-keys@2.0.0: {}
+
+  lowlight@3.3.0:
+    dependencies:
+      '@types/hast': 3.0.5
+      devlop: 1.1.0
+      highlight.js: 11.11.1
 
   lru-cache@11.5.2: {}
 
