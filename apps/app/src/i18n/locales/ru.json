@@ -339,7 +339,11 @@
     "decline": "Отмена"
   },
   "project": {
-    "switch": "К компании"
+    "switch": "К компании",
+    "mobile": {
+      "chat": "Чат",
+      "work": "Работа"
+    }
   },
   "about": {
     "noDescription": "Описания пока нет.",

@@ -1,8 +1,8 @@
-import { useEffect } from 'react'
+import { useEffect, useState } from 'react'
 import { NavLink, Outlet, useNavigate, useOutletContext, useParams } from 'react-router-dom'
 import { useQuery } from '@tanstack/react-query'
 import { useTranslation } from 'react-i18next'
-import { Building2 } from 'lucide-react'
+import { Building2, LayoutGrid, MessagesSquare } from 'lucide-react'
 import { api, getProjectToken, setProjectToken, type Me } from '@/lib/api'
 import { cn } from '@/lib/utils'
 import { ChatPanel } from '@/components/chat/ChatPanel'
@@ -42,6 +42,9 @@ export function ProjectLayout() {
     enabled: Boolean(id),
   })
   const me = useQuery({ queryKey: ['me'], queryFn: () => api<Me>('/api/v1/auth/me') })
+  // Что показываем на узком экране: чат или рабочую область (табы).
+  // На десктопе обе панели видны всегда и это состояние не используется.
+  const [mobileView, setMobileView] = useState<'chat' | 'work'>('work')
 
   const switchProject = () => {
     setProjectToken(null) // сессия жива — назад к выбору без релогина (SPEC §5)
@@ -50,8 +53,17 @@ export function ProjectLayout() {
 
   return (
     <div className="flex h-dvh">
-      {/* Чат — 40%, живёт на всех страницах проекта */}
-      <div className="flex w-[40%] min-w-[320px] flex-col border-e">
+      {/*
+        Чат — 40% на десктопе. На мобильном две панели рядом не помещаются
+        (чат съедал экран, табам оставалась полоска), поэтому показываем
+        что-то одно, с переключателем внизу.
+      */}
+      <div
+        className={cn(
+          'flex-col border-e pb-12 md:flex md:w-[40%] md:min-w-[320px] md:pb-0',
+          mobileView === 'chat' ? 'flex w-full' : 'hidden',
+        )}
+      >
         <ChatPanel
           projectName={project.data?.name}
           aiMode={(project.data?.aiConfig as { mode?: 'observer' | 'assistant' | 'moderator' })?.mode ?? 'assistant'}
@@ -61,8 +73,13 @@ export function ProjectLayout() {
       </div>
 
       {/* Табы — роуты */}
-      <div className="flex min-w-0 flex-1 flex-col">
-        <nav className="flex items-center gap-1 border-b px-4 py-2">
+      <div
+        className={cn(
+          'min-w-0 flex-1 flex-col md:flex',
+          mobileView === 'work' ? 'flex' : 'hidden',
+        )}
+      >
+        <nav className="flex flex-wrap items-center gap-1 border-b px-3 py-2 sm:px-4">
           {TAB_KEYS.map((key) => (
             <NavLink
               key={key}
@@ -98,9 +115,26 @@ export function ProjectLayout() {
             />
           </div>
         </nav>
-        <main className="min-h-0 flex-1 overflow-y-auto">
+        <main className="min-h-0 flex-1 overflow-y-auto pb-12 md:pb-0">
           <Outlet context={{ project: project.data, meId: me.data?.id } satisfies ProjectOutletCtx} />
         </main>
+      </div>
+
+      {/* Переключатель чат / работа — только на мобильном */}
+      <div className="fixed inset-x-0 bottom-0 z-40 flex border-t bg-background/95 backdrop-blur md:hidden">
+        {(['chat', 'work'] as const).map((view) => (
+          <button
+            key={view}
+            onClick={() => setMobileView(view)}
+            className={cn(
+              'flex flex-1 items-center justify-center gap-1.5 py-2.5 text-sm font-medium transition-colors',
+              mobileView === view ? 'text-brand' : 'text-muted-foreground',
+            )}
+          >
+            {view === 'chat' ? <MessagesSquare className="size-4" /> : <LayoutGrid className="size-4" />}
+            {t(`project.mobile.${view}`)}
+          </button>
+        ))}
       </div>
     </div>
   )

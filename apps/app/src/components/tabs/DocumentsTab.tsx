@@ -408,7 +408,13 @@ function DocHistory({
   }
 
   return (
-    <aside className="flex w-72 shrink-0 flex-col border-s bg-card/50">
+    <aside
+      className={cn(
+        'flex flex-col bg-card/50',
+        // мобильный: поверх редактора; десктоп: колонка сбоку
+        'fixed inset-0 z-40 sm:static sm:z-0 sm:w-72 sm:shrink-0 sm:border-s',
+      )}
+    >
       <div className="flex items-center justify-between border-b px-3 py-2.5">
         <h2 className="flex items-center gap-1.5 text-sm font-semibold">
           <History className="size-4" />

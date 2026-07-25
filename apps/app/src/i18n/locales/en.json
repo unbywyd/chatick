@@ -339,7 +339,11 @@
     "decline": "Cancel"
   },
   "project": {
-    "switch": "To company"
+    "switch": "To company",
+    "mobile": {
+      "chat": "Chat",
+      "work": "Workspace"
+    }
   },
   "about": {
     "noDescription": "No description yet.",

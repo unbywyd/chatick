@@ -339,7 +339,11 @@
     "decline": "ביטול"
   },
   "project": {
-    "switch": "לחברה"
+    "switch": "לחברה",
+    "mobile": {
+      "chat": "צ׳אט",
+      "work": "עבודה"
+    }
   },
   "about": {
     "noDescription": "אין עדיין תיאור.",
