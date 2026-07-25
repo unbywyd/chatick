@@ -1,10 +1,10 @@
 import { Hono } from 'hono'
 import { zValidator } from '@hono/zod-validator'
 import { z } from 'zod'
-import { and, eq } from 'drizzle-orm'
+import { and, eq, inArray, isNull, sql } from 'drizzle-orm'
 import { nanoid } from 'nanoid'
 import { db } from '../db/client.js'
-import { companies, companyMembers, projects, projectMembers, projectStorage, users } from '../db/schema.js'
+import { companies, companyMembers, notifications, projects, projectMembers, projectStorage, tasks, users } from '../db/schema.js'
 import { encrypt } from '../lib/crypto.js'
 import { PutObjectCommand, DeleteObjectCommand, S3Client } from '@aws-sdk/client-s3'
 import { requireSession, requireProject, signProjectToken, type SessionEnv, type ProjectEnv } from '../auth.js'
@@ -181,6 +181,49 @@ projectsRoute.get('/', zValidator('query', z.object({ companyId: z.string().min(
   const myByProject = new Map(my.map((m) => [m.projectId, m]))
 
   const visible = canCreateProjects(role) ? all : all.filter((p) => myByProject.has(p.id))
+  const ids = visible.map((p) => p.id)
+
+  // Обзор по проектам (SPEC §8.26): прогресс общий и по моим задачам + мои
+  // непрочитанные уведомления. Три агрегирующих запроса вместо N на проект.
+  type Counts = { total: number; done: number }
+  const overall = new Map<string, Counts>()
+  const mine = new Map<string, Counts>()
+  const unread = new Map<string, number>()
+
+  if (ids.length) {
+    const notDeleted = sql`${tasks.deletedAt} is null`
+    const rows = await db
+      .select({
+        projectId: tasks.projectId,
+        total: sql<number>`count(*)::int`,
+        done: sql<number>`count(*) filter (where ${tasks.status} = 'done')::int`,
+      })
+      .from(tasks)
+      .where(and(inArray(tasks.projectId, ids), notDeleted))
+      .groupBy(tasks.projectId)
+    for (const r of rows) overall.set(r.projectId, { total: r.total, done: r.done })
+
+    const myRows = await db
+      .select({
+        projectId: tasks.projectId,
+        total: sql<number>`count(*)::int`,
+        done: sql<number>`count(*) filter (where ${tasks.status} = 'done')::int`,
+      })
+      .from(tasks)
+      .where(and(inArray(tasks.projectId, ids), eq(tasks.assigneeId, sub), notDeleted))
+      .groupBy(tasks.projectId)
+    for (const r of myRows) mine.set(r.projectId, { total: r.total, done: r.done })
+
+    const notifRows = await db
+      .select({ projectId: notifications.projectId, count: sql<number>`count(*)::int` })
+      .from(notifications)
+      .where(and(inArray(notifications.projectId, ids), eq(notifications.userId, sub), isNull(notifications.readAt)))
+      .groupBy(notifications.projectId)
+    for (const r of notifRows) unread.set(r.projectId, r.count)
+  }
+
+  const pct = (c: Counts | undefined) => (c && c.total > 0 ? Math.round((c.done / c.total) * 100) : 0)
+
   return c.json(
     visible.map((p) => ({
       id: p.id,
@@ -191,6 +234,15 @@ projectsRoute.get('/', zValidator('query', z.object({ companyId: z.string().min(
       isMember: myByProject.has(p.id),
       myRole: myByProject.get(p.id)?.role ?? null,
       rulesAccepted: Boolean(myByProject.get(p.id)?.rulesAcceptedAt),
+      stats: {
+        tasksTotal: overall.get(p.id)?.total ?? 0,
+        tasksDone: overall.get(p.id)?.done ?? 0,
+        progress: pct(overall.get(p.id)),
+        myTotal: mine.get(p.id)?.total ?? 0,
+        myDone: mine.get(p.id)?.done ?? 0,
+        myProgress: pct(mine.get(p.id)),
+        unread: unread.get(p.id) ?? 0,
+      },
     })),
   )
 })

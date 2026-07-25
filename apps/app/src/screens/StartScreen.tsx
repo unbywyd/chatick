@@ -280,6 +280,36 @@ function CompanyHome({
 // Таб «Проекты»: поиск + список + создание с конфигурацией (SPEC §4)
 // ---------------------------------------------------------------------------
 
+// Обзор проекта в списке (SPEC §8.26): общий прогресс + отдельно мои задачи.
+// Свой процент важнее общего — по нему видно, сколько осталось лично тебе.
+function ProjectStats({ stats }: { stats: NonNullable<ProjectListItem['stats']> }) {
+  const { t } = useTranslation()
+  const myLeft = stats.myTotal - stats.myDone
+
+  return (
+    <span className="mt-1.5 block space-y-1">
+      <span className="flex items-center gap-2">
+        <span className="h-1.5 min-w-0 flex-1 overflow-hidden rounded-full bg-secondary">
+          <span
+            className="block h-full rounded-full bg-brand transition-all"
+            style={{ width: `${stats.progress}%` }}
+          />
+        </span>
+        <span className="shrink-0 text-[11px] tabular-nums text-muted-foreground">
+          {stats.tasksDone}/{stats.tasksTotal}
+        </span>
+      </span>
+      <span className="block text-[11px] text-muted-foreground">
+        {stats.myTotal === 0
+          ? t('start.statsNoMine')
+          : myLeft === 0
+            ? t('start.statsMineDone')
+            : t('start.statsMine', { left: myLeft, total: stats.myTotal, pct: stats.myProgress })}
+      </span>
+    </span>
+  )
+}
+
 function ProjectsTab({
   company,
   canManage,
@@ -415,10 +445,19 @@ function ProjectsTab({
                 <FolderKanban className="size-4" />
               </span>
               <span className="min-w-0 flex-1">
-                <span className="block truncate text-sm font-medium">{p.name}</span>
+                <span className="flex items-center gap-2">
+                  <span className="truncate text-sm font-medium">{p.name}</span>
+                  {/* мои непрочитанные уведомления по этому проекту */}
+                  {(p.stats?.unread ?? 0) > 0 && (
+                    <span className="shrink-0 rounded-full bg-brand px-1.5 py-0.5 text-[10px] font-semibold text-brand-foreground">
+                      {p.stats!.unread}
+                    </span>
+                  )}
+                </span>
                 <span className="block text-xs text-muted-foreground">
                   {p.isMember ? t(`roles.${p.myRole}`) : t('start.notMember')}
                 </span>
+                {p.isMember && (p.stats?.tasksTotal ?? 0) > 0 && <ProjectStats stats={p.stats!} />}
               </span>
             </button>
             {/* Админ/менеджер компании видит все проекты, но не состоит в них —

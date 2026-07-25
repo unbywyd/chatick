@@ -29,7 +29,10 @@
     "projectName": "שם הפרויקט",
     "searchProjects": "חיפוש פרויקטים…",
     "nothingFound": "לא נמצא כלום",
-    "joinProject": "הצטרפות"
+    "joinProject": "הצטרפות",
+    "statsMine": "המשימות שלי: נותרו {{left}} מתוך {{total}} ({{pct}}% הושלמו)",
+    "statsMineDone": "כל המשימות שלי הושלמו",
+    "statsNoMine": "אין משימות המשויכות אליי"
   },
   "companyTabs": {
     "projects": "פרויקטים",

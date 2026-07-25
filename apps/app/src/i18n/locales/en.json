@@ -29,7 +29,10 @@
     "projectName": "Project name",
     "searchProjects": "Search projects…",
     "nothingFound": "Nothing found",
-    "joinProject": "Join"
+    "joinProject": "Join",
+    "statsMine": "My tasks: {{left}} of {{total}} left ({{pct}}% done)",
+    "statsMineDone": "All my tasks are done",
+    "statsNoMine": "No tasks assigned to me"
   },
   "companyTabs": {
     "projects": "Projects",
