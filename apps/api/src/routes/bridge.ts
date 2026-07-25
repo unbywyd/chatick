@@ -312,7 +312,9 @@ bridgeRoute.post('/tasks', async (c) => {
     entityLabel: `${row!.number} ${row!.title}`,
   })
   broadcast(id.projectId, 'tasks_changed', {})
-  return c.json(taskView(row!), 201)
+  // подтягиваем исполнителя, чтобы агент сразу видел, на кого задача ушла
+  const who = row!.assigneeId ? await db.query.users.findFirst({ where: eq(users.id, row!.assigneeId) }) : null
+  return c.json(taskView(row!, who), 201)
 })
 
 bridgeRoute.patch('/tasks/:id', async (c) => {
@@ -356,7 +358,8 @@ bridgeRoute.patch('/tasks/:id', async (c) => {
     entityLabel: `${row!.number} ${row!.title}`,
   })
   broadcast(id.projectId, 'tasks_changed', {})
-  return c.json(taskView(row!))
+  const who = row!.assigneeId ? await db.query.users.findFirst({ where: eq(users.id, row!.assigneeId) }) : null
+  return c.json(taskView(row!, who))
 })
 
 bridgeRoute.delete('/tasks/:id', async (c) => {
