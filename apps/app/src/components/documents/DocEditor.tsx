@@ -86,7 +86,6 @@ export function DocEditor({
 
   const editor = useEditor(
     {
-      editable: editable && synced, // до первой синхронизации не даём печатать
       extensions: [
         // history выключаем: с Collaboration за отмену отвечает Yjs (общая история)
         StarterKit.configure({ horizontalRule: { HTMLAttributes: { class: 'doc-hr' } }, undoRedo: false }),
@@ -143,16 +142,35 @@ export function DocEditor({
     [provider, documentId], // пересоздаём редактор при смене документа/провайдера
   )
 
+  // editable зависит от synced, а редактор пересоздаётся только при смене
+  // документа — поэтому переключаем режим императивно, иначе редактор навсегда
+  // остался бы read-only с момента создания.
+  useEffect(() => {
+    editor?.setEditable(Boolean(editable && synced))
+  }, [editor, editable, synced])
+
+  // Имя/цвет для чужих курсоров: `me` приходит асинхронно и обычно позже
+  // создания редактора, поэтому обновляем состояние awareness отдельно.
+  useEffect(() => {
+    if (!editor || !me) return
+    editor.commands.updateUser({ name: me.name || '…', color: userColor(me.id) })
+  }, [editor, me?.id, me?.name])
+
   // Первое наполнение: документ создан до co-editing (или пустая комната) —
   // заливаем HTML-снимок в Y.Doc ОДИН раз. Флаг живёт в самом Y.Doc, поэтому
-  // при одновременном открытии двумя клиентами контент не задвоится.
-  const seededRef = useRef<string | null>(null)
+  // ни повторное открытие, ни одновременный вход двух клиентов не задваивают
+  // контент (ref для этого не годится — он сбрасывается на каждом монтировании).
   useEffect(() => {
-    if (!editor || !provider || !synced || seededRef.current === documentId) return
-    seededRef.current = documentId
+    if (!editor || !provider || !synced) return
     const meta = provider.doc.getMap<boolean>('meta')
+    if (meta.get('seeded')) return
     const empty = provider.doc.getXmlFragment('default').length === 0
-    if (empty && !meta.get('seeded') && value.trim()) {
+    if (!empty) {
+      // контент уже есть (создан до появления флага) — просто помечаем
+      meta.set('seeded', true)
+      return
+    }
+    if (value.trim()) {
       meta.set('seeded', true)
       editor.commands.setContent(withDocImageAuth(value))
     }
