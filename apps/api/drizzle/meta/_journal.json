@@ -218,6 +218,13 @@
       "when": 1784967501077,
       "tag": "0030_youthful_penance",
       "breakpoints": true
+    },
+    {
+      "idx": 31,
+      "version": "7",
+      "when": 1784975293054,
+      "tag": "0031_happy_smasher",
+      "breakpoints": true
     }
   ]
 }

@@ -15,6 +15,7 @@ import { aiRoute } from './routes/ai.js'
 import { activityRoute } from './routes/activity.js'
 import { inboxRoute } from './routes/inbox.js'
 import { documentsRoute, documentsPublicRoute } from './routes/documents.js'
+import { bridgeRoute } from './routes/bridge.js'
 
 export const app = new Hono()
 
@@ -36,12 +37,12 @@ app.route('/api/v1/activity', activityRoute)
 app.route('/api/v1/inbox', inboxRoute)
 app.route('/api/v1/documents', documentsRoute)
 app.route('/d', documentsPublicRoute) // публичный доступ к документу по слагу
+app.route('/x', bridgeRoute) // мост для внешнего ИИ (Claude Code) — SPEC §8.27
 
 // Дальше:
 // app.route('/api/v1/tasks', tasks)         — таск-менеджер
 // app.route('/api/v1/files', files)         — файлы (R2)
 // app.route('/api/v1/credentials', creds)   — кредишены (шифрование)
-// app.route('/mcp', mcp)                    — MCP server (streamable HTTP, api-tokens)
 
 app.notFound((c) => c.json({ error: 'Not found' }, 404))
 app.onError((err, c) => {

@@ -152,3 +152,51 @@ auth.get('/avatar/:userId', async (c) => {
     return c.json({ error: 'Not found' }, 404)
   }
 })
+
+// --- Подтверждение доступа для внешнего ИИ (SPEC §8.27, device flow) --------
+// Человек вводит код в браузере; здесь он видит, что именно одобряет, и выбирает проект.
+
+auth.get('/bridge/code/:code', requireSession, async (c) => {
+  const { lookupUserCode } = await import('../lib/bridge-auth.js')
+  const found = await lookupUserCode(c.req.param('code'))
+  if (!found) return c.json({ error: 'Code not found or expired' }, 404)
+  return c.json({ clientName: found.clientName })
+})
+
+auth.post('/bridge/approve', requireSession, async (c) => {
+  const { sub } = c.get('session')
+  const body = (await c.req.json().catch(() => ({}))) as Record<string, unknown>
+  const code = typeof body.code === 'string' ? body.code : ''
+  const projectId = typeof body.projectId === 'string' ? body.projectId : ''
+  if (!code || !projectId) return c.json({ error: 'code and projectId are required' }, 400)
+
+  // одобрять можно только тот проект, в котором человек реально состоит
+  const { memberDomains } = await import('./projects.js')
+  if (!(await memberDomains(projectId, sub))) return c.json({ error: 'You are not a member of this project' }, 403)
+
+  const { approveUserCode } = await import('../lib/bridge-auth.js')
+  const ok = await approveUserCode(code, sub, projectId)
+  if (!ok) return c.json({ error: 'Code not found or expired' }, 404)
+  return c.json({ ok: true })
+})
+
+auth.post('/bridge/deny', requireSession, async (c) => {
+  const body = (await c.req.json().catch(() => ({}))) as Record<string, unknown>
+  const { denyUserCode } = await import('../lib/bridge-auth.js')
+  await denyUserCode(typeof body.code === 'string' ? body.code : '')
+  return c.json({ ok: true })
+})
+
+// Активные туннели пользователя + закрытие
+auth.get('/bridge/sessions', requireSession, async (c) => {
+  const { sub } = c.get('session')
+  const { listSessions } = await import('../lib/bridge-auth.js')
+  return c.json({ items: await listSessions(sub) })
+})
+
+auth.delete('/bridge/sessions/:id', requireSession, async (c) => {
+  const { sub } = c.get('session')
+  const { closeSession } = await import('../lib/bridge-auth.js')
+  await closeSession(c.req.param('id'), sub)
+  return c.json({ ok: true })
+})

@@ -710,5 +710,30 @@
     "accepted": "Invite accepted",
     "failedTitle": "Could not accept the invite",
     "goToApp": "Go to Chatick"
+  },
+  "connect": {
+    "title": "AI connection",
+    "back": "Back",
+    "step1Title": "Connect your AI assistant",
+    "step1Hint": "Copy this line and paste it into Claude Code. It will read the guide and ask you to approve access — no token goes through your chat.",
+    "pastePrefix": "Connect to Chatick, read the guide at",
+    "copy": "Copy",
+    "copied": "Copied",
+    "step2Title": "Approve the code",
+    "step2Hint": "Your AI will show a short code. Enter it here to grant access.",
+    "requestsAccess": "is asking for access to your workspace.",
+    "chooseProject": "Project it may work in",
+    "actsAsYou": "It will act as you, limited to your permissions, and every action is recorded in the project history under your name.",
+    "allow": "Allow",
+    "deny": "Deny",
+    "approved": "Access granted",
+    "denied": "Request denied",
+    "badCode": "Code not found or expired",
+    "activeTitle": "Active connections",
+    "activeHint": "A connection dies when closed, after 12h, or after 2h of inactivity.",
+    "lastUsed": "last used",
+    "closeTunnel": "Close",
+    "closed": "Connection closed",
+    "noSessions": "No active connections"
   }
 }

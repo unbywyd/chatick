@@ -663,3 +663,54 @@ export const taskReminders = pgTable(
   },
   (t) => [uniqueIndex('task_reminders_project_idx').on(t.projectId)],
 )
+
+// ---------------------------------------------------------------------------
+// Мост для внешнего ИИ (Claude Code) — SPEC §8.27
+// ---------------------------------------------------------------------------
+
+// Одноразовый код авторизации (device flow, как у gh/heroku/vercel).
+// ИИ получает код, человек подтверждает его в браузере — токен НЕ проходит
+// через историю команд. Код живёт минуты и сгорает при первом обмене.
+export const bridgeAuthCodes = pgTable(
+  'bridge_auth_codes',
+  {
+    id: id(),
+    // короткий код, который ИИ показывает человеку (WXYZ-1234)
+    userCode: text('user_code').notNull().unique(),
+    // длинный секрет, по которому ИИ опрашивает статус — человеку не показывается
+    deviceCode: text('device_code').notNull().unique(),
+    status: text('status').notNull().default('pending'), // pending | approved | denied
+    // заполняются в момент подтверждения человеком
+    userId: text('user_id').references(() => users.id, { onDelete: 'cascade' }),
+    projectId: text('project_id').references(() => projects.id, { onDelete: 'cascade' }),
+    // как ИИ представился — показываем человеку, чтобы он понимал, что одобряет
+    clientName: text('client_name').notNull().default('AI assistant'),
+    expiresAt: timestamp('expires_at', { withTimezone: true }).notNull(),
+    createdAt: createdAt(),
+  },
+  (t) => [index('bridge_auth_codes_expiry_idx').on(t.expiresAt)],
+)
+
+// Открытый туннель = живой токен. Закрыли туннель — токен мёртв.
+// Постоянных токенов в системе нет: утёкшая строка бесполезна после закрытия.
+export const bridgeSessions = pgTable(
+  'bridge_sessions',
+  {
+    id: id(),
+    // хэш токена, не сам токен: утечка дампа БД не даёт доступа
+    tokenHash: text('token_hash').notNull().unique(),
+    userId: text('user_id')
+      .notNull()
+      .references(() => users.id, { onDelete: 'cascade' }),
+    projectId: text('project_id')
+      .notNull()
+      .references(() => projects.id, { onDelete: 'cascade' }),
+    clientName: text('client_name').notNull().default('AI assistant'),
+    // туннель сам закрывается после простоя — забытая сессия не живёт вечно
+    lastUsedAt: timestamp('last_used_at', { withTimezone: true }).notNull().defaultNow(),
+    expiresAt: timestamp('expires_at', { withTimezone: true }).notNull(),
+    revokedAt: timestamp('revoked_at', { withTimezone: true }),
+    createdAt: createdAt(),
+  },
+  (t) => [index('bridge_sessions_user_idx').on(t.userId, t.revokedAt)],
+)

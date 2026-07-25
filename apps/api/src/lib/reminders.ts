@@ -4,6 +4,7 @@ import { taskReminders, tasks, projects, projectMembers, users } from '../db/sch
 import { sendTaskReminderMail } from './mails.js'
 import { env } from '../env.js'
 import { sweepPendingFiles, sweepSoftDeleted } from './file-cleanup.js'
+import { sweepBridge } from './bridge-auth.js'
 import { sendDailyDigests } from './digest.js'
 
 // Планировщик напоминаний об открытых задачах (SPEC §8.9).
@@ -130,6 +131,7 @@ export function startReminderScheduler() {
       void tick()
       void sweepPendingFiles() // чистим просроченные временные вложения (SPEC §8.17)
       void sweepSoftDeleted() // окончательно удаляем корзину старше 7 дней (SPEC §8.21)
+      void sweepBridge() // закрываем протухшие туннели внешнего ИИ (SPEC §8.27)
       void sendDailyDigests() // суточный email-дайджест непрочитанных (SPEC §8.22)
     }, TICK_MS)
   }, 60_000)
