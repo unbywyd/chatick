@@ -150,11 +150,13 @@ export function DocEditor({
   }, [editor, editable, synced])
 
   // Имя/цвет для чужих курсоров: `me` приходит асинхронно и обычно позже
-  // создания редактора, поэтому обновляем состояние awareness отдельно.
+  // создания редактора. Пишем прямо в awareness, а не через команду
+  // editor.commands.updateUser — её регистрирует CollaborationCaret, и на
+  // первом рендере (провайдера ещё нет) команды не существует.
   useEffect(() => {
-    if (!editor || !me) return
-    editor.commands.updateUser({ name: me.name || '…', color: userColor(me.id) })
-  }, [editor, me?.id, me?.name])
+    if (!provider || !me) return
+    provider.awareness.setLocalStateField('user', { name: me.name || '…', color: userColor(me.id) })
+  }, [provider, me?.id, me?.name])
 
   // Первое наполнение: документ создан до co-editing (или пустая комната) —
   // заливаем HTML-снимок в Y.Doc ОДИН раз. Флаг живёт в самом Y.Doc, поэтому
