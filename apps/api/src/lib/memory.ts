@@ -1,4 +1,4 @@
-import { and, asc, desc, eq, gt, gte, ilike, lte, or, sql } from 'drizzle-orm'
+import { and, asc, desc, eq, gt, gte, ilike, inArray, lte, or, sql } from 'drizzle-orm'
 import { db } from '../db/client.js'
 import { chatSummaries, credentials, documents, files, messages, projectMembers, projects, resourceSecrets, taskComments, taskGroups, tasks, users } from '../db/schema.js'
 import { hasPermission } from '../routes/projects.js'
@@ -186,6 +186,88 @@ export function memoryTools(projectId: string, actorUserId: string): { tools: To
       description: 'Delete a task by number. Requires tasks.delete.',
       parameters: { type: 'object', properties: { number: { type: 'string' } }, required: ['number'] },
     },
+    // --- Пакетные операции: одна задача за вызов упирается в лимит шагов ---
+    {
+      name: 'create_tasks',
+      description:
+        'Create SEVERAL tasks in one call (max 50). Prefer this over calling create_task repeatedly. Each item takes the same fields as create_task. Requires tasks.create. ALWAYS set estimateMinutes on each item.',
+      parameters: {
+        type: 'object',
+        properties: {
+          tasks: {
+            type: 'array',
+            description: 'Tasks to create',
+            items: {
+              type: 'object',
+              properties: {
+                title: { type: 'string' },
+                description: { type: 'string' },
+                priority: { type: 'string', enum: ['low', 'normal', 'high', 'urgent'] },
+                status: { type: 'string', enum: ['todo', 'in_progress', 'review', 'done'] },
+                assignee: { type: 'string' },
+                dueDate: { type: 'string' },
+                estimateMinutes: { type: 'number' },
+                sprint: { type: 'string' },
+              },
+              required: ['title'],
+            },
+          },
+        },
+        required: ['tasks'],
+      },
+    },
+    {
+      name: 'update_tasks',
+      description:
+        'Update SEVERAL tasks in one call (max 50). Either pass explicit numbers, or a filter to select them. The same changes apply to every selected task. Requires tasks.edit (status-only needs tasks.changeStatus). DESTRUCTIVE-ish: list the affected task numbers to the user and get explicit confirmation BEFORE calling this.',
+      parameters: {
+        type: 'object',
+        properties: {
+          numbers: { type: 'array', items: { type: 'string' }, description: 'Task numbers, e.g. ["TASK-1","TASK-2"]' },
+          filter: {
+            type: 'object',
+            description: 'Alternative to numbers: select tasks by criteria',
+            properties: {
+              status: { type: 'string', enum: ['todo', 'in_progress', 'review', 'done'] },
+              assignee: { type: 'string', description: 'member name/email, or "me" for the author' },
+              sprint: { type: 'string', description: 'sprint name' },
+            },
+          },
+          changes: {
+            type: 'object',
+            description: 'What to set on every selected task',
+            properties: {
+              status: { type: 'string', enum: ['todo', 'in_progress', 'review', 'done'] },
+              priority: { type: 'string', enum: ['low', 'normal', 'high', 'urgent'] },
+              assignee: { type: 'string', description: 'member name/email, or "none" to unassign' },
+              dueDate: { type: 'string', description: 'ISO or YYYY-MM-DD, or "none" to clear' },
+              estimateMinutes: { type: 'number' },
+              sprint: { type: 'string', description: 'sprint name, or "none" to remove' },
+            },
+          },
+        },
+        required: ['changes'],
+      },
+    },
+    {
+      name: 'delete_tasks',
+      description:
+        'Delete SEVERAL tasks in one call (max 50, soft-delete, recoverable for 7 days). Requires tasks.delete. DESTRUCTIVE: you MUST list the exact task numbers to the user and receive explicit confirmation before calling this.',
+      parameters: {
+        type: 'object',
+        properties: {
+          numbers: { type: 'array', items: { type: 'string' } },
+          filter: {
+            type: 'object',
+            properties: {
+              status: { type: 'string', enum: ['todo', 'in_progress', 'review', 'done'] },
+              assignee: { type: 'string' },
+              sprint: { type: 'string' },
+            },
+          },
+        },
+      },
+    },
     // --- Ресурсы (SPEC §8.1) --- значения секретов НИКОГДА не читаются ИИ
     {
       name: 'list_resources',
@@ -333,6 +415,98 @@ export function memoryTools(projectId: string, actorUserId: string): { tools: To
 
   const findTask = (number: string) =>
     db.query.tasks.findFirst({ where: and(eq(tasks.projectId, projectId), eq(tasks.number, number.toUpperCase()), sql`${tasks.deletedAt} is null`) })
+
+  // Потолок пакетной операции: защищает от «закрой все задачи», понятого слишком
+  // широко, и не даёт одному вызову переписать весь проект.
+  const BATCH_LIMIT = 50
+
+  /**
+   * Выбор задач для пакетной операции: по явным номерам или по фильтру.
+   * Возвращает ошибку текстом, чтобы ИИ понял причину, а не гадал.
+   */
+  async function selectTasks(
+    args: Record<string, unknown>,
+  ): Promise<{ rows: (typeof tasks.$inferSelect)[] } | { error: string }> {
+    const numbers = Array.isArray(args.numbers) ? (args.numbers as unknown[]).map((n) => String(n).toUpperCase()) : []
+    const filter = (args.filter ?? {}) as Record<string, unknown>
+    const hasFilter = Object.keys(filter).length > 0
+
+    if (!numbers.length && !hasFilter) {
+      return { error: 'Specify either "numbers" (task numbers) or a "filter". Refusing to touch every task by accident.' }
+    }
+    if (numbers.length > BATCH_LIMIT) {
+      return { error: `Too many tasks: ${numbers.length}. Maximum per call is ${BATCH_LIMIT} — split into several calls.` }
+    }
+
+    const conds = [eq(tasks.projectId, projectId), sql`${tasks.deletedAt} is null`]
+    if (numbers.length) conds.push(inArray(tasks.number, numbers))
+    if (typeof filter.status === 'string' && ['todo', 'in_progress', 'review', 'done'].includes(filter.status)) {
+      conds.push(eq(tasks.status, filter.status as 'todo'))
+    }
+    if (filter.assignee !== undefined) {
+      const id = String(filter.assignee).toLowerCase() === 'me' ? actorUserId : await resolveAssignee(filter.assignee)
+      conds.push(id ? eq(tasks.assigneeId, id) : sql`${tasks.assigneeId} is null`)
+    }
+    if (filter.sprint !== undefined) {
+      const groupId = await resolveSprint(filter.sprint)
+      conds.push(groupId ? eq(tasks.groupId, groupId) : sql`${tasks.groupId} is null`)
+    }
+
+    const rows = await db
+      .select()
+      .from(tasks)
+      .where(and(...conds))
+      .limit(BATCH_LIMIT + 1)
+
+    if (rows.length > BATCH_LIMIT) {
+      return {
+        error: `The filter matched more than ${BATCH_LIMIT} tasks. Narrow it down or pass explicit numbers — refusing to change that many at once.`,
+      }
+    }
+    // о ненайденных номерах сообщаем: молча пропустить — значит соврать про результат
+    if (numbers.length) {
+      const found = new Set(rows.map((r) => r.number))
+      const missing = numbers.filter((n) => !found.has(n))
+      if (missing.length && !rows.length) return { error: `None of these tasks exist: ${missing.join(', ')}.` }
+      if (missing.length) {
+        return { rows, ...({ missing } as object) } as { rows: (typeof tasks.$inferSelect)[] }
+      }
+    }
+    return { rows }
+  }
+
+  /** Создание одной задачи — общий код для create_task и create_tasks. */
+  async function createOneTask(args: Record<string, unknown>): Promise<string> {
+    const [{ next, minSort }] = (await db
+      .select({
+        next: sql<number>`coalesce(max(cast(substring(${tasks.number} from 6) as int)), 0) + 1`,
+        minSort: sql<number>`coalesce(min(${tasks.sortOrder}), 0)`,
+      })
+      .from(tasks)
+      .where(eq(tasks.projectId, projectId))) as [{ next: number; minSort: number }]
+    const assigneeId = await resolveAssignee(args.assignee)
+    const groupId = await resolveSprint(args.sprint)
+    const due = parseDue(args.dueDate)
+    const [row] = await db
+      .insert(tasks)
+      .values({
+        projectId,
+        number: `TASK-${next}`,
+        sortOrder: minSort - 1,
+        title: String(args.title ?? '').slice(0, 300),
+        description: String(args.description ?? '').slice(0, 10_000),
+        priority: (['low', 'normal', 'high', 'urgent'].includes(String(args.priority)) ? args.priority : 'normal') as 'normal',
+        status: (['todo', 'in_progress', 'review', 'done'].includes(String(args.status)) ? args.status : 'todo') as 'todo',
+        assigneeId: assigneeId ?? null,
+        groupId: groupId ?? null,
+        dueDate: due ?? null,
+        estimateMinutes: typeof args.estimateMinutes === 'number' ? String(Math.max(0, Math.round(args.estimateMinutes))) : null,
+        createdById: actorUserId,
+      })
+      .returning()
+    await notifyTaskChange(projectId, actorUserId, row!, { assigned: Boolean(assigneeId), mentions: true })
+    return row!.number
+  }
 
   // разрешить исполнителя по имени/email → userId (или null для «none»/пусто)
   async function resolveAssignee(name: unknown): Promise<string | null | undefined> {
@@ -505,38 +679,10 @@ export function memoryTools(projectId: string, actorUserId: string): { tools: To
     create_task: async (args) => {
       if (!(await hasPermission(projectId, actorUserId, 'tasks.create')))
         return 'PERMISSION DENIED: the author does not have the tasks.create permission. Politely refuse.'
-      const [{ next, minSort }] = (await db
-        .select({
-          next: sql<number>`coalesce(max(cast(substring(${tasks.number} from 6) as int)), 0) + 1`,
-          minSort: sql<number>`coalesce(min(${tasks.sortOrder}), 0)`,
-        })
-        .from(tasks)
-        .where(eq(tasks.projectId, projectId))) as [{ next: number; minSort: number }]
-      const assigneeId = await resolveAssignee(args.assignee)
-      const groupId = await resolveSprint(args.sprint)
-      const due = parseDue(args.dueDate)
-      const [row] = await db
-        .insert(tasks)
-        .values({
-          projectId,
-          number: `TASK-${next}`,
-          sortOrder: minSort - 1,
-          title: String(args.title ?? '').slice(0, 300),
-          description: String(args.description ?? '').slice(0, 10_000),
-          priority: (['low', 'normal', 'high', 'urgent'].includes(String(args.priority)) ? args.priority : 'normal') as 'normal',
-          status: (['todo', 'in_progress', 'review', 'done'].includes(String(args.status)) ? args.status : 'todo') as 'todo',
-          assigneeId: assigneeId ?? null,
-          groupId: groupId ?? null,
-          dueDate: due ?? null,
-          estimateMinutes: typeof args.estimateMinutes === 'number' ? String(Math.max(0, Math.round(args.estimateMinutes))) : null,
-          createdById: actorUserId,
-        })
-        .returning()
-      // уведомление о назначении + упоминаниях в описании
-      await notifyTaskChange(projectId, actorUserId, row!, { assigned: Boolean(assigneeId), mentions: true })
-      const who = assigneeId ? ` → assigned` : ''
+      if (!String(args.title ?? '').trim()) return 'A title is required.'
+      const number = await createOneTask(args)
       broadcast(projectId, 'tasks_changed', {})
-      return `Created ${row!.number}: "${row!.title}"${who}.`
+      return `Created ${number}: "${String(args.title).slice(0, 80)}".`
     },
     update_task: async (args) => {
       const t = await findTask(String(args.number ?? ''))
@@ -592,6 +738,107 @@ export function memoryTools(projectId: string, actorUserId: string): { tools: To
       void logActivity({ projectId, actorId: actorUserId, action: 'delete', entityType: 'task', entityId: t.id, entityLabel: `${t.number}: ${t.title}` })
       broadcast(projectId, 'tasks_changed', {})
       return `Deleted ${t.number} (recoverable for 7 days).`
+    },
+
+    // --- Пакетные операции ---------------------------------------------------
+    // Одна задача за вызов быстро упирается в лимит шагов инструментов, и
+    // цепочка обрывается на середине с частично применёнными изменениями.
+
+    create_tasks: async (args) => {
+      if (!(await hasPermission(projectId, actorUserId, 'tasks.create')))
+        return 'PERMISSION DENIED: the author does not have the tasks.create permission. Politely refuse.'
+      const items = Array.isArray(args.tasks) ? (args.tasks as Record<string, unknown>[]) : []
+      if (!items.length) return 'No tasks provided.'
+      if (items.length > BATCH_LIMIT)
+        return `Too many tasks: ${items.length}. Maximum per call is ${BATCH_LIMIT} — split into several calls.`
+
+      const done: string[] = []
+      const failed: string[] = []
+      for (const item of items) {
+        const title = typeof item.title === 'string' ? item.title.trim() : ''
+        if (!title) {
+          failed.push('(item without a title)')
+          continue
+        }
+        try {
+          const created = await createOneTask(item)
+          done.push(created)
+        } catch (e) {
+          failed.push(`${title}: ${e instanceof Error ? e.message : String(e)}`)
+        }
+      }
+      broadcast(projectId, 'tasks_changed', {})
+      // Отчитываемся и об успехах, и о провалах: ИИ должен знать, что именно не прошло
+      return [
+        done.length ? `Created ${done.length}: ${done.join(', ')}.` : 'Created nothing.',
+        failed.length ? `FAILED ${failed.length}: ${failed.join('; ')}` : '',
+      ]
+        .filter(Boolean)
+        .join(' ')
+    },
+
+    update_tasks: async (args) => {
+      const changes = (args.changes ?? {}) as Record<string, unknown>
+      const onlyStatus = Object.keys(changes).length === 1 && changes.status !== undefined
+      const allowed = onlyStatus
+        ? (await hasPermission(projectId, actorUserId, 'tasks.changeStatus')) ||
+          (await hasPermission(projectId, actorUserId, 'tasks.edit'))
+        : await hasPermission(projectId, actorUserId, 'tasks.edit')
+      if (!allowed) return 'PERMISSION DENIED: the author cannot edit tasks. Politely refuse.'
+
+      const selected = await selectTasks(args)
+      if ('error' in selected) return selected.error
+      if (!selected.rows.length) return 'No tasks matched — nothing was changed.'
+
+      const patch: Record<string, unknown> = {}
+      if (['low', 'normal', 'high', 'urgent'].includes(String(changes.priority))) patch.priority = changes.priority
+      if (['todo', 'in_progress', 'review', 'done'].includes(String(changes.status))) patch.status = changes.status
+      const assigneeId = await resolveAssignee(changes.assignee)
+      if (assigneeId !== undefined) patch.assigneeId = assigneeId
+      const groupId = await resolveSprint(changes.sprint)
+      if (groupId !== undefined) patch.groupId = groupId
+      const due = parseDue(changes.dueDate)
+      if (due !== undefined) patch.dueDate = due
+      if (typeof changes.estimateMinutes === 'number')
+        patch.estimateMinutes = String(Math.max(0, Math.round(changes.estimateMinutes)))
+      if (!Object.keys(patch).length) return 'Nothing to update: "changes" had no recognised fields.'
+
+      const updated: string[] = []
+      for (const t of selected.rows) {
+        const [row] = await db.update(tasks).set(patch).where(eq(tasks.id, t.id)).returning()
+        await notifyTaskChange(projectId, actorUserId, row!, {
+          assigned: assigneeId !== undefined && assigneeId !== t.assigneeId && Boolean(assigneeId),
+          statusChanged: patch.status !== undefined && patch.status !== t.status,
+          mentions: false,
+        })
+        updated.push(t.number)
+      }
+      broadcast(projectId, 'tasks_changed', {})
+      return `Updated ${updated.length} task(s): ${updated.join(', ')}.`
+    },
+
+    delete_tasks: async (args) => {
+      if (!(await hasPermission(projectId, actorUserId, 'tasks.delete')))
+        return 'PERMISSION DENIED: the author does not have the tasks.delete permission. Politely refuse.'
+      const selected = await selectTasks(args)
+      if ('error' in selected) return selected.error
+      if (!selected.rows.length) return 'No tasks matched — nothing was deleted.'
+
+      const deleted: string[] = []
+      for (const t of selected.rows) {
+        await db.update(tasks).set({ deletedAt: new Date(), deletedById: actorUserId }).where(eq(tasks.id, t.id))
+        void logActivity({
+          projectId,
+          actorId: actorUserId,
+          action: 'delete',
+          entityType: 'task',
+          entityId: t.id,
+          entityLabel: `${t.number}: ${t.title}`,
+        })
+        deleted.push(t.number)
+      }
+      broadcast(projectId, 'tasks_changed', {})
+      return `Deleted ${deleted.length} task(s): ${deleted.join(', ')} (recoverable for 7 days).`
     },
 
     // --- Ресурсы ---

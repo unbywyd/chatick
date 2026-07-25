@@ -212,7 +212,30 @@ export async function completeWithTools(
   },
 ): Promise<string | null> {
   const p = LLM_PROVIDERS[cfg.provider]
-  const maxIter = opts.maxIterations ?? 5
+  // 12, а не 5: с пакетными инструментами этого хватает почти всегда, а при
+  // одиночных вызовах короткий лимит обрывал цепочку на середине — часть задач
+  // уже изменена, а пользователь видел пустой ответ.
+  const maxIter = opts.maxIterations ?? 12
+
+  /**
+   * Вызов инструмента. Ошибку возвращаем модели ЧИТАЕМЫМ текстом и пишем в лог:
+   * `Error: [object Object]` не даёт ей понять, чинить запрос или сдаться,
+   * а неизвестный инструмент — это наш баг, который иначе теряется.
+   */
+  const runTool = async (name: string, input: Record<string, unknown>): Promise<string> => {
+    const handler = opts.handlers[name]
+    if (!handler) {
+      console.error('[llm] model called an unknown tool:', name)
+      return `ERROR: tool "${name}" does not exist. Available tools: ${opts.tools.map((t) => t.name).join(', ')}.`
+    }
+    try {
+      return await handler(input)
+    } catch (e) {
+      const detail = e instanceof Error ? e.message : String(e)
+      console.error(`[llm] tool ${name} failed:`, e)
+      return `ERROR while running "${name}": ${detail}. Nothing was changed by this call — tell the user what went wrong.`
+    }
+  }
   try {
     const acc: TokenUsage = { tokensIn: 0, tokensOut: 0 }
     if (p.kind === 'anthropic') {
@@ -245,13 +268,27 @@ export async function completeWithTools(
             .map(async (b) => ({
               type: 'tool_result',
               tool_use_id: b.id,
-              content: (await opts.handlers[b.name]?.(b.input).catch((e) => `Error: ${e}`)) ?? 'Unknown tool',
+              content: await runTool(b.name, b.input),
             })),
         )
         msgs.push({ role: 'user', content: results })
       }
+      // Лимит исчерпан. Молча вернуть null нельзя: часть действий уже выполнена.
+      // Просим модель отчитаться — БЕЗ инструментов, чтобы она не начала заново.
+      msgs.push({
+        role: 'user',
+        content:
+          'TOOL BUDGET EXHAUSTED. Do not call any more tools. Tell the user plainly what you already did, what is left undone, and ask whether to continue.',
+      })
+      const final = await fetch(`${p.baseUrl}/messages`, {
+        method: 'POST',
+        headers: { 'x-api-key': cfg.apiKey, 'anthropic-version': '2023-06-01', 'content-type': 'application/json' },
+        body: JSON.stringify({ model: cfg.model, max_tokens: opts.maxTokens ?? 1500, system: opts.system, messages: msgs }),
+      })
       flushUsage(cfg, acc)
-      return null // не сошлось за maxIter
+      if (!final.ok) return null
+      const fdata = (await final.json()) as { content?: { type: string; text?: string }[] }
+      return fdata.content?.find((b) => b.type === 'text')?.text ?? null
     }
 
     // OpenAI-compatible
@@ -290,12 +327,25 @@ export async function completeWithTools(
         try {
           args = JSON.parse(call.function.arguments || '{}')
         } catch { /* пустые аргументы */ }
-        const result = (await opts.handlers[call.function.name]?.(args).catch((e) => `Error: ${e}`)) ?? 'Unknown tool'
+        const result = await runTool(call.function.name, args)
         msgs.push({ role: 'tool', tool_call_id: call.id, content: result })
       }
     }
+    // то же для OpenAI-совместимых: отчёт вместо тишины
+    msgs.push({
+      role: 'user',
+      content:
+        'TOOL BUDGET EXHAUSTED. Do not call any more tools. Tell the user plainly what you already did, what is left undone, and ask whether to continue.',
+    })
+    const final = await fetch(`${p.baseUrl}/chat/completions`, {
+      method: 'POST',
+      headers: { Authorization: `Bearer ${cfg.apiKey}`, 'content-type': 'application/json' },
+      body: JSON.stringify({ model: cfg.model, max_tokens: opts.maxTokens ?? 1500, messages: msgs }),
+    })
     flushUsage(cfg, acc)
-    return null
+    if (!final.ok) return null
+    const fdata = (await final.json()) as { choices?: { message?: { content?: string } }[] }
+    return fdata.choices?.[0]?.message?.content ?? null
   } catch (err) {
     console.error('[llm] tools error:', err)
     return null
