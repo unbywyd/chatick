@@ -132,6 +132,13 @@
     background: none;
     padding: 0;
   }
+  /* Плавающее меню Tiptap (BubbleMenu) во ВСЕХ редакторах: чат, задачи, документы.
+     Tiptap ставит ему только position:absolute без z-index, поэтому оно уезжает
+     под sticky-панель инструментов. Класс вешается на сам элемент меню. */
+  .tiptap-bubble {
+    z-index: 60;
+  }
+
   /* редактор документов (SPEC §8.25) — «как в Google Docs» */
   .doc-editor {
     font-size: 1rem;
@@ -180,13 +187,14 @@
   .doc-editor pre code { background: none; padding: 0 }
   .doc-editor mark { background: color-mix(in oklab, #facc15 55%, transparent); border-radius: 3px; padding: 0 0.15em }
   .doc-editor hr { border: 0; border-top: 1px solid var(--border); margin: 1.5em 0 }
-  .doc-editor img.doc-image {
+  .doc-editor img {
     max-width: 100%;
     height: auto;
     border-radius: 8px;
     display: block;
-    margin: 0.5em 0;
   }
+  /* обёртка node view — ширина/выравнивание приходят из атрибутов узла */
+  .doc-editor .doc-image-wrap { display: block }
   .doc-editor img.ProseMirror-selectednode { outline: 2px solid var(--brand) }
   /* таблицы */
   .doc-editor table {

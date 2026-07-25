@@ -14,7 +14,7 @@ const ALLOWED_TAGS = new Set([
 // какие атрибуты разрешены у каких тегов
 const ALLOWED_ATTRS: Record<string, Set<string>> = {
   a: new Set(['href', 'title', 'target', 'rel']),
-  img: new Set(['src', 'alt', 'title', 'width', 'height']),
+  img: new Set(['src', 'alt', 'title', 'width', 'height', 'data-align']),
   th: new Set(['colspan', 'rowspan']),
   td: new Set(['colspan', 'rowspan']),
   ol: new Set(['start']),

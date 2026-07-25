@@ -130,8 +130,8 @@ export function RichEditor({
 
   return (
     <div className="rounded-md border transition-shadow focus-within:ring-2 focus-within:ring-ring">
-      <BubbleMenu editor={editor}>
-        <div className="flex rounded-md border bg-popover p-0.5 shadow-md">
+      <BubbleMenu editor={editor} className="tiptap-bubble">
+        <div className="flex rounded-md border bg-popover p-0.5 shadow-lg">
           <Tool active={editor.isActive('bold')} onClick={() => editor.chain().focus().toggleBold().run()}><Bold className="size-3.5" /></Tool>
           <Tool active={editor.isActive('italic')} onClick={() => editor.chain().focus().toggleItalic().run()}><Italic className="size-3.5" /></Tool>
           <Tool active={editor.isActive('strike')} onClick={() => editor.chain().focus().toggleStrike().run()}><Strikethrough className="size-3.5" /></Tool>

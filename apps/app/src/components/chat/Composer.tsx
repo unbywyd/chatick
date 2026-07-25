@@ -305,8 +305,8 @@ export function Composer({
         </div>
       )}
       {/* Контекстное меню форматирования по выделению */}
-      <BubbleMenu editor={editor}>
-        <div className="flex rounded-md border bg-popover p-0.5 shadow-md">
+      <BubbleMenu editor={editor} className="tiptap-bubble">
+        <div className="flex rounded-md border bg-popover p-0.5 shadow-lg">
           <ToolBtn active={editor.isActive('bold')} onClick={() => editor.chain().focus().toggleBold().run()} title="Bold">
             <Bold className="size-3.5" />
           </ToolBtn>

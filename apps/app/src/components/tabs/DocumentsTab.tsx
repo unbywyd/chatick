@@ -207,7 +207,9 @@ function DocumentEditor({
     const body = withDocImageAuth(content)
     const page = `<!doctype html><html><head><meta charset="utf-8"><title>${esc(title)}</title>
 <style>body{font:16px/1.7 system-ui,sans-serif;max-width:48rem;margin:0 auto;padding:2rem}
-img{max-width:100%;height:auto}table{border-collapse:collapse;width:100%}
+img{max-width:100%;height:auto;display:block}
+img[data-align="center"]{margin-inline:auto}img[data-align="right"]{margin-inline-start:auto}
+table{border-collapse:collapse;width:100%}
 th,td{border:1px solid #ddd;padding:.45rem .6rem;text-align:left}th{background:#f4f4f5}
 blockquote{border-left:3px solid #ccc;margin-left:0;padding-left:1rem;color:#666}
 pre{background:#f4f4f5;padding:.85rem;border-radius:6px;overflow-x:auto}</style>
@@ -294,7 +296,7 @@ pre{background:#f4f4f5;padding:.85rem;border-radius:6px;overflow-x:auto}</style>
 
       <div className="flex min-h-0 flex-1">
         <div className="min-h-0 flex-1 overflow-y-auto">
-        <div className="mx-auto max-w-3xl space-y-3 p-4 sm:p-6">
+        <div className="mx-auto w-full max-w-[1400px] space-y-3 p-4 sm:p-6">
           <input
             value={title}
             onChange={(e) => {

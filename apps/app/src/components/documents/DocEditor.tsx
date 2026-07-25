@@ -7,7 +7,6 @@ import Mention from '@tiptap/extension-mention'
 import Link from '@tiptap/extension-link'
 import TaskList from '@tiptap/extension-task-list'
 import TaskItem from '@tiptap/extension-task-item'
-import Image from '@tiptap/extension-image'
 import Underline from '@tiptap/extension-underline'
 import Highlight from '@tiptap/extension-highlight'
 import TextAlign from '@tiptap/extension-text-align'
@@ -40,6 +39,7 @@ import { cn } from '@/lib/utils'
 import { API_URL, docImageUrl, getProjectToken, stripDocImageAuth, withDocImageAuth } from '@/lib/api'
 import { mentionSuggestion, type RichMention } from '@/components/ui/rich-editor'
 import { ImagePicker } from './ImagePicker'
+import { ResizableImage } from './ResizableImage'
 
 // Богатый редактор документов (SPEC §8.25): «как в Google Docs».
 // Хранение — HTML (документы, в отличие от задач/комментариев, богаче markdown).
@@ -73,7 +73,7 @@ export function DocEditor({
       Underline,
       Highlight.configure({ multicolor: false }),
       TextAlign.configure({ types: ['heading', 'paragraph'] }),
-      Image.configure({ inline: false, allowBase64: false, HTMLAttributes: { class: 'doc-image' } }),
+      ResizableImage.configure({ inline: false, allowBase64: false, HTMLAttributes: { class: 'doc-image' } }),
       Table.configure({ resizable: true }),
       TableRow,
       TableHeader,
@@ -170,7 +170,7 @@ export function DocEditor({
     <div className="rounded-md border">
       {/* Панель инструментов */}
       {editable && (
-        <div className="sticky top-0 z-10 flex flex-wrap items-center gap-0.5 border-b bg-background/95 p-1.5 backdrop-blur">
+        <div className="sticky top-0 z-[5] flex flex-wrap items-center gap-0.5 border-b bg-background p-1.5">
           <Tool title="H1" active={editor.isActive('heading', { level: 1 })} onClick={() => editor.chain().focus().toggleHeading({ level: 1 }).run()}>
             <Heading1 className="size-4" />
           </Tool>
@@ -265,8 +265,8 @@ export function DocEditor({
       )}
 
       {/* Плавающее меню по выделению */}
-      <BubbleMenu editor={editor}>
-        <div className="flex rounded-md border bg-popover p-0.5 shadow-md">
+      <BubbleMenu editor={editor} className="tiptap-bubble">
+        <div className="flex rounded-md border bg-popover p-0.5 shadow-lg">
           <Tool title="Bold" active={editor.isActive('bold')} onClick={() => editor.chain().focus().toggleBold().run()}>
             <Bold className="size-3.5" />
           </Tool>

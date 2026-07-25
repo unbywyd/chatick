@@ -235,7 +235,9 @@ documentsPublicRoute.get('/:slug', async (c) => {
   .content h1, .content h2, .content h3 { line-height: 1.25; margin: 1.6em 0 .5em }
   .content h1 { font-size: 1.6rem } .content h2 { font-size: 1.3rem } .content h3 { font-size: 1.1rem }
   .content p, .content ul, .content ol, .content blockquote, .content pre { margin: 0 0 1em }
-  .content img { max-width: 100%; height: auto; border-radius: 6px }
+  .content img { max-width: 100%; height: auto; border-radius: 6px; display: block }
+  .content img[data-align="center"] { margin-inline: auto }
+  .content img[data-align="right"] { margin-inline-start: auto }
   .content a { color: #2563eb }
   .content blockquote { border-left: 3px solid #d0d0d0; margin-left: 0; padding-left: 1rem; color: #666 }
   .content pre { background: #f4f4f5; padding: .85rem 1rem; border-radius: 6px; overflow-x: auto }
