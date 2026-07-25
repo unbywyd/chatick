@@ -40,7 +40,8 @@
     "projects": "Projects",
     "team": "Team",
     "settings": "Settings",
-    "connect": "Connect"
+    "connect": "Connect",
+    "backup": "Backup"
   },
   "llm": {
     "title": "AI provider (LLM)",
@@ -742,5 +743,41 @@
     "requestsCompanyAccess": "is asking for access to all projects in {{company}}.",
     "companyScopeNote": "It acts as you, only in projects you belong to, and every action is recorded in the project history under your name.",
     "wholeCompany": "Whole company"
+  },
+  "backup": {
+    "title": "Export & import",
+    "subtitle": "Take everything with you, or restore it. Your data is never locked in.",
+    "contents": "What the archive contains",
+    "item": {
+      "projects": "Projects",
+      "tasks": "Tasks",
+      "documents": "Documents",
+      "messages": "Chat messages",
+      "files": "Files"
+    },
+    "filesNote": "File metadata is included. File CONTENTS stay in the storage bucket — connect your own S3/R2 so they are yours too.",
+    "secretsTitle": "Resource secrets",
+    "secretsHint": "Leave empty to skip secrets. With a password they are encrypted with YOUR key — we cannot read the archive. Keep the password: without it they cannot be restored.",
+    "passwordPlaceholder": "Password for secrets (optional)",
+    "passwordShort": "At least 8 characters",
+    "downloadTitle": "Download archive",
+    "downloadHint": "One JSON file with everything. Open format — readable without Chatick.",
+    "downloadAction": "Download backup",
+    "downloaded": "Backup downloaded",
+    "storageTitle": "Send to your own storage",
+    "storageHint": "The backup is written to your S3/R2 bucket. We keep no copy.",
+    "pickProject": "Project whose bucket to use",
+    "uploadAction": "Back up to my storage",
+    "uploaded": "Backup uploaded ({{size}})",
+    "noOwnStorage": "None of your projects uses its own storage yet, so a backup would sit on our infrastructure — which defeats the purpose. Connect your S3/R2 in a project's storage settings, then back up here.",
+    "importTitle": "Restore from archive",
+    "importHint": "Creates a NEW company — nothing is overwritten. People are matched by email.",
+    "importPasswordPlaceholder": "Password (if the archive has secrets)",
+    "importAction": "Import backup",
+    "importConfirmTitle": "Import this backup?",
+    "importConfirmText": "A new company will be created alongside your existing ones. Nothing will be overwritten or deleted.",
+    "imported": "Backup imported",
+    "needPassword": "This archive contains secrets — enter the export password",
+    "notABackup": "That file is not a Chatick backup"
   }
 }

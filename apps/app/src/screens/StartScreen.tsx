@@ -25,6 +25,7 @@ import { Button } from '@/components/ui/button'
 import { TeamTab } from '@/components/company/TeamTab'
 import { LlmSettings } from '@/components/company/LlmSettings'
 import { CompanyConnectTab } from '@/components/company/CompanyConnectTab'
+import { BackupTab } from '@/components/company/BackupTab'
 import {
   ProjectSettingsForm,
   DEFAULT_AI_CONFIG,
@@ -244,14 +245,17 @@ function CompanyHome({
   const navigate = useNavigate()
   // таб компании — из URL: /start/:companyId/:companyTab (settings адресуем — на него ведёт чат без LLM)
   const { companyTab } = useParams()
-  const tab = (['projects', 'team', 'connect', 'settings'] as const).includes(companyTab as never)
-    ? (companyTab as 'projects' | 'team' | 'connect' | 'settings')
+  const tab = (['projects', 'team', 'connect', 'backup', 'settings'] as const).includes(companyTab as never)
+    ? (companyTab as 'projects' | 'team' | 'connect' | 'backup' | 'settings')
     : 'projects'
   const canManage = company.myRole === 'admin' || company.myRole === 'manager'
-  // доступ ко всей компании выдают только те, кто ей управляет
-  const tabs = canManage
-    ? (['projects', 'team', 'connect', 'settings'] as const)
-    : (['projects', 'team', 'settings'] as const)
+  const isAdmin = company.myRole === 'admin'
+  // доступ ко всей компании выдают те, кто ей управляет; бэкап — только админ
+  const tabs = isAdmin
+    ? (['projects', 'team', 'connect', 'backup', 'settings'] as const)
+    : canManage
+      ? (['projects', 'team', 'connect', 'settings'] as const)
+      : (['projects', 'team', 'settings'] as const)
 
   return (
     <div className="space-y-6">
@@ -278,6 +282,8 @@ function CompanyHome({
         <TeamTab company={company} meId={meId} />
       ) : tab === 'connect' && canManage ? (
         <CompanyConnectTab company={company} />
+      ) : tab === 'backup' && isAdmin ? (
+        <BackupTab company={company} />
       ) : (
         <LlmSettings companyId={company.id} isAdmin={company.myRole === 'admin'} />
       )}
