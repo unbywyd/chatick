@@ -29,6 +29,13 @@ export const bridgeRoute = new Hono()
 
 const APP = () => (env.APP_URL || 'https://app.chatick.com').replace(/\/$/, '')
 
+// Внятная ошибка вместо пустого 500: читатель — агент, ему нужно понять,
+// что пошло не так, и решить, чинить запрос или сдаться.
+bridgeRoute.onError((err, c) => {
+  console.error('[bridge]', err)
+  return c.json({ error: 'Request failed', detail: String(err instanceof Error ? err.message : err) }, 500)
+})
+
 // --- Публичное: инструкция и device flow (без токена) ----------------------
 
 bridgeRoute.get('/', (c) => c.text(connectDoc()))
@@ -268,17 +275,18 @@ bridgeRoute.post('/tasks', async (c) => {
   if (b.assignee !== undefined && assigneeId === undefined) return c.json({ error: `Unknown assignee: ${String(b.assignee)}` }, 400)
   const dueDate = parseDue(b.dueDate)
 
-  // номер задачи в рамках проекта
-  const [{ n }] = (await db
-    .select({ n: sql<number>`count(*)::int` })
+  // Номер = max+1, а НЕ count: удалённые задачи оставляют дыры, и count
+  // повторно выдаёт уже занятый номер (unique-индекс project+number).
+  const [{ next }] = (await db
+    .select({ next: sql<number>`coalesce(max(cast(substring(${tasks.number} from 6) as int)), 0) + 1` })
     .from(tasks)
-    .where(eq(tasks.projectId, id.projectId))) as [{ n: number }]
+    .where(eq(tasks.projectId, id.projectId))) as [{ next: number }]
 
   const [row] = await db
     .insert(tasks)
     .values({
       projectId: id.projectId,
-      number: `TASK-${n + 1}`,
+      number: `TASK-${next}`,
       title: title.slice(0, 300),
       description: typeof b.description === 'string' ? b.description : '',
       status: (['todo', 'in_progress', 'review', 'done'] as const).includes(b.status as never)
