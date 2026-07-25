@@ -45,11 +45,20 @@ export function ConnectScreen() {
     queryKey: ['companies'],
     queryFn: () => api<{ companies: Company[] }>('/api/v1/companies'),
   })
-  const companyId = companies.data?.companies[0]?.id
+  // Проекты СО ВСЕХ компаний: человек может состоять в нескольких, и выбирать
+  // из проектов только первой — значит часть его проектов просто не показать.
+  const companyIds = (companies.data?.companies ?? []).map((c) => c.id)
   const projects = useQuery({
-    queryKey: ['projects', companyId],
-    enabled: Boolean(companyId),
-    queryFn: () => api<ProjectListItem[]>(`/api/v1/projects?companyId=${companyId}`),
+    queryKey: ['connect-projects', companyIds.join(',')],
+    enabled: companyIds.length > 0,
+    queryFn: async () => {
+      const lists = await Promise.all(
+        companyIds.map((id) =>
+          api<ProjectListItem[]>(`/api/v1/projects?companyId=${id}`).catch(() => [] as ProjectListItem[]),
+        ),
+      )
+      return lists.flat()
+    },
   })
   const myProjects = (projects.data ?? []).filter((p) => p.isMember)
 
@@ -118,7 +127,8 @@ export function ConnectScreen() {
         <div className="flex items-center gap-2">
           <LanguageSelect />
           <ThemeToggle />
-          <Button variant="ghost" size="sm" onClick={() => navigate('/start')}>
+          {/* назад туда, откуда пришли: сюда попадают и из проекта, и со старта */}
+          <Button variant="ghost" size="sm" onClick={() => navigate(-1)}>
             {t('connect.back')}
           </Button>
         </div>

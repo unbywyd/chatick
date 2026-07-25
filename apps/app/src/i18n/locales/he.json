@@ -734,6 +734,7 @@
     "lastUsed": "פעילות",
     "closeTunnel": "סגירה",
     "closed": "החיבור נסגר",
-    "noSessions": "אין חיבורים פעילים"
+    "noSessions": "אין חיבורים פעילים",
+    "menuItem": "חיבור עוזר AI"
   }
 }

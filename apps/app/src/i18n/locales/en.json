@@ -734,6 +734,7 @@
     "lastUsed": "last used",
     "closeTunnel": "Close",
     "closed": "Connection closed",
-    "noSessions": "No active connections"
+    "noSessions": "No active connections",
+    "menuItem": "Connect AI assistant"
   }
 }

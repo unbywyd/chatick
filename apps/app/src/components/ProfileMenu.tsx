@@ -3,7 +3,7 @@ import { useNavigate } from 'react-router-dom'
 import { useQueryClient } from '@tanstack/react-query'
 import { useTranslation } from 'react-i18next'
 import { toast } from 'sonner'
-import { Bell, Bot, Camera, Check, LogOut, Pencil, X } from 'lucide-react'
+import { Bell, Bot, Camera, Check, LogOut, Pencil, Plug, X } from 'lucide-react'
 import { api, API_URL, getSessionToken, setSessionToken, setProjectToken, type Me } from '@/lib/api'
 import { Avatar } from '@/components/ui/avatar'
 import {
@@ -146,6 +146,13 @@ export function ProfileMenu({ me, projectId, isAdmin }: { me?: Me; projectId?: s
             {t('tabs.ai')}
           </DropdownMenuItem>
         )}
+
+        {/* Подключение внешнего ИИ — настройка пользователя, а не проекта,
+            поэтому доступна из любого места (SPEC §8.27) */}
+        <DropdownMenuItem onSelect={() => navigate('/connect')}>
+          <Plug className="size-4" />
+          {t('connect.menuItem')}
+        </DropdownMenuItem>
 
         <DropdownMenuSeparator />
         <DropdownMenuItem onSelect={logout} className="text-destructive focus:text-destructive">
