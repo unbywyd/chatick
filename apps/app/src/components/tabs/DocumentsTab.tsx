@@ -167,7 +167,8 @@ function DocumentEditor({
     mutationFn: () => api<Doc>(`/api/v1/documents/${docId}`, { method: 'PATCH', body: JSON.stringify({ title, content }) }, 'project'),
     onSuccess: () => {
       setDirty(false)
-      toast.success(t('docs.saved'))
+      // без тоаста: сохранение автоматическое и частое, всплывашка на каждое
+      // срабатывание только мешает. Статус показываем текстом в шапке.
       qc.invalidateQueries({ queryKey: ['documents', projectId] })
       qc.invalidateQueries({ queryKey: ['document', docId] })
     },
@@ -248,7 +249,10 @@ pre{background:#f4f4f5;padding:.85rem;border-radius:6px;overflow-x:auto}</style>
           <ArrowLeft className="size-4 rtl:-scale-x-100" />
           <span className="hidden sm:inline">{t('docs.back')}</span>
         </Button>
-        {dirty && <span className="text-xs text-muted-foreground">{t('docs.unsaved')}</span>}
+        {/* статус автосохранения вместо тоаста на каждое срабатывание */}
+        <span className="text-xs text-muted-foreground">
+          {save.isPending ? t('docs.saving') : dirty ? t('docs.unsaved') : t('docs.allSaved')}
+        </span>
 
         {/* Кто ещё открыл этот документ (SPEC §8.25) */}
         {viewers.length > 0 && (

@@ -695,6 +695,8 @@
     "restoreConfirm": "Restore version v{{version}}? The current state will be saved as a version too.",
     "noVersions": "No versions yet",
     "pickImage": "Insert image",
-    "noImages": "No images in the project yet"
+    "noImages": "No images in the project yet",
+    "saving": "Saving…",
+    "allSaved": "All changes saved"
   }
 }

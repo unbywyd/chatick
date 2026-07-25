@@ -29,8 +29,17 @@ function ImageView({ node, updateAttributes, selected, editor }: NodeViewProps) 
     if (!img || !container) return
 
     const startX = e.clientX
-    const startW = img.getBoundingClientRect().width
     const maxW = container.getBoundingClientRect().width
+    // Стартовая ширина — фактически отрисованная ширина картинки.
+    // Пока атрибут width не задан, обёртка тянется на всю строку, но сама
+    // картинка ограничена своим натуральным размером — поэтому берём его,
+    // иначе первое же движение прыгало на 100%.
+    const rendered = img.getBoundingClientRect().width
+    const natural = img.naturalWidth || rendered
+    const startW = Math.min(width ? rendered : Math.min(rendered, natural), maxW)
+    // фиксируем текущий размер сразу: дальше все расчёты идут от заданного
+    // width, и поведение первого перетаскивания не отличается от последующих
+    if (!width) updateAttributes({ width: `${Math.round((startW / maxW) * 100)}%` })
     setDragging(true)
 
     const onMove = (ev: PointerEvent) => {

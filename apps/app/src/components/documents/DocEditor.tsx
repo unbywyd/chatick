@@ -1,6 +1,5 @@
 import { useEffect, useRef, useState } from 'react'
 import { useEditor, EditorContent } from '@tiptap/react'
-import { BubbleMenu } from '@tiptap/react/menus'
 import StarterKit from '@tiptap/starter-kit'
 import Placeholder from '@tiptap/extension-placeholder'
 import Mention from '@tiptap/extension-mention'
@@ -331,30 +330,10 @@ export function DocEditor({
         </div>
       )}
 
-      {/* Плавающее меню по выделению */}
-      <BubbleMenu editor={editor} className="tiptap-bubble">
-        <div className="flex rounded-md border bg-popover p-0.5 shadow-lg">
-          <Tool title="Bold" active={editor.isActive('bold')} onClick={() => editor.chain().focus().toggleBold().run()}>
-            <Bold className="size-3.5" />
-          </Tool>
-          <Tool title="Italic" active={editor.isActive('italic')} onClick={() => editor.chain().focus().toggleItalic().run()}>
-            <Italic className="size-3.5" />
-          </Tool>
-          <Tool title="Highlight" active={editor.isActive('highlight')} onClick={() => editor.chain().focus().toggleHighlight().run()}>
-            <Highlighter className="size-3.5" />
-          </Tool>
-          <Tool
-            title="Link"
-            active={editor.isActive('link')}
-            onClick={() => {
-              const url = window.prompt('URL')
-              if (url) editor.chain().focus().setLink({ href: url }).run()
-            }}
-          >
-            <Link2 className="size-3.5" />
-          </Tool>
-        </div>
-      </BubbleMenu>
+      {/* Плавающего меню здесь нет намеренно: панель инструментов всегда
+          на виду (sticky), поэтому всплывашка только дублировала бы её
+          и перекрывала выделенный текст. В чате и комментариях она нужна —
+          там постоянной панели нет. */}
 
       <EditorContent editor={editor} />
 
