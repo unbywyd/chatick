@@ -118,10 +118,15 @@ export type ProjectListItem = {
   chatRules: string
   isMember: boolean
   myRole: 'owner' | 'admin' | 'member' | null
+  members?: { id: string; name: string; avatarUrl: string | null }[]
+  memberCount?: number
   // обзор по проекту (SPEC §8.26): прогресс, мои задачи, мои непрочитанные
   stats?: {
     tasksTotal: number
     tasksDone: number
+    tasksInProgress: number
+    tasksReview: number
+    tasksTodo: number
     progress: number
     myTotal: number
     myDone: number

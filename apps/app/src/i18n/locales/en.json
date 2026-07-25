@@ -32,7 +32,9 @@
     "joinProject": "Join",
     "statsMine": "My tasks: {{left}} of {{total}} left ({{pct}}% done)",
     "statsMineDone": "All my tasks are done",
-    "statsNoMine": "No tasks assigned to me"
+    "statsNoMine": "No tasks assigned to me",
+    "statsNoTasks": "No tasks yet",
+    "noMembers": "No members"
   },
   "companyTabs": {
     "projects": "Projects",

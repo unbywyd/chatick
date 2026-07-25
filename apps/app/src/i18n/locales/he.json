@@ -32,7 +32,9 @@
     "joinProject": "הצטרפות",
     "statsMine": "המשימות שלי: נותרו {{left}} מתוך {{total}} ({{pct}}% הושלמו)",
     "statsMineDone": "כל המשימות שלי הושלמו",
-    "statsNoMine": "אין משימות המשויכות אליי"
+    "statsNoMine": "אין משימות המשויכות אליי",
+    "statsNoTasks": "אין עדיין משימות",
+    "noMembers": "אין חברים"
   },
   "companyTabs": {
     "projects": "פרויקטים",

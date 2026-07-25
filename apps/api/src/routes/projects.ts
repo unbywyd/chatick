@@ -185,10 +185,11 @@ projectsRoute.get('/', zValidator('query', z.object({ companyId: z.string().min(
 
   // Обзор по проектам (SPEC §8.26): прогресс общий и по моим задачам + мои
   // непрочитанные уведомления. Три агрегирующих запроса вместо N на проект.
-  type Counts = { total: number; done: number }
+  type Counts = { total: number; done: number; inProgress?: number; review?: number; todo?: number }
   const overall = new Map<string, Counts>()
   const mine = new Map<string, Counts>()
   const unread = new Map<string, number>()
+  const membersByProject = new Map<string, { id: string; name: string; avatarUrl: string | null }[]>()
 
   if (ids.length) {
     const notDeleted = sql`${tasks.deletedAt} is null`
@@ -197,11 +198,23 @@ projectsRoute.get('/', zValidator('query', z.object({ companyId: z.string().min(
         projectId: tasks.projectId,
         total: sql<number>`count(*)::int`,
         done: sql<number>`count(*) filter (where ${tasks.status} = 'done')::int`,
+        // разбивка по статусам: менеджеру важно видеть не только «сделано»,
+        // но и сколько в работе / на ревью / ещё не начато
+        inProgress: sql<number>`count(*) filter (where ${tasks.status} = 'in_progress')::int`,
+        review: sql<number>`count(*) filter (where ${tasks.status} = 'review')::int`,
+        todo: sql<number>`count(*) filter (where ${tasks.status} = 'todo')::int`,
       })
       .from(tasks)
       .where(and(inArray(tasks.projectId, ids), notDeleted))
       .groupBy(tasks.projectId)
-    for (const r of rows) overall.set(r.projectId, { total: r.total, done: r.done })
+    for (const r of rows)
+      overall.set(r.projectId, {
+        total: r.total,
+        done: r.done,
+        inProgress: r.inProgress,
+        review: r.review,
+        todo: r.todo,
+      })
 
     const myRows = await db
       .select({
@@ -220,6 +233,18 @@ projectsRoute.get('/', zValidator('query', z.object({ companyId: z.string().min(
       .where(and(inArray(notifications.projectId, ids), eq(notifications.userId, sub), isNull(notifications.readAt)))
       .groupBy(notifications.projectId)
     for (const r of notifRows) unread.set(r.projectId, r.count)
+
+    // участники проектов — для аватарок на карточке
+    const memberRows = await db
+      .select({ projectId: projectMembers.projectId, user: users })
+      .from(projectMembers)
+      .innerJoin(users, eq(users.id, projectMembers.userId))
+      .where(inArray(projectMembers.projectId, ids))
+    for (const r of memberRows) {
+      const arr = membersByProject.get(r.projectId) ?? []
+      arr.push({ id: r.user.id, name: r.user.name, avatarUrl: r.user.avatarUrl })
+      membersByProject.set(r.projectId, arr)
+    }
   }
 
   const pct = (c: Counts | undefined) => (c && c.total > 0 ? Math.round((c.done / c.total) * 100) : 0)
@@ -234,9 +259,14 @@ projectsRoute.get('/', zValidator('query', z.object({ companyId: z.string().min(
       isMember: myByProject.has(p.id),
       myRole: myByProject.get(p.id)?.role ?? null,
       rulesAccepted: Boolean(myByProject.get(p.id)?.rulesAcceptedAt),
+      members: (membersByProject.get(p.id) ?? []).slice(0, 8),
+      memberCount: (membersByProject.get(p.id) ?? []).length,
       stats: {
         tasksTotal: overall.get(p.id)?.total ?? 0,
         tasksDone: overall.get(p.id)?.done ?? 0,
+        tasksInProgress: overall.get(p.id)?.inProgress ?? 0,
+        tasksReview: overall.get(p.id)?.review ?? 0,
+        tasksTodo: overall.get(p.id)?.todo ?? 0,
         progress: pct(overall.get(p.id)),
         myTotal: mine.get(p.id)?.total ?? 0,
         myDone: mine.get(p.id)?.done ?? 0,

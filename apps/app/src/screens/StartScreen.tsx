@@ -5,6 +5,7 @@ import { useTranslation } from 'react-i18next'
 import { toast } from 'sonner'
 import { Building2, Plus, FolderKanban, Check, Mail, Search, X } from 'lucide-react'
 import { ProfileMenu } from '@/components/ProfileMenu'
+import { Avatar } from '@/components/ui/avatar'
 import {
   api,
   logout,
@@ -89,7 +90,8 @@ export function StartScreen() {
         </div>
       </header>
 
-      <main className="mx-auto w-full max-w-3xl flex-1 overflow-y-auto px-6 py-8">
+      {/* шире, чем раньше: карточки проектов идут в две колонки */}
+      <main className="mx-auto w-full max-w-5xl flex-1 overflow-y-auto px-6 py-8">
         {!companyId ? (
           <CompanyPicker
             data={companiesQ.data}
@@ -295,10 +297,35 @@ function ProjectStats({ stats }: { stats: NonNullable<ProjectListItem['stats']> 
             style={{ width: `${stats.progress}%` }}
           />
         </span>
+        {/* процент явно: менеджеру нужен показатель по проекту одним взглядом */}
+        <span className="shrink-0 text-[11px] font-semibold tabular-nums">{stats.progress}%</span>
         <span className="shrink-0 text-[11px] tabular-nums text-muted-foreground">
           {stats.tasksDone}/{stats.tasksTotal}
         </span>
       </span>
+
+      {/* разбивка по статусам — что в работе, что ждёт ревью, что не начато */}
+      <span className="flex flex-wrap items-center gap-x-3 gap-y-0.5 text-[11px] text-muted-foreground">
+        {stats.tasksInProgress > 0 && (
+          <span className="inline-flex items-center gap-1">
+            <span className="size-1.5 rounded-full bg-sky-500" />
+            {t('tasks.status.in_progress')}: {stats.tasksInProgress}
+          </span>
+        )}
+        {stats.tasksReview > 0 && (
+          <span className="inline-flex items-center gap-1">
+            <span className="size-1.5 rounded-full bg-violet-500" />
+            {t('tasks.status.review')}: {stats.tasksReview}
+          </span>
+        )}
+        {stats.tasksTodo > 0 && (
+          <span className="inline-flex items-center gap-1">
+            <span className="size-1.5 rounded-full bg-muted-foreground" />
+            {t('tasks.status.todo')}: {stats.tasksTodo}
+          </span>
+        )}
+      </span>
+
       <span className="block text-[11px] text-muted-foreground">
         {stats.myTotal === 0
           ? t('start.statsNoMine')
@@ -426,56 +453,75 @@ function ProjectsTab({
         </div>
       )}
 
-      <div className="space-y-2">
+      {/* Карточки: имя, участники, прогресс и статистика видны сразу */}
+      <div className="grid gap-3 sm:grid-cols-2">
         {projectsQ.isLoading && <p className="text-sm text-muted-foreground">…</p>}
         {filtered.map((p) => (
           <div
             key={p.id}
             className={cn(
-              'flex w-full items-center gap-3 rounded-lg border bg-card p-3 transition-colors',
-              p.isMember && 'hover:bg-accent',
+              'flex flex-col rounded-xl border bg-card p-4 transition-colors',
+              p.isMember ? 'hover:border-brand/50' : 'opacity-70',
             )}
           >
             <button
               onClick={() => p.isMember && enter.mutate({ projectId: p.id })}
               disabled={!p.isMember}
-              className={cn('flex min-w-0 flex-1 items-center gap-3 text-start', !p.isMember && 'opacity-50')}
+              className="flex min-w-0 flex-1 flex-col text-start"
             >
-              <span className="grid size-9 shrink-0 place-items-center rounded-md bg-secondary">
-                <FolderKanban className="size-4" />
-              </span>
-              <span className="min-w-0 flex-1">
-                <span className="flex items-center gap-2">
-                  <span className="truncate text-sm font-medium">{p.name}</span>
-                  {/* мои непрочитанные уведомления по этому проекту */}
-                  {(p.stats?.unread ?? 0) > 0 && (
-                    <span className="shrink-0 rounded-full bg-brand px-1.5 py-0.5 text-[10px] font-semibold text-brand-foreground">
-                      {p.stats!.unread}
-                    </span>
-                  )}
+              <span className="flex w-full min-w-0 items-start gap-3">
+                <span className="grid size-9 shrink-0 place-items-center rounded-md bg-secondary">
+                  <FolderKanban className="size-4" />
                 </span>
-                <span className="block text-xs text-muted-foreground">
-                  {p.isMember ? t(`roles.${p.myRole}`) : t('start.notMember')}
+                <span className="min-w-0 flex-1">
+                  <span className="flex items-center gap-2">
+                    <span className="truncate text-sm font-semibold">{p.name}</span>
+                    {/* мои непрочитанные уведомления по этому проекту */}
+                    {(p.stats?.unread ?? 0) > 0 && (
+                      <span className="shrink-0 rounded-full bg-brand px-1.5 py-0.5 text-[10px] font-semibold text-brand-foreground">
+                        {p.stats!.unread}
+                      </span>
+                    )}
+                  </span>
+                  <span className="block text-xs text-muted-foreground">
+                    {p.isMember ? t(`roles.${p.myRole}`) : t('start.notMember')}
+                  </span>
                 </span>
-                {p.isMember && (p.stats?.tasksTotal ?? 0) > 0 && <ProjectStats stats={p.stats!} />}
               </span>
+
+              {p.isMember && (p.stats?.tasksTotal ?? 0) > 0 && <ProjectStats stats={p.stats!} />}
+              {p.isMember && (p.stats?.tasksTotal ?? 0) === 0 && (
+                <span className="mt-2 block text-[11px] text-muted-foreground">{t('start.statsNoTasks')}</span>
+              )}
             </button>
-            {/* Админ/менеджер компании видит все проекты, но не состоит в них —
-                даём добавить себя, иначе проект открыть нечем */}
-            {!p.isMember && canManage && (
-              <Button
-                size="sm"
-                variant="outline"
-                disabled={join.isPending}
-                onClick={() => join.mutate(p.id)}
-              >
-                {t('start.joinProject')}
-              </Button>
-            )}
+
+            {/* Команда проекта + действие */}
+            <div className="mt-3 flex items-center justify-between gap-2 border-t pt-3">
+              <div className="flex items-center -space-x-1.5">
+                {(p.members ?? []).slice(0, 5).map((m) => (
+                  <span key={m.id} className="rounded-full ring-2 ring-card" title={m.name}>
+                    <Avatar name={m.name} src={m.avatarUrl} size={22} />
+                  </span>
+                ))}
+                {(p.memberCount ?? 0) > 5 && (
+                  <span className="ps-3 text-[11px] text-muted-foreground">+{p.memberCount! - 5}</span>
+                )}
+                {(p.memberCount ?? 0) === 0 && (
+                  <span className="text-[11px] text-muted-foreground">{t('start.noMembers')}</span>
+                )}
+              </div>
+              {/* Админ/менеджер компании видит все проекты, но не состоит в них —
+                  даём добавить себя, иначе проект открыть нечем */}
+              {!p.isMember && canManage && (
+                <Button size="sm" variant="outline" disabled={join.isPending} onClick={() => join.mutate(p.id)}>
+                  {t('start.joinProject')}
+                </Button>
+              )}
+            </div>
           </div>
         ))}
         {!projectsQ.isLoading && filtered.length === 0 && (
-          <p className="rounded-lg border border-dashed p-6 text-center text-sm text-muted-foreground">
+          <p className="rounded-lg border border-dashed p-6 text-center text-sm text-muted-foreground sm:col-span-2">
             {q ? t('start.nothingFound') : t('start.noProjects')}
           </p>
         )}

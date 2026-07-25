@@ -32,7 +32,9 @@
     "joinProject": "Присоединиться",
     "statsMine": "Мои задачи: осталось {{left}} из {{total}} ({{pct}}% готово)",
     "statsMineDone": "Все мои задачи выполнены",
-    "statsNoMine": "На мне задач нет"
+    "statsNoMine": "На мне задач нет",
+    "statsNoTasks": "Задач пока нет",
+    "noMembers": "Нет участников"
   },
   "companyTabs": {
     "projects": "Проекты",
