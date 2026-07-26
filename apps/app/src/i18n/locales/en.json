@@ -44,7 +44,8 @@
     "settings": "Settings",
     "connect": "Connect",
     "backup": "Backup",
-    "time": "Hours"
+    "time": "Hours",
+    "overview": "Overview"
   },
   "llm": {
     "title": "AI provider (LLM)",
@@ -955,5 +956,18 @@
     "last90": "Last 90 days",
     "thisYear": "This year",
     "all": "All time"
+  },
+  "overview": {
+    "hours": "Hours tracked",
+    "tasks": "Tasks done",
+    "overdue": "Overdue",
+    "people": "People",
+    "rhythm": "Weekly rhythm",
+    "byProject": "Where the time goes",
+    "byPerson": "Who is carrying it",
+    "projects": "Projects",
+    "empty": "No projects yet",
+    "weekOf": "Week of {{date}}",
+    "overdueShort": "{{count}} overdue"
   }
 }

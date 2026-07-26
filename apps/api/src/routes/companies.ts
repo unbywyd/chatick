@@ -1,10 +1,10 @@
 import { Hono } from 'hono'
 import { zValidator } from '@hono/zod-validator'
 import { z } from 'zod'
-import { and, eq } from 'drizzle-orm'
+import { and, eq, inArray, isNull, sql } from 'drizzle-orm'
 import { nanoid } from 'nanoid'
 import { db } from '../db/client.js'
-import { companies, companyMembers, companyInvites, users } from '../db/schema.js'
+import { companies, companyMembers, companyInvites, messages, projectMembers, projects, tasks, timeEntries, users } from '../db/schema.js'
 import { requireSession, type SessionEnv } from '../auth.js'
 import { sendInviteMail } from '../lib/mail-invite.js'
 import { encrypt } from '../lib/crypto.js'
@@ -61,6 +61,142 @@ async function memberRoleIn(companyId: string, userId: string) {
 const canManageInvites = (role: string | null) => role === 'admin' || role === 'manager'
 
 // Участники компании
+/**
+ * Обзор компании (SPEC §8.33): картина целиком, которой нет в списке проектов.
+ * Один запрос вместо десятка — страница открывается сразу, а не собирается
+ * на глазах.
+ */
+companiesRoute.get('/:companyId/overview', async (c) => {
+  const { sub } = c.get('session')
+  const companyId = c.req.param('companyId')
+  const membership = await db.query.companyMembers.findFirst({
+    where: and(eq(companyMembers.companyId, companyId), eq(companyMembers.userId, sub)),
+  })
+  if (!membership) return c.json({ error: 'Forbidden' }, 403)
+
+  // окно в 12 недель: три месяца — тот срок, на котором видно тренд
+  const since = new Date()
+  since.setDate(since.getDate() - 84)
+
+  const projectRows = await db.query.projects.findMany({ where: eq(projects.companyId, companyId) })
+  const ids = projectRows.map((p) => p.id)
+  if (!ids.length) {
+    return c.json({ projects: [], totals: { projects: 0, people: 0, tasksTotal: 0, tasksDone: 0, hours: 0, messages: 0 }, weeks: [], topPeople: [] })
+  }
+
+  const [taskRows, memberRows, timeRows, msgRows, weekRows] = await Promise.all([
+    db
+      .select({
+        projectId: tasks.projectId,
+        total: sql<number>`count(*)::int`,
+        done: sql<number>`count(*) filter (where ${tasks.status} = 'done')::int`,
+        overdue: sql<number>`count(*) filter (where ${tasks.status} <> 'done' and ${tasks.dueDate} < now())::int`,
+      })
+      .from(tasks)
+      .where(and(inArray(tasks.projectId, ids), isNull(tasks.deletedAt)))
+      .groupBy(tasks.projectId),
+
+    db
+      .select({ projectId: projectMembers.projectId, count: sql<number>`count(*)::int` })
+      .from(projectMembers)
+      .where(inArray(projectMembers.projectId, ids))
+      .groupBy(projectMembers.projectId),
+
+    db
+      .select({
+        projectId: timeEntries.projectId,
+        minutes: sql<number>`coalesce(sum(extract(epoch from (${timeEntries.endedAt} - ${timeEntries.startedAt})) / 60), 0)::int`,
+      })
+      .from(timeEntries)
+      .where(and(inArray(timeEntries.projectId, ids), sql`${timeEntries.endedAt} is not null`))
+      .groupBy(timeEntries.projectId),
+
+    db
+      .select({ projectId: messages.projectId, count: sql<number>`count(*)::int` })
+      .from(messages)
+      .where(inArray(messages.projectId, ids))
+      .groupBy(messages.projectId),
+
+    // по неделям: ритм работы компании, который в списке проектов не увидеть
+    db.execute(sql`
+      select to_char(date_trunc('week', ${timeEntries.startedAt}), 'YYYY-MM-DD') as week,
+             coalesce(sum(extract(epoch from (${timeEntries.endedAt} - ${timeEntries.startedAt})) / 60), 0)::int as minutes
+      from ${timeEntries}
+      where ${timeEntries.projectId} in ${ids}
+        and ${timeEntries.endedAt} is not null
+        and ${timeEntries.startedAt} >= ${since.toISOString()}::timestamptz
+      group by date_trunc('week', ${timeEntries.startedAt})
+      order by date_trunc('week', ${timeEntries.startedAt})
+    `),
+  ])
+
+  // кто сколько отработал — верхушка, чтобы понять распределение нагрузки
+  const topPeople = await db
+    .select({
+      userId: timeEntries.userId,
+      name: users.name,
+      avatarUrl: users.avatarUrl,
+      minutes: sql<number>`coalesce(sum(extract(epoch from (${timeEntries.endedAt} - ${timeEntries.startedAt})) / 60), 0)::int`,
+    })
+    .from(timeEntries)
+    .innerJoin(users, eq(users.id, timeEntries.userId))
+    .where(
+      and(
+        inArray(timeEntries.projectId, ids),
+        sql`${timeEntries.endedAt} is not null`,
+        sql`${timeEntries.startedAt} >= ${since.toISOString()}::timestamptz`,
+      ),
+    )
+    .groupBy(timeEntries.userId, users.name, users.avatarUrl)
+    .orderBy(sql`2 desc`)
+
+  const byId = <T extends { projectId: string }>(rows: T[]) => new Map(rows.map((r) => [r.projectId, r]))
+  const taskMap = byId(taskRows)
+  const memberMap = byId(memberRows)
+  const timeMap = byId(timeRows)
+  const msgMap = byId(msgRows)
+
+  const list = projectRows.map((p) => {
+    const t = taskMap.get(p.id)
+    return {
+      id: p.id,
+      name: p.name,
+      color: p.color,
+      logoUrl: p.logoUrl,
+      tasksTotal: t?.total ?? 0,
+      tasksDone: t?.done ?? 0,
+      overdue: t?.overdue ?? 0,
+      progress: t?.total ? Math.round(((t.done ?? 0) / t.total) * 100) : 0,
+      members: memberMap.get(p.id)?.count ?? 0,
+      minutes: timeMap.get(p.id)?.minutes ?? 0,
+      messages: msgMap.get(p.id)?.count ?? 0,
+    }
+  })
+
+  const companyPeople = await db
+    .select({ count: sql<number>`count(*)::int` })
+    .from(companyMembers)
+    .where(eq(companyMembers.companyId, companyId))
+
+  return c.json({
+    projects: list.sort((a, b) => b.minutes - a.minutes),
+    totals: {
+      projects: list.length,
+      people: companyPeople[0]?.count ?? 0,
+      tasksTotal: list.reduce((sum, p) => sum + p.tasksTotal, 0),
+      tasksDone: list.reduce((sum, p) => sum + p.tasksDone, 0),
+      overdue: list.reduce((sum, p) => sum + p.overdue, 0),
+      minutes: list.reduce((sum, p) => sum + p.minutes, 0),
+      messages: list.reduce((sum, p) => sum + p.messages, 0),
+    },
+    weeks: (weekRows as unknown as { week: string; minutes: number }[]).map((r) => ({
+      week: String(r.week),
+      minutes: Number(r.minutes),
+    })),
+    topPeople: topPeople.slice(0, 10),
+  })
+})
+
 companiesRoute.get('/:companyId/members', async (c) => {
   const { sub } = c.get('session')
   const companyId = c.req.param('companyId')

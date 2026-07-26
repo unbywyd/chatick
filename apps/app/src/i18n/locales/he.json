@@ -44,7 +44,8 @@
     "settings": "הגדרות",
     "connect": "חיבור",
     "backup": "גיבוי",
-    "time": "שעות"
+    "time": "שעות",
+    "overview": "סקירה"
   },
   "llm": {
     "title": "ספק AI (LLM)",
@@ -955,5 +956,18 @@
     "last90": "90 הימים האחרונים",
     "thisYear": "השנה",
     "all": "כל הזמן"
+  },
+  "overview": {
+    "hours": "שעות שנרשמו",
+    "tasks": "משימות שהושלמו",
+    "overdue": "באיחור",
+    "people": "אנשים",
+    "rhythm": "קצב שבועי",
+    "byProject": "לאן הולך הזמן",
+    "byPerson": "מי מוביל",
+    "projects": "פרויקטים",
+    "empty": "אין עדיין פרויקטים",
+    "weekOf": "שבוע מ-{{date}}",
+    "overdueShort": "באיחור: {{count}}"
   }
 }
