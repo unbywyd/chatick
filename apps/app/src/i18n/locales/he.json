@@ -34,7 +34,9 @@
     "statsMineDone": "כל המשימות שלי הושלמו",
     "statsNoMine": "אין משימות המשויכות אליי",
     "statsNoTasks": "אין עדיין משימות",
-    "noMembers": "אין חברים"
+    "noMembers": "אין חברים",
+    "noMessages": "אין עדיין הודעות",
+    "mineShort": "{{n}} שלי"
   },
   "companyTabs": {
     "projects": "פרויקטים",
@@ -343,7 +345,10 @@
     "mobile": {
       "chat": "צ׳אט",
       "work": "עבודה"
-    }
+    },
+    "menu": "תפריט",
+    "language": "שפה",
+    "theme": "ערכת נושא"
   },
   "about": {
     "noDescription": "אין עדיין תיאור.",

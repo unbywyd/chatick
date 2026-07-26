@@ -376,3 +376,14 @@
     }
   }
 }
+
+/* Горизонтальные скроллеры (вкладки проекта): полоса прокрутки только мешает */
+@layer utilities {
+  .scrollbar-none {
+    scrollbar-width: none;
+    -ms-overflow-style: none;
+  }
+  .scrollbar-none::-webkit-scrollbar {
+    display: none;
+  }
+}

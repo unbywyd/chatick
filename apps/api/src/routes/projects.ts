@@ -4,7 +4,7 @@ import { z } from 'zod'
 import { and, eq, inArray, isNull, sql } from 'drizzle-orm'
 import { nanoid } from 'nanoid'
 import { db } from '../db/client.js'
-import { companies, companyMembers, notifications, projects, projectMembers, projectStorage, tasks, users } from '../db/schema.js'
+import { companies, companyMembers, messages, notifications, projects, projectMembers, projectStorage, tasks, users } from '../db/schema.js'
 import { encrypt } from '../lib/crypto.js'
 import { PutObjectCommand, DeleteObjectCommand, S3Client } from '@aws-sdk/client-s3'
 import { requireSession, requireProject, signProjectToken, type SessionEnv, type ProjectEnv } from '../auth.js'
@@ -190,6 +190,7 @@ projectsRoute.get('/', zValidator('query', z.object({ companyId: z.string().min(
   const mine = new Map<string, Counts>()
   const unread = new Map<string, number>()
   const membersByProject = new Map<string, { id: string; name: string; avatarUrl: string | null }[]>()
+  const lastMessage = new Map<string, { text: string; author: string; at: string }>()
 
   if (ids.length) {
     const notDeleted = sql`${tasks.deletedAt} is null`
@@ -245,6 +246,31 @@ projectsRoute.get('/', zValidator('query', z.object({ companyId: z.string().min(
       arr.push({ id: r.user.id, name: r.user.name, avatarUrl: r.user.avatarUrl })
       membersByProject.set(r.projectId, arr)
     }
+
+    // Последнее сообщение проекта — список проектов работает как список чатов
+    // (SPEC §8.29). DISTINCT ON быстрее, чем отдельный запрос на проект.
+    const lastRows = await db.execute(sql`
+      select distinct on (m.project_id)
+        m.project_id as "projectId", m.text, m.created_at as "createdAt",
+        m.system_event as "systemEvent", u.name as "authorName"
+      from messages m
+      left join users u on u.id = m.author_id
+      where m.project_id in (${sql.join(ids.map((id) => sql`${id}`), sql`, `)})
+        and m.mode = 'group' and m.status = 'delivered'
+      order by m.project_id, m.created_at desc
+    `)
+    for (const r of lastRows as unknown as {
+      projectId: string
+      text: string
+      createdAt: string
+      authorName: string | null
+    }[]) {
+      lastMessage.set(r.projectId, {
+        text: (r.text ?? '').slice(0, 140),
+        author: r.authorName ?? 'AI',
+        at: r.createdAt,
+      })
+    }
   }
 
   const pct = (c: Counts | undefined) => (c && c.total > 0 ? Math.round((c.done / c.total) * 100) : 0)
@@ -260,6 +286,7 @@ projectsRoute.get('/', zValidator('query', z.object({ companyId: z.string().min(
       myRole: myByProject.get(p.id)?.role ?? null,
       rulesAccepted: Boolean(myByProject.get(p.id)?.rulesAcceptedAt),
       members: (membersByProject.get(p.id) ?? []).slice(0, 8),
+      lastMessage: lastMessage.get(p.id) ?? null,
       memberCount: (membersByProject.get(p.id) ?? []).length,
       stats: {
         tasksTotal: overall.get(p.id)?.total ?? 0,

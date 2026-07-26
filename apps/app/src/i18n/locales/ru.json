@@ -34,7 +34,9 @@
     "statsMineDone": "Все мои задачи выполнены",
     "statsNoMine": "На мне задач нет",
     "statsNoTasks": "Задач пока нет",
-    "noMembers": "Нет участников"
+    "noMembers": "Нет участников",
+    "noMessages": "Сообщений пока нет",
+    "mineShort": "моих {{n}}"
   },
   "companyTabs": {
     "projects": "Проекты",
@@ -343,7 +345,10 @@
     "mobile": {
       "chat": "Чат",
       "work": "Работа"
-    }
+    },
+    "menu": "Меню",
+    "language": "Язык",
+    "theme": "Тема"
   },
   "about": {
     "noDescription": "Описания пока нет.",

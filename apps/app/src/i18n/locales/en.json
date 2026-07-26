@@ -34,7 +34,9 @@
     "statsMineDone": "All my tasks are done",
     "statsNoMine": "No tasks assigned to me",
     "statsNoTasks": "No tasks yet",
-    "noMembers": "No members"
+    "noMembers": "No members",
+    "noMessages": "No messages yet",
+    "mineShort": "{{n}} mine"
   },
   "companyTabs": {
     "projects": "Projects",
@@ -343,7 +345,10 @@
     "mobile": {
       "chat": "Chat",
       "work": "Workspace"
-    }
+    },
+    "menu": "Menu",
+    "language": "Language",
+    "theme": "Theme"
   },
   "about": {
     "noDescription": "No description yet.",

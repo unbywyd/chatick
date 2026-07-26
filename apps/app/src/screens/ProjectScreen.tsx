@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react'
 import { NavLink, Outlet, useNavigate, useOutletContext, useParams } from 'react-router-dom'
 import { useQuery } from '@tanstack/react-query'
 import { useTranslation } from 'react-i18next'
-import { Building2, LayoutGrid, MessagesSquare } from 'lucide-react'
+import { ArrowLeft, Building2, LayoutGrid, Menu } from 'lucide-react'
 import { api, getProjectToken, setProjectToken, type Me } from '@/lib/api'
 import { cn } from '@/lib/utils'
 import { ChatPanel } from '@/components/chat/ChatPanel'
@@ -10,6 +10,13 @@ import { ThemeToggle } from '@/components/ThemeToggle'
 import { LanguageSelect } from '@/components/LanguageSelect'
 import { ProfileMenu } from '@/components/ProfileMenu'
 import { NotificationBell } from '@/components/NotificationBell'
+import {
+  DropdownMenu,
+  DropdownMenuTrigger,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuSeparator,
+} from '@/components/ui/dropdown-menu'
 
 // Layout проекта (CONCEPT.md §3): чат 40% постоянен, табы — вложенные роуты (Outlet),
 // каждый таб имеет свой URL — прямые ссылки работают: /p/:id/tasks, /p/:id/files, ...
@@ -58,12 +65,7 @@ export function ProjectLayout() {
         (чат съедал экран, табам оставалась полоска), поэтому показываем
         что-то одно, с переключателем внизу.
       */}
-      <div
-        className={cn(
-          'flex-col border-e pb-12 md:flex md:w-[40%] md:min-w-[320px] md:pb-0',
-          mobileView === 'chat' ? 'flex w-full' : 'hidden',
-        )}
-      >
+      <div className="flex w-full flex-col border-e md:w-[40%] md:min-w-[320px]">
         <ChatPanel
           projectName={project.data?.name}
           aiMode={(project.data?.aiConfig as { mode?: 'observer' | 'assistant' | 'moderator' })?.mode ?? 'assistant'}
@@ -75,39 +77,72 @@ export function ProjectLayout() {
       {/* Табы — роуты */}
       <div
         className={cn(
-          'min-w-0 flex-1 flex-col md:flex',
-          mobileView === 'work' ? 'flex' : 'hidden',
+          'flex min-w-0 flex-1 flex-col bg-background',
+          // мобильный: выезжает поверх чата; десктоп: обычная колонка
+          'fixed inset-0 z-30 transition-transform duration-200 md:static md:z-0 md:translate-x-0',
+          mobileView === 'work' ? 'translate-x-0' : 'translate-x-full rtl:-translate-x-full',
         )}
       >
-        <nav className="flex flex-wrap items-center gap-1 border-b px-3 py-2 sm:px-4">
-          {TAB_KEYS.map((key) => (
-            <NavLink
-              key={key}
-              to={`/p/${id}/${key}`}
-              className={({ isActive }) =>
-                cn(
-                  'rounded-md px-3 py-1.5 text-sm transition-colors',
-                  isActive
-                    ? 'bg-primary text-primary-foreground'
-                    : 'text-muted-foreground hover:bg-accent hover:text-accent-foreground',
-                )
-              }
-            >
-              {t(`tabs.${key}`)}
-            </NavLink>
-          ))}
-          <div className="ms-auto flex items-center gap-2">
-            <button
-              onClick={switchProject}
-              title={t('project.switch')}
-              className="flex items-center gap-1.5 rounded-md border px-2.5 py-1.5 text-xs text-muted-foreground hover:text-foreground"
-            >
-              <Building2 className="size-3.5" />
-              {t('project.switch')}
-            </button>
+        {/*
+          Шапка как в мессенджере: вкладки скроллятся горизонтально (семь штук
+          на телефон не влезают), а всё служебное убрано в меню — раньше пять
+          контролов занимали половину строки (SPEC §8.29).
+        */}
+        <nav className="flex items-center gap-1 border-b px-2 py-2 sm:px-4">
+          {/* выход из оверлея обратно в чат — только на мобильном */}
+          <button
+            onClick={() => setMobileView('chat')}
+            className="shrink-0 rounded-md p-2 text-muted-foreground hover:bg-accent hover:text-foreground md:hidden"
+            title={t('project.mobile.chat')}
+          >
+            <ArrowLeft className="size-4 rtl:-scale-x-100" />
+          </button>
+          <div className="scrollbar-none -mx-1 flex min-w-0 flex-1 gap-1 overflow-x-auto px-1">
+            {TAB_KEYS.map((key) => (
+              <NavLink
+                key={key}
+                to={`/p/${id}/${key}`}
+                className={({ isActive }) =>
+                  cn(
+                    'shrink-0 rounded-md px-3 py-1.5 text-sm transition-colors',
+                    isActive
+                      ? 'bg-primary text-primary-foreground'
+                      : 'text-muted-foreground hover:bg-accent hover:text-accent-foreground',
+                  )
+                }
+              >
+                {t(`tabs.${key}`)}
+              </NavLink>
+            ))}
+          </div>
+
+          <div className="flex shrink-0 items-center gap-1">
             <NotificationBell currentProjectId={id} />
-            <LanguageSelect />
-            <ThemeToggle />
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <button
+                  className="rounded-md p-2 text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
+                  title={t('project.menu')}
+                >
+                  <Menu className="size-4" />
+                </button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="end" className="w-56">
+                <DropdownMenuItem onSelect={switchProject}>
+                  <Building2 className="size-4" />
+                  {t('project.switch')}
+                </DropdownMenuItem>
+                <DropdownMenuSeparator />
+                <div className="flex items-center justify-between gap-2 px-2 py-1.5">
+                  <span className="text-xs text-muted-foreground">{t('project.language')}</span>
+                  <LanguageSelect />
+                </div>
+                <div className="flex items-center justify-between gap-2 px-2 py-1.5">
+                  <span className="text-xs text-muted-foreground">{t('project.theme')}</span>
+                  <ThemeToggle />
+                </div>
+              </DropdownMenuContent>
+            </DropdownMenu>
             <ProfileMenu
               me={me.data}
               projectId={id}
@@ -115,27 +150,25 @@ export function ProjectLayout() {
             />
           </div>
         </nav>
-        <main className="min-h-0 flex-1 overflow-y-auto pb-12 md:pb-0">
+        <main className="min-h-0 flex-1 overflow-y-auto">
           <Outlet context={{ project: project.data, meId: me.data?.id } satisfies ProjectOutletCtx} />
         </main>
       </div>
 
-      {/* Переключатель чат / работа — только на мобильном */}
-      <div className="fixed inset-x-0 bottom-0 z-40 flex border-t bg-background/95 backdrop-blur md:hidden">
-        {(['chat', 'work'] as const).map((view) => (
-          <button
-            key={view}
-            onClick={() => setMobileView(view)}
-            className={cn(
-              'flex flex-1 items-center justify-center gap-1.5 py-2.5 text-sm font-medium transition-colors',
-              mobileView === view ? 'text-brand' : 'text-muted-foreground',
-            )}
-          >
-            {view === 'chat' ? <MessagesSquare className="size-4" /> : <LayoutGrid className="size-4" />}
-            {t(`project.mobile.${view}`)}
-          </button>
-        ))}
-      </div>
+      {/*
+        Кнопка «Рабочая область» поверх чата (мобильный). Нижней панели с двумя
+        вкладками нет намеренно: чат — основа приложения, а задачи/файлы
+        открываются поверх него и закрываются стрелкой назад.
+      */}
+      {mobileView === 'chat' && (
+        <button
+          onClick={() => setMobileView('work')}
+          className="fixed bottom-20 end-4 z-20 flex items-center gap-2 rounded-full bg-brand px-4 py-2.5 text-sm font-semibold text-brand-foreground shadow-lg md:hidden"
+        >
+          <LayoutGrid className="size-4" />
+          {t('project.mobile.work')}
+        </button>
+      )}
     </div>
   )
 }

@@ -120,6 +120,8 @@ export type ProjectListItem = {
   myRole: 'owner' | 'admin' | 'member' | null
   members?: { id: string; name: string; avatarUrl: string | null }[]
   memberCount?: number
+  // последнее сообщение — список проектов работает как список чатов (SPEC §8.29)
+  lastMessage?: { text: string; author: string; at: string } | null
   // обзор по проекту (SPEC §8.26): прогресс, мои задачи, мои непрочитанные
   stats?: {
     tasksTotal: number
