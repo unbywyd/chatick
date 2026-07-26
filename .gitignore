@@ -18,3 +18,4 @@ out/
 *.log
 release/
 apps/api/_ytest.ts
+app.chatick.com.har
