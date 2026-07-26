@@ -1315,7 +1315,9 @@ async function summarizeChunk(
       `IMPORTANT: write BOTH the name and the summary strictly in ${langName}, regardless of the chat's original language.`,
     ].join('\n'),
     user: transcript,
-    maxTokens: 900,
+    // саммари дня уходит в долговременную память: обрезанное останется таким
+    // навсегда, поэтому запас щедрый
+    maxTokens: 3000,
   })
   if (!raw) throw new Error('empty summary')
 

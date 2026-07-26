@@ -63,6 +63,7 @@ export function TaskDrawer({
   onPatch,
   onDelete,
   onClose,
+  startEditing = false,
 }: {
   task: Task
   members: Member[]
@@ -71,6 +72,8 @@ export function TaskDrawer({
   canEdit?: boolean
   onPatch: (body: Record<string, unknown>) => void
   onDelete: () => void
+  /** только что созданная задача — открываем сразу в режиме правки */
+  startEditing?: boolean
   onClose: () => void
 }) {
   const { t, i18n } = useTranslation()
@@ -180,8 +183,9 @@ export function TaskDrawer({
   const canPreviewInline = (mime: string) => mime.startsWith('image/') || mime === 'application/pdf'
 
   // редактирование справа — по умолчанию скрыто (открывается кнопкой «Редактировать»)
-  const [editing, setEditing] = useState(false)
-  useEffect(() => setEditing(false), [task.id]) // при смене задачи закрываем форму
+  const [editing, setEditing] = useState(startEditing)
+  // при смене задачи форму закрываем — кроме случая, когда её только что создали
+  useEffect(() => setEditing(startEditing), [task.id, startEditing])
 
   // Блокировка редактирования: кто сейчас правит эту задачу (SPEC §8.18)
   const [lockedBy, setLockedBy] = useState<{ id: string; name: string; avatarUrl: string | null } | null>(null)

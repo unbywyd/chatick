@@ -95,7 +95,8 @@ async function summarizeAsk(
       'No greetings, no quotes, no preamble. Max 100 characters.',
     ].join('\n'),
     user: `${actorName} wrote:\n${text.slice(0, 1500)}`,
-    maxTokens: 200,
+    // одно предложение, но на иврите/русском оно дороже — 200 хватало впритык
+    maxTokens: 400,
   })
   const summary = raw?.trim().replace(/^["'«]|["'»]$/g, '').slice(0, 200)
   if (!summary) return

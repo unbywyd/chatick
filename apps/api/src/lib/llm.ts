@@ -492,6 +492,30 @@ export async function improveTask(
  * ИИ даёт короткий совет по улучшению + предлагает улучшенный вариант title/description
  * (для «применить»). Ничего не сохраняет. Fail-open: null → «ИИ недоступен».
  */
+/**
+ * Достаёт строковые поля из ответа модели, даже если JSON оборван.
+ *
+ * Модель упирается в maxTokens посреди строки — и JSON.parse отказывается
+ * читать весь ответ целиком, хотя первые поля пришли полностью. Кириллица
+ * стоит дороже в токенах, поэтому обрыв случается именно на русском тексте.
+ */
+function looseJsonFields(raw: string, fields: string[]): Record<string, string> {
+  const clean = raw.trim().replace(/^```(?:json)?\s*|\s*```$/g, '')
+  try {
+    const parsed = JSON.parse(clean) as Record<string, unknown>
+    return Object.fromEntries(fields.map((f) => [f, typeof parsed[f] === 'string' ? (parsed[f] as string) : '']))
+  } catch {
+    // вытаскиваем каждое поле по отдельности: оборванное останется частичным,
+    // но всё, что успело прийти до обрыва, читается нормально
+    const out: Record<string, string> = {}
+    for (const field of fields) {
+      const m = clean.match(new RegExp(`"${field}"\\s*:\\s*"((?:[^"\\\\]|\\\\.)*)`, 's'))
+      out[field] = m?.[1] ? m[1].replace(/\\"/g, '"').replace(/\\n/g, '\n') : ''
+    }
+    return out
+  }
+}
+
 export async function validateTask(
   projectId: string,
   input: { title: string; description: string; language: string },
@@ -508,19 +532,21 @@ export async function validateTask(
       'Respond with ONLY a JSON object: {"advice": "...", "suggestedTitle": "...", "suggestedDescription": "..."}. No markdown, no extra text.',
     ].join('\n'),
     user: JSON.stringify({ title: input.title, description: input.description }),
-    maxTokens: 800,
+    // 800 не хватало: на русском ответ обрывался посреди строки и JSON не читался
+    maxTokens: 2000,
   })
   if (!text) return null
-  try {
-    const clean = text.trim().replace(/^```(?:json)?\s*|\s*```$/g, '')
-    const parsed = JSON.parse(clean) as { advice?: string; suggestedTitle?: string; suggestedDescription?: string }
-    return {
-      advice: (parsed.advice ?? '').slice(0, 2000),
-      suggestedTitle: (parsed.suggestedTitle ?? input.title).slice(0, 300),
-      suggestedDescription: (parsed.suggestedDescription ?? input.description).slice(0, 10_000),
+  {
+    const f = looseJsonFields(text, ['advice', 'suggestedTitle', 'suggestedDescription'])
+    // совет — единственное обязательное поле: без него показывать нечего
+    if (f.advice) {
+      return {
+        advice: f.advice.slice(0, 2000),
+        suggestedTitle: (f.suggestedTitle || input.title).slice(0, 300),
+        suggestedDescription: (f.suggestedDescription || input.description).slice(0, 10_000),
+      }
     }
-  } catch {
-    console.error('[llm] validateTask: bad JSON:', text.slice(0, 200))
+    console.error('[llm] validateTask: unreadable response:', text.slice(0, 200))
     return null
   }
 }

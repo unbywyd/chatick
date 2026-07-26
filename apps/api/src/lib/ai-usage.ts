@@ -24,7 +24,9 @@ export const DEFAULT_PRICING: Record<string, { in: number; out: number }> = {
   'gemini-1.5-flash': { in: 0.075, out: 0.3 },
   'gemini-1.5-pro': { in: 1.25, out: 5 },
   // DeepSeek
-  'deepseek-chat': { in: 0.27, out: 1.1 },
+  'deepseek-v4-flash': { in: 0.28, out: 0.42 },
+  'deepseek-v4-pro': { in: 0.55, out: 2.19 },
+  'deepseek-chat': { in: 0.27, out: 1.1 }, // снята провайдером, оставлена для истории
   'deepseek-reasoner': { in: 0.55, out: 2.19 },
   // Groq
   'llama-3.3-70b-versatile': { in: 0.59, out: 0.79 },

@@ -278,7 +278,9 @@ export async function sandboxReply(
   let buffer = ''
   const raw = await completeStream(
     cfg,
-    { system, user, maxTokens: 800 },
+    // ответ ищется по маркеру ---SUGGESTION---: обрыв до него теряет всё,
+            // а не просто укорачивает
+            { system, user, maxTokens: 2500 },
     (delta) => {
       if (streamedPastMarker || !onChunk) return
       buffer += delta

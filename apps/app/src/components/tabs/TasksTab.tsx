@@ -1,5 +1,5 @@
-import { useMemo, useRef, useState } from 'react'
-import { useNavigate, useParams } from 'react-router-dom'
+import { useEffect, useMemo, useRef, useState } from 'react'
+import { useNavigate, useParams, useSearchParams } from 'react-router-dom'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { useTranslation } from 'react-i18next'
 import { toast } from 'sonner'
@@ -39,8 +39,12 @@ export function TasksTab({ projectId, meId }: { projectId: string; meId?: string
   // drawer открывается по URL: /p/:id/tasks/:taskId — прямые ссылки на задачу работают
   const navigate = useNavigate()
   const { taskId: openTaskId } = useParams()
-  const setOpenTaskId = (taskId: string | null) =>
-    navigate(taskId ? `/p/${projectId}/tasks/${taskId}` : `/p/${projectId}/tasks`)
+  const [searchParams, setSearchParams] = useSearchParams()
+  // ?new=1 помечает только что созданную задачу — она открывается сразу в
+  // режиме правки, иначе человек попадает на пустую карточку и должен
+  // отдельно нажать «Изменить», чтобы указать исполнителя и срок.
+  const setOpenTaskId = (taskId: string | null, justCreated = false) =>
+    navigate(taskId ? `/p/${projectId}/tasks/${taskId}${justCreated ? '?new=1' : ''}` : `/p/${projectId}/tasks`)
   const [dragId, setDragId] = useState<string | null>(null)
   const [dropHint, setDropHint] = useState<{ status: Status; beforeId: string | null } | null>(null)
   const [view, setView] = useState<'list' | 'table'>(() => (localStorage.getItem('tasksView') as 'list' | 'table') || 'list')
@@ -101,7 +105,7 @@ export function TasksTab({ projectId, meId }: { projectId: string; meId?: string
     onSuccess: (created) => {
       setNewTitle('')
       refresh()
-      setOpenTaskId(created.id) // сразу открыть — заполнить детали/вложения
+      setOpenTaskId(created.id, true) // открыть сразу в форме — заполнить детали
     },
     onError: onErr,
   })
@@ -212,6 +216,19 @@ export function TasksTab({ projectId, meId }: { projectId: string; meId?: string
 
   const doneCount = (tasksQ.data ?? []).filter((task) => task.status === 'done').length
   const openTask = tasksQ.data?.find((task) => task.id === openTaskId) ?? null
+  // Какая задача была создана только что. Держим id, а не булев флаг: URL
+  // чистится сразу после открытия, и флаг успел бы схлопнуться в false,
+  // закрыв форму в тот же момент, когда она открылась.
+  const createdRef = useRef<string | null>(null)
+  if (searchParams.get('new') === '1' && openTaskId) createdRef.current = openTaskId
+  const isNewTask = Boolean(openTaskId) && createdRef.current === openTaskId
+
+  useEffect(() => {
+    if (searchParams.get('new') !== '1') return
+    const next = new URLSearchParams(searchParams)
+    next.delete('new')
+    setSearchParams(next, { replace: true })
+  }, [searchParams, setSearchParams])
 
   // Drop: вычислить sortOrder между соседями целевой позиции и запатчить status+sortOrder
   const handleDrop = (status: Status, beforeId: string | null) => {
@@ -242,6 +259,7 @@ export function TasksTab({ projectId, meId }: { projectId: string; meId?: string
         onPatch={(body) => patch.mutate({ id: openTask.id, ...body })}
         onDelete={() => remove.mutate(openTask.id)}
         onClose={() => setOpenTaskId(null)}
+        startEditing={isNewTask}
       />
     )
   }
