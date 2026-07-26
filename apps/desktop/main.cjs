@@ -311,6 +311,8 @@ function registerIpc() {
       tasks: Array.isArray(next?.tasks) ? next.tasks : [],
       projects: Array.isArray(next?.projects) ? next.projects : [],
       project: next?.project ?? null,
+      company: next?.company ?? null,
+      connections: Array.isArray(next?.connections) ? next.connections : [],
       strings: next?.strings ?? state.strings,
     }
     refreshTray()

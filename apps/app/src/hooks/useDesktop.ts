@@ -1,4 +1,4 @@
-import { useEffect } from 'react'
+import { useEffect, useState } from 'react'
 import { useLocation, useNavigate } from 'react-router-dom'
 import { useTranslation } from 'react-i18next'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
@@ -159,11 +159,17 @@ export function useDesktopSync() {
 
   // Действующие туннели ассистентов: их видно во вкладке «Доступ», и оттуда же
   // их можно закрыть — доступ от своего имени стоит держать на глазах.
+  //
+  // Подтверждение кода САМО ПО СЕБЕ сессию не создаёт: она появляется, когда
+  // ассистент придёт за токеном. Поэтому сразу после выдачи какое-то время
+  // опрашиваем часто — иначе список остаётся пустым, и человек думает, что
+  // подключение не сработало.
+  const [awaitingTunnel, setAwaitingTunnel] = useState(false)
   const bridgeSessions = useQuery({
     queryKey: ['bridge-sessions'],
     enabled: Boolean(bridge) && authed,
     queryFn: () => api<{ items: BridgeSessionLite[] }>('/api/v1/auth/bridge/sessions'),
-    refetchInterval: 60_000,
+    refetchInterval: awaitingTunnel ? 2000 : 60_000,
   })
 
   // Мои открытые задачи текущего проекта: панель показывает то, за что я взялся.
@@ -357,6 +363,9 @@ export function useDesktopSync() {
         await api('/api/v1/auth/bridge/approve', { method: 'POST', body: JSON.stringify({ code, ...target }) })
         bridge.connectResult({ step: 'approved', code })
         qc.invalidateQueries({ queryKey: ['bridge-sessions'] })
+        // ассистент может прийти за токеном не мгновенно
+        setAwaitingTunnel(true)
+        setTimeout(() => setAwaitingTunnel(false), 60_000)
       } catch (e) {
         bridge.connectResult({ step: 'failed', code, error: e instanceof Error ? e.message : String(e) })
       }
