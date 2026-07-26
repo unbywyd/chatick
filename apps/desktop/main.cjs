@@ -48,6 +48,11 @@ function createWindow() {
     },
   })
 
+  // Меню File/Edit/View/Help к Chatick отношения не имеет и занимает строку.
+  // На macOS меню живёт в системной панели: без него отвалятся Cmd+C и Cmd+Q,
+  // поэтому убираем только там, где оно рисуется внутри окна.
+  if (process.platform !== 'darwin') win.setMenuBarVisibility(false)
+
   win.once('ready-to-show', () => win.show())
 
   if (isDev) {
@@ -224,6 +229,7 @@ if (!app.requestSingleInstanceLock()) {
   app.on('second-instance', showWindow)
 
   app.whenReady().then(() => {
+    if (process.platform !== 'darwin') Menu.setApplicationMenu(null)
     registerIpc()
     createWindow()
     createTray()
