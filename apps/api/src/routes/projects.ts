@@ -34,7 +34,7 @@ const aiConfigSchema = z.object({
 // SPEC §4.3 / §8: доменная модель прав. Каждый домен получает УРОВЕНЬ доступа,
 // а конкретные булевы действия (tasks.create и т.п.) выводятся из уровня.
 // Это питает и ручной CRUD, и ИИ-инструменты (Фаза 10) — единая проверка.
-export const PERMISSION_DOMAINS = ['tasks', 'files', 'resources', 'documents'] as const
+export const PERMISSION_DOMAINS = ['tasks', 'files', 'resources', 'documents', 'notes'] as const
 export type PermissionDomain = (typeof PERMISSION_DOMAINS)[number]
 
 // none < read < write < crud. write = создавать/менять свои, crud = + удалять/чужое.
@@ -59,6 +59,9 @@ export const PROJECT_PERMISSIONS = [
   'documents.read',
   'documents.write',
   'documents.delete',
+  'notes.read',
+  'notes.write',
+  'notes.delete',
   // legacy-алиасы (совместимость со старым кодом/данными)
   'credentials.read',
   'credentials.manage',
@@ -80,6 +83,9 @@ const ACTION_REQUIREMENT: Record<ProjectPermission, [PermissionDomain, Permissio
   'documents.read': ['documents', 'read'],
   'documents.write': ['documents', 'write'],
   'documents.delete': ['documents', 'crud'],
+  'notes.read': ['notes', 'read'],
+  'notes.write': ['notes', 'write'],
+  'notes.delete': ['notes', 'crud'],
   'credentials.read': ['resources', 'read'],
   'credentials.manage': ['resources', 'write'],
 }
@@ -90,13 +96,16 @@ const domainPermissionsSchema = z.object({
   files: levelSchema,
   resources: levelSchema,
   documents: levelSchema,
+  notes: levelSchema,
 })
 // PATCH принимает частичный набор доменных уровней
 const permissionsSchema = domainPermissionsSchema.partial()
 
 export function defaultDomainPermissions(role: 'owner' | 'admin' | 'member'): DomainPermissions {
-  if (role === 'member') return { tasks: 'read', files: 'write', resources: 'read', documents: 'write' }
-  return { tasks: 'crud', files: 'crud', resources: 'crud', documents: 'crud' }
+  // Заметки участник пишет наравне с документами: журнал ценен, только если
+  // его ведут все, кто видит проблему, а не один админ.
+  if (role === 'member') return { tasks: 'read', files: 'write', resources: 'read', documents: 'write', notes: 'write' }
+  return { tasks: 'crud', files: 'crud', resources: 'crud', documents: 'crud', notes: 'crud' }
 }
 
 /** Разворачивает доменные уровни в плоский набор булевых действий (для UI и legacy). */

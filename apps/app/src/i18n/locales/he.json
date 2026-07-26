@@ -251,7 +251,8 @@
       "tasks": "משימות",
       "files": "קבצים",
       "resources": "משאבים",
-      "documents": "מסמכים"
+      "documents": "מסמכים",
+      "notes": "הערות"
     },
     "level": {
       "none": {

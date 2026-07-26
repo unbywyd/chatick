@@ -12,8 +12,8 @@ import { notify } from '../lib/notify.js'
 import { broadcast } from '../ws.js'
 
 // Заметки проекта (SPEC §8.31): журнал решений, противоречий и напоминаний.
-// Права берём из домена documents — это тоже письменное знание проекта,
-// отдельный домен заставил бы всех переназначать роли.
+// Отдельный домен прав notes: журнал стоит уметь открывать шире или уже, чем
+// документы — например, дать читать всем, а фиксировать противоречия немногим.
 export const notesRoute = new Hono<ProjectEnv>()
 notesRoute.use('*', requireProject)
 
@@ -80,7 +80,7 @@ const listQuery = z.object({
 
 notesRoute.get('/', zValidator('query', listQuery), async (c) => {
   const { projectId, sub } = c.get('auth')
-  if (!(await hasPermission(projectId, sub, 'documents.read'))) return c.json({ error: 'Forbidden' }, 403)
+  if (!(await hasPermission(projectId, sub, 'notes.read'))) return c.json({ error: 'Forbidden' }, 403)
   const f = c.req.valid('query')
 
   const conds = [alive]
@@ -144,7 +144,7 @@ notesRoute.get('/', zValidator('query', listQuery), async (c) => {
 /** Теги, уже использованные в проекте — для автодополнения и фильтров. */
 notesRoute.get('/tags', async (c) => {
   const { projectId, sub } = c.get('auth')
-  if (!(await hasPermission(projectId, sub, 'documents.read'))) return c.json({ error: 'Forbidden' }, 403)
+  if (!(await hasPermission(projectId, sub, 'notes.read'))) return c.json({ error: 'Forbidden' }, 403)
   const rows = await db.select({ tags: notes.tags }).from(notes).where(and(eq(notes.projectId, projectId), alive)).limit(1000)
   const counts = new Map<string, number>()
   for (const r of rows) for (const t of parseJson<string[]>(r.tags, [])) counts.set(t, (counts.get(t) ?? 0) + 1)
@@ -155,7 +155,7 @@ notesRoute.get('/tags', async (c) => {
 
 notesRoute.get('/:id', async (c) => {
   const { projectId, sub } = c.get('auth')
-  if (!(await hasPermission(projectId, sub, 'documents.read'))) return c.json({ error: 'Forbidden' }, 403)
+  if (!(await hasPermission(projectId, sub, 'notes.read'))) return c.json({ error: 'Forbidden' }, 403)
   const row = await db
     .select({ n: notes, author: users, project: projects })
     .from(notes)
@@ -280,14 +280,14 @@ export async function createNote(
 
 notesRoute.post('/', zValidator('json', bodySchema), async (c) => {
   const { projectId, sub } = c.get('auth')
-  if (!(await hasPermission(projectId, sub, 'documents.write'))) return c.json({ error: 'Forbidden' }, 403)
+  if (!(await hasPermission(projectId, sub, 'notes.write'))) return c.json({ error: 'Forbidden' }, 403)
   const row = await createNote(projectId, sub, c.req.valid('json'), 'ui')
   return c.json(serialize(row), 201)
 })
 
 notesRoute.patch('/:id', zValidator('json', bodySchema.partial()), async (c) => {
   const { projectId, sub } = c.get('auth')
-  if (!(await hasPermission(projectId, sub, 'documents.write'))) return c.json({ error: 'Forbidden' }, 403)
+  if (!(await hasPermission(projectId, sub, 'notes.write'))) return c.json({ error: 'Forbidden' }, 403)
   const existing = await db.query.notes.findFirst({
     where: and(eq(notes.id, c.req.param('id')), eq(notes.projectId, projectId), alive),
   })
@@ -326,7 +326,7 @@ notesRoute.patch('/:id', zValidator('json', bodySchema.partial()), async (c) => 
 
 notesRoute.delete('/:id', async (c) => {
   const { projectId, sub } = c.get('auth')
-  if (!(await hasPermission(projectId, sub, 'documents.delete'))) return c.json({ error: 'Forbidden' }, 403)
+  if (!(await hasPermission(projectId, sub, 'notes.delete'))) return c.json({ error: 'Forbidden' }, 403)
   const existing = await db.query.notes.findFirst({
     where: and(eq(notes.id, c.req.param('id')), eq(notes.projectId, projectId), alive),
   })

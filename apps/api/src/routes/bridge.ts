@@ -654,7 +654,7 @@ bridgeRoute.post('/sprints', async (c) => {
 bridgeRoute.get('/notes', async (c) => {
   const scope = await resolveProject(c as never)
   if ('error' in scope) return c.json({ error: scope.error }, scope.status)
-  const denied = await require(c as never, 'documents.read', scope.projectId)
+  const denied = await require(c as never, 'notes.read', scope.projectId)
   if (denied) return c.json(denied, 403)
 
   const q = c.req.query('q')?.trim()
@@ -712,7 +712,7 @@ bridgeRoute.get('/notes', async (c) => {
 bridgeRoute.get('/notes/:id', async (c) => {
   const scope = await resolveProject(c as never)
   if ('error' in scope) return c.json({ error: scope.error }, scope.status)
-  const denied = await require(c as never, 'documents.read', scope.projectId)
+  const denied = await require(c as never, 'notes.read', scope.projectId)
   if (denied) return c.json(denied, 403)
 
   const row = await db.query.notes.findFirst({
@@ -751,7 +751,7 @@ bridgeRoute.post('/notes', async (c) => {
   const id = auth(c as never)
   const scope = await resolveProject(c as never)
   if ('error' in scope) return c.json({ error: scope.error }, scope.status)
-  const denied = await require(c as never, 'documents.write', scope.projectId)
+  const denied = await require(c as never, 'notes.write', scope.projectId)
   if (denied) return c.json(denied, 403)
 
   const b = (await c.req.json().catch(() => ({}))) as Record<string, unknown>
@@ -788,7 +788,7 @@ bridgeRoute.patch('/notes/:id', async (c) => {
   const id = auth(c as never)
   const scope = await resolveProject(c as never)
   if ('error' in scope) return c.json({ error: scope.error }, scope.status)
-  const denied = await require(c as never, 'documents.write', scope.projectId)
+  const denied = await require(c as never, 'notes.write', scope.projectId)
   if (denied) return c.json(denied, 403)
 
   const existing = await db.query.notes.findFirst({
@@ -850,7 +850,7 @@ bridgeRoute.delete('/notes/:id', async (c) => {
   const id = auth(c as never)
   const scope = await resolveProject(c as never)
   if ('error' in scope) return c.json({ error: scope.error }, scope.status)
-  const denied = await require(c as never, 'documents.delete', scope.projectId)
+  const denied = await require(c as never, 'notes.delete', scope.projectId)
   if (denied) return c.json(denied, 403)
 
   const existing = await db.query.notes.findFirst({

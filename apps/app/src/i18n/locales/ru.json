@@ -251,7 +251,8 @@
       "tasks": "Задачи",
       "files": "Файлы",
       "resources": "Ресурсы",
-      "documents": "Документы"
+      "documents": "Документы",
+      "notes": "Заметки"
     },
     "level": {
       "none": {

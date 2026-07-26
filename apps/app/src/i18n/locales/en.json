@@ -251,7 +251,8 @@
       "tasks": "Tasks",
       "files": "Files",
       "resources": "Resources",
-      "documents": "Documents"
+      "documents": "Documents",
+      "notes": "Notes"
     },
     "level": {
       "none": {

@@ -87,12 +87,14 @@ Base URL: ${b}/x
 
 ## Your permissions in this project
 
-  tasks: ${permissions.tasks}   files: ${permissions.files}   resources: ${permissions.resources}   documents: ${permissions.documents}
+  tasks: ${permissions.tasks}   files: ${permissions.files}   resources: ${permissions.resources}
+  documents: ${permissions.documents}   notes: ${permissions.notes}
 
   create/edit tasks .... ${can('tasks.create')} / ${can('tasks.edit')}
   delete tasks ......... ${can('tasks.delete')}
   upload/delete files .. ${can('files.upload')} / ${can('files.delete')}
   write/delete docs .... ${can('documents.write')} / ${can('documents.delete')}
+  write/delete notes ... ${can('notes.write')} / ${can('notes.delete')}
   manage resources ..... ${can('resources.manage')}
 ${denied.length ? `\n  NOT ALLOWED: ${denied.join(', ')}\n  Do not attempt these — they return 403.` : ''}
 
