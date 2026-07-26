@@ -3,7 +3,7 @@ import { zValidator } from '@hono/zod-validator'
 import { z } from 'zod'
 import { and, desc, eq, inArray, isNull, sql } from 'drizzle-orm'
 import { db } from '../db/client.js'
-import { notifications, projects, users, userNotificationPrefs } from '../db/schema.js'
+import { notifications, projectMembers, projects, tasks, users, userNotificationPrefs } from '../db/schema.js'
 import { requireSession, type SessionEnv } from '../auth.js'
 
 // Глобальные in-app уведомления пользователя (SPEC §8.22) — session-токен,
@@ -67,6 +67,38 @@ inboxRoute.get('/count', async (c) => {
     .from(notifications)
     .where(and(eq(notifications.userId, sub), isNull(notifications.readAt)))) as [{ n: number }]
   return c.json({ unread: n })
+})
+
+/**
+ * Мои открытые задачи по ВСЕМ проектам (SPEC §8.33).
+ *
+ * Задачи всегда живут в проекте, но вопрос «что мне делать» проекта не знает:
+ * в трее и в мобильном человек смотрит на список дел целиком, а не сначала
+ * выбирает, где искать. Отсюда — session-токен и обход всех проектов, где он
+ * состоит.
+ */
+inboxRoute.get('/tasks', async (c) => {
+  const { sub } = c.get('session')
+  const rows = await db
+    .select({ t: tasks, project: projects })
+    .from(tasks)
+    .innerJoin(projects, eq(projects.id, tasks.projectId))
+    .innerJoin(projectMembers, and(eq(projectMembers.projectId, tasks.projectId), eq(projectMembers.userId, sub)))
+    .where(and(eq(tasks.assigneeId, sub), isNull(tasks.deletedAt), sql`${tasks.status} <> 'done'`))
+    .orderBy(desc(tasks.updatedAt))
+    .limit(50)
+
+  return c.json({
+    items: rows.map((r) => ({
+      id: r.t.id,
+      number: r.t.number,
+      title: r.t.title,
+      status: r.t.status,
+      priority: r.t.priority,
+      dueDate: r.t.dueDate,
+      project: { id: r.project.id, name: r.project.name, color: r.project.color },
+    })),
+  })
 })
 
 // Пометить прочитанными: конкретные id / весь проект / всё

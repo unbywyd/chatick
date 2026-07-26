@@ -18,8 +18,6 @@ const APP_URL = process.env.CHATICK_URL || 'https://app.chatick.com'
 let win = null
 let tray = null
 let quitting = false
-/** Панель занята вводом (код доступа) — по клику мимо не закрываем. */
-let panelBusy = false
 
 // Состояние, которое присылает веб. Главный процесс не ходит в API сам: он
 // ничего не знает про токены и права, и знать не должен.
@@ -248,22 +246,15 @@ function createPanel() {
 
   panel.loadFile(path.join(__dirname, 'panel.html'))
 
-  // Клик мимо панели закрывает её: так ведут себя все меню в трее. Но не
-  // посреди работы с кодом доступа — там человек ходит в другое окно за
-  // кодом и возвращается, и захлопнуть панель значит заставить начать заново.
-  panel.on('blur', () => {
-    if (panelBusy) return
-    panel?.hide()
-  })
+  // Панель закрывается только руками — кнопкой «Закрыть» или значком в трее.
+  // Закрытие по клику мимо (как у меню в трее) здесь мешает: в панель ходят
+  // с кодом или задачей из другого окна, и она захлопывалась на полпути.
 }
 
 /** Показать панель рядом со значком, не вылезая за края экрана. */
 function togglePanel() {
   if (!panel) createPanel()
-  if (panel.isVisible()) {
-    panelBusy = false
-    return panel.hide()
-  }
+  if (panel.isVisible()) return panel.hide()
 
   const { screen } = require('electron')
   const iconBounds = tray.getBounds()
@@ -360,19 +351,13 @@ function registerIpc() {
     showWindow()
     if (link) send('navigate', link)
   })
-  ipcMain.on('panel:close', () => {
-    panelBusy = false
-    panel?.hide()
-  })
+  ipcMain.on('panel:close', () => panel?.hide())
 
   // Подключение ассистента: панель передаёт код, веб проверяет и открывает
   // туннель, ответ возвращается в панель. Главный процесс здесь только
   // почтальон — он не знает ни про сессии, ни про права.
   ipcMain.on('panel:check-code', (_e, code) => send('connect:check', code))
   ipcMain.on('panel:approve-code', (_e, payload) => send('connect:approve', payload))
-  ipcMain.on('panel:busy', (_e, busy) => {
-    panelBusy = Boolean(busy)
-  })
   ipcMain.on('panel:refresh-connections', () => send('connect:refresh'))
   ipcMain.on('panel:revoke-connection', (_e, id) => send('connect:revoke', id))
   ipcMain.on('connect:result', (_e, payload) => panel?.webContents.send('panel:connect', payload))

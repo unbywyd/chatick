@@ -22,6 +22,7 @@ import { connectDoc, guideDoc } from '../lib/bridge-docs.js'
 import { logActivity } from '../lib/audit.js'
 import { createNote, noteToTask, NOTE_TYPES, type NoteType } from './notes.js'
 import { readTimeConfig } from './time.js'
+import { readPresence } from './auth.js'
 import { notifyChatMentions } from './messages.js'
 import { htmlToText, sanitizeHtml } from '../lib/sanitize-html.js'
 import { broadcast, sendToUser } from '../ws.js'
@@ -155,10 +156,21 @@ bridgeRoute.get('/projects', async (c) => {
     if (!perms) continue
     items.push({ id: p.id, name: p.name, about: p.about, permissions: perms })
   }
+  // Где человек сейчас: с доступом на всю компанию иначе приходится
+  // переспрашивать «а в каком проекте?» — или, что хуже, угадывать.
+  const here = readPresence(id.userId)
+  const activeProject = here && items.some((x) => x.id === here.projectId) ? here.projectId : null
+
   return c.json({
     items,
     scope: id.companyId ? 'company' : 'project',
-    hint: id.companyId ? 'Pass ?project=<id> on every project-scoped call.' : undefined,
+    activeProject,
+    activeProjectName: activeProject ? items.find((x) => x.id === activeProject)?.name : undefined,
+    hint: id.companyId
+      ? activeProject
+        ? `The person is looking at "${items.find((x) => x.id === activeProject)?.name}" right now — prefer it unless told otherwise. Pass ?project=<id> on every project-scoped call.`
+        : 'Pass ?project=<id> on every project-scoped call.'
+      : undefined,
   })
 })
 

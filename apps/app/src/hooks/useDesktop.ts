@@ -94,7 +94,14 @@ type ProjectLite = {
   isMember: boolean
   stats?: { unread: number }
 }
-type TaskLite = { id: string; number: string; title: string; status: string; dueDate?: string | null; assignee?: { id: string } | null }
+type TaskLite = {
+  id: string
+  number: string
+  title: string
+  status: string
+  dueDate?: string | null
+  project: { id: string; name: string; color?: string }
+}
 type BridgeSessionLite = {
   id: string
   clientName: string
@@ -102,6 +109,29 @@ type BridgeSessionLite = {
   project: { id: string; name: string } | null
   company: { id: string; name: string } | null
   lastUsedAt: string
+}
+
+/**
+ * Отмечает, в каком проекте человек сейчас (SPEC §8.33).
+ *
+ * Нужно ассистенту с доступом на всю компанию: без этого он либо
+ * переспрашивает «в каком проекте?», либо угадывает. Работает и в браузере,
+ * и в десктопе — присутствие не имеет отношения к оболочке.
+ */
+export function usePresence() {
+  const location = useLocation()
+  const authed = Boolean(getSessionToken())
+  const projectId = location.pathname.match(/^\/p\/([^/]+)/)?.[1] ?? null
+
+  useEffect(() => {
+    if (!authed) return
+    const send = () =>
+      api('/api/v1/auth/presence', { method: 'POST', body: JSON.stringify({ projectId }) }).catch(() => {})
+    send()
+    // Отметка живёт 15 минут — подтверждаем, пока вкладка открыта.
+    const timer = setInterval(send, 5 * 60_000)
+    return () => clearInterval(timer)
+  }, [authed, projectId])
 }
 
 /**
@@ -118,13 +148,6 @@ export function useDesktopSync() {
 
   // Активный проект — из адреса: /p/<id>/...
   const activeProjectId = location.pathname.match(/^\/p\/([^/]+)/)?.[1]
-
-  const me = useQuery({
-    queryKey: ['me'],
-    enabled: Boolean(bridge) && authed,
-    queryFn: () => api<{ id: string }>('/api/v1/auth/me'),
-  })
-  const meId = me.data?.id
 
   // Непрочитанные — то же, что показывает колокольчик: только адресованное мне.
   const inbox = useQuery({
@@ -173,13 +196,13 @@ export function useDesktopSync() {
     refetchInterval: awaitingTunnel ? 2000 : 60_000,
   })
 
-  // Мои открытые задачи текущего проекта: панель показывает то, за что я взялся.
+  // Мои открытые задачи по ВСЕМ проектам: панель отвечает на «что мне делать»,
+  // и заставлять сначала зайти в проект — значит не отвечать вовсе.
   const tasks = useQuery({
-    queryKey: ['desktop-tasks', activeProjectId],
-    enabled: Boolean(bridge) && authed && Boolean(activeProjectId),
-    queryFn: () => api<TaskLite[]>('/api/v1/tasks', {}, 'project'),
+    queryKey: ['desktop-tasks'],
+    enabled: Boolean(bridge) && authed,
+    queryFn: () => api<{ items: TaskLite[] }>('/api/v1/inbox/tasks'),
     refetchInterval: 120_000,
-    retry: false,
   })
 
   // --- состояние для трея и панели -------------------------------------------
@@ -211,18 +234,15 @@ export function useDesktopSync() {
         projectName: nameOf(n.projectId),
         unread: !n.readAt,
       })),
-      // только мои и только незакрытые: панель отвечает на «что мне делать»
-      tasks: (authed ? tasks.data ?? [] : [])
-        .filter((t) => t.status !== 'done' && (!meId || t.assignee?.id === meId))
-        .slice(0, 30)
-        .map((t) => ({
-          id: t.id,
-          number: t.number,
-          title: t.title,
-          link: `/p/${activeProjectId}/tasks/${t.id}`,
-          projectName: activeProjectId ? nameOf(activeProjectId) : undefined,
-          due: t.dueDate ? new Date(t.dueDate).toLocaleDateString() : undefined,
-        })),
+      // сервер уже отдал только мои и только незакрытые, из всех проектов
+      tasks: (authed ? tasks.data?.items ?? [] : []).slice(0, 30).map((t) => ({
+        id: t.id,
+        number: t.number,
+        title: t.title,
+        link: `/p/${t.project.id}/tasks/${t.id}`,
+        projectName: t.project.name,
+        due: t.dueDate ? new Date(t.dueDate).toLocaleDateString() : undefined,
+      })),
       projects: projectList.map((p) => ({
         id: p.id,
         name: p.name,
@@ -288,7 +308,7 @@ export function useDesktopSync() {
         dir: i18n.dir(),
       },
     })
-  }, [bridge, authed, inbox.data, running.data?.items, projects.data, tasks.data, bridgeSessions.data, company, activeProjectId, meId, t, i18n])
+  }, [bridge, authed, inbox.data, running.data?.items, projects.data, tasks.data, bridgeSessions.data, company, activeProjectId, t, i18n])
 
   // --- системные уведомления -------------------------------------------------
   useEffect(() => {

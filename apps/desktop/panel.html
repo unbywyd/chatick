@@ -617,9 +617,6 @@
         btn.onclick = () => {
           tab = btn.dataset.tab
           document.querySelectorAll('nav button').forEach((b) => b.classList.toggle('active', b === btn))
-          // За кодом доступа ходят в другое окно и возвращаются — на этой
-          // вкладке панель не должна закрываться от потери фокуса.
-          window.panel.setBusy(tab === 'connect')
           // Список подключений живёт минутным опросом — при открытии вкладки
           // обновляем сразу, иначе только что выданный доступ не видно.
           if (tab === 'connect') window.panel.refreshConnections()

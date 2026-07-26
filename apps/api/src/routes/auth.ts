@@ -164,6 +164,41 @@ auth.get('/desktop/poll', (c) => {
   return c.json({ status: 'approved', token: entry.token })
 })
 
+// --- где человек сейчас (SPEC §8.33) -----------------------------------------
+//
+// Ассистенту с доступом на всю компанию нужно знать, в каком проекте человек
+// работает прямо сейчас: иначе он либо переспрашивает, либо угадывает. Клиент
+// отмечается при переходе между проектами, мост читает это в /x/whoami.
+//
+// Держим в памяти: знание живёт минуты и переживать перезапуск ему незачем.
+
+type Presence = { projectId: string; at: number }
+const presence = new Map<string, Presence>()
+const PRESENCE_TTL_MS = 15 * 60 * 1000
+
+export function readPresence(userId: string): Presence | null {
+  const p = presence.get(userId)
+  if (!p) return null
+  if (Date.now() - p.at > PRESENCE_TTL_MS) {
+    presence.delete(userId)
+    return null
+  }
+  return p
+}
+
+// POST /api/v1/auth/presence — «я сейчас здесь»
+auth.post('/presence', requireSession, async (c) => {
+  const { sub } = c.get('session')
+  const body = (await c.req.json().catch(() => ({}))) as Record<string, unknown>
+  const projectId = typeof body.projectId === 'string' ? body.projectId : ''
+  if (!projectId) {
+    presence.delete(sub)
+    return c.json({ ok: true })
+  }
+  presence.set(sub, { projectId, at: Date.now() })
+  return c.json({ ok: true })
+})
+
 // GET /api/v1/auth/me — профиль по любому валидному токену
 auth.get('/me', requireSession, async (c) => {
   const { sub } = c.get('session')

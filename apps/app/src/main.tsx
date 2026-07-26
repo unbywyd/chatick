@@ -5,7 +5,7 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { Toaster } from 'sonner'
 import './index.css'
 import './i18n'
-import { useDesktopSync } from './hooks/useDesktop'
+import { useDesktopSync, usePresence } from './hooks/useDesktop'
 import { ThemeProvider } from './providers/theme'
 import { ConfirmProvider } from './components/ui/confirm'
 import { ProjectLayout, useProjectCtx } from './screens/ProjectScreen'
@@ -30,6 +30,7 @@ const queryClient = new QueryClient()
 /** Хук требует роутер, поэтому вызываем его из компонента внутри HashRouter. */
 function DesktopSync() {
   useDesktopSync()
+  usePresence()
   return null
 }
 
