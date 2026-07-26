@@ -987,6 +987,9 @@
     "due": "due",
     "launchAtLogin": "Launch at login",
     "quit": "Quit",
-    "timerRunning": "timer running"
+    "timerRunning": "timer running",
+    "signIn": "Sign in",
+    "signedOut": "Not signed in",
+    "signedOutHint": "Sign in to see your timer,<br>tasks and notifications"
   }
 }

@@ -125,6 +125,27 @@
       }
       .empty { padding: 34px 16px; text-align: center; color: var(--muted); }
 
+      /* --- до входа: панель не притворяется пустой, а говорит почему --- */
+      body.guest .timer,
+      body.guest nav { display: none; }
+      .guest-screen { display: none; }
+      body.guest .guest-screen {
+        flex: 1;
+        display: flex; flex-direction: column;
+        align-items: center; justify-content: center;
+        gap: 6px; padding: 24px 20px; text-align: center;
+      }
+      body.guest main { display: none; }
+      .guest-logo {
+        width: 46px; height: 46px; margin-bottom: 6px;
+        border-radius: 12px;
+        background: var(--brand); color: #111;
+        display: grid; place-items: center;
+        font: 700 20px/1 system-ui, sans-serif;
+      }
+      .guest-title { font-size: 15px; font-weight: 600; }
+      .guest-hint { color: var(--muted); }
+
       /* --- низ --- */
       footer {
         display: flex; gap: 8px;
@@ -163,13 +184,19 @@
 
     <main id="list"></main>
 
+    <div class="guest-screen">
+      <div class="guest-logo">C</div>
+      <div class="guest-title" id="guestTitle">Not signed in</div>
+      <div class="guest-hint" id="guestHint">Sign in to see your timer, tasks and notifications</div>
+    </div>
+
     <footer>
       <button id="openApp" class="primary" data-t="openApp">Open Chatick</button>
       <button id="close" data-t="close">Close</button>
     </footer>
 
     <script>
-      let state = { unread: 0, timer: null, notifications: [], tasks: [], projects: [], project: null, strings: {} }
+      let state = { authed: true, unread: 0, timer: null, notifications: [], tasks: [], projects: [], project: null, strings: {} }
 
       /**
        * Подписи приходят из веба вместе с состоянием: язык выбирают в
@@ -286,6 +313,18 @@
           if (val) el.textContent = val
         })
         document.documentElement.dir = state.strings?.dir === 'rtl' ? 'rtl' : 'ltr'
+
+        // Пока не вошли, показывать нечего — и кнопка внизу зовёт войти,
+        // а не «открыть», потому что открывать пока некуда.
+        document.body.classList.toggle('guest', state.authed === false)
+        if (state.authed === false) {
+          $('guestTitle').textContent = T('signedOut', 'Not signed in')
+          $('guestHint').innerHTML = T('signedOutHint', 'Sign in to see your timer,<br>tasks and notifications')
+          $('openApp').textContent = T('signIn', 'Sign in')
+          $('cnt').hidden = true
+          return
+        }
+
         renderTimer()
         const cnt = $('cnt')
         cnt.hidden = !state.unread

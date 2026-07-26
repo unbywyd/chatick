@@ -20,7 +20,7 @@ let quitting = false
 
 // Состояние, которое присылает веб. Главный процесс не ходит в API сам: он
 // ничего не знает про токены и права, и знать не должен.
-let state = { unread: 0, timer: null }
+let state = { authed: true, unread: 0, timer: null }
 
 const iconPath = (name) => path.join(__dirname, 'assets', name)
 
@@ -119,13 +119,21 @@ function buildTrayMenu() {
   // Всё содержательное живёт в панели; правой кнопкой — только то, что панели
   // не идёт: автозапуск и выход.
   return Menu.buildFromTemplate([
-    { label: tr('openApp', 'Open Chatick'), click: showWindow },
-    { type: 'separator' },
     {
-      label: state.timer ? tr('stop', 'Stop timer') : tr('start', 'Start timer'),
-      click: () => send('timer:toggle'),
+      label: state.authed ? tr('openApp', 'Open Chatick') : tr('signIn', 'Sign in'),
+      click: showWindow,
     },
     { type: 'separator' },
+    // Таймером до входа управлять нечем — пункт только сбивал бы с толку.
+    ...(state.authed
+      ? [
+          {
+            label: state.timer ? tr('stop', 'Stop timer') : tr('start', 'Start timer'),
+            click: () => send('timer:toggle'),
+          },
+          { type: 'separator' },
+        ]
+      : []),
     {
       label: tr('launchAtLogin', 'Launch at login'),
       type: 'checkbox',
@@ -271,6 +279,7 @@ const send = (channel, payload) => win?.webContents.send(channel, payload)
 function registerIpc() {
   ipcMain.on('state:update', (_e, next) => {
     state = {
+      authed: next?.authed !== false,
       unread: Number(next?.unread) || 0,
       timer: next?.timer ?? null,
       notifications: Array.isArray(next?.notifications) ? next.notifications : [],

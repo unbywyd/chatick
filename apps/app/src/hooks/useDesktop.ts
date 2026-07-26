@@ -33,6 +33,12 @@ export const isDesktop = () => Boolean(desktop())
 
 /** Всё, что панель в трее рисует без обращения к API. */
 type DesktopState = {
+  /**
+   * До входа панели нечего показывать: списки пусты не потому, что дел нет, а
+   * потому, что мы не знаем, чьи они. Разводим эти два случая явно, иначе
+   * панель врёт («всё прочитано») незалогиненному человеку.
+   */
+  authed: boolean
   unread: number
   timer: { id: string; description: string; startedAt: string; projectName?: string } | null
   notifications: { id: string; title: string; summary?: string | null; link: string; projectName?: string; unread: boolean }[]
@@ -132,12 +138,15 @@ export function useDesktopSync() {
   useEffect(() => {
     if (!bridge) return
 
-    const projectList = (projects.data ?? []).filter((p) => p.isMember)
+    // Кеш запросов переживает выход из аккаунта; в панель ничего из прошлой
+    // сессии попасть не должно.
+    const projectList = authed ? (projects.data ?? []).filter((p) => p.isMember) : []
     const nameOf = (id: string) => projectList.find((p) => p.id === id)?.name
-    const timer = running.data?.items[0]
+    const timer = authed ? running.data?.items[0] : undefined
 
     bridge.setState({
-      unread: inbox.data?.unreadTotal ?? 0,
+      authed,
+      unread: authed ? inbox.data?.unreadTotal ?? 0 : 0,
       timer: timer
         ? {
             id: timer.id,
@@ -146,7 +155,7 @@ export function useDesktopSync() {
             projectName: nameOf(timer.projectId),
           }
         : null,
-      notifications: (inbox.data?.items ?? []).slice(0, 20).map((n) => ({
+      notifications: (authed ? inbox.data?.items ?? [] : []).slice(0, 20).map((n) => ({
         id: n.id,
         title: n.title,
         summary: n.summary,
@@ -155,7 +164,7 @@ export function useDesktopSync() {
         unread: !n.readAt,
       })),
       // только мои и только незакрытые: панель отвечает на «что мне делать»
-      tasks: (tasks.data ?? [])
+      tasks: (authed ? tasks.data ?? [] : [])
         .filter((t) => t.status !== 'done' && (!meId || t.assignee?.id === meId))
         .slice(0, 30)
         .map((t) => ({
@@ -173,7 +182,7 @@ export function useDesktopSync() {
         logoUrl: p.logoUrl,
         unread: p.stats?.unread ?? 0,
       })),
-      project: activeProjectId ? { id: activeProjectId, name: nameOf(activeProjectId) ?? '' } : null,
+      project: authed && activeProjectId ? { id: activeProjectId, name: nameOf(activeProjectId) ?? '' } : null,
       strings: {
         start: t('desktop.start'),
         stop: t('desktop.stop'),
@@ -194,11 +203,14 @@ export function useDesktopSync() {
         launchAtLogin: t('desktop.launchAtLogin'),
         quit: t('desktop.quit'),
         timerRunning: t('desktop.timerRunning'),
+        signIn: t('desktop.signIn'),
+        signedOut: t('desktop.signedOut'),
+        signedOutHint: t('desktop.signedOutHint'),
         // на иврите панель должна разворачиваться, как и всё приложение
         dir: i18n.dir(),
       },
     })
-  }, [bridge, inbox.data, running.data?.items, projects.data, tasks.data, activeProjectId, meId, t, i18n])
+  }, [bridge, authed, inbox.data, running.data?.items, projects.data, tasks.data, activeProjectId, meId, t, i18n])
 
   // --- системные уведомления -------------------------------------------------
   useEffect(() => {

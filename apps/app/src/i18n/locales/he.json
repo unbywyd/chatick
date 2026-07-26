@@ -987,6 +987,9 @@
     "due": "עד",
     "launchAtLogin": "הפעלה בכניסה למערכת",
     "quit": "יציאה",
-    "timerRunning": "הטיימר פועל"
+    "timerRunning": "הטיימר פועל",
+    "signIn": "כניסה",
+    "signedOut": "לא מחוברים",
+    "signedOutHint": "היכנסו כדי לראות את הטיימר,<br>המשימות וההתראות"
   }
 }
