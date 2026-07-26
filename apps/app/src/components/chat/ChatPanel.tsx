@@ -340,7 +340,9 @@ export function ChatPanel({
         </div>
       </header>
 
-      <div ref={scrollRef} onScroll={onScroll} className="relative flex-1 overflow-y-auto p-4">
+      {/* Лента чуть светлее окна: без этого чат сливается с рабочей областью
+          и не читается как отдельная поверхность. */}
+      <div ref={scrollRef} onScroll={onScroll} className="relative flex-1 overflow-y-auto bg-card/40 p-4">
         {llmMissing ? (
           <div className="mx-auto mt-8 max-w-xs rounded-xl border bg-card p-5 text-center">
             <span className="mx-auto grid size-12 place-items-center rounded-full bg-secondary">
