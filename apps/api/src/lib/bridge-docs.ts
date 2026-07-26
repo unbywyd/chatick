@@ -191,6 +191,31 @@ Example — handle everything waiting for me:
   POST   /x/documents/<id>/append  {"content"}       safe for long docs
   DELETE /x/documents/<id>
 
+## Time tracking
+
+You know when work started and stopped — so record it, instead of the human
+poking at timers.
+
+  GET  /x/time/running          what is running now + the project's timer limit
+  POST /x/time/start            {"task?":"TASK-12","description?":"...","startedAt?":"<ISO>"}
+  POST /x/time/stop             {"id?":"<entryId>"}  — id needed only if several run
+  POST /x/time                  {"startedAt","endedAt","task?","description?"} — after the fact
+  GET  /x/time/report?from=YYYY-MM-DD&to=YYYY-MM-DD
+
+  ONE entry links to at most ONE task. Two things at once means two timers —
+  the project caps how many may run (1 unless changed).
+  Everything is optional: a bare start with no task and no description is the
+  normal case.
+  In /x/time, an end earlier than the start is read as the next day.
+
+Example — a working session:
+
+    curl -sS -X POST ${b}/x/time/start -H "authorization: Bearer $TOKEN" \\
+      -H 'content-type: application/json' -d '{"task":"TASK-12","description":"login redirect"}'
+    # ... work ...
+    curl -sS -X POST ${b}/x/time/stop -H "authorization: Bearer $TOKEN" \\
+      -H 'content-type: application/json' -d '{}'
+
 ## Notes — the project journal
 
 A note is a deliberate record: a solved problem, a decision, a contradiction, a
@@ -341,6 +366,9 @@ Everything below behaves exactly as in a single-project connection, but takes
   POST   /x/documents/<id>/append?project=<id>
   GET / POST  /x/messages?project=<id>   POST takes {"text","replyToId?","attachmentIds?"}
   GET    /x/messages/<messageId>/context?project=<id>   conversation around a message
+
+  GET / POST  /x/time/start | /x/time/stop | /x/time...?project=<id>
+         Timers and after-the-fact entries; GET /x/time/report for hours.
 
   GET / POST / PATCH / DELETE  /x/notes...?project=<id>
          Project journal: solutions, decisions, contradictions, reminders.

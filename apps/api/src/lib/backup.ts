@@ -9,6 +9,7 @@ import {
   credentials,
   documents,
   notes as projectNotes,
+  timeEntries,
   documentVersions,
   files,
   messages,
@@ -49,6 +50,7 @@ export type BackupFile = {
     taskNotes: Record<string, unknown>[]
     documents: Record<string, unknown>[]
     projectNotes?: Record<string, unknown>[]
+    timeEntries?: Record<string, unknown>[]
     documentVersions: Record<string, unknown>[]
     messages: Record<string, unknown>[]
     chatSummaries: Record<string, unknown>[]
@@ -120,7 +122,7 @@ export async function exportCompany(companyId: string, password?: string): Promi
   const out: BackupFile['projects'] = []
   for (const project of projectRows) {
     const pid = project.id
-    const [pMembers, sprints, taskRows, comments, notes, docs, docVersions, msgs, summaries, resources, fileRows, activity, journalNotes] =
+    const [pMembers, sprints, taskRows, comments, notes, docs, docVersions, msgs, summaries, resources, fileRows, activity, journalNotes, timeRows] =
       await Promise.all([
         db
           .select({ m: projectMembers, u: users })
@@ -139,6 +141,7 @@ export async function exportCompany(companyId: string, password?: string): Promi
         db.query.files.findMany({ where: eq(files.projectId, pid) }),
         db.query.activityLog.findMany({ where: eq(activityLog.projectId, pid) }),
         db.query.notes.findMany({ where: eq(projectNotes.projectId, pid) }),
+        db.query.timeEntries.findMany({ where: eq(timeEntries.projectId, pid) }),
       ])
 
     const docIds = new Set(docs.map((d) => d.id))
@@ -191,6 +194,8 @@ export async function exportCompany(companyId: string, password?: string): Promi
       taskNotes: notes.map((n) => ({ ...n })),
       // журнал проекта (SPEC §8.31): решения, противоречия, напоминания
       projectNotes: journalNotes.map((n) => ({ ...n, author: refOf(people, n.authorId) })),
+      // учёт времени (SPEC §8.32): часы — то, за что платят, терять их нельзя
+      timeEntries: timeRows.map((e) => ({ ...e, user: refOf(people, e.userId) })),
       documents: docs.map((d) => ({
         ...d,
         createdBy: refOf(people, d.createdById),
@@ -515,6 +520,25 @@ export async function importCompany(
         createdAt: n.createdAt ? new Date(String(n.createdAt)) : undefined,
       })
       bump('projectNotes')
+    }
+
+    // Учёт времени. Идёт после задач: запись может ссылаться на задачу, и
+    // только здесь taskIds уже знает соответствие старых id новым.
+    for (const e of p.timeEntries ?? []) {
+      const userId = await userFor(e.user as PersonRef)
+      if (!userId) continue // некому приписать часы — запись бессмысленна
+      await db.insert(timeEntries).values({
+        projectId: pid,
+        userId,
+        taskId: e.taskId ? taskIds.get(String(e.taskId)) ?? null : null,
+        description: String(e.description ?? ''),
+        startedAt: new Date(String(e.startedAt)),
+        endedAt: e.endedAt ? new Date(String(e.endedAt)) : null,
+        autoStopped: Boolean(e.autoStopped),
+        createdVia: String(e.createdVia ?? 'ui'),
+        createdAt: e.createdAt ? new Date(String(e.createdAt)) : undefined,
+      })
+      bump('timeEntries')
     }
 
     for (const s of p.chatSummaries) {

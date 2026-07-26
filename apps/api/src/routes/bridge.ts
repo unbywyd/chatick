@@ -7,6 +7,7 @@ import {
   messages,
   notes,
   notifications,
+  timeEntries,
   projectMembers,
   projects,
   credentials,
@@ -20,6 +21,7 @@ import { authenticateBridge, closeSession, startDeviceAuth, pollDeviceAuth, type
 import { connectDoc, guideDoc } from '../lib/bridge-docs.js'
 import { logActivity } from '../lib/audit.js'
 import { createNote, noteToTask, NOTE_TYPES, type NoteType } from './notes.js'
+import { readTimeConfig } from './time.js'
 import { notifyChatMentions } from './messages.js'
 import { htmlToText, sanitizeHtml } from '../lib/sanitize-html.js'
 import { broadcast, sendToUser } from '../ws.js'
@@ -651,6 +653,191 @@ bridgeRoute.post('/sprints', async (c) => {
     .returning()
   broadcast(scope.projectId, 'tasks_changed', {})
   return c.json({ id: row!.id, name: row!.name }, 201)
+})
+
+// --- Трекинг времени (SPEC §8.32) -------------------------------------------
+// Ради того, чтобы не тыкать таймеры руками: агент в редакторе знает, когда
+// работа началась и кончилась, — пусть он и записывает.
+
+bridgeRoute.get('/time/running', async (c) => {
+  const id = auth(c as never)
+  const scope = await resolveProject(c as never)
+  if ('error' in scope) return c.json({ error: scope.error }, scope.status)
+
+  const project = await db.query.projects.findFirst({ where: eq(projects.id, scope.projectId) })
+  const cfg = readTimeConfig(project?.timeConfig)
+  const rows = await db
+    .select()
+    .from(timeEntries)
+    .where(and(eq(timeEntries.projectId, scope.projectId), eq(timeEntries.userId, id.userId), isNull(timeEntries.endedAt)))
+
+  const now = Date.now()
+  return c.json({
+    items: rows.map((r) => ({
+      id: r.id,
+      description: r.description,
+      taskId: r.taskId,
+      startedAt: r.startedAt,
+      elapsedMinutes: Math.round((now - r.startedAt.getTime()) / 60_000),
+    })),
+    maxTimers: cfg.maxTimers,
+    hint: 'One entry links to ONE task at most. Two things at once means two timers, up to maxTimers.',
+  })
+})
+
+bridgeRoute.post('/time/start', async (c) => {
+  const id = auth(c as never)
+  const scope = await resolveProject(c as never)
+  if ('error' in scope) return c.json({ error: scope.error }, scope.status)
+
+  const b = (await c.req.json().catch(() => ({}))) as Record<string, unknown>
+  const project = await db.query.projects.findFirst({ where: eq(projects.id, scope.projectId) })
+  const cfg = readTimeConfig(project?.timeConfig)
+
+  const running = await db
+    .select()
+    .from(timeEntries)
+    .where(and(eq(timeEntries.projectId, scope.projectId), eq(timeEntries.userId, id.userId), isNull(timeEntries.endedAt)))
+  if (running.length >= cfg.maxTimers) {
+    return c.json(
+      {
+        error: `${running.length} timer(s) already running; this project allows ${cfg.maxTimers} at once. Stop one first.`,
+        running: running.map((r) => ({ id: r.id, startedAt: r.startedAt, description: r.description })),
+      },
+      409,
+    )
+  }
+
+  let taskId: string | null = null
+  if (typeof b.task === 'string' && b.task) {
+    const found = await db.query.tasks.findFirst({
+      where: and(eq(tasks.projectId, scope.projectId), eq(tasks.number, b.task.toUpperCase())),
+    })
+    if (!found) return c.json({ error: `Task ${b.task} not found in this project` }, 404)
+    taskId = found.id
+  }
+
+  const [row] = await db
+    .insert(timeEntries)
+    .values({
+      projectId: scope.projectId,
+      userId: id.userId,
+      taskId,
+      description: String(b.description ?? '').slice(0, 500),
+      startedAt: typeof b.startedAt === 'string' ? new Date(b.startedAt) : new Date(),
+      createdVia: 'bridge',
+    })
+    .returning()
+  broadcast(scope.projectId, 'time', { action: 'start', id: row!.id, userId: id.userId })
+  return c.json({ id: row!.id, startedAt: row!.startedAt }, 201)
+})
+
+bridgeRoute.post('/time/stop', async (c) => {
+  const id = auth(c as never)
+  const scope = await resolveProject(c as never)
+  if ('error' in scope) return c.json({ error: scope.error }, scope.status)
+
+  const b = (await c.req.json().catch(() => ({}))) as Record<string, unknown>
+  const running = await db
+    .select()
+    .from(timeEntries)
+    .where(and(eq(timeEntries.projectId, scope.projectId), eq(timeEntries.userId, id.userId), isNull(timeEntries.endedAt)))
+  if (!running.length) return c.json({ error: 'No timer is running' }, 404)
+
+  const entry = typeof b.id === 'string' ? running.find((r) => r.id === b.id) : running[0]
+  if (!entry) return c.json({ error: 'That timer is not running' }, 404)
+  if (running.length > 1 && typeof b.id !== 'string') {
+    return c.json(
+      { error: 'Several timers are running — pass the id', running: running.map((r) => ({ id: r.id, description: r.description })) },
+      400,
+    )
+  }
+
+  const endedAt = new Date()
+  await db.update(timeEntries).set({ endedAt, updatedAt: endedAt }).where(eq(timeEntries.id, entry.id))
+  broadcast(scope.projectId, 'time', { action: 'stop', id: entry.id, userId: id.userId })
+  return c.json({ id: entry.id, minutes: Math.round((endedAt.getTime() - entry.startedAt.getTime()) / 60_000) })
+})
+
+bridgeRoute.post('/time', async (c) => {
+  const id = auth(c as never)
+  const scope = await resolveProject(c as never)
+  if ('error' in scope) return c.json({ error: scope.error }, scope.status)
+
+  const b = (await c.req.json().catch(() => ({}))) as Record<string, unknown>
+  const started = new Date(String(b.startedAt ?? ''))
+  let ended = new Date(String(b.endedAt ?? ''))
+  if (Number.isNaN(started.getTime()) || Number.isNaN(ended.getTime())) {
+    return c.json({ error: 'startedAt and endedAt are required ISO timestamps' }, 400)
+  }
+  // конец раньше начала — смена через полночь
+  if (ended.getTime() <= started.getTime()) ended = new Date(ended.getTime() + 86_400_000)
+
+  let taskId: string | null = null
+  if (typeof b.task === 'string' && b.task) {
+    const found = await db.query.tasks.findFirst({
+      where: and(eq(tasks.projectId, scope.projectId), eq(tasks.number, b.task.toUpperCase())),
+    })
+    if (!found) return c.json({ error: `Task ${b.task} not found in this project` }, 404)
+    taskId = found.id
+  }
+
+  const [row] = await db
+    .insert(timeEntries)
+    .values({
+      projectId: scope.projectId,
+      userId: id.userId,
+      taskId,
+      description: String(b.description ?? '').slice(0, 500),
+      startedAt: started,
+      endedAt: ended,
+      createdVia: 'bridge',
+    })
+    .returning()
+  broadcast(scope.projectId, 'time', { action: 'create', id: row!.id, userId: id.userId })
+  return c.json({ id: row!.id, minutes: Math.round((ended.getTime() - started.getTime()) / 60_000) }, 201)
+})
+
+bridgeRoute.get('/time/report', async (c) => {
+  const id = auth(c as never)
+  const scope = await resolveProject(c as never)
+  if ('error' in scope) return c.json({ error: scope.error }, scope.status)
+
+  // чужие часы — только руководству проекта
+  const privileged = await hasPermission(scope.projectId, id.userId, 'tasks.edit')
+  const conds = [eq(timeEntries.projectId, scope.projectId), sql`${timeEntries.endedAt} is not null`]
+  if (!privileged) conds.push(eq(timeEntries.userId, id.userId))
+  const from = c.req.query('from')
+  const to = c.req.query('to')
+  if (from) conds.push(sql`${timeEntries.startedAt} >= ${new Date(from)}`)
+  if (to) {
+    const end = new Date(to)
+    end.setHours(23, 59, 59, 999)
+    conds.push(sql`${timeEntries.startedAt} <= ${end}`)
+  }
+
+  const minutes = sql<number>`coalesce(sum(extract(epoch from (${timeEntries.endedAt} - ${timeEntries.startedAt})) / 60), 0)::int`
+  const [byUser, byTask] = await Promise.all([
+    db
+      .select({ name: users.name, minutes })
+      .from(timeEntries)
+      .innerJoin(users, eq(users.id, timeEntries.userId))
+      .where(and(...conds))
+      .groupBy(users.name),
+    db
+      .select({ number: tasks.number, title: tasks.title, minutes })
+      .from(timeEntries)
+      .leftJoin(tasks, eq(tasks.id, timeEntries.taskId))
+      .where(and(...conds))
+      .groupBy(tasks.number, tasks.title),
+  ])
+
+  return c.json({
+    byUser: byUser.sort((a, b) => b.minutes - a.minutes),
+    byTask: byTask.sort((a, b) => b.minutes - a.minutes),
+    totalMinutes: byUser.reduce((sum, r) => sum + r.minutes, 0),
+    scope: privileged ? 'everyone' : 'you only',
+  })
 })
 
 // --- Заметки (SPEC §8.31) ----------------------------------------------------
