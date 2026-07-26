@@ -6,6 +6,7 @@ import { Building2, PanelLeftClose, PanelLeftOpen, Plus, Search } from 'lucide-r
 import { api, type Company, type Me, type ProjectListItem } from '@/lib/api'
 import { cn } from '@/lib/utils'
 import { ProfileMenu } from '@/components/ProfileMenu'
+import { NotificationBell } from '@/components/NotificationBell'
 import { ProjectBadge } from '@/components/ui/project-badge'
 import { Input } from '@/components/ui/input'
 import { Logo } from '@/components/Logo'
@@ -32,7 +33,7 @@ export function ProjectSidebar({ me, onPick }: { me?: Me; onPick?: () => void })
   const [q, setQ] = useState('')
   // Свёрнутый режим: остаются только значки проектов. Выбор запоминаем —
   // это настройка рабочего места, а не разовое действие.
-  const [collapsed, setCollapsed] = useState(() => localStorage.getItem('chatick_sidebar_collapsed') === '1')
+  const [collapsed, setCollapsed] = useState(() => localStorage.getItem('chatick_sidebar_collapsed') !== '0')
   const toggleCollapsed = () => {
     setCollapsed((v) => {
       localStorage.setItem('chatick_sidebar_collapsed', v ? '0' : '1')
@@ -45,13 +46,16 @@ export function ProjectSidebar({ me, onPick }: { me?: Me; onPick?: () => void })
     queryFn: () => api<{ companies: Company[] }>('/api/v1/companies'),
   })
   const company = companies.data?.companies[0]
-
   const projects = useQuery({
     queryKey: ['sidebar-projects', company?.id],
     enabled: Boolean(company?.id),
     queryFn: () => api<ProjectListItem[]>(`/api/v1/projects?companyId=${company!.id}`),
     refetchInterval: 30_000, // подтягиваем новые сообщения и бейджи
   })
+
+  // меню профиля показывает настройки активного проекта — значит нужна и роль
+  const active = projects.data?.find((p) => p.id === activeId)
+  const isAdmin = active?.myRole === 'owner' || active?.myRole === 'admin'
 
   const list = useMemo(() => {
     const mine = (projects.data ?? []).filter((p) => p.isMember)
@@ -118,7 +122,10 @@ export function ProjectSidebar({ me, onPick }: { me?: Me; onPick?: () => void })
           >
             <Plus className="size-4" />
           </button>
-          <ProfileMenu me={me} companyId={company?.id} />
+          {/* колокольчик и профиль живут только здесь: в навбаре проекта они
+              дублировались, а сайдбар виден на любой вкладке */}
+          <NotificationBell currentProjectId={activeId} />
+          <ProfileMenu me={me} projectId={activeId} companyId={company?.id} isAdmin={isAdmin} />
         </div>
       </div>
     )
@@ -233,7 +240,8 @@ export function ProjectSidebar({ me, onPick }: { me?: Me; onPick?: () => void })
         {/* тот же аватар, что в шапке, ведёт себя одинаково: открывает меню
             профиля. Раньше отсюда уводило на /connect — разное поведение у
             одного и того же элемента. */}
-        <ProfileMenu me={me} companyId={company?.id} />
+        <NotificationBell currentProjectId={activeId} />
+        <ProfileMenu me={me} projectId={activeId} companyId={company?.id} isAdmin={isAdmin} />
       </div>
     </div>
   )

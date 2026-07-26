@@ -9,8 +9,6 @@ import { useProjectToken } from '@/hooks/useProjectToken'
 import { useResizable } from '@/hooks/useResizable'
 import { ChatPanel } from '@/components/chat/ChatPanel'
 import { ProjectSidebar } from '@/components/ProjectSidebar'
-import { ProfileMenu } from '@/components/ProfileMenu'
-import { NotificationBell } from '@/components/NotificationBell'
 import { Button } from '@/components/ui/button'
 
 /*
@@ -69,7 +67,6 @@ export function ProjectLayout() {
     enabled: Boolean(id) && token.status === 'ready',
   })
   const me = useQuery({ queryKey: ['me'], queryFn: () => api<Me>('/api/v1/auth/me') })
-  const isAdmin = project.data?.myRole === 'owner' || project.data?.myRole === 'admin'
 
   // Проект требует принять правила чата до первого входа (SPEC §4.2)
   if (token.status === 'needRules') {
@@ -198,17 +195,6 @@ export function ProjectLayout() {
             ))}
           </div>
 
-          <div className="flex shrink-0 items-center gap-1">
-            <NotificationBell currentProjectId={id} />
-            {/* компания, язык и тема — в меню профиля: отдельный гамбургер рядом
-                с аватаром дублировал сущность */}
-            <ProfileMenu
-              me={me.data}
-              projectId={id}
-              companyId={project.data?.companyId}
-              isAdmin={isAdmin}
-            />
-          </div>
         </nav>
 
         <main className="min-h-0 flex-1 overflow-y-auto">
