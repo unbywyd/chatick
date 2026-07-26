@@ -335,15 +335,11 @@ export function TasksTab({ projectId, meId }: { projectId: string; meId?: string
                     <Upload className="size-3.5" />
                     {t('tasks.importExcel')}
                   </DropdownMenuItem>
-                  <DropdownMenuItem onSelect={() => downloadImportTemplate()}>
+                  <DropdownMenuItem onSelect={() => downloadImportTemplate()} title={t('tasks.importHelp')}>
                     <FileSpreadsheet className="size-3.5" />
                     {t('tasks.importTemplate')}
                   </DropdownMenuItem>
-                  {/* формат импорта прямо здесь: отдельная кнопка «?» была
-                      загадкой, пока на неё не нажмёшь */}
-                  <p className="mt-1 whitespace-pre-wrap border-t px-2 pt-2 text-xs text-muted-foreground">
-                    {t('tasks.importHelp')}
-                  </p>
+
                 </>
               )}
             </DropdownMenuContent>
