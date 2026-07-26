@@ -2,6 +2,7 @@ import { and, eq, inArray } from 'drizzle-orm'
 import { db } from '../db/client.js'
 import { users, projects, projectMembers, notificationOptOuts, notificationLog, notifications } from '../db/schema.js'
 import { sendToUser } from '../ws.js'
+import { projectLlm, complete } from './llm.js'
 
 // Единая точка отправки уведомлений (SPEC §8.9).
 // Проверяет: (1) участник проекта, (2) не отписан от события, (3) не дубль.
@@ -60,6 +61,41 @@ const STR: Record<Lang, Record<string, string>> = {
     open: 'פתח',
     footer: 'ניתן לנהל התראות בהגדרות הפרויקט.',
   },
+}
+
+
+/**
+ * Формулирует, ЧЕГО от человека хотят: «Саша просит прислать APK последней сборки»
+ * вместо «Саша упомянул вас». Пишется в notifications.summary после создания —
+ * уведомление появляется мгновенно, текст уточняется через секунду.
+ */
+async function summarizeAsk(
+  notificationId: string,
+  projectId: string,
+  text: string,
+  actorName: string,
+  lang: Lang,
+): Promise<void> {
+  const cfg = await projectLlm(projectId, 'notification')
+  if (!cfg) return
+  const langName = lang === 'ru' ? 'Russian' : lang === 'he' ? 'Hebrew' : 'English'
+
+  const raw = await complete(cfg, {
+    system: [
+      `Summarise what is being ASKED OF THE READER in ONE short sentence, in ${langName}.`,
+      'Focus on the action expected from them. If nothing is asked, describe what happened instead.',
+      'No greetings, no quotes, no preamble. Max 100 characters.',
+    ].join('\n'),
+    user: `${actorName} wrote:\n${text.slice(0, 1500)}`,
+    maxTokens: 200,
+  })
+  const summary = raw?.trim().replace(/^["'«]|["'»]$/g, '').slice(0, 200)
+  if (!summary) return
+
+  await db.update(notifications).set({ summary }).where(eq(notifications.id, notificationId))
+  // подсказать колокольчику, что текст уточнился
+  const row = await db.query.notifications.findFirst({ where: eq(notifications.id, notificationId) })
+  if (row) sendToUser(projectId, row.userId, 'notification', { projectId })
 }
 
 function tr(lang: Lang, key: string, vars: Record<string, string>): string {
@@ -143,17 +179,26 @@ export async function notify(params: NotifyParams): Promise<void> {
       const vars = { actor: actorName, project: project.name, ...(params.vars || {}) }
 
       // ГЛАВНОЕ: создаём ВНУТРЕННЕЕ уведомление (SPEC §8.22). Почта — суточным дайджестом.
-      await db.insert(notifications).values({
-        userId: user.id,
-        projectId,
-        event,
-        actorId: actorId ?? null,
-        title: tr(lang, event, vars),
-        body: previewText.slice(0, 500),
-        link: params.link ?? '',
-        entityType: params.entityType ?? null,
-        entityId: params.entityId ?? null,
-      })
+      const [created] = await db
+        .insert(notifications)
+        .values({
+          userId: user.id,
+          projectId,
+          event,
+          actorId: actorId ?? null,
+          title: tr(lang, event, vars),
+          body: previewText.slice(0, 500),
+          link: params.link ?? '',
+          entityType: params.entityType ?? null,
+          entityId: params.entityId ?? null,
+        })
+        .returning()
+
+      // «X упомянул вас» не говорит, что от вас нужно. Просим ИИ сформулировать
+      // суть запроса — фоном, чтобы задержка модели не тормозила отправку.
+      if (created && previewText.trim().length > 15) {
+        void summarizeAsk(created.id, projectId, previewText, actorName, lang).catch(() => {})
+      }
 
       // фиксируем в логе дедупа
       if (params.dedupeKey) {

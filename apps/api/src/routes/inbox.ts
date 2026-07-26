@@ -47,6 +47,7 @@ inboxRoute.get('/', zValidator('query', z.object({ onlyUnread: z.string().option
       projectName: r.project.name,
       event: r.n.event,
       title: r.n.title,
+      summary: r.n.summary,
       body: r.n.body,
       link: r.n.link,
       entityType: r.n.entityType,

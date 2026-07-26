@@ -118,6 +118,32 @@ ${denied.length ? `\n  NOT ALLOWED: ${denied.join(', ')}\n  Do not attempt these
   chat messages — so verify before sending, not after.
 - On 401 the tunnel is closed — re-run the device flow (GET ${b}/x).
 
+## What concerns me — start here
+
+  GET  /x/inbox?unread=1&limit=30    everything addressed to this person
+  POST /x/inbox/read                 {"ids":["..."]} or {"all":true}
+
+Each item carries \`whatIsAsked\` — one sentence written by our AI describing what
+the reader is actually expected to do ("Send the latest APK build"), plus
+\`entityType\`/\`entityId\` pointing at the thing it is about:
+
+  entityType="message" -> GET /x/messages/<entityId>/context   read the conversation
+                          around it, then answer with POST /x/messages
+                          {"text":"...","replyToId":"<entityId>","attachmentIds":[...]}
+  entityType="task"    -> GET /x/tasks/<entityId>
+
+Mark items read once handled, otherwise you will see them again.
+
+Example — handle everything waiting for me:
+
+    curl -s '${b}/x/inbox' -H 'authorization: Bearer <token>'
+    curl -s '${b}/x/messages/<messageId>/context' -H 'authorization: Bearer <token>'
+    # upload the file the person asked for, then answer in that thread
+    curl -s -X POST ${b}/x/files -H 'authorization: Bearer <token>' -F 'file=@./app.apk'
+    curl -s -X POST ${b}/x/messages -H 'authorization: Bearer <token>' \
+      -H 'content-type: application/json' \
+      -d '{"text":"Here is the latest build","replyToId":"<messageId>","attachmentIds":["<fileId>"]}'
+
 ## Tasks
 
   GET    /x/tasks?assignee=me&status=todo&q=text&sprint=<id>&limit=50
@@ -166,7 +192,7 @@ ${denied.length ? `\n  NOT ALLOWED: ${denied.join(', ')}\n  Do not attempt these
 ## Chat
 
   GET    /x/messages?limit=50&before=<iso>
-  POST   /x/messages           {"text","attachmentIds?":["<fileId>"]}
+  POST   /x/messages           {"text","replyToId?":"<messageId>","attachmentIds?":["<fileId>"]}
          Posts as the human, bypassing the AI dispatcher.
          To attach files: upload them with POST /x/files first (without taskId),
          then pass the returned ids here. Text may be empty if there are files.
@@ -239,7 +265,13 @@ Everything below behaves exactly as in a single-project connection, but takes
   GET / POST  /x/sprints?project=<id>
   GET / POST / PATCH / DELETE  /x/documents...?project=<id>
   POST   /x/documents/<id>/append?project=<id>
-  GET / POST  /x/messages?project=<id>   POST takes {"text","attachmentIds?"}
+  GET / POST  /x/messages?project=<id>   POST takes {"text","replyToId?","attachmentIds?"}
+  GET    /x/messages/<messageId>/context?project=<id>   conversation around a message
+
+  GET    /x/inbox                       what concerns this person, ACROSS ALL projects
+  POST   /x/inbox/read                  {"ids":[...]} or {"all":true}
+         Each item has whatIsAsked (AI-written), project.id, entityType/entityId.
+         Start every "check what's waiting for me" request here.
   GET    /x/files?project=<id>          POST multipart to upload
   GET    /x/resources?project=<id>      metadata only; secret values never exposed
 

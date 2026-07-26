@@ -51,6 +51,8 @@ async function notifyTask(
       actorId,
       actorName,
       dedupeKey: `task_assigned:${task.id}:${task.assigneeId}`,
+      entityType: 'task',
+      entityId: task.id,
       link,
       preview: task.title,
     })
@@ -63,6 +65,8 @@ async function notifyTask(
       actorId,
       actorName,
       dedupeKey: `task_status:${task.id}:${task.status}:${task.assigneeId}`,
+      entityType: 'task',
+      entityId: task.id,
       link,
       preview: task.title,
       vars: { ref: task.number, status: task.status },
@@ -78,6 +82,8 @@ async function notifyTask(
         actorId,
         actorName,
         dedupeKey: `task_mention:${task.id}`,
+        entityType: 'task',
+        entityId: task.id,
         link,
         preview: task.title,
       })
@@ -478,10 +484,10 @@ tasksRoute.post(
     // уведомления: упоминания в комментарии + автору/ассайни задачи о новом комментарии
     const mentioned = extractMentions(body)
     if (mentioned.length)
-      void notify({ projectId, event: 'comment_mention', recipientIds: mentioned, actorId: sub, actorName, dedupeKey: `comment_mention:${row!.id}`, link, preview: body })
+      void notify({ projectId, event: 'comment_mention', recipientIds: mentioned, actorId: sub, actorName, dedupeKey: `comment_mention:${row!.id}`, link, preview: body, entityType: 'task', entityId: task.id })
     const watchers = [task.assigneeId, task.createdById].filter((x): x is string => Boolean(x) && x !== sub && !mentioned.includes(x!))
     if (watchers.length)
-      void notify({ projectId, event: 'task_comment', recipientIds: watchers, actorId: sub, actorName, dedupeKey: `task_comment:${row!.id}`, link, preview: body, vars: { ref: task.number } })
+      void notify({ projectId, event: 'task_comment', recipientIds: watchers, actorId: sub, actorName, dedupeKey: `task_comment:${row!.id}`, link, preview: body, vars: { ref: task.number }, entityType: 'task', entityId: task.id })
 
     broadcast(projectId, 'task_comments_changed', { taskId })
     const fileMap = await commentFiles([row!.id])

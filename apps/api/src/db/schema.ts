@@ -546,6 +546,9 @@ export const notifications = pgTable(
     actorId: text('actor_id').references(() => users.id, { onDelete: 'set null' }), // null = ИИ/система
     title: text('title').notNull(), // «Artyom упомянул вас»
     body: text('body').notNull().default(''), // превью текста
+    // Суть запроса словами ИИ: «просит прислать APK последней сборки».
+    // Заполняется асинхронно после создания — уведомление не ждёт модель.
+    summary: text('summary'),
     // куда вести по клику: относительный путь внутри приложения (/p/<id>/tasks/<taskId> и т.п.)
     link: text('link').notNull().default(''),
     entityType: text('entity_type'), // task | message | comment

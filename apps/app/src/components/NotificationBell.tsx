@@ -21,6 +21,8 @@ type Notification = {
   projectName: string
   event: string
   title: string
+  /** суть запроса словами ИИ — важнее заголовка «X упомянул вас» */
+  summary?: string | null
   body: string
   link: string
   readAt: string | null
@@ -28,6 +30,14 @@ type Notification = {
   actor: { id: string; name: string; avatarUrl: string | null } | null
 }
 type Inbox = { unreadTotal: number; unreadByProject: Record<string, number>; items: Notification[] }
+
+// Уведомления, созданные до появления вкладки /chat, ссылаются на /p/<id>?msg=<mid>.
+// Такой путь падает на index-редирект, а он теряет query — дописываем /chat сами.
+function normalizeLink(link: string, projectId: string): string {
+  if (!link) return `/p/${projectId}/tasks`
+  const m = link.match(/^\/p\/([^/?]+)(\?.*)?$/)
+  return m ? `/p/${m[1]}/chat${m[2] ?? ''}` : link
+}
 
 export function NotificationBell({ currentProjectId }: { currentProjectId?: string }) {
   const { t, i18n } = useTranslation()
@@ -70,11 +80,11 @@ export function NotificationBell({ currentProjectId }: { currentProjectId?: stri
           body: JSON.stringify({ acceptRules: false }),
         })
         setProjectToken(r.token)
-        window.location.hash = `#${n.link || `/p/${n.projectId}/tasks`}`
+        window.location.hash = `#${normalizeLink(n.link, n.projectId)}`
         window.location.reload()
         return
       }
-      navigate(n.link || `/p/${n.projectId}/tasks`)
+      navigate(normalizeLink(n.link, n.projectId))
     } catch {
       toast.error(t('inbox.openFailed'))
     }
@@ -150,8 +160,11 @@ export function NotificationBell({ currentProjectId }: { currentProjectId?: stri
                   >
                     <Avatar name={n.actor?.name ?? 'AI'} src={n.actor?.avatarUrl} size={22} className="mt-0.5" />
                     <span className="min-w-0 flex-1">
-                      <span className="block truncate text-sm">{n.title}</span>
-                      {n.body && <span className="block truncate text-xs text-muted-foreground">{n.body}</span>}
+                      {/* если ИИ понял суть запроса — показываем её, а не «X упомянул вас» */}
+                      <span className="block truncate text-sm">{n.summary || n.title}</span>
+                      <span className="block truncate text-xs text-muted-foreground">
+                        {n.summary ? n.title : n.body}
+                      </span>
                       <span className="block text-[10px] text-muted-foreground">{new Date(n.createdAt).toLocaleString(i18n.language)}</span>
                     </span>
                   </button>

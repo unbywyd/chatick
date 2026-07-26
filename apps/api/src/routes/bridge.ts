@@ -5,6 +5,7 @@ import {
   documents,
   files,
   messages,
+  notifications,
   projectMembers,
   projects,
   credentials,
@@ -18,7 +19,7 @@ import { authenticateBridge, closeSession, startDeviceAuth, pollDeviceAuth, type
 import { connectDoc, guideDoc } from '../lib/bridge-docs.js'
 import { logActivity } from '../lib/audit.js'
 import { htmlToText } from '../lib/sanitize-html.js'
-import { broadcast } from '../ws.js'
+import { broadcast, sendToUser } from '../ws.js'
 import { env } from '../env.js'
 
 // Мост для внешнего ИИ (SPEC §8.27). Всё выполняется ОТ ИМЕНИ пользователя,
@@ -204,6 +205,129 @@ bridgeRoute.get('/context', async (c) => {
     })),
     sprints: sprints.map((s) => ({ id: s.id, name: s.name })),
     tasks: counts,
+  })
+})
+
+
+// --- Что меня касается: уведомления и контекст (SPEC §8.30) ---------------
+// Ради сценария «Клауд, проверь что там»: агент читает адресованное человеку,
+// доходит до исходного сообщения и отвечает, не открывая интерфейс.
+
+bridgeRoute.get('/inbox', async (c) => {
+  const id = auth(c as never)
+  const onlyUnread = c.req.query('unread') !== '0'
+  const limit = Math.min(100, Math.max(1, Number(c.req.query('limit')) || 30))
+
+  // company-туннель видит все проекты человека, проектный — только свой
+  const conds = [eq(notifications.userId, id.userId)]
+  if (id.projectId) conds.push(eq(notifications.projectId, id.projectId))
+  if (onlyUnread) conds.push(isNull(notifications.readAt))
+
+  const rows = await db
+    .select({ n: notifications, actor: users, project: projects })
+    .from(notifications)
+    .leftJoin(users, eq(users.id, notifications.actorId))
+    .innerJoin(projects, eq(projects.id, notifications.projectId))
+    .where(and(...conds))
+    .orderBy(desc(notifications.createdAt))
+    .limit(limit)
+
+  return c.json({
+    items: rows.map((r) => ({
+      id: r.n.id,
+      event: r.n.event,
+      title: r.n.title,
+      // чего от человека хотят, словами ИИ — главное поле для агента
+      whatIsAsked: r.n.summary,
+      body: r.n.body,
+      from: r.actor ? { id: r.actor.id, name: r.actor.name } : { id: 'ai', name: 'AI' },
+      project: { id: r.project.id, name: r.project.name },
+      // по этим полям агент дотягивается до сути: сообщение, задача, комментарий
+      entityType: r.n.entityType,
+      entityId: r.n.entityId,
+      unread: !r.n.readAt,
+      createdAt: r.n.createdAt,
+    })),
+    hint:
+      'For entityType="message" call GET /x/messages/<entityId>/context to see the surrounding conversation, then reply with POST /x/messages (replyToId=<entityId>). Mark handled ones read with POST /x/inbox/read.',
+  })
+})
+
+bridgeRoute.post('/inbox/read', async (c) => {
+  const id = auth(c as never)
+  const b = (await c.req.json().catch(() => ({}))) as Record<string, unknown>
+  const ids = Array.isArray(b.ids) ? (b.ids as unknown[]).map(String) : []
+  const all = b.all === true
+
+  if (!ids.length && !all) return c.json({ error: 'Pass ids[] or all=true' }, 400)
+  const conds = [eq(notifications.userId, id.userId), isNull(notifications.readAt)]
+  if (!all) conds.push(inArray(notifications.id, ids))
+  if (id.projectId) conds.push(eq(notifications.projectId, id.projectId))
+
+  await db.update(notifications).set({ readAt: new Date() }).where(and(...conds))
+  sendToUser(id.projectId ?? '', id.userId, 'notification', {})
+  return c.json({ ok: true })
+})
+
+/** Окно переписки вокруг сообщения: без него агент не поймёт, о чём просят. */
+bridgeRoute.get('/messages/:id/context', async (c) => {
+  const id = auth(c as never)
+  const scope = await resolveProject(c as never)
+  if ('error' in scope) return c.json({ error: scope.error }, scope.status)
+
+  const target = await db.query.messages.findFirst({
+    where: and(eq(messages.id, c.req.param('id')), eq(messages.projectId, scope.projectId)),
+  })
+  if (!target) return c.json({ error: 'Message not found' }, 404)
+
+  const around = Math.min(30, Math.max(1, Number(c.req.query('around')) || 10))
+  const [before, after] = await Promise.all([
+    db
+      .select({ m: messages, u: users })
+      .from(messages)
+      .leftJoin(users, eq(users.id, messages.authorId))
+      .where(
+        and(
+          eq(messages.projectId, scope.projectId),
+          eq(messages.mode, 'group' as const),
+          lt(messages.createdAt, target.createdAt),
+        ),
+      )
+      .orderBy(desc(messages.createdAt))
+      .limit(around),
+    db
+      .select({ m: messages, u: users })
+      .from(messages)
+      .leftJoin(users, eq(users.id, messages.authorId))
+      .where(
+        and(
+          eq(messages.projectId, scope.projectId),
+          eq(messages.mode, 'group' as const),
+          sql`${messages.createdAt} > ${target.createdAt}`,
+        ),
+      )
+      .orderBy(messages.createdAt)
+      .limit(around),
+  ])
+
+  const view = (r: { m: typeof messages.$inferSelect; u: typeof users.$inferSelect | null }) => ({
+    id: r.m.id,
+    text: r.m.text,
+    author: r.u ? { id: r.u.id, name: r.u.name } : { id: 'ai', name: 'AI' },
+    isYou: r.m.authorId === id.userId,
+    createdAt: r.m.createdAt,
+  })
+
+  // вложения целевого сообщения: просьбы вида «пришли файл» часто ссылаются на них
+  const atts = await db.select().from(files).where(eq(files.messageId, target.id))
+
+  return c.json({
+    target: {
+      ...view({ m: target, u: null }),
+      attachments: atts.map((f) => ({ id: f.id, name: f.name, mime: f.mime, size: Number(f.size) })),
+    },
+    before: before.reverse().map(view),
+    after: after.map(view),
   })
 })
 
@@ -724,8 +848,16 @@ bridgeRoute.post('/messages', async (c) => {
   const attachmentIds = Array.isArray(b.attachmentIds)
     ? (b.attachmentIds as unknown[]).filter((x): x is string => typeof x === 'string').slice(0, 10)
     : []
+  // ответ на конкретное сообщение — так видно, на какую просьбу это реакция
+  const replyToId = typeof b.replyToId === 'string' ? b.replyToId : null
   if (!text && !attachmentIds.length) {
     return c.json({ error: 'text or attachmentIds is required' }, 400)
+  }
+  if (replyToId) {
+    const parent = await db.query.messages.findFirst({
+      where: and(eq(messages.id, replyToId), eq(messages.projectId, scope.projectId)),
+    })
+    if (!parent) return c.json({ error: 'replyToId: message not found in this project' }, 404)
   }
 
   const [row] = await db
@@ -737,6 +869,7 @@ bridgeRoute.post('/messages', async (c) => {
       status: 'delivered',
       rawSend: true, // минуя диспетчер: это уже осмысленное сообщение
       text: (text || '📎').slice(0, 4000),
+      replyToId,
     })
     .returning()
 
@@ -763,7 +896,7 @@ bridgeRoute.post('/messages', async (c) => {
     mode: 'group',
     status: 'delivered',
     text: row!.text,
-    replyToId: null,
+    replyToId,
     createdAt: row!.createdAt,
     attachments,
     authorId: id.userId,

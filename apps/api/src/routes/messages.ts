@@ -26,8 +26,10 @@ async function notifyChatMentions(
     actorId: author?.id ?? null,
     actorName: author?.name || 'Someone',
     dedupeKey: `chat_mention:${messageId}`,
-    link: `/p/${projectId}?msg=${messageId}`,
+    link: `/p/${projectId}/chat?msg=${messageId}`,
     preview: text,
+    entityType: 'message',
+    entityId: messageId,
   })
 }
 

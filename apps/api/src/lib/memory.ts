@@ -547,13 +547,13 @@ export function memoryTools(projectId: string, actorUserId: string): { tools: To
     const actorName = actor?.name || 'Someone'
     const link = `/p/${pid}/tasks/${task.id}`
     if (opts.assigned && task.assigneeId)
-      void notify({ projectId: pid, event: 'task_assigned', recipientIds: [task.assigneeId], actorId, actorName, dedupeKey: `task_assigned:${task.id}:${task.assigneeId}`, link, preview: task.title })
+      void notify({ projectId: pid, event: 'task_assigned', recipientIds: [task.assigneeId], actorId, actorName, dedupeKey: `task_assigned:${task.id}:${task.assigneeId}`, link, preview: task.title, entityType: 'task', entityId: task.id })
     if (opts.statusChanged && task.assigneeId)
-      void notify({ projectId: pid, event: 'task_status', recipientIds: [task.assigneeId], actorId, actorName, dedupeKey: `task_status:${task.id}:${task.status}:${task.assigneeId}`, link, preview: task.title, vars: { ref: task.number, status: task.status } })
+      void notify({ projectId: pid, event: 'task_status', recipientIds: [task.assigneeId], actorId, actorName, dedupeKey: `task_status:${task.id}:${task.status}:${task.assigneeId}`, link, preview: task.title, vars: { ref: task.number, status: task.status }, entityType: 'task', entityId: task.id })
     if (opts.mentions) {
       const mentioned = extractMentions(task.description)
       if (mentioned.length)
-        void notify({ projectId: pid, event: 'task_mention', recipientIds: mentioned, actorId, actorName, dedupeKey: `task_mention:${task.id}`, link, preview: task.title })
+        void notify({ projectId: pid, event: 'task_mention', recipientIds: mentioned, actorId, actorName, dedupeKey: `task_mention:${task.id}`, link, preview: task.title, entityType: 'task', entityId: task.id })
     }
   }
 
@@ -967,10 +967,10 @@ export function memoryTools(projectId: string, actorUserId: string): { tools: To
       const link = `/p/${projectId}/tasks/${t.id}`
       const mentioned = extractMentions(body)
       if (mentioned.length)
-        void notify({ projectId, event: 'comment_mention', recipientIds: mentioned, actorId: actorUserId, actorName: actor?.name || 'Someone', dedupeKey: `comment_mention:${row!.id}`, link, preview: body })
+        void notify({ projectId, event: 'comment_mention', recipientIds: mentioned, actorId: actorUserId, actorName: actor?.name || 'Someone', dedupeKey: `comment_mention:${row!.id}`, link, preview: body, entityType: 'task', entityId: t.id })
       const watchers = [t.assigneeId, t.createdById].filter((x): x is string => Boolean(x) && x !== actorUserId && !mentioned.includes(x!))
       if (watchers.length)
-        void notify({ projectId, event: 'task_comment', recipientIds: watchers, actorId: actorUserId, actorName: actor?.name || 'Someone', dedupeKey: `task_comment:${row!.id}`, link, preview: body, vars: { ref: t.number } })
+        void notify({ projectId, event: 'task_comment', recipientIds: watchers, actorId: actorUserId, actorName: actor?.name || 'Someone', dedupeKey: `task_comment:${row!.id}`, link, preview: body, vars: { ref: t.number }, entityType: 'task', entityId: t.id })
       broadcast(projectId, 'task_comments_changed', { taskId: t.id })
       return `Added a comment to ${t.number}.`
     },
