@@ -105,10 +105,13 @@ function showWindow() {
 
 // --- трей ---------------------------------------------------------------------
 
+/** Подпись из присланных вебом переводов; запасное значение — пока их нет. */
+const tr = (key, fallback) => state.strings?.[key] || fallback
+
 function trayTooltip() {
   const parts = ['Chatick']
-  if (state.timer) parts.push(`⏱ ${state.timer.description || 'таймер идёт'}`)
-  if (state.unread) parts.push(`${state.unread} непрочитанных`)
+  if (state.timer) parts.push(`⏱ ${elapsedText(state.timer)} · ${state.timer.description || tr('noTask', 'no task')}`)
+  if (state.unread) parts.push(`${state.unread} ${tr('unreadOne', 'unread')}`)
   return parts.join(' · ')
 }
 
@@ -116,22 +119,22 @@ function buildTrayMenu() {
   // Всё содержательное живёт в панели; правой кнопкой — только то, что панели
   // не идёт: автозапуск и выход.
   return Menu.buildFromTemplate([
-    { label: 'Открыть Chatick', click: showWindow },
+    { label: tr('openApp', 'Open Chatick'), click: showWindow },
     { type: 'separator' },
     {
-      label: state.timer ? 'Остановить таймер' : 'Запустить таймер',
+      label: state.timer ? tr('stop', 'Stop timer') : tr('start', 'Start timer'),
       click: () => send('timer:toggle'),
     },
     { type: 'separator' },
     {
-      label: 'Запускать при входе в систему',
+      label: tr('launchAtLogin', 'Launch at login'),
       type: 'checkbox',
       checked: app.getLoginItemSettings().openAtLogin,
       click: (item) => app.setLoginItemSettings({ openAtLogin: item.checked }),
     },
     { type: 'separator' },
     {
-      label: 'Выход',
+      label: tr('quit', 'Quit'),
       click: () => {
         quitting = true
         app.quit()
@@ -257,7 +260,7 @@ function refreshBadge() {
   if (!win) return
   // Windows: наложение на кнопку в панели задач
   const badge = n > 0 ? loadIcon('badge.png') : null
-  win.setOverlayIcon(badge && !badge.isEmpty() ? badge : null, n > 0 ? `${n} непрочитанных` : '')
+  win.setOverlayIcon(badge && !badge.isEmpty() ? badge : null, n > 0 ? `${n} ${tr('unreadOne', 'unread')}` : '')
 }
 
 // --- связь с вебом ------------------------------------------------------------
@@ -274,6 +277,7 @@ function registerIpc() {
       tasks: Array.isArray(next?.tasks) ? next.tasks : [],
       projects: Array.isArray(next?.projects) ? next.projects : [],
       project: next?.project ?? null,
+      strings: next?.strings ?? state.strings,
     }
     refreshTray()
     refreshBadge()

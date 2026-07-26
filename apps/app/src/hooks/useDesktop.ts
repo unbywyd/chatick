@@ -1,5 +1,6 @@
 import { useEffect } from 'react'
 import { useLocation, useNavigate } from 'react-router-dom'
+import { useTranslation } from 'react-i18next'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { api, getSessionToken } from '@/lib/api'
 
@@ -38,6 +39,11 @@ type DesktopState = {
   tasks: { id: string; number: string; title: string; link: string; projectName?: string; due?: string }[]
   projects: { id: string; name: string; color?: string; logoUrl?: string | null; unread: number }[]
   project: { id: string; name: string } | null
+  /**
+   * Подписи для панели и трея. Своего i18n у них нет и быть не должно: язык
+   * выбирают в приложении, а панель — его продолжение, а не отдельный продукт.
+   */
+  strings: Record<string, string>
 }
 
 type InboxItem = {
@@ -66,6 +72,7 @@ type TaskLite = { id: string; number: string; title: string; status: string; due
  * Вешается один раз на корень приложения.
  */
 export function useDesktopSync() {
+  const { t, i18n } = useTranslation()
   const navigate = useNavigate()
   const location = useLocation()
   const qc = useQueryClient()
@@ -167,8 +174,31 @@ export function useDesktopSync() {
         unread: p.stats?.unread ?? 0,
       })),
       project: activeProjectId ? { id: activeProjectId, name: nameOf(activeProjectId) ?? '' } : null,
+      strings: {
+        start: t('desktop.start'),
+        stop: t('desktop.stop'),
+        idle: t('desktop.idle'),
+        idleHint: t('desktop.idleHint'),
+        noTask: t('time.noTask'),
+        tabInbox: t('desktop.tabInbox'),
+        tabTasks: t('desktop.tabTasks'),
+        tabProjects: t('desktop.tabProjects'),
+        emptyInbox: t('desktop.emptyInbox'),
+        emptyTasks: t('desktop.emptyTasks'),
+        emptyProjects: t('journal.empty'),
+        openApp: t('desktop.openApp'),
+        close: t('desktop.close'),
+        unreadOne: t('desktop.unread'),
+        allRead: t('desktop.allRead'),
+        due: t('desktop.due'),
+        launchAtLogin: t('desktop.launchAtLogin'),
+        quit: t('desktop.quit'),
+        timerRunning: t('desktop.timerRunning'),
+        // на иврите панель должна разворачиваться, как и всё приложение
+        dir: i18n.dir(),
+      },
     })
-  }, [bridge, inbox.data, running.data?.items, projects.data, tasks.data, activeProjectId, meId])
+  }, [bridge, inbox.data, running.data?.items, projects.data, tasks.data, activeProjectId, meId, t, i18n])
 
   // --- системные уведомления -------------------------------------------------
   useEffect(() => {

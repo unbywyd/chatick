@@ -969,5 +969,24 @@
     "empty": "אין עדיין פרויקטים",
     "weekOf": "שבוע מ-{{date}}",
     "overdueShort": "באיחור: {{count}}"
+  },
+  "desktop": {
+    "start": "הפעלת טיימר",
+    "stop": "עצירה",
+    "idle": "הטיימר לא פועל",
+    "idleHint": "לחצו כדי להתחיל מעקב",
+    "tabInbox": "עבורי",
+    "tabTasks": "משימות",
+    "tabProjects": "פרויקטים",
+    "emptyInbox": "כאן יופיע<br>מה שנוגע אליכם",
+    "emptyTasks": "אין משימות פתוחות",
+    "openApp": "פתיחת Chatick",
+    "close": "סגירה",
+    "unread": "לא נקראו",
+    "allRead": "הכול נקרא",
+    "due": "עד",
+    "launchAtLogin": "הפעלה בכניסה למערכת",
+    "quit": "יציאה",
+    "timerRunning": "הטיימר פועל"
   }
 }

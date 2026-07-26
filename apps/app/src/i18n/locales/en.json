@@ -969,5 +969,24 @@
     "empty": "No projects yet",
     "weekOf": "Week of {{date}}",
     "overdueShort": "{{count}} overdue"
+  },
+  "desktop": {
+    "start": "Start timer",
+    "stop": "Stop",
+    "idle": "No timer running",
+    "idleHint": "Click to start tracking",
+    "tabInbox": "For me",
+    "tabTasks": "Tasks",
+    "tabProjects": "Projects",
+    "emptyInbox": "Anything that concerns you<br>will show up here",
+    "emptyTasks": "No open tasks",
+    "openApp": "Open Chatick",
+    "close": "Close",
+    "unread": "unread",
+    "allRead": "all read",
+    "due": "due",
+    "launchAtLogin": "Launch at login",
+    "quit": "Quit",
+    "timerRunning": "timer running"
   }
 }

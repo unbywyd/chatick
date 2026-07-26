@@ -1,5 +1,5 @@
 <!doctype html>
-<html lang="ru">
+<html lang="en">
   <head>
     <meta charset="utf-8" />
     <title>Chatick</title>
@@ -46,7 +46,8 @@
         display: grid; place-items: center;
       }
       .play.running { background: #2a2a2a; color: var(--brand); }
-      .play:hover { filter: brightness(1.08); }
+      .play:hover { background: #e2ff62; }
+      .play.running:hover { background: #333; }
       .timer-info { min-width: 0; flex: 1; }
       .elapsed {
         font: 600 20px/1.1 ui-monospace, 'SF Mono', Menlo, monospace;
@@ -77,7 +78,7 @@
       }
       nav button.active { color: var(--text); border-bottom-color: var(--brand); }
       nav .count {
-        margin-left: 5px;
+        margin-inline-start: 5px;
         background: var(--brand); color: #111;
         border-radius: 9px; padding: 0 5px;
         font-size: 10px; font-weight: 700;
@@ -93,7 +94,7 @@
         padding: 8px 10px;
         border: 0; border-radius: 8px;
         background: none; color: inherit;
-        font: inherit; text-align: left;
+        font: inherit; text-align: start;
         cursor: pointer;
       }
       .row:hover { background: var(--card); }
@@ -133,39 +134,49 @@
       footer button {
         flex: 1;
         border: 1px solid var(--line); border-radius: 7px;
-        background: none; color: var(--muted);
+        background: var(--card); color: var(--muted);
         font: inherit; padding: 7px;
         cursor: pointer;
+        transition: background .12s, color .12s;
       }
-      footer button:hover { background: var(--card); color: var(--text); }
+      footer button:hover { background: #232323; color: var(--text); }
+      /* Заливку задаём явно и в обычном, и в наведённом состоянии: brightness
+         поверх незаданного фона гасил кнопку вместе с текстом. */
       footer .primary { background: var(--brand); border-color: var(--brand); color: #111; font-weight: 600; }
-      footer .primary:hover { filter: brightness(1.08); color: #111; }
+      footer .primary:hover { background: #e2ff62; border-color: #e2ff62; color: #111; }
     </style>
   </head>
   <body>
     <div class="timer">
-      <button class="play" id="play" title="Запустить или остановить таймер">▶</button>
+      <button class="play" id="play">▶</button>
       <div class="timer-info">
-        <div class="elapsed idle" id="elapsed">Таймер не запущен</div>
-        <div class="timer-sub" id="timerSub">Нажмите, чтобы начать учёт</div>
+        <div class="elapsed idle" id="elapsed">No timer running</div>
+        <div class="timer-sub" id="timerSub">Click to start tracking</div>
       </div>
     </div>
 
     <nav>
-      <button data-tab="inbox" class="active">Мне<span class="count" id="cnt" hidden></span></button>
-      <button data-tab="tasks">Задачи</button>
-      <button data-tab="projects">Проекты</button>
+      <button data-tab="inbox" class="active"><span data-t="tabInbox">For me</span><span class="count" id="cnt" hidden></span></button>
+      <button data-tab="tasks" data-t="tabTasks">Tasks</button>
+      <button data-tab="projects" data-t="tabProjects">Projects</button>
     </nav>
 
     <main id="list"></main>
 
     <footer>
-      <button id="openApp" class="primary">Открыть Chatick</button>
-      <button id="close">Закрыть</button>
+      <button id="openApp" class="primary" data-t="openApp">Open Chatick</button>
+      <button id="close" data-t="close">Close</button>
     </footer>
 
     <script>
-      let state = { unread: 0, timer: null, notifications: [], tasks: [], projects: [], project: null }
+      let state = { unread: 0, timer: null, notifications: [], tasks: [], projects: [], project: null, strings: {} }
+
+      /**
+       * Подписи приходят из веба вместе с состоянием: язык выбирают в
+       * приложении, и панель обязана говорить на нём же. Запасные значения —
+       * на первые миллисекунды, пока состояние не пришло.
+       */
+      const T = (key, fallback) => state.strings?.[key] || fallback
       let tab = 'inbox'
       const $ = (id) => document.getElementById(id)
 
@@ -196,14 +207,15 @@
         const t = state.timer
         $('play').textContent = t ? '⏸' : '▶'
         $('play').classList.toggle('running', Boolean(t))
+        $('play').title = t ? T('stop', 'Stop') : T('start', 'Start timer')
         if (t) {
           $('elapsed').textContent = elapsedText(t)
           $('elapsed').classList.remove('idle')
-          $('timerSub').textContent = t.description || t.taskTitle || t.projectName || 'без задачи'
+          $('timerSub').textContent = t.description || t.projectName || T('noTask', 'No task')
         } else {
-          $('elapsed').textContent = 'Таймер не запущен'
+          $('elapsed').textContent = T('idle', 'No timer running')
           $('elapsed').classList.add('idle')
-          $('timerSub').textContent = 'Нажмите, чтобы начать учёт'
+          $('timerSub').textContent = T('idleHint', 'Click to start tracking')
         }
       }
 
@@ -213,7 +225,7 @@
 
         if (tab === 'inbox') {
           if (!state.notifications.length) {
-            el.innerHTML = '<p class="empty">Здесь появится то,<br>что вас касается</p>'
+            el.innerHTML = `<p class="empty">${T('emptyInbox', 'Anything that concerns you<br>will show up here')}</p>`
             return
           }
           for (const n of state.notifications.slice(0, 20)) {
@@ -230,7 +242,7 @@
 
         if (tab === 'tasks') {
           if (!state.tasks.length) {
-            el.innerHTML = '<p class="empty">Открытых задач нет</p>'
+            el.innerHTML = `<p class="empty">${T('emptyTasks', 'No open tasks')}</p>`
             return
           }
           for (const t of state.tasks.slice(0, 30)) {
@@ -239,7 +251,7 @@
                 <span class="num">${escape(t.number)}</span>
                 <span class="body">
                   <span class="title">${escape(t.title)}</span>
-                  <span class="sub">${escape(t.projectName || '')}${t.due ? ' · до ' + escape(t.due) : ''}</span>
+                  <span class="sub">${escape(t.projectName || '')}${t.due ? ` · ${T('due', 'due')} ${escape(t.due)}` : ''}</span>
                 </span>
               </button>`)
           }
@@ -247,7 +259,7 @@
 
         if (tab === 'projects') {
           if (!state.projects.length) {
-            el.innerHTML = '<p class="empty">Проектов пока нет</p>'
+            el.innerHTML = `<p class="empty">${T('emptyProjects', 'No projects yet')}</p>`
             return
           }
           for (const p of state.projects) {
@@ -258,7 +270,7 @@
                 </span>
                 <span class="body">
                   <span class="title">${escape(p.name)}</span>
-                  <span class="sub">${p.unread ? p.unread + ' непрочитанных' : 'всё прочитано'}</span>
+                  <span class="sub">${p.unread ? `${p.unread} ${T('unreadOne', 'unread')}` : T('allRead', 'all read')}</span>
                 </span>
               </button>`)
           }
@@ -268,6 +280,12 @@
       }
 
       function render() {
+        // статичные подписи: вкладки и кнопки внизу
+        document.querySelectorAll('[data-t]').forEach((el) => {
+          const val = state.strings?.[el.dataset.t]
+          if (val) el.textContent = val
+        })
+        document.documentElement.dir = state.strings?.dir === 'rtl' ? 'rtl' : 'ltr'
         renderTimer()
         const cnt = $('cnt')
         cnt.hidden = !state.unread
