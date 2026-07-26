@@ -815,11 +815,11 @@ bridgeRoute.get('/time/report', async (c) => {
   if (!privileged) conds.push(eq(timeEntries.userId, id.userId))
   const from = c.req.query('from')
   const to = c.req.query('to')
-  if (from) conds.push(sql`${timeEntries.startedAt} >= ${new Date(from)}`)
+  if (from) conds.push(sql`${timeEntries.startedAt} >= ${new Date(from).toISOString()}::timestamptz`)
   if (to) {
     const end = new Date(to)
     end.setHours(23, 59, 59, 999)
-    conds.push(sql`${timeEntries.startedAt} <= ${end}`)
+    conds.push(sql`${timeEntries.startedAt} <= ${end.toISOString()}::timestamptz`)
   }
 
   const minutes = sql<number>`coalesce(sum(extract(epoch from (${timeEntries.endedAt} - ${timeEntries.startedAt})) / 60), 0)::int`

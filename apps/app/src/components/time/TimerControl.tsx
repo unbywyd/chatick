@@ -17,6 +17,9 @@ export type RunningEntry = {
   description: string
   startedAt: string
   task: { id: string; number: string; title: string } | null
+  projectId: string
+  /** null — таймер здесь; строка — идёт в другом проекте */
+  projectName: string | null
 }
 
 /** Секунды с момента начала — тикает раз в секунду, пока таймер идёт. */
@@ -79,15 +82,23 @@ export function TimerControl({ collapsed }: { collapsed: boolean }) {
 
   const toggle = () => (first ? stop.mutate(first.id) : start.mutate(draft.trim()))
 
+  // Таймер, забытый в соседнем проекте, виден и здесь: человек один, и работа
+  // в другом проекте не перестаёт идти оттого, что он переключил вкладку.
+  const elsewhere = first?.projectName ?? null
+
   if (collapsed) {
     return (
       <div className="flex flex-col items-center gap-1">
         <button
           onClick={toggle}
-          title={first ? t('time.stop') : t('time.start')}
+          title={first ? (elsewhere ? t('time.runningIn', { project: elsewhere }) : t('time.stop')) : t('time.start')}
           className={cn(
             'grid size-8 place-items-center rounded-md transition-colors',
-            first ? 'bg-brand text-brand-foreground' : 'text-muted-foreground hover:bg-accent hover:text-foreground',
+            first
+              ? elsewhere
+                ? 'bg-amber-500/20 text-amber-500' // чужой проект — другим цветом
+                : 'bg-brand text-brand-foreground'
+              : 'text-muted-foreground hover:bg-accent hover:text-foreground',
           )}
         >
           {first ? <Pause className="size-4" /> : <Play className="size-4" />}
@@ -95,8 +106,8 @@ export function TimerControl({ collapsed }: { collapsed: boolean }) {
         {first && (
           <button
             onClick={() => navigate(`/p/${projectId}/time`)}
-            className="font-mono text-[10px] tabular-nums text-brand"
-            title={t('time.openPage')}
+            className={cn('font-mono text-[10px] tabular-nums', elsewhere ? 'text-amber-500' : 'text-brand')}
+            title={elsewhere ? t('time.runningIn', { project: elsewhere }) : t('time.openPage')}
           >
             {formatElapsed(elapsed)}
           </button>
@@ -109,10 +120,14 @@ export function TimerControl({ collapsed }: { collapsed: boolean }) {
     <div className="flex min-w-0 items-center gap-1.5">
       <button
         onClick={toggle}
-        title={first ? t('time.stop') : t('time.start')}
+        title={first ? (elsewhere ? t('time.runningIn', { project: elsewhere }) : t('time.stop')) : t('time.start')}
         className={cn(
           'grid size-8 shrink-0 place-items-center rounded-md transition-colors',
-          first ? 'bg-brand text-brand-foreground' : 'text-muted-foreground hover:bg-accent hover:text-foreground',
+          first
+            ? elsewhere
+              ? 'bg-amber-500/20 text-amber-500'
+              : 'bg-brand text-brand-foreground'
+            : 'text-muted-foreground hover:bg-accent hover:text-foreground',
         )}
       >
         {first ? <Pause className="size-4" /> : <Play className="size-4" />}
@@ -120,15 +135,22 @@ export function TimerControl({ collapsed }: { collapsed: boolean }) {
 
       {first ? (
         <div className="min-w-0 flex-1 leading-tight">
-          <span className="block font-mono text-xs tabular-nums text-brand">
+          <span className={cn('block font-mono text-xs tabular-nums', elsewhere ? 'text-amber-500' : 'text-brand')}>
             {formatElapsed(elapsed)}
             {count > 1 && <span className="ms-1 text-[10px] text-muted-foreground">+{count - 1}</span>}
           </span>
-          <StartTimeEdit
-            startedAt={first.startedAt}
-            onChange={(iso) => patchStart.mutate({ id: first.id, startedAt: iso })}
-            label={first.task ? `${first.task.number}` : first.description || t('time.noTask')}
-          />
+          {elsewhere ? (
+            // в чужом проекте время не правим отсюда — только показываем, где идёт
+            <span className="block truncate text-[10px] text-amber-500">
+              {t('time.runningIn', { project: elsewhere })}
+            </span>
+          ) : (
+            <StartTimeEdit
+              startedAt={first.startedAt}
+              onChange={(iso) => patchStart.mutate({ id: first.id, startedAt: iso })}
+              label={first.task ? `${first.task.number}` : first.description || t('time.noTask')}
+            />
+          )}
         </div>
       ) : (
         // Поле, а не надпись: чаще всего человек хочет сразу сказать, над чем

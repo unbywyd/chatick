@@ -116,16 +116,35 @@ async function maybeTranslate(projectId: string, entryId: string, text: string):
 
 // --- Текущие таймеры --------------------------------------------------------
 
-/** Что идёт прямо сейчас у меня. Опрашивается часто — держим лёгким. */
+/**
+ * Что идёт прямо сейчас у меня — ВО ВСЕХ проектах, а не только в открытом.
+ * Человек один: уйдя в другой проект, он не перестаёт работать, и таймер,
+ * забытый в соседнем проекте, должен быть виден, а не исчезать из глаз.
+ */
 timeRoute.get('/running', async (c) => {
   const { projectId, sub } = c.get('auth')
   const rows = await db
     .select()
     .from(timeEntries)
-    .where(and(eq(timeEntries.projectId, projectId), eq(timeEntries.userId, sub), isNull(timeEntries.endedAt)))
+    .where(and(eq(timeEntries.userId, sub), isNull(timeEntries.endedAt)))
     .orderBy(asc(timeEntries.startedAt))
+
   const project = await db.query.projects.findFirst({ where: eq(projects.id, projectId) })
-  return c.json({ items: await hydrate(rows), config: readTimeConfig(project?.timeConfig) })
+  // названия проектов нужны, чтобы отличить чужой таймер от здешнего
+  const otherIds = [...new Set(rows.map((r) => r.projectId).filter((id) => id !== projectId))]
+  const others = otherIds.length
+    ? await db.select({ id: projects.id, name: projects.name }).from(projects).where(inArray(projects.id, otherIds))
+    : []
+  const nameById = new Map(others.map((p) => [p.id, p.name]))
+
+  const items = (await hydrate(rows)).map((item, i) => ({
+    ...item,
+    projectId: rows[i]!.projectId,
+    // null для текущего проекта — клиенту достаточно понять «это не здесь»
+    projectName: rows[i]!.projectId === projectId ? null : nameById.get(rows[i]!.projectId) ?? '—',
+  }))
+
+  return c.json({ items, config: readTimeConfig(project?.timeConfig) })
 })
 
 timeRoute.post(
@@ -146,17 +165,24 @@ timeRoute.post(
     const project = await db.query.projects.findFirst({ where: eq(projects.id, projectId) })
     const cfg = readTimeConfig(project?.timeConfig)
 
+    // Лимит про ЧЕЛОВЕКА, а не про проект: иначе при лимите 1 можно набрать
+    // по таймеру в каждом проекте и «работать» в пяти местах разом.
     const running = await db
       .select()
       .from(timeEntries)
-      .where(and(eq(timeEntries.projectId, projectId), eq(timeEntries.userId, sub), isNull(timeEntries.endedAt)))
+      .where(and(eq(timeEntries.userId, sub), isNull(timeEntries.endedAt)))
     if (running.length >= cfg.maxTimers) {
+      const elsewhere = running.find((r) => r.projectId !== projectId)
+      const otherName = elsewhere
+        ? (await db.query.projects.findFirst({ where: eq(projects.id, elsewhere.projectId) }))?.name
+        : null
       return c.json(
         {
-          error:
-            cfg.maxTimers === 1
+          error: otherName
+            ? `A timer is already running in "${otherName}". Stop it first, or raise the parallel-timer limit.`
+            : cfg.maxTimers === 1
               ? 'A timer is already running. Stop it first, or raise the parallel-timer limit in project settings.'
-              : `You already have ${running.length} timers running (limit ${cfg.maxTimers} in project settings).`,
+              : `You already have ${running.length} timers running (limit ${cfg.maxTimers}).`,
           running: await hydrate(running),
         },
         409,
@@ -187,11 +213,14 @@ timeRoute.post(
 
 timeRoute.post('/:id/stop', async (c) => {
   const { projectId, sub } = c.get('auth')
-  const entry = await db.query.timeEntries.findFirst({
-    where: and(eq(timeEntries.id, c.req.param('id')), eq(timeEntries.projectId, projectId)),
-  })
+  // Запись ищем без привязки к текущему проекту: свой таймер, забытый в
+  // соседнем проекте, должен останавливаться там же, где он показан.
+  const entry = await db.query.timeEntries.findFirst({ where: eq(timeEntries.id, c.req.param('id')) })
   if (!entry) return c.json({ error: 'Not found' }, 404)
-  if (entry.userId !== sub && !(await canSeeOthers(projectId, sub))) return c.json({ error: 'Forbidden' }, 403)
+  // чужой таймер в чужом проекте — не наше дело
+  if (entry.userId !== sub && !(entry.projectId === projectId && (await canSeeOthers(projectId, sub)))) {
+    return c.json({ error: 'Forbidden' }, 403)
+  }
   if (entry.endedAt) return c.json({ error: 'Already stopped' }, 400)
 
   const endedAt = new Date()
@@ -199,7 +228,7 @@ timeRoute.post('/:id/stop', async (c) => {
   // Такую запись не сохраняем: строки по 0:00 засоряют день и ничего не значат.
   if (endedAt.getTime() - entry.startedAt.getTime() < 60_000) {
     await db.delete(timeEntries).where(eq(timeEntries.id, entry.id))
-    broadcast(projectId, 'time', { action: 'delete', id: entry.id, userId: entry.userId })
+    broadcast(entry.projectId, 'time', { action: 'delete', id: entry.id, userId: entry.userId })
     return c.json({ discarded: true, reason: 'Shorter than a minute — nothing recorded.' })
   }
 
@@ -209,7 +238,7 @@ timeRoute.post('/:id/stop', async (c) => {
     .where(eq(timeEntries.id, entry.id))
     .returning()
 
-  broadcast(projectId, 'time', { action: 'stop', id: row!.id, userId: entry.userId })
+  broadcast(entry.projectId, 'time', { action: 'stop', id: row!.id, userId: entry.userId })
   return c.json((await hydrate([row!]))[0])
 })
 
@@ -243,7 +272,8 @@ timeRoute.get(
     // поиске «за сегодня» ночная смена обязана найтись.
     if (f.from) {
       const from = new Date(f.from)
-      conds.push(sql`coalesce(${timeEntries.endedAt}, now()) >= ${from}`)
+      // ISO-строкой с явным приведением: Date в sql-шаблоне драйвер не понимает
+      conds.push(sql`coalesce(${timeEntries.endedAt}, now()) >= ${from.toISOString()}::timestamptz`)
     }
     if (f.to) {
       const to = new Date(f.to)
@@ -389,7 +419,7 @@ timeRoute.get(
     const conds = [eq(timeEntries.projectId, projectId), sql`${timeEntries.endedAt} is not null`]
     if (!privileged) conds.push(eq(timeEntries.userId, sub))
     // берём всё, что ПЕРЕСЕКАЕТСЯ с периодом, а лишнее отрежем ниже
-    if (periodFrom) conds.push(sql`${timeEntries.endedAt} >= ${periodFrom}`)
+    if (periodFrom) conds.push(sql`${timeEntries.endedAt} >= ${periodFrom.toISOString()}::timestamptz`)
     if (periodTo) conds.push(lte(timeEntries.startedAt, periodTo))
 
     /**
@@ -398,9 +428,11 @@ timeRoute.get(
      * дней не сходится с итогом. Время терять нельзя, но и приписывать чужое
      * тоже.
      */
+    const clipEnd = periodTo ? sql`${periodTo.toISOString()}::timestamptz` : sql`${timeEntries.endedAt}`
+    const clipStart = periodFrom ? sql`${periodFrom.toISOString()}::timestamptz` : sql`${timeEntries.startedAt}`
     const clipped = sql<number>`extract(epoch from (
-      least(${timeEntries.endedAt}, ${periodTo ?? sql`${timeEntries.endedAt}`})
-      - greatest(${timeEntries.startedAt}, ${periodFrom ?? sql`${timeEntries.startedAt}`})
+      least(${timeEntries.endedAt}, ${clipEnd})
+      - greatest(${timeEntries.startedAt}, ${clipStart})
     )) / 60`
     const minutes = sql<number>`coalesce(sum(greatest(${clipped}, 0)), 0)::int`
 
