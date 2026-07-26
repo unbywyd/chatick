@@ -1,5 +1,5 @@
 import { useEffect } from 'react'
-import { useNavigate } from 'react-router-dom'
+import { useLocation, useNavigate } from 'react-router-dom'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { api, getSessionToken } from '@/lib/api'
 
@@ -11,7 +11,7 @@ import { api, getSessionToken } from '@/lib/api'
 type DesktopBridge = {
   version: string
   platform: string
-  setState: (s: { unread: number; timer: { description: string } | null }) => void
+  setState: (s: DesktopState) => void
   notify: (p: { title: string; body?: string; link?: string }) => void
   show: () => void
   info: () => Promise<{ version: string; platform: string; openAtLogin: boolean }>
@@ -30,8 +30,36 @@ export const desktop = (): DesktopBridge | undefined =>
 
 export const isDesktop = () => Boolean(desktop())
 
-type Inbox = { unreadTotal: number; items: { id: string; title: string; summary?: string | null; body: string; link: string }[] }
-type Running = { items: { id: string; description: string; projectId: string }[] }
+/** Всё, что панель в трее рисует без обращения к API. */
+type DesktopState = {
+  unread: number
+  timer: { id: string; description: string; startedAt: string; projectName?: string } | null
+  notifications: { id: string; title: string; summary?: string | null; link: string; projectName?: string; unread: boolean }[]
+  tasks: { id: string; number: string; title: string; link: string; projectName?: string; due?: string }[]
+  projects: { id: string; name: string; color?: string; logoUrl?: string | null; unread: number }[]
+  project: { id: string; name: string } | null
+}
+
+type InboxItem = {
+  id: string
+  title: string
+  summary?: string | null
+  body: string
+  link: string
+  projectId: string
+  readAt?: string | null
+}
+type Inbox = { unreadTotal: number; items: InboxItem[] }
+type Running = { items: { id: string; description: string; startedAt: string; projectId: string }[] }
+type ProjectLite = {
+  id: string
+  name: string
+  color?: string
+  logoUrl?: string | null
+  isMember: boolean
+  stats?: { unread: number }
+}
+type TaskLite = { id: string; number: string; title: string; status: string; dueDate?: string | null; assignee?: { id: string } | null }
 
 /**
  * Держит десктоп в курсе: бейдж, трей, уведомления о новом.
@@ -39,9 +67,20 @@ type Running = { items: { id: string; description: string; projectId: string }[]
  */
 export function useDesktopSync() {
   const navigate = useNavigate()
+  const location = useLocation()
   const qc = useQueryClient()
   const bridge = desktop()
   const authed = Boolean(getSessionToken())
+
+  // Активный проект — из адреса: /p/<id>/...
+  const activeProjectId = location.pathname.match(/^\/p\/([^/]+)/)?.[1]
+
+  const me = useQuery({
+    queryKey: ['me'],
+    enabled: Boolean(bridge) && authed,
+    queryFn: () => api<{ id: string }>('/api/v1/auth/me'),
+  })
+  const meId = me.data?.id
 
   // Непрочитанные — то же, что показывает колокольчик: только адресованное мне.
   const inbox = useQuery({
@@ -59,15 +98,77 @@ export function useDesktopSync() {
     retry: false, // без project-токена запрос вернёт 401 — это нормально
   })
 
-  // --- трей и бейдж ----------------------------------------------------------
+  // Проекты нужны панели и для списка, и чтобы подписать, где что произошло.
+  const companies = useQuery({
+    queryKey: ['companies'],
+    enabled: Boolean(bridge) && authed,
+    queryFn: () => api<{ companies: { id: string }[] }>('/api/v1/companies'),
+  })
+  const companyId = companies.data?.companies[0]?.id
+  const projects = useQuery({
+    queryKey: ['sidebar-projects', companyId],
+    enabled: Boolean(bridge) && authed && Boolean(companyId),
+    queryFn: () => api<ProjectLite[]>(`/api/v1/projects?companyId=${companyId}`),
+    refetchInterval: 60_000,
+  })
+
+  // Мои открытые задачи текущего проекта: панель показывает то, за что я взялся.
+  const tasks = useQuery({
+    queryKey: ['desktop-tasks', activeProjectId],
+    enabled: Boolean(bridge) && authed && Boolean(activeProjectId),
+    queryFn: () => api<TaskLite[]>('/api/v1/tasks', {}, 'project'),
+    refetchInterval: 120_000,
+    retry: false,
+  })
+
+  // --- состояние для трея и панели -------------------------------------------
   useEffect(() => {
     if (!bridge) return
+
+    const projectList = (projects.data ?? []).filter((p) => p.isMember)
+    const nameOf = (id: string) => projectList.find((p) => p.id === id)?.name
     const timer = running.data?.items[0]
+
     bridge.setState({
       unread: inbox.data?.unreadTotal ?? 0,
-      timer: timer ? { description: timer.description } : null,
+      timer: timer
+        ? {
+            id: timer.id,
+            description: timer.description,
+            startedAt: timer.startedAt,
+            projectName: nameOf(timer.projectId),
+          }
+        : null,
+      notifications: (inbox.data?.items ?? []).slice(0, 20).map((n) => ({
+        id: n.id,
+        title: n.title,
+        summary: n.summary,
+        link: n.link,
+        projectName: nameOf(n.projectId),
+        unread: !n.readAt,
+      })),
+      // только мои и только незакрытые: панель отвечает на «что мне делать»
+      tasks: (tasks.data ?? [])
+        .filter((t) => t.status !== 'done' && (!meId || t.assignee?.id === meId))
+        .slice(0, 30)
+        .map((t) => ({
+          id: t.id,
+          number: t.number,
+          title: t.title,
+          link: `/p/${activeProjectId}/tasks/${t.id}`,
+          projectName: activeProjectId ? nameOf(activeProjectId) : undefined,
+          due: t.dueDate ? new Date(t.dueDate).toLocaleDateString() : undefined,
+        })),
+      projects: projectList.map((p) => ({
+        id: p.id,
+        name: p.name,
+        color: p.color,
+        logoUrl: p.logoUrl,
+        unread: p.stats?.unread ?? 0,
+      })),
+      project: activeProjectId ? { id: activeProjectId, name: nameOf(activeProjectId) ?? '' } : null,
     })
-  }, [bridge, inbox.data?.unreadTotal, running.data?.items])
+  }, [bridge, inbox.data, running.data?.items, projects.data, tasks.data, activeProjectId, meId])
 
   // --- системные уведомления -------------------------------------------------
   useEffect(() => {

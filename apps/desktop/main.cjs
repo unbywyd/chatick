@@ -113,19 +113,14 @@ function trayTooltip() {
 }
 
 function buildTrayMenu() {
-  const running = Boolean(state.timer)
+  // Всё содержательное живёт в панели; правой кнопкой — только то, что панели
+  // не идёт: автозапуск и выход.
   return Menu.buildFromTemplate([
     { label: 'Открыть Chatick', click: showWindow },
     { type: 'separator' },
     {
-      // Таймер из трея — то, ради чего чаще всего лезут, не открывая окно.
-      label: running
-        ? `Остановить таймер${state.timer.description ? ` — ${state.timer.description}` : ''}`
-        : 'Запустить таймер',
-      click: () => {
-        send('timer:toggle')
-        showWindow()
-      },
+      label: state.timer ? 'Остановить таймер' : 'Запустить таймер',
+      click: () => send('timer:toggle'),
     },
     { type: 'separator' },
     {
@@ -149,14 +144,106 @@ function refreshTray() {
   if (!tray) return
   tray.setToolTip(trayTooltip())
   tray.setContextMenu(buildTrayMenu())
-  // иконка меняется, когда таймер идёт — видно, что учёт включён
-  tray.setImage(loadIcon(state.timer ? 'tray-active.png' : 'tray.png'))
+  tray.setImage(trayImage())
+}
+
+/**
+ * Значок трея: точка непрочитанных поверх иконки. Без неё о новом можно узнать
+ * только наведя курсор, а трей для того и нужен, чтобы видеть краем глаза.
+ * Цвет меняется, когда идёт таймер — учёт виден отдельно от уведомлений.
+ */
+function trayImage() {
+  const base = loadIcon(state.timer ? 'tray-active.png' : 'tray.png')
+  if (!state.unread || base.isEmpty()) return base
+
+  const dot = nativeImage.createFromBuffer(
+    Buffer.from(
+      `<svg xmlns="http://www.w3.org/2000/svg" width="32" height="32">
+         <circle cx="24" cy="8" r="7" fill="#e5484d" stroke="#0f0f0f" stroke-width="2"/>
+       </svg>`,
+    ),
+  )
+  // Наложение делаем средствами nativeImage: рисовать поверх средствами ОС
+  // пришлось бы по-разному на каждой платформе.
+  return dot.isEmpty() ? base : composeIcon(base, dot)
+}
+
+/** Склейка двух картинок 32×32: база + точка в углу. */
+function composeIcon(base, overlay) {
+  const size = { width: 32, height: 32 }
+  const canvas = nativeImage.createEmpty()
+  canvas.addRepresentation({ scaleFactor: 1, width: size.width, height: size.height, buffer: base.resize(size).toBitmap() })
+  const merged = Buffer.from(canvas.toBitmap())
+  const dot = overlay.resize(size).toBitmap()
+  // BGRA: накладываем непрозрачные пиксели точки поверх базы
+  for (let i = 0; i < merged.length; i += 4) {
+    if (dot[i + 3] > 16) {
+      merged[i] = dot[i]
+      merged[i + 1] = dot[i + 1]
+      merged[i + 2] = dot[i + 2]
+      merged[i + 3] = dot[i + 3]
+    }
+  }
+  return nativeImage.createFromBitmap(merged, size)
 }
 
 function createTray() {
   tray = new Tray(loadIcon('tray.png'))
-  tray.on('click', showWindow)
+  // Левый клик — панель (то, ради чего в трей и лезут), правый — короткое меню.
+  tray.on('click', togglePanel)
   refreshTray()
+}
+
+// --- панель в трее ------------------------------------------------------------
+// Контекстное меню упирается в потолок: только текст, ни аватарок, ни живого
+// таймера, ни прогресса. Панель — маленькое окно со своей вёрсткой, которое
+// открывается по клику на значок и прячется, когда теряет фокус.
+
+let panel = null
+
+function createPanel() {
+  panel = new BrowserWindow({
+    width: 380,
+    height: 520,
+    show: false,
+    frame: false,
+    resizable: false,
+    skipTaskbar: true, // панель — не окно приложения, ей нечего делать в панели задач
+    alwaysOnTop: true,
+    backgroundColor: '#0f0f0f',
+    webPreferences: {
+      preload: path.join(__dirname, 'preload-panel.cjs'),
+      contextIsolation: true,
+      nodeIntegration: false,
+    },
+  })
+
+  panel.loadFile(path.join(__dirname, 'panel.html'))
+
+  // Клик мимо панели закрывает её: так ведут себя все меню в трее.
+  panel.on('blur', () => panel?.hide())
+}
+
+/** Показать панель рядом со значком, не вылезая за края экрана. */
+function togglePanel() {
+  if (!panel) createPanel()
+  if (panel.isVisible()) return panel.hide()
+
+  const { screen } = require('electron')
+  const iconBounds = tray.getBounds()
+  const display = screen.getDisplayNearestPoint({ x: iconBounds.x, y: iconBounds.y })
+  const area = display.workArea
+  const [w, h] = panel.getSize()
+
+  // Значок может быть внизу (Windows), сверху (macOS) или сбоку — считаем от него.
+  const x = Math.round(Math.min(Math.max(iconBounds.x + iconBounds.width / 2 - w / 2, area.x + 8), area.x + area.width - w - 8))
+  const below = iconBounds.y < area.y + area.height / 2
+  const y = below ? iconBounds.y + iconBounds.height + 6 : iconBounds.y - h - 6
+
+  panel.setPosition(x, Math.round(Math.max(area.y + 8, y)))
+  panel.webContents.send('panel:state', state)
+  panel.show()
+  panel.focus()
 }
 
 // --- бейдж --------------------------------------------------------------------
@@ -180,9 +267,17 @@ const send = (channel, payload) => win?.webContents.send(channel, payload)
 /** IPC регистрируется после whenReady: раньше ipcMain ещё не существует. */
 function registerIpc() {
   ipcMain.on('state:update', (_e, next) => {
-  state = { unread: Number(next?.unread) || 0, timer: next?.timer ?? null }
-  refreshTray()
-  refreshBadge()
+    state = {
+      unread: Number(next?.unread) || 0,
+      timer: next?.timer ?? null,
+      notifications: Array.isArray(next?.notifications) ? next.notifications : [],
+      tasks: Array.isArray(next?.tasks) ? next.tasks : [],
+      projects: Array.isArray(next?.projects) ? next.projects : [],
+      project: next?.project ?? null,
+    }
+    refreshTray()
+    refreshBadge()
+    panel?.webContents.send('panel:state', state)
   })
 
   ipcMain.on('notify', (_e, payload) => {
@@ -207,6 +302,18 @@ function registerIpc() {
   }))
 
   ipcMain.on('window:show', showWindow)
+
+  // Действия из панели: она сама ничего не умеет, только просит главный процесс.
+  ipcMain.on('panel:toggle-timer', () => {
+    send('timer:toggle')
+    panel?.hide()
+  })
+  ipcMain.on('panel:open', (_e, link) => {
+    panel?.hide()
+    showWindow()
+    if (link) send('navigate', link)
+  })
+  ipcMain.on('panel:close', () => panel?.hide())
 }
 
 // --- горячие клавиши ----------------------------------------------------------

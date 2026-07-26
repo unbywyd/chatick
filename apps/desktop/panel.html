@@ -1,0 +1,306 @@
+<!doctype html>
+<html lang="ru">
+  <head>
+    <meta charset="utf-8" />
+    <title>Chatick</title>
+    <style>
+      /* Панель живёт отдельно от веб-приложения: она должна открываться
+         мгновенно, поэтому никаких фреймворков и загрузок — только свой CSS. */
+      :root {
+        color-scheme: dark;
+        --bg: #0f0f0f;
+        --card: #171717;
+        --line: #262626;
+        --text: #ededed;
+        --muted: #8a8a8a;
+        --brand: #d4f34a;
+        --warn: #f5a524;
+      }
+      * { box-sizing: border-box; }
+      body {
+        margin: 0;
+        font: 13px/1.45 system-ui, -apple-system, 'Segoe UI', sans-serif;
+        background: var(--bg);
+        color: var(--text);
+        height: 100vh;
+        display: flex;
+        flex-direction: column;
+        overflow: hidden;
+        user-select: none;
+      }
+
+      /* --- таймер: главное, ради чего открывают панель --- */
+      .timer {
+        display: flex;
+        align-items: center;
+        gap: 12px;
+        padding: 14px 16px;
+        border-bottom: 1px solid var(--line);
+      }
+      .play {
+        width: 40px; height: 40px;
+        flex: 0 0 auto;
+        border: 0; border-radius: 50%;
+        background: var(--brand); color: #111;
+        font-size: 15px; cursor: pointer;
+        display: grid; place-items: center;
+      }
+      .play.running { background: #2a2a2a; color: var(--brand); }
+      .play:hover { filter: brightness(1.08); }
+      .timer-info { min-width: 0; flex: 1; }
+      .elapsed {
+        font: 600 20px/1.1 ui-monospace, 'SF Mono', Menlo, monospace;
+        font-variant-numeric: tabular-nums;
+        color: var(--brand);
+      }
+      .elapsed.idle { color: var(--muted); font-weight: 400; font-size: 14px; }
+      .timer-sub {
+        margin-top: 2px;
+        color: var(--muted);
+        white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+      }
+
+      /* --- вкладки --- */
+      nav {
+        display: flex;
+        gap: 2px;
+        padding: 8px 12px 0;
+        border-bottom: 1px solid var(--line);
+      }
+      nav button {
+        border: 0; background: none;
+        color: var(--muted);
+        font: inherit;
+        padding: 6px 10px 8px;
+        border-bottom: 2px solid transparent;
+        cursor: pointer;
+      }
+      nav button.active { color: var(--text); border-bottom-color: var(--brand); }
+      nav .count {
+        margin-left: 5px;
+        background: var(--brand); color: #111;
+        border-radius: 9px; padding: 0 5px;
+        font-size: 10px; font-weight: 700;
+      }
+
+      main { flex: 1; overflow-y: auto; padding: 6px; }
+      main::-webkit-scrollbar { width: 8px; }
+      main::-webkit-scrollbar-thumb { background: #2e2e2e; border-radius: 4px; }
+
+      .row {
+        display: flex; align-items: flex-start; gap: 9px;
+        width: 100%;
+        padding: 8px 10px;
+        border: 0; border-radius: 8px;
+        background: none; color: inherit;
+        font: inherit; text-align: left;
+        cursor: pointer;
+      }
+      .row:hover { background: var(--card); }
+      .avatar {
+        width: 26px; height: 26px; flex: 0 0 auto;
+        border-radius: 50%;
+        background: #2a2a2a;
+        display: grid; place-items: center;
+        font-size: 11px; font-weight: 600; color: var(--muted);
+        overflow: hidden;
+      }
+      .avatar img { width: 100%; height: 100%; object-fit: cover; }
+      .badge-dot {
+        width: 7px; height: 7px; flex: 0 0 auto;
+        border-radius: 50%; background: var(--brand);
+        margin-top: 8px;
+      }
+      .body { min-width: 0; flex: 1; }
+      .title { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+      .sub {
+        color: var(--muted); font-size: 11.5px;
+        white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+      }
+      .num {
+        font: 11px ui-monospace, monospace;
+        color: var(--muted);
+        flex: 0 0 auto; padding-top: 2px;
+      }
+      .empty { padding: 34px 16px; text-align: center; color: var(--muted); }
+
+      /* --- низ --- */
+      footer {
+        display: flex; gap: 8px;
+        padding: 8px 12px;
+        border-top: 1px solid var(--line);
+      }
+      footer button {
+        flex: 1;
+        border: 1px solid var(--line); border-radius: 7px;
+        background: none; color: var(--muted);
+        font: inherit; padding: 7px;
+        cursor: pointer;
+      }
+      footer button:hover { background: var(--card); color: var(--text); }
+      footer .primary { background: var(--brand); border-color: var(--brand); color: #111; font-weight: 600; }
+      footer .primary:hover { filter: brightness(1.08); color: #111; }
+    </style>
+  </head>
+  <body>
+    <div class="timer">
+      <button class="play" id="play" title="Запустить или остановить таймер">▶</button>
+      <div class="timer-info">
+        <div class="elapsed idle" id="elapsed">Таймер не запущен</div>
+        <div class="timer-sub" id="timerSub">Нажмите, чтобы начать учёт</div>
+      </div>
+    </div>
+
+    <nav>
+      <button data-tab="inbox" class="active">Мне<span class="count" id="cnt" hidden></span></button>
+      <button data-tab="tasks">Задачи</button>
+      <button data-tab="projects">Проекты</button>
+    </nav>
+
+    <main id="list"></main>
+
+    <footer>
+      <button id="openApp" class="primary">Открыть Chatick</button>
+      <button id="close">Закрыть</button>
+    </footer>
+
+    <script>
+      let state = { unread: 0, timer: null, notifications: [], tasks: [], projects: [], project: null }
+      let tab = 'inbox'
+      const $ = (id) => document.getElementById(id)
+
+      /** Инициалы вместо картинки, когда аватарки нет. */
+      const initials = (name) =>
+        String(name || '?')
+          .split(/\s+/)
+          .slice(0, 2)
+          .map((w) => w[0])
+          .join('')
+          .toUpperCase()
+
+      const escape = (s) =>
+        String(s ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c])
+
+      function elapsedText(timer) {
+        if (!timer?.startedAt) return ''
+        const sec = Math.max(0, Math.floor((Date.now() - new Date(timer.startedAt).getTime()) / 1000))
+        const h = Math.floor(sec / 3600)
+        const m = Math.floor((sec % 3600) / 60)
+        const s = sec % 60
+        return h
+          ? `${h}:${String(m).padStart(2, '0')}:${String(s).padStart(2, '0')}`
+          : `${m}:${String(s).padStart(2, '0')}`
+      }
+
+      function renderTimer() {
+        const t = state.timer
+        $('play').textContent = t ? '⏸' : '▶'
+        $('play').classList.toggle('running', Boolean(t))
+        if (t) {
+          $('elapsed').textContent = elapsedText(t)
+          $('elapsed').classList.remove('idle')
+          $('timerSub').textContent = t.description || t.taskTitle || t.projectName || 'без задачи'
+        } else {
+          $('elapsed').textContent = 'Таймер не запущен'
+          $('elapsed').classList.add('idle')
+          $('timerSub').textContent = 'Нажмите, чтобы начать учёт'
+        }
+      }
+
+      function renderList() {
+        const el = $('list')
+        const rows = []
+
+        if (tab === 'inbox') {
+          if (!state.notifications.length) {
+            el.innerHTML = '<p class="empty">Здесь появится то,<br>что вас касается</p>'
+            return
+          }
+          for (const n of state.notifications.slice(0, 20)) {
+            rows.push(`
+              <button class="row" data-link="${escape(n.link)}">
+                ${n.unread ? '<span class="badge-dot"></span>' : '<span class="badge-dot" style="background:transparent"></span>'}
+                <span class="body">
+                  <span class="title">${escape(n.summary || n.title)}</span>
+                  <span class="sub">${escape(n.projectName || n.title)}</span>
+                </span>
+              </button>`)
+          }
+        }
+
+        if (tab === 'tasks') {
+          if (!state.tasks.length) {
+            el.innerHTML = '<p class="empty">Открытых задач нет</p>'
+            return
+          }
+          for (const t of state.tasks.slice(0, 30)) {
+            rows.push(`
+              <button class="row" data-link="${escape(t.link)}">
+                <span class="num">${escape(t.number)}</span>
+                <span class="body">
+                  <span class="title">${escape(t.title)}</span>
+                  <span class="sub">${escape(t.projectName || '')}${t.due ? ' · до ' + escape(t.due) : ''}</span>
+                </span>
+              </button>`)
+          }
+        }
+
+        if (tab === 'projects') {
+          if (!state.projects.length) {
+            el.innerHTML = '<p class="empty">Проектов пока нет</p>'
+            return
+          }
+          for (const p of state.projects) {
+            rows.push(`
+              <button class="row" data-link="/p/${escape(p.id)}/chat">
+                <span class="avatar" style="background:${escape(p.color || '#2a2a2a')};color:#fff">
+                  ${p.logoUrl ? `<img src="${escape(p.logoUrl)}" alt="">` : escape(initials(p.name))}
+                </span>
+                <span class="body">
+                  <span class="title">${escape(p.name)}</span>
+                  <span class="sub">${p.unread ? p.unread + ' непрочитанных' : 'всё прочитано'}</span>
+                </span>
+              </button>`)
+          }
+        }
+
+        el.innerHTML = rows.join('')
+      }
+
+      function render() {
+        renderTimer()
+        const cnt = $('cnt')
+        cnt.hidden = !state.unread
+        cnt.textContent = state.unread > 99 ? '99+' : state.unread
+        renderList()
+      }
+
+      // --- события ---
+      $('play').onclick = () => window.panel.toggleTimer()
+      $('openApp').onclick = () => window.panel.openApp()
+      $('close').onclick = () => window.panel.close()
+
+      document.querySelectorAll('nav button').forEach((btn) => {
+        btn.onclick = () => {
+          tab = btn.dataset.tab
+          document.querySelectorAll('nav button').forEach((b) => b.classList.toggle('active', b === btn))
+          renderList()
+        }
+      })
+
+      $('list').onclick = (e) => {
+        const row = e.target.closest('.row')
+        if (row?.dataset.link) window.panel.open(row.dataset.link)
+      }
+
+      window.panel.onState((next) => {
+        state = { ...state, ...next }
+        render()
+      })
+
+      // Секунды должны идти: панель открыта, пока на неё смотрят.
+      setInterval(() => state.timer && renderTimer(), 1000)
+      render()
+    </script>
+  </body>
+</html>
