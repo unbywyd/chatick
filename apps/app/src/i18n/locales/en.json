@@ -449,7 +449,8 @@
     "placeholder": "“{{tab}}” tab — content coming soon",
     "ai": "AI & usage",
     "history": "History",
-    "documents": "Documents"
+    "documents": "Documents",
+    "chat": "Chat"
   },
   "notif": {
     "title": "Notifications",
@@ -788,5 +789,11 @@
     "imported": "Backup imported",
     "needPassword": "This archive contains secrets — enter the export password",
     "notABackup": "That file is not a Chatick backup"
+  },
+  "sidebar": {
+    "search": "Search projects",
+    "projects": "Projects",
+    "newProject": "New project",
+    "companySettings": "Company"
   }
 }

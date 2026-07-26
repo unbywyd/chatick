@@ -97,7 +97,11 @@ createRoot(document.getElementById('root')!).render(
               <Route path="/start/:companyId" element={<StartScreen />} />
               <Route path="/start/:companyId/:companyTab" element={<StartScreen />} />
               <Route path="/p/:id" element={<ProjectLayout />}>
-                <Route index element={<Navigate to="tasks" replace />} />
+                {/* чат — такая же вкладка проекта, с собственным URL */}
+                <Route index element={<Navigate to="chat" replace />} />
+                {/* на широком экране чат — отдельная колонка, а рабочая зона
+                    не должна пустовать: показываем задачи */}
+                <Route path="chat" element={<TasksPage />} />
                 <Route path="about" element={<AboutPage />} />
                 {/* :taskId — прямая ссылка на задачу (drawer открыт по URL) */}
                 <Route path="tasks/:taskId?" element={<TasksPage />} />
