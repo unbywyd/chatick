@@ -1,5 +1,5 @@
 import { Hono } from 'hono'
-import { and, desc, eq, ilike, inArray, isNull, lt, or, sql } from 'drizzle-orm'
+import { and, desc, eq, gt, ilike, inArray, isNull, lt, or, sql } from 'drizzle-orm'
 import { db } from '../db/client.js'
 import {
   documents,
@@ -306,7 +306,7 @@ bridgeRoute.get('/messages/:id/context', async (c) => {
         and(
           eq(messages.projectId, scope.projectId),
           eq(messages.mode, 'group' as const),
-          sql`${messages.createdAt} > ${target.createdAt}`,
+          gt(messages.createdAt, target.createdAt),
         ),
       )
       .orderBy(messages.createdAt)
