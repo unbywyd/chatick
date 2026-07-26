@@ -22,7 +22,7 @@ export const takeDesktopCode = () => {
 }
 
 export function LoginScreen() {
-  const { t } = useTranslation()
+  const { t, i18n } = useTranslation()
   const navigate = useNavigate()
   const [params] = useSearchParams()
   const desktopCode = params.get('desktop')
@@ -51,7 +51,15 @@ export function LoginScreen() {
     setWaiting(true)
     try {
       const { code, url } = await api<{ code: string; url: string }>('/api/v1/auth/desktop', { method: 'POST' })
-      shell?.openExternal(url)
+
+      // Язык кладём до решётки: маршрутизация у нас хэшевая, и всё после «#»
+      // детектор языка не читает. Вкладка в чужом браузере должна говорить
+      // на языке приложения.
+      const hashAt = url.indexOf('#')
+      const base = hashAt === -1 ? url : url.slice(0, hashAt)
+      const hash = hashAt === -1 ? '' : url.slice(hashAt)
+      const sep = base.includes('?') ? '&' : '?'
+      shell?.openExternal(`${base}${sep}lng=${i18n.language}${hash}`)
 
       const deadline = Date.now() + 10 * 60 * 1000
       while (Date.now() < deadline) {

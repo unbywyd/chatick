@@ -26,7 +26,11 @@ i18n
     supportedLngs: LOCALES.map((l) => l.code),
     interpolation: { escapeValue: false },
     detection: {
-      order: ['localStorage', 'navigator'],
+      // ?lng= идёт первым ради входа из десктопа: приложение открывает вкладку
+      // в системном браузере, и язык там должен быть тот, что выбран в
+      // приложении, а не тот, что стоит в чужом браузере.
+      order: ['querystring', 'localStorage', 'navigator'],
+      lookupQuerystring: 'lng',
       lookupLocalStorage: 'chatick_lang',
       caches: ['localStorage'],
     },
