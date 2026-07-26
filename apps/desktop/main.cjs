@@ -373,6 +373,7 @@ function registerIpc() {
   ipcMain.on('panel:busy', (_e, busy) => {
     panelBusy = Boolean(busy)
   })
+  ipcMain.on('panel:refresh-connections', () => send('connect:refresh'))
   ipcMain.on('panel:revoke-connection', (_e, id) => send('connect:revoke', id))
   ipcMain.on('connect:result', (_e, payload) => panel?.webContents.send('panel:connect', payload))
 }

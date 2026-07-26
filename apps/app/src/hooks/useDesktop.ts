@@ -24,6 +24,7 @@ type DesktopBridge = {
   connectResult: (payload: ConnectResult) => void
   onConnectCheck: (fn: (code: string) => void) => () => void
   onConnectApprove: (fn: (p: { code: string; projectId?: string; companyId?: string }) => void) => () => void
+  onConnectRefresh: (fn: () => void) => () => void
   onConnectRevoke: (fn: (id: string) => void) => () => void
 }
 
@@ -371,6 +372,12 @@ export function useDesktopSync() {
       }
     })
 
+    // Вкладку открыли — обновляем немедленно: минутный опрос показывал бы
+    // вчерашнюю картину как раз тогда, когда на неё смотрят.
+    const offRefresh = bridge.onConnectRefresh(() => {
+      qc.invalidateQueries({ queryKey: ['bridge-sessions'] })
+    })
+
     // Закрыть туннель прямо из панели: если ассистент больше не нужен,
     // идти за этим в настройки — лишний шаг.
     const offRevoke = bridge.onConnectRevoke(async (id) => {
@@ -388,6 +395,7 @@ export function useDesktopSync() {
       offTimer()
       offCheck()
       offApprove()
+      offRefresh()
       offRevoke()
     }
   }, [bridge, navigate, qc, running.data?.items, activeProjectId])

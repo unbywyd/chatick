@@ -20,6 +20,8 @@ contextBridge.exposeInMainWorld('panel', {
   revokeConnection: (id) => ipcRenderer.send('panel:revoke-connection', id),
   /** «Не закрывай меня по клику мимо» — на время работы с кодом доступа. */
   setBusy: (busy) => ipcRenderer.send('panel:busy', busy),
+  /** Вкладку «Доступ» открыли — самое время обновить список подключений. */
+  refreshConnections: () => ipcRenderer.send('panel:refresh-connections'),
   onConnect: (fn) => {
     const handler = (_e, payload) => fn(payload)
     ipcRenderer.on('panel:connect', handler)
