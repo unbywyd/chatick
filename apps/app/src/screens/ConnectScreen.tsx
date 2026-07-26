@@ -66,11 +66,20 @@ export function ConnectScreen() {
     if (!projectId && myProjects.length) setProjectId(myProjects[0]!.id)
   }, [myProjects, projectId])
 
+  // Подтверждение кода НЕ создаёт сессию: она появляется, когда ассистент
+  // придёт за токеном (/x/device/poll). Поэтому сразу после «Разрешить»
+  // список ещё пуст — какое-то время опрашиваем чаще и показываем ожидание.
+  const [awaiting, setAwaiting] = useState(false)
   const sessions = useQuery({
     queryKey: ['bridge-sessions'],
     queryFn: () => api<{ items: BridgeSession[] }>('/api/v1/auth/bridge/sessions'),
-    refetchInterval: 10_000,
+    refetchInterval: awaiting ? 1500 : 10_000,
   })
+
+  // как только подключение появилось — перестаём частить
+  useEffect(() => {
+    if (awaiting && (sessions.data?.items.length ?? 0) > 0) setAwaiting(false)
+  }, [awaiting, sessions.data])
 
   // проверяем код, чтобы показать, КТО просит доступ
   const pending = useQuery({
@@ -89,7 +98,10 @@ export function ConnectScreen() {
     onSuccess: () => {
       toast.success(t('connect.approved'))
       setCode('')
+      setAwaiting(true)
       qc.invalidateQueries({ queryKey: ['bridge-sessions'] })
+      // ассистент может не успеть опросить: через минуту прекращаем частить
+      setTimeout(() => setAwaiting(false), 60_000)
     },
     onError: (e: unknown) => toast.error(e instanceof Error ? e.message : String(e)),
   })
@@ -231,7 +243,12 @@ export function ConnectScreen() {
                 </Button>
               </li>
             ))}
-            {sessions.data && sessions.data.items.length === 0 && (
+            {awaiting && (sessions.data?.items.length ?? 0) === 0 && (
+              <p className="rounded-lg border border-dashed p-4 text-center text-xs text-muted-foreground">
+                {t('connect.waitingForAi')}
+              </p>
+            )}
+            {!awaiting && sessions.data && sessions.data.items.length === 0 && (
               <p className={cn('rounded-lg border border-dashed p-4 text-center text-xs text-muted-foreground')}>
                 {t('connect.noSessions')}
               </p>

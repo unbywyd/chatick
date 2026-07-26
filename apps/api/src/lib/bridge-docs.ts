@@ -102,6 +102,20 @@ ${denied.length ? `\n  NOT ALLOWED: ${denied.join(', ')}\n  Do not attempt these
 - Destructive actions (delete, bulk status changes) need explicit human
   confirmation first. Ask, then act.
 - Write content in the project's language, not the language of the request.
+- NON-ASCII BODIES: never put non-ASCII text (Cyrillic, Hebrew, emoji, typographic
+  dashes) inline in \`curl -d '...'\` — on Windows the shell re-encodes the argument
+  and the server receives corrupted bytes. The ASCII part survives, which hides the
+  problem. Write the body to a file and send it with --data-binary:
+
+    cat > /tmp/body.json <<'JSON'
+    {"text":"Тестовое сообщение"}
+    JSON
+    curl -sS -X POST ${b}/x/messages -H "authorization: Bearer $TOKEN" \\
+      -H 'content-type: application/json; charset=utf-8' --data-binary @/tmp/body.json
+
+  Applies to every endpoint with a body: messages, tasks, documents, comments.
+  Corrupted text CANNOT be fixed through this bridge — there is no edit/delete for
+  chat messages — so verify before sending, not after.
 - On 401 the tunnel is closed — re-run the device flow (GET ${b}/x).
 
 ## Tasks

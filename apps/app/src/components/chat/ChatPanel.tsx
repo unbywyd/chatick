@@ -489,14 +489,14 @@ function MessageRow({
         <button
           onClick={onDelete}
           title={t('chat.deleteMessage')}
-          className="absolute end-1 top-1 hidden rounded p-1 text-muted-foreground hover:text-destructive group-hover:block"
+          className="absolute end-1 top-1 rounded p-1 text-muted-foreground opacity-0 transition-opacity hover:text-destructive group-hover:opacity-100 focus-visible:opacity-100"
         >
           <Trash2 className="size-3.5" />
         </button>
       )}
       <span className="w-7 shrink-0 select-none">
         {compact ? (
-          <span className="hidden text-[10px] leading-6 text-muted-foreground group-hover:block">{time}</span>
+          <span className="block text-[10px] leading-6 text-muted-foreground opacity-0 transition-opacity group-hover:opacity-100">{time}</span>
         ) : isAi ? (
           <span className="grid size-7 place-items-center rounded-full bg-brand text-brand-foreground">
             <Bot className="size-4" />
