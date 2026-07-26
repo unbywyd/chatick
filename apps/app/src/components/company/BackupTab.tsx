@@ -5,6 +5,7 @@ import { toast } from 'sonner'
 import { AlertTriangle, CloudUpload, Download, HardDriveDownload, Upload } from 'lucide-react'
 import { api, API_URL, getSessionToken, type Company, type ProjectListItem } from '@/lib/api'
 import { Button } from '@/components/ui/button'
+import { Select, SelectTrigger, SelectValue, SelectContent, SelectItem } from '@/components/ui/select'
 import { Input } from '@/components/ui/input'
 import { useConfirm } from '@/components/ui/confirm'
 
@@ -196,18 +197,19 @@ export function BackupTab({ company }: { company: Company }) {
           <>
             <p className="mt-1 text-xs text-muted-foreground">{t('backup.storageHint')}</p>
             <div className="mt-3 flex flex-wrap items-center gap-2">
-              <select
-                value={targetProject}
-                onChange={(e) => setTargetProject(e.target.value)}
-                className="rounded-md border bg-background px-2 py-1.5 text-sm"
-              >
-                <option value="">{t('backup.pickProject')}</option>
-                {(projects.data ?? []).map((p) => (
-                  <option key={p.id} value={p.id}>
-                    {p.name}
-                  </option>
-                ))}
-              </select>
+              <Select value={targetProject || 'none'} onValueChange={(v) => setTargetProject(v === 'none' ? '' : v)}>
+                <SelectTrigger className="w-auto min-w-48">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="none">{t('backup.pickProject')}</SelectItem>
+                  {(projects.data ?? []).map((p) => (
+                    <SelectItem key={p.id} value={p.id}>
+                      {p.name}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
               <Button variant="outline" disabled={!targetProject || toStorage.isPending} onClick={() => toStorage.mutate()}>
                 <CloudUpload className="size-4" />
                 {t('backup.uploadAction')}

@@ -5,6 +5,7 @@ import { toast } from 'sonner'
 import { History, RotateCcw, Search, Trash2 } from 'lucide-react'
 import { api } from '@/lib/api'
 import { cn } from '@/lib/utils'
+import { Select, SelectTrigger, SelectValue, SelectContent, SelectItem } from '@/components/ui/select'
 import { Avatar } from '@/components/ui/avatar'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -85,30 +86,45 @@ function ActivityFeed({ projectId, lang }: { projectId: string; lang: string }) 
     <div className="space-y-3">
       {/* Фильтры */}
       <div className="flex flex-wrap items-center gap-1.5">
-        <select value={entityType} onChange={(e) => setEntityType(e.target.value)} className="h-8 rounded-md border bg-background px-2 text-xs">
-          <option value="">{t('history.allTypes')}</option>
-          {ENTITY_TYPES.map((et) => (
-            <option key={et} value={et}>
-              {t(`history.entity.${et}`)}
-            </option>
-          ))}
-        </select>
-        <select value={action} onChange={(e) => setAction(e.target.value)} className="h-8 rounded-md border bg-background px-2 text-xs">
-          <option value="">{t('history.allActions')}</option>
-          {ACTIONS.map((a) => (
-            <option key={a} value={a}>
-              {t(`history.action.${a}`)}
-            </option>
-          ))}
-        </select>
-        <select value={actorId} onChange={(e) => setActorId(e.target.value)} className="h-8 rounded-md border bg-background px-2 text-xs">
-          <option value="">{t('history.allActors')}</option>
-          {(members.data ?? []).map((m) => (
-            <option key={m.user.id} value={m.user.id}>
-              {m.user.name || m.user.email}
-            </option>
-          ))}
-        </select>
+        <Select value={entityType || 'all'} onValueChange={(v) => setEntityType(v === 'all' ? '' : v)}>
+          <SelectTrigger className="h-8 w-auto min-w-32 text-xs">
+            <SelectValue />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="all">{t('history.allTypes')}</SelectItem>
+            {ENTITY_TYPES.map((et) => (
+              <SelectItem key={et} value={et}>
+                {t(`history.entity.${et}`)}
+              </SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
+        <Select value={action || 'all'} onValueChange={(v) => setAction(v === 'all' ? '' : v)}>
+          <SelectTrigger className="h-8 w-auto min-w-32 text-xs">
+            <SelectValue />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="all">{t('history.allActions')}</SelectItem>
+            {ACTIONS.map((a) => (
+              <SelectItem key={a} value={a}>
+                {t(`history.action.${a}`)}
+              </SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
+        <Select value={actorId || 'all'} onValueChange={(v) => setActorId(v === 'all' ? '' : v)}>
+          <SelectTrigger className="h-8 w-auto min-w-32 text-xs">
+            <SelectValue />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="all">{t('history.allActors')}</SelectItem>
+            {(members.data ?? []).map((m) => (
+              <SelectItem key={m.user.id} value={m.user.id}>
+                {m.user.name || m.user.email}
+              </SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
         {hasFilters && (
           <button onClick={() => { setQ(''); setEntityType(''); setAction(''); setActorId('') }} className={cn(chip, 'text-muted-foreground hover:text-foreground')}>
             {t('tasks.resetFilters')}

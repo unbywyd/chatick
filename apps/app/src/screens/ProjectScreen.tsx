@@ -7,6 +7,7 @@ import { api, getSessionToken, type Me } from '@/lib/api'
 import { cn } from '@/lib/utils'
 import { useProjectToken } from '@/hooks/useProjectToken'
 import { useResizable } from '@/hooks/useResizable'
+import { useSidebarCollapsed } from '@/hooks/useSidebarCollapsed'
 import { ChatPanel } from '@/components/chat/ChatPanel'
 import { ProjectSidebar } from '@/components/ProjectSidebar'
 import { Button } from '@/components/ui/button'
@@ -50,6 +51,7 @@ export function ProjectLayout() {
   const [sidebarOpen, setSidebarOpen] = useState(false)
   // ширина колонки чата: было 38% — на широком мониторе это заметно много
   const chat = useResizable('chatick_chat_width', 380, 300, 720)
+  const [collapsed] = useSidebarCollapsed()
 
   // Текущая вкладка из URL (/p/:id/chat, /p/:id/tasks, ...). Берём из pathname:
   // маршрут не splat, поэтому useParams('*') здесь пустой.
@@ -95,7 +97,11 @@ export function ProjectLayout() {
       {/* КОЛОНКА 1 — список проектов. На мобильном выезжает поверх. */}
       <aside
         className={cn(
-          'w-[300px] shrink-0 border-e bg-background',
+          'w-[300px] shrink-0 border-e bg-background transition-[width] duration-200',
+          // Ширина следует за состоянием сайдбара, иначе рядом со свёрнутым
+          // списком остаётся пустая полоса. Только на десктопе: на мобильном
+          // панель выезжает поверх, и свёрнутая до значков она бесполезна.
+          collapsed && 'md:w-14',
           'fixed inset-y-0 start-0 z-40 transition-transform duration-200',
           // на десктопе — обычная колонка без сдвига; сдвиг только на мобильном,
           // иначе в RTL классы состояния перебивали md:translate-x-0 и панель

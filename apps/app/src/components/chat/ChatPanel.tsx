@@ -15,6 +15,7 @@ import { SandboxOverlay } from './SandboxOverlay'
 import { AiOverlay } from './AiOverlay'
 import { FileViewer, type ViewerFile } from '@/components/files/FileViewer'
 import { NOTE_META, NOTE_TYPES, type NoteType } from '@/components/tabs/NotesTab'
+import { DatePicker } from '@/components/ui/date-picker'
 
 type ChatMode = 'group' | 'ai'
 type Member = { id: string; role: string; user: { id: string; name: string; email: string; avatarUrl: string | null } }
@@ -799,9 +800,9 @@ function ChatSearch({ projectId, lang, onJump, onClose }: { projectId: string; l
               {t('chatSearch.tabHistory')}
             </button>
           </div>
-          <input type="date" value={from} onChange={(e) => setFrom(e.target.value)} className="h-8 rounded-md border bg-transparent px-2 text-xs" />
+          <DatePicker value={from} onChange={setFrom} className="w-36" />
           <span className="text-xs text-muted-foreground">–</span>
-          <input type="date" value={to} onChange={(e) => setTo(e.target.value)} className="h-8 rounded-md border bg-transparent px-2 text-xs" />
+          <DatePicker value={to} onChange={setTo} className="w-36" />
         </div>
       </header>
 

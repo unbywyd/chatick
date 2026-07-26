@@ -28,6 +28,9 @@ import { Avatar } from '@/components/ui/avatar'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { RichEditor, type RichMention } from '@/components/ui/rich-editor'
+import { TagInput } from '@/components/ui/tag-input'
+import { DatePicker } from '@/components/ui/date-picker'
+import { Select, SelectTrigger, SelectValue, SelectContent, SelectItem } from '@/components/ui/select'
 import { useConfirm } from '@/components/ui/confirm'
 import { Popover, PopoverTrigger, PopoverContent } from '@/components/ui/popover'
 
@@ -114,6 +117,7 @@ export function NotesTab({ projectId }: { projectId: string }) {
     queryKey: ['project-members', projectId],
     queryFn: () => api<Member[]>(`/api/v1/projects/${projectId}/members`),
   })
+  const me = useQuery({ queryKey: ['me'], queryFn: () => api<{ id: string }>('/api/v1/auth/me') })
 
   // Заметка → задача: наблюдение обсудили, пора делать. Заметка остаётся —
   // она объясняет, почему задача такая, и хранит цитаты.
@@ -159,6 +163,8 @@ export function NotesTab({ projectId }: { projectId: string }) {
         projectId={projectId}
         note={editing === 'new' ? null : editing}
         mentions={mentionItems}
+        meId={me.data?.id}
+        tagSuggestions={(tagList.data ?? []).map((x) => x.tag)}
         onClose={() => setEditing(null)}
         onSaved={() => {
           setEditing(null)
@@ -236,44 +242,46 @@ export function NotesTab({ projectId }: { projectId: string }) {
 
             <div>
               <p className="mb-1 text-xs font-medium">{t('journal.author')}</p>
-              <select
-                value={authorId}
-                onChange={(e) => setAuthorId(e.target.value)}
-                className="h-9 w-full rounded-md border bg-background px-2 text-sm"
-              >
-                <option value="">{t('journal.anyone')}</option>
-                {(members.data ?? []).map((m) => (
-                  <option key={m.user.id} value={m.user.id}>
-                    {m.user.name}
-                  </option>
-                ))}
-              </select>
+              <Select value={authorId || 'any'} onValueChange={(v) => setAuthorId(v === 'any' ? '' : v)}>
+                <SelectTrigger>
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="any">{t('journal.anyone')}</SelectItem>
+                  {(members.data ?? []).map((m) => (
+                    <SelectItem key={m.user.id} value={m.user.id}>
+                      {m.user.name}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
             </div>
 
             <div>
               <p className="mb-1 text-xs font-medium">{t('journal.mentions')}</p>
-              <select
-                value={mentions}
-                onChange={(e) => setMentions(e.target.value)}
-                className="h-9 w-full rounded-md border bg-background px-2 text-sm"
-              >
-                <option value="">{t('journal.anyone')}</option>
-                {(members.data ?? []).map((m) => (
-                  <option key={m.user.id} value={m.user.id}>
-                    {m.user.name}
-                  </option>
-                ))}
-              </select>
+              <Select value={mentions || 'any'} onValueChange={(v) => setMentions(v === 'any' ? '' : v)}>
+                <SelectTrigger>
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="any">{t('journal.anyone')}</SelectItem>
+                  {(members.data ?? []).map((m) => (
+                    <SelectItem key={m.user.id} value={m.user.id}>
+                      {m.user.name}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
             </div>
 
             <div className="grid grid-cols-2 gap-2">
               <div>
                 <p className="mb-1 text-xs font-medium">{t('journal.from')}</p>
-                <Input type="date" value={from} onChange={(e) => setFrom(e.target.value)} className="h-9" />
+                <DatePicker value={from} onChange={setFrom} />
               </div>
               <div>
                 <p className="mb-1 text-xs font-medium">{t('journal.to')}</p>
-                <Input type="date" value={to} onChange={(e) => setTo(e.target.value)} className="h-9" />
+                <DatePicker value={to} onChange={setTo} />
               </div>
             </div>
 
@@ -461,12 +469,17 @@ function NoteEditor({
   projectId,
   note,
   mentions,
+  meId,
+  tagSuggestions,
   onClose,
   onSaved,
 }: {
   projectId: string
   note: Note | null
   mentions: RichMention[]
+  /** автор: по умолчанию заметка касается его самого */
+  meId?: string
+  tagSuggestions: string[]
   onClose: () => void
   onSaved: () => void
 }) {
@@ -474,8 +487,11 @@ function NoteEditor({
   const [type, setType] = useState<NoteType>(note?.type ?? 'note')
   const [title, setTitle] = useState(note?.title ?? '')
   const [body, setBody] = useState(note?.body ?? '')
-  const [mentionedIds, setMentionedIds] = useState<string[]>(note?.mentionedIds ?? [])
-  const [tagInput, setTagInput] = useState((note?.tags ?? []).join(', '))
+  // Кого касается заметка. Два источника: упомянутые прямо в тексте и выбранные
+  // явно — храним раздельно, иначе редактор затирал бы выбор на каждой букве.
+  const [textMentions, setTextMentions] = useState<string[]>([])
+  const [assignees, setAssignees] = useState<string[]>(note?.mentionedIds ?? (meId ? [meId] : []))
+  const [tags, setTags] = useState<string[]>(note?.tags ?? [])
   const [scope, setScope] = useState<'project' | 'company'>(note?.scope ?? 'project')
   const [remindAt, setRemindAt] = useState(note?.remindAt ? note.remindAt.slice(0, 10) : '')
 
@@ -485,9 +501,9 @@ function NoteEditor({
         type,
         title,
         body,
-        tags: tagInput.split(',').map((s) => s.trim()).filter(Boolean),
+        tags,
         scope,
-        mentionedIds,
+        mentionedIds: [...new Set([...assignees, ...textMentions])],
         remindAt: remindAt || null,
       }
       return note
@@ -538,7 +554,7 @@ function NoteEditor({
         value={body}
         onChange={(html, ids) => {
           setBody(html)
-          setMentionedIds(ids)
+          setTextMentions(ids)
         }}
         mentions={mentions}
         placeholder={t('journal.bodyPlaceholder')}
@@ -561,25 +577,53 @@ function NoteEditor({
         </div>
       )}
 
+      {/* Кого касается: по умолчанию автор, но заметка часто заводится ради
+          другого человека — он и должен о ней узнать. */}
+      <div>
+        <p className="mb-1.5 text-xs font-medium">{t('journal.concerns')}</p>
+        <div className="flex flex-wrap gap-1.5">
+          {mentions.map((m) => {
+            const picked = assignees.includes(m.id)
+            return (
+              <button
+                key={m.id}
+                type="button"
+                onClick={() =>
+                  setAssignees((cur) => (picked ? cur.filter((x) => x !== m.id) : [...cur, m.id]))
+                }
+                className={cn(
+                  'inline-flex items-center gap-1.5 rounded-full border py-1 pe-2.5 ps-1 text-xs transition-colors',
+                  picked ? 'border-brand bg-brand/10 text-foreground' : 'text-muted-foreground hover:bg-accent',
+                )}
+              >
+                <Avatar name={m.label} src={m.avatarUrl} size={18} />
+                {m.label}
+              </button>
+            )
+          })}
+        </div>
+      </div>
+
       <div className="grid gap-3 sm:grid-cols-3">
         <div>
           <p className="mb-1 text-xs font-medium">{t('journal.tags')}</p>
-          <Input value={tagInput} onChange={(e) => setTagInput(e.target.value)} placeholder="dns, docker" />
+          <TagInput value={tags} onChange={setTags} suggestions={tagSuggestions} placeholder="dns, docker" />
         </div>
         <div>
           <p className="mb-1 text-xs font-medium">{t('journal.scope')}</p>
-          <select
-            value={scope}
-            onChange={(e) => setScope(e.target.value as 'project' | 'company')}
-            className="h-9 w-full rounded-md border bg-background px-2 text-sm"
-          >
-            <option value="project">{t('journal.scopeProject')}</option>
-            <option value="company">{t('journal.scopeCompany')}</option>
-          </select>
+          <Select value={scope} onValueChange={(v) => setScope(v as 'project' | 'company')}>
+            <SelectTrigger>
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="project">{t('journal.scopeProject')}</SelectItem>
+              <SelectItem value="company">{t('journal.scopeCompany')}</SelectItem>
+            </SelectContent>
+          </Select>
         </div>
         <div>
           <p className="mb-1 text-xs font-medium">{t('journal.remindAt')}</p>
-          <Input type="date" value={remindAt} onChange={(e) => setRemindAt(e.target.value)} />
+          <DatePicker value={remindAt} onChange={setRemindAt} />
         </div>
       </div>
       <p className="text-xs text-muted-foreground">

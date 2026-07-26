@@ -854,7 +854,8 @@
     "toTask": "יצירת משימה מההערה",
     "taskExists": "המשימה כבר נוצרה",
     "hasTask": "נוצרה משימה",
-    "taskCreated": "המשימה {{number}} נוצרה"
+    "taskCreated": "המשימה {{number}} נוצרה",
+    "concerns": "למי זה נוגע"
   },
   "common": {
     "save": "שמירה",

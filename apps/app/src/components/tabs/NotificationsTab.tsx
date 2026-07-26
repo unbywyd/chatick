@@ -6,6 +6,7 @@ import { Bell, Clock } from 'lucide-react'
 import { api } from '@/lib/api'
 import { Switch } from '@/components/ui/switch'
 import { Button } from '@/components/ui/button'
+import { Select, SelectTrigger, SelectValue, SelectContent, SelectItem } from '@/components/ui/select'
 
 // Уведомления и подписки проекта (SPEC §8.9): личные подписки + напоминания задач.
 const EVENTS = [
@@ -193,32 +194,37 @@ function ReminderConfig({ projectId, isAdmin }: { projectId: string; isAdmin: bo
             {form.cadence === 'weekly' && (
               <label className="flex items-center gap-2 text-sm">
                 {t('notif.dayOfWeek')}
-                <select
-                  value={form.dayOfWeek}
-                  onChange={(e) => setForm({ ...form, dayOfWeek: e.target.value })}
-                  className="rounded-md border bg-background px-2 py-1 text-sm"
+                <Select
+                  value={String(form.dayOfWeek)}
+                  onValueChange={(v) => setForm({ ...form, dayOfWeek: v })}
                 >
+                  <SelectTrigger className="w-auto min-w-32">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
                   {[0, 1, 2, 3, 4, 5, 6].map((d) => (
-                    <option key={d} value={d}>
+                    <SelectItem key={d} value={String(d)}>
                       {t(`notif.weekday.${d}`)}
-                    </option>
+                    </SelectItem>
                   ))}
-                </select>
+                  </SelectContent>
+                </Select>
               </label>
             )}
             <label className="flex items-center gap-2 text-sm">
               {t('notif.atHour')}
-              <select
-                value={form.hourOfDay}
-                onChange={(e) => setForm({ ...form, hourOfDay: e.target.value })}
-                className="rounded-md border bg-background px-2 py-1 text-sm"
-              >
+              <Select value={String(form.hourOfDay)} onValueChange={(v) => setForm({ ...form, hourOfDay: v })}>
+                <SelectTrigger className="w-auto min-w-28">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
                 {Array.from({ length: 24 }, (_, h) => (
-                  <option key={h} value={h}>
+                  <SelectItem key={h} value={String(h)}>
                     {String(h).padStart(2, '0')}:00 UTC
-                  </option>
+                  </SelectItem>
                 ))}
-              </select>
+                </SelectContent>
+              </Select>
             </label>
           </div>
         )}
@@ -300,17 +306,18 @@ function DigestSettings() {
       {daily && (
         <label className="flex items-center gap-2 text-sm">
           {t('notif.atHour')}
-          <select
-            value={String(hour)}
-            onChange={(e) => save.mutate({ dailyDigest: true, digestHourUtc: Number(e.target.value) })}
-            className="rounded-md border bg-background px-2 py-1 text-sm"
-          >
+          <Select value={String(hour)} onValueChange={(v) => save.mutate({ dailyDigest: true, digestHourUtc: Number(v) })}>
+            <SelectTrigger className="w-auto min-w-28">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
             {Array.from({ length: 24 }, (_, h) => (
-              <option key={h} value={h}>
+              <SelectItem key={h} value={String(h)}>
                 {String(h).padStart(2, '0')}:00 UTC
-              </option>
+              </SelectItem>
             ))}
-          </select>
+            </SelectContent>
+          </Select>
         </label>
       )}
     </section>

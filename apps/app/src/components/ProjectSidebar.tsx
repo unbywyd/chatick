@@ -1,4 +1,6 @@
 import { useMemo, useState } from 'react'
+import { useSidebarCollapsed } from '@/hooks/useSidebarCollapsed'
+import { useMediaQuery } from '@/hooks/useMediaQuery'
 import { useNavigate, useParams } from 'react-router-dom'
 import { useQuery } from '@tanstack/react-query'
 import { useTranslation } from 'react-i18next'
@@ -31,15 +33,13 @@ export function ProjectSidebar({ me, onPick }: { me?: Me; onPick?: () => void })
   const navigate = useNavigate()
   const { id: activeId } = useParams()
   const [q, setQ] = useState('')
-  // Свёрнутый режим: остаются только значки проектов. Выбор запоминаем —
-  // это настройка рабочего места, а не разовое действие.
-  const [collapsed, setCollapsed] = useState(() => localStorage.getItem('chatick_sidebar_collapsed') !== '0')
-  const toggleCollapsed = () => {
-    setCollapsed((v) => {
-      localStorage.setItem('chatick_sidebar_collapsed', v ? '0' : '1')
-      return !v
-    })
-  }
+  // Свёрнутый режим: остаются только значки проектов. Состояние общее с
+  // колонкой-обёрткой, поэтому живёт в хуке, а не здесь.
+  const [collapsedPref, toggleCollapsed] = useSidebarCollapsed()
+  // На мобильном сайдбар — выезжающая панель: свёрнутый до значков он там
+  // бессмыслен, потому что открывают его как раз чтобы выбрать проект.
+  const isMobile = useMediaQuery('(max-width: 767px)')
+  const collapsed = collapsedPref && !isMobile
 
   const companies = useQuery({
     queryKey: ['companies'],
@@ -76,7 +76,7 @@ export function ProjectSidebar({ me, onPick }: { me?: Me; onPick?: () => void })
 
   if (collapsed) {
     return (
-      <div className="flex h-full w-14 flex-col border-e bg-card/40">
+      <div className="flex h-full flex-col bg-card/40">
         <button
           onClick={toggleCollapsed}
           title={t('sidebar.expand')}

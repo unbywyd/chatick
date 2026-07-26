@@ -9,6 +9,7 @@ import { cn } from '@/lib/utils'
 import { Logo } from '@/components/Logo'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
+import { Select, SelectTrigger, SelectValue, SelectContent, SelectItem } from '@/components/ui/select'
 import { LanguageSelect } from '@/components/LanguageSelect'
 import { ThemeToggle } from '@/components/ThemeToggle'
 
@@ -197,17 +198,18 @@ export function ConnectPanel({ onClose }: { onClose?: () => void }) {
               </p>
               <label className="block text-xs font-medium text-muted-foreground">
                 {t('connect.chooseProject')}
-                <select
-                  value={projectId}
-                  onChange={(e) => setProjectId(e.target.value)}
-                  className="mt-1 w-full rounded-md border bg-background px-2 py-1.5 text-sm text-foreground"
-                >
-                  {myProjects.map((p) => (
-                    <option key={p.id} value={p.id}>
-                      {p.name}
-                    </option>
-                  ))}
-                </select>
+                <Select value={projectId} onValueChange={setProjectId}>
+                  <SelectTrigger className="mt-1">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {myProjects.map((p) => (
+                      <SelectItem key={p.id} value={p.id}>
+                        {p.name}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
               </label>
               <p className="text-xs text-muted-foreground">{t('connect.actsAsYou')}</p>
               <div className="flex gap-2">

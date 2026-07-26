@@ -856,7 +856,8 @@
     "toTask": "Создать задачу из заметки",
     "taskExists": "Задача уже создана",
     "hasTask": "задача создана",
-    "taskCreated": "Задача {{number}} создана"
+    "taskCreated": "Задача {{number}} создана",
+    "concerns": "Кого касается"
   },
   "common": {
     "save": "Сохранить",

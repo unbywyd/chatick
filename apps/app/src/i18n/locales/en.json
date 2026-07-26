@@ -854,7 +854,8 @@
     "toTask": "Create a task from this note",
     "taskExists": "Task already created — open it",
     "hasTask": "task created",
-    "taskCreated": "Task {{number}} created"
+    "taskCreated": "Task {{number}} created",
+    "concerns": "Who it concerns"
   },
   "common": {
     "save": "Save",

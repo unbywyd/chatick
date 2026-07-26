@@ -1,9 +1,10 @@
 import { and, asc, desc, eq, gt, gte, ilike, inArray, lte, or, sql } from 'drizzle-orm'
 import { db } from '../db/client.js'
-import { chatSummaries, credentials, documents, files, messages, projectMembers, projects, resourceSecrets, taskComments, taskGroups, tasks, users } from '../db/schema.js'
+import { chatSummaries, credentials, documents, files, messages, notes, projectMembers, projects, resourceSecrets, taskComments, taskGroups, tasks, users } from '../db/schema.js'
 import { hasPermission } from '../routes/projects.js'
 import { snapshot } from '../routes/documents.js'
-import { htmlToText } from './sanitize-html.js'
+import { htmlToText, sanitizeHtml } from './sanitize-html.js'
+import { createNote, noteToTask, NOTE_TYPES } from '../routes/notes.js'
 import { encrypt } from './crypto.js'
 import { notify, extractMentions } from './notify.js'
 import { projectLlm, complete, validateTask, type ToolDef, type ToolHandler } from './llm.js'
@@ -361,6 +362,71 @@ export function memoryTools(projectId: string, actorUserId: string): { tools: To
       parameters: { type: 'object', properties: {} },
     },
     // --- Документы (SPEC §8.24) ---
+    {
+      name: 'list_notes',
+      description:
+        'Search the project journal (SPEC §8.31): solutions, problems, decisions, contradictions, mismatches, gaps, reminders, business rules. Filter by free text (searches title, body and tags), type or tag. Pass scope="company" to search notes shared across the whole company — do that BEFORE debugging something that may already have been solved in another project.',
+      parameters: {
+        type: 'object',
+        properties: {
+          query: { type: 'string' },
+          type: { type: 'string', description: 'comma separated: solution,problem,decision,contradiction,mismatch,gap,reminder,business,note' },
+          tag: { type: 'string', description: 'comma separated tags, AND condition' },
+          scope: { type: 'string', enum: ['project', 'company'] },
+        },
+      },
+    },
+    {
+      name: 'read_note',
+      description: 'Read one note in full by id: body, tags, quoted chat messages and who it concerns.',
+      parameters: { type: 'object', properties: { id: { type: 'string' } }, required: ['id'] },
+    },
+    {
+      name: 'create_note',
+      description:
+        'Write something into the project journal, ON BEHALF OF the user. Use when asked to "save this", "remember how we fixed it", "log that this contradicts what was said". Types: solution (a problem and its fix — the reusable kind), problem, decision, contradiction (people said conflicting things), mismatch (the build deviates from the design/docs), gap (the design/spec does not cover the case), reminder, business, note. Body is HTML like documents, not markdown. Set scope="company" for technical solutions so other projects can find them. sourceMessageIds quotes chat messages IN THE ORDER THEY WERE SENT — the chain is the evidence; their text is copied, so it survives the messages being deleted. assigneeIds marks who the note concerns; they get notified.',
+      parameters: {
+        type: 'object',
+        properties: {
+          type: { type: 'string' },
+          title: { type: 'string' },
+          body: { type: 'string', description: 'HTML' },
+          tags: { type: 'array', items: { type: 'string' } },
+          scope: { type: 'string', enum: ['project', 'company'] },
+          sourceMessageIds: { type: 'array', items: { type: 'string' } },
+          assigneeIds: { type: 'array', items: { type: 'string' }, description: 'user ids the note concerns' },
+          remindAt: { type: 'string', description: 'ISO date to resurface the note' },
+        },
+        required: ['title'],
+      },
+    },
+    {
+      name: 'update_note',
+      description: 'Update a note by id: any of type, title, body (HTML), tags, scope, remindAt. Requires notes.write.',
+      parameters: {
+        type: 'object',
+        properties: {
+          id: { type: 'string' },
+          type: { type: 'string' },
+          title: { type: 'string' },
+          body: { type: 'string' },
+          tags: { type: 'array', items: { type: 'string' } },
+          scope: { type: 'string', enum: ['project', 'company'] },
+          remindAt: { type: 'string' },
+        },
+        required: ['id'],
+      },
+    },
+    {
+      name: 'note_to_task',
+      description:
+        'Turn a note into a task once the action is clear. The note SURVIVES and keeps a link to the task — it explains why the task exists and its quotes are copied into the task description. Calling it twice returns the same task.',
+      parameters: {
+        type: 'object',
+        properties: { id: { type: 'string' }, title: { type: 'string' }, assignee: { type: 'string' } },
+        required: ['id'],
+      },
+    },
     {
       name: 'list_documents',
       description: 'List project documents (id, title, size in characters, updated). Optionally filter by title.',
@@ -1043,6 +1109,114 @@ export function memoryTools(projectId: string, actorUserId: string): { tools: To
         '',
         chunk,
       ].join('\n')
+    },
+    list_notes: async (args) => {
+      if (!(await hasPermission(projectId, actorUserId, 'notes.read'))) return 'PERMISSION DENIED: the author cannot read notes.'
+      const conds = [sql`${notes.deletedAt} is null`]
+      if (String(args.scope ?? '') === 'company') {
+        const project = await db.query.projects.findFirst({ where: eq(projects.id, projectId) })
+        conds.push(
+          project?.companyId
+            ? or(eq(notes.projectId, projectId), and(eq(notes.companyId, project.companyId), eq(notes.scope, 'company')))!
+            : eq(notes.projectId, projectId),
+        )
+      } else {
+        conds.push(eq(notes.projectId, projectId))
+      }
+      const types = String(args.type ?? '').split(',').map((x) => x.trim()).filter(Boolean)
+      if (types.length) conds.push(inArray(notes.type, types))
+      for (const tag of String(args.tag ?? '').split(',').map((x) => x.trim()).filter(Boolean)) {
+        conds.push(sql`${notes.tags}::jsonb ? ${tag}`)
+      }
+      const q = String(args.query ?? '').trim()
+      if (q) {
+        const like = `%${q}%`
+        conds.push(or(sql`${notes.title} ilike ${like}`, sql`${notes.body} ilike ${like}`, sql`${notes.tags} ilike ${like}`)!)
+      }
+      const rows = await db.select().from(notes).where(and(...conds)).orderBy(desc(notes.createdAt)).limit(40)
+      if (!rows.length) return 'No notes found.'
+      return rows
+        .map((n) => `[${n.type}] ${n.id} — "${n.title || htmlToText(n.body).slice(0, 60)}" tags=${n.tags}${n.scope === 'company' ? ' (company-wide)' : ''}`)
+        .join('\n')
+    },
+    read_note: async (args) => {
+      if (!(await hasPermission(projectId, actorUserId, 'notes.read'))) return 'PERMISSION DENIED: the author cannot read notes.'
+      const n = await db.query.notes.findFirst({
+        where: and(eq(notes.id, String(args.id ?? '')), sql`${notes.deletedAt} is null`),
+      })
+      if (!n) return 'Note not found.'
+      // чужой проект — только company-видимые
+      if (n.projectId !== projectId) {
+        const project = await db.query.projects.findFirst({ where: eq(projects.id, projectId) })
+        if (!(n.scope === 'company' && n.companyId && n.companyId === project?.companyId)) return 'Note not found.'
+      }
+      const sources = JSON.parse(n.sources) as { authorName?: string; text: string }[]
+      return [
+        `[${n.type}] "${n.title}" tags=${n.tags} scope=${n.scope}`,
+        htmlToText(n.body),
+        sources.length ? `\nQuoted from chat (in order):\n${sources.map((q, i) => `${i + 1}. ${q.authorName ?? '—'}: ${q.text.slice(0, 400)}`).join('\n')}` : '',
+      ]
+        .filter(Boolean)
+        .join('\n')
+    },
+    create_note: async (args) => {
+      if (!(await hasPermission(projectId, actorUserId, 'notes.write'))) return 'PERMISSION DENIED: the author cannot write notes.'
+      const type = String(args.type ?? 'note')
+      if (!(NOTE_TYPES as readonly string[]).includes(type)) return `Unknown type. Use one of: ${NOTE_TYPES.join(', ')}.`
+      const title = String(args.title ?? '').slice(0, 300)
+      if (!title && !String(args.body ?? '').trim()) return 'Provide at least a title or a body.'
+      const row = await createNote(
+        projectId,
+        actorUserId,
+        {
+          type: type as never,
+          title,
+          body: String(args.body ?? ''),
+          tags: Array.isArray(args.tags) ? (args.tags as unknown[]).map(String).slice(0, 20) : [],
+          scope: args.scope === 'company' ? 'company' : 'project',
+          sources: [],
+          mentionedIds: Array.isArray(args.assigneeIds) ? (args.assigneeIds as unknown[]).map(String) : [],
+          remindAt: typeof args.remindAt === 'string' ? args.remindAt : null,
+          sourceMessageIds: Array.isArray(args.sourceMessageIds) ? (args.sourceMessageIds as unknown[]).map(String).slice(0, 50) : [],
+        },
+        'ai',
+      )
+      return `Saved a ${type} note "${row.title}" (id=${row.id})${row.scope === 'company' ? ', visible across the company' : ''}.`
+    },
+    update_note: async (args) => {
+      if (!(await hasPermission(projectId, actorUserId, 'notes.write'))) return 'PERMISSION DENIED: the author cannot write notes.'
+      const n = await db.query.notes.findFirst({
+        where: and(eq(notes.id, String(args.id ?? '')), eq(notes.projectId, projectId), sql`${notes.deletedAt} is null`),
+      })
+      if (!n) return 'Note not found.'
+      const patch: Record<string, unknown> = { updatedAt: new Date() }
+      if (typeof args.type === 'string') {
+        if (!(NOTE_TYPES as readonly string[]).includes(args.type)) return `Unknown type. Use one of: ${NOTE_TYPES.join(', ')}.`
+        patch.type = args.type
+      }
+      if (typeof args.title === 'string') patch.title = args.title.slice(0, 300)
+      if (typeof args.body === 'string') patch.body = sanitizeHtml(args.body)
+      if (Array.isArray(args.tags)) patch.tags = JSON.stringify((args.tags as unknown[]).map((x) => String(x).toLowerCase()))
+      if (args.scope === 'company' || args.scope === 'project') patch.scope = args.scope
+      if (typeof args.remindAt === 'string') {
+        patch.remindAt = new Date(args.remindAt)
+        patch.remindedAt = null
+      }
+      await db.update(notes).set(patch).where(eq(notes.id, n.id))
+      broadcast(projectId, 'notes', { action: 'update', id: n.id })
+      return `Updated note "${n.title}".`
+    },
+    note_to_task: async (args) => {
+      if (!(await hasPermission(projectId, actorUserId, 'tasks.create'))) return 'PERMISSION DENIED: the author cannot create tasks.'
+      const assigneeId = args.assignee ? await resolveAssignee(args.assignee) : null
+      const res = await noteToTask(projectId, actorUserId, String(args.id ?? ''), {
+        title: typeof args.title === 'string' ? args.title : undefined,
+        assigneeId: assigneeId ?? null,
+      })
+      if ('error' in res) return String(res.error)
+      return res.already
+        ? `That note already has task ${res.task.number} — not creating a duplicate.`
+        : `Created ${res.task.number} "${res.task.title}" from the note.`
     },
     create_document: async (args) => {
       if (!(await hasPermission(projectId, actorUserId, 'documents.write'))) return 'PERMISSION DENIED: the author cannot write documents.'

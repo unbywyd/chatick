@@ -6,6 +6,7 @@ import { Bot, Cpu } from 'lucide-react'
 import { api } from '@/lib/api'
 import { cn } from '@/lib/utils'
 import { Button } from '@/components/ui/button'
+import { Select, SelectTrigger, SelectValue, SelectContent, SelectItem } from '@/components/ui/select'
 
 // ИИ-агент проекта + учёт использования (SPEC §8.11).
 type Config = {
@@ -113,13 +114,18 @@ export function AiUsageTab({ projectId, isAdmin }: { projectId: string; isAdmin:
           <div className="space-y-3">
             <label className="block">
               <span className="mb-1 block text-xs font-medium text-muted-foreground">{t('ai.provider')}</span>
-              <select value={provider} onChange={(e) => setProvider(e.target.value)} disabled={!isAdmin} className="h-9 w-full rounded-md border bg-background px-2 text-sm">
-                {cfg.providers.map((p) => (
-                  <option key={p.id} value={p.id}>
-                    {p.label}
-                  </option>
-                ))}
-              </select>
+              <Select value={provider} onValueChange={setProvider} disabled={!isAdmin}>
+                <SelectTrigger>
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  {cfg.providers.map((p) => (
+                    <SelectItem key={p.id} value={p.id}>
+                      {p.label}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
             </label>
             <label className="block">
               <span className="mb-1 block text-xs font-medium text-muted-foreground">{t('ai.model')}</span>
