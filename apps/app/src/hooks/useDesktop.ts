@@ -191,6 +191,7 @@ export function useDesktopSync() {
         idle: t('desktop.idle'),
         idleHint: t('desktop.idleHint'),
         idleNoProject: t('desktop.idleNoProject'),
+        minShort: t('desktop.minShort'),
         noTask: t('time.noTask'),
         tabInbox: t('desktop.tabInbox'),
         tabTasks: t('desktop.tabTasks'),

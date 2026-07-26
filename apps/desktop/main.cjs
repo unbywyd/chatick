@@ -109,6 +109,20 @@ function showWindow() {
 /** Подпись из присланных вебом переводов; запасное значение — пока их нет. */
 const tr = (key, fallback) => state.strings?.[key] || fallback
 
+/**
+ * Сколько идёт таймер — для подсказки над значком в трее.
+ * Своя копия, а не общая с панелью: панель живёт в отдельном процессе и
+ * ничего из главного не импортирует.
+ */
+function elapsedText(timer) {
+  const started = timer?.startedAt ? new Date(timer.startedAt).getTime() : NaN
+  if (Number.isNaN(started)) return ''
+  const sec = Math.max(0, Math.floor((Date.now() - started) / 1000))
+  const h = Math.floor(sec / 3600)
+  const m = Math.floor((sec % 3600) / 60)
+  return h ? `${h}:${String(m).padStart(2, '0')}` : `${m} ${tr('minShort', 'min')}`
+}
+
 function trayTooltip() {
   const parts = ['Chatick']
   if (state.timer) parts.push(`⏱ ${elapsedText(state.timer)} · ${state.timer.description || tr('noTask', 'no task')}`)
@@ -369,6 +383,12 @@ if (!app.requestSingleInstanceLock()) {
     })
   })
 }
+
+// Ошибка в отрисовке трея не должна убивать приложение системным диалогом:
+// таймер идёт, уведомления приходят — терять это из-за подписи над значком
+// несоразмерно. Пишем в консоль и живём дальше.
+process.on('uncaughtException', (err) => console.error('[desktop] uncaught:', err))
+process.on('unhandledRejection', (err) => console.error('[desktop] unhandled rejection:', err))
 
 app.on('before-quit', () => {
   quitting = true
