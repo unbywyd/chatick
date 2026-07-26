@@ -188,7 +188,7 @@ export function defaultPermissions(role: 'owner' | 'admin' | 'member'): Record<P
   return expandPermissions(defaultDomainPermissions(role))
 }
 
-async function companyRoleOf(companyId: string, userId: string) {
+export async function companyRoleOf(companyId: string, userId: string) {
   const m = await db.query.companyMembers.findFirst({
     where: and(eq(companyMembers.companyId, companyId), eq(companyMembers.userId, userId)),
   })

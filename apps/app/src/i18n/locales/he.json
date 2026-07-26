@@ -43,7 +43,8 @@
     "team": "צוות",
     "settings": "הגדרות",
     "connect": "חיבור",
-    "backup": "גיבוי"
+    "backup": "גיבוי",
+    "time": "שעות"
   },
   "llm": {
     "title": "ספק AI (LLM)",

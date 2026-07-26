@@ -265,7 +265,10 @@ function StatsView({ projectId, weekStart }: { projectId: string; weekStart: num
 
   const s = summary.data
   const maxUser = Math.max(1, ...(s?.byUser ?? []).map((u) => u.minutes))
-  const maxDay = Math.max(1, ...(s?.byDay ?? []).map((d) => d.minutes))
+  // Дни с нулём отбрасываем: запись могла задеть период краем, не дав внутри
+  // него ни минуты, — столбик высотой в пиксель и «0:00» ничего не сообщают.
+  const days = (s?.byDay ?? []).filter((d) => d.minutes > 0)
+  const maxDay = Math.max(1, ...days.map((d) => d.minutes))
 
   return (
     <div className="space-y-5">
@@ -281,11 +284,11 @@ function StatsView({ projectId, weekStart }: { projectId: string; weekStart: num
           словами: серый прямоугольник ничего не сообщает. */}
       <section className="rounded-lg border bg-card p-4">
         <h2 className="mb-3 text-sm font-semibold">{t('time.byDay')}</h2>
-        {(s?.byDay ?? []).length === 0 ? (
+        {days.length === 0 ? (
           <p className="py-10 text-center text-sm text-muted-foreground">{t('time.noData')}</p>
         ) : (
           <div className="flex h-40 items-end gap-1">
-            {(s?.byDay ?? []).map((d) => (
+            {days.map((d) => (
               <div key={d.day} className="group flex flex-1 flex-col items-center gap-1" title={`${d.day} — ${formatDuration(d.minutes)}`}>
                 {/* часы над столбиком: иначе высота ни о чём не говорит */}
                 <span className="text-[9px] tabular-nums text-muted-foreground opacity-0 transition-opacity group-hover:opacity-100">

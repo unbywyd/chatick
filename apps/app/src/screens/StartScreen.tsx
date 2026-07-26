@@ -24,6 +24,7 @@ import { LanguageSelect } from '@/components/LanguageSelect'
 import { Input } from '@/components/ui/input'
 import { Button } from '@/components/ui/button'
 import { TeamTab } from '@/components/company/TeamTab'
+import { CompanyTimeTab } from '@/components/company/CompanyTimeTab'
 import { LlmSettings } from '@/components/company/LlmSettings'
 import { CompanyConnectTab } from '@/components/company/CompanyConnectTab'
 import { BackupTab } from '@/components/company/BackupTab'
@@ -246,16 +247,16 @@ function CompanyHome({
   const navigate = useNavigate()
   // таб компании — из URL: /start/:companyId/:companyTab (settings адресуем — на него ведёт чат без LLM)
   const { companyTab } = useParams()
-  const tab = (['projects', 'team', 'connect', 'backup', 'settings'] as const).includes(companyTab as never)
-    ? (companyTab as 'projects' | 'team' | 'connect' | 'backup' | 'settings')
+  const tab = (['projects', 'team', 'time', 'connect', 'backup', 'settings'] as const).includes(companyTab as never)
+    ? (companyTab as 'projects' | 'team' | 'time' | 'connect' | 'backup' | 'settings')
     : 'projects'
   const canManage = company.myRole === 'admin' || company.myRole === 'manager'
   const isAdmin = company.myRole === 'admin'
   // доступ ко всей компании выдают те, кто ей управляет; бэкап — только админ
   const tabs = isAdmin
-    ? (['projects', 'team', 'connect', 'backup', 'settings'] as const)
+    ? (['projects', 'team', 'time', 'connect', 'backup', 'settings'] as const)
     : canManage
-      ? (['projects', 'team', 'connect', 'settings'] as const)
+      ? (['projects', 'team', 'time', 'connect', 'settings'] as const)
       : (['projects', 'team', 'settings'] as const)
 
   return (
@@ -281,6 +282,8 @@ function CompanyHome({
         <ProjectsTab company={company} canManage={canManage} onEntered={onEntered} />
       ) : tab === 'team' ? (
         <TeamTab company={company} meId={meId} />
+      ) : tab === 'time' && canManage ? (
+        <CompanyTimeTab companyId={company.id} />
       ) : tab === 'connect' && canManage ? (
         <CompanyConnectTab company={company} />
       ) : tab === 'backup' && isAdmin ? (

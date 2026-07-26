@@ -5,7 +5,7 @@ import { and, asc, desc, eq, gte, inArray, isNull, lte, sql } from 'drizzle-orm'
 import { db } from '../db/client.js'
 import { projects, tasks, timeEntries, users } from '../db/schema.js'
 import { requireProject, type ProjectEnv } from '../auth.js'
-import { projectRoleOf } from './projects.js'
+import { projectRoleOf, companyRoleOf } from './projects.js'
 import { logActivity } from '../lib/audit.js'
 import { broadcast } from '../ws.js'
 import { translateTimeEntry } from '../lib/llm.js'
@@ -428,6 +428,78 @@ timeRoute.delete('/:id', async (c) => {
   broadcast(projectId, 'time', { action: 'delete', id: entry.id, userId: entry.userId })
   return c.json({ ok: true })
 })
+
+/**
+ * Сводка по всей компании (SPEC §8.32) — для расчёта зарплат и счетов.
+ * Только admin/manager компании: это чужие часы, и видеть их вправе лишь тот,
+ * кто за них платит.
+ *
+ * Строки — «человек × проект»: именно так их и сводят, когда считают, кому
+ * сколько заплатить и на какой проект списать.
+ */
+timeRoute.get(
+  '/company/:companyId',
+  zValidator('query', z.object({ from: z.string().optional(), to: z.string().optional(), userId: z.string().optional() })),
+  async (c) => {
+    const { sub } = c.get('auth')
+    const companyId = c.req.param('companyId')
+    const role = await companyRoleOf(companyId, sub)
+    if (role !== 'admin' && role !== 'manager') return c.json({ error: 'Forbidden' }, 403)
+
+    const f = c.req.valid('query')
+    const periodFrom = f.from ? new Date(f.from) : null
+    const periodTo = f.to ? new Date(f.to) : null
+    if (periodTo && !f.to!.includes('T')) periodTo.setHours(23, 59, 59, 999)
+
+    const conds = [eq(projects.companyId, companyId), sql`${timeEntries.endedAt} is not null`]
+    if (f.userId) conds.push(eq(timeEntries.userId, f.userId))
+    // берём пересекающиеся записи, а лишнее отрежем — иначе смена через полночь
+    // на границе месяца попадёт в отчёт целиком
+    if (periodFrom) conds.push(sql`${timeEntries.endedAt} >= ${periodFrom.toISOString()}::timestamptz`)
+    if (periodTo) conds.push(lte(timeEntries.startedAt, periodTo))
+
+    const clipEnd = periodTo ? sql`${periodTo.toISOString()}::timestamptz` : sql`${timeEntries.endedAt}`
+    const clipStart = periodFrom ? sql`${periodFrom.toISOString()}::timestamptz` : sql`${timeEntries.startedAt}`
+    const minutes = sql<number>`coalesce(sum(greatest(extract(epoch from (
+      least(${timeEntries.endedAt}, ${clipEnd}) - greatest(${timeEntries.startedAt}, ${clipStart})
+    )) / 60, 0)), 0)::int`
+
+    const rows = await db
+      .select({
+        userId: timeEntries.userId,
+        userName: users.name,
+        avatarUrl: users.avatarUrl,
+        projectId: projects.id,
+        projectName: projects.name,
+        minutes,
+        entries: sql<number>`count(*)::int`,
+      })
+      .from(timeEntries)
+      .innerJoin(projects, eq(projects.id, timeEntries.projectId))
+      .innerJoin(users, eq(users.id, timeEntries.userId))
+      .where(and(...conds))
+      .groupBy(timeEntries.userId, users.name, users.avatarUrl, projects.id, projects.name)
+
+    // сворачиваем в людей с разбивкой по проектам: так читают отчёт
+    const byUser = new Map<string, { userId: string; name: string; avatarUrl: string | null; minutes: number; projects: { id: string; name: string; minutes: number }[] }>()
+    for (const r of rows) {
+      const entry = byUser.get(r.userId) ?? { userId: r.userId, name: r.userName, avatarUrl: r.avatarUrl, minutes: 0, projects: [] }
+      entry.minutes += r.minutes
+      entry.projects.push({ id: r.projectId, name: r.projectName, minutes: r.minutes })
+      byUser.set(r.userId, entry)
+    }
+
+    const people = [...byUser.values()]
+      .map((u) => ({ ...u, projects: u.projects.sort((a, b) => b.minutes - a.minutes) }))
+      .filter((u) => u.minutes > 0)
+      .sort((a, b) => b.minutes - a.minutes)
+
+    return c.json({
+      people,
+      totalMinutes: people.reduce((sum, u) => sum + u.minutes, 0),
+    })
+  },
+)
 
 // --- Сводка -----------------------------------------------------------------
 
