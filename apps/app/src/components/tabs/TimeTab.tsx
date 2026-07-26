@@ -12,6 +12,7 @@ import { DatePicker } from '@/components/ui/date-picker'
 import { PeriodPicker, resolvePreset, type Period } from '@/components/ui/period-picker'
 import { Select, SelectTrigger, SelectValue, SelectContent, SelectItem } from '@/components/ui/select'
 import { useConfirm } from '@/components/ui/confirm'
+import { useProjectSocket } from '@/hooks/useProjectSocket'
 import { Popover, PopoverTrigger, PopoverContent } from '@/components/ui/popover'
 import {
   dayOffset,
@@ -62,7 +63,18 @@ const isoDay = (d: Date) =>
 
 export function TimeTab({ projectId }: { projectId: string }) {
   const { t } = useTranslation()
+  const qc = useQueryClient()
   const [tab, setTab] = useState<Tab>('week')
+
+  // список обновляется сразу, кто бы ни тронул таймер — человек, ИИ или мост
+  useProjectSocket(projectId, {
+    onMessage: () => {},
+    onTime: () => {
+      qc.invalidateQueries({ queryKey: ['time-entries', projectId] })
+      qc.invalidateQueries({ queryKey: ['time-summary', projectId] })
+      qc.invalidateQueries({ queryKey: ['time-running', projectId] })
+    },
+  })
 
   // первый день недели задан в проекте: в Израиле неделя начинается с воскресенья
   const running = useQuery({

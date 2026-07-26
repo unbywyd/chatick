@@ -28,6 +28,8 @@ export type SocketEvents = {
   onHeld?: (p: { messageId: string }) => void
   onSandboxChunk?: (p: { messageId: string; delta: string }) => void
   onMessageDeleted?: (p: { messageId: string }) => void
+  /** таймер запустили/остановили — в том числе ИИ или другой клиент */
+  onTime?: (p: { action: string; id: string; userId: string }) => void
   onTaskLock?: (p: TaskLockEvent) => void
   onTaskLockDenied?: (p: { taskId: string }) => void
   onDocPresence?: (p: { docId: string; users: PresenceUser[] }) => void
@@ -69,6 +71,7 @@ export function useProjectSocket(projectId: string | undefined, events: SocketEv
           if (event === 'held') eventsRef.current.onHeld?.(payload as { messageId: string })
           if (event === 'sandbox_chunk') eventsRef.current.onSandboxChunk?.(payload as { messageId: string; delta: string })
           if (event === 'message_deleted') eventsRef.current.onMessageDeleted?.(payload as { messageId: string })
+          if (event === 'time') eventsRef.current.onTime?.(payload as { action: string; id: string; userId: string })
           // реал-тайм задач: ИИ или другой участник изменил доску / комментарии
           if (event === 'tasks_changed') {
             qc.invalidateQueries({ queryKey: ['tasks', projectId] })

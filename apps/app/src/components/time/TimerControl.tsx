@@ -9,6 +9,7 @@ import { cn } from '@/lib/utils'
 import { formatElapsed, parseTimeOfDay, withTimeOfDay } from '@/lib/time-parse'
 import { Popover, PopoverTrigger, PopoverContent } from '@/components/ui/popover'
 import { ProjectBadge } from '@/components/ui/project-badge'
+import { useProjectSocket } from '@/hooks/useProjectSocket'
 
 // Быстрый контроль таймера в сайдбаре (SPEC §8.32): запустить, остановить,
 // поправить время начала. Всё остальное — на странице /p/:id/time.
@@ -46,7 +47,18 @@ export function TimerControl({ collapsed }: { collapsed: boolean }) {
     queryKey: ['time-running', projectId],
     enabled: Boolean(projectId),
     queryFn: () => api<{ items: RunningEntry[] }>('/api/v1/time/running', {}, 'project'),
-    refetchInterval: 60_000, // таймер мог запустить другой клиент или ИИ
+    // опрос — только страховка: основное обновление приходит по сокету
+    refetchInterval: 60_000,
+  })
+
+  // Таймер могли запустить не отсюда: ИИ из чата, мост из редактора, другая
+  // вкладка. Без сокета контрол показывал старое состояние до минуты.
+  useProjectSocket(projectId, {
+    onMessage: () => {},
+    onTime: () => {
+      qc.invalidateQueries({ queryKey: ['time-running', projectId] })
+      qc.invalidateQueries({ queryKey: ['time-entries', projectId] })
+    },
   })
 
   const first = running.data?.items[0]
