@@ -3,7 +3,7 @@ import { useNavigate, useSearchParams } from 'react-router-dom'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { useTranslation } from 'react-i18next'
 import { toast } from 'sonner'
-import { Bot, Check, Copy, Plug, ShieldCheck, X } from 'lucide-react'
+import { ArrowLeft, Bot, Check, Copy, Plug, ShieldCheck, X } from 'lucide-react'
 import { api, API_URL, getSessionToken, type Company, type ProjectListItem } from '@/lib/api'
 import { cn } from '@/lib/utils'
 import { Logo } from '@/components/Logo'
@@ -122,6 +122,10 @@ export function ConnectScreen() {
     },
   })
 
+  // Сюда попадают из проекта и со стартовой страницы. Возврат — в компанию,
+  // если она известна, иначе на список проектов: всегда есть куда уйти.
+  const backTo = companyIds[0] ? `/start/${companyIds[0]}` : '/start'
+
   const copy = () => {
     navigator.clipboard.writeText(inviteLine).catch(() => {})
     setCopied(true)
@@ -131,18 +135,25 @@ export function ConnectScreen() {
   return (
     <div className="flex h-dvh flex-col">
       <header className="flex items-center justify-between border-b px-6 py-3">
-        <div className="flex items-center gap-3">
+        <div className="flex min-w-0 items-center gap-2">
+          {/* Стрелка ведёт по ЯВНОМУ адресу, а не navigate(-1): после рефреша
+              истории нет, и «назад» превращалась в мёртвую кнопку. */}
+          <Button
+            variant="ghost"
+            size="icon"
+            className="shrink-0"
+            title={t('connect.back')}
+            onClick={() => navigate(backTo, { replace: true })}
+          >
+            <ArrowLeft className="size-4 rtl:rotate-180" />
+          </Button>
           <Logo />
           <span className="text-muted-foreground">/</span>
-          <span className="text-sm font-medium">{t('connect.title')}</span>
+          <span className="truncate text-sm font-medium">{t('connect.title')}</span>
         </div>
         <div className="flex items-center gap-2">
           <LanguageSelect />
           <ThemeToggle />
-          {/* назад туда, откуда пришли: сюда попадают и из проекта, и со старта */}
-          <Button variant="ghost" size="sm" onClick={() => navigate(-1)}>
-            {t('connect.back')}
-          </Button>
         </div>
       </header>
 
