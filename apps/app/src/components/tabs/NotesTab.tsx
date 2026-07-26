@@ -29,6 +29,7 @@ import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { RichEditor, type RichMention } from '@/components/ui/rich-editor'
 import { TagInput } from '@/components/ui/tag-input'
+import { PeoplePicker } from '@/components/ui/people-picker'
 import { DatePicker } from '@/components/ui/date-picker'
 import { Select, SelectTrigger, SelectValue, SelectContent, SelectItem } from '@/components/ui/select'
 import { useConfirm } from '@/components/ui/confirm'
@@ -578,30 +579,15 @@ function NoteEditor({
       )}
 
       {/* Кого касается: по умолчанию автор, но заметка часто заводится ради
-          другого человека — он и должен о ней узнать. */}
+          другого человека — он и должен о ней узнать. Поиск, а не ряд кнопок:
+          на двадцати участниках ряд перестаёт читаться. */}
       <div>
         <p className="mb-1.5 text-xs font-medium">{t('journal.concerns')}</p>
-        <div className="flex flex-wrap gap-1.5">
-          {mentions.map((m) => {
-            const picked = assignees.includes(m.id)
-            return (
-              <button
-                key={m.id}
-                type="button"
-                onClick={() =>
-                  setAssignees((cur) => (picked ? cur.filter((x) => x !== m.id) : [...cur, m.id]))
-                }
-                className={cn(
-                  'inline-flex items-center gap-1.5 rounded-full border py-1 pe-2.5 ps-1 text-xs transition-colors',
-                  picked ? 'border-brand bg-brand/10 text-foreground' : 'text-muted-foreground hover:bg-accent',
-                )}
-              >
-                <Avatar name={m.label} src={m.avatarUrl} size={18} />
-                {m.label}
-              </button>
-            )
-          })}
-        </div>
+        <PeoplePicker
+          people={mentions.map((m) => ({ id: m.id, name: m.label, avatarUrl: m.avatarUrl }))}
+          value={assignees}
+          onChange={setAssignees}
+        />
       </div>
 
       <div className="grid gap-3 sm:grid-cols-3">

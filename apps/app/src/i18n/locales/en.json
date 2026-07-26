@@ -860,5 +860,11 @@
   "common": {
     "save": "Save",
     "cancel": "Cancel"
+  },
+  "people": {
+    "add": "Add people…",
+    "search": "Search by name",
+    "noMatches": "Nobody found",
+    "allPicked": "Everyone is already added"
   }
 }
