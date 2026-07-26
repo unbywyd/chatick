@@ -3,7 +3,7 @@ import { zValidator } from '@hono/zod-validator'
 import { z } from 'zod'
 import { and, desc, eq, gte, inArray, lte, or, sql } from 'drizzle-orm'
 import { db } from '../db/client.js'
-import { messages, notes, projects, users } from '../db/schema.js'
+import { messages, notes, projects, tasks, users } from '../db/schema.js'
 import { requireProject, type ProjectEnv } from '../auth.js'
 import { hasPermission } from './projects.js'
 import { logActivity } from '../lib/audit.js'
@@ -17,7 +17,10 @@ import { broadcast } from '../ws.js'
 export const notesRoute = new Hono<ProjectEnv>()
 notesRoute.use('*', requireProject)
 
-export const NOTE_TYPES = ['note', 'solution', 'problem', 'decision', 'contradiction', 'reminder', 'business'] as const
+export const NOTE_TYPES = ['note', 'solution', 'problem', 'decision', 'contradiction', 'mismatch', 'gap', 'reminder', 'business'] as const
+// mismatch — реализация разошлась с макетом/докой (есть источник истины и отклонение);
+// gap — в самом макете/спеке чего-то нет (случай не описан, идти к автору).
+// Оба отличаются от contradiction: там спорят люди, а не документы.
 export type NoteType = (typeof NOTE_TYPES)[number]
 
 /** Цитата из чата или откуда угодно. text — копия: сообщение может исчезнуть. */
@@ -54,6 +57,7 @@ const serialize = (
   sources: parseJson<Source[]>(n.sources, []),
   mentionedIds: parseJson<string[]>(n.mentionedIds, []),
   remindAt: n.remindAt,
+  taskId: n.taskId,
   createdVia: n.createdVia,
   author: author ?? null,
   createdAt: n.createdAt,
@@ -322,6 +326,92 @@ notesRoute.patch('/:id', zValidator('json', bodySchema.partial()), async (c) => 
   })
   broadcast(projectId, 'notes', { action: 'update', id: row!.id })
   return c.json(serialize(row!))
+})
+
+/**
+ * Заметка → задача (SPEC §8.31). Заметка ОСТАЁТСЯ: она объясняет, почему
+ * задача такая, и хранит цитаты, из которых выросла. Ссылка двусторонняя.
+ */
+export async function noteToTask(
+  projectId: string,
+  userId: string,
+  noteId: string,
+  overrides: { title?: string; assigneeId?: string | null; priority?: string; dueDate?: string | null } = {},
+) {
+  const note = await db.query.notes.findFirst({
+    where: and(eq(notes.id, noteId), eq(notes.projectId, projectId), alive),
+  })
+  if (!note) return { error: 'Note not found', status: 404 as const }
+  if (note.taskId) {
+    const existing = await db.query.tasks.findFirst({ where: eq(tasks.id, note.taskId) })
+    // повторный клик не должен плодить дубликаты — возвращаем уже созданную
+    if (existing) return { task: existing, already: true }
+  }
+
+  const [{ next, minSort }] = (await db
+    .select({
+      next: sql<number>`coalesce(max(cast(substring(${tasks.number} from 6) as int)), 0) + 1`,
+      minSort: sql<number>`coalesce(min(${tasks.sortOrder}), 0)`,
+    })
+    .from(tasks)
+    .where(eq(tasks.projectId, projectId))) as [{ next: number; minSort: number }]
+
+  const title = (overrides.title ?? note.title ?? '').trim() || htmlToText(note.body).slice(0, 120) || 'Untitled'
+  // цитаты из чата тянем в описание: без них задача теряет доказательную часть
+  const quotes = parseJson<Source[]>(note.sources, [])
+  const quoteHtml = quotes.length
+    ? `<hr><p><b>Из переписки:</b></p>${quotes
+        .map((q) => `<blockquote><p>${q.authorName ?? '—'}: ${htmlToText(q.text).slice(0, 500)}</p></blockquote>`)
+        .join('')}`
+    : ''
+
+  const [row] = await db
+    .insert(tasks)
+    .values({
+      projectId,
+      number: `TASK-${next}`,
+      sortOrder: minSort - 1,
+      title: title.slice(0, 300),
+      description: `${note.body}${quoteHtml}`,
+      status: 'todo',
+      priority: (overrides.priority as 'normal') ?? 'normal',
+      dueDate: overrides.dueDate ? new Date(overrides.dueDate) : null,
+      assigneeId: overrides.assigneeId ?? null,
+      createdById: userId,
+    })
+    .returning()
+
+  await db.update(notes).set({ taskId: row!.id, updatedAt: new Date() }).where(eq(notes.id, note.id))
+
+  void logActivity({
+    projectId,
+    actorId: userId,
+    action: 'create',
+    entityType: 'task',
+    entityId: row!.id,
+    entityLabel: `${row!.number}: ${row!.title}`,
+    meta: { fromNote: note.id },
+  })
+  broadcast(projectId, 'tasks', { action: 'create', id: row!.id })
+  broadcast(projectId, 'notes', { action: 'update', id: note.id })
+  return { task: row!, already: false }
+}
+
+notesRoute.post('/:id/task', async (c) => {
+  const { projectId, sub } = c.get('auth')
+  if (!(await hasPermission(projectId, sub, 'notes.read'))) return c.json({ error: 'Forbidden' }, 403)
+  // создаём ЗАДАЧУ — значит и права нужны задачные
+  if (!(await hasPermission(projectId, sub, 'tasks.create'))) return c.json({ error: 'Forbidden' }, 403)
+
+  const b = (await c.req.json().catch(() => ({}))) as Record<string, unknown>
+  const res = await noteToTask(projectId, sub, c.req.param('id'), {
+    title: typeof b.title === 'string' ? b.title : undefined,
+    assigneeId: typeof b.assigneeId === 'string' ? b.assigneeId : null,
+    priority: typeof b.priority === 'string' ? b.priority : undefined,
+    dueDate: typeof b.dueDate === 'string' ? b.dueDate : null,
+  })
+  if ('error' in res) return c.json({ error: res.error }, res.status)
+  return c.json({ id: res.task.id, number: res.task.number, title: res.task.title, already: res.already }, res.already ? 200 : 201)
 })
 
 notesRoute.delete('/:id', async (c) => {

@@ -837,11 +837,17 @@
       "problem": "Problem",
       "decision": "Decision",
       "contradiction": "Contradiction",
+      "mismatch": "Mismatch",
+      "gap": "Gap",
       "reminder": "Reminder",
       "business": "Business logic",
       "note": "Note"
     },
-    "picked": "{{count}} message(s) selected"
+    "picked": "{{count}} message(s) selected",
+    "toTask": "Create a task from this note",
+    "taskExists": "Task already created — open it",
+    "hasTask": "task created",
+    "taskCreated": "Task {{number}} created"
   },
   "common": {
     "save": "Save",

@@ -837,11 +837,17 @@
       "problem": "בעיה",
       "decision": "החלטה",
       "contradiction": "סתירה",
+      "mismatch": "אי-התאמה",
+      "gap": "פער",
       "reminder": "תזכורת",
       "business": "לוגיקה עסקית",
       "note": "הערה"
     },
-    "picked": "נבחרו {{count}} הודעות"
+    "picked": "נבחרו {{count}} הודעות",
+    "toTask": "יצירת משימה מההערה",
+    "taskExists": "המשימה כבר נוצרה",
+    "hasTask": "נוצרה משימה",
+    "taskCreated": "המשימה {{number}} נוצרה"
   },
   "common": {
     "save": "שמירה",

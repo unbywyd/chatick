@@ -366,6 +366,9 @@ export const notes = pgTable(
      */
     sources: text('sources').notNull().default('[]'),
     mentionedIds: text('mentioned_ids').notNull().default('[]'), // JSON string[] — кого касается
+    // Задача, выросшая из заметки: заметка остаётся и объясняет, ПОЧЕМУ задача
+    // такая, а задача — что с этим делают. Обе стороны знают друг о друге.
+    taskId: text('task_id').references(() => tasks.id, { onDelete: 'set null' }),
     // напоминание: заметка всплывает в уведомлениях в эту дату
     remindAt: timestamp('remind_at', { withTimezone: true }),
     remindedAt: timestamp('reminded_at', { withTimezone: true }),

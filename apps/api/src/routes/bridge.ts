@@ -19,7 +19,7 @@ import { hasPermission, memberDomains, type ProjectPermission } from './projects
 import { authenticateBridge, closeSession, startDeviceAuth, pollDeviceAuth, type BridgeIdentity } from '../lib/bridge-auth.js'
 import { connectDoc, guideDoc } from '../lib/bridge-docs.js'
 import { logActivity } from '../lib/audit.js'
-import { createNote, NOTE_TYPES, type NoteType } from './notes.js'
+import { createNote, noteToTask, NOTE_TYPES, type NoteType } from './notes.js'
 import { notifyChatMentions } from './messages.js'
 import { htmlToText, sanitizeHtml } from '../lib/sanitize-html.js'
 import { broadcast, sendToUser } from '../ws.js'
@@ -747,6 +747,7 @@ bridgeRoute.get('/notes/:id', async (c) => {
     sources: JSON.parse(row.sources) as unknown[],
     mentionedIds: JSON.parse(row.mentionedIds) as string[],
     remindAt: row.remindAt,
+    taskId: row.taskId, // задача, выросшая из этой заметки
     createdVia: row.createdVia, // ui | bridge | ai — видно, чьей рукой заведена
     author: author ? { id: author.id, name: author.name } : null,
     createdAt: row.createdAt,
@@ -851,6 +852,24 @@ bridgeRoute.patch('/notes/:id', async (c) => {
   })
   broadcast(scope.projectId, 'notes', { action: 'update', id: row!.id })
   return c.json({ id: row!.id, title: row!.title, type: row!.type })
+})
+
+bridgeRoute.post('/notes/:id/task', async (c) => {
+  const id = auth(c as never)
+  const scope = await resolveProject(c as never)
+  if ('error' in scope) return c.json({ error: scope.error }, scope.status)
+  const denied = (await require(c as never, 'notes.read', scope.projectId)) ?? (await require(c as never, 'tasks.create', scope.projectId))
+  if (denied) return c.json(denied, 403)
+
+  const b = (await c.req.json().catch(() => ({}))) as Record<string, unknown>
+  const res = await noteToTask(scope.projectId, id.userId, c.req.param('id'), {
+    title: typeof b.title === 'string' ? b.title : undefined,
+    assigneeId: typeof b.assigneeId === 'string' ? b.assigneeId : null,
+    priority: typeof b.priority === 'string' ? b.priority : undefined,
+    dueDate: typeof b.dueDate === 'string' ? b.dueDate : null,
+  })
+  if ('error' in res) return c.json({ error: res.error }, res.status)
+  return c.json({ id: res.task.id, number: res.task.number, title: res.task.title, alreadyExisted: res.already })
 })
 
 bridgeRoute.delete('/notes/:id', async (c) => {

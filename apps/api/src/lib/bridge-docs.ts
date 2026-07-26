@@ -203,11 +203,20 @@ was said earlier" — that is a note.
   POST   /x/notes                   {"type","title","body","tags":[],"scope","sourceMessageIds":[],"mentionedIds":[],"remindAt"}
   PATCH  /x/notes/<id>              same fields; sourceMessageIds APPENDS quotes
   DELETE /x/notes/<id>
+  POST   /x/notes/<id>/task         turn the note into a task
+         {"title?","assigneeId?","priority?","dueDate?"} — all optional.
+         The note SURVIVES and keeps a link to the task: it explains why the
+         task exists and carries the quotes it grew from. Calling it twice
+         returns the same task instead of creating a duplicate.
 
   type:  solution     a problem and how it was solved — the reusable kind
          problem      a known issue with no fix yet
          decision     what was agreed and why
-         contradiction  instructions that conflict with each other
+         contradiction  people said conflicting things
+         mismatch     the build does not match the design or the docs — there
+                      IS a source of truth and something deviates from it
+         gap          the design/spec itself is missing a case — nothing to
+                      deviate from yet, someone has to decide
          reminder     something to resurface later (set remindAt)
          business     business-logic rule worth writing down
          note         anything else
@@ -239,6 +248,13 @@ proves the point after the messages are edited away or scroll out of history.
 
 mentionedIds notifies those people — use it when someone needs to know the note
 exists, not by default.
+
+### Note or task?
+
+A task is work someone will do: it has an assignee, a status, and it closes.
+A note is an observation that is not yet actionable — nobody knows what to do
+about it. When a note has been discussed and the action is clear, convert it:
+POST /x/notes/<id>/task.
 
 ### Before solving anything, check whether it is already solved
 

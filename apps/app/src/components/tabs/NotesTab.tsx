@@ -9,11 +9,14 @@ import {
   Briefcase,
   Building2,
   Check,
+  CheckSquare,
   Gavel,
+  GitCompareArrows,
   Lightbulb,
   MessageSquareQuote,
   NotebookPen,
   Plus,
+  Puzzle as PuzzleIcon,
   Search,
   Split,
   Trash2,
@@ -31,7 +34,7 @@ import { Popover, PopoverTrigger, PopoverContent } from '@/components/ui/popover
 // Заметки проекта (SPEC §8.31): решения, противоречия, договорённости, напоминания.
 // Одна лента с типами и тегами вместо трёх отдельных разделов.
 
-export const NOTE_TYPES = ['solution', 'problem', 'decision', 'contradiction', 'reminder', 'business', 'note'] as const
+export const NOTE_TYPES = ['solution', 'problem', 'decision', 'contradiction', 'mismatch', 'gap', 'reminder', 'business', 'note'] as const
 export type NoteType = (typeof NOTE_TYPES)[number]
 
 /** Иконка и цвет держатся за тип: по ленте видно, что перед тобой, без чтения. */
@@ -40,6 +43,8 @@ export const NOTE_META: Record<NoteType, { icon: typeof Lightbulb; className: st
   problem: { icon: AlertTriangle, className: 'text-amber-600 dark:text-amber-400' },
   decision: { icon: Gavel, className: 'text-blue-600 dark:text-blue-400' },
   contradiction: { icon: Split, className: 'text-rose-600 dark:text-rose-400' },
+  mismatch: { icon: GitCompareArrows, className: 'text-orange-600 dark:text-orange-400' },
+  gap: { icon: PuzzleIcon, className: 'text-fuchsia-600 dark:text-fuchsia-400' },
   reminder: { icon: Bell, className: 'text-violet-600 dark:text-violet-400' },
   business: { icon: Briefcase, className: 'text-cyan-600 dark:text-cyan-400' },
   note: { icon: NotebookPen, className: 'text-muted-foreground' },
@@ -58,6 +63,7 @@ type Note = {
   sources: Source[]
   mentionedIds: string[]
   remindAt: string | null
+  taskId: string | null
   createdVia: string
   author: { id: string; name: string; avatarUrl: string | null } | null
   createdAt: string
@@ -107,6 +113,18 @@ export function NotesTab({ projectId }: { projectId: string }) {
   const members = useQuery({
     queryKey: ['project-members', projectId],
     queryFn: () => api<Member[]>(`/api/v1/projects/${projectId}/members`),
+  })
+
+  // Заметка → задача: наблюдение обсудили, пора делать. Заметка остаётся —
+  // она объясняет, почему задача такая, и хранит цитаты.
+  const toTask = useMutation({
+    mutationFn: (id: string) => api<{ number: string }>(`/api/v1/notes/${id}/task`, { method: 'POST', body: '{}' }, 'project'),
+    onSuccess: (created) => {
+      toast.success(t('journal.taskCreated', { number: created.number }))
+      qc.invalidateQueries({ queryKey: ['notes', projectId] })
+      qc.invalidateQueries({ queryKey: ['tasks', projectId] })
+    },
+    onError: onErr,
   })
 
   const remove = useMutation({
@@ -358,6 +376,12 @@ export function NotesTab({ projectId }: { projectId: string }) {
                           {n.sources.length}
                         </span>
                       )}
+                      {n.taskId && (
+                        <span className="inline-flex items-center gap-1 text-brand">
+                          <CheckSquare className="size-3" />
+                          {t('journal.hasTask')}
+                        </span>
+                      )}
                       {n.remindAt && (
                         <span className="inline-flex items-center gap-1">
                           <Bell className="size-3" />
@@ -373,6 +397,16 @@ export function NotesTab({ projectId }: { projectId: string }) {
                     <div className="flex items-center gap-1 opacity-0 transition-opacity group-hover:opacity-100">
                       {!foreign && (
                         <>
+                          <Button
+                            variant="ghost"
+                            size="icon"
+                            className="size-7"
+                            title={n.taskId ? t('journal.taskExists') : t('journal.toTask')}
+                            disabled={toTask.isPending}
+                            onClick={() => toTask.mutate(n.id)}
+                          >
+                            <CheckSquare className={cn('size-3.5', n.taskId && 'text-brand')} />
+                          </Button>
                           <Button variant="ghost" size="icon" className="size-7" onClick={() => setEditing(n)}>
                             <NotebookPen className="size-3.5" />
                           </Button>
