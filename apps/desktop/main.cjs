@@ -417,6 +417,8 @@ function registerIpc() {
   // Выбор проекта из панели: окно не показываем — человек остался в панели
   // намеренно, а веб просто переходит на нужный проект в фоне.
   ipcMain.on('panel:set-project', (_e, id) => send('project:set', id))
+  ipcMain.on('panel:task-timer', (_e, taskId) => send('task:timer', taskId))
+  ipcMain.on('panel:task-status', (_e, payload) => send('task:status', payload))
   ipcMain.on('panel:revoke-connection', (_e, id) => send('connect:revoke', id))
   ipcMain.on('connect:result', (_e, payload) => panel?.webContents.send('panel:connect', payload))
 }

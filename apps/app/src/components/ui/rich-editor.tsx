@@ -294,6 +294,13 @@ function collectMentions(doc: MdNode): string[] {
 // markdown → простой HTML для начального контента редактора (базовый)
 function markdownToHtml(md: string): string {
   if (!md) return ''
+
+  // Часть текстов уже хранится размеченным HTML (заметки, документы, всё, что
+  // пишет ИИ через мост). Экранировать их значит показать теги буквально,
+  // поэтому пропускаем такое содержимое как есть — санитайзер отработает
+  // на стороне Tiptap.
+  if (/^\s*<(p|h[1-6]|ul|ol|li|blockquote|pre|img|div|table)/i.test(md)) return md
+
   // экранируем, затем базовые инлайн-замены; блоки — по строкам как параграфы
   const esc = (s: string) => s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
   return md

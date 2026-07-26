@@ -5,6 +5,7 @@ import { and, desc, eq, inArray, isNull, sql } from 'drizzle-orm'
 import { db } from '../db/client.js'
 import { notifications, projectMembers, projects, tasks, users, userNotificationPrefs } from '../db/schema.js'
 import { requireSession, type SessionEnv } from '../auth.js'
+import { broadcast } from '../ws.js'
 
 // Глобальные in-app уведомления пользователя (SPEC §8.22) — session-токен,
 // уведомления из ВСЕХ проектов, сгруппированные по проекту на клиенте.
@@ -100,6 +101,40 @@ inboxRoute.get('/tasks', async (c) => {
     })),
   })
 })
+
+/**
+ * Сменить статус СВОЕЙ задачи из любого проекта (SPEC §8.33).
+ *
+ * Обычная правка задачи требует project-токена, а трей показывает задачи из
+ * всех проектов сразу — переключать токен ради одного клика бессмысленно.
+ * Поэтому здесь узкая операция: только статус и только у задачи, которая на
+ * тебя назначена.
+ */
+inboxRoute.patch(
+  '/tasks/:taskId',
+  zValidator('json', z.object({ status: z.enum(['todo', 'in_progress', 'review', 'done']) })),
+  async (c) => {
+    const { sub } = c.get('session')
+    const { status } = c.req.valid('json')
+    const taskId = c.req.param('taskId')
+
+    const task = await db.query.tasks.findFirst({ where: and(eq(tasks.id, taskId), isNull(tasks.deletedAt)) })
+    if (!task) return c.json({ error: 'Not found' }, 404)
+
+    // Только своя задача: этот путь в обход проектных прав, и расширять его
+    // до чужих задач нельзя.
+    if (task.assigneeId !== sub) return c.json({ error: 'Not your task' }, 403)
+
+    const [updated] = await db
+      .update(tasks)
+      .set({ status, updatedAt: new Date() })
+      .where(eq(tasks.id, taskId))
+      .returning()
+
+    broadcast(task.projectId, 'tasks', { action: 'update', id: taskId })
+    return c.json({ id: updated!.id, status: updated!.status })
+  },
+)
 
 // Пометить прочитанными: конкретные id / весь проект / всё
 inboxRoute.post(

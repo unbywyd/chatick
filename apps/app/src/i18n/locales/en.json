@@ -877,7 +877,8 @@
     "add": "Add people…",
     "search": "Search by name",
     "noMatches": "Nobody found",
-    "allPicked": "Everyone is already added"
+    "allPicked": "Everyone is already added",
+    "anyone": "Anyone"
   },
   "time": {
     "title": "Time",
@@ -948,7 +949,10 @@
     "daysWorked": "{{count}} days worked",
     "avgPerDay": "avg/day",
     "exportPerson": "Export this person",
-    "onlyMine": "Only mine"
+    "onlyMine": "Only mine",
+    "startOnTask": "Start timer on this task",
+    "startedOnTask": "Timer started on the task",
+    "stopped": "Timer stopped"
   },
   "period": {
     "today": "Today",
@@ -1014,6 +1018,7 @@
     "connectRevoke": "Revoke",
     "connectRevoked": "Connection closed",
     "projectOpen": "Open",
-    "projectHere": "active"
+    "projectHere": "active",
+    "taskSetStatus": "Change status"
   }
 }

@@ -241,38 +241,30 @@ export function NotesTab({ projectId }: { projectId: string }) {
             </label>
             <p className="-mt-2 text-xs text-muted-foreground">{t('journal.companyWideHint')}</p>
 
+            {/* Люди — с поиском и лицами: в команде на два десятка человек
+                выпадающий список имён бесполезен. */}
             <div>
               <p className="mb-1 text-xs font-medium">{t('journal.author')}</p>
-              <Select value={authorId || 'any'} onValueChange={(v) => setAuthorId(v === 'any' ? '' : v)}>
-                <SelectTrigger>
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="any">{t('journal.anyone')}</SelectItem>
-                  {(members.data ?? []).map((m) => (
-                    <SelectItem key={m.user.id} value={m.user.id}>
-                      {m.user.name}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
+              <PeoplePicker
+                single
+                people={(members.data ?? []).map((m) => m.user)}
+                value={authorId ? [authorId] : []}
+                onChange={(ids) => setAuthorId(ids[0] ?? '')}
+                placeholder={t('journal.anyone')}
+                clearLabel={t('journal.anyone')}
+              />
             </div>
 
             <div>
               <p className="mb-1 text-xs font-medium">{t('journal.mentions')}</p>
-              <Select value={mentions || 'any'} onValueChange={(v) => setMentions(v === 'any' ? '' : v)}>
-                <SelectTrigger>
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="any">{t('journal.anyone')}</SelectItem>
-                  {(members.data ?? []).map((m) => (
-                    <SelectItem key={m.user.id} value={m.user.id}>
-                      {m.user.name}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
+              <PeoplePicker
+                single
+                people={(members.data ?? []).map((m) => m.user)}
+                value={mentions ? [mentions] : []}
+                onChange={(ids) => setMentions(ids[0] ?? '')}
+                placeholder={t('journal.anyone')}
+                clearLabel={t('journal.anyone')}
+              />
             </div>
 
             <div className="grid grid-cols-2 gap-2">
@@ -416,13 +408,20 @@ export function NotesTab({ projectId }: { projectId: string }) {
                           >
                             <CheckSquare className={cn('size-3.5', n.taskId && 'text-brand')} />
                           </Button>
-                          <Button variant="ghost" size="icon" className="size-7" onClick={() => setEditing(n)}>
+                          <Button
+                            variant="ghost"
+                            size="icon"
+                            className="size-7"
+                            title={t('journal.edit')}
+                            onClick={() => setEditing(n)}
+                          >
                             <NotebookPen className="size-3.5" />
                           </Button>
                           <Button
                             variant="ghost"
                             size="icon"
                             className="size-7"
+                            title={t('files.delete')}
                             onClick={async () => {
                               if (
                                 await confirm({

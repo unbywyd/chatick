@@ -161,9 +161,9 @@ export function ProjectLayout() {
         />
         <div className="min-h-0 flex-1">
           <ChatPanel
-            projectName={project.data?.name}
             onOpenSidebar={() => setSidebarOpen(true)}
             onOpenWork={() => navigate(`/p/${id}/tasks`)}
+            onOpenTeam={() => navigate(`/p/${id}/team`)}
             aiMode={(project.data?.aiConfig as { mode?: 'observer' | 'assistant' | 'moderator' })?.mode ?? 'assistant'}
             myRole={project.data?.myRole}
             meId={me.data?.id}

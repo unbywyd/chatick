@@ -879,7 +879,8 @@
     "add": "Добавить людей…",
     "search": "Поиск по имени",
     "noMatches": "Никого не найдено",
-    "allPicked": "Все уже добавлены"
+    "allPicked": "Все уже добавлены",
+    "anyone": "Любой"
   },
   "time": {
     "title": "Время",
@@ -950,7 +951,10 @@
     "daysWorked": "рабочих дней: {{count}}",
     "avgPerDay": "в среднем в день",
     "exportPerson": "Выгрузить по этому человеку",
-    "onlyMine": "Только мои"
+    "onlyMine": "Только мои",
+    "startOnTask": "Запустить таймер по задаче",
+    "startedOnTask": "Таймер запущен по задаче",
+    "stopped": "Таймер остановлен"
   },
   "period": {
     "today": "Сегодня",
@@ -1016,6 +1020,7 @@
     "connectRevoke": "Закрыть",
     "connectRevoked": "Подключение закрыто",
     "projectOpen": "Открыть",
-    "projectHere": "активен"
+    "projectHere": "активен",
+    "taskSetStatus": "Сменить статус"
   }
 }

@@ -877,7 +877,8 @@
     "add": "הוספת אנשים…",
     "search": "חיפוש לפי שם",
     "noMatches": "לא נמצא אף אחד",
-    "allPicked": "כולם כבר נוספו"
+    "allPicked": "כולם כבר נוספו",
+    "anyone": "כל אחד"
   },
   "time": {
     "title": "זמן",
@@ -948,7 +949,10 @@
     "daysWorked": "ימי עבודה: {{count}}",
     "avgPerDay": "ממוצע ליום",
     "exportPerson": "ייצוא עבור אדם זה",
-    "onlyMine": "שלי בלבד"
+    "onlyMine": "שלי בלבד",
+    "startOnTask": "הפעלת טיימר על המשימה",
+    "startedOnTask": "הטיימר הופעל על המשימה",
+    "stopped": "הטיימר נעצר"
   },
   "period": {
     "today": "היום",
@@ -1014,6 +1018,7 @@
     "connectRevoke": "לסגור",
     "connectRevoked": "החיבור נסגר",
     "projectOpen": "פתיחה",
-    "projectHere": "פעיל"
+    "projectHere": "פעיל",
+    "taskSetStatus": "שינוי סטטוס"
   }
 }

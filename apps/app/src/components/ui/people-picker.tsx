@@ -16,12 +16,18 @@ export function PeoplePicker({
   onChange,
   placeholder,
   className,
+  single = false,
+  clearLabel,
 }: {
   people: Person[]
   value: string[]
   onChange: (ids: string[]) => void
   placeholder?: string
   className?: string
+  /** одиночный выбор (фильтры «автор», «упомянут»): выбранный виден в кнопке */
+  single?: boolean
+  /** подпись пункта «сбросить» в одиночном режиме */
+  clearLabel?: string
 }) {
   const { t } = useTranslation()
   const [open, setOpen] = useState(false)
@@ -34,11 +40,18 @@ export function PeoplePicker({
   const matches = useMemo(() => {
     const needle = q.trim().toLowerCase()
     return people
-      .filter((p) => !value.includes(p.id))
+      // в одиночном режиме выбранного не прячем: по нему видно, что выбрано
+      .filter((p) => single || !value.includes(p.id))
       .filter((p) => !needle || p.name.toLowerCase().includes(needle) || (p.email ?? '').toLowerCase().includes(needle))
-  }, [people, value, q])
+  }, [people, value, q, single])
 
   const add = (id: string) => {
+    if (single) {
+      onChange([id])
+      setQ('')
+      setOpen(false)
+      return
+    }
     onChange([...value, id])
     setQ('')
     inputRef.current?.focus()
@@ -46,7 +59,7 @@ export function PeoplePicker({
 
   return (
     <div className={cn('space-y-1.5', className)}>
-      {picked.length > 0 && (
+      {!single && picked.length > 0 && (
         <div className="flex flex-wrap gap-1.5">
           {picked.map((p) => (
             <span
@@ -71,10 +84,30 @@ export function PeoplePicker({
         <PopoverTrigger asChild>
           <button
             type="button"
-            className="flex h-9 w-full items-center gap-2 rounded-md border bg-background px-2 text-sm text-muted-foreground transition-colors hover:bg-accent"
+            className={cn(
+              'flex h-9 w-full items-center gap-2 rounded-md border bg-background px-2 text-sm transition-colors hover:bg-accent',
+              single && picked[0] ? 'text-foreground' : 'text-muted-foreground',
+            )}
           >
-            <Search className="size-3.5 shrink-0" />
-            {placeholder ?? t('people.add')}
+            {single && picked[0] ? (
+              <>
+                <Avatar name={picked[0].name} src={picked[0].avatarUrl} size={20} />
+                <span className="min-w-0 flex-1 truncate text-start">{picked[0].name}</span>
+                <X
+                  className="size-3.5 shrink-0 text-muted-foreground transition-colors hover:text-destructive"
+                  onClick={(e) => {
+                    // сброс, не открывая список
+                    e.stopPropagation()
+                    onChange([])
+                  }}
+                />
+              </>
+            ) : (
+              <>
+                <Search className="size-3.5 shrink-0" />
+                <span className="min-w-0 flex-1 truncate text-start">{placeholder ?? t('people.add')}</span>
+              </>
+            )}
           </button>
         </PopoverTrigger>
         <PopoverContent className="w-[var(--radix-popover-trigger-width)] p-0" align="start">
@@ -96,12 +129,28 @@ export function PeoplePicker({
             />
           </div>
           <div className="max-h-60 overflow-y-auto p-1">
+            {single && value.length > 0 && (
+              <button
+                type="button"
+                onClick={() => {
+                  onChange([])
+                  setOpen(false)
+                }}
+                className="flex w-full items-center gap-2 rounded-sm px-1.5 py-1.5 text-start text-sm text-muted-foreground transition-colors hover:bg-accent"
+              >
+                <X className="size-4" />
+                {clearLabel ?? t('people.anyone')}
+              </button>
+            )}
             {matches.map((p) => (
               <button
                 key={p.id}
                 type="button"
                 onClick={() => add(p.id)}
-                className="flex w-full items-center gap-2 rounded-sm px-1.5 py-1.5 text-start text-sm transition-colors hover:bg-accent"
+                className={cn(
+                  'flex w-full items-center gap-2 rounded-sm px-1.5 py-1.5 text-start text-sm transition-colors hover:bg-accent',
+                  single && value.includes(p.id) && 'bg-accent font-medium',
+                )}
               >
                 <Avatar name={p.name} src={p.avatarUrl} size={20} />
                 <span className="min-w-0 flex-1 truncate">{p.name}</span>

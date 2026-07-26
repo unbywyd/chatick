@@ -20,11 +20,14 @@ import { Popover, PopoverTrigger, PopoverContent } from '@/components/ui/popover
 import { TaskDrawer } from './tasks/TaskDrawer'
 import { TasksTable } from './tasks/TasksTable'
 import { TaskContextMenu } from './tasks/TaskContextMenu'
+import { useTaskTimer } from '@/hooks/useTaskTimer'
 import { exportTasksToExcel, downloadImportTemplate, parseTasksFromExcel } from './tasks/taskExcel'
 import { STATUSES, PRIORITIES, STATUS_ICON, STATUS_COLOR, PRIORITY_COLOR, isOverdue, fmtEstimate, type Task, type TaskGroup, type Member, type Status, type Priority } from './tasks/types'
 
 // Таб «Задачи»: список по статусам + drawer с деталями и вложениями (SPEC §4.3 — права)
 export function TasksTab({ projectId, meId }: { projectId: string; meId?: string }) {
+  // учёт времени прямо из задачи — см. useTaskTimer
+  const startTimer = useTaskTimer(projectId)
   const { t, i18n } = useTranslation()
   const qc = useQueryClient()
   const [q, setQ] = useState('')
@@ -576,6 +579,7 @@ export function TasksTab({ projectId, meId }: { projectId: string; meId?: string
                           e.stopPropagation()
                           handleDrop(status, task.id)
                         }}
+                        onStartTimer={() => startTimer.mutate({ id: task.id, title: task.title })}
                       />
                     ))}
                     {list.length === 0 && (
@@ -630,6 +634,7 @@ function TaskRow({
   onDragEnd,
   onDragOverRow,
   onDropRow,
+  onStartTimer,
 }: {
   task: Task
   lang: string
@@ -646,13 +651,21 @@ function TaskRow({
   onDragEnd: () => void
   onDragOverRow: (e: React.DragEvent) => void
   onDropRow: (e: React.DragEvent) => void
+  onStartTimer?: () => void
 }) {
   const { t } = useTranslation()
   const overdue = isOverdue(task)
   const StatusIcon = STATUS_ICON[task.status]
 
   return (
-    <TaskContextMenu task={task} canEdit={canEdit} meId={meId} onPatch={onPatch} onDelete={onDelete}>
+    <TaskContextMenu
+      task={task}
+      canEdit={canEdit}
+      meId={meId}
+      onPatch={onPatch}
+      onDelete={onDelete}
+      onStartTimer={onStartTimer}
+    >
     <li
       draggable
       onDragStart={(e) => {

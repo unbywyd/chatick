@@ -131,6 +131,48 @@
       }
       .empty { padding: 34px 16px; text-align: center; color: var(--muted); }
 
+      /* Задача — то, на что тратится время: статус и таймер должны меняться
+         здесь же, без похода в приложение. */
+      .task-actions { display: flex; gap: 3px; flex: 0 0 auto; align-self: center; }
+      /* Кнопки не должны налезать на текст: место под них резервируем всегда. */
+      .row .body { min-width: 0; }
+
+      /* Выбор статуса: список вместо «следующего по кругу» — гадать, куда
+         попадёшь, не нужно. */
+      .status-menu {
+        position: absolute; z-index: 20;
+        min-width: 150px; padding: 4px;
+        border: 1px solid var(--line); border-radius: 8px;
+        background: var(--card); box-shadow: 0 8px 24px rgba(0,0,0,.5);
+      }
+      .status-menu button {
+        display: flex; align-items: center; gap: 8px;
+        width: 100%; padding: 6px 8px;
+        border: 0; border-radius: 6px;
+        background: none; color: var(--text);
+        font: inherit; text-align: start; cursor: pointer;
+      }
+      .status-menu button:hover { background: #232323; }
+      .status-menu button.on { color: var(--brand); }
+      .mini {
+        width: 22px; height: 22px;
+        display: grid; place-items: center;
+        border: 1px solid var(--line); border-radius: 6px;
+        background: none; color: var(--muted);
+        font: 11px/1 system-ui, sans-serif; cursor: pointer;
+        transition: border-color .12s, color .12s, background .12s;
+      }
+      .mini:hover { border-color: var(--brand); color: var(--brand); }
+      .mini.on { background: var(--brand); border-color: var(--brand); color: #111; }
+      .status-dot {
+        width: 8px; height: 8px; flex: 0 0 auto;
+        border-radius: 50%; border: 2px solid var(--muted);
+        align-self: center;
+      }
+      .status-dot.in_progress { border-color: #3b82f6; background: #3b82f6; }
+      .status-dot.review { border-color: #a855f7; background: #a855f7; }
+      .status-dot.done { border-color: var(--brand); background: var(--brand); }
+
       /* Активный проект: с ним работает таймер и его видит ассистент —
          значит он должен быть виден и здесь, а не угадываться. */
       .row.active { background: #1a1a1a; }
@@ -389,14 +431,22 @@
             return
           }
           for (const t of state.tasks.slice(0, 30)) {
+            const running = state.timer?.taskId === t.id
             rows.push(`
-              <button class="row" data-link="${escape(t.link)}">
-                <span class="num">${escape(t.number)}</span>
-                <span class="body">
-                  <span class="title">${escape(t.title)}</span>
+              <div class="row">
+                <span class="status-dot ${escape(t.status || 'todo')}"></span>
+                <button class="body" data-link="${escape(t.link)}"
+                        style="border:0;background:none;color:inherit;font:inherit;text-align:start;cursor:pointer;padding:0">
+                  <span class="title">${escape(t.number)} ${escape(t.title)}</span>
                   <span class="sub">${escape(t.projectName || '')}${t.due ? ` · ${T('due', 'due')} ${escape(t.due)}` : ''}</span>
+                </button>
+                <span class="task-actions">
+                  <button class="mini ${running ? 'on' : ''}" data-timer="${escape(t.id)}"
+                          title="${running ? T('stop', 'Stop') : T('start', 'Start timer')}">${running ? '⏸' : '▶'}</button>
+                  <button class="mini" data-status="${escape(t.id)}" data-current="${escape(t.status || 'todo')}"
+                          title="${T('taskSetStatus', 'Change status')}">•••</button>
                 </span>
-              </button>`)
+              </div>`)
           }
         }
 
@@ -435,6 +485,52 @@
         }
 
         el.innerHTML = rows.join('')
+      }
+
+      /** Меню статусов рядом с кнопкой. Закрывается по выбору или клику мимо. */
+      function openStatusMenu(btn) {
+        document.querySelector('.status-menu')?.remove()
+
+        const labels = {
+          todo: T('statusTodo', 'To do'),
+          in_progress: T('statusInProgress', 'In progress'),
+          review: T('statusReview', 'Review'),
+          done: T('statusDone', 'Done'),
+        }
+        const current = btn.dataset.current
+        const menu = document.createElement('div')
+        menu.className = 'status-menu'
+        menu.innerHTML = Object.entries(labels)
+          .map(
+            ([key, label]) => `
+              <button data-pick-status="${key}" class="${key === current ? 'on' : ''}">
+                <span class="status-dot ${key}"></span>${escape(label)}
+              </button>`,
+          )
+          .join('')
+
+        // Ставим под кнопкой, не вылезая за правый край панели.
+        const r = btn.getBoundingClientRect()
+        menu.style.top = `${r.bottom + 4}px`
+        menu.style.left = `${Math.max(6, Math.min(r.left, window.innerWidth - 156))}px`
+        document.body.appendChild(menu)
+
+        menu.onclick = (e) => {
+          const pick = e.target.closest('[data-pick-status]')
+          if (!pick) return
+          window.panel.taskStatus(btn.dataset.status, pick.dataset.pickStatus)
+          menu.remove()
+        }
+        // Клик мимо закрывает — но не тот же самый, что меню открыл.
+        setTimeout(() => {
+          const off = (e) => {
+            if (!menu.contains(e.target)) {
+              menu.remove()
+              document.removeEventListener('click', off)
+            }
+          }
+          document.addEventListener('click', off)
+        }, 0)
       }
 
       // --- подключение ассистента ---------------------------------------------
@@ -664,6 +760,21 @@
           window.panel.open(open.dataset.link, open.dataset.notification || null)
           return
         }
+        // Таймер на задаче: перебивает текущий — работают над чем-то одним.
+        const timer = e.target.closest('[data-timer]')
+        if (timer) {
+          window.panel.taskTimer(timer.dataset.timer)
+          return
+        }
+
+        // Статус выбирают из списка: «следующий по кругу» заставлял бы
+        // угадывать, куда попадёшь, и жать несколько раз.
+        const status = e.target.closest('[data-status]')
+        if (status) {
+          openStatusMenu(status)
+          return
+        }
+
         const pick = e.target.closest('[data-pick]')
         if (pick) {
           window.panel.setProject(pick.dataset.pick)

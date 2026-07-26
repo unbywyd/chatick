@@ -25,6 +25,8 @@ type DesktopBridge = {
   onConnectCheck: (fn: (code: string) => void) => () => void
   onConnectApprove: (fn: (p: { code: string; projectId?: string; companyId?: string }) => void) => () => void
   onSetProject: (fn: (id: string) => void) => () => void
+  onTaskStatus: (fn: (p: { taskId: string; status: string }) => void) => () => void
+  onTaskTimer: (fn: (taskId: string) => void) => () => void
   onConnectRefresh: (fn: () => void) => () => void
   onConnectRevoke: (fn: (id: string) => void) => () => void
 }
@@ -57,9 +59,9 @@ type DesktopState = {
    */
   authed: boolean
   unread: number
-  timer: { id: string; description: string; startedAt: string; projectName?: string } | null
+  timer: { id: string; description: string; startedAt: string; projectName?: string; taskId?: string | null } | null
   notifications: { id: string; title: string; summary?: string | null; link: string; projectName?: string; unread: boolean }[]
-  tasks: { id: string; number: string; title: string; link: string; projectName?: string; due?: string }[]
+  tasks: { id: string; number: string; title: string; status: string; link: string; projectName?: string; due?: string }[]
   projects: { id: string; name: string; color?: string; logoUrl?: string | null; unread: number }[]
   project: { id: string; name: string } | null
   /**
@@ -86,7 +88,7 @@ type InboxItem = {
   readAt?: string | null
 }
 type Inbox = { unreadTotal: number; items: InboxItem[] }
-type Running = { items: { id: string; description: string; startedAt: string; projectId: string }[] }
+type Running = { items: { id: string; description: string; startedAt: string; projectId: string; taskId?: string | null }[] }
 type ProjectLite = {
   id: string
   name: string
@@ -225,6 +227,7 @@ export function useDesktopSync() {
             description: timer.description,
             startedAt: timer.startedAt,
             projectName: nameOf(timer.projectId),
+            taskId: timer.taskId ?? null,
           }
         : null,
       notifications: (authed ? inbox.data?.items ?? [] : []).slice(0, 20).map((n) => ({
@@ -240,6 +243,7 @@ export function useDesktopSync() {
         id: t.id,
         number: t.number,
         title: t.title,
+        status: t.status,
         link: `/p/${t.project.id}/tasks/${t.id}`,
         projectName: t.project.name,
         due: t.dueDate ? new Date(t.dueDate).toLocaleDateString() : undefined,
@@ -280,6 +284,11 @@ export function useDesktopSync() {
         tabConnect: t('desktop.tabConnect'),
         projectOpen: t('desktop.projectOpen'),
         projectHere: t('desktop.projectHere'),
+        taskSetStatus: t('desktop.taskSetStatus'),
+        statusTodo: t('tasks.status.todo'),
+        statusInProgress: t('tasks.status.in_progress'),
+        statusReview: t('tasks.status.review'),
+        statusDone: t('tasks.status.done'),
         connectHint: t('desktop.connectHint'),
         connectActsAsYou: t('desktop.connectActsAsYou'),
         connectProject: t('desktop.connectProject'),
@@ -410,6 +419,42 @@ export function useDesktopSync() {
       }
     })
 
+    // Таймер прямо на задаче: перебивает текущий, потому что работают над
+    // чем-то одним, а два счётчика на одного человека — это уже путаница.
+    const offTaskTimer = bridge.onTaskTimer(async (taskId) => {
+      const task = tasks.data?.items.find((x) => x.id === taskId)
+      if (!task) return
+      const current = running.data?.items[0]
+      try {
+        if (current) await api(`/api/v1/time/${current.id}/stop`, { method: 'POST' }, 'project')
+        // Уже шёл таймер именно по этой задаче — значит нажатие было «стоп».
+        if (current?.taskId !== taskId) {
+          await api(
+            '/api/v1/time/start',
+            { method: 'POST', body: JSON.stringify({ projectId: task.project.id, taskId, description: task.title }) },
+            'project',
+          )
+        }
+      } catch {
+        bridge.show()
+      }
+      qc.invalidateQueries({ queryKey: ['desktop-running'] })
+      qc.invalidateQueries({ queryKey: ['time-running'] })
+      qc.invalidateQueries({ queryKey: ['time-entries'] })
+    })
+
+    // Статус задачи меняют прямо из панели: ради «взял в работу» открывать
+    // приложение и искать задачу — лишняя дорога.
+    const offTaskStatus = bridge.onTaskStatus(async ({ taskId, status }) => {
+      try {
+        await api(`/api/v1/inbox/tasks/${taskId}`, { method: 'PATCH', body: JSON.stringify({ status }) })
+      } catch {
+        bridge.show()
+      }
+      qc.invalidateQueries({ queryKey: ['desktop-tasks'] })
+      qc.invalidateQueries({ queryKey: ['tasks'] })
+    })
+
     // Проект выбрали из панели: переходим в него, но окно не поднимаем —
     // человек остался в панели намеренно.
     const offSetProject = bridge.onSetProject((id) => {
@@ -440,10 +485,12 @@ export function useDesktopSync() {
       offCheck()
       offApprove()
       offSetProject()
+      offTaskStatus()
+      offTaskTimer()
       offRefresh()
       offRevoke()
     }
-  }, [bridge, navigate, qc, running.data?.items, activeProjectId])
+  }, [bridge, navigate, qc, running.data?.items, tasks.data, activeProjectId])
 }
 
 // --- что уже показывали -------------------------------------------------------

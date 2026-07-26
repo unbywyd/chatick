@@ -1,6 +1,6 @@
 import { useTranslation } from 'react-i18next'
 import { toast } from 'sonner'
-import { CheckCircle, Copy, Flag, Trash2, UserCheck } from 'lucide-react'
+import { CheckCircle, Copy, Flag, Play, Trash2, UserCheck } from 'lucide-react'
 import {
   ContextMenu,
   ContextMenuTrigger,
@@ -21,6 +21,7 @@ export function TaskContextMenu({
   children,
   onPatch,
   onDelete,
+  onStartTimer,
   asChild = true,
 }: {
   task: Task
@@ -29,6 +30,8 @@ export function TaskContextMenu({
   children: React.ReactNode
   onPatch: (body: Record<string, unknown>) => void
   onDelete: () => void
+  /** учёт времени по этой задаче — если трекинг включён в проекте */
+  onStartTimer?: () => void
   asChild?: boolean
 }) {
   const { t } = useTranslation()
@@ -49,6 +52,18 @@ export function TaskContextMenu({
     <ContextMenu>
       <ContextMenuTrigger asChild={asChild}>{children}</ContextMenuTrigger>
       <ContextMenuContent>
+        {/* Время тратится на задачи — начинать учёт логично отсюда, а не
+            перенабирая описание в контроле таймера. */}
+        {onStartTimer && task.status !== 'done' && (
+          <>
+            <ContextMenuItem onSelect={onStartTimer}>
+              <Play className="size-4 text-brand" />
+              {t('time.startOnTask')}
+            </ContextMenuItem>
+            <ContextMenuSeparator />
+          </>
+        )}
+
         {/* Быстрое «Готово» / статусы */}
         {canEdit && task.status !== 'done' && (
           <ContextMenuItem onSelect={() => onPatch({ status: 'done' })}>

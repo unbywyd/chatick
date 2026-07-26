@@ -7,11 +7,11 @@ import ReactMarkdown from 'react-markdown'
 import { toast } from 'sonner'
 import { api } from '@/lib/api'
 import { cn } from '@/lib/utils'
-import { ProjectSwitcher } from './ProjectSwitcher'
 import { Button } from '@/components/ui/button'
 import { useProjectSocket, type ChatMessage } from '@/hooks/useProjectSocket'
 import { Composer, AI_MENTION_ID } from './Composer'
 import { SandboxOverlay } from './SandboxOverlay'
+import { AvatarRow } from '@/components/ui/avatar-row'
 import { AiOverlay } from './AiOverlay'
 import { FileViewer, type ViewerFile } from '@/components/files/FileViewer'
 import { NOTE_META, NOTE_TYPES, type NoteType } from '@/components/tabs/NotesTab'
@@ -25,20 +25,21 @@ const mentionRe = /@\[([^\]]+)\]\(([^)]+)\)/g
 const renderMentions = (text: string) => text.replace(mentionRe, '**@$1**')
 
 export function ChatPanel({
-  projectName,
   aiMode = 'assistant',
   myRole,
   meId,
   onOpenSidebar,
   onOpenWork,
+  onOpenTeam,
 }: {
-  projectName?: string
   aiMode?: 'observer' | 'assistant' | 'moderator'
   myRole?: 'owner' | 'admin' | 'member' | null
   meId?: string
   /** мобильный: открыть список проектов и уйти в рабочую зону — на десктопе не нужны */
   onOpenSidebar?: () => void
   onOpenWork?: () => void
+  /** клик по участникам ведёт в команду проекта */
+  onOpenTeam?: () => void
 }) {
   const { t, i18n } = useTranslation()
   const navigate = useNavigate()
@@ -295,7 +296,16 @@ export function ChatPanel({
               <Menu className="size-4" />
             </button>
           )}
-          <ProjectSwitcher projectName={projectName} />
+          {/* На месте переключателя проекта — участники: какой проект открыт,
+              видно по подсветке в сайдбаре, а вот КТО здесь — больше нигде. */}
+          <AvatarRow
+            members={(members.data ?? []).map((m) => m.user)}
+            max={5}
+            size={26}
+            className="ms-1"
+            title={t('tabs.team')}
+            onClick={onOpenTeam}
+          />
         </div>
         <div className="flex items-center gap-3">
           {/* ниже xl чат занимает весь экран — нужен явный выход в рабочую зону */}

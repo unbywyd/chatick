@@ -22,6 +22,10 @@ contextBridge.exposeInMainWorld('panel', {
   refreshConnections: () => ipcRenderer.send('panel:refresh-connections'),
   /** Сделать проект активным, не открывая окно приложения. */
   setProject: (id) => ipcRenderer.send('panel:set-project', id),
+  /** Запустить/остановить таймер на конкретной задаче. */
+  taskTimer: (taskId) => ipcRenderer.send('panel:task-timer', taskId),
+  /** Сменить статус своей задачи, не открывая приложение. */
+  taskStatus: (taskId, status) => ipcRenderer.send('panel:task-status', { taskId, status }),
   onConnect: (fn) => {
     const handler = (_e, payload) => fn(payload)
     ipcRenderer.on('panel:connect', handler)
