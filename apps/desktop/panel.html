@@ -164,14 +164,13 @@
       }
       .mini:hover { border-color: var(--brand); color: var(--brand); }
       .mini.on { background: var(--brand); border-color: var(--brand); color: #111; }
-      .status-dot {
-        width: 8px; height: 8px; flex: 0 0 auto;
-        border-radius: 50%; border: 2px solid var(--muted);
-        align-self: center;
-      }
-      .status-dot.in_progress { border-color: #3b82f6; background: #3b82f6; }
-      .status-dot.review { border-color: #a855f7; background: #a855f7; }
-      .status-dot.done { border-color: var(--brand); background: var(--brand); }
+      /* Иконки статуса — те же, что в приложении: круг → круг с точкой →
+         глаз → галочка, и те же цвета. */
+      .status-icon { flex: 0 0 auto; align-self: center; }
+      .st-todo { color: var(--muted); }
+      .st-in_progress { color: #38bdf8; }
+      .st-review { color: #a78bfa; }
+      .st-done { color: var(--brand); }
 
       /* Активный проект: с ним работает таймер и его видит ассистент —
          значит он должен быть виден и здесь, а не угадываться. */
@@ -353,6 +352,23 @@
       let tab = 'inbox'
       const $ = (id) => document.getElementById(id)
 
+      /**
+       * Иконка статуса задачи. Рисуем svg вручную: тянуть библиотеку иконок
+       * в панель ради четырёх фигур несоразмерно.
+       */
+      const STATUS_ICONS = {
+        todo: '<circle cx="12" cy="12" r="9"/>',
+        in_progress: '<circle cx="12" cy="12" r="9"/><circle cx="12" cy="12" r="3.5" fill="currentColor" stroke="none"/>',
+        review: '<path d="M2 12s3.5-6 10-6 10 6 10 6-3.5 6-10 6-10-6-10-6Z"/><circle cx="12" cy="12" r="3"/>',
+        done: '<circle cx="12" cy="12" r="9"/><path d="m8.5 12 2.5 2.5 4.5-5"/>',
+      }
+      const statusIcon = (status, size = 14) => {
+        const key = STATUS_ICONS[status] ? status : 'todo'
+        return `<svg class="status-icon st-${key}" width="${size}" height="${size}" viewBox="0 0 24 24"
+                     fill="none" stroke="currentColor" stroke-width="2"
+                     stroke-linecap="round" stroke-linejoin="round">${STATUS_ICONS[key]}</svg>`
+      }
+
       /** Инициалы вместо картинки, когда аватарки нет. */
       const initials = (name) =>
         String(name || '?')
@@ -434,7 +450,7 @@
             const running = state.timer?.taskId === t.id
             rows.push(`
               <div class="row">
-                <span class="status-dot ${escape(t.status || 'todo')}"></span>
+                ${statusIcon(t.status || 'todo', 15)}
                 <button class="body" data-link="${escape(t.link)}"
                         style="border:0;background:none;color:inherit;font:inherit;text-align:start;cursor:pointer;padding:0">
                   <span class="title">${escape(t.number)} ${escape(t.title)}</span>
@@ -444,7 +460,7 @@
                   <button class="mini ${running ? 'on' : ''}" data-timer="${escape(t.id)}"
                           title="${running ? T('stop', 'Stop') : T('start', 'Start timer')}">${running ? '⏸' : '▶'}</button>
                   <button class="mini" data-status="${escape(t.id)}" data-current="${escape(t.status || 'todo')}"
-                          title="${T('taskSetStatus', 'Change status')}">•••</button>
+                          title="${T('taskSetStatus', 'Change status')}">${statusIcon(t.status || 'todo', 13)}</button>
                 </span>
               </div>`)
           }
@@ -504,7 +520,7 @@
           .map(
             ([key, label]) => `
               <button data-pick-status="${key}" class="${key === current ? 'on' : ''}">
-                <span class="status-dot ${key}"></span>${escape(label)}
+                ${statusIcon(key, 15)}${escape(label)}
               </button>`,
           )
           .join('')

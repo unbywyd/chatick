@@ -82,6 +82,9 @@ export function RichEditor({
   readOnly?: boolean
 }) {
   const fileRef = useRef<HTMLInputElement>(null)
+  // Человек начал править — внешнее значение больше не подставляем.
+  const touched = useRef(false)
+
   const editor = useEditor({
     editable: !readOnly,
     extensions: [
@@ -129,6 +132,7 @@ export function RichEditor({
       },
     },
     onUpdate: ({ editor }) => {
+      touched.current = true
       const json = editor.getJSON() as MdNode
       // токен доступа к картинкам в сохранённый текст попасть не должен
       onChange(stripInlineImageAuth(serializeToMarkdown(json)), collectMentions(json))
@@ -144,13 +148,25 @@ export function RichEditor({
     }
   }
 
-  // внешний ресет (после отправки value='') + синхронизация в read-only режиме
+  // Синхронизация с внешним значением.
+  //
+  // В read-only редактор просто показывает то, что дали. В режиме правки
+  // содержимое ставится при создании — но форму могли открыть раньше, чем
+  // приехали данные, и тогда редактор остался бы пустым. Поэтому подставляем
+  // и здесь, пока человек ничего не набрал: перетирать набранное нельзя.
   useEffect(() => {
     if (!editor) return
     if (readOnly) {
       editor.commands.setContent(markdownToHtml(withInlineImageAuth(value)))
-    } else if (value === '' && !editor.isEmpty) {
-      editor.commands.clearContent()
+      return
+    }
+    if (value === '') {
+      if (!editor.isEmpty) editor.commands.clearContent()
+      touched.current = false
+      return
+    }
+    if (!touched.current && editor.isEmpty) {
+      editor.commands.setContent(markdownToHtml(withInlineImageAuth(value)))
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [value, readOnly])
@@ -292,14 +308,24 @@ function collectMentions(doc: MdNode): string[] {
 }
 
 // markdown → простой HTML для начального контента редактора (базовый)
+/**
+ * Готовая разметка или markdown?
+ *
+ * Проверяем наличие парного блочного тега, а не только начало строки: текст
+ * может начинаться с обычного абзаца и содержать разметку дальше, а «5 < 10»
+ * разметкой быть не должно.
+ */
+function looksLikeHtml(s: string): boolean {
+  return /<(p|h[1-6]|ul|ol|li|blockquote|pre|div|table|strong|em|code)[^>]*>[\s\S]*<\/>/i.test(s)
+}
+
 function markdownToHtml(md: string): string {
   if (!md) return ''
 
   // Часть текстов уже хранится размеченным HTML (заметки, документы, всё, что
-  // пишет ИИ через мост). Экранировать их значит показать теги буквально,
-  // поэтому пропускаем такое содержимое как есть — санитайзер отработает
-  // на стороне Tiptap.
-  if (/^\s*<(p|h[1-6]|ul|ol|li|blockquote|pre|img|div|table)/i.test(md)) return md
+  // пишет ИИ через мост). Экранировать их значит показать теги буквально —
+  // Tiptap разбирает HTML сам, поэтому такое содержимое отдаём как есть.
+  if (looksLikeHtml(md)) return md
 
   // экранируем, затем базовые инлайн-замены; блоки — по строкам как параграфы
   const esc = (s: string) => s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
