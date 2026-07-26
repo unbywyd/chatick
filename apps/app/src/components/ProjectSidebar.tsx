@@ -125,7 +125,7 @@ export function ProjectSidebar({ me, onPick }: { me?: Me; onPick?: () => void })
 
         <div className="flex flex-col items-center gap-2 border-t p-2">
           <button
-            onClick={() => navigate(`/start/${company?.id ?? ''}`)}
+            onClick={() => navigate(`/start/${company?.id ?? ''}/projects`)}
             title={t('sidebar.newProject')}
             className="grid size-8 place-items-center rounded-md text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
           >
@@ -246,7 +246,7 @@ export function ProjectSidebar({ me, onPick }: { me?: Me; onPick?: () => void })
       {/* Низ: новый проект + профиль — как в WhatsApp Desktop */}
       <div className="flex items-center gap-2 border-t p-2">
         <button
-          onClick={() => navigate(`/start/${company?.id ?? ''}`)}
+          onClick={() => navigate(`/start/${company?.id ?? ''}/projects`)}
           className="flex flex-1 items-center gap-2 rounded-md px-2 py-1.5 text-xs text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
         >
           <Plus className="size-3.5" />

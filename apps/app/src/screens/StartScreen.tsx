@@ -254,7 +254,7 @@ function CompanyHome({
   const { companyTab } = useParams()
   const tab = (['overview', 'projects', 'team', 'time', 'connect', 'backup', 'settings'] as const).includes(companyTab as never)
     ? (companyTab as 'overview' | 'projects' | 'team' | 'time' | 'connect' | 'backup' | 'settings')
-    : 'projects'
+    : 'overview'
   const canManage = company.myRole === 'admin' || company.myRole === 'manager'
   const isAdmin = company.myRole === 'admin'
   // доступ ко всей компании выдают те, кто ей управляет; бэкап — только админ
@@ -270,7 +270,7 @@ function CompanyHome({
         {tabs.map((key) => (
           <button
             key={key}
-            onClick={() => navigate(key === 'projects' ? `/start/${company.id}` : `/start/${company.id}/${key}`)}
+            onClick={() => navigate(key === 'overview' ? `/start/${company.id}` : `/start/${company.id}/${key}`)}
             className={cn(
               '-mb-px border-b-2 px-4 py-2 text-sm font-medium transition-colors',
               tab === key
