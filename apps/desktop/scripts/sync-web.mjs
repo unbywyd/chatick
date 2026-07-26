@@ -1,0 +1,18 @@
+// Копирует собранный веб внутрь десктопа — нужно только для LOAD_MODE='bundled'.
+// В обычном режиме приложение грузит app.chatick.com и эта папка не участвует.
+import fs from 'node:fs'
+import path from 'node:path'
+import { fileURLToPath } from 'node:url'
+
+const here = path.dirname(fileURLToPath(import.meta.url))
+const src = path.resolve(here, '../../app/dist')
+const dest = path.resolve(here, '../web')
+
+if (!fs.existsSync(src)) {
+  console.error('Сначала соберите веб: pnpm --filter @chatick/app build')
+  process.exit(1)
+}
+
+fs.rmSync(dest, { recursive: true, force: true })
+fs.cpSync(src, dest, { recursive: true })
+console.log(`web скопирован: ${src} -> ${dest}`)

@@ -7,7 +7,9 @@
     "dev": "electron . --dev",
     "build": "echo \"desktop: packaging via electron-builder (pnpm dist) — skipped in turbo build\"",
     "dist": "electron-builder",
-    "typecheck": "echo \"desktop: plain js, nothing to typecheck\""
+    "typecheck": "echo \"desktop: plain js, nothing to typecheck\"",
+    "start": "electron .",
+    "sync-web": "node scripts/sync-web.mjs"
   },
   "devDependencies": {
     "electron": "^38.0.0",
@@ -19,8 +21,31 @@
     "directories": {
       "output": "release"
     },
-    "files": ["main.cjs", "preload.cjs", "web/**/*"],
-    "win": { "target": "nsis" },
-    "mac": { "target": "dmg", "category": "public.app-category.productivity" }
+    "files": [
+      "main.cjs",
+      "preload.cjs",
+      "offline.html",
+      "assets/**/*",
+      "web/**/*"
+    ],
+    "win": {
+      "target": "nsis",
+      "icon": "assets/icon.png"
+    },
+    "mac": {
+      "target": "dmg",
+      "category": "public.app-category.productivity",
+      "icon": "assets/icon.png"
+    },
+    "linux": {
+      "target": "AppImage",
+      "category": "Office",
+      "icon": "assets/icon.png"
+    },
+    "nsis": {
+      "oneClick": false,
+      "allowToChangeInstallationDirectory": true,
+      "createDesktopShortcut": true
+    }
   }
 }

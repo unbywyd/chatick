@@ -1,20 +1,53 @@
 # @chatick/desktop
 
-Electron-обёртка над `@chatick/app`.
+Десктопная оболочка Chatick (SPEC §8.33): трей, системные уведомления, бейдж
+непрочитанных, глобальные горячие клавиши.
 
-## Dev
+## Откуда берётся интерфейс
+
+По умолчанию окно грузит **app.chatick.com**. Причина: темп правок высокий, а
+вшитая сборка означала бы переустановку у всех ради каждой мелочи. Офлайна это
+не отнимает — Chatick и так не работает без сети; вместо белого листа при обрыве
+показывается `offline.html` с кнопкой повтора.
+
+Переключить на вшитые файлы — `LOAD_MODE = 'bundled'` в `main.cjs`, плюс
+`pnpm sync-web` перед упаковкой.
+
+## Разработка
 
 ```bash
-pnpm app dev        # поднять vite на :5173
-pnpm desktop dev    # electron грузит localhost:5173
+pnpm --filter @chatick/app dev        # vite на :5173
+pnpm --filter @chatick/desktop dev    # electron грузит localhost:5173
 ```
+
+Открыть прод-версию локально: `pnpm --filter @chatick/desktop start`.
+
+Другой адрес: `CHATICK_URL=http://localhost:5173 pnpm --filter @chatick/desktop start`.
+
+> **Если `require('electron')` возвращает строку с путём вместо API** — в
+> окружении выставлена `ELECTRON_RUN_AS_NODE=1`. Она заставляет `electron.exe`
+> работать чистым Node: без окон, без `app`, без `ipcMain`. Такое бывает, когда
+> запуск идёт из другого Electron-приложения (например, из терминала IDE).
+> Снимите переменную: `unset ELECTRON_RUN_AS_NODE`.
+
+## Что умеет
+
+| | |
+|---|---|
+| Трей | иконка меняется, когда идёт таймер; в меню — старт/стоп, автозапуск, выход |
+| Уведомления | системные, из тех же данных, что в колокольчике; клик открывает нужное место |
+| Бейдж | число непрочитанных на иконке (macOS) или наложением (Windows) |
+| Горячие клавиши | `Ctrl/Cmd+Shift+T` — таймер, `Ctrl/Cmd+Shift+C` — окно |
+| Закрытие окна | сворачивает в трей: таймер идёт, уведомления приходят |
+
+Главный процесс **не ходит в API**: он не знает про токены и права. Всё, что
+показывается в трее и бейдже, присылает веб через `preload.cjs`.
 
 ## Упаковка
 
 ```bash
-pnpm app build                          # собрать веб-приложение
-# скопировать apps/app/dist → apps/desktop/web
-pnpm desktop dist                       # electron-builder → release/
+pnpm --filter @chatick/desktop dist   # electron-builder -> release/
 ```
 
-Сборка `@chatick/app` использует `base: './'` и HashRouter — работает из `file://` без сервера.
+Цели: NSIS (Windows), DMG (macOS), AppImage (Linux). Иконки — `assets/`,
+генерируются из `apps/app/public/logo-small.png`.
