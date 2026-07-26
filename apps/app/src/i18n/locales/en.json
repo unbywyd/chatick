@@ -940,7 +940,8 @@
     "exportDaily": "Day by day",
     "daysWorked": "{{count}} days worked",
     "avgPerDay": "avg/day",
-    "exportPerson": "Export this person"
+    "exportPerson": "Export this person",
+    "onlyMine": "Only mine"
   },
   "period": {
     "today": "Today",

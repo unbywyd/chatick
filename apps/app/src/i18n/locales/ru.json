@@ -942,7 +942,8 @@
     "exportDaily": "По дням",
     "daysWorked": "рабочих дней: {{count}}",
     "avgPerDay": "в среднем в день",
-    "exportPerson": "Выгрузить по этому человеку"
+    "exportPerson": "Выгрузить по этому человеку",
+    "onlyMine": "Только мои"
   },
   "period": {
     "today": "Сегодня",

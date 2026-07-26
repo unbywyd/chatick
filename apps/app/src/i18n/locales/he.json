@@ -940,7 +940,8 @@
     "exportDaily": "יום אחר יום",
     "daysWorked": "ימי עבודה: {{count}}",
     "avgPerDay": "ממוצע ליום",
-    "exportPerson": "ייצוא עבור אדם זה"
+    "exportPerson": "ייצוא עבור אדם זה",
+    "onlyMine": "שלי בלבד"
   },
   "period": {
     "today": "היום",

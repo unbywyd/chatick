@@ -2,7 +2,7 @@ import { useMemo, useState } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { useTranslation } from 'react-i18next'
 import { toast } from 'sonner'
-import { BarChart3, CalendarRange, Clock, Download, Plus, Search, Trash2, X } from 'lucide-react'
+import { BarChart3, CalendarRange, Clock, Download, Plus, Search, Trash2, User, X } from 'lucide-react'
 import { api } from '@/lib/api'
 import { cn } from '@/lib/utils'
 import { Avatar } from '@/components/ui/avatar'
@@ -156,6 +156,7 @@ function WeekView({ projectId, weekStart }: { projectId: string; weekStart: numb
 
 function HistoryView({ projectId, weekStart }: { projectId: string; weekStart: number }) {
   const { t } = useTranslation()
+  const me = useQuery({ queryKey: ['me'], queryFn: () => api<{ id: string }>('/api/v1/auth/me') })
   const [period, setPeriod] = useState<Period>(() => resolvePreset('thisMonth', weekStart))
   const [userId, setUserId] = useState('')
   const [q, setQ] = useState('')
@@ -217,12 +218,28 @@ function HistoryView({ projectId, weekStart }: { projectId: string; weekStart: n
 
   return (
     <div className="space-y-3">
-      <div className="flex flex-wrap items-end gap-2">
+      {/* Панель липкая: список записей за месяц длинный, а период и итог
+          сверяют постоянно. Отрицательные отступы гасят паддинг страницы. */}
+      <div className="sticky -top-6 z-10 -mx-6 -mt-4 flex flex-wrap items-end gap-2 border-b bg-background px-6 pb-3 pt-4">
         <div className="relative min-w-40 flex-1">
           <Search className="pointer-events-none absolute start-2.5 top-1/2 size-3.5 -translate-y-1/2 text-muted-foreground" />
           <Input value={q} onChange={(e) => setQ(e.target.value)} placeholder={t('time.searchPlaceholder')} className="h-9 ps-8" />
         </div>
         <PeriodPicker value={period} onChange={setPeriod} weekStart={weekStart} className="w-48" />
+        {/* «Мои» — самый частый выбор, а в выпадающем списке из десяти имён
+            его ещё нужно найти. Отдельной кнопкой. */}
+        {me.data && (
+          <button
+            onClick={() => setUserId((cur) => (cur === me.data!.id ? '' : me.data!.id))}
+            className={cn(
+              'inline-flex h-9 shrink-0 items-center gap-1.5 rounded-full border px-3 text-xs transition-colors',
+              userId === me.data.id ? 'border-brand bg-brand/10 text-foreground' : 'text-muted-foreground hover:bg-accent',
+            )}
+          >
+            <User className="size-3.5" />
+            {t('time.onlyMine')}
+          </button>
+        )}
         <Select value={userId || 'all'} onValueChange={(v) => setUserId(v === 'all' ? '' : v)}>
           <SelectTrigger className="w-auto min-w-36">
             <SelectValue />
