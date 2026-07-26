@@ -3,6 +3,7 @@ import { zValidator } from '@hono/zod-validator'
 import { z } from 'zod'
 import { and, eq, inArray, isNull, sql } from 'drizzle-orm'
 import { nanoid } from 'nanoid'
+import sharp from 'sharp'
 import { db } from '../db/client.js'
 import { companies, companyMembers, messages, notifications, projects, projectMembers, projectStorage, tasks, users } from '../db/schema.js'
 import { encrypt } from '../lib/crypto.js'
@@ -10,6 +11,7 @@ import { PutObjectCommand, DeleteObjectCommand, S3Client } from '@aws-sdk/client
 import { requireSession, requireProject, signProjectToken, type SessionEnv, type ProjectEnv } from '../auth.js'
 import { sendAddedToProjectMail, sendRemovedFromProjectMail } from '../lib/mails.js'
 import { companyLlm } from '../lib/llm.js'
+import { s3Client, s3Bucket, getObjectStream, S3_KEY_PREFIX } from '../lib/s3.js'
 
 export const projectsRoute = new Hono<SessionEnv>()
 projectsRoute.use('*', requireSession)
@@ -34,6 +36,23 @@ const aiConfigSchema = z.object({
 // SPEC §4.3 / §8: доменная модель прав. Каждый домен получает УРОВЕНЬ доступа,
 // а конкретные булевы действия (tasks.create и т.п.) выводятся из уровня.
 // Это питает и ручной CRUD, и ИИ-инструменты (Фаза 10) — единая проверка.
+/**
+ * Палитра для случайного цвета нового проекта. Тона подобраны так, чтобы белая
+ * буква на них читалась и в светлой, и в тёмной теме.
+ */
+export const PROJECT_COLORS = [
+  '#6366f1', // indigo
+  '#0ea5e9', // sky
+  '#14b8a6', // teal
+  '#22c55e', // green
+  '#eab308', // yellow
+  '#f97316', // orange
+  '#ef4444', // red
+  '#ec4899', // pink
+  '#a855f7', // purple
+  '#64748b', // slate
+] as const
+
 export const PERMISSION_DOMAINS = ['tasks', 'files', 'resources', 'documents', 'notes'] as const
 export type PermissionDomain = (typeof PERMISSION_DOMAINS)[number]
 
@@ -290,6 +309,8 @@ projectsRoute.get('/', zValidator('query', z.object({ companyId: z.string().min(
       name: p.name,
       slug: p.slug,
       about: p.about,
+      color: p.color,
+      logoUrl: p.logoUrl,
       chatRules: p.chatRules,
       isMember: myByProject.has(p.id),
       myRole: myByProject.get(p.id)?.role ?? null,
@@ -334,7 +355,17 @@ projectsRoute.post(
     const slug = `${name.toLowerCase().replace(/[^a-z0-9а-яё]+/gi, '-').replace(/^-+|-+$/g, '').slice(0, 40) || 'project'}-${nanoid(6)}`
     const [project] = await db
       .insert(projects)
-      .values({ companyId, name, about, slug, chatRules, aiConfig: JSON.stringify(aiConfig) })
+      .values({
+        companyId,
+        name,
+        about,
+        slug,
+        chatRules,
+        aiConfig: JSON.stringify(aiConfig),
+        // цвет раздаём сразу: в свёрнутом сайдбаре проекты различают по нему,
+        // и заставлять человека выбирать его вручную незачем
+        color: PROJECT_COLORS[Math.floor(Math.random() * PROJECT_COLORS.length)]!,
+      })
       .returning()
     await db.insert(projectMembers).values({
       projectId: project!.id,
@@ -384,6 +415,7 @@ projectsRoute.patch(
       about: z.string().max(5000).optional(),
       aiConfig: aiConfigSchema.partial().optional(),
       chatRules: z.string().max(CHAT_RULES_MAX).optional(),
+      color: z.string().regex(/^#[0-9a-fA-F]{6}$/).optional(),
       storageLimit: z.number().int().min(0).nullable().optional(), // байты; null = наследовать компанию, 0 = без override (безлимит в рамках компании)
     }),
   ),
@@ -398,11 +430,12 @@ projectsRoute.patch(
     const allowed = membership?.role === 'owner' || membership?.role === 'admin' || companyRole === 'admin'
     if (!allowed) return c.json({ error: 'Forbidden' }, 403)
 
-    const { name, about, aiConfig, chatRules, storageLimit } = c.req.valid('json')
+    const { name, about, aiConfig, chatRules, color, storageLimit } = c.req.valid('json')
     const patch: Record<string, unknown> = {}
     if (name !== undefined) patch.name = name
     if (about !== undefined) patch.about = about
     if (chatRules !== undefined) patch.chatRules = chatRules
+    if (color !== undefined) patch.color = color
     if (storageLimit !== undefined) patch.storageLimit = storageLimit === null ? null : String(storageLimit)
     if (aiConfig !== undefined) {
       const current = JSON.parse(project.aiConfig || '{}')
@@ -413,6 +446,76 @@ projectsRoute.patch(
     return c.json({ ...updated, aiConfig: JSON.parse(updated!.aiConfig || '{}') })
   },
 )
+
+// POST /:projectId/logo — логотип проекта (webp, приватный бакет; раздаём
+// через GET /:projectId/logo). В свёрнутом сайдбаре он заменяет букву.
+projectsRoute.post('/:projectId/logo', async (c) => {
+  const { sub } = c.get('session')
+  const projectId = c.req.param('projectId')
+  const project = await db.query.projects.findFirst({ where: eq(projects.id, projectId) })
+  if (!project) return c.json({ error: 'Not found' }, 404)
+
+  const membership = await projectRoleOf(projectId, sub)
+  const companyRole = await companyRoleOf(project.companyId, sub)
+  if (!(membership?.role === 'owner' || membership?.role === 'admin' || companyRole === 'admin')) {
+    return c.json({ error: 'Forbidden' }, 403)
+  }
+
+  const body = await c.req.parseBody()
+  const file = body['file']
+  if (!(file instanceof File)) return c.json({ error: 'file field is required' }, 400)
+  if (file.size > 5 * 1024 * 1024) return c.json({ error: 'File too large (max 5MB)' }, 413)
+
+  try {
+    const buffer = await sharp(Buffer.from(await file.arrayBuffer()), { failOn: 'none' })
+      .rotate()
+      .resize(256, 256, { fit: 'cover' })
+      .webp({ quality: 85 })
+      .toBuffer()
+    const key = `${S3_KEY_PREFIX}/project-logos/${projectId}-${nanoid(6)}.webp`
+    await s3Client().send(new PutObjectCommand({ Bucket: s3Bucket(), Key: key, Body: buffer, ContentType: 'image/webp' }))
+    // версия в URL, чтобы кэш не отдавал старый логотип после замены
+    const url = `${process.env.API_PUBLIC_URL || 'https://api.chatick.com'}/api/v1/projects/${projectId}/logo?v=${Date.now()}`
+    await db.update(projects).set({ logoUrl: url, logoKey: key }).where(eq(projects.id, projectId))
+    return c.json({ logoUrl: url })
+  } catch (e) {
+    console.error('[project logo] upload failed:', e)
+    return c.json({ error: 'Failed to process image' }, 500)
+  }
+})
+
+// Отдача логотипа. Публично по id: логотип не секрет, а требовать токен —
+// значит не показать его в <img> без ухищрений.
+projectsRoute.get('/:projectId/logo', async (c) => {
+  const project = await db.query.projects.findFirst({ where: eq(projects.id, c.req.param('projectId')) })
+  if (!project?.logoKey) return c.json({ error: 'Not found' }, 404)
+  try {
+    const { body, contentType } = await getObjectStream(
+      { client: s3Client(), bucket: s3Bucket(), keyPrefix: S3_KEY_PREFIX, isCustom: false, publicUrl: null },
+      project.logoKey,
+    )
+    c.header('Content-Type', contentType || 'image/webp')
+    c.header('Cache-Control', 'public, max-age=86400')
+    const { Readable } = await import('node:stream')
+    return c.body(Readable.toWeb(body) as ReadableStream)
+  } catch {
+    return c.json({ error: 'Not found' }, 404)
+  }
+})
+
+projectsRoute.delete('/:projectId/logo', async (c) => {
+  const { sub } = c.get('session')
+  const projectId = c.req.param('projectId')
+  const project = await db.query.projects.findFirst({ where: eq(projects.id, projectId) })
+  if (!project) return c.json({ error: 'Not found' }, 404)
+  const membership = await projectRoleOf(projectId, sub)
+  const companyRole = await companyRoleOf(project.companyId, sub)
+  if (!(membership?.role === 'owner' || membership?.role === 'admin' || companyRole === 'admin')) {
+    return c.json({ error: 'Forbidden' }, 403)
+  }
+  await db.update(projects).set({ logoUrl: null, logoKey: null }).where(eq(projects.id, projectId))
+  return c.json({ ok: true })
+})
 
 // Участники проекта
 projectsRoute.get('/:projectId/members', async (c) => {

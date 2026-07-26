@@ -1,8 +1,9 @@
-import { useState } from 'react'
+import { useRef, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { Eye, MessageCircleQuestion, ShieldCheck, ChevronDown } from 'lucide-react'
 import { Switch } from '@/components/ui/switch'
 import { Input } from '@/components/ui/input'
+import { ProjectBadge } from '@/components/ui/project-badge'
 import { Button } from '@/components/ui/button'
 import {
   DropdownMenu,
@@ -40,10 +41,19 @@ export const DEFAULT_AI_CONFIG: AiConfig = {
 export type ProjectSettings = {
   name: string
   about: string
+  /** цвет значка проекта; при создании раздаётся случайный */
+  color?: string
+  logoUrl?: string | null
   chatRules: string
   aiConfig: AiConfig
   storageLimit?: number | null // байты; null = наследовать компанию; число = override
 }
+
+// Та же палитра, что раздаёт сервер новому проекту (routes/projects.ts).
+const PROJECT_COLORS = [
+  '#6366f1', '#0ea5e9', '#14b8a6', '#22c55e', '#eab308',
+  '#f97316', '#ef4444', '#ec4899', '#a855f7', '#64748b',
+] as const
 
 const GB = 1024 * 1024 * 1024
 const STORAGE_OPTIONS = [1, 2, 5, 10, 50] as const // GB
@@ -68,13 +78,20 @@ export function ProjectSettingsForm({
   value,
   onChange,
   showName = true,
+  onLogoUpload,
+  onLogoRemove,
 }: {
   value: ProjectSettings
   onChange: (v: ProjectSettings) => void
   showName?: boolean
+  // загрузка логотипа возможна только у существующего проекта: файл кладётся
+  // сразу, поэтому в форме создания эти обработчики не передаются
+  onLogoUpload?: (file: File) => void
+  onLogoRemove?: () => void
 }) {
   const { t } = useTranslation()
   const [tab, setTab] = useState<FormTab>('general')
+  const logoInput = useRef<HTMLInputElement>(null)
   const set = <K extends keyof ProjectSettings>(k: K, v: ProjectSettings[K]) => onChange({ ...value, [k]: v })
   const setAi = <K extends keyof AiConfig>(k: K, v: AiConfig[K]) =>
     onChange({ ...value, aiConfig: { ...value.aiConfig, [k]: v } })
@@ -107,6 +124,63 @@ export function ProjectSettingsForm({
               <Input value={value.name} onChange={(e) => set('name', e.target.value)} placeholder={t('start.projectName')} />
             </Field>
           )}
+          {/* Значок проекта: в свёрнутом сайдбаре только он и виден */}
+          <div className="flex items-start justify-between gap-4">
+            <div className="min-w-0">
+              <p className="text-sm font-medium">{t('projectForm.badge')}</p>
+              <p className="text-xs text-muted-foreground">{t('projectForm.badgeHint')}</p>
+              <div className="mt-2 flex flex-wrap gap-1.5">
+                {PROJECT_COLORS.map((c) => (
+                  <button
+                    key={c}
+                    type="button"
+                    onClick={() => set('color', c)}
+                    style={{ backgroundColor: c }}
+                    className={cn(
+                      'size-6 rounded-md transition-transform',
+                      (value.color ?? PROJECT_COLORS[0]) === c ? 'scale-110 ring-2 ring-foreground ring-offset-2 ring-offset-background' : 'hover:scale-105',
+                    )}
+                    aria-label={c}
+                  />
+                ))}
+              </div>
+            </div>
+            <div className="flex shrink-0 flex-col items-center gap-1.5">
+              <ProjectBadge name={value.name || '?'} color={value.color} logoUrl={value.logoUrl} size={56} />
+              {onLogoUpload && (
+                <>
+                  <input
+                    ref={logoInput}
+                    type="file"
+                    accept="image/*"
+                    className="hidden"
+                    onChange={(e) => {
+                      const f = e.target.files?.[0]
+                      if (f) onLogoUpload(f)
+                      e.target.value = ''
+                    }}
+                  />
+                  <button
+                    type="button"
+                    onClick={() => logoInput.current?.click()}
+                    className="text-xs text-muted-foreground underline-offset-2 hover:underline"
+                  >
+                    {value.logoUrl ? t('projectForm.logoReplace') : t('projectForm.logoUpload')}
+                  </button>
+                  {value.logoUrl && onLogoRemove && (
+                    <button
+                      type="button"
+                      onClick={onLogoRemove}
+                      className="text-xs text-destructive underline-offset-2 hover:underline"
+                    >
+                      {t('projectForm.logoRemove')}
+                    </button>
+                  )}
+                </>
+              )}
+            </div>
+          </div>
+
           {/* Язык проекта — фундаментальное свойство: задачи, документы и чат на нём */}
           <div className="flex items-center justify-between gap-3">
             <div>

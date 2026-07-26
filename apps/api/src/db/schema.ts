@@ -119,6 +119,12 @@ export const projects = pgTable(
     name: text('name').notNull(),
     slug: text('slug').notNull().unique(),
     about: text('about').notNull().default(''), // таб «О проекте»
+    // Опознавательные знаки проекта: в свёрнутом сайдбаре видно только их.
+    // Цвет раздаётся случайно при создании — чтобы проекты различались сразу,
+    // без похода в настройки.
+    color: text('color').notNull().default('#6366f1'),
+    logoUrl: text('logo_url'),
+    logoKey: text('logo_key'),
     // --- конфиг ИИ-диспетчера (SPEC.md §4.1) ---
     // структурированные флаги/проценты храним одним JSON-полем — состав будет расти
     aiConfig: text('ai_config').notNull().default('{}'), // JSON: { strictness, allowFlood, allowJokes, allowQuestions, allowOfftopic, filters: {...} }

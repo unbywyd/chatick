@@ -96,7 +96,12 @@
     "generateTaskNotes": "Generate AI notes for tasks",
     "generateTaskNotesHint": "On task creation the AI adds facts / issues / recommendations only when genuinely useful",
     "autoPostTaskEvents": "Post task events to chat",
-    "autoPostTaskEventsHint": "When someone finishes or assigns a task, a message with a link to it is posted in the chat"
+    "autoPostTaskEventsHint": "When someone finishes or assigns a task, a message with a link to it is posted in the chat",
+    "badge": "Project badge",
+    "badgeHint": "Colour and logo identify the project when the list is collapsed to icons.",
+    "logoUpload": "Upload a logo",
+    "logoReplace": "Replace the logo",
+    "logoRemove": "Remove"
   },
   "aiMode": {
     "observer": {
@@ -798,7 +803,9 @@
     "search": "Search projects",
     "projects": "Projects",
     "newProject": "New project",
-    "companySettings": "Company"
+    "companySettings": "Company",
+    "collapse": "Collapse the list",
+    "expand": "Expand the list"
   },
   "journal": {
     "title": "Notes",

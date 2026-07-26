@@ -2,11 +2,12 @@ import { useMemo, useState } from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
 import { useQuery } from '@tanstack/react-query'
 import { useTranslation } from 'react-i18next'
-import { Building2, Plus, Search } from 'lucide-react'
+import { Building2, PanelLeftClose, PanelLeftOpen, Plus, Search } from 'lucide-react'
 import { api, type Company, type Me, type ProjectListItem } from '@/lib/api'
 import { cn } from '@/lib/utils'
 import { ProfileMenu } from '@/components/ProfileMenu'
 import { AvatarGroup } from '@/components/ui/avatar-group'
+import { ProjectBadge } from '@/components/ui/project-badge'
 import { Input } from '@/components/ui/input'
 import { Logo } from '@/components/Logo'
 
@@ -30,6 +31,15 @@ export function ProjectSidebar({ me, onPick }: { me?: Me; onPick?: () => void })
   const navigate = useNavigate()
   const { id: activeId } = useParams()
   const [q, setQ] = useState('')
+  // Свёрнутый режим: остаются только значки проектов. Выбор запоминаем —
+  // это настройка рабочего места, а не разовое действие.
+  const [collapsed, setCollapsed] = useState(() => localStorage.getItem('chatick_sidebar_collapsed') === '1')
+  const toggleCollapsed = () => {
+    setCollapsed((v) => {
+      localStorage.setItem('chatick_sidebar_collapsed', v ? '0' : '1')
+      return !v
+    })
+  }
 
   const companies = useQuery({
     queryKey: ['companies'],
@@ -61,6 +71,60 @@ export function ProjectSidebar({ me, onPick }: { me?: Me; onPick?: () => void })
     onPick?.()
   }
 
+  if (collapsed) {
+    return (
+      <div className="flex h-full w-14 flex-col border-e bg-card/40">
+        <button
+          onClick={toggleCollapsed}
+          title={t('sidebar.expand')}
+          className="grid h-12 shrink-0 place-items-center border-b text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
+        >
+          <PanelLeftOpen className="size-4 rtl:rotate-180" />
+        </button>
+
+        <ul className="min-h-0 flex-1 space-y-1 overflow-y-auto py-2">
+          {list.map((p) => {
+            const unread = p.stats?.unread ?? 0
+            const active = p.id === activeId
+            return (
+              <li key={p.id} className="flex justify-center">
+                <button
+                  onClick={() => open(p.id)}
+                  title={p.name}
+                  className={cn(
+                    'relative rounded-lg p-0.5 transition-all',
+                    active ? 'ring-2 ring-brand' : 'opacity-80 hover:opacity-100',
+                  )}
+                >
+                  <ProjectBadge name={p.name} color={p.color} logoUrl={p.logoUrl} size={38} />
+                  {/* Бейдж — только непрочитанные уведомления, то есть места,
+                      где человека затронули лично. Чужая активность сюда не
+                      попадает и попадать не должна. */}
+                  {unread > 0 && (
+                    <span className="absolute -end-1 -top-1 grid min-w-4 place-items-center rounded-full bg-brand px-1 text-[10px] font-bold text-brand-foreground ring-2 ring-card">
+                      {unread > 99 ? '99+' : unread}
+                    </span>
+                  )}
+                </button>
+              </li>
+            )
+          })}
+        </ul>
+
+        <div className="flex flex-col items-center gap-2 border-t p-2">
+          <button
+            onClick={() => navigate(`/start/${company?.id ?? ''}`)}
+            title={t('sidebar.newProject')}
+            className="grid size-8 place-items-center rounded-md text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
+          >
+            <Plus className="size-4" />
+          </button>
+          <ProfileMenu me={me} companyId={company?.id} />
+        </div>
+      </div>
+    )
+  }
+
   return (
     <div className="flex h-full min-h-0 flex-col bg-card/40">
       {/* Шапка: компания — вход в её настройки, команду, бэкап */}
@@ -73,6 +137,13 @@ export function ProjectSidebar({ me, onPick }: { me?: Me; onPick?: () => void })
         >
           <Building2 className="size-3.5 shrink-0" />
           <span className="truncate">{company?.name ?? '…'}</span>
+        </button>
+        <button
+          onClick={toggleCollapsed}
+          title={t('sidebar.collapse')}
+          className="grid size-7 shrink-0 place-items-center rounded-md text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
+        >
+          <PanelLeftClose className="size-4 rtl:rotate-180" />
         </button>
       </div>
 

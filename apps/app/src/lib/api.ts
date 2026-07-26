@@ -115,6 +115,9 @@ export type ProjectListItem = {
   name: string
   slug: string
   about: string
+  // опознавательные знаки: в свёрнутом сайдбаре видно только их
+  color?: string
+  logoUrl?: string | null
   chatRules: string
   isMember: boolean
   myRole: 'owner' | 'admin' | 'member' | null

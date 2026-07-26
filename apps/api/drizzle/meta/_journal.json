@@ -253,6 +253,13 @@
       "when": 1785057486203,
       "tag": "0035_note_task",
       "breakpoints": true
+    },
+    {
+      "idx": 36,
+      "version": "7",
+      "when": 1785058924452,
+      "tag": "0036_project_brand",
+      "breakpoints": true
     }
   ]
 }

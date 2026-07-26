@@ -96,7 +96,12 @@
     "generateTaskNotes": "יצירת הערות AI למשימות",
     "generateTaskNotesHint": "בעת יצירת משימה ה-AI מוסיף עובדות / בעיות / המלצות — רק כשזה באמת מועיל",
     "autoPostTaskEvents": "פרסום אירועי משימות בצ׳אט",
-    "autoPostTaskEventsHint": "כשמישהו מסיים או מקצה משימה, מתפרסמת הודעה עם קישור אליה"
+    "autoPostTaskEventsHint": "כשמישהו מסיים או מקצה משימה, מתפרסמת הודעה עם קישור אליה",
+    "badge": "סמל הפרויקט",
+    "badgeHint": "צבע ולוגו מבדילים בין פרויקטים כשהרשימה מכווצת לסמלים.",
+    "logoUpload": "העלאת לוגו",
+    "logoReplace": "החלפת הלוגו",
+    "logoRemove": "הסרה"
   },
   "aiMode": {
     "observer": {
@@ -798,7 +803,9 @@
     "search": "חיפוש פרויקטים",
     "projects": "פרויקטים",
     "newProject": "פרויקט חדש",
-    "companySettings": "חברה"
+    "companySettings": "חברה",
+    "collapse": "כיווץ הרשימה",
+    "expand": "הרחבת הרשימה"
   },
   "journal": {
     "title": "הערות",

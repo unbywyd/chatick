@@ -3,7 +3,7 @@ import { useMutation, useQueryClient } from '@tanstack/react-query'
 import { useTranslation } from 'react-i18next'
 import { toast } from 'sonner'
 import { Pencil, X } from 'lucide-react'
-import { api } from '@/lib/api'
+import { API_URL, getSessionToken, api } from '@/lib/api'
 import { Button } from '@/components/ui/button'
 import {
   ProjectSettingsForm,
@@ -18,6 +18,8 @@ type ProjectDetails = {
   about: string
   chatRules: string
   aiConfig: Partial<AiConfig>
+  color?: string
+  logoUrl?: string | null
   storageLimit?: string | number | null
   myRole: 'owner' | 'admin' | 'member' | null
 }
@@ -39,6 +41,38 @@ export function AboutTab({ project, loading }: { project?: ProjectDetails; loadi
     onError: (e) => toast.error(e instanceof Error ? e.message : String(e)),
   })
 
+  // Логотип кладётся сразу, отдельным запросом: это файл, а не поле формы, и
+  // ждать общего «Сохранить» ради него нет причины.
+  const uploadLogo = useMutation({
+    mutationFn: async (file: File) => {
+      const fd = new FormData()
+      fd.append('file', file)
+      const res = await fetch(`${API_URL}/api/v1/projects/${project!.id}/logo`, {
+        method: 'POST',
+        headers: { Authorization: `Bearer ${getSessionToken()}` },
+        body: fd,
+      })
+      if (!res.ok) throw new Error((await res.json().catch(() => ({}))).error ?? 'Upload failed')
+      return (await res.json()) as { logoUrl: string }
+    },
+    onSuccess: (r) => {
+      setForm((f) => (f ? { ...f, logoUrl: r.logoUrl } : f))
+      qc.invalidateQueries({ queryKey: ['project', project!.id] })
+      qc.invalidateQueries({ queryKey: ['projects'] })
+    },
+    onError: (e) => toast.error(e instanceof Error ? e.message : String(e)),
+  })
+
+  const removeLogo = useMutation({
+    mutationFn: () => api(`/api/v1/projects/${project!.id}/logo`, { method: 'DELETE' }),
+    onSuccess: () => {
+      setForm((f) => (f ? { ...f, logoUrl: null } : f))
+      qc.invalidateQueries({ queryKey: ['project', project!.id] })
+      qc.invalidateQueries({ queryKey: ['projects'] })
+    },
+    onError: (e) => toast.error(e instanceof Error ? e.message : String(e)),
+  })
+
   if (loading || !project) return <p className="p-6 text-sm text-muted-foreground">…</p>
 
   const canEdit = project.myRole === 'owner' || project.myRole === 'admin'
@@ -49,6 +83,8 @@ export function AboutTab({ project, loading }: { project?: ProjectDetails; loadi
       about: project.about,
       chatRules: project.chatRules,
       aiConfig: { ...DEFAULT_AI_CONFIG, ...project.aiConfig },
+      color: project.color,
+      logoUrl: project.logoUrl ?? null,
       storageLimit: project.storageLimit != null ? Number(project.storageLimit) : null,
     })
     setEditing(true)
@@ -63,7 +99,12 @@ export function AboutTab({ project, loading }: { project?: ProjectDetails; loadi
             <X className="size-4" />
           </Button>
         </div>
-        <ProjectSettingsForm value={form} onChange={setForm} />
+        <ProjectSettingsForm
+          value={form}
+          onChange={setForm}
+          onLogoUpload={(f) => uploadLogo.mutate(f)}
+          onLogoRemove={() => removeLogo.mutate()}
+        />
         <div className="mt-5 flex justify-end gap-2">
           <Button variant="outline" onClick={() => setEditing(false)}>
             {t('rules.decline')}
