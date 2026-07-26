@@ -36,7 +36,12 @@
         gap: 12px;
         padding: 14px 16px;
         border-bottom: 1px solid var(--line);
+        /* Полоса с таймером работает ручкой: окно без рамки иначе не сдвинуть,
+           а его позиция от значка в трее подходит не всем и не всегда. */
+        -webkit-app-region: drag;
       }
+      /* Кнопка внутри ручки должна оставаться кнопкой. */
+      .play, .timer-info { -webkit-app-region: no-drag; }
       .play {
         width: 40px; height: 40px;
         flex: 0 0 auto;
@@ -125,6 +130,23 @@
         flex: 0 0 auto; padding-top: 2px;
       }
       .empty { padding: 34px 16px; text-align: center; color: var(--muted); }
+
+      /* Активный проект: с ним работает таймер и его видит ассистент —
+         значит он должен быть виден и здесь, а не угадываться. */
+      .row.active { background: #1a1a1a; }
+      .row.active .title { color: var(--brand); }
+      .row-open {
+        flex: 0 0 auto; align-self: center;
+        border: 1px solid var(--line); border-radius: 6px;
+        background: none; color: var(--muted);
+        font: inherit; font-size: 11px; padding: 3px 8px; cursor: pointer;
+      }
+      .row-open:hover { border-color: var(--brand); color: var(--brand); }
+      .row-here {
+        flex: 0 0 auto; align-self: center;
+        font-size: 10px; color: var(--brand);
+        border: 1px solid var(--brand); border-radius: 5px; padding: 1px 6px;
+      }
 
       /* --- подключение ассистента --- */
       .connect { padding: 12px 10px; }
@@ -384,8 +406,11 @@
             return
           }
           for (const p of state.projects) {
+            const here = state.project?.id === p.id
+            // Строка выбирает проект активным (не открывая окно), кнопка
+            // справа — открывает его в приложении. Это разные намерения.
             rows.push(`
-              <button class="row" data-link="/p/${escape(p.id)}/chat">
+              <div class="row ${here ? 'active' : ''}" data-pick="${escape(p.id)}">
                 <span class="avatar" style="background:${escape(p.color || '#2a2a2a')};color:#fff">
                   ${p.logoUrl ? `<img src="${escape(p.logoUrl)}" alt="">` : escape(initials(p.name))}
                 </span>
@@ -393,7 +418,13 @@
                   <span class="title">${escape(p.name)}</span>
                   <span class="sub">${p.unread ? `${p.unread} ${T('unreadOne', 'unread')}` : T('allRead', 'all read')}</span>
                 </span>
-              </button>`)
+                ${
+                  here
+                    ? `<span class="row-here">${T('projectHere', 'active')}</span>`
+                    : ''
+                }
+                <button class="row-open" data-link="/p/${escape(p.id)}/chat">${T('projectOpen', 'Open')}</button>
+              </div>`)
           }
         }
 
@@ -625,6 +656,17 @@
       })
 
       $('list').onclick = (e) => {
+        // Кнопка «Открыть» — в приложение; сама строка — сделать активным.
+        const open = e.target.closest('[data-link]')
+        if (open) {
+          window.panel.open(open.dataset.link)
+          return
+        }
+        const pick = e.target.closest('[data-pick]')
+        if (pick) {
+          window.panel.setProject(pick.dataset.pick)
+          return
+        }
         const row = e.target.closest('.row')
         if (row?.dataset.link) window.panel.open(row.dataset.link)
       }

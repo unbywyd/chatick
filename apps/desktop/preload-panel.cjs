@@ -20,6 +20,8 @@ contextBridge.exposeInMainWorld('panel', {
   revokeConnection: (id) => ipcRenderer.send('panel:revoke-connection', id),
   /** Вкладку «Доступ» открыли — самое время обновить список подключений. */
   refreshConnections: () => ipcRenderer.send('panel:refresh-connections'),
+  /** Сделать проект активным, не открывая окно приложения. */
+  setProject: (id) => ipcRenderer.send('panel:set-project', id),
   onConnect: (fn) => {
     const handler = (_e, payload) => fn(payload)
     ipcRenderer.on('panel:connect', handler)

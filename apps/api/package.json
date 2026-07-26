@@ -12,7 +12,8 @@
     "db:migrate": "tsx src/db/migrate.ts",
     "db:push": "drizzle-kit push",
     "db:studio": "drizzle-kit studio",
-    "db:seed-demo": "tsx src/db/seed-demo.ts"
+    "db:seed-demo": "tsx src/db/seed-demo.ts",
+    "db:seed-inbox": "tsx src/db/seed-inbox.ts"
   },
   "dependencies": {
     "@aws-sdk/client-s3": "^3.1093.0",

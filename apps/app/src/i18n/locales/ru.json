@@ -1012,6 +1012,8 @@
     "connectWholeCompany": "вся компания",
     "connectActive": "Действующие подключения",
     "connectRevoke": "Закрыть",
-    "connectRevoked": "Подключение закрыто"
+    "connectRevoked": "Подключение закрыто",
+    "projectOpen": "Открыть",
+    "projectHere": "активен"
   }
 }

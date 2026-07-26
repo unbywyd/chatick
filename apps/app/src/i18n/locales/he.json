@@ -1010,6 +1010,8 @@
     "connectWholeCompany": "כל החברה",
     "connectActive": "חיבורים פעילים",
     "connectRevoke": "לסגור",
-    "connectRevoked": "החיבור נסגר"
+    "connectRevoked": "החיבור נסגר",
+    "projectOpen": "פתיחה",
+    "projectHere": "פעיל"
   }
 }

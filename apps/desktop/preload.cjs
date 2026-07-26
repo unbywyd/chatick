@@ -47,6 +47,11 @@ contextBridge.exposeInMainWorld('chatickDesktop', {
     ipcRenderer.on('connect:approve', handler)
     return () => ipcRenderer.off('connect:approve', handler)
   },
+  onSetProject: (fn) => {
+    const handler = (_e, id) => fn(id)
+    ipcRenderer.on('project:set', handler)
+    return () => ipcRenderer.off('project:set', handler)
+  },
   onConnectRefresh: (fn) => {
     const handler = () => fn()
     ipcRenderer.on('connect:refresh', handler)

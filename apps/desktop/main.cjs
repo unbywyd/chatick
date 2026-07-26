@@ -18,6 +18,8 @@ const APP_URL = process.env.CHATICK_URL || 'https://app.chatick.com'
 let win = null
 let tray = null
 let quitting = false
+/** Куда человек перетащил панель; null — держимся значка в трее. */
+let panelPos = null
 
 // Состояние, которое присылает веб. Главный процесс не ходит в API сам: он
 // ничего не знает про токены и права, и знать не должен.
@@ -131,24 +133,14 @@ function trayTooltip() {
 }
 
 function buildTrayMenu() {
-  // Всё содержательное живёт в панели; правой кнопкой — только то, что панели
-  // не идёт: автозапуск и выход.
+  // Всё содержательное живёт в панели, включая таймер; правой кнопкой — только
+  // то, чему в панели места нет: автозапуск и выход.
   return Menu.buildFromTemplate([
     {
       label: state.authed ? tr('openApp', 'Open Chatick') : tr('signIn', 'Sign in'),
       click: showWindow,
     },
     { type: 'separator' },
-    // Таймером до входа управлять нечем — пункт только сбивал бы с толку.
-    ...(state.authed
-      ? [
-          {
-            label: state.timer ? tr('stop', 'Stop timer') : tr('start', 'Start timer'),
-            click: () => send('timer:toggle'),
-          },
-          { type: 'separator' },
-        ]
-      : []),
     {
       label: tr('launchAtLogin', 'Launch at login'),
       type: 'checkbox',
@@ -246,6 +238,14 @@ function createPanel() {
 
   panel.loadFile(path.join(__dirname, 'panel.html'))
 
+  // Перетащили — запоминаем. Событие приходит и при нашем setPosition,
+  // поэтому пишем только когда панель видима и двигал её человек.
+  panel.on('moved', () => {
+    if (!panel?.isVisible()) return
+    const [x, y] = panel.getPosition()
+    panelPos = { x, y }
+  })
+
   // Панель закрывается только руками — кнопкой «Закрыть» или значком в трее.
   // Закрытие по клику мимо (как у меню в трее) здесь мешает: в панель ходят
   // с кодом или задачей из другого окна, и она захлопывалась на полпути.
@@ -255,6 +255,16 @@ function createPanel() {
 function togglePanel() {
   if (!panel) createPanel()
   if (panel.isVisible()) return panel.hide()
+
+  // Панель сдвинули руками — уважаем это: возвращать её к значку значит
+  // отменять решение человека при каждом открытии.
+  if (panelPos) {
+    panel.setPosition(panelPos.x, panelPos.y)
+    panel.webContents.send('panel:state', state)
+    panel.show()
+    panel.focus()
+    return
+  }
 
   const { screen } = require('electron')
   const iconBounds = tray.getBounds()
@@ -359,6 +369,9 @@ function registerIpc() {
   ipcMain.on('panel:check-code', (_e, code) => send('connect:check', code))
   ipcMain.on('panel:approve-code', (_e, payload) => send('connect:approve', payload))
   ipcMain.on('panel:refresh-connections', () => send('connect:refresh'))
+  // Выбор проекта из панели: окно не показываем — человек остался в панели
+  // намеренно, а веб просто переходит на нужный проект в фоне.
+  ipcMain.on('panel:set-project', (_e, id) => send('project:set', id))
   ipcMain.on('panel:revoke-connection', (_e, id) => send('connect:revoke', id))
   ipcMain.on('connect:result', (_e, payload) => panel?.webContents.send('panel:connect', payload))
 }

@@ -24,6 +24,7 @@ type DesktopBridge = {
   connectResult: (payload: ConnectResult) => void
   onConnectCheck: (fn: (code: string) => void) => () => void
   onConnectApprove: (fn: (p: { code: string; projectId?: string; companyId?: string }) => void) => () => void
+  onSetProject: (fn: (id: string) => void) => () => void
   onConnectRefresh: (fn: () => void) => () => void
   onConnectRevoke: (fn: (id: string) => void) => () => void
 }
@@ -277,6 +278,8 @@ export function useDesktopSync() {
         tabTasks: t('desktop.tabTasks'),
         tabProjects: t('desktop.tabProjects'),
         tabConnect: t('desktop.tabConnect'),
+        projectOpen: t('desktop.projectOpen'),
+        projectHere: t('desktop.projectHere'),
         connectHint: t('desktop.connectHint'),
         connectActsAsYou: t('desktop.connectActsAsYou'),
         connectProject: t('desktop.connectProject'),
@@ -392,6 +395,12 @@ export function useDesktopSync() {
       }
     })
 
+    // Проект выбрали из панели: переходим в него, но окно не поднимаем —
+    // человек остался в панели намеренно.
+    const offSetProject = bridge.onSetProject((id) => {
+      if (id) navigate(`/p/${id}/chat`)
+    })
+
     // Вкладку открыли — обновляем немедленно: минутный опрос показывал бы
     // вчерашнюю картину как раз тогда, когда на неё смотрят.
     const offRefresh = bridge.onConnectRefresh(() => {
@@ -415,6 +424,7 @@ export function useDesktopSync() {
       offTimer()
       offCheck()
       offApprove()
+      offSetProject()
       offRefresh()
       offRevoke()
     }

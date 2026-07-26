@@ -1010,6 +1010,8 @@
     "connectWholeCompany": "whole company",
     "connectActive": "Active connections",
     "connectRevoke": "Revoke",
-    "connectRevoked": "Connection closed"
+    "connectRevoked": "Connection closed",
+    "projectOpen": "Open",
+    "projectHere": "active"
   }
 }
