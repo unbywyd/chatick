@@ -260,6 +260,20 @@
       "when": 1785058924452,
       "tag": "0036_project_brand",
       "breakpoints": true
+    },
+    {
+      "idx": 37,
+      "version": "7",
+      "when": 1785066247169,
+      "tag": "0037_time_tracking",
+      "breakpoints": true
+    },
+    {
+      "idx": 38,
+      "version": "7",
+      "when": 1785066485112,
+      "tag": "0038_timer_event",
+      "breakpoints": true
     }
   ]
 }

@@ -68,7 +68,8 @@
     "tabs": {
       "general": "General",
       "ai": "AI",
-      "rules": "Rules"
+      "rules": "Rules",
+      "time": "Time"
     },
     "improveTasks": "Improve tasks with AI",
     "improveTasksHint": "New tasks are translated into the project language and lightly polished — meaning unchanged",
@@ -643,7 +644,9 @@
     "photoUpdated": "Photo updated",
     "changePhoto": "Change photo",
     "logout": "Sign out",
-    "logoutConfirm": "Sign out of your account?"
+    "logoutConfirm": "Sign out of your account?",
+    "projectSettings": "Project settings",
+    "projectTeam": "Project team"
   },
   "projSwitch": {
     "search": "Search projects…",
@@ -866,5 +869,53 @@
     "search": "Search by name",
     "noMatches": "Nobody found",
     "allPicked": "Everyone is already added"
+  },
+  "time": {
+    "title": "Time",
+    "start": "Start a timer",
+    "stop": "Stop the timer",
+    "openPage": "Open time tracking",
+    "startedAt": "Started at",
+    "noTask": "No task",
+    "subtitle": "Timers, history and statistics for this project",
+    "tab": {
+      "week": "This week",
+      "history": "History",
+      "stats": "Statistics"
+    },
+    "weekHint": "Entries from Monday, newest first.",
+    "addManual": "Add an entry",
+    "empty": "Nothing tracked yet",
+    "running": "running",
+    "total": "Total",
+    "export": "Export CSV",
+    "nothingToExport": "Nothing to export for this period",
+    "searchPlaceholder": "Search in descriptions",
+    "everyone": "Everyone",
+    "period": {
+      "week": "Week",
+      "month": "Month",
+      "quarter": "3 months",
+      "halfYear": "6 months",
+      "year": "Year"
+    },
+    "byDay": "By day",
+    "byPerson": "By person",
+    "byTask": "By task",
+    "withoutTask": "Without a task",
+    "noData": "No data for this period",
+    "descriptionPlaceholder": "What are you working on?",
+    "deleteConfirm": "Delete this time entry?",
+    "autoStopped": "auto-stopped",
+    "autoStoppedHint": "The timer hit the project limit and was stopped automatically — check the time.",
+    "nextDay": "ended the next day",
+    "badTime": "Could not read the time. Try 9, 930 or 9:30.",
+    "maxTimers": "Parallel timers",
+    "maxTimersHint": "How many timers one person may run at once.",
+    "idleAction": "A timer left running",
+    "idleRemind": "Remind",
+    "idleStop": "Stop it",
+    "idleHours": "After (hours)",
+    "repeatHours": "Repeat every (hours)"
   }
 }

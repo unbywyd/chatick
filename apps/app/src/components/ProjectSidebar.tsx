@@ -9,6 +9,7 @@ import { api, type Company, type Me, type ProjectListItem } from '@/lib/api'
 import { cn } from '@/lib/utils'
 import { ProfileMenu } from '@/components/ProfileMenu'
 import { NotificationBell } from '@/components/NotificationBell'
+import { TimerControl } from '@/components/time/TimerControl'
 import { ProjectBadge } from '@/components/ui/project-badge'
 import { Input } from '@/components/ui/input'
 import { Logo } from '@/components/Logo'
@@ -84,6 +85,14 @@ export function ProjectSidebar({ me, onPick }: { me?: Me; onPick?: () => void })
         >
           <PanelLeftOpen className="size-4 rtl:rotate-180" />
         </button>
+
+        {/* таймер виден всегда: запустить и остановить нужно чаще, чем что-либо
+            ещё в сайдбаре */}
+        {activeId && (
+          <div className="flex justify-center border-b py-2">
+            <TimerControl collapsed />
+          </div>
+        )}
 
         <ul className="min-h-0 flex-1 space-y-1 overflow-y-auto py-2">
           {list.map((p) => {
@@ -164,6 +173,12 @@ export function ProjectSidebar({ me, onPick }: { me?: Me; onPick?: () => void })
           />
         </div>
       </div>
+
+      {activeId && (
+        <div className="border-b px-2 pb-2">
+          <TimerControl collapsed={false} />
+        </div>
+      )}
 
       <ul className="min-h-0 flex-1 overflow-y-auto px-1 pb-2">
         {projects.isLoading && <p className="px-3 py-2 text-sm text-muted-foreground">…</p>}

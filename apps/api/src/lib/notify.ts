@@ -17,6 +17,7 @@ export type NotificationEvent =
   | 'task_comment'
   | 'note_mention'
   | 'note_reminder'
+  | 'timer_running'
 
 /** Извлекает id упомянутых пользователей из разметки `@[Label](id)`. */
 export function extractMentions(text: string): string[] {
@@ -42,6 +43,7 @@ const STR: Record<Lang, Record<string, string>> = {
     task_comment: '{actor} commented on {ref} in {project}',
     note_mention: '{actor} mentioned you in a note in {project}',
     note_reminder: 'Reminder from {project}',
+    timer_running: 'Your timer in {project} has been running for {hours}h',
     open: 'Open',
     footer: 'You can manage notifications in your project settings.',
   },
@@ -54,6 +56,7 @@ const STR: Record<Lang, Record<string, string>> = {
     task_comment: '{actor} прокомментировал(а) {ref} в проекте «{project}»',
     note_mention: '{actor} упомянул(а) вас в заметке в проекте «{project}»',
     note_reminder: 'Напоминание из проекта «{project}»',
+    timer_running: 'Таймер в проекте «{project}» идёт уже {hours} ч',
     open: 'Открыть',
     footer: 'Управлять уведомлениями можно в настройках проекта.',
   },
@@ -66,6 +69,7 @@ const STR: Record<Lang, Record<string, string>> = {
     task_comment: '{actor} הגיב/ה על {ref} בפרויקט «{project}»',
     note_mention: '{actor} הזכיר/ה אותך בהערה בפרויקט «{project}»',
     note_reminder: 'תזכורת מפרויקט «{project}»',
+    timer_running: 'הטיימר בפרויקט «{project}» פועל כבר {hours} שעות',
     open: 'פתח',
     footer: 'ניתן לנהל התראות בהגדרות הפרויקט.',
   },
@@ -139,7 +143,7 @@ type NotifyParams = {
   /** доп. переменные для шаблона: ref, status */
   vars?: Record<string, string>
   /** на какую сущность ведёт уведомление (для иконки/навигации) */
-  entityType?: 'task' | 'message' | 'comment' | 'note'
+  entityType?: 'task' | 'message' | 'comment' | 'note' | 'time'
   entityId?: string
 }
 

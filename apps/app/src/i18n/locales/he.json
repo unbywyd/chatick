@@ -68,7 +68,8 @@
     "tabs": {
       "general": "כללי",
       "ai": "AI",
-      "rules": "כללים"
+      "rules": "כללים",
+      "time": "זמן"
     },
     "improveTasks": "לשפר משימות עם AI",
     "improveTasksHint": "משימות חדשות מתורגמות לשפת הפרויקט ומלוטשות קלות — המשמעות לא משתנה",
@@ -643,7 +644,9 @@
     "photoUpdated": "התמונה עודכנה",
     "changePhoto": "החלפת תמונה",
     "logout": "התנתקות",
-    "logoutConfirm": "להתנתק מהחשבון?"
+    "logoutConfirm": "להתנתק מהחשבון?",
+    "projectSettings": "הגדרות הפרויקט",
+    "projectTeam": "צוות הפרויקט"
   },
   "projSwitch": {
     "search": "חיפוש פרויקטים…",
@@ -866,5 +869,53 @@
     "search": "חיפוש לפי שם",
     "noMatches": "לא נמצא אף אחד",
     "allPicked": "כולם כבר נוספו"
+  },
+  "time": {
+    "title": "זמן",
+    "start": "הפעלת טיימר",
+    "stop": "עצירת הטיימר",
+    "openPage": "פתיחת מעקב הזמן",
+    "startedAt": "התחלה",
+    "noTask": "ללא משימה",
+    "subtitle": "טיימרים, היסטוריה וסטטיסטיקה של הפרויקט",
+    "tab": {
+      "week": "השבוע",
+      "history": "היסטוריה",
+      "stats": "סטטיסטיקה"
+    },
+    "weekHint": "רשומות מיום שני, החדשות למעלה.",
+    "addManual": "הוספת רשומה",
+    "empty": "עדיין לא נרשם דבר",
+    "running": "פועל",
+    "total": "סה״כ",
+    "export": "ייצוא CSV",
+    "nothingToExport": "אין מה לייצא לתקופה הזו",
+    "searchPlaceholder": "חיפוש בתיאורים",
+    "everyone": "כולם",
+    "period": {
+      "week": "שבוע",
+      "month": "חודש",
+      "quarter": "3 חודשים",
+      "halfYear": "חצי שנה",
+      "year": "שנה"
+    },
+    "byDay": "לפי יום",
+    "byPerson": "לפי אדם",
+    "byTask": "לפי משימה",
+    "withoutTask": "ללא משימה",
+    "noData": "אין נתונים לתקופה הזו",
+    "descriptionPlaceholder": "על מה אתה עובד?",
+    "deleteConfirm": "למחוק את רשומת הזמן?",
+    "autoStopped": "נעצר אוטומטית",
+    "autoStoppedHint": "הטיימר הגיע למגבלת הפרויקט ונעצר אוטומטית — כדאי לבדוק את הזמן.",
+    "nextDay": "הסתיים למחרת",
+    "badTime": "לא הצלחנו לקרוא את השעה. נסו 9, 930 או 9:30.",
+    "maxTimers": "טיימרים במקביל",
+    "maxTimersHint": "כמה טיימרים אדם אחד יכול להפעיל בו-זמנית.",
+    "idleAction": "טיימר שנשכח",
+    "idleRemind": "להזכיר",
+    "idleStop": "לעצור",
+    "idleHours": "אחרי (שעות)",
+    "repeatHours": "לחזור כל (שעות)"
   }
 }

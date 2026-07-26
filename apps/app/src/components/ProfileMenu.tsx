@@ -3,7 +3,7 @@ import { useNavigate } from 'react-router-dom'
 import { useQueryClient } from '@tanstack/react-query'
 import { useTranslation } from 'react-i18next'
 import { toast } from 'sonner'
-import { Bell, Bot, Building2, Camera, Check, LogOut, Pencil, Plug, X } from 'lucide-react'
+import { Bell, Bot, Building2, Camera, Check, LogOut, Pencil, Plug, SlidersHorizontal, Users, X } from 'lucide-react'
 import { api, API_URL, getSessionToken, setSessionToken, setProjectToken, type Me } from '@/lib/api'
 import { Avatar } from '@/components/ui/avatar'
 import {
@@ -148,6 +148,21 @@ export function ProfileMenu({
         </div>
 
         <DropdownMenuSeparator />
+
+        {/* Настройки проекта и состав команды — сюда, вкладками они не были
+            нужны: в настройки заходят изредка, а команду смотрят из профиля. */}
+        {projectId && isAdmin && (
+          <DropdownMenuItem onSelect={() => navigate(`/p/${projectId}/about`)}>
+            <SlidersHorizontal className="size-4" />
+            {t('profile.projectSettings')}
+          </DropdownMenuItem>
+        )}
+        {projectId && (
+          <DropdownMenuItem onSelect={() => navigate(`/p/${projectId}/team`)}>
+            <Users className="size-4" />
+            {t('profile.projectTeam')}
+          </DropdownMenuItem>
+        )}
 
         {projectId && (
           <DropdownMenuItem onSelect={() => navigate(`/p/${projectId}/notifications`)}>

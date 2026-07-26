@@ -1,10 +1,11 @@
-import { and, asc, desc, eq, gt, gte, ilike, inArray, lte, or, sql } from 'drizzle-orm'
+import { and, asc, desc, eq, gt, gte, ilike, inArray, isNull, lte, or, sql } from 'drizzle-orm'
 import { db } from '../db/client.js'
-import { chatSummaries, credentials, documents, files, messages, notes, projectMembers, projects, resourceSecrets, taskComments, taskGroups, tasks, users } from '../db/schema.js'
+import { chatSummaries, credentials, documents, files, messages, notes, projectMembers, projects, resourceSecrets, taskComments, taskGroups, tasks, timeEntries, users } from '../db/schema.js'
 import { hasPermission } from '../routes/projects.js'
 import { snapshot } from '../routes/documents.js'
 import { htmlToText, sanitizeHtml } from './sanitize-html.js'
 import { createNote, noteToTask, NOTE_TYPES } from '../routes/notes.js'
+import { readTimeConfig } from '../routes/time.js'
 import { encrypt } from './crypto.js'
 import { notify, extractMentions } from './notify.js'
 import { projectLlm, complete, validateTask, type ToolDef, type ToolHandler } from './llm.js'
@@ -362,6 +363,56 @@ export function memoryTools(projectId: string, actorUserId: string): { tools: To
       parameters: { type: 'object', properties: {} },
     },
     // --- Документы (SPEC §8.24) ---
+    {
+      name: 'start_timer',
+      description:
+        'Start a time tracker for the user (SPEC §8.32). Use when they say "I am starting on X", "log my time", "note that I began at 9". taskNumber links the entry to a task (ONE task per entry — parallel work means parallel timers). startedAt lets you backdate the start when they only remembered later.',
+      parameters: {
+        type: 'object',
+        properties: {
+          description: { type: 'string', description: 'what they are working on; optional' },
+          taskNumber: { type: 'string', description: 'e.g. TASK-12; optional' },
+          startedAt: { type: 'string', description: 'ISO timestamp; defaults to now' },
+        },
+      },
+    },
+    {
+      name: 'stop_timer',
+      description: 'Stop the user\'s running timer. If several are running, pass the id from list_timers.',
+      parameters: { type: 'object', properties: { id: { type: 'string' } } },
+    },
+    {
+      name: 'list_timers',
+      description: 'What is running right now for this user, with elapsed minutes and the project limit on parallel timers.',
+      parameters: { type: 'object', properties: {} },
+    },
+    {
+      name: 'log_time',
+      description:
+        'Record time AFTER the fact — they worked but never started a timer. Both ends required. If the end is earlier than the start it is treated as the next day (a shift past midnight).',
+      parameters: {
+        type: 'object',
+        properties: {
+          startedAt: { type: 'string', description: 'ISO timestamp' },
+          endedAt: { type: 'string', description: 'ISO timestamp' },
+          description: { type: 'string' },
+          taskNumber: { type: 'string' },
+        },
+        required: ['startedAt', 'endedAt'],
+      },
+    },
+    {
+      name: 'time_report',
+      description:
+        'Hours for a period, grouped by person, by task and by day. Answers "how much did I work this week", "how much went into TASK-7". A member sees only their own; owner/admin see everyone.',
+      parameters: {
+        type: 'object',
+        properties: {
+          from: { type: 'string', description: 'YYYY-MM-DD' },
+          to: { type: 'string', description: 'YYYY-MM-DD' },
+        },
+      },
+    },
     {
       name: 'list_notes',
       description:
@@ -1108,6 +1159,140 @@ export function memoryTools(projectId: string, actorUserId: string): { tools: To
         `"${d.title || '—'}" [${asHtml ? 'HTML' : 'text'}] — characters ${offset}..${end} of ${total}${more ? ` (MORE REMAINS: call read_document again with offset=${end})` : ' (end of document)'}`,
         '',
         chunk,
+      ].join('\n')
+    },
+    start_timer: async (args) => {
+      const project = await db.query.projects.findFirst({ where: eq(projects.id, projectId) })
+      const cfg = readTimeConfig(project?.timeConfig)
+      const running = await db
+        .select()
+        .from(timeEntries)
+        .where(and(eq(timeEntries.projectId, projectId), eq(timeEntries.userId, actorUserId), isNull(timeEntries.endedAt)))
+      if (running.length >= cfg.maxTimers) {
+        return `Cannot start: ${running.length} timer(s) already running and the project allows ${cfg.maxTimers} at once. Stop one first (stop_timer) or raise the limit in project settings.`
+      }
+
+      let taskId: string | null = null
+      if (args.taskNumber) {
+        const t = await db.query.tasks.findFirst({
+          where: and(eq(tasks.projectId, projectId), eq(tasks.number, String(args.taskNumber).toUpperCase())),
+        })
+        if (!t) return `Task ${String(args.taskNumber)} not found.`
+        taskId = t.id
+      }
+
+      const [row] = await db
+        .insert(timeEntries)
+        .values({
+          projectId,
+          userId: actorUserId,
+          taskId,
+          description: String(args.description ?? '').slice(0, 500),
+          startedAt: typeof args.startedAt === 'string' ? new Date(args.startedAt) : new Date(),
+          createdVia: 'ai',
+        })
+        .returning()
+      broadcast(projectId, 'time', { action: 'start', id: row!.id, userId: actorUserId })
+      return `Timer started at ${row!.startedAt.toISOString().slice(11, 16)} UTC${taskId ? ` on ${String(args.taskNumber)}` : ''}.`
+    },
+    stop_timer: async (args) => {
+      const running = await db
+        .select()
+        .from(timeEntries)
+        .where(and(eq(timeEntries.projectId, projectId), eq(timeEntries.userId, actorUserId), isNull(timeEntries.endedAt)))
+      if (!running.length) return 'No timer is running.'
+      const entry = args.id ? running.find((r) => r.id === String(args.id)) : running[0]
+      if (!entry) return 'That timer is not running.'
+      if (running.length > 1 && !args.id) {
+        return `${running.length} timers are running — say which one: ${running.map((r) => `${r.id} (${r.description || 'no description'})`).join(', ')}.`
+      }
+      const endedAt = new Date()
+      await db.update(timeEntries).set({ endedAt, updatedAt: endedAt }).where(eq(timeEntries.id, entry.id))
+      broadcast(projectId, 'time', { action: 'stop', id: entry.id, userId: actorUserId })
+      const minutes = Math.round((endedAt.getTime() - entry.startedAt.getTime()) / 60_000)
+      return `Timer stopped: ${Math.floor(minutes / 60)}h ${minutes % 60}m recorded.`
+    },
+    list_timers: async () => {
+      const project = await db.query.projects.findFirst({ where: eq(projects.id, projectId) })
+      const cfg = readTimeConfig(project?.timeConfig)
+      const running = await db
+        .select()
+        .from(timeEntries)
+        .where(and(eq(timeEntries.projectId, projectId), eq(timeEntries.userId, actorUserId), isNull(timeEntries.endedAt)))
+      if (!running.length) return `Nothing running. The project allows ${cfg.maxTimers} parallel timer(s).`
+      const now = Date.now()
+      return running
+        .map((r) => `${r.id} — started ${r.startedAt.toISOString().slice(11, 16)} UTC, ${Math.round((now - r.startedAt.getTime()) / 60_000)} min so far${r.description ? `: ${r.description}` : ''}`)
+        .join('\n')
+    },
+    log_time: async (args) => {
+      const started = new Date(String(args.startedAt))
+      let ended = new Date(String(args.endedAt))
+      if (Number.isNaN(started.getTime()) || Number.isNaN(ended.getTime())) return 'Could not read the timestamps.'
+      // конец раньше начала — работа перешла через полночь
+      if (ended.getTime() <= started.getTime()) ended = new Date(ended.getTime() + 86_400_000)
+
+      let taskId: string | null = null
+      if (args.taskNumber) {
+        const t = await db.query.tasks.findFirst({
+          where: and(eq(tasks.projectId, projectId), eq(tasks.number, String(args.taskNumber).toUpperCase())),
+        })
+        if (!t) return `Task ${String(args.taskNumber)} not found.`
+        taskId = t.id
+      }
+
+      const [row] = await db
+        .insert(timeEntries)
+        .values({
+          projectId,
+          userId: actorUserId,
+          taskId,
+          description: String(args.description ?? '').slice(0, 500),
+          startedAt: started,
+          endedAt: ended,
+          createdVia: 'ai',
+        })
+        .returning()
+      broadcast(projectId, 'time', { action: 'create', id: row!.id, userId: actorUserId })
+      const minutes = Math.round((ended.getTime() - started.getTime()) / 60_000)
+      return `Logged ${Math.floor(minutes / 60)}h ${minutes % 60}m${taskId ? ` on ${String(args.taskNumber)}` : ''}.`
+    },
+    time_report: async (args) => {
+      const privileged = await hasPermission(projectId, actorUserId, 'tasks.edit')
+      const conds = [eq(timeEntries.projectId, projectId), sql`${timeEntries.endedAt} is not null`]
+      // без права видеть чужое — только свои часы
+      if (!privileged) conds.push(eq(timeEntries.userId, actorUserId))
+      if (typeof args.from === 'string') conds.push(gte(timeEntries.startedAt, new Date(args.from)))
+      if (typeof args.to === 'string') {
+        const to = new Date(args.to)
+        to.setHours(23, 59, 59, 999)
+        conds.push(lte(timeEntries.startedAt, to))
+      }
+
+      const minutes = sql<number>`coalesce(sum(extract(epoch from (${timeEntries.endedAt} - ${timeEntries.startedAt})) / 60), 0)::int`
+      const [byUser, byTask] = await Promise.all([
+        db
+          .select({ name: users.name, minutes })
+          .from(timeEntries)
+          .innerJoin(users, eq(users.id, timeEntries.userId))
+          .where(and(...conds))
+          .groupBy(users.name),
+        db
+          .select({ number: tasks.number, title: tasks.title, minutes })
+          .from(timeEntries)
+          .leftJoin(tasks, eq(tasks.id, timeEntries.taskId))
+          .where(and(...conds))
+          .groupBy(tasks.number, tasks.title),
+      ])
+      if (!byUser.length) return 'No tracked time for that period.'
+      const fmt = (m: number) => `${Math.floor(m / 60)}h ${m % 60}m`
+      return [
+        'By person:',
+        ...byUser.sort((a, b) => b.minutes - a.minutes).map((r) => `  ${r.name}: ${fmt(r.minutes)}`),
+        'By task:',
+        ...byTask
+          .sort((a, b) => b.minutes - a.minutes)
+          .map((r) => `  ${r.number ? `${r.number} ${r.title}` : '(no task)'}: ${fmt(r.minutes)}`),
       ].join('\n')
     },
     list_notes: async (args) => {

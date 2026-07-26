@@ -1,12 +1,14 @@
 import { and, eq, inArray, isNotNull, isNull, lte } from 'drizzle-orm'
 import { db } from '../db/client.js'
-import { notes, taskReminders, tasks, projects, projectMembers, users } from '../db/schema.js'
+import { notes, taskReminders, tasks, projects, projectMembers, timeEntries, users } from '../db/schema.js'
 import { sendTaskReminderMail } from './mails.js'
 import { env } from '../env.js'
 import { sweepPendingFiles, sweepSoftDeleted } from './file-cleanup.js'
 import { sweepBridge } from './bridge-auth.js'
 import { sendDailyDigests } from './digest.js'
 import { notify } from './notify.js'
+import { readTimeConfig } from '../routes/time.js'
+import { broadcast } from '../ws.js'
 import { htmlToText } from './sanitize-html.js'
 
 // Планировщик напоминаний об открытых задачах (SPEC §8.9).
@@ -165,6 +167,60 @@ async function sweepNoteReminders() {
   }
 }
 
+/**
+ * Забытые таймеры (SPEC §8.32). Проект решает сам: напоминать или
+ * останавливать. Напоминание повторяется, пока таймер идёт, — один раз его
+ * легко пропустить, а сутки в статистике портят всю картину.
+ */
+async function sweepRunningTimers() {
+  try {
+    const running = await db.query.timeEntries.findMany({ where: isNull(timeEntries.endedAt), limit: 500 })
+    if (!running.length) return
+    const now = Date.now()
+
+    for (const e of running) {
+      const project = await db.query.projects.findFirst({ where: eq(projects.id, e.projectId) })
+      if (!project) continue
+      const cfg = readTimeConfig(project.timeConfig)
+      const hours = (now - e.startedAt.getTime()) / 3_600_000
+      if (hours < cfg.idleHours) continue
+
+      if (cfg.idleAction === 'stop') {
+        // останавливаем на пороге, а не «сейчас»: время после него человек
+        // не работал — иначе бы выключил
+        const endedAt = new Date(e.startedAt.getTime() + cfg.idleHours * 3_600_000)
+        await db.update(timeEntries).set({ endedAt, autoStopped: true, updatedAt: new Date() }).where(eq(timeEntries.id, e.id))
+        broadcast(e.projectId, 'time', { action: 'stop', id: e.id, userId: e.userId })
+      }
+
+      // сколько напоминаний уже полагалось к этому моменту
+      const due = Math.floor((hours - cfg.idleHours) / cfg.repeatHours) + 1
+      if (cfg.idleAction === 'stop' || due > e.remindersSent) {
+        const user = await db.query.users.findFirst({ where: eq(users.id, e.userId) })
+        await notify({
+          projectId: e.projectId,
+          event: 'timer_running',
+          recipientIds: [e.userId],
+          actorId: null,
+          actorName: user?.name || '',
+          // ключ включает номер напоминания, иначе дедуп проглотит повторы
+          dedupeKey: `timer_running:${e.id}:${cfg.idleAction === 'stop' ? 'auto' : due}`,
+          link: `/p/${e.projectId}/time`,
+          preview: e.description || '',
+          vars: { hours: String(Math.floor(hours)) },
+          entityType: 'time',
+          entityId: e.id,
+        })
+        if (cfg.idleAction !== 'stop') {
+          await db.update(timeEntries).set({ remindersSent: due }).where(eq(timeEntries.id, e.id))
+        }
+      }
+    }
+  } catch (err) {
+    console.error('[reminders] running timers failed:', err)
+  }
+}
+
 export function startReminderScheduler() {
   // первый прогон через минуту после старта, далее каждые TICK_MS
   setTimeout(() => {
@@ -177,6 +233,7 @@ export function startReminderScheduler() {
       void sweepBridge() // закрываем протухшие туннели внешнего ИИ (SPEC §8.27)
       void sendDailyDigests() // суточный email-дайджест непрочитанных (SPEC §8.22)
       void sweepNoteReminders() // напоминания в заметках (SPEC §8.31)
+      void sweepRunningTimers() // забытые таймеры (SPEC §8.32)
     }, TICK_MS)
   }, 60_000)
   console.log('⏰ task-reminder scheduler started')

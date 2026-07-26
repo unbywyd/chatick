@@ -29,7 +29,9 @@ import { Button } from '@/components/ui/button'
   переключение между проектами мгновенное и не перезагружает страницу.
 */
 
-const WORK_TABS = ['tasks', 'files', 'documents', 'notes', 'resources', 'team', 'history', 'about'] as const
+// About и Team ушли в меню профиля: настройки — это администрирование, а не
+// вкладка, и просмотр деталей проекта отдельно от формы не нужен.
+const WORK_TABS = ['tasks', 'files', 'documents', 'notes', 'resources', 'history'] as const
 
 export type ProjectDetails = {
   id: string

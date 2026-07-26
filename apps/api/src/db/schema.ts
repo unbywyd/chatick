@@ -123,6 +123,10 @@ export const projects = pgTable(
     // Цвет раздаётся случайно при создании — чтобы проекты различались сразу,
     // без похода в настройки.
     color: text('color').notNull().default('#6366f1'),
+    // Трекинг (SPEC §8.32): сколько таймеров можно держать запущенными и что
+    // делать с забытым. JSON — состав настроек будет расти.
+    // { maxTimers: 1, idleAction: 'remind'|'stop', idleHours: 8, repeatHours: 8 }
+    timeConfig: text('time_config').notNull().default('{}'),
     logoUrl: text('logo_url'),
     logoKey: text('logo_key'),
     // --- конфиг ИИ-диспетчера (SPEC.md §4.1) ---
@@ -393,6 +397,44 @@ export const notes = pgTable(
   ],
 )
 
+/**
+ * Записи трекера времени (SPEC §8.32).
+ *
+ * Одна запись — один отрезок работы одного человека. Задача необязательна:
+ * типичный сценарий — запустил утром и работаешь весь день, ничего не указывая.
+ * Задача ОДНА, а не список: час на трёх задачах пришлось бы либо делить
+ * выдуманными долями, либо считать трижды. Нужно две задачи разом — запускаются
+ * два таймера (их число ограничивает настройка проекта).
+ *
+ * endedAt = null означает «идёт сейчас».
+ */
+export const timeEntries = pgTable(
+  'time_entries',
+  {
+    id: id(),
+    projectId: text('project_id').notNull().references(() => projects.id, { onDelete: 'cascade' }),
+    userId: text('user_id').notNull().references(() => users.id, { onDelete: 'cascade' }),
+    taskId: text('task_id').references(() => tasks.id, { onDelete: 'set null' }),
+    description: text('description').notNull().default(''),
+    startedAt: timestamp('started_at', { withTimezone: true }).notNull(),
+    endedAt: timestamp('ended_at', { withTimezone: true }), // null = таймер идёт
+    // Остановлен автоматически по порогу забытого таймера — видно и человеку,
+    // и статистике, что это не его решение.
+    autoStopped: boolean('auto_stopped').notNull().default(false),
+    // сколько раз уже напомнили — чтобы повтор шёл по расписанию, а не каждый тик
+    remindersSent: integer('reminders_sent').notNull().default(0),
+    createdVia: text('created_via').notNull().default('ui'), // ui | bridge | ai
+    createdAt: createdAt(),
+    updatedAt: updatedAt(),
+  },
+  (t) => [
+    index('time_entries_project_idx').on(t.projectId, t.startedAt),
+    index('time_entries_user_idx').on(t.userId, t.startedAt),
+    // быстрый поиск идущих таймеров: их мало, но ищут их постоянно
+    index('time_entries_running_idx').on(t.userId, t.endedAt),
+  ],
+)
+
 // Версии документа (SPEC §8.25): снапшот контента, история и откат.
 // Пишется не на каждое автосохранение, а при существенном изменении/паузе — см. routes/documents.ts.
 export const documentVersions = pgTable(
@@ -579,6 +621,7 @@ export const notificationEvent = pgEnum('notification_event', [
   'task_comment', // новый комментарий к задаче, где ты автор/ассайни
   'note_mention', // тебя упомянули в заметке проекта
   'note_reminder', // наступила дата напоминания в заметке
+  'timer_running', // таймер идёт слишком долго — не забыли ли выключить
 ])
 
 // Подписки: строка = (user, project, event) отключён. По умолчанию всё включено;

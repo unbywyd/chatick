@@ -1,0 +1,369 @@
+import { Hono } from 'hono'
+import { zValidator } from '@hono/zod-validator'
+import { z } from 'zod'
+import { and, asc, desc, eq, gte, inArray, isNull, lte, sql } from 'drizzle-orm'
+import { db } from '../db/client.js'
+import { projects, tasks, timeEntries, users } from '../db/schema.js'
+import { requireProject, type ProjectEnv } from '../auth.js'
+import { projectRoleOf } from './projects.js'
+import { logActivity } from '../lib/audit.js'
+import { broadcast } from '../ws.js'
+
+// Трекинг времени (SPEC §8.32).
+// Одна запись — один отрезок работы. Задача необязательна и всегда одна:
+// параллельные задачи — это параллельные таймеры, а не список внутри записи.
+export const timeRoute = new Hono<ProjectEnv>()
+timeRoute.use('*', requireProject)
+
+export type TimeConfig = {
+  maxTimers: number
+  idleAction: 'remind' | 'stop'
+  idleHours: number
+  repeatHours: number
+}
+
+export const DEFAULT_TIME_CONFIG: TimeConfig = {
+  maxTimers: 1, // параллельные таймеры разрешены, но по умолчанию их нет
+  idleAction: 'remind',
+  idleHours: 8,
+  repeatHours: 8,
+}
+
+export function readTimeConfig(raw: string | null | undefined): TimeConfig {
+  try {
+    const p = JSON.parse(raw || '{}') as Partial<TimeConfig>
+    return {
+      maxTimers: Math.max(1, Math.min(20, Number(p.maxTimers) || DEFAULT_TIME_CONFIG.maxTimers)),
+      idleAction: p.idleAction === 'stop' ? 'stop' : 'remind',
+      idleHours: Math.max(1, Math.min(48, Number(p.idleHours) || DEFAULT_TIME_CONFIG.idleHours)),
+      repeatHours: Math.max(1, Math.min(48, Number(p.repeatHours) || DEFAULT_TIME_CONFIG.repeatHours)),
+    }
+  } catch {
+    return DEFAULT_TIME_CONFIG
+  }
+}
+
+/** Чужие записи видит и правит только руководство проекта. */
+async function canSeeOthers(projectId: string, userId: string): Promise<boolean> {
+  const m = await projectRoleOf(projectId, userId)
+  return m?.role === 'owner' || m?.role === 'admin'
+}
+
+const serialize = (
+  e: typeof timeEntries.$inferSelect,
+  user?: { id: string; name: string; avatarUrl: string | null } | null,
+  task?: { id: string; number: string; title: string } | null,
+) => ({
+  id: e.id,
+  userId: e.userId,
+  user: user ?? null,
+  task: task ?? null,
+  description: e.description,
+  startedAt: e.startedAt,
+  endedAt: e.endedAt,
+  running: e.endedAt === null,
+  // минуты считает сервер: у клиентов часы разъезжаются, а в отчёте это цена
+  minutes: e.endedAt ? Math.round((e.endedAt.getTime() - e.startedAt.getTime()) / 60_000) : null,
+  autoStopped: e.autoStopped,
+  createdVia: e.createdVia,
+})
+
+async function hydrate(rows: (typeof timeEntries.$inferSelect)[]) {
+  if (!rows.length) return []
+  const userIds = [...new Set(rows.map((r) => r.userId))]
+  const taskIds = [...new Set(rows.map((r) => r.taskId).filter(Boolean) as string[])]
+  const [people, taskRows] = await Promise.all([
+    db.select().from(users).where(inArray(users.id, userIds)),
+    taskIds.length ? db.select().from(tasks).where(inArray(tasks.id, taskIds)) : Promise.resolve([]),
+  ])
+  const byUser = new Map(people.map((u) => [u.id, { id: u.id, name: u.name, avatarUrl: u.avatarUrl }]))
+  const byTask = new Map(taskRows.map((t) => [t.id, { id: t.id, number: t.number, title: t.title }]))
+  return rows.map((r) => serialize(r, byUser.get(r.userId), r.taskId ? byTask.get(r.taskId) : null))
+}
+
+// --- Текущие таймеры --------------------------------------------------------
+
+/** Что идёт прямо сейчас у меня. Опрашивается часто — держим лёгким. */
+timeRoute.get('/running', async (c) => {
+  const { projectId, sub } = c.get('auth')
+  const rows = await db
+    .select()
+    .from(timeEntries)
+    .where(and(eq(timeEntries.projectId, projectId), eq(timeEntries.userId, sub), isNull(timeEntries.endedAt)))
+    .orderBy(asc(timeEntries.startedAt))
+  const project = await db.query.projects.findFirst({ where: eq(projects.id, projectId) })
+  return c.json({ items: await hydrate(rows), config: readTimeConfig(project?.timeConfig) })
+})
+
+timeRoute.post(
+  '/start',
+  zValidator(
+    'json',
+    z.object({
+      taskId: z.string().nullable().optional(),
+      description: z.string().max(500).default(''),
+      /** ISO — если работа началась раньше, чем человек вспомнил про таймер */
+      startedAt: z.string().optional(),
+    }),
+  ),
+  async (c) => {
+    const { projectId, sub } = c.get('auth')
+    const body = c.req.valid('json')
+
+    const project = await db.query.projects.findFirst({ where: eq(projects.id, projectId) })
+    const cfg = readTimeConfig(project?.timeConfig)
+
+    const running = await db
+      .select()
+      .from(timeEntries)
+      .where(and(eq(timeEntries.projectId, projectId), eq(timeEntries.userId, sub), isNull(timeEntries.endedAt)))
+    if (running.length >= cfg.maxTimers) {
+      return c.json(
+        {
+          error:
+            cfg.maxTimers === 1
+              ? 'A timer is already running. Stop it first, or raise the parallel-timer limit in project settings.'
+              : `You already have ${running.length} timers running (limit ${cfg.maxTimers} in project settings).`,
+          running: await hydrate(running),
+        },
+        409,
+      )
+    }
+
+    if (body.taskId) {
+      const task = await db.query.tasks.findFirst({ where: and(eq(tasks.id, body.taskId), eq(tasks.projectId, projectId)) })
+      if (!task) return c.json({ error: 'Task not found in this project' }, 404)
+    }
+
+    const [row] = await db
+      .insert(timeEntries)
+      .values({
+        projectId,
+        userId: sub,
+        taskId: body.taskId ?? null,
+        description: body.description,
+        startedAt: body.startedAt ? new Date(body.startedAt) : new Date(),
+      })
+      .returning()
+
+    broadcast(projectId, 'time', { action: 'start', id: row!.id, userId: sub })
+    return c.json((await hydrate([row!]))[0], 201)
+  },
+)
+
+timeRoute.post('/:id/stop', async (c) => {
+  const { projectId, sub } = c.get('auth')
+  const entry = await db.query.timeEntries.findFirst({
+    where: and(eq(timeEntries.id, c.req.param('id')), eq(timeEntries.projectId, projectId)),
+  })
+  if (!entry) return c.json({ error: 'Not found' }, 404)
+  if (entry.userId !== sub && !(await canSeeOthers(projectId, sub))) return c.json({ error: 'Forbidden' }, 403)
+  if (entry.endedAt) return c.json({ error: 'Already stopped' }, 400)
+
+  const [row] = await db
+    .update(timeEntries)
+    .set({ endedAt: new Date(), updatedAt: new Date() })
+    .where(eq(timeEntries.id, entry.id))
+    .returning()
+
+  broadcast(projectId, 'time', { action: 'stop', id: row!.id, userId: entry.userId })
+  return c.json((await hydrate([row!]))[0])
+})
+
+// --- Список и правка --------------------------------------------------------
+
+timeRoute.get(
+  '/',
+  zValidator(
+    'query',
+    z.object({
+      from: z.string().optional(),
+      to: z.string().optional(),
+      userId: z.string().optional(),
+      taskId: z.string().optional(),
+      q: z.string().optional(),
+      limit: z.coerce.number().min(1).max(500).default(200),
+    }),
+  ),
+  async (c) => {
+    const { projectId, sub } = c.get('auth')
+    const f = c.req.valid('query')
+    const privileged = await canSeeOthers(projectId, sub)
+
+    const conds = [eq(timeEntries.projectId, projectId)]
+    // участник видит только свои записи — чужие часы не его дело
+    if (!privileged) conds.push(eq(timeEntries.userId, sub))
+    else if (f.userId) conds.push(eq(timeEntries.userId, f.userId))
+
+    if (f.from) conds.push(gte(timeEntries.startedAt, new Date(f.from)))
+    if (f.to) {
+      const to = new Date(f.to)
+      if (!f.to.includes('T')) to.setHours(23, 59, 59, 999)
+      conds.push(lte(timeEntries.startedAt, to))
+    }
+    if (f.taskId) conds.push(eq(timeEntries.taskId, f.taskId))
+    if (f.q?.trim()) conds.push(sql`${timeEntries.description} ilike ${`%${f.q.trim()}%`}`)
+
+    const rows = await db
+      .select()
+      .from(timeEntries)
+      .where(and(...conds))
+      .orderBy(desc(timeEntries.startedAt))
+      .limit(f.limit)
+
+    return c.json({ items: await hydrate(rows), canSeeOthers: privileged })
+  },
+)
+
+const patchSchema = z.object({
+  taskId: z.string().nullable().optional(),
+  description: z.string().max(500).optional(),
+  startedAt: z.string().optional(),
+  endedAt: z.string().nullable().optional(),
+})
+
+timeRoute.patch('/:id', zValidator('json', patchSchema), async (c) => {
+  const { projectId, sub } = c.get('auth')
+  const entry = await db.query.timeEntries.findFirst({
+    where: and(eq(timeEntries.id, c.req.param('id')), eq(timeEntries.projectId, projectId)),
+  })
+  if (!entry) return c.json({ error: 'Not found' }, 404)
+  if (entry.userId !== sub && !(await canSeeOthers(projectId, sub))) return c.json({ error: 'Forbidden' }, 403)
+
+  const b = c.req.valid('json')
+  const patch: Partial<typeof timeEntries.$inferInsert> = { updatedAt: new Date() }
+
+  if (b.taskId !== undefined) {
+    if (b.taskId) {
+      const task = await db.query.tasks.findFirst({ where: and(eq(tasks.id, b.taskId), eq(tasks.projectId, projectId)) })
+      if (!task) return c.json({ error: 'Task not found in this project' }, 404)
+    }
+    patch.taskId = b.taskId
+  }
+  if (b.description !== undefined) patch.description = b.description
+  if (b.startedAt) patch.startedAt = new Date(b.startedAt)
+  if (b.endedAt !== undefined) {
+    patch.endedAt = b.endedAt ? new Date(b.endedAt) : null
+    // ручная правка снимает пометку автостопа: время теперь подтверждено человеком
+    if (b.endedAt) patch.autoStopped = false
+  }
+
+  const started = patch.startedAt ?? entry.startedAt
+  const ended = patch.endedAt !== undefined ? patch.endedAt : entry.endedAt
+  if (ended && ended.getTime() <= started.getTime()) {
+    return c.json({ error: 'End must be after start (a shift past midnight already counts as the next day)' }, 400)
+  }
+
+  const [row] = await db.update(timeEntries).set(patch).where(eq(timeEntries.id, entry.id)).returning()
+  broadcast(projectId, 'time', { action: 'update', id: row!.id, userId: entry.userId })
+  return c.json((await hydrate([row!]))[0])
+})
+
+/** Ручная запись задним числом — работал, а таймер не включил. */
+timeRoute.post(
+  '/',
+  zValidator(
+    'json',
+    z.object({
+      taskId: z.string().nullable().optional(),
+      description: z.string().max(500).default(''),
+      startedAt: z.string(),
+      endedAt: z.string(),
+    }),
+  ),
+  async (c) => {
+    const { projectId, sub } = c.get('auth')
+    const b = c.req.valid('json')
+    const started = new Date(b.startedAt)
+    const ended = new Date(b.endedAt)
+    if (ended.getTime() <= started.getTime()) return c.json({ error: 'End must be after start' }, 400)
+
+    if (b.taskId) {
+      const task = await db.query.tasks.findFirst({ where: and(eq(tasks.id, b.taskId), eq(tasks.projectId, projectId)) })
+      if (!task) return c.json({ error: 'Task not found in this project' }, 404)
+    }
+
+    const [row] = await db
+      .insert(timeEntries)
+      .values({ projectId, userId: sub, taskId: b.taskId ?? null, description: b.description, startedAt: started, endedAt: ended })
+      .returning()
+
+    broadcast(projectId, 'time', { action: 'create', id: row!.id, userId: sub })
+    return c.json((await hydrate([row!]))[0], 201)
+  },
+)
+
+timeRoute.delete('/:id', async (c) => {
+  const { projectId, sub } = c.get('auth')
+  const entry = await db.query.timeEntries.findFirst({
+    where: and(eq(timeEntries.id, c.req.param('id')), eq(timeEntries.projectId, projectId)),
+  })
+  if (!entry) return c.json({ error: 'Not found' }, 404)
+  if (entry.userId !== sub && !(await canSeeOthers(projectId, sub))) return c.json({ error: 'Forbidden' }, 403)
+
+  await db.delete(timeEntries).where(eq(timeEntries.id, entry.id))
+  void logActivity({
+    projectId,
+    actorId: sub,
+    action: 'delete',
+    entityType: 'time',
+    entityId: entry.id,
+    entityLabel: entry.description || '—',
+  })
+  broadcast(projectId, 'time', { action: 'delete', id: entry.id, userId: entry.userId })
+  return c.json({ ok: true })
+})
+
+// --- Сводка -----------------------------------------------------------------
+
+/** Часы по людям и по задачам за период — основа графиков и выгрузок. */
+timeRoute.get(
+  '/summary',
+  zValidator('query', z.object({ from: z.string().optional(), to: z.string().optional() })),
+  async (c) => {
+    const { projectId, sub } = c.get('auth')
+    const f = c.req.valid('query')
+    const privileged = await canSeeOthers(projectId, sub)
+
+    const conds = [eq(timeEntries.projectId, projectId), sql`${timeEntries.endedAt} is not null`]
+    if (!privileged) conds.push(eq(timeEntries.userId, sub))
+    if (f.from) conds.push(gte(timeEntries.startedAt, new Date(f.from)))
+    if (f.to) {
+      const to = new Date(f.to)
+      if (!f.to.includes('T')) to.setHours(23, 59, 59, 999)
+      conds.push(lte(timeEntries.startedAt, to))
+    }
+
+    const minutes = sql<number>`coalesce(sum(extract(epoch from (${timeEntries.endedAt} - ${timeEntries.startedAt})) / 60), 0)::int`
+
+    const [byUser, byTask, byDay] = await Promise.all([
+      db
+        .select({ userId: timeEntries.userId, name: users.name, avatarUrl: users.avatarUrl, minutes, entries: sql<number>`count(*)::int` })
+        .from(timeEntries)
+        .innerJoin(users, eq(users.id, timeEntries.userId))
+        .where(and(...conds))
+        .groupBy(timeEntries.userId, users.name, users.avatarUrl),
+      db
+        .select({ taskId: timeEntries.taskId, number: tasks.number, title: tasks.title, minutes, entries: sql<number>`count(*)::int` })
+        .from(timeEntries)
+        .leftJoin(tasks, eq(tasks.id, timeEntries.taskId))
+        .where(and(...conds))
+        .groupBy(timeEntries.taskId, tasks.number, tasks.title),
+      db
+        .select({ day: sql<string>`to_char(${timeEntries.startedAt}, 'YYYY-MM-DD')`, minutes })
+        .from(timeEntries)
+        .where(and(...conds))
+        .groupBy(sql`to_char(${timeEntries.startedAt}, 'YYYY-MM-DD')`)
+        .orderBy(sql`to_char(${timeEntries.startedAt}, 'YYYY-MM-DD')`),
+    ])
+
+    return c.json({
+      byUser: byUser.sort((a, b) => b.minutes - a.minutes),
+      // записи без задачи — отдельной строкой, а не размазаны по задачам
+      byTask: byTask.sort((a, b) => b.minutes - a.minutes),
+      byDay,
+      totalMinutes: byUser.reduce((sum, r) => sum + r.minutes, 0),
+      canSeeOthers: privileged,
+    })
+  },
+)

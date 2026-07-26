@@ -38,9 +38,19 @@ export const DEFAULT_AI_CONFIG: AiConfig = {
   autoPostTaskEvents: true,
 }
 
+export type TimeConfig = {
+  maxTimers: number
+  idleAction: 'remind' | 'stop'
+  idleHours: number
+  repeatHours: number
+}
+
+export const DEFAULT_TIME_CONFIG: TimeConfig = { maxTimers: 1, idleAction: 'remind', idleHours: 8, repeatHours: 8 }
+
 export type ProjectSettings = {
   name: string
   about: string
+  timeConfig?: TimeConfig
   /** цвет значка проекта; при создании раздаётся случайный */
   color?: string
   logoUrl?: string | null
@@ -70,7 +80,7 @@ const MODES: { key: AiMode; icon: typeof Eye }[] = [
   { key: 'moderator', icon: ShieldCheck },
 ]
 
-const FORM_TABS = ['general', 'ai', 'rules'] as const
+const FORM_TABS = ['general', 'ai', 'rules', 'time'] as const
 type FormTab = (typeof FORM_TABS)[number]
 
 // Настройки проекта — поля растут, разбито табами: Основное / ИИ / Правила
@@ -92,6 +102,9 @@ export function ProjectSettingsForm({
   const { t } = useTranslation()
   const [tab, setTab] = useState<FormTab>('general')
   const logoInput = useRef<HTMLInputElement>(null)
+  const time = { ...DEFAULT_TIME_CONFIG, ...(value.timeConfig ?? {}) }
+  const setTime = <K extends keyof TimeConfig>(k: K, v: TimeConfig[K]) =>
+    onChange({ ...value, timeConfig: { ...time, [k]: v } })
   const set = <K extends keyof ProjectSettings>(k: K, v: ProjectSettings[K]) => onChange({ ...value, [k]: v })
   const setAi = <K extends keyof AiConfig>(k: K, v: AiConfig[K]) =>
     onChange({ ...value, aiConfig: { ...value.aiConfig, [k]: v } })
@@ -314,6 +327,71 @@ export function ProjectSettingsForm({
             className="w-full resize-none rounded-md border bg-transparent px-3 py-2 text-sm outline-none placeholder:text-muted-foreground focus:ring-2 focus:ring-ring"
           />
         </Field>
+      )}
+      {tab === 'time' && (
+        <div className="space-y-5">
+          {/* Параллельные таймеры: они же закрывают потребность вести две
+              задачи разом — вместо списка задач внутри одной записи. */}
+          <div className="flex items-center justify-between gap-3">
+            <div>
+              <p className="text-sm font-medium">{t('time.maxTimers')}</p>
+              <p className="text-xs text-muted-foreground">{t('time.maxTimersHint')}</p>
+            </div>
+            <Input
+              type="number"
+              min={1}
+              max={20}
+              value={time.maxTimers}
+              onChange={(e) => setTime('maxTimers', Math.max(1, Math.min(20, Number(e.target.value) || 1)))}
+              className="w-20 text-center"
+            />
+          </div>
+
+          <div className="space-y-2">
+            <p className="text-sm font-medium">{t('time.idleAction')}</p>
+            <div className="flex gap-1.5">
+              {(['remind', 'stop'] as const).map((action) => (
+                <button
+                  key={action}
+                  type="button"
+                  onClick={() => setTime('idleAction', action)}
+                  className={cn(
+                    'rounded-full border px-3 py-1 text-xs transition-colors',
+                    time.idleAction === action
+                      ? 'border-brand bg-brand/10 text-foreground'
+                      : 'text-muted-foreground hover:bg-accent',
+                  )}
+                >
+                  {t(action === 'remind' ? 'time.idleRemind' : 'time.idleStop')}
+                </button>
+              ))}
+            </div>
+            <div className="grid grid-cols-2 gap-3">
+              <div>
+                <p className="mb-1 text-xs text-muted-foreground">{t('time.idleHours')}</p>
+                <Input
+                  type="number"
+                  min={1}
+                  max={48}
+                  value={time.idleHours}
+                  onChange={(e) => setTime('idleHours', Math.max(1, Math.min(48, Number(e.target.value) || 8)))}
+                />
+              </div>
+              {time.idleAction === 'remind' && (
+                <div>
+                  <p className="mb-1 text-xs text-muted-foreground">{t('time.repeatHours')}</p>
+                  <Input
+                    type="number"
+                    min={1}
+                    max={48}
+                    value={time.repeatHours}
+                    onChange={(e) => setTime('repeatHours', Math.max(1, Math.min(48, Number(e.target.value) || 8)))}
+                  />
+                </div>
+              )}
+            </div>
+          </div>
+        </div>
       )}
     </div>
   )

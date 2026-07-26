@@ -379,7 +379,7 @@ projectsRoute.post(
   },
 )
 
-async function projectRoleOf(projectId: string, userId: string) {
+export async function projectRoleOf(projectId: string, userId: string) {
   const m = await db.query.projectMembers.findFirst({
     where: and(eq(projectMembers.projectId, projectId), eq(projectMembers.userId, userId)),
   })
@@ -416,6 +416,15 @@ projectsRoute.patch(
       aiConfig: aiConfigSchema.partial().optional(),
       chatRules: z.string().max(CHAT_RULES_MAX).optional(),
       color: z.string().regex(/^#[0-9a-fA-F]{6}$/).optional(),
+      timeConfig: z
+        .object({
+          maxTimers: z.number().int().min(1).max(20),
+          idleAction: z.enum(['remind', 'stop']),
+          idleHours: z.number().int().min(1).max(48),
+          repeatHours: z.number().int().min(1).max(48),
+        })
+        .partial()
+        .optional(),
       storageLimit: z.number().int().min(0).nullable().optional(), // байты; null = наследовать компанию, 0 = без override (безлимит в рамках компании)
     }),
   ),
@@ -430,12 +439,16 @@ projectsRoute.patch(
     const allowed = membership?.role === 'owner' || membership?.role === 'admin' || companyRole === 'admin'
     if (!allowed) return c.json({ error: 'Forbidden' }, 403)
 
-    const { name, about, aiConfig, chatRules, color, storageLimit } = c.req.valid('json')
+    const { name, about, aiConfig, chatRules, color, timeConfig, storageLimit } = c.req.valid('json')
     const patch: Record<string, unknown> = {}
     if (name !== undefined) patch.name = name
     if (about !== undefined) patch.about = about
     if (chatRules !== undefined) patch.chatRules = chatRules
     if (color !== undefined) patch.color = color
+    if (timeConfig !== undefined) {
+      const current = JSON.parse(project.timeConfig || '{}')
+      patch.timeConfig = JSON.stringify({ ...current, ...timeConfig })
+    }
     if (storageLimit !== undefined) patch.storageLimit = storageLimit === null ? null : String(storageLimit)
     if (aiConfig !== undefined) {
       const current = JSON.parse(project.aiConfig || '{}')

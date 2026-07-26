@@ -1,4 +1,5 @@
 import { useState } from 'react'
+import { useNavigate } from 'react-router-dom'
 import { useMutation, useQueryClient } from '@tanstack/react-query'
 import { useTranslation } from 'react-i18next'
 import { toast } from 'sonner'
@@ -8,6 +9,7 @@ import { Button } from '@/components/ui/button'
 import {
   ProjectSettingsForm,
   DEFAULT_AI_CONFIG,
+  DEFAULT_TIME_CONFIG,
   type ProjectSettings,
   type AiConfig,
 } from '@/components/ProjectSettingsForm'
@@ -20,6 +22,7 @@ type ProjectDetails = {
   aiConfig: Partial<AiConfig>
   color?: string
   logoUrl?: string | null
+  timeConfig?: Record<string, unknown>
   storageLimit?: string | number | null
   myRole: 'owner' | 'admin' | 'member' | null
 }
@@ -27,7 +30,9 @@ type ProjectDetails = {
 export function AboutTab({ project, loading }: { project?: ProjectDetails; loading: boolean }) {
   const { t } = useTranslation()
   const qc = useQueryClient()
-  const [editing, setEditing] = useState(false)
+  const navigate = useNavigate()
+  // страница = форма: просмотр деталей отдельно от неё не нужен
+  const [editing, setEditing] = useState(true)
   const [form, setForm] = useState<ProjectSettings | null>(null)
 
   const save = useMutation({
@@ -35,7 +40,6 @@ export function AboutTab({ project, loading }: { project?: ProjectDetails; loadi
       api(`/api/v1/projects/${project!.id}`, { method: 'PATCH', body: JSON.stringify(v) }),
     onSuccess: () => {
       toast.success(t('projectForm.saved'))
-      setEditing(false)
       qc.invalidateQueries({ queryKey: ['project', project!.id] })
     },
     onError: (e) => toast.error(e instanceof Error ? e.message : String(e)),
@@ -85,6 +89,7 @@ export function AboutTab({ project, loading }: { project?: ProjectDetails; loadi
       aiConfig: { ...DEFAULT_AI_CONFIG, ...project.aiConfig },
       color: project.color,
       logoUrl: project.logoUrl ?? null,
+      timeConfig: { ...DEFAULT_TIME_CONFIG, ...(project.timeConfig ?? {}) } as never,
       storageLimit: project.storageLimit != null ? Number(project.storageLimit) : null,
     })
     setEditing(true)
@@ -95,7 +100,7 @@ export function AboutTab({ project, loading }: { project?: ProjectDetails; loadi
       <div className="mx-auto w-full max-w-6xl p-6">
         <div className="mb-4 flex items-center justify-between">
           <h1 className="text-xl font-bold tracking-tight">{t('projectForm.editTitle')}</h1>
-          <Button variant="ghost" size="icon" onClick={() => setEditing(false)}>
+          <Button variant="ghost" size="icon" onClick={() => navigate(`/p/${project.id}/chat`)}>
             <X className="size-4" />
           </Button>
         </div>
@@ -106,7 +111,7 @@ export function AboutTab({ project, loading }: { project?: ProjectDetails; loadi
           onLogoRemove={() => removeLogo.mutate()}
         />
         <div className="mt-5 flex justify-end gap-2">
-          <Button variant="outline" onClick={() => setEditing(false)}>
+          <Button variant="outline" onClick={() => navigate(`/p/${project.id}/chat`)}>
             {t('rules.decline')}
           </Button>
           <Button variant="brand" disabled={save.isPending || !form.name.trim()} onClick={() => save.mutate(form)}>
