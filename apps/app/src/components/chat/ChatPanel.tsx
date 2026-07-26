@@ -247,7 +247,12 @@ export function ChatPanel({
       }
       // @AI в группе → тот же оверлей, что и перехват: беседа с ИИ поверх чата
       if (created.redirectedToAi) setAiOpen(true)
-      if (sendMode === 'ai' || created.redirectedToAi) setAiThinking(true)
+      if (sendMode === 'ai' || created.redirectedToAi) {
+        setAiThinking(true)
+        // страховка: если ответ так и не пришёл (сеть, перезапуск сервера),
+        // индикатор гаснет сам — иначе поле ввода заблокировано навсегда
+        window.setTimeout(() => setAiThinking(false), 90_000)
+      }
       void mentionIds.includes(AI_MENTION_ID)
     } catch (e) {
       setMyPending(false)

@@ -130,10 +130,13 @@ function ActivityFeed({ projectId, lang }: { projectId: string; lang: string }) 
             {t('tasks.resetFilters')}
           </button>
         )}
-        <div className="relative ms-auto w-48">
-          <Search className="pointer-events-none absolute start-2.5 top-1/2 size-3.5 -translate-y-1/2 text-muted-foreground" />
-          <Input value={q} onChange={(e) => setQ(e.target.value)} placeholder={t('history.search')} className="h-8 ps-8 text-xs" />
-        </div>
+      </div>
+
+      {/* Поиск отдельным рядом: в общем ряду его выдавливало вниз, стоило
+          появиться ещё одному фильтру. На узком экране — во всю ширину. */}
+      <div className="relative w-full sm:ms-auto sm:w-56">
+        <Search className="pointer-events-none absolute start-2.5 top-1/2 size-3.5 -translate-y-1/2 text-muted-foreground" />
+        <Input value={q} onChange={(e) => setQ(e.target.value)} placeholder={t('history.search')} className="h-8 ps-8 text-xs" />
       </div>
 
       {/* Лента */}

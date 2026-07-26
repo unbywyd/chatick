@@ -35,6 +35,9 @@ export async function notifyChatMentions(
   })
 }
 
+/** Что показать, когда ИИ не ответил. Лучше честная строка, чем вечное ожидание. */
+const AI_FAILED_TEXT = '⚠️ Не получилось получить ответ. Попробуйте ещё раз.'
+
 // Чат (SPEC §5.5): pending → диспетчер → delivered | held(sandbox) → выбор → delivered.
 // Вложения (files.messageId) прикрепляются до отправки и едут с финальным вариантом.
 export const messagesRoute = new Hono<ProjectEnv>()
@@ -208,11 +211,25 @@ messagesRoute.post(
     if (mode === 'ai') {
       // личный диалог с ИИ: память + инструменты, CRUD в пределах пермишенов юзера (SPEC §5.6)
       void (async () => {
-        const answer = await aiChatReply(projectId, sub, text)
-        if (!answer) return
+        // Молчать при сбое нельзя: клиент ждёт ответа и показывает «ИИ думает…»
+        // до тех пор, пока не придёт сообщение. Пустой ответ или упавший вызов
+        // оставляли индикатор висеть навсегда, и написать заново было нельзя.
+        let answer: string | null = null
+        try {
+          answer = await aiChatReply(projectId, sub, text)
+        } catch (e) {
+          console.error('[ai-chat] reply failed:', e)
+        }
         const [aiRow] = await db
           .insert(messages)
-          .values({ projectId, authorId: null, recipientId: sub, mode: 'ai', status: 'delivered', text: answer })
+          .values({
+            projectId,
+            authorId: null,
+            recipientId: sub,
+            mode: 'ai',
+            status: 'delivered',
+            text: answer || AI_FAILED_TEXT,
+          })
           .returning()
         // ai-режим приватный: шлём только автору
         sendToUser(projectId, sub, 'message', serialize(aiRow!))

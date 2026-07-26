@@ -460,12 +460,27 @@ export function TasksTab({ projectId, meId }: { projectId: string; meId?: string
                 {t('tasks.resetFilters')}
               </button>
             )}
-            <div className="relative ms-auto w-44">
+            <input
+              ref={importRef}
+              type="file"
+              accept=".xlsx,.xls"
+              hidden
+              onChange={(e) => {
+                if (e.target.files?.[0]) runImport(e.target.files[0])
+                e.target.value = ''
+              }}
+            />
+          </div>
+
+          {/* Поиск и вид — своим рядом. В общем ряду с чипсами их выдавливало
+              вниз, стоило появиться ещё одному фильтру, и позиция поиска
+              прыгала. На узком экране поиск занимает всю ширину. */}
+          <div className="mt-2 flex items-center gap-1.5">
+            <div className="relative min-w-0 flex-1 sm:max-w-56 sm:flex-none ms-auto">
               <Search className="pointer-events-none absolute start-2.5 top-1/2 size-3.5 -translate-y-1/2 text-muted-foreground" />
-              <Input value={q} onChange={(e) => setQ(e.target.value)} placeholder={t('tasks.search')} className="h-8 ps-8 text-xs" />
+              <Input value={q} onChange={(e) => setQ(e.target.value)} placeholder={t('tasks.search')} className="h-8 w-full ps-8 text-xs" />
             </div>
-            {/* Переключатель Список / Таблица */}
-            <div className="inline-flex overflow-hidden rounded-md border">
+            <div className="inline-flex shrink-0 overflow-hidden rounded-md border">
               <button
                 onClick={() => setViewPersist('list')}
                 title={t('tasks.viewList')}
@@ -481,16 +496,6 @@ export function TasksTab({ projectId, meId }: { projectId: string; meId?: string
                 <Table2 className="size-4" />
               </button>
             </div>
-            <input
-              ref={importRef}
-              type="file"
-              accept=".xlsx,.xls"
-              hidden
-              onChange={(e) => {
-                if (e.target.files?.[0]) runImport(e.target.files[0])
-                e.target.value = ''
-              }}
-            />
           </div>
 
           {/* Табличный вид: вложенные таблицы по спринт-группам */}
