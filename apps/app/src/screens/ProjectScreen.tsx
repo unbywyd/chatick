@@ -2,25 +2,16 @@ import { useEffect, useState } from 'react'
 import { NavLink, Outlet, useLocation, useNavigate, useOutletContext, useParams } from 'react-router-dom'
 import { useQuery } from '@tanstack/react-query'
 import { useTranslation } from 'react-i18next'
-import { ArrowLeft, Building2, Menu, MessagesSquare, PanelsTopLeft, X } from 'lucide-react'
+import { ArrowLeft, Menu, MessagesSquare, PanelsTopLeft, X } from 'lucide-react'
 import { api, getSessionToken, type Me } from '@/lib/api'
 import { cn } from '@/lib/utils'
 import { useProjectToken } from '@/hooks/useProjectToken'
 import { useResizable } from '@/hooks/useResizable'
 import { ChatPanel } from '@/components/chat/ChatPanel'
 import { ProjectSidebar } from '@/components/ProjectSidebar'
-import { ThemeToggle } from '@/components/ThemeToggle'
-import { LanguageSelect } from '@/components/LanguageSelect'
 import { ProfileMenu } from '@/components/ProfileMenu'
 import { NotificationBell } from '@/components/NotificationBell'
 import { Button } from '@/components/ui/button'
-import {
-  DropdownMenu,
-  DropdownMenuTrigger,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuSeparator,
-} from '@/components/ui/dropdown-menu'
 
 /*
   Оболочка приложения — мессенджер, а не набор страниц (SPEC §8.29).
@@ -107,8 +98,12 @@ export function ProjectLayout() {
       {/* КОЛОНКА 1 — список проектов. На мобильном выезжает поверх. */}
       <aside
         className={cn(
-          'w-[300px] shrink-0 border-e',
-          'fixed inset-y-0 start-0 z-40 transition-transform duration-200 md:static md:z-0 md:translate-x-0',
+          'w-[300px] shrink-0 border-e bg-background',
+          'fixed inset-y-0 start-0 z-40 transition-transform duration-200',
+          // на десктопе — обычная колонка без сдвига; сдвиг только на мобильном,
+          // иначе в RTL классы состояния перебивали md:translate-x-0 и панель
+          // уезжала за край экрана
+          'md:static md:z-0 md:!translate-x-0',
           sidebarOpen ? 'translate-x-0' : '-translate-x-full rtl:translate-x-full',
         )}
       >
@@ -219,32 +214,14 @@ export function ProjectLayout() {
 
           <div className="flex shrink-0 items-center gap-1">
             <NotificationBell currentProjectId={id} />
-            <DropdownMenu>
-              <DropdownMenuTrigger asChild>
-                <button
-                  className="rounded-md p-2 text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
-                  title={t('project.menu')}
-                >
-                  <Menu className="size-4" />
-                </button>
-              </DropdownMenuTrigger>
-              <DropdownMenuContent align="end" className="w-56">
-                <DropdownMenuItem onSelect={() => navigate(`/start/${project.data?.companyId ?? ''}`)}>
-                  <Building2 className="size-4" />
-                  {t('sidebar.companySettings')}
-                </DropdownMenuItem>
-                <DropdownMenuSeparator />
-                <div className="flex items-center justify-between gap-2 px-2 py-1.5">
-                  <span className="text-xs text-muted-foreground">{t('project.language')}</span>
-                  <LanguageSelect />
-                </div>
-                <div className="flex items-center justify-between gap-2 px-2 py-1.5">
-                  <span className="text-xs text-muted-foreground">{t('project.theme')}</span>
-                  <ThemeToggle />
-                </div>
-              </DropdownMenuContent>
-            </DropdownMenu>
-            <ProfileMenu me={me.data} projectId={id} isAdmin={isAdmin} />
+            {/* компания, язык и тема — в меню профиля: отдельный гамбургер рядом
+                с аватаром дублировал сущность */}
+            <ProfileMenu
+              me={me.data}
+              projectId={id}
+              companyId={project.data?.companyId}
+              isAdmin={isAdmin}
+            />
           </div>
         </nav>
 

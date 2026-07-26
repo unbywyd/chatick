@@ -3,7 +3,7 @@ import { useNavigate } from 'react-router-dom'
 import { useQueryClient } from '@tanstack/react-query'
 import { useTranslation } from 'react-i18next'
 import { toast } from 'sonner'
-import { Bell, Bot, Camera, Check, LogOut, Pencil, Plug, X } from 'lucide-react'
+import { Bell, Bot, Building2, Camera, Check, LogOut, Pencil, Plug, X } from 'lucide-react'
 import { api, API_URL, getSessionToken, setSessionToken, setProjectToken, type Me } from '@/lib/api'
 import { Avatar } from '@/components/ui/avatar'
 import {
@@ -14,10 +14,22 @@ import {
   DropdownMenuSeparator,
 } from '@/components/ui/dropdown-menu'
 import { useConfirm } from '@/components/ui/confirm'
+import { LanguageSelect } from '@/components/LanguageSelect'
+import { ThemeToggle } from '@/components/ThemeToggle'
 
 // Меню профиля в шапке (SPEC §8.19): аватар → профиль (смена фото/имени),
 // уведомления, ИИ и расходы (только admin), выход с подтверждением.
-export function ProfileMenu({ me, projectId, isAdmin }: { me?: Me; projectId?: string; isAdmin?: boolean }) {
+export function ProfileMenu({
+  me,
+  projectId,
+  companyId,
+  isAdmin,
+}: {
+  me?: Me
+  projectId?: string
+  companyId?: string
+  isAdmin?: boolean
+}) {
   const { t } = useTranslation()
   const navigate = useNavigate()
   const qc = useQueryClient()
@@ -153,6 +165,25 @@ export function ProfileMenu({ me, projectId, isAdmin }: { me?: Me; projectId?: s
           <Plug className="size-4" />
           {t('connect.menuItem')}
         </DropdownMenuItem>
+
+        {companyId && (
+          <DropdownMenuItem onSelect={() => navigate(`/start/${companyId}`)}>
+            <Building2 className="size-4" />
+            {t('sidebar.companySettings')}
+          </DropdownMenuItem>
+        )}
+
+        <DropdownMenuSeparator />
+
+        {/* Язык и тема — здесь же: отдельное меню-гамбургер рядом было лишним */}
+        <div className="flex items-center justify-between gap-2 px-2 py-1.5">
+          <span className="text-xs text-muted-foreground">{t('project.language')}</span>
+          <LanguageSelect />
+        </div>
+        <div className="flex items-center justify-between gap-2 px-2 py-1.5">
+          <span className="text-xs text-muted-foreground">{t('project.theme')}</span>
+          <ThemeToggle />
+        </div>
 
         <DropdownMenuSeparator />
         <DropdownMenuItem onSelect={logout} className="text-destructive focus:text-destructive">
