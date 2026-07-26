@@ -12,6 +12,7 @@ import { DatePicker } from '@/components/ui/date-picker'
 import { PeriodPicker, resolvePreset, type Period } from '@/components/ui/period-picker'
 import { Select, SelectTrigger, SelectValue, SelectContent, SelectItem } from '@/components/ui/select'
 import { useConfirm } from '@/components/ui/confirm'
+import { Bar, BarChart, CartesianGrid, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recharts'
 import { useProjectSocket } from '@/hooks/useProjectSocket'
 import { Popover, PopoverTrigger, PopoverContent } from '@/components/ui/popover'
 import {
@@ -254,7 +255,8 @@ function HistoryView({ projectId, weekStart }: { projectId: string; weekStart: n
 // --- Статистика ---------------------------------------------------------------
 
 function StatsView({ projectId, weekStart }: { projectId: string; weekStart: number }) {
-  const { t } = useTranslation()
+  const { t, i18n } = useTranslation()
+  const lang = i18n.language
   const [period, setPeriod] = useState<Period>(() => resolvePreset('thisMonth', weekStart))
   const { from, to } = period
 
@@ -280,28 +282,51 @@ function StatsView({ projectId, weekStart }: { projectId: string; weekStart: num
         </span>
       </div>
 
-      {/* По дням — столбики без библиотеки графиков. Пустой период показываем
-          словами: серый прямоугольник ничего не сообщает. */}
+      {/* По дням. Самодельные столбики схлопывались в невидимую полоску при
+          одном дне — здесь нужна нормальная библиотека, а не флексы. */}
       <section className="rounded-lg border bg-card p-4">
         <h2 className="mb-3 text-sm font-semibold">{t('time.byDay')}</h2>
         {days.length === 0 ? (
           <p className="py-10 text-center text-sm text-muted-foreground">{t('time.noData')}</p>
         ) : (
-          <div className="flex h-40 items-end gap-1">
-            {days.map((d) => (
-              <div key={d.day} className="group flex flex-1 flex-col items-center gap-1" title={`${d.day} — ${formatDuration(d.minutes)}`}>
-                {/* часы над столбиком: иначе высота ни о чём не говорит */}
-                <span className="text-[9px] tabular-nums text-muted-foreground opacity-0 transition-opacity group-hover:opacity-100">
-                  {formatDuration(d.minutes)}
-                </span>
-                <div
-                  className="w-full rounded-t bg-brand/70 transition-colors group-hover:bg-brand"
-                  style={{ height: `${Math.max(2, (d.minutes / maxDay) * 100)}%` }}
-                />
-                <span className="text-[9px] tabular-nums text-muted-foreground">{d.day.slice(-2)}</span>
-              </div>
-            ))}
-          </div>
+          <ResponsiveContainer width="100%" height={200}>
+            <BarChart data={days} margin={{ top: 8, right: 8, bottom: 0, left: 0 }}>
+              <CartesianGrid vertical={false} strokeDasharray="3 3" className="stroke-border" />
+              <XAxis
+                dataKey="day"
+                tickFormatter={(day: string) => day.slice(-2)}
+                tickLine={false}
+                axisLine={false}
+                className="text-[10px]"
+                stroke="currentColor"
+                opacity={0.5}
+              />
+              <YAxis
+                // ось в часах: минуты на шкале читать невозможно
+                tickFormatter={(m: number) => String(Math.round(m / 60))}
+                tickLine={false}
+                axisLine={false}
+                width={28}
+                className="text-[10px]"
+                stroke="currentColor"
+                opacity={0.5}
+              />
+              <Tooltip
+                cursor={{ fill: 'currentColor', opacity: 0.06 }}
+                contentStyle={{
+                  background: 'var(--popover)',
+                  border: '1px solid var(--border)',
+                  borderRadius: '0.5rem',
+                  fontSize: '0.75rem',
+                }}
+                labelFormatter={(day) =>
+                  new Date(`${String(day)}T00:00:00`).toLocaleDateString(lang, { day: 'numeric', month: 'long' })
+                }
+                formatter={(m) => [formatDuration(Number(m)), t('time.total')]}
+              />
+              <Bar dataKey="minutes" fill="var(--brand)" radius={[4, 4, 0, 0]} maxBarSize={48} />
+            </BarChart>
+          </ResponsiveContainer>
         )}
       </section>
 
