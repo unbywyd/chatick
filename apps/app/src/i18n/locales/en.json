@@ -1005,6 +1005,11 @@
     "connectCancel": "Cancel",
     "connectBadCode": "Code not found or expired",
     "connectDone": "Access granted",
-    "connectFailed": "Could not grant access"
+    "connectFailed": "Could not grant access",
+    "connectWhere": "Where to grant access",
+    "connectWholeCompany": "whole company",
+    "connectActive": "Active connections",
+    "connectRevoke": "Revoke",
+    "connectRevoked": "Connection closed"
   }
 }

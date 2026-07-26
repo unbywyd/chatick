@@ -16,7 +16,10 @@ contextBridge.exposeInMainWorld('panel', {
    * код и открывает туннель веб, у него есть сессия и права.
    */
   checkCode: (code) => ipcRenderer.send('panel:check-code', code),
-  approveCode: (code, projectId) => ipcRenderer.send('panel:approve-code', { code, projectId }),
+  approveCode: (code, target) => ipcRenderer.send('panel:approve-code', { code, ...target }),
+  revokeConnection: (id) => ipcRenderer.send('panel:revoke-connection', id),
+  /** «Не закрывай меня по клику мимо» — на время работы с кодом доступа. */
+  setBusy: (busy) => ipcRenderer.send('panel:busy', busy),
   onConnect: (fn) => {
     const handler = (_e, payload) => fn(payload)
     ipcRenderer.on('panel:connect', handler)

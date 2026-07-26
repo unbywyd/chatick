@@ -1005,6 +1005,11 @@
     "connectCancel": "ביטול",
     "connectBadCode": "הקוד לא נמצא או פג תוקפו",
     "connectDone": "הגישה אושרה",
-    "connectFailed": "לא ניתן היה לאשר גישה"
+    "connectFailed": "לא ניתן היה לאשר גישה",
+    "connectWhere": "היכן להעניק גישה",
+    "connectWholeCompany": "כל החברה",
+    "connectActive": "חיבורים פעילים",
+    "connectRevoke": "לסגור",
+    "connectRevoked": "החיבור נסגר"
   }
 }

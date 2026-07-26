@@ -1007,6 +1007,11 @@
     "connectCancel": "Отмена",
     "connectBadCode": "Код не найден или истёк",
     "connectDone": "Доступ выдан",
-    "connectFailed": "Не удалось выдать доступ"
+    "connectFailed": "Не удалось выдать доступ",
+    "connectWhere": "Куда выдать доступ",
+    "connectWholeCompany": "вся компания",
+    "connectActive": "Действующие подключения",
+    "connectRevoke": "Закрыть",
+    "connectRevoked": "Подключение закрыто"
   }
 }

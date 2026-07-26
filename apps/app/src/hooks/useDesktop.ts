@@ -23,7 +23,8 @@ type DesktopBridge = {
   /** Ответ панели про введённый код подключения. */
   connectResult: (payload: ConnectResult) => void
   onConnectCheck: (fn: (code: string) => void) => () => void
-  onConnectApprove: (fn: (p: { code: string; projectId: string }) => void) => () => void
+  onConnectApprove: (fn: (p: { code: string; projectId?: string; companyId?: string }) => void) => () => void
+  onConnectRevoke: (fn: (id: string) => void) => () => void
 }
 
 /** Что панель узнаёт о введённом коде: кто просит доступ и чем кончилось. */
@@ -31,6 +32,7 @@ type ConnectResult =
   | { step: 'found'; code: string; clientName: string }
   | { step: 'invalid'; code: string }
   | { step: 'approved'; code: string }
+  | { step: 'revoked'; code: string }
   | { step: 'failed'; code: string; error: string }
 
 declare global {
@@ -59,6 +61,13 @@ type DesktopState = {
   projects: { id: string; name: string; color?: string; logoUrl?: string | null; unread: number }[]
   project: { id: string; name: string } | null
   /**
+   * Компания и роль в ней: доступ ко всей компании выдают только админы и
+   * менеджеры, и панель не должна предлагать то, что сервер отклонит.
+   */
+  company: { id: string; name: string; canGrantCompany: boolean } | null
+  /** Действующие туннели ассистентов — их видно и можно закрыть из панели. */
+  connections: { id: string; clientName: string; scope: 'company' | 'project'; where: string }[]
+  /**
    * Подписи для панели и трея. Своего i18n у них нет и быть не должно: язык
    * выбирают в приложении, а панель — его продолжение, а не отдельный продукт.
    */
@@ -85,6 +94,14 @@ type ProjectLite = {
   stats?: { unread: number }
 }
 type TaskLite = { id: string; number: string; title: string; status: string; dueDate?: string | null; assignee?: { id: string } | null }
+type BridgeSessionLite = {
+  id: string
+  clientName: string
+  scope: 'company' | 'project'
+  project: { id: string; name: string } | null
+  company: { id: string; name: string } | null
+  lastUsedAt: string
+}
 
 /**
  * Держит десктоп в курсе: бейдж, трей, уведомления о новом.
@@ -128,13 +145,24 @@ export function useDesktopSync() {
   const companies = useQuery({
     queryKey: ['companies'],
     enabled: Boolean(bridge) && authed,
-    queryFn: () => api<{ companies: { id: string }[] }>('/api/v1/companies'),
+    queryFn: () =>
+      api<{ companies: { id: string; name: string; myRole: 'admin' | 'manager' | 'member' }[] }>('/api/v1/companies'),
   })
-  const companyId = companies.data?.companies[0]?.id
+  const company = companies.data?.companies[0]
+  const companyId = company?.id
   const projects = useQuery({
     queryKey: ['sidebar-projects', companyId],
     enabled: Boolean(bridge) && authed && Boolean(companyId),
     queryFn: () => api<ProjectLite[]>(`/api/v1/projects?companyId=${companyId}`),
+    refetchInterval: 60_000,
+  })
+
+  // Действующие туннели ассистентов: их видно во вкладке «Доступ», и оттуда же
+  // их можно закрыть — доступ от своего имени стоит держать на глазах.
+  const bridgeSessions = useQuery({
+    queryKey: ['bridge-sessions'],
+    enabled: Boolean(bridge) && authed,
+    queryFn: () => api<{ items: BridgeSessionLite[] }>('/api/v1/auth/bridge/sessions'),
     refetchInterval: 60_000,
   })
 
@@ -196,6 +224,20 @@ export function useDesktopSync() {
         unread: p.stats?.unread ?? 0,
       })),
       project: authed && activeProjectId ? { id: activeProjectId, name: nameOf(activeProjectId) ?? '' } : null,
+      company:
+        authed && company
+          ? {
+              id: company.id,
+              name: company.name,
+              canGrantCompany: company.myRole === 'admin' || company.myRole === 'manager',
+            }
+          : null,
+      connections: (authed ? bridgeSessions.data?.items ?? [] : []).map((x) => ({
+        id: x.id,
+        clientName: x.clientName,
+        scope: x.scope,
+        where: (x.scope === 'company' ? x.company?.name : x.project?.name) ?? '',
+      })),
       strings: {
         start: t('desktop.start'),
         stop: t('desktop.stop'),
@@ -211,6 +253,11 @@ export function useDesktopSync() {
         connectHint: t('desktop.connectHint'),
         connectActsAsYou: t('desktop.connectActsAsYou'),
         connectProject: t('desktop.connectProject'),
+        connectWhere: t('desktop.connectWhere'),
+        connectWholeCompany: t('desktop.connectWholeCompany'),
+        connectActive: t('desktop.connectActive'),
+        connectRevoke: t('desktop.connectRevoke'),
+        connectRevoked: t('desktop.connectRevoked'),
         connectAllow: t('desktop.connectAllow'),
         connectCancel: t('desktop.connectCancel'),
         connectBadCode: t('desktop.connectBadCode'),
@@ -234,7 +281,7 @@ export function useDesktopSync() {
         dir: i18n.dir(),
       },
     })
-  }, [bridge, authed, inbox.data, running.data?.items, projects.data, tasks.data, activeProjectId, meId, t, i18n])
+  }, [bridge, authed, inbox.data, running.data?.items, projects.data, tasks.data, bridgeSessions.data, company, activeProjectId, meId, t, i18n])
 
   // --- системные уведомления -------------------------------------------------
   useEffect(() => {
@@ -303,9 +350,11 @@ export function useDesktopSync() {
       }
     })
 
-    const offApprove = bridge.onConnectApprove(async ({ code, projectId }) => {
+    const offApprove = bridge.onConnectApprove(async ({ code, projectId, companyId: cid }) => {
       try {
-        await api('/api/v1/auth/bridge/approve', { method: 'POST', body: JSON.stringify({ code, projectId }) })
+        // Либо проект, либо вся компания — сервер сам проверит роль.
+        const target = cid ? { companyId: cid } : { projectId }
+        await api('/api/v1/auth/bridge/approve', { method: 'POST', body: JSON.stringify({ code, ...target }) })
         bridge.connectResult({ step: 'approved', code })
         qc.invalidateQueries({ queryKey: ['bridge-sessions'] })
       } catch (e) {
@@ -313,11 +362,24 @@ export function useDesktopSync() {
       }
     })
 
+    // Закрыть туннель прямо из панели: если ассистент больше не нужен,
+    // идти за этим в настройки — лишний шаг.
+    const offRevoke = bridge.onConnectRevoke(async (id) => {
+      try {
+        await api(`/api/v1/auth/bridge/sessions/${id}`, { method: 'DELETE' })
+        bridge.connectResult({ step: 'revoked', code: '' })
+      } catch (e) {
+        bridge.connectResult({ step: 'failed', code: '', error: e instanceof Error ? e.message : String(e) })
+      }
+      qc.invalidateQueries({ queryKey: ['bridge-sessions'] })
+    })
+
     return () => {
       offNav()
       offTimer()
       offCheck()
       offApprove()
+      offRevoke()
     }
   }, [bridge, navigate, qc, running.data?.items, activeProjectId])
 }

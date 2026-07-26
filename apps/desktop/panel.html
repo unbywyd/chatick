@@ -146,13 +146,50 @@
       .connect-who { font-weight: 600; }
       .connect-warn { margin-top: 4px; color: var(--muted); font-size: 11.5px; }
       .connect-label { display: block; margin: 10px 0 5px; color: var(--muted); font-size: 11.5px; }
-      .connect select {
-        width: 100%;
-        border: 1px solid var(--line); border-radius: 7px;
+
+      /* Свой список, а не <select>: нативный выпадающий список — отдельное
+         окно ОС, оно забирает фокус, и панель закрывалась по blur на каждом
+         клике. Заодно он не поддаётся оформлению. */
+      .picker { display: flex; flex-direction: column; gap: 3px; max-height: 132px; overflow-y: auto; }
+      .picker::-webkit-scrollbar { width: 6px; }
+      .picker::-webkit-scrollbar-thumb { background: #2e2e2e; border-radius: 3px; }
+      .pick {
+        display: flex; align-items: center; gap: 8px;
+        border: 1px solid transparent; border-radius: 7px;
         background: var(--bg); color: var(--text);
-        font: inherit; padding: 7px 8px;
+        font: inherit; text-align: start;
+        padding: 7px 9px; cursor: pointer;
       }
-      .connect select:focus { outline: 0; border-color: var(--brand); }
+      .pick:hover { background: #1e1e1e; }
+      .pick.on { border-color: var(--brand); background: #1e1e1e; }
+      .pick .dot {
+        width: 9px; height: 9px; flex: 0 0 auto;
+        border-radius: 3px; background: #3a3a3a;
+      }
+      .pick .pick-name { min-width: 0; flex: 1; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+      .pick .pick-tag {
+        flex: 0 0 auto; font-size: 10px; color: var(--muted);
+        border: 1px solid var(--line); border-radius: 5px; padding: 1px 5px;
+      }
+
+      /* Действующие подключения */
+      .conns { margin-top: 14px; border-top: 1px solid var(--line); padding-top: 11px; }
+      .conns-title { color: var(--muted); font-size: 11.5px; margin-bottom: 7px; }
+      .conn {
+        display: flex; align-items: center; gap: 8px;
+        padding: 7px 9px; border-radius: 7px; background: var(--card);
+      }
+      .conn + .conn { margin-top: 4px; }
+      .conn-body { min-width: 0; flex: 1; }
+      .conn-name { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+      .conn-where { color: var(--muted); font-size: 11px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+      .conn-kill {
+        flex: 0 0 auto;
+        border: 1px solid var(--line); border-radius: 6px;
+        background: none; color: var(--muted);
+        font: inherit; font-size: 11px; padding: 3px 8px; cursor: pointer;
+      }
+      .conn-kill:hover { border-color: #f5736f; color: #f5736f; }
       .connect-actions { margin-top: 10px; display: flex; gap: 8px; }
       .connect-actions button {
         flex: 1;
@@ -375,12 +412,44 @@
       // неудобно — панель уже открыта. Проверку и подтверждение делает веб:
       // права и сессия есть только у него.
 
-      let connect = { code: '', clientName: null, msg: null, msgKind: null, busy: false }
+      let connect = { code: '', clientName: null, msg: null, msgKind: null, busy: false, target: null }
 
       function renderConnect() {
         const projects = state.projects || []
-        const options = projects
-          .map((p) => `<option value="${escape(p.id)}">${escape(p.name)}</option>`)
+        const company = state.company
+
+        // Компанию целиком показываем только тем, кто вправе её выдать:
+        // сервер всё равно откажет, а предлагать неисполнимое — обманывать.
+        const targets = [
+          ...(company?.canGrantCompany
+            ? [{ key: `c:${company.id}`, name: company.name, tag: T('connectWholeCompany', 'whole company'), color: null }]
+            : []),
+          ...projects.map((p) => ({ key: `p:${p.id}`, name: p.name, tag: null, color: p.color })),
+        ]
+        if (!connect.target && targets.length) connect.target = targets[0].key
+
+        const picker = targets
+          .map(
+            (x) => `
+              <button class="pick ${x.key === connect.target ? 'on' : ''}" data-target="${escape(x.key)}">
+                <span class="dot" style="background:${escape(x.color || '#3a3a3a')}"></span>
+                <span class="pick-name">${escape(x.name)}</span>
+                ${x.tag ? `<span class="pick-tag">${escape(x.tag)}</span>` : ''}
+              </button>`,
+          )
+          .join('')
+
+        const conns = (state.connections || [])
+          .map(
+            (c) => `
+              <div class="conn">
+                <div class="conn-body">
+                  <div class="conn-name">${escape(c.clientName)}</div>
+                  <div class="conn-where">${escape(c.where)}${c.scope === 'company' ? ` · ${T('connectWholeCompany', 'whole company')}` : ''}</div>
+                </div>
+                <button class="conn-kill" data-revoke="${escape(c.id)}">${T('connectRevoke', 'Revoke')}</button>
+              </div>`,
+          )
           .join('')
 
         return `
@@ -393,12 +462,10 @@
                 ? `<div class="connect-box">
                      <div class="connect-who">${escape(connect.clientName)}</div>
                      <div class="connect-warn">${T('connectActsAsYou', 'Will act on your behalf in the chosen project')}</div>
-                     <label class="connect-label">${T('connectProject', 'Project')}</label>
-                     <select id="connectProject" ${projects.length ? '' : 'disabled'}>
-                       ${options || `<option>${T('emptyProjects', 'No projects yet')}</option>`}
-                     </select>
+                     <label class="connect-label">${T('connectWhere', 'Where to grant access')}</label>
+                     <div class="picker">${picker || `<p class="empty">${T('emptyProjects', 'No projects yet')}</p>`}</div>
                      <div class="connect-actions">
-                       <button class="allow" id="connectAllow" ${projects.length && !connect.busy ? '' : 'disabled'}>
+                       <button class="allow" id="connectAllow" ${targets.length && !connect.busy ? '' : 'disabled'}>
                          ${T('connectAllow', 'Allow')}
                        </button>
                        <button id="connectCancel">${T('connectCancel', 'Cancel')}</button>
@@ -407,6 +474,14 @@
                 : ''
             }
             ${connect.msg ? `<p class="connect-msg ${connect.msgKind || ''}">${escape(connect.msg)}</p>` : ''}
+            ${
+              conns
+                ? `<div class="conns">
+                     <div class="conns-title">${T('connectActive', 'Active connections')}</div>
+                     ${conns}
+                   </div>`
+                : ''
+            }
           </div>`
       }
 
@@ -446,23 +521,37 @@
           }
         }
 
+        for (const btn of document.querySelectorAll('.pick')) {
+          btn.onclick = () => {
+            connect.target = btn.dataset.target
+            refreshConnect()
+          }
+        }
+
         const allow = $('connectAllow')
         if (allow) {
           allow.onclick = () => {
-            const select = $('connectProject')
-            if (!select?.value) return
+            if (!connect.target) return
+            const [kind, id] = [connect.target.slice(0, 1), connect.target.slice(2)]
             connect.busy = true
             connect.msg = null
             refreshConnect()
-            window.panel.approveCode(connect.code, select.value)
+            window.panel.approveCode(connect.code, kind === 'c' ? { companyId: id } : { projectId: id })
           }
         }
 
         const cancel = $('connectCancel')
         if (cancel) {
           cancel.onclick = () => {
-            connect = { code: '', clientName: null, msg: null, msgKind: null, busy: false }
+            connect = { code: '', clientName: null, msg: null, msgKind: null, busy: false, target: null }
             refreshConnect()
+          }
+        }
+
+        for (const btn of document.querySelectorAll('.conn-kill')) {
+          btn.onclick = () => {
+            btn.disabled = true
+            window.panel.revokeConnection(btn.dataset.revoke)
           }
         }
       }
@@ -479,7 +568,13 @@
           connect.msg = connect.code.length >= 9 ? T('connectBadCode', 'Code not found or expired') : null
           connect.msgKind = 'err'
         } else if (r.step === 'approved') {
-          connect = { code: '', clientName: null, msg: T('connectDone', 'Access granted'), msgKind: 'ok', busy: false }
+          connect = {
+            code: '', clientName: null, target: null, busy: false,
+            msg: T('connectDone', 'Access granted'), msgKind: 'ok',
+          }
+        } else if (r.step === 'revoked') {
+          connect.msg = T('connectRevoked', 'Connection closed')
+          connect.msgKind = 'ok'
         } else if (r.step === 'failed') {
           connect.msg = r.error || T('connectFailed', 'Could not grant access')
           connect.msgKind = 'err'
@@ -522,6 +617,9 @@
         btn.onclick = () => {
           tab = btn.dataset.tab
           document.querySelectorAll('nav button').forEach((b) => b.classList.toggle('active', b === btn))
+          // За кодом доступа ходят в другое окно и возвращаются — на этой
+          // вкладке панель не должна закрываться от потери фокуса.
+          window.panel.setBusy(tab === 'connect')
           renderList()
         }
       })
