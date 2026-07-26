@@ -3,7 +3,7 @@ import { useNavigate, useParams, useSearchParams } from 'react-router-dom'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { useTranslation } from 'react-i18next'
 import { toast } from 'sonner'
-import { CalendarDays, Download, FileSpreadsheet, Flag, HelpCircle, LayoutList, Paperclip, Plus, Search, Table2, Timer, Upload, User, X } from 'lucide-react'
+import { CalendarDays, Download, FileSpreadsheet, Flag, LayoutList, MoreHorizontal, Paperclip, Plus, Search, Table2, Timer, Upload, User, X } from 'lucide-react'
 import { api } from '@/lib/api'
 import { cn } from '@/lib/utils'
 import { Input } from '@/components/ui/input'
@@ -315,6 +315,39 @@ export function TasksTab({ projectId, meId }: { projectId: string; meId?: string
               <Plus className="size-4" />
               {t('start.create')}
             </Button>
+
+          {/* Общее меню страницы: две безымянные иконки в ряду фильтров не
+              объясняли ни что делают, ни чем отличаются. Всё редкое — сюда. */}
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+              <Button variant="outline" size="icon" title={t('tasks.moreActions')}>
+                <MoreHorizontal className="size-4" />
+              </Button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="end" className="w-64">
+              <DropdownMenuItem onSelect={() => exportTasksToExcel(tasksQ.data ?? [], groupsQ.data ?? [], projectName)}>
+                <Download className="size-3.5" />
+                {t('tasks.exportExcel')}
+              </DropdownMenuItem>
+              {canEdit && (
+                <>
+                  <DropdownMenuItem onSelect={() => importRef.current?.click()}>
+                    <Upload className="size-3.5" />
+                    {t('tasks.importExcel')}
+                  </DropdownMenuItem>
+                  <DropdownMenuItem onSelect={() => downloadImportTemplate()}>
+                    <FileSpreadsheet className="size-3.5" />
+                    {t('tasks.importTemplate')}
+                  </DropdownMenuItem>
+                  {/* формат импорта прямо здесь: отдельная кнопка «?» была
+                      загадкой, пока на неё не нажмёшь */}
+                  <p className="mt-1 whitespace-pre-wrap border-t px-2 pt-2 text-xs text-muted-foreground">
+                    {t('tasks.importHelp')}
+                  </p>
+                </>
+              )}
+            </DropdownMenuContent>
+          </DropdownMenu>
           </form>
 
           {/* Прогресс реализации (по активным фильтрам) — SPEC §8.15 */}
@@ -448,47 +481,6 @@ export function TasksTab({ projectId, meId }: { projectId: string; meId?: string
                 <Table2 className="size-4" />
               </button>
             </div>
-            {/* Импорт / экспорт Excel */}
-            <DropdownMenu>
-              <DropdownMenuTrigger asChild>
-                <button title={t('tasks.importExport')} className="rounded-md border px-2 py-1.5 text-muted-foreground transition-colors hover:bg-secondary hover:text-foreground">
-                  <FileSpreadsheet className="size-4" />
-                </button>
-              </DropdownMenuTrigger>
-              <DropdownMenuContent align="end">
-                <DropdownMenuItem onSelect={() => exportTasksToExcel(tasksQ.data ?? [], groupsQ.data ?? [], projectName)}>
-                  <Download className="size-3.5" />
-                  {t('tasks.exportExcel')}
-                </DropdownMenuItem>
-                {canEdit && (
-                  <DropdownMenuItem onSelect={() => importRef.current?.click()}>
-                    <Upload className="size-3.5" />
-                    {t('tasks.importExcel')}
-                  </DropdownMenuItem>
-                )}
-                {canEdit && (
-                  <DropdownMenuItem onSelect={() => downloadImportTemplate()}>
-                    <FileSpreadsheet className="size-3.5" />
-                    {t('tasks.importTemplate')}
-                  </DropdownMenuItem>
-                )}
-              </DropdownMenuContent>
-            </DropdownMenu>
-            {/* Помощь по формату импорта */}
-            <Popover>
-              <PopoverTrigger asChild>
-                <button title={t('tasks.importExport')} className="rounded-md border px-2 py-1.5 text-muted-foreground transition-colors hover:bg-secondary hover:text-foreground">
-                  <HelpCircle className="size-4" />
-                </button>
-              </PopoverTrigger>
-              <PopoverContent align="end" className="w-80 text-xs">
-                <p className="mb-2 whitespace-pre-wrap text-muted-foreground">{t('tasks.importHelp')}</p>
-                <Button variant="outline" size="sm" onClick={() => downloadImportTemplate()}>
-                  <FileSpreadsheet className="size-3.5" />
-                  {t('tasks.importTemplate')}
-                </Button>
-              </PopoverContent>
-            </Popover>
             <input
               ref={importRef}
               type="file"

@@ -4,7 +4,7 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { useTranslation } from 'react-i18next'
 import { toast } from 'sonner'
 import { Clock3, Pause, Play } from 'lucide-react'
-import { api, getProjectToken } from '@/lib/api'
+import { api } from '@/lib/api'
 import { cn } from '@/lib/utils'
 import { formatElapsed, parseTimeOfDay, withTimeOfDay } from '@/lib/time-parse'
 import { Popover, PopoverTrigger, PopoverContent } from '@/components/ui/popover'
@@ -34,17 +34,6 @@ function useElapsed(startedAt?: string): number {
     return () => clearInterval(t)
   }, [startedAt])
   return startedAt ? Math.floor((now - new Date(startedAt).getTime()) / 1000) : 0
-}
-
-/** projectId из project-токена — без проверки подписи, только чтобы сверить. */
-function projectOfToken(token: string | null): string | null {
-  if (!token) return null
-  try {
-    const payload = JSON.parse(atob(token.split('.')[1] ?? '')) as { projectId?: string }
-    return payload.projectId ?? null
-  } catch {
-    return null
-  }
 }
 
 export function TimerControl({ collapsed }: { collapsed: boolean }) {
@@ -83,7 +72,9 @@ export function TimerControl({ collapsed }: { collapsed: boolean }) {
   const myProjects = (projectsQ.data ?? []).filter((p) => p.isMember)
   const start = useMutation({
     mutationFn: (description: string) =>
-      api('/api/v1/time/start', { method: 'POST', body: JSON.stringify({ description }) }, 'project'),
+      // projectId передаём явно: токен меняется с задержкой, и без этого
+      // запуск иногда уезжал в предыдущий проект
+      api('/api/v1/time/start', { method: 'POST', body: JSON.stringify({ description, projectId }) }, 'project'),
     onSuccess: () => {
       setDraft('')
       refresh()
@@ -115,11 +106,7 @@ export function TimerControl({ collapsed }: { collapsed: boolean }) {
     onError: onErr,
   })
 
-  // Project-токен один на приложение и меняется при переходе между проектами.
-  // Пока он не догнал URL, запуск уехал бы в ПРЕДЫДУЩИЙ проект — молча и не
-  // туда, куда человек смотрит. Поэтому ждём совпадения.
-  const tokenProject = projectOfToken(getProjectToken())
-  if (!projectId || tokenProject !== projectId) return null
+  if (!projectId) return null
 
   const toggle = () => (first ? stop.mutate(first.id) : start.mutate(draft.trim()))
 

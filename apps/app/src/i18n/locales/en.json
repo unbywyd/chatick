@@ -206,7 +206,8 @@
     "importHelp": "Columns: Number (ignored on import), Title (required), Description, Status (todo/in_progress/review/done), Priority (low/normal/high/urgent), Assignee (member name or email), Due (YYYY-MM-DD), EstimateMinutes (number), Sprint (existing sprint name). Unknown assignees/sprints are left empty.",
     "markDone": "Mark as done",
     "assignToMe": "Assign to me",
-    "copyLink": "Copy link"
+    "copyLink": "Copy link",
+    "moreActions": "More actions"
   },
   "files": {
     "search": "Search files…",

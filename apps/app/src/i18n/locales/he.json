@@ -206,7 +206,8 @@
     "importHelp": "עמודות: Number (מתעלמים בייבוא), Title (חובה), Description, Status, Priority, Assignee (שם/אימייל), Due (YYYY-MM-DD), EstimateMinutes (מספר), Sprint (שם ספרינט קיים). אחראים/ספרינטים לא ידועים יישארו ריקים.",
     "markDone": "סמן כבוצע",
     "assignToMe": "הקצה לי",
-    "copyLink": "העתק קישור"
+    "copyLink": "העתק קישור",
+    "moreActions": "עוד"
   },
   "files": {
     "search": "חיפוש קבצים…",

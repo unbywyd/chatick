@@ -156,11 +156,26 @@ timeRoute.post(
       description: z.string().max(500).default(''),
       /** ISO — если работа началась раньше, чем человек вспомнил про таймер */
       startedAt: z.string().optional(),
+      /**
+       * Проект, в котором стартуем. Project-токен один на приложение и
+       * меняется с задержкой при переходе между проектами — полагаться на
+       * него значит иногда записывать часы не туда. Клиент знает, где он
+       * находится, и говорит это прямо.
+       */
+      projectId: z.string().optional(),
     }),
   ),
   async (c) => {
-    const { projectId, sub } = c.get('auth')
+    const { projectId: tokenProject, sub } = c.get('auth')
     const body = c.req.valid('json')
+
+    // членство обязательно: иначе можно завести часы в чужом проекте
+    let projectId = tokenProject
+    if (body.projectId && body.projectId !== tokenProject) {
+      const membership = await projectRoleOf(body.projectId, sub)
+      if (!membership) return c.json({ error: 'You are not a member of that project' }, 403)
+      projectId = body.projectId
+    }
 
     const project = await db.query.projects.findFirst({ where: eq(projects.id, projectId) })
     const cfg = readTimeConfig(project?.timeConfig)
