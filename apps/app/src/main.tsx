@@ -106,8 +106,9 @@ createRoot(document.getElementById('root')!).render(
               <Route path="/p/:id" element={<ProjectLayout />}>
                 {/* чат — такая же вкладка проекта, с собственным URL */}
                 <Route index element={<Navigate to="chat" replace />} />
-                {/* на широком экране чат — отдельная колонка, а рабочая зона
-                    не должна пустовать: показываем задачи */}
+                {/* /chat — режим «только чат» для узкого экрана; на широком
+                    ProjectScreen сам переводит адрес на /tasks, чтобы вкладка
+                    и содержимое совпадали */}
                 <Route path="chat" element={<TasksPage />} />
                 {/* :taskId — прямая ссылка на задачу (drawer открыт по URL) */}
                 <Route path="tasks/:taskId?" element={<TasksPage />} />

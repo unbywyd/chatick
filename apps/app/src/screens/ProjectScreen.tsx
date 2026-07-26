@@ -8,6 +8,7 @@ import { cn } from '@/lib/utils'
 import { useProjectToken } from '@/hooks/useProjectToken'
 import { useResizable } from '@/hooks/useResizable'
 import { useSidebarCollapsed } from '@/hooks/useSidebarCollapsed'
+import { useMediaQuery } from '@/hooks/useMediaQuery'
 import { ChatPanel } from '@/components/chat/ChatPanel'
 import { ProjectSidebar } from '@/components/ProjectSidebar'
 import { Button } from '@/components/ui/button'
@@ -59,6 +60,15 @@ export function ProjectLayout() {
   // маршрут не splat, поэтому useParams('*') здесь пустой.
   const tab = pathname.split('/')[3] || 'chat'
   const isChatTab = tab === 'chat'
+
+  // На широком экране чат — отдельная колонка, а в рабочей зоне рисуются
+  // задачи. URL при этом оставался /chat, и вкладка «Задачи» не подсвечивалась,
+  // хотя открыты именно они. Переводим адрес на /tasks, чтобы подсветка,
+  // ссылка и содержимое говорили одно и то же.
+  const wide = useMediaQuery('(min-width: 1280px)')
+  useEffect(() => {
+    if (wide && isChatTab && id) navigate(`/p/${id}/tasks`, { replace: true })
+  }, [wide, isChatTab, id, navigate])
 
   useEffect(() => {
     if (!getSessionToken()) navigate('/login', { replace: true })
