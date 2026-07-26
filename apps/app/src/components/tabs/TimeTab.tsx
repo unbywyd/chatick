@@ -294,7 +294,9 @@ function StatsView({ projectId, weekStart }: { projectId: string; weekStart: num
               <CartesianGrid vertical={false} strokeDasharray="3 3" className="stroke-border" />
               <XAxis
                 dataKey="day"
-                tickFormatter={(day: string) => day.slice(-2)}
+                // день с месяцем: одно число ни о чём не говорит, а на периоде
+                // в несколько месяцев подписи ещё и повторяются
+                tickFormatter={(day: string) => `${day.slice(8)}.${day.slice(5, 7)}`}
                 tickLine={false}
                 axisLine={false}
                 className="text-[10px]"
@@ -302,8 +304,12 @@ function StatsView({ projectId, weekStart }: { projectId: string; weekStart: num
                 opacity={0.5}
               />
               <YAxis
-                // ось в часах: минуты на шкале читать невозможно
+                // Ось в часах. Дробные значения округляются, и подписи начинают
+                // повторяться («6, 5, 3, 2, 0» вместо ровной шкалы), поэтому
+                // деления считаем целыми часами.
                 tickFormatter={(m: number) => String(Math.round(m / 60))}
+                allowDecimals={false}
+                domain={[0, (max: number) => Math.ceil(max / 60) * 60]}
                 tickLine={false}
                 axisLine={false}
                 width={28}
