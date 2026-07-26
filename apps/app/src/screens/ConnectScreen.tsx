@@ -12,9 +12,14 @@ import { Input } from '@/components/ui/input'
 import { LanguageSelect } from '@/components/LanguageSelect'
 import { ThemeToggle } from '@/components/ThemeToggle'
 
-// Страница подключения внешнего ИИ (SPEC §8.27).
+// Подключение внешнего ИИ (SPEC §8.27).
 // Здесь человек: (1) копирует строку-приглашение для Claude Code,
 // (2) подтверждает код, который тот показал, (3) видит и закрывает туннели.
+//
+// Это действие ВНУТРИ проекта, поэтому основной способ открыть его — модалка
+// (ConnectDialog): контекст проекта не теряется и возвращаться некуда.
+// Отдельный маршрут /connect оставлен как обёртка — на него ведут старые
+// ссылки и письма.
 
 type BridgeSession = {
   id: string
@@ -25,7 +30,7 @@ type BridgeSession = {
   createdAt: string
 }
 
-export function ConnectScreen() {
+export function ConnectPanel({ onClose }: { onClose?: () => void }) {
   const { t, i18n } = useTranslation()
   const navigate = useNavigate()
   const qc = useQueryClient()
@@ -133,31 +138,25 @@ export function ConnectScreen() {
   }
 
   return (
-    <div className="flex h-dvh flex-col">
-      <header className="flex items-center justify-between border-b px-6 py-3">
+    <div className="flex min-h-0 flex-col">
+      <header className="flex items-center justify-between gap-3 border-b px-5 py-3">
         <div className="flex min-w-0 items-center gap-2">
-          {/* Стрелка ведёт по ЯВНОМУ адресу, а не navigate(-1): после рефреша
-              истории нет, и «назад» превращалась в мёртвую кнопку. */}
-          <Button
-            variant="ghost"
-            size="icon"
-            className="shrink-0"
-            title={t('connect.back')}
-            onClick={() => navigate(backTo, { replace: true })}
-          >
-            <ArrowLeft className="size-4 rtl:rotate-180" />
-          </Button>
-          <Logo />
-          <span className="text-muted-foreground">/</span>
-          <span className="truncate text-sm font-medium">{t('connect.title')}</span>
+          <Plug className="size-4 shrink-0" />
+          <span className="truncate text-sm font-semibold">{t('connect.title')}</span>
         </div>
         <div className="flex items-center gap-2">
-          <LanguageSelect />
-          <ThemeToggle />
+          {/* в модалке тема и язык лишние — они есть в меню профиля */}
+          {!onClose && <LanguageSelect />}
+          {!onClose && <ThemeToggle />}
+          {onClose && (
+            <Button variant="ghost" size="icon" onClick={onClose} title={t('connect.back')}>
+              <X className="size-4" />
+            </Button>
+          )}
         </div>
       </header>
 
-      <main className="mx-auto w-full max-w-2xl flex-1 space-y-6 overflow-y-auto px-6 py-8">
+      <main className="min-h-0 flex-1 space-y-5 overflow-y-auto p-5">
         {/* Шаг 1: одна кнопка — скопировать приглашение */}
         <section className="rounded-xl border bg-card p-5">
           <h1 className="flex items-center gap-2 text-base font-bold">
@@ -267,6 +266,60 @@ export function ConnectScreen() {
           </ul>
         </section>
       </main>
+    </div>
+  )
+}
+
+/**
+ * Отдельный маршрут /connect — обёртка над той же панелью. Существует ради
+ * старых ссылок; из интерфейса подключение открывается модалкой.
+ */
+export function ConnectScreen() {
+  const navigate = useNavigate()
+  const { t } = useTranslation()
+
+  useEffect(() => {
+    if (!getSessionToken()) navigate('/login', { replace: true })
+  }, [navigate])
+
+  return (
+    <div className="flex h-dvh flex-col">
+      <header className="flex items-center justify-between border-b px-6 py-3">
+        <div className="flex min-w-0 items-center gap-2">
+          {/* явный адрес, а не navigate(-1): после рефреша истории нет */}
+          <Button
+            variant="ghost"
+            size="icon"
+            className="shrink-0"
+            title={t('connect.back')}
+            onClick={() => navigate('/start', { replace: true })}
+          >
+            <ArrowLeft className="size-4 rtl:rotate-180" />
+          </Button>
+          <Logo />
+        </div>
+        <div className="flex items-center gap-2">
+          <LanguageSelect />
+          <ThemeToggle />
+        </div>
+      </header>
+      <div className="mx-auto w-full max-w-2xl flex-1 overflow-y-auto">
+        <ConnectPanel />
+      </div>
+    </div>
+  )
+}
+
+/** Модалка подключения — основной вход из проекта и из меню профиля. */
+export function ConnectDialog({ onClose }: { onClose: () => void }) {
+  return (
+    <div className="fixed inset-0 z-50 grid place-items-center bg-black/40 p-4" onClick={onClose}>
+      <div
+        className="flex max-h-[85dvh] w-full max-w-2xl flex-col overflow-hidden rounded-xl border bg-card shadow-lg"
+        onClick={(e) => e.stopPropagation()}
+      >
+        <ConnectPanel onClose={onClose} />
+      </div>
     </div>
   )
 }

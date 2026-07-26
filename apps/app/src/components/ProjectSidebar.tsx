@@ -5,7 +5,7 @@ import { useTranslation } from 'react-i18next'
 import { Building2, Plus, Search } from 'lucide-react'
 import { api, type Company, type Me, type ProjectListItem } from '@/lib/api'
 import { cn } from '@/lib/utils'
-import { Avatar } from '@/components/ui/avatar'
+import { ProfileMenu } from '@/components/ProfileMenu'
 import { AvatarGroup } from '@/components/ui/avatar-group'
 import { Input } from '@/components/ui/input'
 import { Logo } from '@/components/Logo'
@@ -158,13 +158,10 @@ export function ProjectSidebar({ me, onPick }: { me?: Me; onPick?: () => void })
           <Plus className="size-3.5" />
           {t('sidebar.newProject')}
         </button>
-        <button
-          onClick={() => navigate('/connect')}
-          className="rounded-full p-0.5 transition-opacity hover:opacity-80"
-          title={me?.name}
-        >
-          <Avatar name={me?.name} src={me?.avatarUrl} size={28} />
-        </button>
+        {/* тот же аватар, что в шапке, ведёт себя одинаково: открывает меню
+            профиля. Раньше отсюда уводило на /connect — разное поведение у
+            одного и того же элемента. */}
+        <ProfileMenu me={me} companyId={company?.id} />
       </div>
     </div>
   )

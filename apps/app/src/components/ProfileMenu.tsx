@@ -14,6 +14,7 @@ import {
   DropdownMenuSeparator,
 } from '@/components/ui/dropdown-menu'
 import { useConfirm } from '@/components/ui/confirm'
+import { ConnectDialog } from '@/screens/ConnectScreen'
 import { LanguageSelect } from '@/components/LanguageSelect'
 import { ThemeToggle } from '@/components/ThemeToggle'
 
@@ -30,6 +31,7 @@ export function ProfileMenu({
   companyId?: string
   isAdmin?: boolean
 }) {
+  const [connectOpen, setConnectOpen] = useState(false)
   const { t } = useTranslation()
   const navigate = useNavigate()
   const qc = useQueryClient()
@@ -86,6 +88,7 @@ export function ProfileMenu({
   }
 
   return (
+    <>
     <DropdownMenu onOpenChange={(o) => !o && setEditing(false)}>
       <DropdownMenuTrigger asChild>
         <button className="rounded-full outline-none ring-offset-2 ring-offset-background transition-shadow focus-visible:ring-2 focus-visible:ring-ring" title={me?.name}>
@@ -160,8 +163,9 @@ export function ProfileMenu({
         )}
 
         {/* Подключение внешнего ИИ — настройка пользователя, а не проекта,
-            поэтому доступна из любого места (SPEC §8.27) */}
-        <DropdownMenuItem onSelect={() => navigate('/connect')}>
+            поэтому доступна из любого места (SPEC §8.27). Модалкой, а не
+            отдельным экраном: уводить из проекта ради ввода кода незачем. */}
+        <DropdownMenuItem onSelect={() => setConnectOpen(true)}>
           <Plug className="size-4" />
           {t('connect.menuItem')}
         </DropdownMenuItem>
@@ -192,5 +196,7 @@ export function ProfileMenu({
         </DropdownMenuItem>
       </DropdownMenuContent>
     </DropdownMenu>
+    {connectOpen && <ConnectDialog onClose={() => setConnectOpen(false)} />}
+    </>
   )
 }
