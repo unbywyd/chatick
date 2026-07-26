@@ -73,7 +73,8 @@ export function RichEditor({
   readOnly = false,
 }: {
   value: string
-  onChange: (markdown: string, mentionIds: string[]) => void
+  /** HTML-содержимое: Tiptap хранит и отдаёт разметку напрямую */
+  onChange: (html: string, mentionIds: string[]) => void
   onSubmit?: () => void
   placeholder?: string
   mentions: RichMention[]
@@ -99,7 +100,7 @@ export function RichEditor({
       Mention.configure({ HTMLAttributes: { class: 'mention' }, suggestion: mentionSuggestion(() => mentions) as never }),
       Image.configure({ inline: false, allowBase64: false, HTMLAttributes: { class: 'inline-doc-image' } }),
     ],
-    content: markdownToHtml(withInlineImageAuth(value)),
+    content: withInlineImageAuth(value),
     editorProps: {
       attributes: { class: cn('tiptap-editor max-h-[50vh] min-h-16 overflow-y-auto px-3 py-2 text-sm outline-none', className) },
       handleKeyDown: (_v, event) => {
@@ -135,7 +136,7 @@ export function RichEditor({
       touched.current = true
       const json = editor.getJSON() as MdNode
       // токен доступа к картинкам в сохранённый текст попасть не должен
-      onChange(stripInlineImageAuth(serializeToMarkdown(json)), collectMentions(json))
+      onChange(stripInlineImageAuth(editor.getHTML()), collectMentions(json))
     },
   })
 
@@ -157,7 +158,7 @@ export function RichEditor({
   useEffect(() => {
     if (!editor) return
     if (readOnly) {
-      editor.commands.setContent(markdownToHtml(withInlineImageAuth(value)))
+      editor.commands.setContent(withInlineImageAuth(value))
       return
     }
     if (value === '') {
@@ -166,7 +167,7 @@ export function RichEditor({
       return
     }
     if (!touched.current && editor.isEmpty) {
-      editor.commands.setContent(markdownToHtml(withInlineImageAuth(value)))
+      editor.commands.setContent(withInlineImageAuth(value))
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [value, readOnly])
@@ -281,6 +282,10 @@ function inline(nodes: MdNode[] = []): string {
     })
     .join('')
 }
+/**
+ * @deprecated Редактор хранит HTML напрямую (Tiptap умеет это сам).
+ * Оставлено на случай, если понадобится экспорт в markdown.
+ */
 export function serializeToMarkdown(doc: MdNode): string {
   const blocks: string[] = []
   for (const node of doc.content ?? []) {
@@ -319,6 +324,7 @@ function looksLikeHtml(s: string): boolean {
   return /<(p|h[1-6]|ul|ol|li|blockquote|pre|div|table|strong|em|code)[^>]*>[\s\S]*<\/>/i.test(s)
 }
 
+/** @deprecated см. serializeToMarkdown — конвертация больше не нужна. */
 function markdownToHtml(md: string): string {
   if (!md) return ''
 
