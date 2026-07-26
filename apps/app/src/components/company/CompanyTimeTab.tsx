@@ -140,7 +140,10 @@ export function CompanyTimeTab({ companyId }: { companyId: string }) {
 
   return (
     <div className="space-y-4">
-      <div className="flex flex-wrap items-center gap-2">
+      {/* Панель липкая: со списком в двадцать человек период и итог уезжают
+          вверх, а сверяются с ними постоянно. -mx/px компенсируют отступы
+          страницы, чтобы фон перекрывал контент под собой целиком. */}
+      <div className="sticky -top-8 z-10 -mx-6 -mt-8 flex flex-wrap items-center gap-2 border-b bg-background px-6 pb-3 pt-8">
         <PeriodPicker value={period} onChange={setPeriod} className="w-52" />
         <div className="relative w-48">
           <Search className="pointer-events-none absolute start-2.5 top-1/2 size-3.5 -translate-y-1/2 text-muted-foreground" />
