@@ -6,7 +6,6 @@ import { Building2, PanelLeftClose, PanelLeftOpen, Plus, Search } from 'lucide-r
 import { api, type Company, type Me, type ProjectListItem } from '@/lib/api'
 import { cn } from '@/lib/utils'
 import { ProfileMenu } from '@/components/ProfileMenu'
-import { AvatarGroup } from '@/components/ui/avatar-group'
 import { ProjectBadge } from '@/components/ui/project-badge'
 import { Input } from '@/components/ui/input'
 import { Logo } from '@/components/Logo'
@@ -173,7 +172,9 @@ export function ProjectSidebar({ me, onPick }: { me?: Me; onPick?: () => void })
                   active ? 'bg-accent' : 'hover:bg-accent/60',
                 )}
               >
-                <AvatarGroup members={p.members ?? []} total={p.memberCount} size={42} />
+                {/* значок проекта, а не лица участников: в списке нужно
+                    различать проекты, а люди в них и так пересекаются */}
+                <ProjectBadge name={p.name} color={p.color} logoUrl={p.logoUrl} size={42} />
                 <span className="min-w-0 flex-1">
                   <span className="flex items-baseline gap-2">
                     <span className={cn('truncate text-sm', unread > 0 ? 'font-bold' : 'font-medium')}>{p.name}</span>
