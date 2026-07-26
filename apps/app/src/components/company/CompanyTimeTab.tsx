@@ -2,10 +2,11 @@ import { useMemo, useState } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import { useTranslation } from 'react-i18next'
 import { toast } from 'sonner'
-import { Download } from 'lucide-react'
+import { Download, Search } from 'lucide-react'
 import { api } from '@/lib/api'
 import { Avatar } from '@/components/ui/avatar'
 import { Button } from '@/components/ui/button'
+import { Input } from '@/components/ui/input'
 import { DropdownMenu, DropdownMenuTrigger, DropdownMenuContent, DropdownMenuItem } from '@/components/ui/dropdown-menu'
 import { Select, SelectTrigger, SelectValue, SelectContent, SelectItem } from '@/components/ui/select'
 import { PeriodPicker, resolvePreset, type Period } from '@/components/ui/period-picker'
@@ -36,6 +37,7 @@ export function CompanyTimeTab({ companyId }: { companyId: string }) {
   const { t } = useTranslation()
   const [period, setPeriod] = useState<Period>(() => resolvePreset('lastMonth'))
   const [userId, setUserId] = useState('')
+  const [q, setQ] = useState('')
 
   const members = useQuery({
     queryKey: ['company-members', companyId],
@@ -55,7 +57,12 @@ export function CompanyTimeTab({ companyId }: { companyId: string }) {
     queryFn: () => api<Report>(`/api/v1/time/company/${companyId}?${query}`, {}, 'project'),
   })
 
-  const people = report.data?.people ?? []
+  const all = report.data?.people ?? []
+  // поиск по имени: на двадцати сотрудниках список уже не проглядеть глазами
+  const people = useMemo(() => {
+    const needle = q.trim().toLowerCase()
+    return needle ? all.filter((p) => p.name.toLowerCase().includes(needle)) : all
+  }, [all, q])
 
   /** Точка с запятой: Excel в русской локали не разбивает запятые. */
   const download = (rows: string[][], name: string) => {
@@ -111,12 +118,34 @@ export function CompanyTimeTab({ companyId }: { companyId: string }) {
     )
   }
 
+  /** Выгрузка по одному человеку: чаще всего платят именно поштучно. */
+  const exportPerson = (p: Person) => {
+    download(
+      [
+        ['Person', 'Date', 'Hours', 'Minutes'],
+        ...p.days.map((d) => [p.name, d.day, (d.minutes / 60).toFixed(2), String(d.minutes)]),
+        [],
+        ['Projects', '', '', ''],
+        ...p.projects.map((pr) => [pr.name, '', (pr.minutes / 60).toFixed(2), String(pr.minutes)]),
+        [],
+        ['TOTAL', '', (p.minutes / 60).toFixed(2), String(p.minutes)],
+        ['Days worked', '', String(p.daysWorked), ''],
+        ['Avg per day', '', (p.avgPerDay / 60).toFixed(2), String(p.avgPerDay)],
+      ],
+      `hours-${p.name.replace(/\s+/g, '-').toLowerCase()}`,
+    )
+  }
+
   const maxMinutes = Math.max(1, ...people.map((p) => p.minutes))
 
   return (
     <div className="space-y-4">
       <div className="flex flex-wrap items-center gap-2">
         <PeriodPicker value={period} onChange={setPeriod} className="w-52" />
+        <div className="relative w-48">
+          <Search className="pointer-events-none absolute start-2.5 top-1/2 size-3.5 -translate-y-1/2 text-muted-foreground" />
+          <Input value={q} onChange={(e) => setQ(e.target.value)} placeholder={t('people.search')} className="h-9 ps-8" />
+        </div>
         <Select value={userId || 'all'} onValueChange={(v) => setUserId(v === 'all' ? '' : v)}>
           <SelectTrigger className="w-auto min-w-40">
             <SelectValue />
@@ -165,6 +194,13 @@ export function CompanyTimeTab({ companyId }: { companyId: string }) {
                   <span className="block h-full rounded-full bg-brand" style={{ width: `${(p.minutes / maxMinutes) * 100}%` }} />
                 </span>
                 <span className="w-20 shrink-0 text-end font-mono text-base tabular-nums">{formatDuration(p.minutes)}</span>
+                <button
+                  onClick={() => exportPerson(p)}
+                  title={t('time.exportPerson')}
+                  className="shrink-0 rounded p-1.5 text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
+                >
+                  <Download className="size-3.5" />
+                </button>
               </div>
 
               {/* дни и средняя выработка: по ним сверяют табель */}

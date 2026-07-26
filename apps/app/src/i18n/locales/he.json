@@ -939,7 +939,8 @@
     "exportSummary": "סיכום (אדם × פרויקט)",
     "exportDaily": "יום אחר יום",
     "daysWorked": "ימי עבודה: {{count}}",
-    "avgPerDay": "ממוצע ליום"
+    "avgPerDay": "ממוצע ליום",
+    "exportPerson": "ייצוא עבור אדם זה"
   },
   "period": {
     "today": "היום",

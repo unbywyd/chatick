@@ -939,7 +939,8 @@
     "exportSummary": "Summary (person × project)",
     "exportDaily": "Day by day",
     "daysWorked": "{{count}} days worked",
-    "avgPerDay": "avg/day"
+    "avgPerDay": "avg/day",
+    "exportPerson": "Export this person"
   },
   "period": {
     "today": "Today",

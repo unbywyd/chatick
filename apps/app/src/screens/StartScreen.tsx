@@ -95,7 +95,10 @@ export function StartScreen() {
       </header>
 
       {/* шире, чем раньше: карточки проектов идут в две колонки */}
-      <main className="mx-auto w-full max-w-5xl flex-1 overflow-y-auto px-6 py-8">
+      {/* Прокрутка на всю ширину окна: ограниченный по ширине контейнер
+          рисовал полосу посреди экрана. Содержимое центрируется внутри. */}
+      <main className="min-h-0 flex-1 overflow-y-auto">
+        <div className="mx-auto w-full max-w-6xl px-6 py-8">
         {!companyId ? (
           <CompanyPicker
             data={companiesQ.data}
@@ -106,6 +109,7 @@ export function StartScreen() {
         ) : company ? (
           <CompanyHome company={company} meId={me.data?.id} onEntered={(id) => navigate(`/p/${id}`)} />
         ) : null}
+        </div>
       </main>
     </div>
   )
