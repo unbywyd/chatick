@@ -323,10 +323,15 @@ bridgeRoute.get('/messages/:id/context', async (c) => {
 
   // вложения целевого сообщения: просьбы вида «пришли файл» часто ссылаются на них
   const atts = await db.select().from(files).where(eq(files.messageId, target.id))
+  // автора целевого сообщения надо подтянуть: без него target выглядел как «AI»,
+  // и агент не понимал, кто именно его о чём-то просит
+  const targetAuthor = target.authorId
+    ? (await db.query.users.findFirst({ where: eq(users.id, target.authorId) })) ?? null
+    : null
 
   return c.json({
     target: {
-      ...view({ m: target, u: null }),
+      ...view({ m: target, u: targetAuthor }),
       attachments: atts.map((f) => ({ id: f.id, name: f.name, mime: f.mime, size: Number(f.size) })),
     },
     before: before.reverse().map(view),
@@ -742,6 +747,7 @@ bridgeRoute.get('/notes/:id', async (c) => {
     sources: JSON.parse(row.sources) as unknown[],
     mentionedIds: JSON.parse(row.mentionedIds) as string[],
     remindAt: row.remindAt,
+    createdVia: row.createdVia, // ui | bridge | ai — видно, чьей рукой заведена
     author: author ? { id: author.id, name: author.name } : null,
     createdAt: row.createdAt,
     updatedAt: row.updatedAt,
