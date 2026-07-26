@@ -998,6 +998,15 @@
     "signedOut": "Вы не вошли",
     "signedOutHint": "Войдите, чтобы видеть таймер,<br>задачи и уведомления",
     "idleNoProject": "Откройте проект, чтобы начать учёт",
-    "minShort": "мин"
+    "minShort": "мин",
+    "tabConnect": "Доступ",
+    "connectHint": "Введите код, который показал ассистент",
+    "connectActsAsYou": "Будет действовать от вашего имени в выбранном проекте",
+    "connectProject": "Проект",
+    "connectAllow": "Разрешить",
+    "connectCancel": "Отмена",
+    "connectBadCode": "Код не найден или истёк",
+    "connectDone": "Доступ выдан",
+    "connectFailed": "Не удалось выдать доступ"
   }
 }

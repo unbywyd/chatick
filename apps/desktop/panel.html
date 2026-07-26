@@ -126,6 +126,49 @@
       }
       .empty { padding: 34px 16px; text-align: center; color: var(--muted); }
 
+      /* --- подключение ассистента --- */
+      .connect { padding: 12px 10px; }
+      .connect-hint { color: var(--muted); margin-bottom: 10px; }
+      .code-input {
+        width: 100%;
+        border: 1px solid var(--line); border-radius: 8px;
+        background: var(--card); color: var(--text);
+        font: 600 15px/1 ui-monospace, 'SF Mono', Menlo, monospace;
+        letter-spacing: .12em; text-align: center; text-transform: uppercase;
+        padding: 11px 10px;
+      }
+      .code-input:focus { outline: 0; border-color: var(--brand); }
+      .connect-box {
+        margin-top: 10px; padding: 11px 12px;
+        border: 1px solid var(--line); border-radius: 8px;
+        background: var(--card);
+      }
+      .connect-who { font-weight: 600; }
+      .connect-warn { margin-top: 4px; color: var(--muted); font-size: 11.5px; }
+      .connect-label { display: block; margin: 10px 0 5px; color: var(--muted); font-size: 11.5px; }
+      .connect select {
+        width: 100%;
+        border: 1px solid var(--line); border-radius: 7px;
+        background: var(--bg); color: var(--text);
+        font: inherit; padding: 7px 8px;
+      }
+      .connect select:focus { outline: 0; border-color: var(--brand); }
+      .connect-actions { margin-top: 10px; display: flex; gap: 8px; }
+      .connect-actions button {
+        flex: 1;
+        border: 1px solid var(--line); border-radius: 7px;
+        background: var(--card); color: var(--muted);
+        font: inherit; padding: 7px; cursor: pointer;
+        transition: background .12s, color .12s;
+      }
+      .connect-actions button:hover { background: #232323; color: var(--text); }
+      .connect-actions .allow { background: var(--brand); border-color: var(--brand); color: #111; font-weight: 600; }
+      .connect-actions .allow:hover { background: #e2ff62; border-color: #e2ff62; color: #111; }
+      .connect-actions .allow:disabled { opacity: .5; cursor: default; }
+      .connect-msg { margin-top: 9px; font-size: 12px; }
+      .connect-msg.ok { color: var(--brand); }
+      .connect-msg.err { color: #f5736f; }
+
       /* --- до входа: панель не притворяется пустой, а говорит почему --- */
       body.guest .timer,
       body.guest nav { display: none; }
@@ -181,6 +224,7 @@
       <button data-tab="inbox" class="active"><span data-t="tabInbox">For me</span><span class="count" id="cnt" hidden></span></button>
       <button data-tab="tasks" data-t="tabTasks">Tasks</button>
       <button data-tab="projects" data-t="tabProjects">Projects</button>
+      <button data-tab="connect" data-t="tabConnect">Connect</button>
     </nav>
 
     <main id="list"></main>
@@ -316,8 +360,132 @@
           }
         }
 
+        if (tab === 'connect') {
+          el.innerHTML = renderConnect()
+          bindConnect()
+          return
+        }
+
         el.innerHTML = rows.join('')
       }
+
+      // --- подключение ассистента ---------------------------------------------
+      //
+      // Коды приходят из редактора или терминала, и лезть за ними в браузер
+      // неудобно — панель уже открыта. Проверку и подтверждение делает веб:
+      // права и сессия есть только у него.
+
+      let connect = { code: '', clientName: null, msg: null, msgKind: null, busy: false }
+
+      function renderConnect() {
+        const projects = state.projects || []
+        const options = projects
+          .map((p) => `<option value="${escape(p.id)}">${escape(p.name)}</option>`)
+          .join('')
+
+        return `
+          <div class="connect">
+            <p class="connect-hint">${T('connectHint', 'Enter the code shown by your assistant')}</p>
+            <input id="codeInput" class="code-input" maxlength="12" spellcheck="false"
+                   placeholder="XXXX-XXXX" value="${escape(connect.code)}" />
+            ${
+              connect.clientName
+                ? `<div class="connect-box">
+                     <div class="connect-who">${escape(connect.clientName)}</div>
+                     <div class="connect-warn">${T('connectActsAsYou', 'Will act on your behalf in the chosen project')}</div>
+                     <label class="connect-label">${T('connectProject', 'Project')}</label>
+                     <select id="connectProject" ${projects.length ? '' : 'disabled'}>
+                       ${options || `<option>${T('emptyProjects', 'No projects yet')}</option>`}
+                     </select>
+                     <div class="connect-actions">
+                       <button class="allow" id="connectAllow" ${projects.length && !connect.busy ? '' : 'disabled'}>
+                         ${T('connectAllow', 'Allow')}
+                       </button>
+                       <button id="connectCancel">${T('connectCancel', 'Cancel')}</button>
+                     </div>
+                   </div>`
+                : ''
+            }
+            ${connect.msg ? `<p class="connect-msg ${connect.msgKind || ''}">${escape(connect.msg)}</p>` : ''}
+          </div>`
+      }
+
+      /**
+       * Перерисовка вкладки. Отдельно от renderList: пересобирать поле ввода
+       * на каждый ответ значит терять курсор посреди набора.
+       */
+      function refreshConnect() {
+        const el = $('list')
+        const focused = document.activeElement?.id === 'codeInput'
+        const caret = focused ? $('codeInput').selectionStart : null
+        el.innerHTML = renderConnect()
+        bindConnect()
+        if (focused) {
+          const input = $('codeInput')
+          input.focus()
+          if (caret !== null) input.setSelectionRange(caret, caret)
+        }
+      }
+
+      function bindConnect() {
+        const input = $('codeInput')
+        if (!input) return
+
+        // Курсор в поле сразу: вкладку открывают ровно затем, чтобы вставить код.
+        if (!connect.clientName && document.activeElement !== input) input.focus()
+
+        input.oninput = () => {
+          connect.code = input.value.trim()
+          connect.clientName = null
+          connect.msg = null
+          // Код формата XXXX-XXXX: как только набрана нужная длина, спрашиваем,
+          // кто это, — вручную нажимать «проверить» незачем.
+          if (connect.code.replace(/[^0-9a-z]/gi, '').length >= 8) {
+            connect.busy = true
+            window.panel.checkCode(connect.code)
+          }
+        }
+
+        const allow = $('connectAllow')
+        if (allow) {
+          allow.onclick = () => {
+            const select = $('connectProject')
+            if (!select?.value) return
+            connect.busy = true
+            connect.msg = null
+            refreshConnect()
+            window.panel.approveCode(connect.code, select.value)
+          }
+        }
+
+        const cancel = $('connectCancel')
+        if (cancel) {
+          cancel.onclick = () => {
+            connect = { code: '', clientName: null, msg: null, msgKind: null, busy: false }
+            refreshConnect()
+          }
+        }
+      }
+
+      window.panel.onConnect((r) => {
+        connect.busy = false
+        if (r.step === 'found') {
+          connect.clientName = r.clientName
+          connect.msg = null
+        } else if (r.step === 'invalid') {
+          // Пока код набирают по символу, «не найден» — обычное состояние,
+          // а не ошибка: ругаемся только на полностью введённый код.
+          connect.clientName = null
+          connect.msg = connect.code.length >= 9 ? T('connectBadCode', 'Code not found or expired') : null
+          connect.msgKind = 'err'
+        } else if (r.step === 'approved') {
+          connect = { code: '', clientName: null, msg: T('connectDone', 'Access granted'), msgKind: 'ok', busy: false }
+        } else if (r.step === 'failed') {
+          connect.msg = r.error || T('connectFailed', 'Could not grant access')
+          connect.msgKind = 'err'
+        }
+        if (tab === 'connect') refreshConnect()
+      })
 
       function render() {
         // статичные подписи: вкладки и кнопки внизу

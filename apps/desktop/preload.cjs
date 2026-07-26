@@ -34,6 +34,19 @@ contextBridge.exposeInMainWorld('chatickDesktop', {
     ipcRenderer.on('timer:toggle', handler)
     return () => ipcRenderer.off('timer:toggle', handler)
   },
+  /** Ответ панели на её же запрос про код подключения. */
+  connectResult: (payload) => ipcRenderer.send('connect:result', payload),
+
+  onConnectCheck: (fn) => {
+    const handler = (_e, code) => fn(code)
+    ipcRenderer.on('connect:check', handler)
+    return () => ipcRenderer.off('connect:check', handler)
+  },
+  onConnectApprove: (fn) => {
+    const handler = (_e, payload) => fn(payload)
+    ipcRenderer.on('connect:approve', handler)
+    return () => ipcRenderer.off('connect:approve', handler)
+  },
   onNavigate: (fn) => {
     const handler = (_e, link) => fn(link)
     ipcRenderer.on('navigate', handler)

@@ -20,7 +20,18 @@ type DesktopBridge = {
   info: () => Promise<{ version: string; platform: string; openAtLogin: boolean }>
   onToggleTimer: (fn: () => void) => () => void
   onNavigate: (fn: (link: string) => void) => () => void
+  /** Ответ панели про введённый код подключения. */
+  connectResult: (payload: ConnectResult) => void
+  onConnectCheck: (fn: (code: string) => void) => () => void
+  onConnectApprove: (fn: (p: { code: string; projectId: string }) => void) => () => void
 }
+
+/** Что панель узнаёт о введённом коде: кто просит доступ и чем кончилось. */
+type ConnectResult =
+  | { step: 'found'; code: string; clientName: string }
+  | { step: 'invalid'; code: string }
+  | { step: 'approved'; code: string }
+  | { step: 'failed'; code: string; error: string }
 
 declare global {
   interface Window {
@@ -196,6 +207,15 @@ export function useDesktopSync() {
         tabInbox: t('desktop.tabInbox'),
         tabTasks: t('desktop.tabTasks'),
         tabProjects: t('desktop.tabProjects'),
+        tabConnect: t('desktop.tabConnect'),
+        connectHint: t('desktop.connectHint'),
+        connectActsAsYou: t('desktop.connectActsAsYou'),
+        connectProject: t('desktop.connectProject'),
+        connectAllow: t('desktop.connectAllow'),
+        connectCancel: t('desktop.connectCancel'),
+        connectBadCode: t('desktop.connectBadCode'),
+        connectDone: t('desktop.connectDone'),
+        connectFailed: t('desktop.connectFailed'),
         emptyInbox: t('desktop.emptyInbox'),
         emptyTasks: t('desktop.emptyTasks'),
         emptyProjects: t('journal.empty'),
@@ -269,11 +289,37 @@ export function useDesktopSync() {
       qc.invalidateQueries({ queryKey: ['time-running'] })
       qc.invalidateQueries({ queryKey: ['time-entries'] })
     })
+
+    // --- подключение ассистента из панели ------------------------------------
+    // Панель показывает поле для кода, но проверять и подтверждать может
+    // только веб: у него сессия и права. Туда же уходит выбор проекта —
+    // туннель открывается в конкретный проект, а не «в аккаунт».
+    const offCheck = bridge.onConnectCheck(async (code) => {
+      try {
+        const r = await api<{ clientName: string }>(`/api/v1/auth/bridge/code/${encodeURIComponent(code)}`)
+        bridge.connectResult({ step: 'found', code, clientName: r.clientName })
+      } catch {
+        bridge.connectResult({ step: 'invalid', code })
+      }
+    })
+
+    const offApprove = bridge.onConnectApprove(async ({ code, projectId }) => {
+      try {
+        await api('/api/v1/auth/bridge/approve', { method: 'POST', body: JSON.stringify({ code, projectId }) })
+        bridge.connectResult({ step: 'approved', code })
+        qc.invalidateQueries({ queryKey: ['bridge-sessions'] })
+      } catch (e) {
+        bridge.connectResult({ step: 'failed', code, error: e instanceof Error ? e.message : String(e) })
+      }
+    })
+
     return () => {
       offNav()
       offTimer()
+      offCheck()
+      offApprove()
     }
-  }, [bridge, navigate, qc, running.data?.items])
+  }, [bridge, navigate, qc, running.data?.items, activeProjectId])
 }
 
 // --- что уже показывали -------------------------------------------------------

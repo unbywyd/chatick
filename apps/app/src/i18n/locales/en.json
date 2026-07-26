@@ -996,6 +996,15 @@
     "signedOut": "Not signed in",
     "signedOutHint": "Sign in to see your timer,<br>tasks and notifications",
     "idleNoProject": "Open a project to start tracking",
-    "minShort": "min"
+    "minShort": "min",
+    "tabConnect": "Connect",
+    "connectHint": "Enter the code shown by your assistant",
+    "connectActsAsYou": "Will act on your behalf in the chosen project",
+    "connectProject": "Project",
+    "connectAllow": "Allow",
+    "connectCancel": "Cancel",
+    "connectBadCode": "Code not found or expired",
+    "connectDone": "Access granted",
+    "connectFailed": "Could not grant access"
   }
 }

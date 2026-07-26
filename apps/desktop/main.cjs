@@ -349,6 +349,13 @@ function registerIpc() {
     if (link) send('navigate', link)
   })
   ipcMain.on('panel:close', () => panel?.hide())
+
+  // Подключение ассистента: панель передаёт код, веб проверяет и открывает
+  // туннель, ответ возвращается в панель. Главный процесс здесь только
+  // почтальон — он не знает ни про сессии, ни про права.
+  ipcMain.on('panel:check-code', (_e, code) => send('connect:check', code))
+  ipcMain.on('panel:approve-code', (_e, payload) => send('connect:approve', payload))
+  ipcMain.on('connect:result', (_e, payload) => panel?.webContents.send('panel:connect', payload))
 }
 
 // --- горячие клавиши ----------------------------------------------------------

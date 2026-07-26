@@ -10,6 +10,18 @@ contextBridge.exposeInMainWorld('panel', {
     return () => ipcRenderer.off('panel:state', handler)
   },
   toggleTimer: () => ipcRenderer.send('panel:toggle-timer'),
+
+  /**
+   * Код подключения ассистента. Панель только передаёт введённое: проверяет
+   * код и открывает туннель веб, у него есть сессия и права.
+   */
+  checkCode: (code) => ipcRenderer.send('panel:check-code', code),
+  approveCode: (code, projectId) => ipcRenderer.send('panel:approve-code', { code, projectId }),
+  onConnect: (fn) => {
+    const handler = (_e, payload) => fn(payload)
+    ipcRenderer.on('panel:connect', handler)
+    return () => ipcRenderer.off('panel:connect', handler)
+  },
   open: (link) => ipcRenderer.send('panel:open', link),
   openApp: () => ipcRenderer.send('window:show'),
   close: () => ipcRenderer.send('panel:close'),

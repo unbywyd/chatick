@@ -996,6 +996,15 @@
     "signedOut": "לא מחוברים",
     "signedOutHint": "היכנסו כדי לראות את הטיימר,<br>המשימות וההתראות",
     "idleNoProject": "פתחו פרויקט כדי להתחיל מעקב",
-    "minShort": "דק׳"
+    "minShort": "דק׳",
+    "tabConnect": "חיבור",
+    "connectHint": "הזינו את הקוד שהציג העוזר",
+    "connectActsAsYou": "יפעל בשמכם בפרויקט שנבחר",
+    "connectProject": "פרויקט",
+    "connectAllow": "לאשר",
+    "connectCancel": "ביטול",
+    "connectBadCode": "הקוד לא נמצא או פג תוקפו",
+    "connectDone": "הגישה אושרה",
+    "connectFailed": "לא ניתן היה לאשר גישה"
   }
 }
