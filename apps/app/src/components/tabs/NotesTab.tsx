@@ -319,7 +319,7 @@ export function NotesTab({ projectId }: { projectId: string }) {
               onClick={() => setTags(toggle(tags, tag))}
               className={cn(
                 'rounded-md px-2 py-0.5 text-xs transition-colors',
-                tags.includes(tag) ? 'bg-brand text-white' : 'bg-muted text-muted-foreground hover:bg-accent',
+                tags.includes(tag) ? 'bg-brand font-medium text-brand-foreground' : 'bg-muted text-muted-foreground hover:bg-accent',
               )}
             >
               #{tag}

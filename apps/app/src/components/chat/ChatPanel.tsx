@@ -213,16 +213,19 @@ export function ChatPanel({
     [t],
   )
 
-  // дип-линк ?msg=<id> (из файл-менеджера) → прыжок к сообщению
+  // дип-линк ?msg=<id> — из уведомления, поиска или файл-менеджера.
+  //
+  // Ждём, пока сообщения текущего проекта загрузятся: project-токен меняется
+  // не мгновенно, и переход из уведомления в ДРУГОЙ проект уходил со старым
+  // токеном — сервер искал сообщение не там и отвечал 404.
   useEffect(() => {
     const msg = searchParams.get('msg')
-    if (msg) {
-      jumpTo(msg)
-      searchParams.delete('msg')
-      setSearchParams(searchParams, { replace: true })
-    }
+    if (!msg || history.isLoading) return
+    jumpTo(msg)
+    searchParams.delete('msg')
+    setSearchParams(searchParams, { replace: true })
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [searchParams.get('msg')])
+  }, [searchParams.get('msg'), history.isLoading])
 
   const exitContext = () => {
     setContextView(null)
@@ -480,7 +483,7 @@ export function ChatPanel({
             </button>
             <button
               onClick={() => setNoteDraft(picked)}
-              className="inline-flex items-center gap-1.5 rounded bg-brand px-2.5 py-1 text-xs text-white"
+              className="inline-flex items-center gap-1.5 rounded bg-brand px-2.5 py-1 text-xs font-semibold text-brand-foreground"
             >
               <NotebookPen className="size-3.5" />
               {t('journal.saveFromChat')}
@@ -571,16 +574,21 @@ function MessageRow({
         picking && !picked && 'opacity-60',
       )}
     >
-      <div className="absolute end-1 top-1 flex items-center gap-0.5">
-        {/* opacity, а не hidden: показ/скрытие не должно двигать разметку */}
+      {/* Действия лежат поверх текста, поэтому им нужна своя подложка: без неё
+          значки читаются как часть сообщения и теряются на длинных строках.
+          opacity, а не hidden: показ/скрытие не должно двигать разметку. */}
+      <div
+        className={cn(
+          'absolute end-1 top-1 z-10 flex items-center gap-0.5 rounded-md border bg-popover p-0.5 shadow-sm transition-opacity',
+          picked ? 'opacity-100' : 'opacity-0 group-hover:opacity-100 focus-within:opacity-100',
+        )}
+      >
         <button
           onClick={onPick}
           title={t('journal.saveFromChat')}
           className={cn(
-            'rounded p-1 transition-opacity focus-visible:opacity-100',
-            picked
-              ? 'text-brand opacity-100'
-              : 'text-muted-foreground opacity-0 hover:text-foreground group-hover:opacity-100',
+            'rounded p-1 hover:bg-accent',
+            picked ? 'text-brand' : 'text-muted-foreground hover:text-foreground',
           )}
         >
           <NotebookPen className="size-3.5" />
@@ -589,7 +597,7 @@ function MessageRow({
           <button
             onClick={onDelete}
             title={t('chat.deleteMessage')}
-            className="rounded p-1 text-muted-foreground opacity-0 transition-opacity hover:text-destructive group-hover:opacity-100 focus-visible:opacity-100"
+            className="rounded p-1 text-muted-foreground hover:bg-accent hover:text-destructive"
           >
             <Trash2 className="size-3.5" />
           </button>
@@ -968,7 +976,7 @@ function SaveToNoteDialog({
           <button
             onClick={() => save.mutate()}
             disabled={save.isPending}
-            className="rounded bg-brand px-3 py-1.5 text-sm text-white disabled:opacity-60"
+            className="rounded bg-brand px-3 py-1.5 text-sm font-semibold text-brand-foreground disabled:opacity-60"
           >
             {t('common.save')}
           </button>
