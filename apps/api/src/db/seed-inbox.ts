@@ -134,7 +134,7 @@ async function main() {
       createdAt: new Date(Date.now() - i * 37 * 60_000),
     })
     created++
-    console.log(`  ${actor.name} → ${project.name}: ${draft.summary}`)
+    console.log(`  ${actor.name} → ${project.name}: ${summary}`)
   }
 
   console.log(`\nСоздано уведомлений: ${created} для ${me.name} <${me.email}>`)
