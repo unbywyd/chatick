@@ -5,6 +5,7 @@ import {
   documents,
   files,
   messages,
+  notes,
   notifications,
   projectMembers,
   projects,
@@ -18,7 +19,8 @@ import { hasPermission, memberDomains, type ProjectPermission } from './projects
 import { authenticateBridge, closeSession, startDeviceAuth, pollDeviceAuth, type BridgeIdentity } from '../lib/bridge-auth.js'
 import { connectDoc, guideDoc } from '../lib/bridge-docs.js'
 import { logActivity } from '../lib/audit.js'
-import { htmlToText } from '../lib/sanitize-html.js'
+import { createNote, NOTE_TYPES, type NoteType } from './notes.js'
+import { htmlToText, sanitizeHtml } from '../lib/sanitize-html.js'
 import { broadcast, sendToUser } from '../ws.js'
 import { env } from '../env.js'
 
@@ -643,6 +645,229 @@ bridgeRoute.post('/sprints', async (c) => {
     .returning()
   broadcast(scope.projectId, 'tasks_changed', {})
   return c.json({ id: row!.id, name: row!.name }, 201)
+})
+
+// --- Заметки (SPEC §8.31) ----------------------------------------------------
+// Ради двух сценариев: «сохрани это решение на будущее» из редактора и
+// «зафиксируй, что тут противоречие» из чата. Второй берёт цитаты копией.
+
+bridgeRoute.get('/notes', async (c) => {
+  const scope = await resolveProject(c as never)
+  if ('error' in scope) return c.json({ error: scope.error }, scope.status)
+  const denied = await require(c as never, 'documents.read', scope.projectId)
+  if (denied) return c.json(denied, 403)
+
+  const q = c.req.query('q')?.trim()
+  const conds = [isNull(notes.deletedAt)]
+
+  // company-поиск существует ради «в прошлом проекте это уже решали»
+  if (c.req.query('scope') === 'company') {
+    const project = await db.query.projects.findFirst({ where: eq(projects.id, scope.projectId) })
+    conds.push(
+      project?.companyId
+        ? or(eq(notes.projectId, scope.projectId), and(eq(notes.companyId, project.companyId), eq(notes.scope, 'company')))!
+        : eq(notes.projectId, scope.projectId),
+    )
+  } else {
+    conds.push(eq(notes.projectId, scope.projectId))
+  }
+
+  const types = (c.req.query('type') ?? '').split(',').map((t) => t.trim()).filter(Boolean)
+  if (types.length) conds.push(inArray(notes.type, types))
+  for (const tag of (c.req.query('tag') ?? '').split(',').map((t) => t.trim()).filter(Boolean)) {
+    conds.push(sql`${notes.tags}::jsonb ? ${tag}`)
+  }
+  if (q) {
+    const like = `%${q}%`
+    conds.push(or(sql`${notes.title} ilike ${like}`, sql`${notes.body} ilike ${like}`, sql`${notes.tags} ilike ${like}`)!)
+  }
+
+  const rows = await db
+    .select({ n: notes, author: users, project: projects })
+    .from(notes)
+    .leftJoin(users, eq(users.id, notes.authorId))
+    .leftJoin(projects, eq(projects.id, notes.projectId))
+    .where(and(...conds))
+    .orderBy(desc(notes.createdAt))
+    .limit(Math.min(100, Math.max(1, Number(c.req.query('limit')) || 50)))
+
+  return c.json({
+    items: rows.map((r) => ({
+      id: r.n.id,
+      type: r.n.type,
+      title: r.n.title,
+      preview: htmlToText(r.n.body).slice(0, 200),
+      tags: JSON.parse(r.n.tags) as string[],
+      scope: r.n.scope,
+      project: { id: r.n.projectId, name: r.project?.name ?? '' },
+      author: r.author ? { id: r.author.id, name: r.author.name } : null,
+      sourceCount: (JSON.parse(r.n.sources) as unknown[]).length,
+      createdAt: r.n.createdAt,
+    })),
+    hint:
+      'Add ?scope=company to search notes shared across every project of this company — that is where reusable technical solutions live. GET /x/notes/<id> returns the full body and the quoted sources.',
+  })
+})
+
+bridgeRoute.get('/notes/:id', async (c) => {
+  const scope = await resolveProject(c as never)
+  if ('error' in scope) return c.json({ error: scope.error }, scope.status)
+  const denied = await require(c as never, 'documents.read', scope.projectId)
+  if (denied) return c.json(denied, 403)
+
+  const row = await db.query.notes.findFirst({
+    where: and(eq(notes.id, c.req.param('id')), isNull(notes.deletedAt)),
+  })
+  if (!row) return c.json({ error: 'Note not found' }, 404)
+
+  // чужой проект — только если заметка помечена как company-видимая
+  if (row.projectId !== scope.projectId) {
+    const project = await db.query.projects.findFirst({ where: eq(projects.id, scope.projectId) })
+    if (!(row.scope === 'company' && row.companyId && row.companyId === project?.companyId)) {
+      return c.json({ error: 'Note not found' }, 404)
+    }
+  }
+
+  const author = row.authorId ? await db.query.users.findFirst({ where: eq(users.id, row.authorId) }) : null
+  return c.json({
+    id: row.id,
+    type: row.type,
+    title: row.title,
+    body: htmlToText(row.body),
+    html: row.body,
+    tags: JSON.parse(row.tags) as string[],
+    scope: row.scope,
+    projectId: row.projectId,
+    sources: JSON.parse(row.sources) as unknown[],
+    mentionedIds: JSON.parse(row.mentionedIds) as string[],
+    remindAt: row.remindAt,
+    author: author ? { id: author.id, name: author.name } : null,
+    createdAt: row.createdAt,
+    updatedAt: row.updatedAt,
+  })
+})
+
+bridgeRoute.post('/notes', async (c) => {
+  const id = auth(c as never)
+  const scope = await resolveProject(c as never)
+  if ('error' in scope) return c.json({ error: scope.error }, scope.status)
+  const denied = await require(c as never, 'documents.write', scope.projectId)
+  if (denied) return c.json(denied, 403)
+
+  const b = (await c.req.json().catch(() => ({}))) as Record<string, unknown>
+  const type = String(b.type ?? 'note')
+  if (!(NOTE_TYPES as readonly string[]).includes(type)) {
+    return c.json({ error: `type must be one of: ${NOTE_TYPES.join(', ')}` }, 400)
+  }
+  if (!String(b.title ?? '').trim() && !String(b.body ?? '').trim()) {
+    return c.json({ error: 'Provide at least title or body' }, 400)
+  }
+
+  const row = await createNote(
+    scope.projectId,
+    id.userId,
+    {
+      type: type as NoteType,
+      title: String(b.title ?? '').slice(0, 300),
+      body: String(b.body ?? ''),
+      tags: Array.isArray(b.tags) ? (b.tags as unknown[]).map(String).slice(0, 20) : [],
+      scope: b.scope === 'company' ? 'company' : 'project',
+      sources: Array.isArray(b.sources) ? (b.sources as never[]).slice(0, 50) : [],
+      mentionedIds: Array.isArray(b.mentionedIds) ? (b.mentionedIds as unknown[]).map(String) : [],
+      remindAt: typeof b.remindAt === 'string' ? b.remindAt : null,
+      sourceMessageIds: Array.isArray(b.sourceMessageIds)
+        ? (b.sourceMessageIds as unknown[]).map(String).slice(0, 50)
+        : [],
+    },
+    'bridge',
+  )
+  return c.json({ id: row.id, type: row.type, title: row.title, scope: row.scope }, 201)
+})
+
+bridgeRoute.patch('/notes/:id', async (c) => {
+  const id = auth(c as never)
+  const scope = await resolveProject(c as never)
+  if ('error' in scope) return c.json({ error: scope.error }, scope.status)
+  const denied = await require(c as never, 'documents.write', scope.projectId)
+  if (denied) return c.json(denied, 403)
+
+  const existing = await db.query.notes.findFirst({
+    where: and(eq(notes.id, c.req.param('id')), eq(notes.projectId, scope.projectId), isNull(notes.deletedAt)),
+  })
+  if (!existing) return c.json({ error: 'Note not found' }, 404)
+
+  const b = (await c.req.json().catch(() => ({}))) as Record<string, unknown>
+  const patch: Partial<typeof notes.$inferInsert> = { updatedAt: new Date() }
+  if (typeof b.type === 'string') {
+    if (!(NOTE_TYPES as readonly string[]).includes(b.type)) {
+      return c.json({ error: `type must be one of: ${NOTE_TYPES.join(', ')}` }, 400)
+    }
+    patch.type = b.type
+  }
+  if (typeof b.title === 'string') patch.title = b.title.slice(0, 300)
+  if (typeof b.body === 'string') patch.body = sanitizeHtml(b.body)
+  if (Array.isArray(b.tags)) patch.tags = JSON.stringify((b.tags as unknown[]).map((t) => String(t).toLowerCase()))
+  if (b.scope === 'company' || b.scope === 'project') patch.scope = b.scope
+  if (typeof b.remindAt === 'string' || b.remindAt === null) {
+    patch.remindAt = b.remindAt ? new Date(b.remindAt as string) : null
+    patch.remindedAt = null
+  }
+  // дописать цитаты, не потеряв уже сохранённые
+  if (Array.isArray(b.sourceMessageIds) && b.sourceMessageIds.length) {
+    const ids = (b.sourceMessageIds as unknown[]).map(String)
+    const rows = await db
+      .select({ m: messages, u: users })
+      .from(messages)
+      .leftJoin(users, eq(users.id, messages.authorId))
+      .where(and(eq(messages.projectId, scope.projectId), inArray(messages.id, ids)))
+    const byId = new Map(rows.map((r) => [r.m.id, r]))
+    const added = ids
+      .map((mid) => byId.get(mid))
+      .filter(Boolean)
+      .map((r) => ({
+        messageId: r!.m.id,
+        text: r!.m.text,
+        authorName: r!.u?.name ?? 'AI',
+        sentAt: r!.m.createdAt.toISOString(),
+      }))
+    patch.sources = JSON.stringify([...(JSON.parse(existing.sources) as unknown[]), ...added])
+  }
+
+  const [row] = await db.update(notes).set(patch).where(eq(notes.id, existing.id)).returning()
+  void logActivity({
+    projectId: scope.projectId,
+    actorId: id.userId,
+    action: 'update',
+    entityType: 'note',
+    entityId: row!.id,
+    entityLabel: row!.title,
+  })
+  broadcast(scope.projectId, 'notes', { action: 'update', id: row!.id })
+  return c.json({ id: row!.id, title: row!.title, type: row!.type })
+})
+
+bridgeRoute.delete('/notes/:id', async (c) => {
+  const id = auth(c as never)
+  const scope = await resolveProject(c as never)
+  if ('error' in scope) return c.json({ error: scope.error }, scope.status)
+  const denied = await require(c as never, 'documents.delete', scope.projectId)
+  if (denied) return c.json(denied, 403)
+
+  const existing = await db.query.notes.findFirst({
+    where: and(eq(notes.id, c.req.param('id')), eq(notes.projectId, scope.projectId), isNull(notes.deletedAt)),
+  })
+  if (!existing) return c.json({ error: 'Note not found' }, 404)
+  await db.update(notes).set({ deletedAt: new Date(), deletedById: id.userId }).where(eq(notes.id, existing.id))
+  void logActivity({
+    projectId: scope.projectId,
+    actorId: id.userId,
+    action: 'delete',
+    entityType: 'note',
+    entityId: existing.id,
+    entityLabel: existing.title,
+  })
+  broadcast(scope.projectId, 'notes', { action: 'delete', id: existing.id })
+  return c.json({ ok: true })
 })
 
 // --- Документы --------------------------------------------------------------

@@ -189,6 +189,62 @@ Example — handle everything waiting for me:
   POST   /x/documents/<id>/append  {"content"}       safe for long docs
   DELETE /x/documents/<id>
 
+## Notes — the project journal
+
+A note is a deliberate record: a solved problem, a decision, a contradiction, a
+reminder. Notes are created ON REQUEST, never automatically. When the person
+says "save this", "remember how we fixed it", "log that this contradicts what
+was said earlier" — that is a note.
+
+  GET    /x/notes?q=text&type=solution&tag=dns&scope=company&limit=50
+  GET    /x/notes/<id>              full body + the quoted sources
+  POST   /x/notes                   {"type","title","body","tags":[],"scope","sourceMessageIds":[],"mentionedIds":[],"remindAt"}
+  PATCH  /x/notes/<id>              same fields; sourceMessageIds APPENDS quotes
+  DELETE /x/notes/<id>
+
+  type:  solution     a problem and how it was solved — the reusable kind
+         problem      a known issue with no fix yet
+         decision     what was agreed and why
+         contradiction  instructions that conflict with each other
+         reminder     something to resurface later (set remindAt)
+         business     business-logic rule worth writing down
+         note         anything else
+
+  scope: "project" (default) or "company". Use "company" for technical
+         solutions — they are then findable from every project of this company,
+         which is the whole point: hit the same DNS error in another project,
+         search once, find the fix. Keep internal disputes and business rules
+         at "project".
+
+### Saving a solution (from the editor, no chat involved)
+
+    cat > /tmp/note.json <<'JSON'
+    {"type":"solution","scope":"company","title":"DNS resolution fails in Docker on WSL2",
+     "body":"<p>Symptom: ... </p><p>Fix: ...</p>","tags":["dns","docker","wsl"]}
+    JSON
+    curl -sS -X POST ${b}/x/notes -H "authorization: Bearer $TOKEN" \\
+      -H 'content-type: application/json; charset=utf-8' --data-binary @/tmp/note.json
+
+### Recording a contradiction (from chat)
+
+Pass sourceMessageIds IN THE ORDER THE MESSAGES WERE SENT — the chain is the
+evidence. We copy each message's text and author at save time, so the note still
+proves the point after the messages are edited away or scroll out of history.
+
+    GET /x/messages?limit=50           # find the message ids
+    POST /x/notes {"type":"contradiction","title":"Auth flow: three conflicting instructions",
+                   "body":"<p>...</p>","sourceMessageIds":["m1","m2","m3"],"mentionedIds":["<userId>"]}
+
+mentionedIds notifies those people — use it when someone needs to know the note
+exists, not by default.
+
+### Before solving anything, check whether it is already solved
+
+    curl -s '${b}/x/notes?scope=company&q=<the+error+text>' -H "authorization: Bearer $TOKEN"
+
+Worth doing at the start of a debugging session: a past project may already
+carry the answer.
+
 ## Chat
 
   GET    /x/messages?limit=50&before=<iso>
@@ -267,6 +323,11 @@ Everything below behaves exactly as in a single-project connection, but takes
   POST   /x/documents/<id>/append?project=<id>
   GET / POST  /x/messages?project=<id>   POST takes {"text","replyToId?","attachmentIds?"}
   GET    /x/messages/<messageId>/context?project=<id>   conversation around a message
+
+  GET / POST / PATCH / DELETE  /x/notes...?project=<id>
+         Project journal: solutions, decisions, contradictions, reminders.
+         ?scope=company searches notes shared across the whole company — check
+         it before debugging something that may already have been solved.
 
   GET    /x/inbox                       what concerns this person, ACROSS ALL projects
   POST   /x/inbox/read                  {"ids":[...]} or {"all":true}

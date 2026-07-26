@@ -451,7 +451,8 @@
     "ai": "AI & usage",
     "history": "History",
     "documents": "Documents",
-    "chat": "Chat"
+    "chat": "Chat",
+    "notes": "Notes"
   },
   "notif": {
     "title": "Notifications",
@@ -797,5 +798,52 @@
     "projects": "Projects",
     "newProject": "New project",
     "companySettings": "Company"
+  },
+  "journal": {
+    "title": "Notes",
+    "subtitle": "Solutions, decisions, contradictions and reminders — the project journal",
+    "new": "New note",
+    "edit": "Edit note",
+    "search": "Search in titles, text and tags",
+    "empty": "No notes yet",
+    "untitled": "Untitled",
+    "deleted": "Note deleted",
+    "deleteConfirm": "Delete note \"{{title}}\"?",
+    "titlePlaceholder": "What is this about?",
+    "bodyPlaceholder": "What happened, what was decided, how it was solved…",
+    "filters": "Filters",
+    "clearFilters": "Clear filters",
+    "author": "Author",
+    "mentions": "Mentions",
+    "anyone": "Anyone",
+    "from": "From",
+    "to": "To",
+    "tags": "Tags (comma separated)",
+    "sources": "Quoted from chat",
+    "company": "Company",
+    "companyWide": "Search across the company",
+    "companyWideHint": "Also shows notes other projects marked as company-wide.",
+    "scope": "Visibility",
+    "scopeProject": "This project",
+    "scopeCompany": "Whole company",
+    "scopeProjectHint": "Visible in this project only.",
+    "scopeCompanyHint": "Findable from every project of this company — use it for reusable technical solutions.",
+    "remindAt": "Remind me on",
+    "saveFromChat": "Save as note",
+    "savedFromChat": "Saved to notes",
+    "type": {
+      "solution": "Solution",
+      "problem": "Problem",
+      "decision": "Decision",
+      "contradiction": "Contradiction",
+      "reminder": "Reminder",
+      "business": "Business logic",
+      "note": "Note"
+    },
+    "picked": "{{count}} message(s) selected"
+  },
+  "common": {
+    "save": "Save",
+    "cancel": "Cancel"
   }
 }

@@ -21,6 +21,7 @@ import { NotificationsTab } from './components/tabs/NotificationsTab'
 import { AiUsageTab } from './components/tabs/AiUsageTab'
 import { HistoryTab } from './components/tabs/HistoryTab'
 import { DocumentsTab } from './components/tabs/DocumentsTab'
+import { NotesTab } from './components/tabs/NotesTab'
 
 // HashRouter — единый роутинг для веба и Electron (file://) без доп. настроек.
 const queryClient = new QueryClient()
@@ -68,6 +69,11 @@ function AiPage() {
   const { id } = useParams()
   return id ? <AiUsageTab projectId={id} isAdmin={project?.myRole === 'owner' || project?.myRole === 'admin'} /> : null
 }
+function NotesPage() {
+  const { id } = useParams()
+  return id ? <NotesTab projectId={id} /> : null
+}
+
 function DocumentsPage() {
   const { id } = useParams()
   return id ? <DocumentsTab projectId={id} /> : null
@@ -112,6 +118,7 @@ createRoot(document.getElementById('root')!).render(
                 <Route path="ai" element={<AiPage />} />
                 <Route path="history" element={<HistoryPage />} />
                 <Route path="documents" element={<DocumentsPage />} />
+                <Route path="notes" element={<NotesPage />} />
               </Route>
             </Routes>
           </HashRouter>

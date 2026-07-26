@@ -1,11 +1,13 @@
-import { and, eq, inArray } from 'drizzle-orm'
+import { and, eq, inArray, isNotNull, isNull, lte } from 'drizzle-orm'
 import { db } from '../db/client.js'
-import { taskReminders, tasks, projects, projectMembers, users } from '../db/schema.js'
+import { notes, taskReminders, tasks, projects, projectMembers, users } from '../db/schema.js'
 import { sendTaskReminderMail } from './mails.js'
 import { env } from '../env.js'
 import { sweepPendingFiles, sweepSoftDeleted } from './file-cleanup.js'
 import { sweepBridge } from './bridge-auth.js'
 import { sendDailyDigests } from './digest.js'
+import { notify } from './notify.js'
+import { htmlToText } from './sanitize-html.js'
 
 // Планировщик напоминаний об открытых задачах (SPEC §8.9).
 // Тик раз в 5 минут: для каждого включённого конфига проверяем, наступил ли срок,
@@ -122,6 +124,47 @@ async function tick() {
   }
 }
 
+/**
+ * Наступившие напоминания в заметках (SPEC §8.31). Уведомляем автора и всех,
+ * кого он в заметке упомянул — напоминание часто и ставят ради другого человека.
+ * remindedAt защищает от повтора: тик идёт чаще, чем раз в сутки.
+ */
+async function sweepNoteReminders() {
+  try {
+    const due = await db.query.notes.findMany({
+      where: and(
+        isNotNull(notes.remindAt),
+        lte(notes.remindAt, new Date()),
+        isNull(notes.remindedAt),
+        isNull(notes.deletedAt),
+      ),
+      limit: 200,
+    })
+    for (const n of due) {
+      const author = n.authorId ? await db.query.users.findFirst({ where: eq(users.id, n.authorId) }) : null
+      const mentioned = JSON.parse(n.mentionedIds) as string[]
+      const recipients = [...new Set([n.authorId, ...mentioned].filter(Boolean) as string[])]
+      if (recipients.length) {
+        await notify({
+          projectId: n.projectId,
+          event: 'note_reminder',
+          recipientIds: recipients,
+          actorId: n.authorId ?? null,
+          actorName: author?.name || 'Someone',
+          dedupeKey: `note_reminder:${n.id}`,
+          link: `/p/${n.projectId}/notes?note=${n.id}`,
+          preview: n.title || htmlToText(n.body).slice(0, 200),
+          entityType: 'note',
+          entityId: n.id,
+        })
+      }
+      await db.update(notes).set({ remindedAt: new Date() }).where(eq(notes.id, n.id))
+    }
+  } catch (err) {
+    console.error('[reminders] note reminders failed:', err)
+  }
+}
+
 export function startReminderScheduler() {
   // первый прогон через минуту после старта, далее каждые TICK_MS
   setTimeout(() => {
@@ -133,6 +176,7 @@ export function startReminderScheduler() {
       void sweepSoftDeleted() // окончательно удаляем корзину старше 7 дней (SPEC §8.21)
       void sweepBridge() // закрываем протухшие туннели внешнего ИИ (SPEC §8.27)
       void sendDailyDigests() // суточный email-дайджест непрочитанных (SPEC §8.22)
+      void sweepNoteReminders() // напоминания в заметках (SPEC §8.31)
     }, TICK_MS)
   }, 60_000)
   console.log('⏰ task-reminder scheduler started')

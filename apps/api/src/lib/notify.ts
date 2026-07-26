@@ -15,6 +15,8 @@ export type NotificationEvent =
   | 'task_assigned'
   | 'task_status'
   | 'task_comment'
+  | 'note_mention'
+  | 'note_reminder'
 
 /** Извлекает id упомянутых пользователей из разметки `@[Label](id)`. */
 export function extractMentions(text: string): string[] {
@@ -38,6 +40,8 @@ const STR: Record<Lang, Record<string, string>> = {
     task_assigned: '{actor} assigned you a task in {project}',
     task_status: 'Task {ref} status changed to {status} in {project}',
     task_comment: '{actor} commented on {ref} in {project}',
+    note_mention: '{actor} mentioned you in a note in {project}',
+    note_reminder: 'Reminder from {project}',
     open: 'Open',
     footer: 'You can manage notifications in your project settings.',
   },
@@ -48,6 +52,8 @@ const STR: Record<Lang, Record<string, string>> = {
     task_assigned: '{actor} назначил(а) вам задачу в проекте «{project}»',
     task_status: 'Статус задачи {ref} изменён на «{status}» в проекте «{project}»',
     task_comment: '{actor} прокомментировал(а) {ref} в проекте «{project}»',
+    note_mention: '{actor} упомянул(а) вас в заметке в проекте «{project}»',
+    note_reminder: 'Напоминание из проекта «{project}»',
     open: 'Открыть',
     footer: 'Управлять уведомлениями можно в настройках проекта.',
   },
@@ -58,6 +64,8 @@ const STR: Record<Lang, Record<string, string>> = {
     task_assigned: '{actor} הקצה/תה לך משימה בפרויקט «{project}»',
     task_status: 'סטטוס המשימה {ref} שונה ל-«{status}» בפרויקט «{project}»',
     task_comment: '{actor} הגיב/ה על {ref} בפרויקט «{project}»',
+    note_mention: '{actor} הזכיר/ה אותך בהערה בפרויקט «{project}»',
+    note_reminder: 'תזכורת מפרויקט «{project}»',
     open: 'פתח',
     footer: 'ניתן לנהל התראות בהגדרות הפרויקט.',
   },
@@ -130,7 +138,7 @@ type NotifyParams = {
   /** доп. переменные для шаблона: ref, status */
   vars?: Record<string, string>
   /** на какую сущность ведёт уведомление (для иконки/навигации) */
-  entityType?: 'task' | 'message' | 'comment'
+  entityType?: 'task' | 'message' | 'comment' | 'note'
   entityId?: string
 }
 

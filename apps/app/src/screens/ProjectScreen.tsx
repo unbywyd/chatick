@@ -30,7 +30,7 @@ import { Button } from '@/components/ui/button'
   переключение между проектами мгновенное и не перезагружает страницу.
 */
 
-const WORK_TABS = ['tasks', 'files', 'documents', 'resources', 'team', 'history', 'about'] as const
+const WORK_TABS = ['tasks', 'files', 'documents', 'notes', 'resources', 'team', 'history', 'about'] as const
 
 export type ProjectDetails = {
   id: string

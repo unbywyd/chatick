@@ -4,7 +4,7 @@ import { activityLog } from '../db/schema.js'
 // Универсальный журнал действий (SPEC §8.21). Fail-safe — не роняет основной флоу.
 
 export type ActivityAction = 'create' | 'update' | 'delete' | 'restore' | 'status' | 'assign' | 'comment' | 'upload'
-export type EntityType = 'task' | 'file' | 'resource' | 'comment' | 'sprint' | 'member' | 'project' | 'document' | 'ai'
+export type EntityType = 'task' | 'file' | 'resource' | 'comment' | 'sprint' | 'member' | 'project' | 'document' | 'note' | 'ai'
 
 export async function logActivity(params: {
   projectId: string

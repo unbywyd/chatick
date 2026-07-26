@@ -334,6 +334,56 @@ export const documents = pgTable(
   (t) => [index('documents_project_idx').on(t.projectId, t.updatedAt)],
 )
 
+/**
+ * Заметки проекта (SPEC §8.31) — журнал знания и свидетельств.
+ *
+ * Два сценария в одной сущности:
+ *   решение — «проблема с DNS решается так»: ищется по симптому, живёт долго,
+ *     ценно в ДРУГИХ проектах, поэтому scope='company' достаёт его отовсюду;
+ *   противоречие — «сказали это, потом то, потом обвинили»: ценно только внутри
+ *     проекта, и вся его сила в цепочке sources.
+ *
+ * Заводятся вручную (человеком или ЛЛМ по просьбе), не автоматически.
+ */
+export const notes = pgTable(
+  'notes',
+  {
+    id: id(),
+    projectId: text('project_id').notNull().references(() => projects.id, { onDelete: 'cascade' }),
+    // дублируем компанию проекта: поиск scope='company' идёт по ней без джойна
+    companyId: text('company_id').references(() => companies.id, { onDelete: 'cascade' }),
+    // тип задаёт иконку и цвет; теги — свободные, поверх типа
+    type: text('type').notNull().default('note'), // note|solution|problem|decision|contradiction|reminder|business
+    title: text('title').notNull().default(''),
+    body: text('body').notNull().default(''), // HTML, как в документах
+    tags: text('tags').notNull().default('[]'), // JSON string[]
+    // 'project' — видна в своём проекте; 'company' — находится из любого проекта компании
+    scope: text('scope').notNull().default('project'),
+    /**
+     * Источники: JSON-массив {messageId?, text, authorName?, sentAt?}.
+     * Пусто, когда заметку сохранили из редактора — туда чат не приходит.
+     * text хранится КОПИЕЙ: доказательство должно пережить удаление сообщения.
+     */
+    sources: text('sources').notNull().default('[]'),
+    mentionedIds: text('mentioned_ids').notNull().default('[]'), // JSON string[] — кого касается
+    // напоминание: заметка всплывает в уведомлениях в эту дату
+    remindAt: timestamp('remind_at', { withTimezone: true }),
+    remindedAt: timestamp('reminded_at', { withTimezone: true }),
+    authorId: text('author_id').references(() => users.id, { onDelete: 'set null' }),
+    // заметку мог сохранить ЛЛМ от имени человека — видно, чьей рукой
+    createdVia: text('created_via').notNull().default('ui'), // ui|bridge|ai
+    deletedAt: timestamp('deleted_at', { withTimezone: true }),
+    deletedById: text('deleted_by_id').references(() => users.id, { onDelete: 'set null' }),
+    createdAt: createdAt(),
+    updatedAt: updatedAt(),
+  },
+  (t) => [
+    index('notes_project_idx').on(t.projectId, t.createdAt),
+    index('notes_company_idx').on(t.companyId, t.scope),
+    index('notes_remind_idx').on(t.remindAt),
+  ],
+)
+
 // Версии документа (SPEC §8.25): снапшот контента, история и откат.
 // Пишется не на каждое автосохранение, а при существенном изменении/паузе — см. routes/documents.ts.
 export const documentVersions = pgTable(
@@ -518,6 +568,8 @@ export const notificationEvent = pgEnum('notification_event', [
   'task_assigned', // тебе назначили задачу
   'task_status', // изменился статус твоей/назначенной задачи
   'task_comment', // новый комментарий к задаче, где ты автор/ассайни
+  'note_mention', // тебя упомянули в заметке проекта
+  'note_reminder', // наступила дата напоминания в заметке
 ])
 
 // Подписки: строка = (user, project, event) отключён. По умолчанию всё включено;

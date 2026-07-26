@@ -8,6 +8,7 @@ import {
   companyMembers,
   credentials,
   documents,
+  notes as projectNotes,
   documentVersions,
   files,
   messages,
@@ -47,6 +48,7 @@ export type BackupFile = {
     taskComments: Record<string, unknown>[]
     taskNotes: Record<string, unknown>[]
     documents: Record<string, unknown>[]
+    projectNotes?: Record<string, unknown>[]
     documentVersions: Record<string, unknown>[]
     messages: Record<string, unknown>[]
     chatSummaries: Record<string, unknown>[]
@@ -118,7 +120,7 @@ export async function exportCompany(companyId: string, password?: string): Promi
   const out: BackupFile['projects'] = []
   for (const project of projectRows) {
     const pid = project.id
-    const [pMembers, sprints, taskRows, comments, notes, docs, docVersions, msgs, summaries, resources, fileRows, activity] =
+    const [pMembers, sprints, taskRows, comments, notes, docs, docVersions, msgs, summaries, resources, fileRows, activity, journalNotes] =
       await Promise.all([
         db
           .select({ m: projectMembers, u: users })
@@ -136,6 +138,7 @@ export async function exportCompany(companyId: string, password?: string): Promi
         db.query.credentials.findMany({ where: eq(credentials.projectId, pid) }),
         db.query.files.findMany({ where: eq(files.projectId, pid) }),
         db.query.activityLog.findMany({ where: eq(activityLog.projectId, pid) }),
+        db.query.notes.findMany({ where: eq(projectNotes.projectId, pid) }),
       ])
 
     const docIds = new Set(docs.map((d) => d.id))
@@ -186,6 +189,8 @@ export async function exportCompany(companyId: string, password?: string): Promi
       })),
       taskComments: comments.map((c) => ({ ...c, author: refOf(people, c.authorId) })),
       taskNotes: notes.map((n) => ({ ...n })),
+      // журнал проекта (SPEC §8.31): решения, противоречия, напоминания
+      projectNotes: journalNotes.map((n) => ({ ...n, author: refOf(people, n.authorId) })),
       documents: docs.map((d) => ({
         ...d,
         createdBy: refOf(people, d.createdById),
@@ -472,6 +477,44 @@ export async function importCompany(
         .returning()
       messageIds.set(String(m.id), row!.id)
       bump('messages')
+    }
+
+    // Журнал проекта (SPEC §8.31). Идёт после сообщений: цитаты ссылаются на них,
+    // и только здесь messageIds уже знает соответствие старых id новым.
+    for (const n of p.projectNotes ?? []) {
+      const sources = (() => {
+        try {
+          const arr = JSON.parse(String(n.sources ?? '[]')) as { messageId?: string | null }[]
+          // текст цитаты сохранён копией и переносится как есть; ссылку чиним,
+          // а если сообщение не приехало — оставляем null, цитата всё равно читается
+          return JSON.stringify(
+            arr.map((src) => ({ ...src, messageId: src.messageId ? messageIds.get(String(src.messageId)) ?? null : null })),
+          )
+        } catch {
+          return '[]'
+        }
+      })()
+
+      await db.insert(projectNotes).values({
+        projectId: pid,
+        companyId: company!.id,
+        type: String(n.type ?? 'note'),
+        title: String(n.title ?? ''),
+        body: String(n.body ?? ''),
+        tags: String(n.tags ?? '[]'),
+        scope: String(n.scope ?? 'project'),
+        sources,
+        // упоминания указывают на пользователей старой базы — не переносим,
+        // иначе заметка «упомянет» случайных людей после сопоставления по email
+        mentionedIds: '[]',
+        remindAt: n.remindAt ? new Date(String(n.remindAt)) : null,
+        remindedAt: n.remindedAt ? new Date(String(n.remindedAt)) : null,
+        authorId: await userFor(n.author as PersonRef),
+        createdVia: String(n.createdVia ?? 'ui'),
+        deletedAt: n.deletedAt ? new Date(String(n.deletedAt)) : null,
+        createdAt: n.createdAt ? new Date(String(n.createdAt)) : undefined,
+      })
+      bump('projectNotes')
     }
 
     for (const s of p.chatSummaries) {

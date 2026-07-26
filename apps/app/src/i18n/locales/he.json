@@ -451,7 +451,8 @@
     "ai": "AI ושימוש",
     "history": "היסטוריה",
     "documents": "מסמכים",
-    "chat": "צ׳אט"
+    "chat": "צ׳אט",
+    "notes": "הערות"
   },
   "notif": {
     "title": "התראות",
@@ -797,5 +798,52 @@
     "projects": "פרויקטים",
     "newProject": "פרויקט חדש",
     "companySettings": "חברה"
+  },
+  "journal": {
+    "title": "הערות",
+    "subtitle": "פתרונות, החלטות, סתירות ותזכורות — יומן הפרויקט",
+    "new": "הערה חדשה",
+    "edit": "עריכת הערה",
+    "search": "חיפוש בכותרות, בטקסט ובתגיות",
+    "empty": "אין עדיין הערות",
+    "untitled": "ללא כותרת",
+    "deleted": "ההערה נמחקה",
+    "deleteConfirm": "למחוק את ההערה «{{title}}»?",
+    "titlePlaceholder": "במה מדובר?",
+    "bodyPlaceholder": "מה קרה, על מה הוסכם, איך זה נפתר…",
+    "filters": "מסננים",
+    "clearFilters": "ניקוי מסננים",
+    "author": "מחבר",
+    "mentions": "מוזכר",
+    "anyone": "כל אחד",
+    "from": "מתאריך",
+    "to": "עד תאריך",
+    "tags": "תגיות (מופרדות בפסיק)",
+    "sources": "ציטוטים מהצ׳אט",
+    "company": "חברה",
+    "companyWide": "חיפוש בכל החברה",
+    "companyWideHint": "יציג גם הערות מפרויקטים אחרים שסומנו כמשותפות לחברה.",
+    "scope": "נראות",
+    "scopeProject": "הפרויקט הזה בלבד",
+    "scopeCompany": "כל החברה",
+    "scopeProjectHint": "נראית רק בפרויקט הזה.",
+    "scopeCompanyHint": "ניתן למצוא מכל פרויקט בחברה — כך כדאי לסמן פתרונות טכניים.",
+    "remindAt": "תזכורת בתאריך",
+    "saveFromChat": "שמירה כהערה",
+    "savedFromChat": "נשמר בהערות",
+    "type": {
+      "solution": "פתרון",
+      "problem": "בעיה",
+      "decision": "החלטה",
+      "contradiction": "סתירה",
+      "reminder": "תזכורת",
+      "business": "לוגיקה עסקית",
+      "note": "הערה"
+    },
+    "picked": "נבחרו {{count}} הודעות"
+  },
+  "common": {
+    "save": "שמירה",
+    "cancel": "ביטול"
   }
 }

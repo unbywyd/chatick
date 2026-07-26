@@ -15,6 +15,7 @@ import { aiRoute } from './routes/ai.js'
 import { activityRoute } from './routes/activity.js'
 import { inboxRoute } from './routes/inbox.js'
 import { documentsRoute, documentsPublicRoute } from './routes/documents.js'
+import { notesRoute } from './routes/notes.js'
 import { bridgeRoute } from './routes/bridge.js'
 import { backupRoute } from './routes/backup.js'
 
@@ -37,6 +38,7 @@ app.route('/api/v1/ai', aiRoute)
 app.route('/api/v1/activity', activityRoute)
 app.route('/api/v1/inbox', inboxRoute)
 app.route('/api/v1/documents', documentsRoute)
+app.route('/api/v1/notes', notesRoute)
 app.route('/d', documentsPublicRoute) // публичный доступ к документу по слагу
 app.route('/x', bridgeRoute) // мост для внешнего ИИ (Claude Code) — SPEC §8.27
 app.route('/api/v1/backup', backupRoute) // экспорт/импорт компании — SPEC §8.28

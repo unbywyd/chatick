@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useNavigate, useParams, useSearchParams } from 'react-router-dom'
 import { useInfiniteQuery, useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { ArrowDown, Bot, CheckSquare, Users, BrainCircuit, Loader2, Search, Settings, Trash2, UserPlus, X } from 'lucide-react'
+import { ArrowDown, Bot, CheckSquare, Users, BrainCircuit, Loader2, NotebookPen, Search, Settings, Trash2, UserPlus, X } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
 import ReactMarkdown from 'react-markdown'
 import { toast } from 'sonner'
@@ -15,6 +15,7 @@ import { Composer, AI_MENTION_ID } from './Composer'
 import { SandboxOverlay } from './SandboxOverlay'
 import { AiOverlay } from './AiOverlay'
 import { FileViewer, type ViewerFile } from '@/components/files/FileViewer'
+import { NOTE_META, NOTE_TYPES, type NoteType } from '@/components/tabs/NotesTab'
 
 type ChatMode = 'group' | 'ai'
 type Member = { id: string; role: string; user: { id: string; name: string; email: string; avatarUrl: string | null } }
@@ -55,6 +56,10 @@ export function ChatPanel({
   // режим «перехода к сообщению»: окно контекста + подсветка
   const [contextView, setContextView] = useState<{ messages: ChatMessage[] } | null>(null)
   const [highlightId, setHighlightId] = useState<string | null>(null)
+  // выделение сообщений для сохранения в заметку (SPEC §8.31). Множественное,
+  // потому что противоречие — это цепочка реплик, одна ничего не доказывает.
+  const [picked, setPicked] = useState<string[]>([])
+  const [noteDraft, setNoteDraft] = useState<string[] | null>(null)
 
   const llm = useQuery({
     queryKey: ['llm-status', projectId],
@@ -356,6 +361,11 @@ export function ChatPanel({
                     lang={i18n.language}
                     canDelete={myRole === 'owner' || myRole === 'admin' || (Boolean(m.author) && m.author?.id === meId)}
                     onDelete={() => deleteMessage.mutate(m.id)}
+                    picked={picked.includes(m.id)}
+                    picking={picked.length > 0}
+                    onPick={() =>
+                      setPicked((cur) => (cur.includes(m.id) ? cur.filter((x) => x !== m.id) : [...cur, m.id]))
+                    }
                   />
                 </div>
               )
@@ -425,6 +435,41 @@ export function ChatPanel({
         />
       )}
 
+      {picked.length > 0 && (
+        <div className="flex items-center justify-between gap-2 border-t bg-brand/5 px-3 py-2">
+          <span className="text-xs text-muted-foreground">{t('journal.picked', { count: picked.length })}</span>
+          <div className="flex items-center gap-1.5">
+            <button
+              onClick={() => setPicked([])}
+              className="rounded px-2 py-1 text-xs text-muted-foreground hover:bg-accent"
+            >
+              {t('common.cancel')}
+            </button>
+            <button
+              onClick={() => setNoteDraft(picked)}
+              className="inline-flex items-center gap-1.5 rounded bg-brand px-2.5 py-1 text-xs text-white"
+            >
+              <NotebookPen className="size-3.5" />
+              {t('journal.saveFromChat')}
+            </button>
+          </div>
+        </div>
+      )}
+
+      {noteDraft && (
+        <SaveToNoteDialog
+          projectId={projectId!}
+          messageIds={noteDraft}
+          onClose={() => setNoteDraft(null)}
+          onSaved={() => {
+            setNoteDraft(null)
+            setPicked([])
+            toast.success(t('journal.savedFromChat'))
+            qc.invalidateQueries({ queryKey: ['notes', projectId] })
+          }}
+        />
+      )}
+
       <footer className="border-t p-3">
         <Composer
           disabled={llmMissing}
@@ -467,12 +512,18 @@ function MessageRow({
   lang,
   canDelete,
   onDelete,
+  picked,
+  picking,
+  onPick,
 }: {
   message: ChatMessage
   compact: boolean
   lang: string
   canDelete: boolean
   onDelete: () => void
+  picked: boolean
+  picking: boolean
+  onPick: () => void
 }) {
   const { t } = useTranslation()
   const isAi = !message.author
@@ -483,17 +534,34 @@ function MessageRow({
       className={cn(
         'group relative flex gap-2.5 rounded-md px-2 py-1 transition-colors hover:bg-accent/40',
         compact ? 'mt-px' : 'mt-2.5',
+        picked && 'bg-brand/10 ring-1 ring-brand/40',
+        picking && !picked && 'opacity-60',
       )}
     >
-      {canDelete && (
+      <div className="absolute end-1 top-1 flex items-center gap-0.5">
+        {/* opacity, а не hidden: показ/скрытие не должно двигать разметку */}
         <button
-          onClick={onDelete}
-          title={t('chat.deleteMessage')}
-          className="absolute end-1 top-1 rounded p-1 text-muted-foreground opacity-0 transition-opacity hover:text-destructive group-hover:opacity-100 focus-visible:opacity-100"
+          onClick={onPick}
+          title={t('journal.saveFromChat')}
+          className={cn(
+            'rounded p-1 transition-opacity focus-visible:opacity-100',
+            picked
+              ? 'text-brand opacity-100'
+              : 'text-muted-foreground opacity-0 hover:text-foreground group-hover:opacity-100',
+          )}
         >
-          <Trash2 className="size-3.5" />
+          <NotebookPen className="size-3.5" />
         </button>
-      )}
+        {canDelete && (
+          <button
+            onClick={onDelete}
+            title={t('chat.deleteMessage')}
+            className="rounded p-1 text-muted-foreground opacity-0 transition-opacity hover:text-destructive group-hover:opacity-100 focus-visible:opacity-100"
+          >
+            <Trash2 className="size-3.5" />
+          </button>
+        )}
+      </div>
       <span className="w-7 shrink-0 select-none">
         {compact ? (
           <span className="block text-[10px] leading-6 text-muted-foreground opacity-0 transition-opacity group-hover:opacity-100">{time}</span>
@@ -776,5 +844,103 @@ function ModeButton({ active, onClick, icon, label }: { active: boolean; onClick
       {icon}
       {label}
     </button>
+  )
+}
+
+/**
+ * Сохранение выбранных сообщений в заметку (SPEC §8.31). Сервер сам копирует
+ * текст и автора каждой реплики — доказательство должно пережить удаление.
+ */
+function SaveToNoteDialog({
+  projectId,
+  messageIds,
+  onClose,
+  onSaved,
+}: {
+  projectId: string
+  messageIds: string[]
+  onClose: () => void
+  onSaved: () => void
+}) {
+  const { t } = useTranslation()
+  const [type, setType] = useState<NoteType>('contradiction')
+  const [title, setTitle] = useState('')
+  const [tags, setTags] = useState('')
+
+  const save = useMutation({
+    mutationFn: () =>
+      api(
+        '/api/v1/notes',
+        {
+          method: 'POST',
+          body: JSON.stringify({
+            type,
+            title,
+            tags: tags.split(',').map((x) => x.trim()).filter(Boolean),
+            sourceMessageIds: messageIds,
+          }),
+        },
+        'project',
+      ),
+    onSuccess: onSaved,
+    onError: (e: unknown) => toast.error(e instanceof Error ? e.message : String(e)),
+  })
+
+  return (
+    <div className="absolute inset-0 z-30 flex items-end justify-center bg-black/40 p-4" onClick={onClose}>
+      <div
+        className="w-full max-w-md space-y-3 rounded-lg border bg-card p-4 shadow-lg"
+        onClick={(e) => e.stopPropagation()}
+      >
+        <p className="text-sm font-semibold">{t('journal.saveFromChat')}</p>
+        <p className="text-xs text-muted-foreground">{t('journal.picked', { count: messageIds.length })}</p>
+
+        <div className="flex flex-wrap gap-1.5">
+          {NOTE_TYPES.map((tp) => {
+            const { icon: Icon, className } = NOTE_META[tp]
+            return (
+              <button
+                key={tp}
+                onClick={() => setType(tp)}
+                className={cn(
+                  'inline-flex items-center gap-1.5 rounded-full border px-2.5 py-1 text-xs transition-colors',
+                  type === tp ? 'border-brand bg-brand/10 text-foreground' : 'text-muted-foreground hover:bg-accent',
+                )}
+              >
+                <Icon className={cn('size-3.5', type === tp ? className : '')} />
+                {t(`journal.type.${tp}`)}
+              </button>
+            )
+          })}
+        </div>
+
+        <input
+          value={title}
+          onChange={(e) => setTitle(e.target.value)}
+          placeholder={t('journal.titlePlaceholder')}
+          className="h-9 w-full rounded-md border bg-background px-2 text-sm"
+          autoFocus
+        />
+        <input
+          value={tags}
+          onChange={(e) => setTags(e.target.value)}
+          placeholder={t('journal.tags')}
+          className="h-9 w-full rounded-md border bg-background px-2 text-sm"
+        />
+
+        <div className="flex justify-end gap-2">
+          <button onClick={onClose} className="rounded px-3 py-1.5 text-sm text-muted-foreground hover:bg-accent">
+            {t('common.cancel')}
+          </button>
+          <button
+            onClick={() => save.mutate()}
+            disabled={save.isPending}
+            className="rounded bg-brand px-3 py-1.5 text-sm text-white disabled:opacity-60"
+          >
+            {t('common.save')}
+          </button>
+        </div>
+      </div>
+    </div>
   )
 }
