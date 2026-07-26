@@ -15,6 +15,8 @@ type DesktopBridge = {
   setState: (s: DesktopState) => void
   notify: (p: { title: string; body?: string; link?: string }) => void
   show: () => void
+  /** Открыть ссылку в системном браузере (нужно для входа через Google). */
+  openExternal: (url: string) => void
   info: () => Promise<{ version: string; platform: string; openAtLogin: boolean }>
   onToggleTimer: (fn: () => void) => () => void
   onNavigate: (fn: (link: string) => void) => () => void

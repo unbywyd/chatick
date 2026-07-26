@@ -14,6 +14,7 @@ const isDev = process.argv.includes('--dev')
 const LOAD_MODE = 'remote' // 'remote' | 'bundled'
 const APP_URL = process.env.CHATICK_URL || 'https://app.chatick.com'
 
+
 let win = null
 let tray = null
 let quitting = false
@@ -315,6 +316,14 @@ function registerIpc() {
   }))
 
   ipcMain.on('window:show', showWindow)
+
+  // Вход открывается в системном браузере: Google не показывает свой экран
+  // согласия внутри встроенного окна. Пускаем только http(s) — ipc открыт
+  // вебу, и передать сюда file:// или произвольную схему не должно быть
+  // способом что-то запустить.
+  ipcMain.on('open-external', (_e, url) => {
+    if (typeof url === 'string' && /^https?:\/\//.test(url)) shell.openExternal(url)
+  })
 
   // Действия из панели: она сама ничего не умеет, только просит главный процесс.
   ipcMain.on('panel:toggle-timer', () => {

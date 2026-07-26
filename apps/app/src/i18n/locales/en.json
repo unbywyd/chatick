@@ -6,7 +6,11 @@
     "title": "Welcome to Chatick",
     "subtitle": "Sign in to open your project workspace",
     "google": "Continue with Google",
-    "failed": "Sign-in failed, please try again"
+    "failed": "Sign-in failed, please try again",
+    "desktopWaiting": "Waiting for sign-in in your browser…",
+    "desktopExpired": "Sign-in took too long. Please try again.",
+    "desktopDone": "You are signed in",
+    "desktopDoneHint": "You can close this tab and go back to the Chatick app."
   },
   "start": {
     "logout": "Sign out",

@@ -26,6 +26,10 @@ auth.get('/google', (c) => {
     scope: 'openid email profile',
     prompt: 'select_account',
   })
+  // Код десктопного входа возвращаем себе же через state: браузер может
+  // открыть колбэк в новой вкладке, и на sessionStorage полагаться нельзя.
+  const desktop = c.req.query('desktop')
+  if (desktop) params.set('state', `desktop:${desktop}`)
   return c.redirect(`${GOOGLE_AUTH_URL}?${params}`)
 })
 
@@ -83,11 +87,81 @@ auth.get('/google/callback', async (c) => {
     }
 
     const token = await signSessionToken({ sub: user.id, email: user.email })
-    return c.redirect(`${env.APP_URL}/#/auth?token=${token}`)
+    const desktop = c.req.query('state')?.startsWith('desktop:')
+      ? c.req.query('state')!.slice('desktop:'.length)
+      : null
+    const suffix = desktop ? `&desktop=${encodeURIComponent(desktop)}` : ''
+    return c.redirect(`${env.APP_URL}/#/auth?token=${token}${suffix}`)
   } catch (err) {
     console.error('google oauth error:', err)
     return c.redirect(`${env.APP_URL}/#/auth?error=oauth_failed`)
   }
+})
+
+// --- вход из десктопа (SPEC §8.33) -------------------------------------------
+//
+// Google не даёт показывать свой экран согласия внутри окна Electron, поэтому
+// вход всегда уходит в системный браузер. Оттуда токен надо как-то вернуть
+// приложению: оно заранее берёт код, открывает браузер с ним, а потом
+// опрашивает сервер, пока код не обменяется на токен.
+//
+// Коды живут в памяти: они одноразовые и короткоживущие, переживать перезапуск
+// им незачем — человек просто нажмёт «Войти» ещё раз.
+
+type PendingLogin = { token: string | null; expiresAt: number }
+const desktopLogins = new Map<string, PendingLogin>()
+const DESKTOP_LOGIN_TTL_MS = 10 * 60 * 1000
+
+function sweepDesktopLogins() {
+  const now = Date.now()
+  for (const [code, entry] of desktopLogins) if (entry.expiresAt < now) desktopLogins.delete(code)
+}
+
+// POST /api/v1/auth/desktop — приложение берёт код перед открытием браузера
+auth.post('/desktop', (c) => {
+  sweepDesktopLogins()
+  const code = nanoid(32)
+  desktopLogins.set(code, { token: null, expiresAt: Date.now() + DESKTOP_LOGIN_TTL_MS })
+  return c.json({
+    code,
+    url: `${env.APP_URL}/#/login?desktop=${code}`,
+    expiresInSec: DESKTOP_LOGIN_TTL_MS / 1000,
+  })
+})
+
+// POST /api/v1/auth/desktop/claim — браузер отдаёт добытый токен под кодом.
+// Требует валидной сессии: иначе кто угодно подложил бы чужой токен в чужой код.
+auth.post('/desktop/claim', requireSession, async (c) => {
+  const body = await c.req.json().catch(() => ({}) as Record<string, unknown>)
+  const code = typeof body.code === 'string' ? body.code : ''
+  const entry = desktopLogins.get(code)
+  if (!entry || entry.expiresAt < Date.now()) {
+    desktopLogins.delete(code)
+    return c.json({ error: 'Code expired' }, 410)
+  }
+
+  // Кладём не присланный клиентом токен, а свежий для того, кто подтвердил
+  // вход: так десктоп не может получить сессию шире, чем у самого человека.
+  const { sub } = c.get('session')
+  const user = await db.query.users.findFirst({ where: eq(users.id, sub) })
+  if (!user) return c.json({ error: 'Not found' }, 404)
+  entry.token = await signSessionToken({ sub: user.id, email: user.email })
+  return c.json({ ok: true })
+})
+
+// GET /api/v1/auth/desktop/poll?code=... — приложение ждёт подтверждения
+auth.get('/desktop/poll', (c) => {
+  const code = c.req.query('code') ?? ''
+  const entry = desktopLogins.get(code)
+  if (!entry || entry.expiresAt < Date.now()) {
+    desktopLogins.delete(code)
+    return c.json({ status: 'expired' })
+  }
+  if (!entry.token) return c.json({ status: 'pending' })
+
+  // Одноразовость: код сгорает вместе с выдачей токена.
+  desktopLogins.delete(code)
+  return c.json({ status: 'approved', token: entry.token })
 })
 
 // GET /api/v1/auth/me — профиль по любому валидному токену

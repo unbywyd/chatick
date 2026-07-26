@@ -16,6 +16,12 @@ contextBridge.exposeInMainWorld('chatickDesktop', {
   /** Поднять окно (например, после действия из трея). */
   show: () => ipcRenderer.send('window:show'),
 
+  /**
+   * Открыть ссылку в системном браузере. Нужно для входа: Google не показывает
+   * свой экран согласия внутри встроенного окна.
+   */
+  openExternal: (url) => ipcRenderer.send('open-external', url),
+
   info: () => ipcRenderer.invoke('app:info'),
 
   /**
