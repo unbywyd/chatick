@@ -479,6 +479,50 @@ timeRoute.get(
       .innerJoin(users, eq(users.id, timeEntries.userId))
       .where(and(...conds))
       .groupBy(timeEntries.userId, users.name, users.avatarUrl, projects.id, projects.name)
+      // проекты с нулём внутри периода не показываем: запись могла задеть
+      // границу краем, а строка «0ч 0м» в платёжном отчёте только мешает
+      .having(sql`${minutes} > 0`)
+
+    // Дни, в которые человек работал, и часы в каждом. Для расчётов это нужно
+    // не меньше суммы: по ним сверяют табель и считают среднюю выработку.
+    const dayRows = await db.execute(sql`
+      with bounds as (
+        select ${timeEntries.userId} as uid, ${timeEntries.startedAt} as s, ${timeEntries.endedAt} as e
+        from ${timeEntries}
+        inner join ${projects} on ${projects.id} = ${timeEntries.projectId}
+        where ${and(...conds)}
+      ),
+      spread as (
+        select b.uid,
+          generate_series(
+            date_trunc('day', b.s at time zone 'UTC'),
+            date_trunc('day', b.e at time zone 'UTC'),
+            interval '1 day'
+          ) as day_local,
+          b.s, b.e
+        from bounds b
+      )
+      select uid,
+        to_char(day_local, 'YYYY-MM-DD') as day,
+        coalesce(sum(greatest(extract(epoch from (
+          least(e, (day_local + interval '1 day') at time zone 'UTC')
+          - greatest(s, day_local at time zone 'UTC')
+        )) / 60, 0)), 0)::int as minutes
+      from spread
+      group by uid, day_local
+      having coalesce(sum(greatest(extract(epoch from (
+        least(e, (day_local + interval '1 day') at time zone 'UTC')
+        - greatest(s, day_local at time zone 'UTC')
+      )) / 60, 0)), 0) > 0
+      order by day_local
+    `)
+
+    const daysByUser = new Map<string, { day: string; minutes: number }[]>()
+    for (const r of dayRows as unknown as { uid: string; day: string; minutes: number }[]) {
+      const list = daysByUser.get(r.uid) ?? []
+      list.push({ day: String(r.day), minutes: Number(r.minutes) })
+      daysByUser.set(r.uid, list)
+    }
 
     // сворачиваем в людей с разбивкой по проектам: так читают отчёт
     const byUser = new Map<string, { userId: string; name: string; avatarUrl: string | null; minutes: number; projects: { id: string; name: string; minutes: number }[] }>()
@@ -490,7 +534,18 @@ timeRoute.get(
     }
 
     const people = [...byUser.values()]
-      .map((u) => ({ ...u, projects: u.projects.sort((a, b) => b.minutes - a.minutes) }))
+      .map((u) => {
+        const days = daysByUser.get(u.userId) ?? []
+        return {
+          ...u,
+          projects: u.projects.sort((a, b) => b.minutes - a.minutes),
+          days,
+          // средняя выработка считается по РАБОЧИМ дням, а не по календарным:
+          // делить месячную сумму на 30 бессмысленно, если человек работал 12 дней
+          daysWorked: days.length,
+          avgPerDay: days.length ? Math.round(u.minutes / days.length) : 0,
+        }
+      })
       .filter((u) => u.minutes > 0)
       .sort((a, b) => b.minutes - a.minutes)
 

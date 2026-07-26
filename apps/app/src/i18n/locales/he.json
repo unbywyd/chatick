@@ -935,7 +935,11 @@
     "translateHint": "מעביר את מה שנכתב דרך ה-AI לשפת הפרויקט, עם תיקון קל.",
     "runningIn": "פועל בפרויקט «{{project}}» — לחצו כדי לעצור",
     "changeProject": "העברה לפרויקט אחר",
-    "discarded": "נעצר תוך שנייה — לא נשמרה רשומה"
+    "discarded": "נעצר תוך שנייה — לא נשמרה רשומה",
+    "exportSummary": "סיכום (אדם × פרויקט)",
+    "exportDaily": "יום אחר יום",
+    "daysWorked": "ימי עבודה: {{count}}",
+    "avgPerDay": "ממוצע ליום"
   },
   "period": {
     "today": "היום",
