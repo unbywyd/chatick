@@ -305,6 +305,9 @@ importers:
       electron-builder:
         specifier: ^26.0.0
         version: 26.15.3(electron-builder-squirrel-windows@26.15.3)
+      sharp:
+        specifier: ^0.35.3
+        version: 0.35.3(@types/node@22.20.1)
 
   apps/landing:
     dependencies:

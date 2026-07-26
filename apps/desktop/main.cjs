@@ -173,36 +173,40 @@ function refreshTray() {
 function trayImage() {
   const base = loadIcon(state.timer ? 'tray-active.png' : 'tray.png')
   if (!state.unread || base.isEmpty()) return base
-
-  const dot = nativeImage.createFromBuffer(
-    Buffer.from(
-      `<svg xmlns="http://www.w3.org/2000/svg" width="32" height="32">
-         <circle cx="24" cy="8" r="7" fill="#e5484d" stroke="#0f0f0f" stroke-width="2"/>
-       </svg>`,
-    ),
-  )
-  // Наложение делаем средствами nativeImage: рисовать поверх средствами ОС
-  // пришлось бы по-разному на каждой платформе.
-  return dot.isEmpty() ? base : composeIcon(base, dot)
+  return withDot(base)
 }
 
-/** Склейка двух картинок 32×32: база + точка в углу. */
-function composeIcon(base, overlay) {
+/**
+ * Точка непрочитанных поверх значка.
+ *
+ * Рисуем пиксели руками: nativeImage не умеет ни SVG (createFromBuffer ждёт
+ * PNG/JPEG), ни рисование поверх, а заводить графическую библиотеку ради
+ * кружка в углу несоразмерно.
+ */
+function withDot(base) {
   const size = { width: 32, height: 32 }
-  const canvas = nativeImage.createEmpty()
-  canvas.addRepresentation({ scaleFactor: 1, width: size.width, height: size.height, buffer: base.resize(size).toBitmap() })
-  const merged = Buffer.from(canvas.toBitmap())
-  const dot = overlay.resize(size).toBitmap()
-  // BGRA: накладываем непрозрачные пиксели точки поверх базы
-  for (let i = 0; i < merged.length; i += 4) {
-    if (dot[i + 3] > 16) {
-      merged[i] = dot[i]
-      merged[i + 1] = dot[i + 1]
-      merged[i + 2] = dot[i + 2]
-      merged[i + 3] = dot[i + 3]
+  const px = Buffer.from(base.resize(size).toBitmap())
+  if (px.length < size.width * size.height * 4) return base // формат не тот — лучше без точки, чем каша
+
+  // Круг в правом верхнем углу. BGRA, как отдаёт toBitmap.
+  const cx = 24
+  const cy = 8
+  const r = 7
+  for (let y = cy - r; y <= cy + r; y++) {
+    for (let x = cx - r; x <= cx + r; x++) {
+      if (x < 0 || y < 0 || x >= size.width || y >= size.height) continue
+      const d = Math.hypot(x - cx, y - cy)
+      if (d > r) continue
+      const i = (y * size.width + x) * 4
+      // Тёмная окантовка отделяет точку от светлого значка.
+      const edge = d > r - 1.6
+      px[i] = edge ? 0x0f : 0x4d // B
+      px[i + 1] = edge ? 0x0f : 0x48 // G
+      px[i + 2] = edge ? 0x0f : 0xe5 // R
+      px[i + 3] = 0xff
     }
   }
-  return nativeImage.createFromBitmap(merged, size)
+  return nativeImage.createFromBitmap(px, size)
 }
 
 function createTray() {
