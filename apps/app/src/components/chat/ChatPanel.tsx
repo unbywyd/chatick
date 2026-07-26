@@ -50,7 +50,8 @@ export function ChatPanel({
   const [aiOpen, setAiOpen] = useState(false)
   const mode: ChatMode = 'group'
   const [checkingUsers, setCheckingUsers] = useState<Map<string, string>>(new Map()) // userId -> name («пишет…»)
-  const [myPending, setMyPending] = useState(false) // «проверяется…» у автора
+  // id сообщения, которое сейчас проверяется (null — ничего не ждём)
+  const [myPending, setMyPending] = useState<string | null>(null)
   const [sandboxId, setSandboxId] = useState<string | null>(null)
   const [sandboxStream, setSandboxStream] = useState('') // постепенная печать ответа ИИ
   const [aiThinking, setAiThinking] = useState(false) // ai-режим: ждём ответ
@@ -107,7 +108,6 @@ export function ChatPanel({
       }
       return [...prev, m]
     })
-    setMyPending(false)
   }, [])
 
   const { online, connected } = useProjectSocket(projectId, {
@@ -120,7 +120,8 @@ export function ChatPanel({
         return next
       }),
     onHeld: ({ messageId }) => {
-      setMyPending(false)
+      // ушло в песочницу — ждать больше нечего, теперь решает человек
+      setMyPending(null)
       setSandboxId(messageId)
     },
     onSandboxChunk: ({ delta }) => setSandboxStream((prev) => prev + delta),
@@ -149,6 +150,18 @@ export function ChatPanel({
     if (held && !sandboxId) setSandboxId(held.id)
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [historyMessages])
+
+  // «Проверяется…» гаснет по факту: именно ЭТО сообщение доставлено и видно.
+  // Раньше индикатор зависел от цепочки событий (ответ POST, ws, onHeld), и
+  // после «вставить как есть» ни одно из них до автора уже не доходило —
+  // полоска висела навсегда.
+  useEffect(() => {
+    if (!myPending) return
+    const m = merged.find((x) => x.id === myPending)
+    // Проверяем только появившееся: пока сообщение на сервере, в ленте его нет,
+    // и «исчезло» здесь означало бы «ещё не пришло».
+    if (m?.status === 'delivered') setMyPending(null)
+  }, [merged, myPending])
 
   // автоскролл вниз только если пользователь у низа; иначе — бейдж «новые»
   const prevCount = useRef(0)
@@ -239,7 +252,7 @@ export function ChatPanel({
     sendMode: ChatMode = 'group',
   ) => {
     try {
-      if (sendMode === 'group' && !raw) setMyPending(true) // «проверяется…» до вердикта
+      // «проверяется…» до вердикта; id узнаем из ответа ниже
       const created = await api<ChatMessage & { redirectedToAi?: boolean }>(
         '/api/v1/messages',
         { method: 'POST', body: JSON.stringify({ text: markdown, mode: sendMode, attachmentIds, taskRefs: taskRefs ?? [], raw: Boolean(raw) }) },
@@ -247,7 +260,8 @@ export function ChatPanel({
       )
       if (created.status === 'delivered') {
         setLive((prev) => (prev.some((x) => x.id === created.id) ? prev : [...prev, created]))
-        setMyPending(false)
+      } else if (sendMode === 'group' && !raw) {
+        setMyPending(created.id)
       }
       // @AI в группе → тот же оверлей, что и перехват: беседа с ИИ поверх чата
       if (created.redirectedToAi) setAiOpen(true)
@@ -259,7 +273,7 @@ export function ChatPanel({
       }
       void mentionIds.includes(AI_MENTION_ID)
     } catch (e) {
-      setMyPending(false)
+      setMyPending(null)
       toast.error(e instanceof Error ? e.message : String(e))
     }
   }
@@ -471,11 +485,13 @@ export function ChatPanel({
           onSent={() => {
             setSandboxId(null)
             setSandboxStream('')
+            setMyPending(null)
             qc.invalidateQueries({ queryKey: ['messages', projectId] })
           }}
           onDiscard={() => {
             setSandboxId(null)
             setSandboxStream('')
+            setMyPending(null)
             qc.invalidateQueries({ queryKey: ['messages', projectId] })
           }}
         />
