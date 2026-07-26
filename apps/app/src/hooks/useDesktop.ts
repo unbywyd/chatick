@@ -338,7 +338,19 @@ export function useDesktopSync() {
   useEffect(() => {
     if (!bridge) return
     const offNav = bridge.onNavigate((link) => {
-      if (link) navigate(link)
+      if (!link) return
+      navigate(link)
+
+      // Клик из панели — это прочтение: уведомление приводит человека на
+      // место, и висеть непрочитанным после этого ему незачем.
+      const n = inbox.data?.items.find((x) => x.link === link && !x.readAt)
+      if (!n) return
+      api('/api/v1/inbox/read', { method: 'POST', body: JSON.stringify({ ids: [n.id] }) })
+        .then(() => {
+          qc.invalidateQueries({ queryKey: ['inbox'] })
+          qc.invalidateQueries({ queryKey: ['sidebar-projects'] })
+        })
+        .catch(() => {})
     })
     const offTimer = bridge.onToggleTimer(async () => {
       const current = running.data?.items[0]
@@ -428,7 +440,7 @@ export function useDesktopSync() {
       offRefresh()
       offRevoke()
     }
-  }, [bridge, navigate, qc, running.data?.items, activeProjectId])
+  }, [bridge, navigate, qc, running.data?.items, activeProjectId, inbox.data])
 }
 
 // --- что уже показывали -------------------------------------------------------

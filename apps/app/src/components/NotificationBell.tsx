@@ -53,7 +53,11 @@ export function NotificationBell({ currentProjectId }: { currentProjectId?: stri
   const markRead = useMutation({
     mutationFn: (body: { ids?: string[]; projectId?: string; all?: boolean }) =>
       api('/api/v1/inbox/read', { method: 'POST', body: JSON.stringify(body) }),
-    onSuccess: () => qc.invalidateQueries({ queryKey: ['inbox'] }),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['inbox'] })
+      qc.invalidateQueries({ queryKey: ['sidebar-projects'] })
+      qc.invalidateQueries({ queryKey: ['projects'] })
+    },
     onError: (e) => toast.error(e instanceof Error ? e.message : String(e)),
   })
 

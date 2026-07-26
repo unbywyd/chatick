@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import { NavLink, Outlet, useLocation, useNavigate, useOutletContext, useParams } from 'react-router-dom'
+import { NavLink, Outlet, useLocation, useNavigate, useOutletContext, useParams, useSearchParams } from 'react-router-dom'
 import { useQuery } from '@tanstack/react-query'
 import { useTranslation } from 'react-i18next'
 import { ArrowLeft, MessagesSquare, X } from 'lucide-react'
@@ -67,9 +67,14 @@ export function ProjectLayout() {
   // хотя открыты именно они. Переводим адрес на /tasks, чтобы подсветка,
   // ссылка и содержимое говорили одно и то же.
   const wide = useMediaQuery('(min-width: 1280px)')
+  const [search] = useSearchParams()
   useEffect(() => {
+    // ?msg= — переход к конкретному сообщению из уведомления или поиска.
+    // Переписав адрес, мы потеряли бы параметр вместе с самим переходом:
+    // чат остаётся колонкой рядом, подсветка отработает там.
+    if (search.get('msg')) return
     if (wide && isChatTab && id) navigate(`/p/${id}/tasks`, { replace: true })
-  }, [wide, isChatTab, id, navigate])
+  }, [wide, isChatTab, id, navigate, search])
 
   useEffect(() => {
     if (!getSessionToken()) navigate('/login', { replace: true })

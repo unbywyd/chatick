@@ -62,4 +62,30 @@ await render('tray-active-light.png', 'dark-logo.png', 32, [0x6b, 0x7f, 0x14])
 // Иконка приложения — с плашкой: у неё свой фон, скругление там к месту.
 await render('icon.png', 'logo.png', 256)
 
+// Точка непрочитанных на кнопке в панели задач. Тот же цвет, что рисует
+// withDot() в трее: две точки об одном и том же не должны различаться.
+// Красный, а не брендовый: лайм в трее уже занят под идущий таймер.
+await writeFile(
+  join(assets, 'badge.png'),
+  await sharp({
+    create: { width: 32, height: 32, channels: 4, background: { r: 0, g: 0, b: 0, alpha: 0 } },
+  })
+    .composite([
+      {
+        input: Buffer.from(
+          // Windows растягивает наложение на угол кнопки — рисуем точку
+          // поменьше, иначе она перекрывает сам значок.
+          `<svg xmlns="http://www.w3.org/2000/svg" width="32" height="32">
+             <circle cx="21" cy="11" r="10" fill="#e5484d"/>
+           </svg>`,
+        ),
+        top: 0,
+        left: 0,
+      },
+    ])
+    .png()
+    .toBuffer(),
+)
+console.log('  badge.png              32×32  (точка непрочитанных)')
+
 console.log('Готово.')

@@ -48,16 +48,24 @@ export function ProjectInbox({ projectId }: { projectId: string }) {
   const markRead = useMutation({
     mutationFn: (body: { ids?: string[]; projectId?: string }) =>
       api('/api/v1/inbox/read', { method: 'POST', body: JSON.stringify(body) }),
-    onSuccess: () => qc.invalidateQueries({ queryKey: ['inbox'] }),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['inbox'] })
+      // Бейджи в сайдбаре считаются из stats.unread списка проектов —
+      // без этого число там осталось бы прежним.
+      qc.invalidateQueries({ queryKey: ['sidebar-projects'] })
+      qc.invalidateQueries({ queryKey: ['projects'] })
+    },
   })
 
   // Только этот проект: человек открыл его, чужие дела здесь — шум.
   const items = (inbox.data?.items ?? []).filter((n) => n.projectId === projectId && !n.readAt)
   if (!items.length) return null
 
+  // Сначала переход, потом пометка: карточка не должна исчезать раньше, чем
+  // человек окажется на месте — иначе клик выглядит как «просто пропало».
   const open = (n: Notification) => {
-    markRead.mutate({ ids: [n.id] })
     navigate(normalizeLink(n.link, n.projectId))
+    markRead.mutate({ ids: [n.id] })
   }
 
   return (
