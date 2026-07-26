@@ -3,50 +3,63 @@ import { writeFile } from 'node:fs/promises'
 import { fileURLToPath } from 'node:url'
 import { dirname, join } from 'node:path'
 
-// Иконки трея и приложения из одного исходника (SPEC §8.33).
+// Иконки трея и приложения из фирменных логотипов (SPEC §8.33).
 //
-// В трее значок конкурирует за внимание с чужими: если рисунок не занимает
-// всё поле, он читается как более мелкий, чем соседние, даже при том же
-// размере файла. Поэтому viewBox подрезан вплотную к рисунку, а поля
-// добавляем сами — ровно столько, сколько нужно, чтобы штрих не липнул к краю.
+//   node scripts/make-icons.mjs
+//
+// Источники в logos/:
+//   light-logo.png — белый пузырь, зелёная галочка, без подложки
+//   dark-logo.png  — то же чёрным
+//   logo.png       — версия на чёрной скруглённой плашке
+//
+// Логотипы нарисованы под мелкий размер (толстые штрихи), поэтому ничего не
+// перерисовываем — только масштабируем. В трее значок конкурирует за внимание
+// с чужими: если он не занимает всё поле, читается как более мелкий при том же
+// размере файла, поэтому масштабируем впритык.
 
 const here = dirname(fileURLToPath(import.meta.url))
 const assets = join(here, '..', 'assets')
+const logos = join(here, '..', '..', '..', 'logos')
 
-/** Галочка в пузыре. stroke — цвет контура, accent — цвет галочки. */
-const bubble = (stroke, accent) => `
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="2 2 44 44" fill="none">
-  <path d="M24 4C12.4 4 3 12.7 3 23.5c0 5.4 2.4 10.3 6.2 13.8L8 44l8.4-3.2c2.4.7 4.9 1.2 7.6 1.2 11.6 0 21-8.7 21-19.5S35.6 4 24 4Z"
-        stroke="${stroke}" stroke-width="4" stroke-linejoin="round"/>
-  <path d="M15 24.5 21 30l12-12" stroke="${accent}" stroke-width="5.5" stroke-linecap="round" stroke-linejoin="round"/>
-</svg>`
-
-/**
- * @param name    имя файла в assets
- * @param svg     исходник
- * @param size    сторона итоговой картинки
- * @param padding поля в пикселях с каждой стороны
- */
-async function render(name, svg, size, padding) {
-  const inner = size - padding * 2
-  const drawn = await sharp(Buffer.from(svg)).resize(inner, inner).png().toBuffer()
-  const out = await sharp({
-    create: { width: size, height: size, channels: 4, background: { r: 0, g: 0, b: 0, alpha: 0 } },
+async function render(name, source, size, recolor) {
+  const img = sharp(join(logos, source)).resize(size, size, {
+    fit: 'contain',
+    background: { r: 0, g: 0, b: 0, alpha: 0 },
   })
-    .composite([{ input: drawn, top: padding, left: padding }])
-    .png()
-    .toBuffer()
+
+  if (!recolor) {
+    await writeFile(join(assets, name), await img.png().toBuffer())
+    console.log(`  ${name.padEnd(22)} ${size}×${size}  ← ${source}`)
+    return
+  }
+
+  // Идущий таймер должен читаться боковым зрением. tint() красит всё разом и
+  // разницы почти не даёт, поэтому перекрашиваем только пузырь, оставляя
+  // галочку прежней: значок узнаётся, а состояние видно.
+  const { data, info } = await img.ensureAlpha().raw().toBuffer({ resolveWithObject: true })
+  const [r, g, b] = recolor
+  for (let i = 0; i < data.length; i += 4) {
+    if (data[i + 3] < 16) continue
+    // галочка — зелёная; всё остальное непрозрачное и есть пузырь
+    const isCheck = data[i + 1] > 140 && data[i] < 170 && data[i + 2] < 120
+    if (isCheck) continue
+    data[i] = r
+    data[i + 1] = g
+    data[i + 2] = b
+  }
+  const out = await sharp(data, { raw: { width: info.width, height: info.height, channels: 4 } }).png().toBuffer()
   await writeFile(join(assets, name), out)
-  console.log(`  ${name}  ${size}×${size}, рисунок ${inner}×${inner}`)
+  console.log(`  ${name.padEnd(22)} ${size}×${size}  ← ${source}  (пузырь перекрашен)`)
 }
 
-// В трее Windows значок живёт на тёмной панели — контур белый.
-// Активный таймер подсвечиваем брендовым цветом целиком: разницу должно быть
-// видно боковым зрением, а не при разглядывании.
-await render('tray.png', bubble('#ffffff', '#d4f228'), 32, 1)
-await render('tray-active.png', bubble('#d4f228', '#d4f228'), 32, 1)
+// Трей Windows — панель тёмная, значок белый. Светлая тема панели встречается
+// редко, но для неё держим чёрный вариант рядом: main.cjs выберет по теме ОС.
+await render('tray.png', 'light-logo.png', 32)
+await render('tray-light.png', 'dark-logo.png', 32) // для СВЕТЛОЙ панели — тёмный значок
+await render('tray-active.png', 'light-logo.png', 32, [0xd4, 0xf2, 0x28])
+await render('tray-active-light.png', 'dark-logo.png', 32, [0x6b, 0x7f, 0x14])
 
-// Иконка приложения — на своём фоне, поля ей не нужны совсем.
-await render('icon.png', bubble('#ffffff', '#d4f228'), 256, 8)
+// Иконка приложения — с плашкой: у неё свой фон, скругление там к месту.
+await render('icon.png', 'logo.png', 256)
 
-console.log('\nГотово. Иконки пересобраны из favicon.svg.')
+console.log('Готово.')

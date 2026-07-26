@@ -171,7 +171,15 @@ function refreshTray() {
  * Цвет меняется, когда идёт таймер — учёт виден отдельно от уведомлений.
  */
 function trayImage() {
-  const base = loadIcon(state.timer ? 'tray-active.png' : 'tray.png')
+  // Значок должен читаться на любой панели: на тёмной — белый, на светлой —
+  // чёрный. Windows умеет обе темы, и угадывать тут нечего — система отвечает.
+  const { nativeTheme } = require('electron')
+  const light = !nativeTheme.shouldUseDarkColors
+  const name = state.timer
+    ? light ? 'tray-active-light.png' : 'tray-active.png'
+    : light ? 'tray-light.png' : 'tray.png'
+
+  const base = loadIcon(name)
   if (!state.unread || base.isEmpty()) return base
   return withDot(base)
 }
@@ -210,7 +218,12 @@ function withDot(base) {
 }
 
 function createTray() {
-  tray = new Tray(loadIcon('tray.png'))
+  tray = new Tray(trayImage())
+
+  // Тему панели меняют на ходу — значок должен переодеться, а не остаться
+  // белым на белом.
+  const { nativeTheme } = require('electron')
+  nativeTheme.on('updated', () => tray?.setImage(trayImage()))
   // Левый клик — панель (то, ради чего в трей и лезут), правый — короткое меню.
   tray.on('click', togglePanel)
   refreshTray()
