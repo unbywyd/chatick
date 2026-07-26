@@ -56,7 +56,7 @@ export function AboutTab({ project, loading }: { project?: ProjectDetails; loadi
 
   if (editing && form) {
     return (
-      <div className="mx-auto max-w-2xl p-6">
+      <div className="mx-auto w-full max-w-6xl p-6">
         <div className="mb-4 flex items-center justify-between">
           <h1 className="text-xl font-bold tracking-tight">{t('projectForm.editTitle')}</h1>
           <Button variant="ghost" size="icon" onClick={() => setEditing(false)}>
@@ -77,7 +77,7 @@ export function AboutTab({ project, loading }: { project?: ProjectDetails; loadi
   }
 
   return (
-    <div className="mx-auto max-w-2xl space-y-8 p-6">
+    <div className="mx-auto w-full max-w-6xl space-y-8 p-6">
       <div className="flex items-start justify-between gap-3">
         <div>
           <h1 className="text-xl font-bold tracking-tight">{project.name}</h1>

@@ -6,6 +6,7 @@ import { ArrowLeft, Building2, Menu, MessagesSquare, PanelsTopLeft, X } from 'lu
 import { api, getSessionToken, type Me } from '@/lib/api'
 import { cn } from '@/lib/utils'
 import { useProjectToken } from '@/hooks/useProjectToken'
+import { useResizable } from '@/hooks/useResizable'
 import { ChatPanel } from '@/components/chat/ChatPanel'
 import { ProjectSidebar } from '@/components/ProjectSidebar'
 import { ThemeToggle } from '@/components/ThemeToggle'
@@ -58,6 +59,8 @@ export function ProjectLayout() {
   const { id } = useParams()
   const { pathname } = useLocation()
   const [sidebarOpen, setSidebarOpen] = useState(false)
+  // ширина колонки чата: было 38% — на широком мониторе это заметно много
+  const chat = useResizable('chatick_chat_width', 380, 300, 720)
 
   // Текущая вкладка из URL (/p/:id/chat, /p/:id/tasks, ...). Берём из pathname:
   // маршрут не splat, поэтому useParams('*') здесь пустой.
@@ -116,9 +119,14 @@ export function ProjectLayout() {
       )}
 
       {/* КОЛОНКА 2 — чат. На xl всегда виден; ниже — только когда выбран таб «Чат». */}
+      {/*
+        Колонка чата. Ниже xl занимает всю ширину (чат — вкладка), на широком
+        экране получает фиксированную ширину, которую можно тянуть за границу.
+      */}
       <div
+        style={{ ['--chat-w' as string]: `${chat.width}px` }}
         className={cn(
-          'min-w-0 flex-col border-e xl:flex xl:w-[38%] xl:min-w-[340px] xl:shrink-0 xl:flex-none',
+          'relative min-w-0 flex-col border-e xl:flex xl:w-[var(--chat-w)] xl:shrink-0 xl:flex-none',
           isChatTab ? 'flex flex-1' : 'hidden',
         )}
       >
@@ -140,6 +148,17 @@ export function ProjectLayout() {
             <PanelsTopLeft className="size-4" />
           </button>
         </header>
+        {/* ручка перетаскивания границы */}
+        <div
+          onPointerDown={chat.onPointerDown}
+          onDoubleClick={chat.reset}
+          title={t('project.resizeChat')}
+          className={cn(
+            'absolute inset-y-0 -end-1 z-20 hidden w-2 cursor-col-resize xl:block',
+            'after:absolute after:inset-y-0 after:start-1/2 after:w-px after:-translate-x-1/2 after:bg-transparent after:transition-colors hover:after:bg-brand',
+            chat.dragging && 'after:bg-brand',
+          )}
+        />
         <div className="min-h-0 flex-1">
           <ChatPanel
             projectName={project.data?.name}

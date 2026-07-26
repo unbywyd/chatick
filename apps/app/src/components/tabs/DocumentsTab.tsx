@@ -81,7 +81,7 @@ export function DocumentsTab({ projectId }: { projectId: string }) {
   }
 
   return (
-    <div className="mx-auto max-w-4xl space-y-4 p-6">
+    <div className="mx-auto w-full max-w-6xl space-y-4 p-6">
       <div className="flex items-center justify-between gap-3">
         <div>
           <h1 className="flex items-center gap-2 text-xl font-bold tracking-tight">

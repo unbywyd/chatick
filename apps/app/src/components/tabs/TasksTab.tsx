@@ -249,7 +249,7 @@ export function TasksTab({ projectId, meId }: { projectId: string; meId?: string
   return (
     <div className="relative h-full overflow-hidden">
       <div className="h-full overflow-y-auto">
-        <div className="mx-auto max-w-6xl p-6">
+        <div className="mx-auto w-full max-w-6xl p-6">
           {/* Быстрое создание */}
           <form
             className="flex gap-2"

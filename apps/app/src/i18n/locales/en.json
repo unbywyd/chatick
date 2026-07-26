@@ -348,7 +348,8 @@
     },
     "menu": "Menu",
     "language": "Language",
-    "theme": "Theme"
+    "theme": "Theme",
+    "resizeChat": "Drag to resize · double-click to reset"
   },
   "about": {
     "noDescription": "No description yet.",
