@@ -916,6 +916,33 @@
     "idleRemind": "להזכיר",
     "idleStop": "לעצור",
     "idleHours": "אחרי (שעות)",
-    "repeatHours": "לחזור כל (שעות)"
+    "repeatHours": "לחזור כל (שעות)",
+    "country": "מדינה",
+    "countryHint": "קובעת אזור זמן, יום ראשון בשבוע ושפת הפרויקט.",
+    "countryNone": "לא נבחרה",
+    "timezone": "אזור זמן",
+    "weekStart": "השבוע מתחיל ביום",
+    "thisWeek": "השבוע",
+    "thisMonth": "החודש",
+    "saved": "נשמר",
+    "whatAreYouDoing": "על מה אתה עובד?",
+    "linkTask": "+ קישור למשימה",
+    "searchTask": "חיפוש משימות",
+    "noTasksFound": "לא נמצאו משימות",
+    "translate": "תרגום תיאורי הרשומות",
+    "translateHint": "מעביר את מה שנכתב דרך ה-AI לשפת הפרויקט, עם תיקון קל."
+  },
+  "period": {
+    "today": "היום",
+    "yesterday": "אתמול",
+    "thisWeek": "השבוע",
+    "lastWeek": "שבוע שעבר",
+    "thisMonth": "החודש",
+    "lastMonth": "חודש שעבר",
+    "last7": "7 הימים האחרונים",
+    "last30": "30 הימים האחרונים",
+    "last90": "90 הימים האחרונים",
+    "thisYear": "השנה",
+    "all": "כל הזמן"
   }
 }

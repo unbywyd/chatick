@@ -422,6 +422,10 @@ projectsRoute.patch(
           idleAction: z.enum(['remind', 'stop']),
           idleHours: z.number().int().min(1).max(48),
           repeatHours: z.number().int().min(1).max(48),
+          country: z.string().max(2),
+          timezone: z.string().max(64),
+          weekStart: z.number().int().min(0).max(6),
+          translate: z.boolean(),
         })
         .partial()
         .optional(),

@@ -1207,6 +1207,11 @@ export function memoryTools(projectId: string, actorUserId: string): { tools: To
         return `${running.length} timers are running — say which one: ${running.map((r) => `${r.id} (${r.description || 'no description'})`).join(', ')}.`
       }
       const endedAt = new Date()
+      if (endedAt.getTime() - entry.startedAt.getTime() < 60_000) {
+        await db.delete(timeEntries).where(eq(timeEntries.id, entry.id))
+        broadcast(projectId, 'time', { action: 'delete', id: entry.id, userId: actorUserId })
+        return 'The timer ran less than a minute — nothing was recorded.'
+      }
       await db.update(timeEntries).set({ endedAt, updatedAt: endedAt }).where(eq(timeEntries.id, entry.id))
       broadcast(projectId, 'time', { action: 'stop', id: entry.id, userId: actorUserId })
       const minutes = Math.round((endedAt.getTime() - entry.startedAt.getTime()) / 60_000)

@@ -916,6 +916,33 @@
     "idleRemind": "Remind",
     "idleStop": "Stop it",
     "idleHours": "After (hours)",
-    "repeatHours": "Repeat every (hours)"
+    "repeatHours": "Repeat every (hours)",
+    "country": "Country",
+    "countryHint": "Sets the time zone, the first day of the week and the project language.",
+    "countryNone": "Not set",
+    "timezone": "Time zone",
+    "weekStart": "Week starts on",
+    "thisWeek": "This week",
+    "thisMonth": "This month",
+    "saved": "saved",
+    "whatAreYouDoing": "What are you working on?",
+    "linkTask": "+ link a task",
+    "searchTask": "Search tasks",
+    "noTasksFound": "No tasks found",
+    "translate": "Translate entry descriptions",
+    "translateHint": "Runs what people type through the AI into the project language, with light tidying."
+  },
+  "period": {
+    "today": "Today",
+    "yesterday": "Yesterday",
+    "thisWeek": "This week",
+    "lastWeek": "Last week",
+    "thisMonth": "This month",
+    "lastMonth": "Last month",
+    "last7": "Last 7 days",
+    "last30": "Last 30 days",
+    "last90": "Last 90 days",
+    "thisYear": "This year",
+    "all": "All time"
   }
 }

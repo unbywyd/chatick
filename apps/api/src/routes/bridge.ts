@@ -754,6 +754,12 @@ bridgeRoute.post('/time/stop', async (c) => {
   }
 
   const endedAt = new Date()
+  // короче минуты — промах, а не работа
+  if (endedAt.getTime() - entry.startedAt.getTime() < 60_000) {
+    await db.delete(timeEntries).where(eq(timeEntries.id, entry.id))
+    broadcast(scope.projectId, 'time', { action: 'delete', id: entry.id, userId: id.userId })
+    return c.json({ discarded: true, reason: 'Shorter than a minute — nothing recorded.' })
+  }
   await db.update(timeEntries).set({ endedAt, updatedAt: endedAt }).where(eq(timeEntries.id, entry.id))
   broadcast(scope.projectId, 'time', { action: 'stop', id: entry.id, userId: id.userId })
   return c.json({ id: entry.id, minutes: Math.round((endedAt.getTime() - entry.startedAt.getTime()) / 60_000) })

@@ -9,8 +9,10 @@ import { Avatar } from '@/components/ui/avatar'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { DatePicker } from '@/components/ui/date-picker'
+import { PeriodPicker, resolvePreset, type Period } from '@/components/ui/period-picker'
 import { Select, SelectTrigger, SelectValue, SelectContent, SelectItem } from '@/components/ui/select'
 import { useConfirm } from '@/components/ui/confirm'
+import { Popover, PopoverTrigger, PopoverContent } from '@/components/ui/popover'
 import {
   dayOffset,
   formatDuration,
@@ -47,11 +49,11 @@ type Summary = {
 
 type Tab = 'week' | 'history' | 'stats'
 
-/** Понедельник текущей недели — неделя считается с него во всех трёх языках. */
-function weekStart(): string {
+/** Начало текущей недели с учётом первого дня, заданного в проекте. */
+function startOfCurrentWeek(weekStartsOn: number): string {
   const d = new Date()
-  const day = (d.getDay() + 6) % 7 // 0 = понедельник
-  d.setDate(d.getDate() - day)
+  const shift = (d.getDay() - weekStartsOn + 7) % 7
+  d.setDate(d.getDate() - shift)
   d.setHours(0, 0, 0, 0)
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
 }
@@ -62,6 +64,13 @@ const isoDay = (d: Date) =>
 export function TimeTab({ projectId }: { projectId: string }) {
   const { t } = useTranslation()
   const [tab, setTab] = useState<Tab>('week')
+
+  // первый день недели задан в проекте: в Израиле неделя начинается с воскресенья
+  const running = useQuery({
+    queryKey: ['time-running', projectId],
+    queryFn: () => api<{ config: { weekStart: number } }>('/api/v1/time/running', {}, 'project'),
+  })
+  const weekStart = running.data?.config?.weekStart ?? 1
 
   return (
     <div className="mx-auto w-full max-w-6xl space-y-4 p-6">
@@ -95,19 +104,19 @@ export function TimeTab({ projectId }: { projectId: string }) {
         ))}
       </div>
 
-      {tab === 'week' && <WeekView projectId={projectId} />}
-      {tab === 'history' && <HistoryView projectId={projectId} />}
-      {tab === 'stats' && <StatsView projectId={projectId} />}
+      {tab === 'week' && <WeekView projectId={projectId} weekStart={weekStart} />}
+      {tab === 'history' && <HistoryView projectId={projectId} weekStart={weekStart} />}
+      {tab === 'stats' && <StatsView projectId={projectId} weekStart={weekStart} />}
     </div>
   )
 }
 
 // --- Неделя ------------------------------------------------------------------
 
-function WeekView({ projectId }: { projectId: string }) {
+function WeekView({ projectId, weekStart }: { projectId: string; weekStart: number }) {
   const { t } = useTranslation()
   const [adding, setAdding] = useState(false)
-  const from = useMemo(weekStart, [])
+  const from = useMemo(() => startOfCurrentWeek(weekStart), [weekStart])
 
   const entries = useQuery({
     queryKey: ['time-entries', projectId, from],
@@ -133,12 +142,12 @@ function WeekView({ projectId }: { projectId: string }) {
 
 // --- История -----------------------------------------------------------------
 
-function HistoryView({ projectId }: { projectId: string }) {
+function HistoryView({ projectId, weekStart }: { projectId: string; weekStart: number }) {
   const { t } = useTranslation()
-  const [from, setFrom] = useState('')
-  const [to, setTo] = useState('')
+  const [period, setPeriod] = useState<Period>(() => resolvePreset('thisMonth', weekStart))
   const [userId, setUserId] = useState('')
   const [q, setQ] = useState('')
+  const { from, to } = period
 
   const members = useQuery({
     queryKey: ['project-members', projectId],
@@ -159,15 +168,6 @@ function HistoryView({ projectId }: { projectId: string }) {
     queryKey: ['time-entries', projectId, 'history', query],
     queryFn: () => api<{ items: Entry[]; canSeeOthers: boolean }>(`/api/v1/time?${query}`, {}, 'project'),
   })
-
-  /** Быстрые периоды: их выбирают чаще, чем набирают даты руками. */
-  const preset = (days: number) => {
-    const end = new Date()
-    const start = new Date()
-    start.setDate(start.getDate() - days)
-    setFrom(isoDay(start))
-    setTo(isoDay(end))
-  }
 
   const exportCsv = () => {
     const items = entries.data?.items ?? []
@@ -210,8 +210,7 @@ function HistoryView({ projectId }: { projectId: string }) {
           <Search className="pointer-events-none absolute start-2.5 top-1/2 size-3.5 -translate-y-1/2 text-muted-foreground" />
           <Input value={q} onChange={(e) => setQ(e.target.value)} placeholder={t('time.searchPlaceholder')} className="h-9 ps-8" />
         </div>
-        <DatePicker value={from} onChange={setFrom} className="w-36" />
-        <DatePicker value={to} onChange={setTo} className="w-36" />
+        <PeriodPicker value={period} onChange={setPeriod} weekStart={weekStart} className="w-48" />
         <Select value={userId || 'all'} onValueChange={(v) => setUserId(v === 'all' ? '' : v)}>
           <SelectTrigger className="w-auto min-w-36">
             <SelectValue />
@@ -231,40 +230,6 @@ function HistoryView({ projectId }: { projectId: string }) {
         </Button>
       </div>
 
-      <div className="flex flex-wrap gap-1.5">
-        {(
-          [
-            [7, 'week'],
-            [30, 'month'],
-            [90, 'quarter'],
-            [180, 'halfYear'],
-            [365, 'year'],
-          ] as const
-        ).map(([days, key]) => (
-          <button
-            key={key}
-            onClick={() => preset(days)}
-            className="rounded-full border px-2.5 py-1 text-xs text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
-          >
-            {t(`time.period.${key}`)}
-          </button>
-        ))}
-        {(from || to || userId || q) && (
-          <button
-            onClick={() => {
-              setFrom('')
-              setTo('')
-              setUserId('')
-              setQ('')
-            }}
-            className="inline-flex items-center gap-1 rounded-full px-2.5 py-1 text-xs text-muted-foreground hover:text-foreground"
-          >
-            <X className="size-3" />
-            {t('journal.clearFilters')}
-          </button>
-        )}
-      </div>
-
       <p className="text-sm">
         <span className="text-muted-foreground">{t('time.total')}: </span>
         <span className="font-mono font-semibold tabular-nums">{formatDuration(total)}</span>
@@ -277,14 +242,10 @@ function HistoryView({ projectId }: { projectId: string }) {
 
 // --- Статистика ---------------------------------------------------------------
 
-function StatsView({ projectId }: { projectId: string }) {
+function StatsView({ projectId, weekStart }: { projectId: string; weekStart: number }) {
   const { t } = useTranslation()
-  const [from, setFrom] = useState(() => {
-    const d = new Date()
-    d.setDate(d.getDate() - 30)
-    return isoDay(d)
-  })
-  const [to, setTo] = useState(() => isoDay(new Date()))
+  const [period, setPeriod] = useState<Period>(() => resolvePreset('thisMonth', weekStart))
+  const { from, to } = period
 
   const summary = useQuery({
     queryKey: ['time-summary', projectId, from, to],
@@ -298,8 +259,7 @@ function StatsView({ projectId }: { projectId: string }) {
   return (
     <div className="space-y-5">
       <div className="flex flex-wrap items-center gap-2">
-        <DatePicker value={from} onChange={setFrom} className="w-36" />
-        <DatePicker value={to} onChange={setTo} className="w-36" />
+        <PeriodPicker value={period} onChange={setPeriod} weekStart={weekStart} className="w-48" />
         <span className="ms-auto text-sm">
           <span className="text-muted-foreground">{t('time.total')}: </span>
           <span className="font-mono font-semibold tabular-nums">{formatDuration(s?.totalMinutes ?? 0)}</span>
@@ -431,10 +391,18 @@ function EntryRow({ projectId, entry }: { projectId: string; entry: Entry }) {
     qc.invalidateQueries({ queryKey: ['time-summary', projectId] })
   }
 
+  // Короткая подсветка вместо тоста: правок времени много, и на каждую
+  // всплывашку смотреть невыносимо — но и молчать нельзя, человек должен
+  // видеть, что записалось.
+  const [saved, setSaved] = useState(false)
   const patch = useMutation({
     mutationFn: (body: Record<string, unknown>) =>
       api(`/api/v1/time/${entry.id}`, { method: 'PATCH', body: JSON.stringify(body) }, 'project'),
-    onSuccess: refresh,
+    onSuccess: () => {
+      refresh()
+      setSaved(true)
+      setTimeout(() => setSaved(false), 1200)
+    },
     onError: onErr,
   })
   const remove = useMutation({
@@ -458,24 +426,27 @@ function EntryRow({ projectId, entry }: { projectId: string; entry: Entry }) {
             if (e.target.value !== entry.description) patch.mutate({ description: e.target.value })
           }}
           placeholder={t('time.descriptionPlaceholder')}
-          className="w-full truncate bg-transparent text-sm outline-none placeholder:text-muted-foreground"
+          className="w-full truncate rounded-md bg-transparent px-1 py-0.5 text-sm outline-none transition-colors placeholder:text-muted-foreground hover:bg-accent/50 focus:bg-accent"
         />
-        {entry.task && (
-          <span className="text-xs text-muted-foreground">
-            <span className="font-mono">{entry.task.number}</span> {entry.task.title}
-          </span>
-        )}
+        {/* задачу цепляют задним числом чаще, чем при старте: сначала работаешь,
+            потом вспоминаешь, к чему это относилось */}
+        <TaskPicker
+          projectId={projectId}
+          value={entry.task}
+          onChange={(taskId) => patch.mutate({ taskId })}
+        />
       </div>
 
       {/* время правится на месте: 9, 930, 9:30 */}
       <TimeCell
         value={start}
+        saved={saved}
         onCommit={(minutes) => patch.mutate({ startedAt: withTimeOfDay(start, minutes).toISOString() })}
       />
       <span className="text-xs text-muted-foreground">–</span>
       {end ? (
         <span className="relative">
-          <TimeCell value={end} onCommit={(minutes) => patch.mutate({ endedAt: resolveEnd(start, minutes).toISOString() })} />
+          <TimeCell value={end} saved={saved} onCommit={(minutes) => patch.mutate({ endedAt: resolveEnd(start, minutes).toISOString() })} />
           {offset > 0 && (
             <span className="absolute -end-3 -top-1 text-[9px] text-brand" title={t('time.nextDay')}>
               +{offset}
@@ -486,8 +457,11 @@ function EntryRow({ projectId, entry }: { projectId: string; entry: Entry }) {
         <span className="w-12 text-center text-xs text-brand">{t('time.running')}</span>
       )}
 
-      <span className="w-14 shrink-0 text-end font-mono text-sm tabular-nums">
+      <span className="relative w-16 shrink-0 text-end font-mono text-base tabular-nums">
         {entry.minutes != null ? formatDuration(entry.minutes) : '—'}
+        {saved && (
+          <span className="absolute -bottom-3 end-0 text-[9px] font-sans text-brand">{t('time.saved')}</span>
+        )}
       </span>
 
       {entry.autoStopped && (
@@ -509,8 +483,12 @@ function EntryRow({ projectId, entry }: { projectId: string; entry: Entry }) {
   )
 }
 
-/** Ячейка времени: показывает «09:30», принимает «9», «930», «9:30». */
-function TimeCell({ value, onCommit }: { value: Date; onCommit: (minutes: number) => void }) {
+/**
+ * Ячейка времени: показывает «09:30», принимает «9», «930», «9:30».
+ * Поле крупное и с широкой зоной клика — по строке высотой в 36px попасть в
+ * мелкий текст трудно, а места по бокам достаточно.
+ */
+function TimeCell({ value, onCommit, saved }: { value: Date; onCommit: (minutes: number) => void; saved?: boolean }) {
   const shown = formatTimeOfDay(value.getHours() * 60 + value.getMinutes())
   const [draft, setDraft] = useState<string | null>(null)
 
@@ -532,7 +510,12 @@ function TimeCell({ value, onCommit }: { value: Date; onCommit: (minutes: number
           e.currentTarget.blur()
         }
       }}
-      className="w-12 shrink-0 rounded bg-transparent text-center font-mono text-sm tabular-nums outline-none hover:bg-accent focus:bg-accent"
+      className={cn(
+        'w-[4.5rem] shrink-0 rounded-md bg-transparent py-1 text-center font-mono text-base tabular-nums outline-none transition-colors',
+        'hover:bg-accent focus:bg-accent focus:ring-1 focus:ring-ring',
+        // подтверждение без тоста: поле само коротко подсвечивается
+        saved && 'bg-brand/15 ring-1 ring-brand/40',
+      )}
     />
   )
 }
@@ -612,5 +595,91 @@ function ManualEntryForm({ projectId, onDone }: { projectId: string; onDone: () 
         {t('common.cancel')}
       </Button>
     </div>
+  )
+}
+
+/** Привязка задачи к записи: поиск по номеру и названию, снять — «без задачи». */
+function TaskPicker({
+  projectId,
+  value,
+  onChange,
+}: {
+  projectId: string
+  value: { id: string; number: string; title: string } | null
+  onChange: (taskId: string | null) => void
+}) {
+  const { t } = useTranslation()
+  const [open, setOpen] = useState(false)
+  const [q, setQ] = useState('')
+
+  const tasksQ = useQuery({
+    queryKey: ['tasks', projectId],
+    enabled: open, // список тянем только когда открыли — строк на странице много
+    queryFn: () => api<TaskLite[]>('/api/v1/tasks', {}, 'project'),
+  })
+
+  const matches = useMemo(() => {
+    const needle = q.trim().toLowerCase()
+    return (tasksQ.data ?? [])
+      .filter((task) => !needle || task.title.toLowerCase().includes(needle) || task.number.toLowerCase().includes(needle))
+      .slice(0, 30)
+  }, [tasksQ.data, q])
+
+  return (
+    <Popover open={open} onOpenChange={setOpen}>
+      <PopoverTrigger asChild>
+        <button className="max-w-full truncate rounded px-1 py-0.5 text-xs text-muted-foreground transition-colors hover:bg-accent hover:text-foreground">
+          {value ? (
+            <>
+              <span className="font-mono">{value.number}</span> {value.title}
+            </>
+          ) : (
+            t('time.linkTask')
+          )}
+        </button>
+      </PopoverTrigger>
+      <PopoverContent className="w-72 p-0" align="start">
+        <div className="border-b p-1.5">
+          <input
+            autoFocus
+            value={q}
+            onChange={(e) => setQ(e.target.value)}
+            placeholder={t('time.searchTask')}
+            className="h-7 w-full bg-transparent px-1 text-sm outline-none placeholder:text-muted-foreground"
+          />
+        </div>
+        <div className="max-h-60 overflow-y-auto p-1">
+          {value && (
+            <button
+              onClick={() => {
+                onChange(null)
+                setOpen(false)
+              }}
+              className="w-full rounded-sm px-2 py-1.5 text-start text-sm text-muted-foreground transition-colors hover:bg-accent"
+            >
+              {t('time.noTask')}
+            </button>
+          )}
+          {matches.map((task) => (
+            <button
+              key={task.id}
+              onClick={() => {
+                onChange(task.id)
+                setOpen(false)
+              }}
+              className="flex w-full gap-2 rounded-sm px-2 py-1.5 text-start text-sm transition-colors hover:bg-accent"
+            >
+              <span className="shrink-0 font-mono text-xs text-muted-foreground">{task.number}</span>
+              <span className="min-w-0 truncate">{task.title}</span>
+            </button>
+          ))}
+          {open && !matches.length && (
+            <p className="px-2 py-3 text-center text-xs text-muted-foreground">
+              {tasksQ.isLoading ? '…' : t('time.noTasksFound')}
+            </p>
+          )}
+        </div>
+      </PopoverContent>
+    </Popover>
   )
 }

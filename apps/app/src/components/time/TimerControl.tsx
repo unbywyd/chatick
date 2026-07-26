@@ -3,7 +3,7 @@ import { useNavigate, useParams } from 'react-router-dom'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { useTranslation } from 'react-i18next'
 import { toast } from 'sonner'
-import { MoreHorizontal, Pause, Play } from 'lucide-react'
+import { Clock3, Pause, Play } from 'lucide-react'
 import { api } from '@/lib/api'
 import { cn } from '@/lib/utils'
 import { formatElapsed, parseTimeOfDay, withTimeOfDay } from '@/lib/time-parse'
@@ -50,9 +50,14 @@ export function TimerControl({ collapsed }: { collapsed: boolean }) {
   const onErr = (e: unknown) => toast.error(e instanceof Error ? e.message : String(e))
   const refresh = () => qc.invalidateQueries({ queryKey: ['time-running', projectId] })
 
+  const [draft, setDraft] = useState('')
   const start = useMutation({
-    mutationFn: () => api('/api/v1/time/start', { method: 'POST', body: JSON.stringify({}) }, 'project'),
-    onSuccess: refresh,
+    mutationFn: (description: string) =>
+      api('/api/v1/time/start', { method: 'POST', body: JSON.stringify({ description }) }, 'project'),
+    onSuccess: () => {
+      setDraft('')
+      refresh()
+    },
     onError: onErr,
   })
   const stop = useMutation({
@@ -72,7 +77,7 @@ export function TimerControl({ collapsed }: { collapsed: boolean }) {
 
   if (!projectId) return null
 
-  const toggle = () => (first ? stop.mutate(first.id) : start.mutate())
+  const toggle = () => (first ? stop.mutate(first.id) : start.mutate(draft.trim()))
 
   if (collapsed) {
     return (
@@ -126,7 +131,17 @@ export function TimerControl({ collapsed }: { collapsed: boolean }) {
           />
         </div>
       ) : (
-        <span className="min-w-0 flex-1 truncate text-xs text-muted-foreground">{t('time.start')}</span>
+        // Поле, а не надпись: чаще всего человек хочет сразу сказать, над чем
+        // садится работать, и лишний заход на страницу учёта ради этого лишний.
+        <input
+          value={draft}
+          onChange={(e) => setDraft(e.target.value)}
+          onKeyDown={(e) => {
+            if (e.key === 'Enter') start.mutate(draft.trim())
+          }}
+          placeholder={t('time.whatAreYouDoing')}
+          className="min-w-0 flex-1 bg-transparent text-xs outline-none placeholder:text-muted-foreground"
+        />
       )}
 
       <button
@@ -134,7 +149,7 @@ export function TimerControl({ collapsed }: { collapsed: boolean }) {
         title={t('time.openPage')}
         className="grid size-7 shrink-0 place-items-center rounded-md text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
       >
-        <MoreHorizontal className="size-4" />
+        <Clock3 className="size-4" />
       </button>
     </div>
   )

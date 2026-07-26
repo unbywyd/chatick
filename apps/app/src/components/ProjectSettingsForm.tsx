@@ -4,6 +4,8 @@ import { Eye, MessageCircleQuestion, ShieldCheck, ChevronDown } from 'lucide-rea
 import { Switch } from '@/components/ui/switch'
 import { Input } from '@/components/ui/input'
 import { ProjectBadge } from '@/components/ui/project-badge'
+import { COUNTRIES, countryByCode } from '@/lib/countries'
+import { Select, SelectTrigger, SelectValue, SelectContent, SelectItem } from '@/components/ui/select'
 import { Button } from '@/components/ui/button'
 import {
   DropdownMenu,
@@ -43,9 +45,24 @@ export type TimeConfig = {
   idleAction: 'remind' | 'stop'
   idleHours: number
   repeatHours: number
+  /** страна задаёт пояс, первый день недели и язык — одним выбором */
+  country: string
+  timezone: string
+  weekStart: number
+  /** пропускать описания записей через ИИ на язык проекта */
+  translate: boolean
 }
 
-export const DEFAULT_TIME_CONFIG: TimeConfig = { maxTimers: 1, idleAction: 'remind', idleHours: 8, repeatHours: 8 }
+export const DEFAULT_TIME_CONFIG: TimeConfig = {
+  maxTimers: 1,
+  idleAction: 'remind',
+  idleHours: 8,
+  repeatHours: 8,
+  country: '',
+  timezone: 'UTC',
+  weekStart: 1,
+  translate: false,
+}
 
 export type ProjectSettings = {
   name: string
@@ -330,6 +347,75 @@ export function ProjectSettingsForm({
       )}
       {tab === 'time' && (
         <div className="space-y-5">
+          {/* Регион задаётся одним выбором: пояс, первый день недели и язык
+              связаны, и настраивать их порознь — путь к рассинхрону отчётов. */}
+          <div className="space-y-3 rounded-lg border p-3">
+            <div className="flex items-center justify-between gap-3">
+              <div>
+                <p className="text-sm font-medium">{t('time.country')}</p>
+                <p className="text-xs text-muted-foreground">{t('time.countryHint')}</p>
+              </div>
+              <Select
+                value={time.country || 'none'}
+                onValueChange={(code) => {
+                  const preset = countryByCode(code)
+                  if (!preset) {
+                    setTime('country', '')
+                    return
+                  }
+                  onChange({
+                    ...value,
+                    timeConfig: {
+                      ...time,
+                      country: preset.code,
+                      timezone: preset.timezone,
+                      weekStart: preset.weekStart,
+                    },
+                    // язык проекта — тоже часть региона, но перебивать уже
+                    // выбранный не станем: его могли задать осознанно
+                    aiConfig: value.aiConfig.language
+                      ? value.aiConfig
+                      : { ...value.aiConfig, language: preset.language ?? 'en' },
+                  })
+                }}
+              >
+                <SelectTrigger className="w-52">
+                  <SelectValue placeholder={t('time.countryNone')} />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="none">{t('time.countryNone')}</SelectItem>
+                  {COUNTRIES.map((c) => (
+                    <SelectItem key={c.code} value={c.code}>
+                      {c.name}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+
+            <div className="grid gap-3 sm:grid-cols-2">
+              <div>
+                <p className="mb-1 text-xs text-muted-foreground">{t('time.timezone')}</p>
+                <Input value={time.timezone} onChange={(e) => setTime('timezone', e.target.value)} placeholder="UTC" />
+              </div>
+              <div>
+                <p className="mb-1 text-xs text-muted-foreground">{t('time.weekStart')}</p>
+                <Select value={String(time.weekStart)} onValueChange={(v) => setTime('weekStart', Number(v))}>
+                  <SelectTrigger>
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {[0, 1, 6].map((d) => (
+                      <SelectItem key={d} value={String(d)}>
+                        {t(`notif.weekday.${d}`)}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+            </div>
+          </div>
+
           {/* Параллельные таймеры: они же закрывают потребность вести две
               задачи разом — вместо списка задач внутри одной записи. */}
           <div className="flex items-center justify-between gap-3">
@@ -346,6 +432,13 @@ export function ProjectSettingsForm({
               className="w-20 text-center"
             />
           </div>
+
+          <ToggleRow
+            label={t('time.translate')}
+            hint={t('time.translateHint')}
+            checked={time.translate}
+            onChange={(v) => setTime('translate', v)}
+          />
 
           <div className="space-y-2">
             <p className="text-sm font-medium">{t('time.idleAction')}</p>

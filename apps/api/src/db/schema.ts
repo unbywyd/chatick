@@ -123,9 +123,12 @@ export const projects = pgTable(
     // Цвет раздаётся случайно при создании — чтобы проекты различались сразу,
     // без похода в настройки.
     color: text('color').notNull().default('#6366f1'),
-    // Трекинг (SPEC §8.32): сколько таймеров можно держать запущенными и что
-    // делать с забытым. JSON — состав настроек будет расти.
-    // { maxTimers: 1, idleAction: 'remind'|'stop', idleHours: 8, repeatHours: 8 }
+    // Трекинг и региональные настройки (SPEC §8.32). JSON — состав растёт.
+    // { maxTimers, idleAction: 'remind'|'stop', idleHours, repeatHours,
+    //   country, timezone, weekStart: 0..6 }
+    // Пояс и первый день недели нужны, чтобы «эта неделя» и суммы за день
+    // считались одинаково у всех: иначе клиент режет дни по своему поясу,
+    // а SQL — по серверному, и понедельник у них разный.
     timeConfig: text('time_config').notNull().default('{}'),
     logoUrl: text('logo_url'),
     logoKey: text('logo_key'),

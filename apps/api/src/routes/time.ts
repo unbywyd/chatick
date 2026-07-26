@@ -8,6 +8,7 @@ import { requireProject, type ProjectEnv } from '../auth.js'
 import { projectRoleOf } from './projects.js'
 import { logActivity } from '../lib/audit.js'
 import { broadcast } from '../ws.js'
+import { translateTimeEntry } from '../lib/llm.js'
 
 // Трекинг времени (SPEC §8.32).
 // Одна запись — один отрезок работы. Задача необязательна и всегда одна:
@@ -20,6 +21,14 @@ export type TimeConfig = {
   idleAction: 'remind' | 'stop'
   idleHours: number
   repeatHours: number
+  /** ISO-код страны — из него подставляются пояс, первый день недели и язык */
+  country: string
+  /** IANA, например Asia/Jerusalem: по нему режутся сутки в отчётах */
+  timezone: string
+  /** 0 = воскресенье … 1 = понедельник; в Израиле неделя начинается с воскресенья */
+  weekStart: number
+  /** пропускать описания записей через ИИ на язык проекта */
+  translate: boolean
 }
 
 export const DEFAULT_TIME_CONFIG: TimeConfig = {
@@ -27,6 +36,10 @@ export const DEFAULT_TIME_CONFIG: TimeConfig = {
   idleAction: 'remind',
   idleHours: 8,
   repeatHours: 8,
+  country: '',
+  timezone: 'UTC',
+  weekStart: 1,
+  translate: false,
 }
 
 export function readTimeConfig(raw: string | null | undefined): TimeConfig {
@@ -37,6 +50,10 @@ export function readTimeConfig(raw: string | null | undefined): TimeConfig {
       idleAction: p.idleAction === 'stop' ? 'stop' : 'remind',
       idleHours: Math.max(1, Math.min(48, Number(p.idleHours) || DEFAULT_TIME_CONFIG.idleHours)),
       repeatHours: Math.max(1, Math.min(48, Number(p.repeatHours) || DEFAULT_TIME_CONFIG.repeatHours)),
+      country: typeof p.country === 'string' ? p.country.slice(0, 2).toUpperCase() : '',
+      timezone: typeof p.timezone === 'string' && p.timezone ? p.timezone : DEFAULT_TIME_CONFIG.timezone,
+      weekStart: Number.isInteger(p.weekStart) && Number(p.weekStart) >= 0 && Number(p.weekStart) <= 6 ? Number(p.weekStart) : 1,
+      translate: p.translate === true,
     }
   } catch {
     return DEFAULT_TIME_CONFIG
@@ -79,6 +96,22 @@ async function hydrate(rows: (typeof timeEntries.$inferSelect)[]) {
   const byUser = new Map(people.map((u) => [u.id, { id: u.id, name: u.name, avatarUrl: u.avatarUrl }]))
   const byTask = new Map(taskRows.map((t) => [t.id, { id: t.id, number: t.number, title: t.title }]))
   return rows.map((r) => serialize(r, byUser.get(r.userId), r.taskId ? byTask.get(r.taskId) : null))
+}
+
+
+/**
+ * Переводит описание записи на язык проекта, если это включено. Делается
+ * ФОНОМ после сохранения: человек не должен ждать модель, чтобы продолжить.
+ */
+async function maybeTranslate(projectId: string, entryId: string, text: string): Promise<void> {
+  if (!text.trim()) return
+  const project = await db.query.projects.findFirst({ where: eq(projects.id, projectId) })
+  if (!project || !readTimeConfig(project.timeConfig).translate) return
+  const language = (JSON.parse(project.aiConfig || '{}') as { language?: string }).language ?? 'en'
+  const translated = await translateTimeEntry(projectId, text, language)
+  if (!translated) return
+  await db.update(timeEntries).set({ description: translated }).where(eq(timeEntries.id, entryId))
+  broadcast(projectId, 'time', { action: 'update', id: entryId, userId: '' })
 }
 
 // --- Текущие таймеры --------------------------------------------------------
@@ -147,6 +180,7 @@ timeRoute.post(
       .returning()
 
     broadcast(projectId, 'time', { action: 'start', id: row!.id, userId: sub })
+    void maybeTranslate(projectId, row!.id, row!.description).catch(() => {})
     return c.json((await hydrate([row!]))[0], 201)
   },
 )
@@ -160,9 +194,18 @@ timeRoute.post('/:id/stop', async (c) => {
   if (entry.userId !== sub && !(await canSeeOthers(projectId, sub))) return c.json({ error: 'Forbidden' }, 403)
   if (entry.endedAt) return c.json({ error: 'Already stopped' }, 400)
 
+  const endedAt = new Date()
+  // Остановили меньше чем через минуту — это промах по кнопке, а не работа.
+  // Такую запись не сохраняем: строки по 0:00 засоряют день и ничего не значат.
+  if (endedAt.getTime() - entry.startedAt.getTime() < 60_000) {
+    await db.delete(timeEntries).where(eq(timeEntries.id, entry.id))
+    broadcast(projectId, 'time', { action: 'delete', id: entry.id, userId: entry.userId })
+    return c.json({ discarded: true, reason: 'Shorter than a minute — nothing recorded.' })
+  }
+
   const [row] = await db
     .update(timeEntries)
-    .set({ endedAt: new Date(), updatedAt: new Date() })
+    .set({ endedAt, updatedAt: endedAt })
     .where(eq(timeEntries.id, entry.id))
     .returning()
 
@@ -195,7 +238,13 @@ timeRoute.get(
     if (!privileged) conds.push(eq(timeEntries.userId, sub))
     else if (f.userId) conds.push(eq(timeEntries.userId, f.userId))
 
-    if (f.from) conds.push(gte(timeEntries.startedAt, new Date(f.from)))
+    // Запись попадает в выборку, если ПЕРЕСЕКАЕТСЯ с периодом, а не начата
+    // внутри него: работа с 23:00 до 02:00 относится к обоим дням, и при
+    // поиске «за сегодня» ночная смена обязана найтись.
+    if (f.from) {
+      const from = new Date(f.from)
+      conds.push(sql`coalesce(${timeEntries.endedAt}, now()) >= ${from}`)
+    }
     if (f.to) {
       const to = new Date(f.to)
       if (!f.to.includes('T')) to.setHours(23, 59, 59, 999)
@@ -211,7 +260,8 @@ timeRoute.get(
       .orderBy(desc(timeEntries.startedAt))
       .limit(f.limit)
 
-    return c.json({ items: await hydrate(rows), canSeeOthers: privileged })
+    const projectRow = await db.query.projects.findFirst({ where: eq(projects.id, projectId) })
+    return c.json({ items: await hydrate(rows), canSeeOthers: privileged, config: readTimeConfig(projectRow?.timeConfig) })
   },
 )
 
@@ -256,6 +306,7 @@ timeRoute.patch('/:id', zValidator('json', patchSchema), async (c) => {
 
   const [row] = await db.update(timeEntries).set(patch).where(eq(timeEntries.id, entry.id)).returning()
   broadcast(projectId, 'time', { action: 'update', id: row!.id, userId: entry.userId })
+  if (b.description !== undefined) void maybeTranslate(projectId, row!.id, row!.description).catch(() => {})
   return c.json((await hydrate([row!]))[0])
 })
 
@@ -289,6 +340,7 @@ timeRoute.post(
       .returning()
 
     broadcast(projectId, 'time', { action: 'create', id: row!.id, userId: sub })
+    void maybeTranslate(projectId, row!.id, row!.description).catch(() => {})
     return c.json((await hydrate([row!]))[0], 201)
   },
 )
@@ -325,16 +377,32 @@ timeRoute.get(
     const f = c.req.valid('query')
     const privileged = await canSeeOthers(projectId, sub)
 
+    const project = await db.query.projects.findFirst({ where: eq(projects.id, projectId) })
+    const tz = readTimeConfig(project?.timeConfig).timezone
+
+    // Границы периода в поясе ПРОЕКТА: «этот месяц» начинается в 00:00 там, где
+    // работает команда, а не там, где стоит сервер.
+    const periodFrom = f.from ? new Date(f.from) : null
+    const periodTo = f.to ? new Date(f.to) : null
+    if (periodTo && !f.to!.includes('T')) periodTo.setHours(23, 59, 59, 999)
+
     const conds = [eq(timeEntries.projectId, projectId), sql`${timeEntries.endedAt} is not null`]
     if (!privileged) conds.push(eq(timeEntries.userId, sub))
-    if (f.from) conds.push(gte(timeEntries.startedAt, new Date(f.from)))
-    if (f.to) {
-      const to = new Date(f.to)
-      if (!f.to.includes('T')) to.setHours(23, 59, 59, 999)
-      conds.push(lte(timeEntries.startedAt, to))
-    }
+    // берём всё, что ПЕРЕСЕКАЕТСЯ с периодом, а лишнее отрежем ниже
+    if (periodFrom) conds.push(sql`${timeEntries.endedAt} >= ${periodFrom}`)
+    if (periodTo) conds.push(lte(timeEntries.startedAt, periodTo))
 
-    const minutes = sql<number>`coalesce(sum(extract(epoch from (${timeEntries.endedAt} - ${timeEntries.startedAt})) / 60), 0)::int`
+    /**
+     * Минуты записи ВНУТРИ периода. Смена с 23:00 до 02:00 отдаёт час одному
+     * дню и два — другому; иначе отчёт за день завышен на чужие часы, а сумма
+     * дней не сходится с итогом. Время терять нельзя, но и приписывать чужое
+     * тоже.
+     */
+    const clipped = sql<number>`extract(epoch from (
+      least(${timeEntries.endedAt}, ${periodTo ?? sql`${timeEntries.endedAt}`})
+      - greatest(${timeEntries.startedAt}, ${periodFrom ?? sql`${timeEntries.startedAt}`})
+    )) / 60`
+    const minutes = sql<number>`coalesce(sum(greatest(${clipped}, 0)), 0)::int`
 
     const [byUser, byTask, byDay] = await Promise.all([
       db
@@ -349,19 +417,49 @@ timeRoute.get(
         .leftJoin(tasks, eq(tasks.id, timeEntries.taskId))
         .where(and(...conds))
         .groupBy(timeEntries.taskId, tasks.number, tasks.title),
-      db
-        .select({ day: sql<string>`to_char(${timeEntries.startedAt}, 'YYYY-MM-DD')`, minutes })
-        .from(timeEntries)
-        .where(and(...conds))
-        .groupBy(sql`to_char(${timeEntries.startedAt}, 'YYYY-MM-DD')`)
-        .orderBy(sql`to_char(${timeEntries.startedAt}, 'YYYY-MM-DD')`),
+      // Раскладываем каждую запись по суткам, которые она задевает: сутки
+      // берутся в поясе проекта, а от каждого дня считается ровно тот кусок,
+      // что попал внутрь записи И внутрь периода.
+      db.execute(sql`
+        with bounds as (
+          select
+            ${timeEntries.startedAt} as s,
+            ${timeEntries.endedAt} as e
+          from ${timeEntries}
+          where ${and(...conds)}
+        ),
+        spread as (
+          select
+            generate_series(
+              date_trunc('day', b.s at time zone ${tz}),
+              date_trunc('day', b.e at time zone ${tz}),
+              interval '1 day'
+            ) as day_local,
+            b.s, b.e
+          from bounds b
+        )
+        select
+          to_char(day_local, 'YYYY-MM-DD') as day,
+          coalesce(sum(greatest(extract(epoch from (
+            least(e, (day_local + interval '1 day') at time zone ${tz})
+            - greatest(s, day_local at time zone ${tz})
+          )) / 60, 0)), 0)::int as minutes
+        from spread
+        group by day_local
+        order by day_local
+      `),
     ])
+
+    const days = (byDay as unknown as { day: string; minutes: number }[]).map((r) => ({
+      day: String(r.day),
+      minutes: Number(r.minutes),
+    }))
 
     return c.json({
       byUser: byUser.sort((a, b) => b.minutes - a.minutes),
       // записи без задачи — отдельной строкой, а не размазаны по задачам
       byTask: byTask.sort((a, b) => b.minutes - a.minutes),
-      byDay,
+      byDay: days,
       totalMinutes: byUser.reduce((sum, r) => sum + r.minutes, 0),
       canSeeOthers: privileged,
     })

@@ -516,6 +516,44 @@ function looseJsonFields(raw: string, fields: string[]): Record<string, string> 
   }
 }
 
+
+/**
+ * Приводит описание записи трекера к языку проекта (SPEC §8.32).
+ * Правка МЯГКАЯ: человек писал наспех, между делом, и переписывать смысл
+ * нельзя — только перевести и слегка причесать. Если менять нечего, вернётся
+ * null и текст останется как есть.
+ */
+export async function translateTimeEntry(
+  projectId: string,
+  text: string,
+  language: string,
+): Promise<string | null> {
+  const trimmed = text.trim()
+  if (trimmed.length < 3) return null
+  const cfg = await projectLlm(projectId, 'translate_time_entry')
+  if (!cfg) return null
+  const lang = LANG_NAMES[language] ?? language
+
+  const out = await complete(cfg, {
+    system: [
+      `Rewrite a short work-log note in ${lang}.`,
+      'Translate it if it is in another language, and tidy obvious typos and shorthand.',
+      'Keep it SHORT and keep the meaning exactly — do not add detail, do not invent context, do not turn it into a sentence if it was a fragment.',
+      'Keep task numbers, file names, identifiers and code as they are.',
+      `If it is already correct ${lang}, reply with the text unchanged.`,
+      'Reply with the text only — no quotes, no explanation.',
+    ].join('\n'),
+    user: trimmed.slice(0, 500),
+    maxTokens: 300,
+  })
+
+  const clean = out?.trim().replace(/^["'«]|["'»]$/g, '')
+  if (!clean || clean === trimmed) return null
+  // защита от «улучшений»: если модель раздула фразу втрое, это уже не правка
+  if (clean.length > Math.max(80, trimmed.length * 3)) return null
+  return clean.slice(0, 500)
+}
+
 export async function validateTask(
   projectId: string,
   input: { title: string; description: string; language: string },
