@@ -469,19 +469,13 @@ timeRoute.get(
     )) / 60`
     const minutes = sql<number>`coalesce(sum(greatest(${clipped}, 0)), 0)::int`
 
-    const [byUser, byTask, byDay] = await Promise.all([
+    const [byUser, byDay] = await Promise.all([
       db
         .select({ userId: timeEntries.userId, name: users.name, avatarUrl: users.avatarUrl, minutes, entries: sql<number>`count(*)::int` })
         .from(timeEntries)
         .innerJoin(users, eq(users.id, timeEntries.userId))
         .where(and(...conds))
         .groupBy(timeEntries.userId, users.name, users.avatarUrl),
-      db
-        .select({ taskId: timeEntries.taskId, number: tasks.number, title: tasks.title, minutes, entries: sql<number>`count(*)::int` })
-        .from(timeEntries)
-        .leftJoin(tasks, eq(tasks.id, timeEntries.taskId))
-        .where(and(...conds))
-        .groupBy(timeEntries.taskId, tasks.number, tasks.title),
       // Раскладываем каждую запись по суткам, которые она задевает: сутки
       // берутся в поясе проекта, а от каждого дня считается ровно тот кусок,
       // что попал внутрь записи И внутрь периода.
@@ -522,8 +516,6 @@ timeRoute.get(
 
     return c.json({
       byUser: byUser.sort((a, b) => b.minutes - a.minutes),
-      // записи без задачи — отдельной строкой, а не размазаны по задачам
-      byTask: byTask.sort((a, b) => b.minutes - a.minutes),
       byDay: days,
       totalMinutes: byUser.reduce((sum, r) => sum + r.minutes, 0),
       canSeeOthers: privileged,

@@ -41,7 +41,6 @@ type Member = { user: { id: string; name: string; email: string; avatarUrl: stri
 type TaskLite = { id: string; number: string; title: string }
 type Summary = {
   byUser: { userId: string; name: string; avatarUrl: string | null; minutes: number; entries: number }[]
-  byTask: { taskId: string | null; number: string | null; title: string | null; minutes: number; entries: number }[]
   byDay: { day: string; minutes: number }[]
   totalMinutes: number
   canSeeOthers: boolean
@@ -266,19 +265,25 @@ function StatsView({ projectId, weekStart }: { projectId: string; weekStart: num
         </span>
       </div>
 
-      {/* По дням — простые столбики: показывают ритм работы без библиотеки графиков */}
+      {/* По дням — столбики без библиотеки графиков. Пустой период показываем
+          словами: серый прямоугольник ничего не сообщает. */}
       <section className="rounded-lg border bg-card p-4">
         <h2 className="mb-3 text-sm font-semibold">{t('time.byDay')}</h2>
         {(s?.byDay ?? []).length === 0 ? (
-          <p className="py-4 text-center text-xs text-muted-foreground">{t('time.noData')}</p>
+          <p className="py-10 text-center text-sm text-muted-foreground">{t('time.noData')}</p>
         ) : (
-          <div className="flex h-32 items-end gap-1">
+          <div className="flex h-40 items-end gap-1">
             {(s?.byDay ?? []).map((d) => (
-              <div key={d.day} className="group relative flex-1" title={`${d.day} — ${formatDuration(d.minutes)}`}>
+              <div key={d.day} className="group flex flex-1 flex-col items-center gap-1" title={`${d.day} — ${formatDuration(d.minutes)}`}>
+                {/* часы над столбиком: иначе высота ни о чём не говорит */}
+                <span className="text-[9px] tabular-nums text-muted-foreground opacity-0 transition-opacity group-hover:opacity-100">
+                  {formatDuration(d.minutes)}
+                </span>
                 <div
                   className="w-full rounded-t bg-brand/70 transition-colors group-hover:bg-brand"
                   style={{ height: `${Math.max(2, (d.minutes / maxDay) * 100)}%` }}
                 />
+                <span className="text-[9px] tabular-nums text-muted-foreground">{d.day.slice(-2)}</span>
               </div>
             ))}
           </div>
@@ -287,11 +292,11 @@ function StatsView({ projectId, weekStart }: { projectId: string; weekStart: num
 
       <section className="rounded-lg border bg-card p-4">
         <h2 className="mb-3 text-sm font-semibold">{t('time.byPerson')}</h2>
-        {(s?.byUser ?? []).length === 0 ? (
-          <p className="py-4 text-center text-xs text-muted-foreground">{t('time.noData')}</p>
+        {(s?.byUser ?? []).filter((u) => u.minutes > 0).length === 0 ? (
+          <p className="py-6 text-center text-sm text-muted-foreground">{t('time.noData')}</p>
         ) : (
           <ul className="space-y-2">
-            {(s?.byUser ?? []).map((u) => (
+            {(s?.byUser ?? []).filter((u) => u.minutes > 0).map((u) => (
               <li key={u.userId} className="flex items-center gap-3">
                 <Avatar name={u.name} src={u.avatarUrl} size={24} />
                 <span className="w-32 shrink-0 truncate text-sm">{u.name}</span>
@@ -305,30 +310,6 @@ function StatsView({ projectId, weekStart }: { projectId: string; weekStart: num
         )}
       </section>
 
-      <section className="rounded-lg border bg-card p-4">
-        <h2 className="mb-3 text-sm font-semibold">{t('time.byTask')}</h2>
-        {(s?.byTask ?? []).length === 0 ? (
-          <p className="py-4 text-center text-xs text-muted-foreground">{t('time.noData')}</p>
-        ) : (
-          <ul className="space-y-1.5">
-            {(s?.byTask ?? []).map((task) => (
-              <li key={task.taskId ?? 'none'} className="flex items-center gap-3 text-sm">
-                <span className="min-w-0 flex-1 truncate">
-                  {task.taskId ? (
-                    <>
-                      <span className="font-mono text-xs text-muted-foreground">{task.number}</span> {task.title}
-                    </>
-                  ) : (
-                    <span className="text-muted-foreground">{t('time.withoutTask')}</span>
-                  )}
-                </span>
-                <span className="shrink-0 text-xs text-muted-foreground">{task.entries}×</span>
-                <span className="w-16 shrink-0 text-end font-mono tabular-nums">{formatDuration(task.minutes)}</span>
-              </li>
-            ))}
-          </ul>
-        )}
-      </section>
     </div>
   )
 }
