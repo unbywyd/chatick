@@ -190,6 +190,7 @@ export function useDesktopSync() {
         stop: t('desktop.stop'),
         idle: t('desktop.idle'),
         idleHint: t('desktop.idleHint'),
+        idleNoProject: t('desktop.idleNoProject'),
         noTask: t('time.noTask'),
         tabInbox: t('desktop.tabInbox'),
         tabTasks: t('desktop.tabTasks'),
@@ -243,14 +244,24 @@ export function useDesktopSync() {
     })
     const offTimer = bridge.onToggleTimer(async () => {
       const current = running.data?.items[0]
+
+      // Запускать «куда-нибудь» нельзя: project-токен остаётся от последнего
+      // открытого проекта, и часы молча ушли бы не туда. Нет открытого
+      // проекта — показываем окно, пусть человек выберет сам.
+      if (!current && !activeProjectId) {
+        bridge.show()
+        return
+      }
+
       try {
         if (current) {
           await api(`/api/v1/time/${current.id}/stop`, { method: 'POST' }, 'project')
         } else {
-          await api('/api/v1/time/start', { method: 'POST', body: '{}' }, 'project')
+          // projectId передаём явно — по той же причине, что и в веб-контроле
+          await api('/api/v1/time/start', { method: 'POST', body: JSON.stringify({ projectId: activeProjectId }) }, 'project')
         }
       } catch {
-        // проект не выбран или нет прав — окно откроется, человек разберётся
+        // нет прав или проект недоступен — окно откроется, человек разберётся
         bridge.show()
       }
       qc.invalidateQueries({ queryKey: ['desktop-running'] })

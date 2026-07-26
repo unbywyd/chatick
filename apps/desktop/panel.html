@@ -46,7 +46,8 @@
         display: grid; place-items: center;
       }
       .play.running { background: #2a2a2a; color: var(--brand); }
-      .play:hover { background: #e2ff62; }
+      .play:disabled { opacity: .45; cursor: default; }
+      .play:not(:disabled):hover { background: #e2ff62; }
       .play.running:hover { background: #333; }
       .timer-info { min-width: 0; flex: 1; }
       .elapsed {
@@ -234,15 +235,25 @@
         const t = state.timer
         $('play').textContent = t ? '⏸' : '▶'
         $('play').classList.toggle('running', Boolean(t))
+        // Без проекта стартовать нечему — кнопка гаснет, а не молча не срабатывает.
+        const canStart = Boolean(t) || Boolean(state.project)
+        $('play').disabled = !canStart
         $('play').title = t ? T('stop', 'Stop') : T('start', 'Start timer')
         if (t) {
           $('elapsed').textContent = elapsedText(t)
           $('elapsed').classList.remove('idle')
-          $('timerSub').textContent = t.description || t.projectName || T('noTask', 'No task')
+          // Проект показываем всегда, а не только вместо описания: куда
+          // пишется время — половина ответа на вопрос «что сейчас идёт».
+          const what = t.description || T('noTask', 'No task')
+          $('timerSub').textContent = t.projectName ? `${t.projectName} · ${what}` : what
         } else {
           $('elapsed').textContent = T('idle', 'No timer running')
           $('elapsed').classList.add('idle')
-          $('timerSub').textContent = T('idleHint', 'Click to start tracking')
+          // Без открытого проекта запускать некуда — говорим об этом заранее,
+          // а не после нажатия.
+          $('timerSub').textContent = state.project
+            ? T('idleHint', 'Click to start tracking')
+            : T('idleNoProject', 'Open a project to start tracking')
         }
       }
 

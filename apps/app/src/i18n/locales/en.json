@@ -994,6 +994,7 @@
     "timerRunning": "timer running",
     "signIn": "Sign in",
     "signedOut": "Not signed in",
-    "signedOutHint": "Sign in to see your timer,<br>tasks and notifications"
+    "signedOutHint": "Sign in to see your timer,<br>tasks and notifications",
+    "idleNoProject": "Open a project to start tracking"
   }
 }
