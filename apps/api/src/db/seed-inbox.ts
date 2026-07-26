@@ -34,14 +34,14 @@ const DRAFTS: Draft[] = [
   {
     event: 'task_assigned',
     title: '{actor} назначил вам задачу в {project}',
-    body: 'Нужно свести часы за июль перед выплатами.',
-    summary: 'Свести отчёт по часам за июль',
+    body: 'Взял на вас {task} — посмотрите, когда будет время.',
+    summary: 'Назначена задача: {task}',
   },
   {
     event: 'task_comment',
     title: '{actor} прокомментировал задачу в {project}',
-    body: 'На втором мониторе панель уезжает за край — воспроизводится стабильно.',
-    summary: 'Сообщает о баге с позиционированием панели',
+    body: 'Оставил комментарий в {task} — нужен ваш ответ.',
+    summary: 'Комментарий в задаче: {task}',
   },
   {
     event: 'chat_mention',
@@ -52,8 +52,8 @@ const DRAFTS: Draft[] = [
   {
     event: 'task_status',
     title: 'Задача перешла в «на проверке» в {project}',
-    body: 'Авторизация по номеру — готово к проверке.',
-    summary: 'Задача ждёт вашей проверки',
+    body: '{task} готова к проверке.',
+    summary: 'Ждёт проверки: {task}',
   },
 ]
 
@@ -86,9 +86,13 @@ async function main() {
     if (!actor) continue
 
     // Ссылаемся на настоящую задачу или сообщение — иначе клик уведёт в пустоту.
+    // Текст уведомления при этом должен ОПИСЫВАТЬ то, куда ведёт: иначе
+    // человек читает про одно, попадает в другое и считает это ошибкой.
     let entityType: string | null = null
     let entityId: string | null = null
     let link = `/p/${project.id}/chat`
+    let body = draft.body
+    let summary = draft.summary
 
     if (draft.event === 'chat_mention') {
       const msg = await db.query.messages.findFirst({
@@ -109,6 +113,9 @@ async function main() {
         entityType = 'task'
         entityId = task.id
         link = `/p/${project.id}/tasks/${task.id}`
+        // Пишем про ту задачу, куда ведём, а не про абстрактную.
+        body = draft.body.replace('{task}', `${task.number} «${task.title}»`)
+        summary = draft.summary.replace('{task}', task.title)
       }
     }
 
@@ -118,8 +125,8 @@ async function main() {
       event: draft.event,
       actorId: actor.id,
       title: draft.title.replace('{actor}', actor.name).replace('{project}', project.name),
-      body: draft.body,
-      summary: draft.summary,
+      body,
+      summary,
       link,
       entityType,
       entityId,

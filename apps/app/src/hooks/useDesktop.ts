@@ -19,7 +19,7 @@ type DesktopBridge = {
   openExternal: (url: string) => void
   info: () => Promise<{ version: string; platform: string; openAtLogin: boolean }>
   onToggleTimer: (fn: () => void) => () => void
-  onNavigate: (fn: (link: string) => void) => () => void
+  onNavigate: (fn: (p: string | { link: string; notificationId?: string | null }) => void) => () => void
   /** Ответ панели про введённый код подключения. */
   connectResult: (payload: ConnectResult) => void
   onConnectCheck: (fn: (code: string) => void) => () => void
@@ -337,15 +337,18 @@ export function useDesktopSync() {
   // --- команды из главного процесса -----------------------------------------
   useEffect(() => {
     if (!bridge) return
-    const offNav = bridge.onNavigate((link) => {
+    const offNav = bridge.onNavigate((payload) => {
+      // Панель присылает объект; строка — от старых вызовов (переход в проект).
+      const link = typeof payload === 'string' ? payload : payload?.link
+      const notificationId = typeof payload === 'string' ? null : payload?.notificationId
       if (!link) return
       navigate(link)
 
-      // Клик из панели — это прочтение: уведомление приводит человека на
-      // место, и висеть непрочитанным после этого ему незачем.
-      const n = inbox.data?.items.find((x) => x.link === link && !x.readAt)
-      if (!n) return
-      api('/api/v1/inbox/read', { method: 'POST', body: JSON.stringify({ ids: [n.id] }) })
+      // Клик из панели — это прочтение: уведомление привело человека на место,
+      // и висеть непрочитанным ему больше незачем. id приходит от панели: по
+      // ссылке уведомления не различить, несколько ведут в одно место.
+      if (!notificationId) return
+      api('/api/v1/inbox/read', { method: 'POST', body: JSON.stringify({ ids: [notificationId] }) })
         .then(() => {
           qc.invalidateQueries({ queryKey: ['inbox'] })
           qc.invalidateQueries({ queryKey: ['sidebar-projects'] })
@@ -440,7 +443,7 @@ export function useDesktopSync() {
       offRefresh()
       offRevoke()
     }
-  }, [bridge, navigate, qc, running.data?.items, activeProjectId, inbox.data])
+  }, [bridge, navigate, qc, running.data?.items, activeProjectId])
 }
 
 // --- что уже показывали -------------------------------------------------------

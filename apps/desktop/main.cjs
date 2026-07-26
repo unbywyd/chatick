@@ -58,6 +58,9 @@ function createWindow() {
 
   win.once('ready-to-show', () => win.show())
 
+  // Веб смонтировал обработчики — можно отдавать накопленные команды.
+  win.webContents.on('did-finish-load', flushPending)
+
   if (isDev) {
     win.loadURL('http://localhost:5173')
     win.webContents.openDevTools({ mode: 'detach' })
@@ -316,7 +319,29 @@ function refreshBadge() {
 
 // --- связь с вебом ------------------------------------------------------------
 
-const send = (channel, payload) => win?.webContents.send(channel, payload)
+/**
+ * Команда в веб-окно.
+ *
+ * Окно может быть закрыто, ещё грузиться или перезагружаться — тогда прямой
+ * send() уходит в никуда, и действие человека (открыть уведомление, запустить
+ * таймер) молча теряется. Копим такие команды и отдаём, когда окно готово.
+ */
+const pending = []
+
+function send(channel, payload) {
+  if (!win || win.webContents.isLoading()) {
+    pending.push({ channel, payload })
+    if (!win) createWindow()
+    return
+  }
+  win.webContents.send(channel, payload)
+}
+
+/** Окно догрузилось — отдаём накопленное. */
+function flushPending() {
+  if (!win || !pending.length) return
+  for (const { channel, payload } of pending.splice(0)) win.webContents.send(channel, payload)
+}
 
 /** IPC регистрируется после whenReady: раньше ipcMain ещё не существует. */
 function registerIpc() {
@@ -373,10 +398,13 @@ function registerIpc() {
   // Панель остаётся открытой: человек нажал «старт» и должен увидеть, что
   // таймер действительно пошёл, а не гадать по исчезнувшему окну.
   ipcMain.on('panel:toggle-timer', () => send('timer:toggle'))
-  ipcMain.on('panel:open', (_e, link) => {
+  ipcMain.on('panel:open', (_e, payload) => {
     panel?.hide()
     showWindow()
-    if (link) send('navigate', link)
+    // Строка — из старых вызовов (строка проектов), объект — из списка
+    // уведомлений, где вместе со ссылкой едет id прочитанного.
+    const link = typeof payload === 'string' ? payload : payload?.link
+    if (link) send('navigate', { link, notificationId: typeof payload === 'string' ? null : payload?.notificationId })
   })
   ipcMain.on('panel:close', () => panel?.hide())
 

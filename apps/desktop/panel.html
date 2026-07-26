@@ -373,7 +373,7 @@
           }
           for (const n of state.notifications.slice(0, 20)) {
             rows.push(`
-              <button class="row" data-link="${escape(n.link)}">
+              <button class="row" data-link="${escape(n.link)}" data-notification="${escape(n.id)}">
                 ${n.unread ? '<span class="badge-dot"></span>' : '<span class="badge-dot" style="background:transparent"></span>'}
                 <span class="body">
                   <span class="title">${escape(n.summary || n.title)}</span>
@@ -659,7 +659,9 @@
         // Кнопка «Открыть» — в приложение; сама строка — сделать активным.
         const open = e.target.closest('[data-link]')
         if (open) {
-          window.panel.open(open.dataset.link)
+          // id уведомления передаём явно: по ссылке их не различить —
+          // несколько уведомлений одного проекта ведут в одно место.
+          window.panel.open(open.dataset.link, open.dataset.notification || null)
           return
         }
         const pick = e.target.closest('[data-pick]')

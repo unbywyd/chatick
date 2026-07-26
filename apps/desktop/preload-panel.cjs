@@ -27,7 +27,7 @@ contextBridge.exposeInMainWorld('panel', {
     ipcRenderer.on('panel:connect', handler)
     return () => ipcRenderer.off('panel:connect', handler)
   },
-  open: (link) => ipcRenderer.send('panel:open', link),
+  open: (link, notificationId) => ipcRenderer.send('panel:open', { link, notificationId }),
   openApp: () => ipcRenderer.send('window:show'),
   close: () => ipcRenderer.send('panel:close'),
 })
