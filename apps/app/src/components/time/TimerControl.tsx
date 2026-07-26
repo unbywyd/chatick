@@ -8,9 +8,12 @@ import { api } from '@/lib/api'
 import { cn } from '@/lib/utils'
 import { formatElapsed, parseTimeOfDay, withTimeOfDay } from '@/lib/time-parse'
 import { Popover, PopoverTrigger, PopoverContent } from '@/components/ui/popover'
+import { ProjectBadge } from '@/components/ui/project-badge'
 
 // Быстрый контроль таймера в сайдбаре (SPEC §8.32): запустить, остановить,
 // поправить время начала. Всё остальное — на странице /p/:id/time.
+
+type ProjectLite = { id: string; name: string; color?: string; logoUrl?: string | null; isMember: boolean }
 
 export type RunningEntry = {
   id: string
@@ -54,6 +57,19 @@ export function TimerControl({ collapsed }: { collapsed: boolean }) {
   const refresh = () => qc.invalidateQueries({ queryKey: ['time-running', projectId] })
 
   const [draft, setDraft] = useState('')
+
+  // проекты нужны, чтобы показать, к какому привязан таймер, и дать перенести
+  const companies = useQuery({
+    queryKey: ['companies'],
+    queryFn: () => api<{ companies: { id: string }[] }>('/api/v1/companies'),
+  })
+  const companyId = companies.data?.companies[0]?.id
+  const projectsQ = useQuery({
+    queryKey: ['sidebar-projects', companyId],
+    enabled: Boolean(companyId),
+    queryFn: () => api<ProjectLite[]>(`/api/v1/projects?companyId=${companyId}`),
+  })
+  const myProjects = (projectsQ.data ?? []).filter((p) => p.isMember)
   const start = useMutation({
     mutationFn: (description: string) =>
       api('/api/v1/time/start', { method: 'POST', body: JSON.stringify({ description }) }, 'project'),
@@ -71,6 +87,16 @@ export function TimerControl({ collapsed }: { collapsed: boolean }) {
     },
     onError: onErr,
   })
+  const move = useMutation({
+    mutationFn: ({ id, projectId: target }: { id: string; projectId: string }) =>
+      api(`/api/v1/time/${id}`, { method: 'PATCH', body: JSON.stringify({ projectId: target }) }, 'project'),
+    onSuccess: () => {
+      refresh()
+      qc.invalidateQueries({ queryKey: ['time-entries'] })
+    },
+    onError: onErr,
+  })
+
   const patchStart = useMutation({
     mutationFn: ({ id, startedAt }: { id: string; startedAt: string }) =>
       api(`/api/v1/time/${id}`, { method: 'PATCH', body: JSON.stringify({ startedAt }) }, 'project'),
@@ -104,13 +130,21 @@ export function TimerControl({ collapsed }: { collapsed: boolean }) {
           {first ? <Pause className="size-4" /> : <Play className="size-4" />}
         </button>
         {first && (
-          <button
-            onClick={() => navigate(`/p/${projectId}/time`)}
-            className={cn('font-mono text-[10px] tabular-nums', elsewhere ? 'text-amber-500' : 'text-brand')}
-            title={elsewhere ? t('time.runningIn', { project: elsewhere }) : t('time.openPage')}
-          >
-            {formatElapsed(elapsed)}
-          </button>
+          <>
+            <button
+              onClick={() => navigate(`/p/${first.projectId}/time`)}
+              className={cn('font-mono text-[10px] tabular-nums', elsewhere ? 'text-amber-500' : 'text-brand')}
+              title={elsewhere ? t('time.runningIn', { project: elsewhere }) : t('time.openPage')}
+            >
+              {formatElapsed(elapsed)}
+            </button>
+            {/* маленький значок проекта: в узкой колонке это единственный
+                способ понять, чей таймер идёт */}
+            {(() => {
+              const p = myProjects.find((x) => x.id === first.projectId)
+              return p ? <ProjectBadge name={p.name} color={p.color} logoUrl={p.logoUrl} size={16} /> : null
+            })()}
+          </>
         )}
       </div>
     )
@@ -139,18 +173,23 @@ export function TimerControl({ collapsed }: { collapsed: boolean }) {
             {formatElapsed(elapsed)}
             {count > 1 && <span className="ms-1 text-[10px] text-muted-foreground">+{count - 1}</span>}
           </span>
-          {elsewhere ? (
-            // в чужом проекте время не правим отсюда — только показываем, где идёт
-            <span className="block truncate text-[10px] text-amber-500">
-              {t('time.runningIn', { project: elsewhere })}
-            </span>
-          ) : (
-            <StartTimeEdit
-              startedAt={first.startedAt}
-              onChange={(iso) => patchStart.mutate({ id: first.id, startedAt: iso })}
-              label={first.task ? `${first.task.number}` : first.description || t('time.noTask')}
+          {/* К какому проекту привязан таймер — видно ВСЕГДА, а не только когда
+              он чужой: стоя в своём проекте, человек иначе решает, что таймер
+              общий, раз он висит над списком проектов. */}
+          <div className="flex items-center gap-1">
+            <ProjectSwitch
+              projects={myProjects}
+              currentId={first.projectId}
+              onPick={(target) => move.mutate({ id: first.id, projectId: target })}
             />
-          )}
+            {!elsewhere && (
+              <StartTimeEdit
+                startedAt={first.startedAt}
+                onChange={(iso) => patchStart.mutate({ id: first.id, startedAt: iso })}
+                label={first.task ? `${first.task.number}` : first.description || t('time.noTask')}
+              />
+            )}
+          </div>
         </div>
       ) : (
         // Поле, а не надпись: чаще всего человек хочет сразу сказать, над чем
@@ -237,6 +276,54 @@ function StartTimeEdit({
           placeholder="9:30"
           className="h-8 w-full rounded-md border bg-background px-2 text-sm outline-none"
         />
+      </PopoverContent>
+    </Popover>
+  )
+}
+
+/** Значок проекта, к которому привязан таймер; по клику — перенести в другой. */
+function ProjectSwitch({
+  projects,
+  currentId,
+  onPick,
+}: {
+  projects: ProjectLite[]
+  currentId: string
+  onPick: (projectId: string) => void
+}) {
+  const { t } = useTranslation()
+  const [open, setOpen] = useState(false)
+  const current = projects.find((p) => p.id === currentId)
+
+  return (
+    <Popover open={open} onOpenChange={setOpen}>
+      <PopoverTrigger asChild>
+        <button
+          className="flex min-w-0 items-center gap-1 rounded px-0.5 py-0.5 transition-colors hover:bg-accent"
+          title={t('time.changeProject')}
+        >
+          <ProjectBadge name={current?.name ?? '?'} color={current?.color} logoUrl={current?.logoUrl} size={14} />
+          <span className="max-w-24 truncate text-[10px] text-muted-foreground">{current?.name ?? '—'}</span>
+        </button>
+      </PopoverTrigger>
+      <PopoverContent className="w-56 p-1" align="start">
+        <p className="px-2 py-1 text-[10px] text-muted-foreground">{t('time.changeProject')}</p>
+        {projects.map((p) => (
+          <button
+            key={p.id}
+            onClick={() => {
+              if (p.id !== currentId) onPick(p.id)
+              setOpen(false)
+            }}
+            className={cn(
+              'flex w-full items-center gap-2 rounded-sm px-2 py-1.5 text-start text-sm transition-colors hover:bg-accent',
+              p.id === currentId && 'bg-brand/10',
+            )}
+          >
+            <ProjectBadge name={p.name} color={p.color} logoUrl={p.logoUrl} size={18} />
+            <span className="min-w-0 truncate">{p.name}</span>
+          </button>
+        ))}
       </PopoverContent>
     </Popover>
   )

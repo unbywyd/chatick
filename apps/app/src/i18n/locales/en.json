@@ -931,7 +931,8 @@
     "noTasksFound": "No tasks found",
     "translate": "Translate entry descriptions",
     "translateHint": "Runs what people type through the AI into the project language, with light tidying.",
-    "runningIn": "Running in “{{project}}” — click to stop"
+    "runningIn": "Running in “{{project}}” — click to stop",
+    "changeProject": "Move to another project"
   },
   "period": {
     "today": "Today",

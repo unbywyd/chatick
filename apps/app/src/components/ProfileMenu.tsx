@@ -15,6 +15,7 @@ import {
 } from '@/components/ui/dropdown-menu'
 import { useConfirm } from '@/components/ui/confirm'
 import { ConnectDialog } from '@/screens/ConnectScreen'
+import { ProjectSettingsDialog } from '@/components/ProjectSettingsDialog'
 import { LanguageSelect } from '@/components/LanguageSelect'
 import { ThemeToggle } from '@/components/ThemeToggle'
 
@@ -32,6 +33,7 @@ export function ProfileMenu({
   isAdmin?: boolean
 }) {
   const [connectOpen, setConnectOpen] = useState(false)
+  const [settingsOpen, setSettingsOpen] = useState(false)
   const { t } = useTranslation()
   const navigate = useNavigate()
   const qc = useQueryClient()
@@ -152,7 +154,7 @@ export function ProfileMenu({
         {/* Настройки проекта и состав команды — сюда, вкладками они не были
             нужны: в настройки заходят изредка, а команду смотрят из профиля. */}
         {projectId && isAdmin && (
-          <DropdownMenuItem onSelect={() => navigate(`/p/${projectId}/about`)}>
+          <DropdownMenuItem onSelect={() => setSettingsOpen(true)}>
             <SlidersHorizontal className="size-4" />
             {t('profile.projectSettings')}
           </DropdownMenuItem>
@@ -212,6 +214,9 @@ export function ProfileMenu({
       </DropdownMenuContent>
     </DropdownMenu>
     {connectOpen && <ConnectDialog onClose={() => setConnectOpen(false)} />}
+    {settingsOpen && projectId && (
+      <ProjectSettingsDialog projectId={projectId} onClose={() => setSettingsOpen(false)} />
+    )}
     </>
   )
 }

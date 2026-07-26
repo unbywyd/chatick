@@ -55,3 +55,25 @@ export function guessCountry(): CountryPreset | undefined {
     return undefined
   }
 }
+
+/**
+ * Все зоны IANA, какие знает браузер. Вводить их руками нельзя: опечатка
+ * в «Asia/Jerusalem» тихо ломает подсчёт суток в отчётах.
+ */
+export function allTimezones(): string[] {
+  const withSupport = Intl as typeof Intl & { supportedValuesOf?: (key: string) => string[] }
+  const list = withSupport.supportedValuesOf?.('timeZone')
+  if (list?.length) return list
+  // старые браузеры: хотя бы то, что есть в пресетах, плюс UTC
+  return ['UTC', ...new Set(COUNTRIES.map((c) => c.timezone))].sort()
+}
+
+/** «Asia/Jerusalem» → «+03:00»: смещение помогает узнать нужный пояс. */
+export function timezoneOffset(tz: string): string {
+  try {
+    const parts = new Intl.DateTimeFormat('en-US', { timeZone: tz, timeZoneName: 'shortOffset' }).formatToParts(new Date())
+    return parts.find((p) => p.type === 'timeZoneName')?.value ?? ''
+  } catch {
+    return ''
+  }
+}

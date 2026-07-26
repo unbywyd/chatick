@@ -12,7 +12,6 @@ import { LoginScreen, AuthCallback } from './screens/LoginScreen'
 import { InviteScreen } from './screens/InviteScreen'
 import { ConnectScreen } from './screens/ConnectScreen'
 import { StartScreen } from './screens/StartScreen'
-import { AboutTab } from './components/tabs/AboutTab'
 import { TasksTab } from './components/tabs/TasksTab'
 import { FilesTab } from './components/tabs/FilesTab'
 import { ResourcesTab } from './components/tabs/ResourcesTab'
@@ -28,10 +27,6 @@ import { TimeTab } from './components/tabs/TimeTab'
 const queryClient = new QueryClient()
 
 // Обёртки: тянут контекст layout'а (Outlet) и параметры URL
-function AboutPage() {
-  const { project } = useProjectCtx()
-  return <AboutTab project={project} loading={!project} />
-}
 function TasksPage() {
   const { meId } = useProjectCtx()
   const { id } = useParams()
@@ -114,7 +109,6 @@ createRoot(document.getElementById('root')!).render(
                 {/* на широком экране чат — отдельная колонка, а рабочая зона
                     не должна пустовать: показываем задачи */}
                 <Route path="chat" element={<TasksPage />} />
-                <Route path="about" element={<AboutPage />} />
                 {/* :taskId — прямая ссылка на задачу (drawer открыт по URL) */}
                 <Route path="tasks/:taskId?" element={<TasksPage />} />
                 <Route path="files" element={<FilesPage />} />

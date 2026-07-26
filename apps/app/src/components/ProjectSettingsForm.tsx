@@ -1,10 +1,11 @@
-import { useRef, useState } from 'react'
+import { useMemo, useRef, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { Eye, MessageCircleQuestion, ShieldCheck, ChevronDown } from 'lucide-react'
 import { Switch } from '@/components/ui/switch'
 import { Input } from '@/components/ui/input'
 import { ProjectBadge } from '@/components/ui/project-badge'
-import { COUNTRIES, countryByCode } from '@/lib/countries'
+import { COUNTRIES, countryByCode, allTimezones, timezoneOffset } from '@/lib/countries'
+import { Combobox } from '@/components/ui/combobox'
 import { Select, SelectTrigger, SelectValue, SelectContent, SelectItem } from '@/components/ui/select'
 import { Button } from '@/components/ui/button'
 import {
@@ -120,6 +121,11 @@ export function ProjectSettingsForm({
   const [tab, setTab] = useState<FormTab>('general')
   const logoInput = useRef<HTMLInputElement>(null)
   const time = { ...DEFAULT_TIME_CONFIG, ...(value.timeConfig ?? {}) }
+  // список зон длинный и не меняется — собираем один раз на монтирование
+  const timezoneOptions = useMemo(
+    () => allTimezones().map((tz) => ({ value: tz, label: tz.replace(/_/g, ' '), hint: timezoneOffset(tz) })),
+    [],
+  )
   const setTime = <K extends keyof TimeConfig>(k: K, v: TimeConfig[K]) =>
     onChange({ ...value, timeConfig: { ...time, [k]: v } })
   const set = <K extends keyof ProjectSettings>(k: K, v: ProjectSettings[K]) => onChange({ ...value, [k]: v })
@@ -396,7 +402,12 @@ export function ProjectSettingsForm({
             <div className="grid gap-3 sm:grid-cols-2">
               <div>
                 <p className="mb-1 text-xs text-muted-foreground">{t('time.timezone')}</p>
-                <Input value={time.timezone} onChange={(e) => setTime('timezone', e.target.value)} placeholder="UTC" />
+                <Combobox
+                  options={timezoneOptions}
+                  value={time.timezone}
+                  onChange={(tz) => setTime('timezone', tz)}
+                  placeholder="UTC"
+                />
               </div>
               <div>
                 <p className="mb-1 text-xs text-muted-foreground">{t('time.weekStart')}</p>

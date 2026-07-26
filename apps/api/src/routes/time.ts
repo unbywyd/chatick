@@ -296,6 +296,8 @@ timeRoute.get(
 )
 
 const patchSchema = z.object({
+  /** перенести запись в другой проект — часы уехали не туда, бывает */
+  projectId: z.string().optional(),
   taskId: z.string().nullable().optional(),
   description: z.string().max(500).optional(),
   startedAt: z.string().optional(),
@@ -304,18 +306,31 @@ const patchSchema = z.object({
 
 timeRoute.patch('/:id', zValidator('json', patchSchema), async (c) => {
   const { projectId, sub } = c.get('auth')
-  const entry = await db.query.timeEntries.findFirst({
-    where: and(eq(timeEntries.id, c.req.param('id')), eq(timeEntries.projectId, projectId)),
-  })
+  const entry = await db.query.timeEntries.findFirst({ where: eq(timeEntries.id, c.req.param('id')) })
   if (!entry) return c.json({ error: 'Not found' }, 404)
-  if (entry.userId !== sub && !(await canSeeOthers(projectId, sub))) return c.json({ error: 'Forbidden' }, 403)
+  // свою запись правим где угодно; чужую — только у себя в проекте и с правами
+  if (entry.userId !== sub && !(entry.projectId === projectId && (await canSeeOthers(projectId, sub)))) {
+    return c.json({ error: 'Forbidden' }, 403)
+  }
 
   const b = c.req.valid('json')
   const patch: Partial<typeof timeEntries.$inferInsert> = { updatedAt: new Date() }
 
+  // Смена проекта: часы принадлежат проекту, поэтому переносить их можно
+  // только туда, где человек действительно состоит.
+  let targetProject = entry.projectId
+  if (b.projectId && b.projectId !== entry.projectId) {
+    const membership = await projectRoleOf(b.projectId, sub)
+    if (!membership) return c.json({ error: 'You are not a member of that project' }, 403)
+    patch.projectId = b.projectId
+    // задача осталась в прежнем проекте — она там и остаётся, связь рвём
+    patch.taskId = null
+    targetProject = b.projectId
+  }
+
   if (b.taskId !== undefined) {
     if (b.taskId) {
-      const task = await db.query.tasks.findFirst({ where: and(eq(tasks.id, b.taskId), eq(tasks.projectId, projectId)) })
+      const task = await db.query.tasks.findFirst({ where: and(eq(tasks.id, b.taskId), eq(tasks.projectId, targetProject)) })
       if (!task) return c.json({ error: 'Task not found in this project' }, 404)
     }
     patch.taskId = b.taskId
@@ -335,7 +350,10 @@ timeRoute.patch('/:id', zValidator('json', patchSchema), async (c) => {
   }
 
   const [row] = await db.update(timeEntries).set(patch).where(eq(timeEntries.id, entry.id)).returning()
-  broadcast(projectId, 'time', { action: 'update', id: row!.id, userId: entry.userId })
+  broadcast(entry.projectId, 'time', { action: 'update', id: row!.id, userId: entry.userId })
+  if (targetProject !== entry.projectId) {
+    broadcast(targetProject, 'time', { action: 'update', id: row!.id, userId: entry.userId })
+  }
   if (b.description !== undefined) void maybeTranslate(projectId, row!.id, row!.description).catch(() => {})
   return c.json((await hydrate([row!]))[0])
 })
