@@ -703,7 +703,9 @@
     "markAllRead": "Прочитать все",
     "markProjectRead": "Прочитать проект",
     "openProject": "Перейти в проект",
-    "openFailed": "Не удалось открыть"
+    "openFailed": "Не удалось открыть",
+    "hereTitle": "Вас касается здесь: {{count}}",
+    "markRead": "Отметить прочитанным"
   },
   "docs": {
     "title": "Документы",

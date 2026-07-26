@@ -12,6 +12,7 @@ import { useMediaQuery } from '@/hooks/useMediaQuery'
 import { ChatPanel } from '@/components/chat/ChatPanel'
 import { ProjectSidebar } from '@/components/ProjectSidebar'
 import { Button } from '@/components/ui/button'
+import { ProjectInbox } from '@/components/ProjectInbox'
 
 /*
   Оболочка приложения — мессенджер, а не набор страниц (SPEC §8.29).
@@ -214,6 +215,10 @@ export function ProjectLayout() {
           </div>
 
         </nav>
+
+        {/* Что меня касается в ЭТОМ проекте — над работой, а не в колокольчике:
+            человек уже здесь, и уходить за подробностями некуда. */}
+        {id && token.status === 'ready' && <ProjectInbox projectId={id} />}
 
         <main className="min-h-0 flex-1 overflow-y-auto">
           {token.status === 'error' ? (

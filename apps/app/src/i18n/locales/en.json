@@ -701,7 +701,9 @@
     "markAllRead": "Mark all read",
     "markProjectRead": "Mark project read",
     "openProject": "Open project",
-    "openFailed": "Could not open"
+    "openFailed": "Could not open",
+    "hereTitle": "For you here: {{count}}",
+    "markRead": "Mark as read"
   },
   "docs": {
     "title": "Documents",

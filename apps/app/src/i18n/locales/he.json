@@ -701,7 +701,9 @@
     "markAllRead": "סמן הכל כנקרא",
     "markProjectRead": "סמן פרויקט כנקרא",
     "openProject": "פתח פרויקט",
-    "openFailed": "לא ניתן לפתוח"
+    "openFailed": "לא ניתן לפתוח",
+    "hereTitle": "נוגע אליכם כאן: {{count}}",
+    "markRead": "סימון כנקרא"
   },
   "docs": {
     "title": "מסמכים",

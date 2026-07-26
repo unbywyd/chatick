@@ -72,9 +72,11 @@ export function NotificationBell({ currentProjectId }: { currentProjectId?: stri
 
   // переход по уведомлению: если проект другой — переключаем project-токен
   const openNotification = async (n: Notification) => {
-    markRead.mutate({ ids: [n.id] })
     try {
       if (n.projectId !== currentProjectId) {
+        // Пометку ЖДЁМ: следом идёт reload, и незавершённый запрос просто
+        // не успел бы уйти — уведомление оставалось непрочитанным.
+        await markRead.mutateAsync({ ids: [n.id] })
         const r = await api<{ token: string; project: { id: string } }>(`/api/v1/projects/${n.projectId}/enter`, {
           method: 'POST',
           body: JSON.stringify({ acceptRules: false }),
@@ -84,6 +86,7 @@ export function NotificationBell({ currentProjectId }: { currentProjectId?: stri
         window.location.reload()
         return
       }
+      markRead.mutate({ ids: [n.id] })
       navigate(normalizeLink(n.link, n.projectId))
     } catch {
       toast.error(t('inbox.openFailed'))
