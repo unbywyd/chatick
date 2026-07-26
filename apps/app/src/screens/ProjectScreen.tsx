@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react'
 import { NavLink, Outlet, useLocation, useNavigate, useOutletContext, useParams } from 'react-router-dom'
 import { useQuery } from '@tanstack/react-query'
 import { useTranslation } from 'react-i18next'
-import { ArrowLeft, Menu, MessagesSquare, PanelsTopLeft, X } from 'lucide-react'
+import { ArrowLeft, MessagesSquare, X } from 'lucide-react'
 import { api, getSessionToken, type Me } from '@/lib/api'
 import { cn } from '@/lib/utils'
 import { useProjectToken } from '@/hooks/useProjectToken'
@@ -125,24 +125,8 @@ export function ProjectLayout() {
           isChatTab ? 'flex flex-1' : 'hidden',
         )}
       >
-        <header className="flex items-center gap-2 border-b px-2 py-2">
-          <button
-            onClick={() => setSidebarOpen(true)}
-            className="rounded-md p-2 text-muted-foreground hover:bg-accent hover:text-foreground md:hidden"
-            title={t('sidebar.projects')}
-          >
-            <Menu className="size-4" />
-          </button>
-          <span className="min-w-0 flex-1 truncate text-sm font-semibold">{project.data?.name ?? '…'}</span>
-          {/* ниже xl чат — вкладка, значит нужен явный выход в рабочую зону */}
-          <button
-            onClick={() => navigate(`/p/${id}/tasks`)}
-            className="rounded-md p-2 text-muted-foreground hover:bg-accent hover:text-foreground xl:hidden"
-            title={t('project.mobile.work')}
-          >
-            <PanelsTopLeft className="size-4" />
-          </button>
-        </header>
+        {/* своей шапки здесь нет: название и навигация живут в шапке чата,
+            иначе строка с именем проекта дублируется дважды подряд */}
         {/* ручка перетаскивания границы */}
         <div
           onPointerDown={chat.onPointerDown}
@@ -157,6 +141,8 @@ export function ProjectLayout() {
         <div className="min-h-0 flex-1">
           <ChatPanel
             projectName={project.data?.name}
+            onOpenSidebar={() => setSidebarOpen(true)}
+            onOpenWork={() => navigate(`/p/${id}/tasks`)}
             aiMode={(project.data?.aiConfig as { mode?: 'observer' | 'assistant' | 'moderator' })?.mode ?? 'assistant'}
             myRole={project.data?.myRole}
             meId={me.data?.id}

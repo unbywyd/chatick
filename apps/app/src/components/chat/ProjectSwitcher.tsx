@@ -72,7 +72,7 @@ export function ProjectSwitcher({ projectName }: { projectName?: string }) {
     <DropdownMenu onOpenChange={(o) => !o && setQ('')}>
       <DropdownMenuTrigger asChild>
         <button className="flex min-w-0 items-center gap-1 rounded-md px-1.5 py-0.5 text-xs text-muted-foreground transition-colors hover:bg-accent hover:text-foreground">
-          <span className="truncate">/ {projectName ?? '…'}</span>
+          <span className="truncate font-semibold">{projectName ?? '…'}</span>
           <ChevronsUpDown className="size-3 shrink-0 opacity-60" />
         </button>
       </DropdownMenuTrigger>

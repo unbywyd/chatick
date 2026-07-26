@@ -1,13 +1,12 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useNavigate, useParams, useSearchParams } from 'react-router-dom'
 import { useInfiniteQuery, useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { ArrowDown, Bot, CheckSquare, Users, BrainCircuit, Loader2, NotebookPen, Search, Settings, Trash2, UserPlus, X } from 'lucide-react'
+import { ArrowDown, Bot, CheckSquare, Users, BrainCircuit, Loader2, Menu, NotebookPen, PanelsTopLeft, Search, Settings, Trash2, UserPlus, X } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
 import ReactMarkdown from 'react-markdown'
 import { toast } from 'sonner'
 import { api } from '@/lib/api'
 import { cn } from '@/lib/utils'
-import { Logo } from '@/components/Logo'
 import { ProjectSwitcher } from './ProjectSwitcher'
 import { Button } from '@/components/ui/button'
 import { useProjectSocket, type ChatMessage } from '@/hooks/useProjectSocket'
@@ -29,11 +28,16 @@ export function ChatPanel({
   aiMode = 'assistant',
   myRole,
   meId,
+  onOpenSidebar,
+  onOpenWork,
 }: {
   projectName?: string
   aiMode?: 'observer' | 'assistant' | 'moderator'
   myRole?: 'owner' | 'admin' | 'member' | null
   meId?: string
+  /** мобильный: открыть список проектов и уйти в рабочую зону — на десктопе не нужны */
+  onOpenSidebar?: () => void
+  onOpenWork?: () => void
 }) {
   const { t, i18n } = useTranslation()
   const navigate = useNavigate()
@@ -268,12 +272,33 @@ export function ChatPanel({
 
   return (
     <div className="relative flex h-full flex-col overflow-hidden">
-      <header className="flex items-center justify-between gap-2 border-b px-4 py-2">
-        <div className="flex min-w-0 items-center gap-2">
-          <Logo />
+      <header className="flex items-center justify-between gap-2 border-b px-3 py-2">
+        <div className="flex min-w-0 items-center gap-1">
+          {/* На мобильном — выход к списку проектов; на десктопе список виден
+              всегда, поэтому кнопки нет. Логотип живёт в сайдбаре, здесь он
+              был третьим по счёту. */}
+          {onOpenSidebar && (
+            <button
+              onClick={onOpenSidebar}
+              className="rounded-md p-1.5 text-muted-foreground hover:bg-accent hover:text-foreground md:hidden"
+              title={t('sidebar.projects')}
+            >
+              <Menu className="size-4" />
+            </button>
+          )}
           <ProjectSwitcher projectName={projectName} />
         </div>
         <div className="flex items-center gap-3">
+          {/* ниже xl чат занимает весь экран — нужен явный выход в рабочую зону */}
+          {onOpenWork && (
+            <button
+              onClick={onOpenWork}
+              className="rounded-md p-1.5 text-muted-foreground hover:bg-accent hover:text-foreground xl:hidden"
+              title={t('project.mobile.work')}
+            >
+              <PanelsTopLeft className="size-4" />
+            </button>
+          )}
           {/* Presence: кто онлайн — аватарки с тултипом */}
           <div className="flex items-center -space-x-1.5" title={online.map((u) => u.name).join(', ')}>
             {online.slice(0, 5).map((u) => (
