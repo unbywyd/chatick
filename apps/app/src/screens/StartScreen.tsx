@@ -7,6 +7,7 @@ import { Building2, Plus, FolderKanban, Check, Mail, Search, X } from 'lucide-re
 import { ProfileMenu } from '@/components/ProfileMenu'
 import { Avatar } from '@/components/ui/avatar'
 import { AvatarGroup } from '@/components/ui/avatar-group'
+import { ProjectBadge } from '@/components/ui/project-badge'
 import {
   api,
   logout,
@@ -491,78 +492,86 @@ function ProjectsTab({
       )}
 
       {/*
-        Список проектов = список чатов (SPEC §8.29). Строка вместо карточки:
-        аватар команды, имя, последнее сообщение, время, бейдж непрочитанных —
-        то, по чему в мессенджере выбирают, куда зайти. Прогресс тонкой полосой
-        снизу, чтобы не спорил с текстом сообщения.
+        Карточки, а не строки: список проектов растёт, и вертикальная простыня
+        заставляет читать всё подряд. Сетка даёт беглый обзор, а логотип и цвет
+        работают как якорь — нужный проект находишь, не вчитываясь в названия.
+        Внутри карточки порядок прежний (SPEC §8.29): кто, о чём последнее
+        сообщение, сколько непрочитанных, как идут задачи.
       */}
-      <ul className="-mx-2 divide-y divide-border/60">
-        {projectsQ.isLoading && <p className="px-2 py-3 text-sm text-muted-foreground">…</p>}
+      {projectsQ.isLoading && <p className="px-2 py-3 text-sm text-muted-foreground">…</p>}
+
+      <ul className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
         {filtered.map((p) => {
           const unread = p.stats?.unread ?? 0
           return (
             <li key={p.id}>
               <div
                 className={cn(
-                  'flex items-center gap-3 rounded-lg px-2 py-2.5 transition-colors',
-                  p.isMember ? 'cursor-pointer hover:bg-accent' : 'opacity-70',
+                  'flex h-full flex-col gap-3 rounded-xl border bg-card p-4 transition-colors',
+                  p.isMember ? 'cursor-pointer hover:border-brand/50 hover:bg-accent' : 'opacity-70',
                 )}
                 onClick={() => p.isMember && enter.mutate({ projectId: p.id })}
               >
-                <AvatarGroup members={p.members ?? []} total={p.memberCount} size={46} />
+                <div className="flex items-start gap-3">
+                  <ProjectBadge name={p.name} color={p.color} logoUrl={p.logoUrl} size={44} />
 
-                <div className="min-w-0 flex-1">
-                  <div className="flex items-baseline gap-2">
-                    <span className={cn('truncate text-sm', unread > 0 ? 'font-bold' : 'font-semibold')}>{p.name}</span>
-                    {p.lastMessage && (
-                      <span className="ms-auto shrink-0 text-[11px] text-muted-foreground">
-                        {relTime(p.lastMessage.at, i18n.language)}
-                      </span>
-                    )}
-                  </div>
-
-                  <div className="mt-0.5 flex items-center gap-2">
-                    <span className="min-w-0 flex-1 truncate text-xs text-muted-foreground">
-                      {p.lastMessage ? (
-                        <>
-                          <span className="text-foreground/70">{p.lastMessage.author}:</span> {p.lastMessage.text}
-                        </>
-                      ) : p.isMember ? (
-                        t('start.noMessages')
-                      ) : (
-                        t('start.notMember')
+                  <div className="min-w-0 flex-1">
+                    <div className="flex items-baseline gap-2">
+                      <span className={cn('truncate text-sm', unread > 0 ? 'font-bold' : 'font-semibold')}>{p.name}</span>
+                      {unread > 0 && (
+                        <span className="ms-auto grid min-w-5 shrink-0 place-items-center rounded-full bg-brand px-1.5 py-0.5 text-[10px] font-bold text-brand-foreground">
+                          {unread > 99 ? '99+' : unread}
+                        </span>
                       )}
-                    </span>
-                    {unread > 0 && (
-                      <span className="grid min-w-5 shrink-0 place-items-center rounded-full bg-brand px-1.5 py-0.5 text-[10px] font-bold text-brand-foreground">
-                        {unread > 99 ? '99+' : unread}
-                      </span>
-                    )}
-                  </div>
-
-                  {/* прогресс проекта — тонкой полосой, не отвлекая от сообщения */}
-                  {p.isMember && (p.stats?.tasksTotal ?? 0) > 0 && (
-                    <div className="mt-1.5 flex items-center gap-2">
-                      <span className="h-1 min-w-0 flex-1 overflow-hidden rounded-full bg-secondary">
-                        <span
-                          className="block h-full rounded-full bg-brand transition-all"
-                          style={{ width: `${p.stats!.progress}%` }}
-                        />
-                      </span>
-                      <span className="shrink-0 text-[10px] tabular-nums text-muted-foreground">
-                        {p.stats!.tasksDone}/{p.stats!.tasksTotal}
-                        {p.stats!.myTotal - p.stats!.myDone > 0 &&
-                          ` · ${t('start.mineShort', { n: p.stats!.myTotal - p.stats!.myDone })}`}
-                      </span>
                     </div>
-                  )}
+                    <div className="mt-1 flex items-center gap-2">
+                      <AvatarGroup members={p.members ?? []} total={p.memberCount} size={22} />
+                      {p.lastMessage && (
+                        <span className="ms-auto shrink-0 text-[11px] text-muted-foreground">
+                          {relTime(p.lastMessage.at, i18n.language)}
+                        </span>
+                      )}
+                    </div>
+                  </div>
                 </div>
+
+                {/* Последнее сообщение — в две строки: в карточке места больше,
+                    чем в строке, и обрывать его на полуслове незачем. */}
+                <p className="line-clamp-2 min-h-8 text-xs text-muted-foreground">
+                  {p.lastMessage ? (
+                    <>
+                      <span className="text-foreground/70">{p.lastMessage.author}:</span> {p.lastMessage.text}
+                    </>
+                  ) : p.isMember ? (
+                    t('start.noMessages')
+                  ) : (
+                    t('start.notMember')
+                  )}
+                </p>
+
+                {/* прогресс проекта — тонкой полосой внизу карточки */}
+                {p.isMember && (p.stats?.tasksTotal ?? 0) > 0 && (
+                  <div className="mt-auto flex items-center gap-2">
+                    <span className="h-1 min-w-0 flex-1 overflow-hidden rounded-full bg-secondary">
+                      <span
+                        className="block h-full rounded-full bg-brand transition-all"
+                        style={{ width: `${p.stats!.progress}%` }}
+                      />
+                    </span>
+                    <span className="shrink-0 text-[10px] tabular-nums text-muted-foreground">
+                      {p.stats!.tasksDone}/{p.stats!.tasksTotal}
+                      {p.stats!.myTotal - p.stats!.myDone > 0 &&
+                        ` · ${t('start.mineShort', { n: p.stats!.myTotal - p.stats!.myDone })}`}
+                    </span>
+                  </div>
+                )}
 
                 {/* Админ/менеджер видит все проекты компании, но не состоит в них */}
                 {!p.isMember && canManage && (
                   <Button
                     size="sm"
                     variant="outline"
+                    className="mt-auto w-full"
                     disabled={join.isPending}
                     onClick={(e) => {
                       e.stopPropagation()
@@ -576,12 +585,13 @@ function ProjectsTab({
             </li>
           )
         })}
-        {!projectsQ.isLoading && filtered.length === 0 && (
-          <p className="rounded-lg border border-dashed p-6 text-center text-sm text-muted-foreground">
-            {q ? t('start.nothingFound') : t('start.noProjects')}
-          </p>
-        )}
       </ul>
+
+      {!projectsQ.isLoading && filtered.length === 0 && (
+        <p className="rounded-lg border border-dashed p-6 text-center text-sm text-muted-foreground">
+          {q ? t('start.nothingFound') : t('start.noProjects')}
+        </p>
+      )}
 
       {rulesModal && (
         <div className="fixed inset-0 z-50 grid place-items-center bg-black/60 p-6">
