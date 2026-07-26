@@ -20,6 +20,7 @@ import { authenticateBridge, closeSession, startDeviceAuth, pollDeviceAuth, type
 import { connectDoc, guideDoc } from '../lib/bridge-docs.js'
 import { logActivity } from '../lib/audit.js'
 import { createNote, NOTE_TYPES, type NoteType } from './notes.js'
+import { notifyChatMentions } from './messages.js'
 import { htmlToText, sanitizeHtml } from '../lib/sanitize-html.js'
 import { broadcast, sendToUser } from '../ws.js'
 import { env } from '../env.js'
@@ -1097,6 +1098,13 @@ bridgeRoute.post('/messages', async (c) => {
       replyToId,
     })
     .returning()
+
+  // Упоминание должно уведомлять одинаково, откуда бы сообщение ни пришло:
+  // агент часто пишет человеку именно затем, чтобы тот увидел (SPEC §8.30).
+  {
+    const author = await db.query.users.findFirst({ where: eq(users.id, id.userId) })
+    void notifyChatMentions(scope.projectId, row!.id, row!.text, author ?? null)
+  }
 
   // Привязываем только свои файлы этого проекта и снимаем временный флаг —
   // файл становится постоянным, как и при отправке из композера (SPEC §8.17).

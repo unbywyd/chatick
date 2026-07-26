@@ -11,7 +11,9 @@ import { maybeCompress } from '../lib/memory.js'
 import { notify, extractMentions } from '../lib/notify.js'
 
 // Письмо тем, кого упомянули в доставленном групповом сообщении (SPEC §8.9).
-async function notifyChatMentions(
+// Экспортируется: сообщения приходят и через мост, а упоминание должно
+// уведомлять одинаково, кем бы оно ни было отправлено (SPEC §8.30).
+export async function notifyChatMentions(
   projectId: string,
   messageId: string,
   text: string,
