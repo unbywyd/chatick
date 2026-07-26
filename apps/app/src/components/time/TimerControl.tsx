@@ -82,8 +82,12 @@ export function TimerControl({ collapsed }: { collapsed: boolean }) {
     onError: onErr,
   })
   const stop = useMutation({
-    mutationFn: (id: string) => api(`/api/v1/time/${id}/stop`, { method: 'POST' }, 'project'),
-    onSuccess: () => {
+    mutationFn: (id: string) =>
+      api<{ discarded?: boolean }>(`/api/v1/time/${id}/stop`, { method: 'POST' }, 'project'),
+    onSuccess: (r) => {
+      // Секундная запись не сохраняется — но молчать об этом нельзя: человек
+      // нажал стоп и вправе знать, почему в списке ничего не появилось.
+      if (r?.discarded) toast.info(t('time.discarded'))
       refresh()
       qc.invalidateQueries({ queryKey: ['time-entries', projectId] })
     },

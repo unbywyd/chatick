@@ -239,12 +239,12 @@ timeRoute.post('/:id/stop', async (c) => {
   if (entry.endedAt) return c.json({ error: 'Already stopped' }, 400)
 
   const endedAt = new Date()
-  // Остановили меньше чем через минуту — это промах по кнопке, а не работа.
-  // Такую запись не сохраняем: строки по 0:00 засоряют день и ничего не значат.
-  if (endedAt.getTime() - entry.startedAt.getTime() < 60_000) {
+  // Меньше секунды — двойной клик, а не работа. Порог намеренно крошечный:
+  // всё, что человек делал хоть сколько-то, должно записаться.
+  if (endedAt.getTime() - entry.startedAt.getTime() < 1_000) {
     await db.delete(timeEntries).where(eq(timeEntries.id, entry.id))
     broadcast(entry.projectId, 'time', { action: 'delete', id: entry.id, userId: entry.userId })
-    return c.json({ discarded: true, reason: 'Shorter than a minute — nothing recorded.' })
+    return c.json({ discarded: true, reason: 'Stopped within a second — nothing recorded.' })
   }
 
   const [row] = await db
