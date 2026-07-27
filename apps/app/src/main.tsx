@@ -18,6 +18,7 @@ import { InviteScreen } from './screens/InviteScreen'
 import { ConnectScreen } from './screens/ConnectScreen'
 import { StartScreen } from './screens/StartScreen'
 import { InboxScreen } from './screens/InboxScreen'
+import { NotifySettingsScreen } from './screens/NotifySettingsScreen'
 import { TasksTab } from './components/tabs/TasksTab'
 import { FilesTab } from './components/tabs/FilesTab'
 import { ResourcesTab } from './components/tabs/ResourcesTab'
@@ -130,6 +131,8 @@ createRoot(document.getElementById('root')!).render(
               {/* уведомления — глобальная страница: они приходят из всех
                   проектов сразу, и разбирают их тоже сразу все */}
               <Route path="/inbox" element={<InboxScreen />} />
+              {/* системные уведомления — настройка программы, не проекта */}
+              <Route path="/settings/notifications" element={<NotifySettingsScreen />} />
               <Route path="/start" element={<StartScreen />} />
               <Route path="/start/:companyId" element={<StartScreen />} />
               <Route path="/start/:companyId/:companyTab" element={<StartScreen />} />

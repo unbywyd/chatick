@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { useNavigate } from 'react-router-dom'
-import { api, getSessionToken } from '@/lib/api'
+import { api, API_URL, getSessionToken } from '@/lib/api'
 import { loadNotifySettings, type NotifySettings } from '@/lib/notify-settings'
 import type { InboxNotification } from '@/hooks/useOpenNotification'
 import { normalizeLink } from '@/hooks/useOpenNotification'
@@ -15,7 +15,9 @@ import { normalizeLink } from '@/hooks/useOpenNotification'
 
 type Inbox = { unreadTotal: number; items: InboxNotification[] }
 
-type DesktopBridge = { notify: (p: { title: string; body?: string; link?: string }) => void }
+type DesktopBridge = {
+  notify: (p: { title: string; body?: string; link?: string; silent?: boolean }) => void
+}
 
 const SEEN_KEY = 'chatick_desktop_seen'
 
@@ -51,56 +53,6 @@ function readSeen(): Set<string> {
 function writeSeen(seen: Set<string>) {
   // Храним последние 200: список уведомлений не бесконечен, а localStorage да.
   localStorage.setItem(SEEN_KEY, JSON.stringify([...seen].slice(-200)))
-}
-
-/**
- * Показать пробное уведомление — кнопкой из настроек.
- *
- * Ждать настоящего события, чтобы понять, работают ли уведомления, — плохая
- * проверка: непонятно, что сломалось, если ничего не пришло. Возвращает
- * причину отказа или null, если показали.
- */
-export async function testNotification(title: string, body: string): Promise<string | null> {
-  const bridge = (window as unknown as { chatickDesktop?: { notify: (p: unknown) => void } })
-    .chatickDesktop
-  if (bridge) {
-    bridge.notify({ title, body })
-    return null
-  }
-  if (!('Notification' in window)) return 'unsupported'
-  if (Notification.permission === 'default') {
-    const next = await requestBrowserPermission()
-    if (next !== 'granted') return next
-  }
-  if (Notification.permission !== 'granted') return Notification.permission
-
-  const n = new Notification(title, { body, icon: '/logo-small.png', requireInteraction: true })
-  // Браузер принял вызов — это ещё не значит, что система его показала.
-  // Windows молча проглатывает всплывашки при включённом «Не беспокоить», и
-  // разницу видно только по этим событиям.
-  n.onshow = () => console.info('[chatick] система показала уведомление')
-  n.onerror = () => console.warn('[chatick] система отказалась показывать уведомление')
-  n.onclick = () => {
-    window.focus()
-    n.close()
-  }
-  // Если за секунду не показалось — почти наверняка «Не беспокоить».
-  window.setTimeout(() => {
-    console.info('[chatick] пробное: проверьте «Не беспокоить» в Windows, если всплывашки не было')
-  }, 1000)
-  return null
-}
-
-/**
- * Забыть, что уже показывали. Уведомления придут заново — кнопкой из настроек.
- *
- * Список «показанных» — единственное, что стоит между накопившимися
- * уведомлениями и человеком, и когда показ ломался, туда попадало лишнее.
- * Чинить это разовой миграцией ненадёжно: она отрабатывает один раз и молча.
- */
-export function forgetShownNotifications() {
-  localStorage.removeItem(SEEN_KEY)
-  window.dispatchEvent(new CustomEvent('chatick:notification'))
 }
 
 /** Разрешение браузера: в Electron не спрашиваем — там своё, системное. */
@@ -213,8 +165,7 @@ export function useSystemNotifications() {
       const link = normalizeLink(n.link, n.projectId)
 
       if (bridge) {
-        console.info('[chatick] уведомление отдано в Electron:', title)
-        bridge.notify({ title, body, link })
+        bridge.notify({ title, body, link, silent: !s.sound })
         return true
       }
       if (!('Notification' in window)) return skip('браузер не поддерживает Notification API')
@@ -280,12 +231,54 @@ export function useSystemNotifications() {
     if (shown) writeSeen(seen)
   }, [inbox.data, show])
 
-  // Сокет присылает 'notification' — обновляем инбокс сразу, не дожидаясь
-  // следующего опроса. Слушаем событие окна: сокет живёт в другом хуке.
+  // Сокет проекта присылает 'notification' — обновляем инбокс сразу.
   useEffect(() => {
     if (!authed) return
     const onPing = () => qc.invalidateQueries({ queryKey: ['inbox-system'] })
     window.addEventListener('chatick:notification', onPing)
     return () => window.removeEventListener('chatick:notification', onPing)
+  }, [authed, qc])
+
+  // Своё подключение на всё приложение: сокет проекта живёт только внутри
+  // проекта, а уведомления должны доходить и на списке компаний, и в инбоксе —
+  // человек в программе, значит он онлайн. Без него там оставался бы опрос
+  // раз в минуту.
+  useEffect(() => {
+    if (!authed) return
+    const token = getSessionToken()
+    if (!token) return
+
+    let ws: WebSocket | null = null
+    let closed = false
+    let attempt = 0
+    let retry: number | undefined
+
+    const connect = () => {
+      if (closed) return
+      ws = new WebSocket(`${API_URL.replace(/^http/, 'ws')}/ws?token=${encodeURIComponent(token)}`)
+      ws.onopen = () => {
+        attempt = 0
+      }
+      ws.onmessage = (e) => {
+        try {
+          const { event } = JSON.parse(e.data as string) as { event?: string }
+          if (event === 'notification') qc.invalidateQueries({ queryKey: ['inbox-system'] })
+        } catch {
+          /* чужое сообщение — не наша забота */
+        }
+      }
+      ws.onclose = () => {
+        // Сеть отвалилась — возвращаемся, увеличивая паузу, но не молча
+        // навсегда: иначе уведомления тихо перестанут приходить.
+        if (!closed) retry = window.setTimeout(connect, Math.min(1000 * 2 ** attempt++, 15_000))
+      }
+    }
+    connect()
+
+    return () => {
+      closed = true
+      if (retry) window.clearTimeout(retry)
+      ws?.close()
+    }
   }, [authed, qc])
 }

@@ -592,15 +592,9 @@
     "systemSoundHint": "Off by default: a sound interrupts more than a pop-up.",
     "promptTitle": "Turn on notifications?",
     "promptHint": "So you don't miss mentions and tasks assigned to you.",
-    "test": "Send a test notification",
-    "testTitle": "Chatick",
-    "testBody": "Notifications are working.",
-    "testFailed": "Couldn't show a notification — check your browser settings.",
-    "testSent": "Sent — check the corner of your screen.",
-    "replay": "Show unread again",
-    "replayed": "Unread notifications will come through again.",
     "permGranted": "Notifications are on.",
-    "permBlocked": "Your browser didn't show the prompt. Click the icon at the left of the address bar and allow notifications there."
+    "permBlocked": "Your browser didn't show the prompt. Click the icon at the left of the address bar and allow notifications there.",
+    "perProjectHint": "Which events you're subscribed to is set per project — open a project and go to Notifications."
   },
   "projTeam": {
     "title": "Project team",

@@ -161,14 +161,34 @@ export function attachWs(server: Server) {
     const url = new URL(req.url ?? '', 'http://localhost')
     const token = url.searchParams.get('token')
     const payload = token ? await verifyToken(token) : null
-    if (!payload || payload.typ !== 'project') {
+    if (!payload || (payload.typ !== 'project' && payload.typ !== 'session')) {
       ws.close(4001, 'unauthorized')
       return
     }
 
-    const client: Client = { ws, userId: payload.sub, projectId: payload.projectId }
-    roomClients(client.projectId).add(client)
+    // Сессионное подключение — только ради уведомлений: человек открыл
+    // программу, но ещё не вошёл ни в один проект. Комнаты и presence ему не
+    // нужны, а уведомления адресованы ему и должны доходить сразу.
+    const notifyOnly = payload.typ === 'session'
+
+    const client: Client = {
+      ws,
+      userId: payload.sub,
+      projectId: notifyOnly ? '' : payload.projectId,
+    }
+    if (!notifyOnly) roomClients(client.projectId).add(client)
     userClients(client.userId).add(client)
+    if (notifyOnly) {
+      // Дальше — presence, локи и команды проекта: сессионному клиенту нечего
+      // там делать, он только слушает.
+      ws.on('close', () => {
+        const mine = byUser.get(client.userId)
+        mine?.delete(client)
+        if (mine?.size === 0) byUser.delete(client.userId)
+      })
+      ws.on('error', () => ws.close())
+      return
+    }
     void pushPresence(client.projectId)
     // отдать текущие локи новому клиенту
     for (const l of locksOf(client.projectId)) ws.send(JSON.stringify({ event: 'task_lock', payload: { taskId: l.taskId, user: l.user } }))

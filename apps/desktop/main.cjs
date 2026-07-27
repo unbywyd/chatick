@@ -157,6 +157,13 @@ function buildTrayMenu() {
         showWindow()
       },
     },
+    {
+      label: tr('notifySettings', 'Notification settings'),
+      click: () => {
+        showWindow()
+        send('navigate', '/settings/notifications')
+      },
+    },
     { type: 'separator' },
     {
       label: tr('about', 'About'),
@@ -394,6 +401,9 @@ function registerIpc() {
     title: payload?.title || 'Chatick',
     body: payload?.body || '',
     icon: loadIcon('icon.png'),
+    // Звук — общая настройка приложения, а не системы: человек решает один
+    // раз, а не отдельно для окна и для трея.
+    silent: Boolean(payload?.silent),
   })
   n.on('failed', (_ev, err) => console.warn('[chatick] уведомление не показано:', err))
   // Клик ведёт туда, где событие произошло: уведомление без перехода бесполезно.

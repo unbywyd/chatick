@@ -193,6 +193,13 @@ export function ProfileMenu({
           </DropdownMenuItem>
         )}
 
+        {/* Системные уведомления — про приложение, поэтому без привязки
+            к проекту, в отличие от подписок на события */}
+        <DropdownMenuItem onSelect={() => navigate('/settings/notifications')}>
+          <Bell className="size-4" />
+          {t('notif.system')}
+        </DropdownMenuItem>
+
         {projectId && (
           <DropdownMenuItem onSelect={() => navigate(`/p/${projectId}/shortcuts`)}>
             <Keyboard className="size-4" />
