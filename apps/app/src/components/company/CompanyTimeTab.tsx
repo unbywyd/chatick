@@ -8,8 +8,8 @@ import { Avatar } from '@/components/ui/avatar'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { DropdownMenu, DropdownMenuTrigger, DropdownMenuContent, DropdownMenuItem } from '@/components/ui/dropdown-menu'
-import { Select, SelectTrigger, SelectValue, SelectContent, SelectItem } from '@/components/ui/select'
 import { PeriodPicker, resolvePreset, type Period } from '@/components/ui/period-picker'
+import { PeoplePicker } from '@/components/ui/people-picker'
 import { formatDuration } from '@/lib/time-parse'
 
 // Часы по всей компании (SPEC §8.32): кто сколько отработал и на каких
@@ -158,19 +158,18 @@ export function CompanyTimeTab({
           <Search className="pointer-events-none absolute start-2.5 top-1/2 size-3.5 -translate-y-1/2 text-muted-foreground" />
           <Input value={q} onChange={(e) => setQ(e.target.value)} placeholder={t('people.search')} className="h-9 ps-8" />
         </div>
-        <Select value={userId || 'all'} onValueChange={(v) => setUserId(v === 'all' ? '' : v)}>
-          <SelectTrigger className="w-auto min-w-40">
-            <SelectValue />
-          </SelectTrigger>
-          <SelectContent>
-            <SelectItem value="all">{t('time.everyone')}</SelectItem>
-            {(members.data?.members ?? []).map((m) => (
-              <SelectItem key={m.user.id} value={m.user.id}>
-                {m.user.name}
-              </SelectItem>
-            ))}
-          </SelectContent>
-        </Select>
+        {/* Выбранный виден лицом и именем, и его можно сбросить крестиком.
+            Select показывал пустоту, пока грузился список участников — было
+            непонятно, кто выбран, и снять выбор было нечем. */}
+        <PeoplePicker
+          single
+          className="w-52"
+          people={(members.data?.members ?? []).map((m) => m.user)}
+          value={userId ? [userId] : []}
+          onChange={(ids) => setUserId(ids[0] ?? '')}
+          placeholder={t('time.everyone')}
+          clearLabel={t('time.everyone')}
+        />
         <DropdownMenu>
           <DropdownMenuTrigger asChild>
             <Button variant="outline" size="sm">

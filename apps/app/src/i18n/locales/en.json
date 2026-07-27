@@ -438,7 +438,9 @@
     "copy": "Copy text",
     "copied": "Copied",
     "actions": "Message actions",
-    "typing": "{{names}} is checking a message…"
+    "typing": "{{names}} is checking a message…",
+    "bypassOn": "Sending without AI check — click to turn off",
+    "bypassOff": "Send without AI check"
   },
   "composer": {
     "dropHere": "Drop to attach",

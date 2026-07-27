@@ -139,7 +139,9 @@ export function PeriodPicker({
           )}
         >
           <CalendarRange className="size-3.5 shrink-0 text-muted-foreground" />
-          <span className="truncate">{label}</span>
+          {/* Распорка: без неё стрелка липнет к тексту, когда кнопка шире
+              содержимого. */}
+          <span className="min-w-0 flex-1 truncate text-start">{label}</span>
           <ChevronDown className="size-3.5 shrink-0 text-muted-foreground" />
         </button>
       </PopoverTrigger>

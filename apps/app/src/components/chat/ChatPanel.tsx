@@ -59,6 +59,8 @@ export function ChatPanel({
   const [sandboxId, setSandboxId] = useState<string | null>(null)
   /** сообщение, на которое отвечаем (плашка над композером) */
   const [replyTo, setReplyTo] = useState<ChatMessage | null>(null)
+  /** счётчик-сигнал: меняется — композер забирает фокус */
+  const [focusComposer, setFocusComposer] = useState(0)
   const [sandboxStream, setSandboxStream] = useState('') // постепенная печать ответа ИИ
   const [aiThinking, setAiThinking] = useState(false) // ai-режим: ждём ответ
   const [searchOpen, setSearchOpen] = useState(false)
@@ -447,7 +449,10 @@ export function ChatPanel({
                     onPick={() =>
                       setPicked((cur) => (cur.includes(m.id) ? cur.filter((x) => x !== m.id) : [...cur, m.id]))
                     }
-                    onReply={() => setReplyTo(m)}
+                    onReply={() => {
+                      setReplyTo(m)
+                      setFocusComposer((n) => n + 1)
+                    }}
                     onJump={jumpTo}
                     replyTo={m.replyToId ? byId.get(m.replyToId) : undefined}
                   />
@@ -580,6 +585,8 @@ export function ChatPanel({
           placeholder={llmMissing ? t('chat.noLlmPlaceholder') : t('chat.placeholderGroup')}
           mentions={mentionItems}
           onSend={(p) => send(p, 'group')}
+          focusSignal={focusComposer}
+          canBypassAi={myRole === 'owner' || myRole === 'admin'}
         />
       </footer>
     </div>

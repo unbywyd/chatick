@@ -5,7 +5,7 @@ import StarterKit from '@tiptap/starter-kit'
 import Placeholder from '@tiptap/extension-placeholder'
 import Mention from '@tiptap/extension-mention'
 import tippy, { type Instance } from 'tippy.js'
-import { Bold, CheckSquare, ChevronUp, ClipboardPaste, Code, FileText, Image as ImageIcon, Italic, List, Loader2, Paperclip, SendHorizontal, ShieldOff, Strikethrough, X } from 'lucide-react'
+import { Bold, CheckSquare, ClipboardPaste, Code, FileText, Image as ImageIcon, Italic, List, Loader2, Paperclip, SendHorizontal, Strikethrough, X, Zap } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
 import { toast } from 'sonner'
 import { useQuery } from '@tanstack/react-query'
@@ -25,17 +25,30 @@ export function Composer({
   placeholder,
   mentions,
   onSend,
+  focusSignal,
+  canBypassAi = false,
 }: {
   disabled?: boolean
   placeholder: string
   mentions: MentionItem[]
+  /**
+   * Меняется — ставим курсор в поле. Нужен, когда фокус просит внешнее
+   * действие («Ответить» на сообщении): без этого человек жмёт «ответить»,
+   * а потом ещё раз кликает в поле, чтобы начать печатать.
+   */
+  focusSignal?: number
+  /** отправка мимо проверки ИИ — только руководству проекта */
+  canBypassAi?: boolean
   onSend: (payload: { markdown: string; mentionIds: string[]; attachmentIds: string[]; taskRefs: string[]; raw?: boolean }) => void
 }) {
   const { t } = useTranslation()
+  // Режим прямой отправки залипает: включил — и дальше пишешь без проверки,
+  // пока сам не выключишь. Разовый пункт в меню заставлял бы лезть туда
+  // перед каждым сообщением.
+  const [bypassAi, setBypassAi] = useState(false)
   const [attachments, setAttachments] = useState<PendingAttachment[]>([])
   const [taskPins, setTaskPins] = useState<{ id: string; number: string; title: string }[]>([])
   const [uploading, setUploading] = useState(0)
-  const [sendMenu, setSendMenu] = useState(false)
   const [dropActive, setDropActive] = useState(false) // подсветка зоны при наведении файла/задачи
   // «отправить оригинал» — как в WhatsApp: без сжатия картинок
   const [keepOriginal, setKeepOriginal] = useState(false)
@@ -161,6 +174,13 @@ export function Composer({
     editor?.setEditable(!disabled)
   }, [editor, disabled])
 
+  // Внешний запрос фокуса: «Ответить» на сообщении ставит курсор сюда, чтобы
+  // не приходилось отдельно кликать в поле.
+  useEffect(() => {
+    if (focusSignal && editor && !disabled) editor.commands.focus('end')
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [focusSignal, editor])
+
   // Ручная вставка из буфера (SPEC §8.16): картинка → вложение, текст → в редактор.
   async function pasteFromClipboard() {
     try {
@@ -188,7 +208,9 @@ export function Composer({
     }
   }
 
-  const submit = (raw = false) => {
+  const submit = (forceRaw = false) => {
+    // залипший режим или разовый выбор в меню — одно и то же для сервера
+    const raw = forceRaw || (canBypassAi && bypassAi)
     if (!editor) return
     const markdown = editor.isEmpty ? '' : serializeToMarkdown(editor.getJSON())
     if (!markdown.trim() && attachments.length === 0 && taskPins.length === 0) return
@@ -203,7 +225,6 @@ export function Composer({
     editor.commands.clearContent()
     setAttachments([])
     setTaskPins([])
-    setSendMenu(false)
   }
 
   if (!editor) return null
@@ -347,6 +368,24 @@ export function Composer({
         >
           <ClipboardPaste className="size-4" />
         </button>
+
+        {/* Молния: режим отправки мимо проверки ИИ. Залипает — включил и
+            пишешь дальше, пока не выключишь. Видна только руководству
+            проекта: правила чата держатся на этой проверке. */}
+        {canBypassAi && (
+          <button
+            type="button"
+            onClick={() => setBypassAi((v) => !v)}
+            disabled={disabled}
+            title={bypassAi ? t('chat.bypassOn') : t('chat.bypassOff')}
+            className={cn(
+              'rounded-md p-2 transition-colors disabled:opacity-40',
+              bypassAi ? 'bg-brand/15 text-brand' : 'text-muted-foreground hover:text-foreground',
+            )}
+          >
+            <Zap className={cn('size-4', bypassAi && 'fill-current')} />
+          </button>
+        )}
         <button
           type="button"
           onClick={() => setKeepOriginal((v) => !v)}
@@ -378,37 +417,10 @@ export function Composer({
             disabled={disabled}
             aria-label={t('chat.send')}
             title={t('chat.sendHint')}
-            className="rounded-s-md bg-brand p-2 text-brand-foreground transition-opacity disabled:opacity-40"
+            className="rounded-md bg-brand p-2 text-brand-foreground transition-opacity disabled:opacity-40"
           >
             <SendHorizontal className="size-4 rtl:-scale-x-100" />
           </button>
-          <button
-            type="button"
-            onClick={() => setSendMenu((v) => !v)}
-            disabled={disabled}
-            className="rounded-e-md border-s border-brand-foreground/20 bg-brand px-1 text-brand-foreground transition-opacity disabled:opacity-40"
-          >
-            <ChevronUp className={cn('size-3.5 transition-transform', sendMenu && 'rotate-180')} />
-          </button>
-
-          {sendMenu && (
-            <>
-              <div className="fixed inset-0 z-40" onClick={() => setSendMenu(false)} />
-              <div className="absolute bottom-full end-0 z-50 mb-1 min-w-52 overflow-hidden rounded-md border bg-popover p-1 shadow-md">
-                <button
-                  type="button"
-                  onClick={() => submit(true)}
-                  className="flex w-full items-center gap-2 rounded-sm px-2 py-1.5 text-start text-sm hover:bg-accent"
-                >
-                  <ShieldOff className="size-3.5 text-orange-400" />
-                  <span>
-                    <span className="block">{t('chat.rawSend')}</span>
-                    <span className="block text-xs text-muted-foreground">{t('chat.rawSendHint')}</span>
-                  </span>
-                </button>
-              </div>
-            </>
-          )}
         </div>
       </div>
     </div>

@@ -9,6 +9,7 @@ import { broadcast, sendToUser } from '../ws.js'
 import { evaluateMessage, sandboxReply, aiChatReply } from '../lib/dispatcher.js'
 import { maybeCompress } from '../lib/memory.js'
 import { notify, extractMentions } from '../lib/notify.js'
+import { projectRoleOf } from './projects.js'
 
 // Письмо тем, кого упомянули в доставленном групповом сообщении (SPEC §8.9).
 // Экспортируется: сообщения приходят и через мост, а упоминание должно
@@ -178,8 +179,16 @@ messagesRoute.post(
   ),
   async (c) => {
     const { projectId, sub } = c.get('auth')
-    const { text, replyToId, attachmentIds, taskRefs, raw } = c.req.valid('json')
+    const { text, replyToId, attachmentIds, taskRefs } = c.req.valid('json')
     let { mode } = c.req.valid('json')
+
+    // Отправка мимо проверки ИИ — привилегия руководства проекта: правила чата
+    // держатся на этой проверке, и обходить её всем подряд значит не иметь
+    // правил вовсе. Молча игнорируем флаг, а не отказываем: сообщение всё
+    // равно уйдёт, просто обычным путём.
+    const membership = await projectRoleOf(projectId, sub)
+    const mayBypass = membership?.role === 'owner' || membership?.role === 'admin'
+    const raw = c.req.valid('json').raw && mayBypass
 
     // @AI в группе → сообщение уходит в личный ИИ-канал, группа его не видит (по решению 2026-07-23)
     const mentionsAi = /@\[[^\]]*\]\(ai\)/.test(text)
