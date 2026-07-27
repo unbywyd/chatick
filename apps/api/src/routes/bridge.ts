@@ -33,6 +33,7 @@ import { logActivity } from '../lib/audit.js'
 import { createNote, noteToTask, NOTE_TYPES, type NoteType } from './notes.js'
 import { readTimeConfig } from './time.js'
 import { readPresence } from './auth.js'
+import { createShare, revokeShare, type ShareEntityType } from './shares.js'
 import { notifyChatMentions } from './messages.js'
 import { htmlToText, sanitizeHtml } from '../lib/sanitize-html.js'
 import { broadcast, sendToUser } from '../ws.js'
@@ -284,6 +285,60 @@ bridgeRoute.patch('/projects/:id', async (c) => {
 
   return c.json({ id: updated!.id, name: updated!.name, about: updated!.about, chatRules: updated!.chatRules, color: updated!.color })
 })
+
+// --- Ссылки на сущности (SPEC §8.34) ----------------------------------------
+//
+// Ассистент часто заканчивает работу словами «вот файл» или «смотри заметку» —
+// и без ссылки человеку приходится искать это руками.
+
+bridgeRoute.post('/shares/:type/:id', async (c) => {
+  const id = auth(c as never)
+  const scope = await resolveProject(c as never)
+  if ('error' in scope) return c.json({ error: scope.error }, scope.status)
+
+  const type = c.req.param('type')
+  const entityId = c.req.param('id')
+  if (!['file', 'note', 'resource', 'message', 'task'].includes(type)) {
+    return c.json({ error: 'Unsupported entity', hint: 'file | note | resource | message | task' }, 400)
+  }
+
+  // Публикуют наружу владелец и админ проекта — то же правило, что в интерфейсе.
+  const member = await projectRoleOf(scope.projectId, id.userId)
+  if (!(member?.role === 'owner' || member?.role === 'admin')) {
+    return c.json({ error: 'Only project owners and admins can publish links' }, 403)
+  }
+
+  const share = await createShare(type as ShareEntityType, entityId, scope.projectId, id.userId)
+  if (!share) return c.json({ error: 'Not found' }, 404)
+
+  const app = APP()
+  return c.json({
+    // Ссылка для команды: откроется у того, кто в проекте. Публичная работает
+    // без входа — её отдаём отдельно, чтобы ассистент не путал их местами.
+    appUrl: `${app}/#${appPathOf(type, scope.projectId, entityId)}`,
+    publicUrl: `${app}/#/s/${share.slug}`,
+    slug: share.slug,
+  })
+})
+
+bridgeRoute.delete('/shares/:type/:id', async (c) => {
+  const id = auth(c as never)
+  const scope = await resolveProject(c as never)
+  if ('error' in scope) return c.json({ error: scope.error }, scope.status)
+
+  const member = await projectRoleOf(scope.projectId, id.userId)
+  if (!(member?.role === 'owner' || member?.role === 'admin')) return c.json({ error: 'Forbidden' }, 403)
+
+  await revokeShare(c.req.param('type') as ShareEntityType, c.req.param('id'))
+  return c.json({ ok: true })
+})
+
+/** Внутренний адрес сущности — тот же, что открывается в приложении. */
+function appPathOf(type: string, projectId: string, id: string): string {
+  if (type === 'message') return `/p/${projectId}/chat?msg=${id}`
+  const tab = type === 'file' ? 'files' : type === 'note' ? 'notes' : type === 'resource' ? 'resources' : 'tasks'
+  return `/p/${projectId}/${tab}/${id}`
+}
 
 // --- Контекст проекта -------------------------------------------------------
 

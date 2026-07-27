@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react'
-import { useNavigate } from 'react-router-dom'
+import { useNavigate, useParams } from 'react-router-dom'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { useTranslation } from 'react-i18next'
 import { toast } from 'sonner'
@@ -42,6 +42,7 @@ import { usePasteFiles } from '@/hooks/usePasteFiles'
 import { useProjectSocket } from '@/hooks/useProjectSocket'
 import { STATUSES, PRIORITIES, STATUS_ICON, STATUS_COLOR, PRIORITY_DOT, fmtEstimate, type Task, type Member, type TaskGroup } from './types'
 import { parseDuration } from '@/lib/time-parse'
+import { ShareDialog } from '@/components/ShareDialog'
 
 type Attachment = {
   id: string
@@ -219,15 +220,12 @@ export function TaskDrawer({
   // файлы, пришедшие из чата (есть messageId) — секция «связь с чатом»
   const chatFiles = (attachments.data ?? []).filter((a) => a.messageId)
 
-  const share = async () => {
-    const url = `${window.location.origin}${window.location.pathname}#/p/${window.location.hash.split("/")[2]}/tasks/${task.id}`
-    try {
-      await navigator.clipboard.writeText(url)
-      toast.success(t('tasks.linkCopied'))
-    } catch {
-      toast.error(t('composer.clipboardDenied'))
-    }
-  }
+  // Диалог вместо копирования в буфер: кроме ссылки для команды у задачи
+  // теперь есть и публичная — показать её можно и тому, кого нет в проекте.
+  const [sharing, setSharing] = useState(false)
+  // Проект берём из адреса: сама задача его не хранит, а ссылка без проекта
+  // никуда не ведёт.
+  const { id: routeProjectId } = useParams()
 
   const editForm = (
     <>
@@ -646,6 +644,17 @@ export function TaskDrawer({
         if (e.dataTransfer.files.length) upload(e.dataTransfer.files)
       }}
     >
+      {sharing && (
+        <ShareDialog
+          type="task"
+          id={task.id}
+          title={`${task.number} ${task.title}`}
+          appPath={`/p/${routeProjectId}/tasks/${task.id}`}
+          canPublish={canEdit}
+          onClose={() => setSharing(false)}
+        />
+      )}
+
       {/* Верхняя панель: назад · номер · поделиться / редактировать / удалить */}
       <header className="flex items-center gap-2 border-b px-4 py-3">
         <Button variant="ghost" size="sm" onClick={onClose} className="gap-1.5">
@@ -661,7 +670,7 @@ export function TaskDrawer({
           </span>
         )}
         <div className="ms-auto flex items-center gap-1">
-          <Button variant="ghost" size="sm" onClick={share} className="gap-1.5" title={t('tasks.share')}>
+          <Button variant="ghost" size="sm" onClick={() => setSharing(true)} className="gap-1.5" title={t('tasks.share')}>
             <Share2 className="size-4" />
             <span className="hidden sm:inline">{t('tasks.share')}</span>
           </Button>

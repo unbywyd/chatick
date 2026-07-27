@@ -61,6 +61,37 @@ async function locate(type: Entity, id: string): Promise<{ projectId: string; ti
   }
 }
 
+export type ShareEntityType = Entity
+
+/**
+ * Выдать публичную ссылку. Общая для интерфейса и моста: правило «одна
+ * активная ссылка на сущность» должно быть одним, иначе отзыв перестанет
+ * что-либо гарантировать.
+ */
+export async function createShare(type: Entity, entityId: string, projectId: string, userId: string) {
+  const found = await locate(type, entityId)
+  if (!found || found.projectId !== projectId) return null
+
+  const existing = await db.query.shares.findFirst({
+    where: and(eq(shares.entityType, type), eq(shares.entityId, entityId), isNull(shares.revokedAt)),
+  })
+  if (existing) return existing
+
+  const [row] = await db
+    .insert(shares)
+    .values({ slug: nanoid(16), entityType: type, entityId, projectId, createdById: userId })
+    .returning()
+  return row!
+}
+
+/** Отозвать: ссылка перестаёт работать немедленно. */
+export async function revokeShare(type: Entity, entityId: string) {
+  await db
+    .update(shares)
+    .set({ revokedAt: new Date() })
+    .where(and(eq(shares.entityType, type), eq(shares.entityId, entityId), isNull(shares.revokedAt)))
+}
+
 // --- Управление ссылками (нужна сессия) -------------------------------------
 
 sharesRoute.use('/*', requireSession)
@@ -207,7 +238,16 @@ async function readEntity(type: Entity, id: string) {
       if (!r) return null
       // Санитизируем на отдаче, а не полагаемся на запись: публичную страницу
       // открывает кто угодно, и цена пропущенного скрипта здесь другая.
-      return { note: { title: r.title, body: sanitizeHtml(r.body), type: r.type, tags: r.tags, createdAt: r.createdAt } }
+      // Теги хранятся строкой JSON — отдать её как есть значит уронить
+      // страницу на tags.map.
+      let tags: string[] = []
+      try {
+        const parsed: unknown = JSON.parse(r.tags || '[]')
+        if (Array.isArray(parsed)) tags = parsed.filter((x): x is string => typeof x === 'string')
+      } catch {
+        /* битые теги — не повод не показать заметку */
+      }
+      return { note: { title: r.title, body: sanitizeHtml(r.body), type: r.type, tags, createdAt: r.createdAt } }
     }
     case 'resource': {
       const r = await db.query.credentials.findFirst({
