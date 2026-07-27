@@ -84,8 +84,8 @@ const CHART_STATUSES = [
           </svg>
         </a>
         <a class="btn btn-ghost" href="#ask">{t.hero.ctaSecondary}</a>
-        <span class="note">{t.hero.note}</span>
       </div>
+      <p class="note hero-note">{t.hero.note}</p>
 
       <!-- Три столпа — сразу в шапке, а не в подвале: опенсурс, бесплатно, надёжно -->
       <ul class="hero-trust">
@@ -890,9 +890,13 @@ const CHART_STATUSES = [
   .hero-cta {
     margin-top: 40px;
     display: flex;
-    flex-direction: column;
+    flex-wrap: wrap;
+    justify-content: center;
     align-items: center;
-    gap: 14px;
+    gap: 12px;
+  }
+  .hero-note {
+    margin-top: 14px;
   }
   .note {
     font-size: 0.82rem;
@@ -1793,6 +1797,15 @@ const CHART_STATUSES = [
     content: '\2713';
   }
 
+  @media (max-width: 560px) {
+    .hero-cta {
+      flex-direction: column;
+    }
+    .hero-cta .btn {
+      width: 100%;
+      justify-content: center;
+    }
+  }
   @media (max-width: 640px) {
     .form-row {
       grid-template-columns: 1fr;
