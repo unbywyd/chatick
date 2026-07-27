@@ -341,52 +341,20 @@ const CHART_STATUSES = [
       <h2>{t.reviews.title}</h2>
       <p class="section-sub">{t.reviews.subtitle}</p>
 
-      <div class="grid grid-3" id="reviews-list" data-empty={t.reviews.empty}>
-        <p class="note reviews-loading">…</p>
+      <div class="reviews-grid" id="reviews-list" hidden></div>
+
+      <!-- Пустое состояние — приглашение, а не серая строка -->
+      <div class="reviews-empty" id="reviews-empty" hidden>
+        <div class="stars-hero" aria-hidden="true">★★★★★</div>
+        <p>{t.reviews.empty}</p>
       </div>
 
       <div class="review-actions">
-        <button class="btn btn-ghost" id="review-open" type="button">{t.reviews.leave}</button>
+        <button class="btn" id="review-open" type="button">
+          <svg viewBox="0 0 24 24" width="17" height="17" fill="none" aria-hidden="true"><path d="M12 3.3l2.7 5.4 6 .9-4.3 4.2 1 6-5.4-2.8-5.4 2.8 1-6L3.3 9.6l6-.9L12 3.3z" stroke="currentColor" stroke-width="2" stroke-linejoin="round"/></svg>
+          {t.reviews.leave}
+        </button>
       </div>
-
-      <form class="form" id="review-form" hidden>
-        <div class="form-row">
-          <label>
-            <span>{t.reviews.name}</span>
-            <input name="name" required maxlength="80" autocomplete="name" />
-          </label>
-          <label>
-            <span>{t.reviews.role}</span>
-            <input name="role" maxlength="80" />
-          </label>
-        </div>
-        <div class="form-row">
-          <label>
-            <span>{t.reviews.email}</span>
-            <input name="email" type="email" required autocomplete="email" />
-          </label>
-          <label>
-            <span>{t.reviews.rating}</span>
-            <select name="rating">
-              <option value="5">★★★★★</option>
-              <option value="4">★★★★☆</option>
-              <option value="3">★★★☆☆</option>
-              <option value="2">★★☆☆☆</option>
-              <option value="1">★☆☆☆☆</option>
-            </select>
-          </label>
-        </div>
-        <label>
-          <span>{t.reviews.text}</span>
-          <textarea name="body" rows="4" required minlength="20" maxlength="2000"></textarea>
-        </label>
-        <input class="trap" type="text" name="website" tabindex="-1" autocomplete="off" aria-hidden="true" />
-        <div class="form-actions">
-          <button class="btn" type="submit">{t.reviews.send}</button>
-          <button class="btn btn-ghost" type="button" id="review-cancel">{t.reviews.cancel}</button>
-          <span class="form-msg" data-sent={t.reviews.sent} data-failed={t.reviews.failed}></span>
-        </div>
-      </form>
     </div>
   </section>
 
@@ -396,38 +364,54 @@ const CHART_STATUSES = [
       <h2>{t.contact.title}</h2>
       <p class="section-sub">{t.contact.subtitle}</p>
 
-      <form class="form" id="contact-form">
-        <div class="form-row">
+      <form
+        class="contact-card"
+        id="contact-form"
+        novalidate
+        data-err-required={t.formErrors.required}
+        data-err-email={t.formErrors.email}
+        data-err-short={t.formErrors.short}
+      >
+        <div class="form-fields">
+          <div class="form-row">
+            <label>
+              <span>{t.contact.name}</span>
+              <input name="name" maxlength="120" autocomplete="name" />
+              <em class="err"></em>
+            </label>
+            <label>
+              <span>{t.contact.email}</span>
+              <input name="email" type="email" required autocomplete="email" />
+              <em class="err"></em>
+            </label>
+          </div>
           <label>
-            <span>{t.contact.name}</span>
-            <input name="name" maxlength="120" autocomplete="name" />
+            <span>{t.contact.topic}</span>
+            <select name="topic" class="form-select">
+              <option value="question">{t.contact.topics.question}</option>
+              <option value="bug">{t.contact.topics.bug}</option>
+              <option value="feature">{t.contact.topics.feature}</option>
+              <option value="other">{t.contact.topics.other}</option>
+            </select>
           </label>
           <label>
-            <span>{t.contact.email}</span>
-            <input name="email" type="email" required autocomplete="email" />
+            <span>{t.contact.message}</span>
+            <textarea name="body" rows="4" required minlength="10" maxlength="5000"></textarea>
+            <em class="err"></em>
           </label>
+          <input class="trap" type="text" name="website" tabindex="-1" autocomplete="off" aria-hidden="true" />
+          <div class="form-actions">
+            <button class="btn" type="submit">{t.contact.send}</button>
+            <span class="form-msg" data-failed={t.contact.failed}></span>
+          </div>
         </div>
-        <label>
-          <span>{t.contact.topic}</span>
-          <select name="topic">
-            <option value="question">{t.contact.topics.question}</option>
-            <option value="bug">{t.contact.topics.bug}</option>
-            <option value="feature">{t.contact.topics.feature}</option>
-            <option value="other">{t.contact.topics.other}</option>
-          </select>
-        </label>
-        <label>
-          <span>{t.contact.message}</span>
-          <textarea name="body" rows="5" required minlength="10" maxlength="5000"></textarea>
-        </label>
-        <input class="trap" type="text" name="website" tabindex="-1" autocomplete="off" aria-hidden="true" />
-        <div class="form-actions">
-          <button class="btn" type="submit">{t.contact.send}</button>
-          <span class="form-msg" data-sent={t.contact.sent} data-failed={t.contact.failed}></span>
+        <div class="form-done" aria-live="polite">
+          <span class="done-ic"><svg viewBox="0 0 24 24" width="26" height="26" fill="none" aria-hidden="true"><path d="m5 13 4 4L19 7" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"/></svg></span>
+          <p>{t.contact.sent}</p>
         </div>
       </form>
 
-      <p class="note contact-mail">
+      <p class="contact-mail">
         {t.contact.support} <a href={`mailto:${SUPPORT}`}>{SUPPORT}</a>
       </p>
     </div>
@@ -442,6 +426,69 @@ const CHART_STATUSES = [
     </div>
   </section>
 </main>
+
+<!-- Модалка отзыва: форма не мозолит глаза на странице, а приходит по кнопке -->
+<div class="cmodal" id="review-modal" hidden>
+  <div class="cmodal-backdrop" data-close></div>
+  <div class="cmodal-card" role="dialog" aria-modal="true" aria-labelledby="review-modal-title">
+    <button class="cmodal-x" type="button" data-close aria-label="Close">
+      <svg viewBox="0 0 24 24" width="18" height="18" fill="none" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"/></svg>
+    </button>
+    <h3 class="cmodal-title" id="review-modal-title">{t.reviews.leave}</h3>
+    <form
+      id="review-form"
+      novalidate
+      data-err-required={t.formErrors.required}
+      data-err-email={t.formErrors.email}
+      data-err-short={t.formErrors.short}
+    >
+      <div class="form-fields">
+        <div class="form-row">
+          <label>
+            <span>{t.reviews.name}</span>
+            <input name="name" required maxlength="80" autocomplete="name" />
+            <em class="err"></em>
+          </label>
+          <label>
+            <span>{t.reviews.role}</span>
+            <input name="role" maxlength="80" autocomplete="organization-title" />
+            <em class="err"></em>
+          </label>
+        </div>
+        <label>
+          <span>{t.reviews.email}</span>
+          <input name="email" type="email" required autocomplete="email" />
+          <em class="err"></em>
+        </label>
+        <div class="rate">
+          <span class="rate-label">{t.reviews.rating}</span>
+          <div class="starpick" id="starpick">
+              <button type="button" class="is-on" aria-label="1"><svg viewBox="0 0 24 24" width="26" height="26" aria-hidden="true"><path d="M12 2.6l2.9 5.9 6.5.9-4.7 4.6 1.1 6.5L12 17.4l-5.8 3.1 1.1-6.5L2.6 9.4l6.5-.9L12 2.6z" fill="currentColor"/></svg></button>
+              <button type="button" class="is-on" aria-label="2"><svg viewBox="0 0 24 24" width="26" height="26" aria-hidden="true"><path d="M12 2.6l2.9 5.9 6.5.9-4.7 4.6 1.1 6.5L12 17.4l-5.8 3.1 1.1-6.5L2.6 9.4l6.5-.9L12 2.6z" fill="currentColor"/></svg></button>
+              <button type="button" class="is-on" aria-label="3"><svg viewBox="0 0 24 24" width="26" height="26" aria-hidden="true"><path d="M12 2.6l2.9 5.9 6.5.9-4.7 4.6 1.1 6.5L12 17.4l-5.8 3.1 1.1-6.5L2.6 9.4l6.5-.9L12 2.6z" fill="currentColor"/></svg></button>
+              <button type="button" class="is-on" aria-label="4"><svg viewBox="0 0 24 24" width="26" height="26" aria-hidden="true"><path d="M12 2.6l2.9 5.9 6.5.9-4.7 4.6 1.1 6.5L12 17.4l-5.8 3.1 1.1-6.5L2.6 9.4l6.5-.9L12 2.6z" fill="currentColor"/></svg></button>
+              <button type="button" class="is-on" aria-label="5"><svg viewBox="0 0 24 24" width="26" height="26" aria-hidden="true"><path d="M12 2.6l2.9 5.9 6.5.9-4.7 4.6 1.1 6.5L12 17.4l-5.8 3.1 1.1-6.5L2.6 9.4l6.5-.9L12 2.6z" fill="currentColor"/></svg></button>
+          </div>
+          <input type="hidden" name="rating" value="5" />
+        </div>
+        <label>
+          <span>{t.reviews.text}</span>
+          <textarea name="body" rows="4" required minlength="20" maxlength="2000"></textarea>
+          <em class="err"></em>
+        </label>
+        <input class="trap" type="text" name="website" tabindex="-1" autocomplete="off" aria-hidden="true" />
+        <div class="form-actions">
+          <button class="btn" type="submit">{t.reviews.send}</button>
+          <span class="form-msg" data-failed={t.reviews.failed}></span>
+        </div>
+      </div>
+      <div class="form-done" aria-live="polite">
+        <span class="done-ic"><svg viewBox="0 0 24 24" width="26" height="26" fill="none" aria-hidden="true"><path d="m5 13 4 4L19 7" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"/></svg></span>
+        <p>{t.reviews.sent}</p>
+      </div>
+    </form>
+  </div>
+</div>
 
 <footer class="footer">
   <div class="container footer-inner">
@@ -470,18 +517,115 @@ const CHART_STATUSES = [
 
 <script>
   // --- Отзывы и контактная форма ------------------------------------------
-  // Лендинг статический, поэтому обе формы говорят с API напрямую. Ответ
-  // показываем на месте: молчание в ответ на «Отправить» неотличимо от поломки.
+  // Лендинг статический, формы говорят с API напрямую. Валидация своя:
+  // браузерные пузыри выглядят чужеродно и не переводятся вместе со страницей.
   const API = 'https://api.chatick.com'
+  const EMAIL_RE = /^[^@\s]+@[^@\s]+\.[^@\s]+$/
 
-  function say(form: HTMLFormElement, ok: boolean) {
-    const el = form.querySelector<HTMLElement>('.form-msg')
-    if (!el) return
-    el.textContent = ok ? el.dataset.sent! : el.dataset.failed!
-    el.classList.toggle('is-ok', ok)
-    el.classList.toggle('is-err', !ok)
+  const esc = (v: string) => v.replace(/[<>&]/g, (c) => ({ '<': '&lt;', '>': '&gt;', '&': '&amp;' })[c]!)
+
+  // --- список отзывов или пустое состояние --------------------------------
+  const list = document.getElementById('reviews-list')
+  const emptyBox = document.getElementById('reviews-empty')
+  if (list && emptyBox) {
+    fetch(`${API}/api/v1/reviews`)
+      .then((r) => (r.ok ? r.json() : { items: [] }))
+      .catch(() => ({ items: [] }))
+      .then((d: { items?: { name: string; role: string; rating: number; body: string }[] }) => {
+        const items = d.items ?? []
+        if (!items.length) {
+          emptyBox.hidden = false
+          return
+        }
+        list.innerHTML = items
+          .map((x) => {
+            const n = Math.max(1, Math.min(5, x.rating))
+            const stars = '★'.repeat(n) + `<span class="off">${'★'.repeat(5 - n)}</span>`
+            return `<figure class="rcard">
+                <div class="rstars">${stars}</div>
+                <blockquote>${esc(x.body)}</blockquote>
+                <figcaption><b>${esc(x.name)}</b>${x.role ? ` · ${esc(x.role)}` : ''}</figcaption>
+              </figure>`
+          })
+          .join('')
+        list.hidden = false
+      })
   }
 
+  // --- модалка -------------------------------------------------------------
+  const modal = document.getElementById('review-modal')
+  const openBtn = document.getElementById('review-open')
+  const reviewForm = document.getElementById('review-form') as HTMLFormElement | null
+
+  function openModal() {
+    if (!modal) return
+    modal.hidden = false
+    document.documentElement.style.overflow = 'hidden' // страница под модалкой не крутится
+    modal.querySelector<HTMLInputElement>('input[name=name]')?.focus()
+  }
+  function closeModal() {
+    if (!modal) return
+    modal.hidden = true
+    document.documentElement.style.overflow = ''
+  }
+  openBtn?.addEventListener('click', openModal)
+  modal?.querySelectorAll('[data-close]').forEach((el) => el.addEventListener('click', closeModal))
+  window.addEventListener('keydown', (e) => {
+    if (e.key === 'Escape' && modal && !modal.hidden) closeModal()
+  })
+
+  // --- звёзды: кликабельные, с живым предпросмотром ------------------------
+  const pick = document.getElementById('starpick')
+  const ratingInput = reviewForm?.querySelector<HTMLInputElement>('input[name=rating]') ?? null
+  const stars = pick ? Array.from(pick.querySelectorAll('button')) : []
+  const paint = (n: number) => stars.forEach((b, i) => b.classList.toggle('is-on', i < n))
+  stars.forEach((b, i) => {
+    b.addEventListener('click', () => {
+      if (ratingInput) ratingInput.value = String(i + 1)
+      paint(i + 1)
+    })
+    b.addEventListener('mouseenter', () => paint(i + 1))
+  })
+  pick?.addEventListener('mouseleave', () => paint(Number(ratingInput?.value ?? 5)))
+
+  // --- валидация ------------------------------------------------------------
+  type Field = HTMLInputElement | HTMLTextAreaElement
+
+  function fieldError(form: HTMLFormElement, el: Field): string {
+    const v = el.value.trim()
+    if (el.required && !v) return form.dataset.errRequired ?? ''
+    if (el instanceof HTMLInputElement && el.type === 'email' && v && !EMAIL_RE.test(v))
+      return form.dataset.errEmail ?? ''
+    const min = Number(el.getAttribute('minlength') ?? 0)
+    if (min > 0 && v && v.length < min) return (form.dataset.errShort ?? '').replace('{n}', String(min))
+    return ''
+  }
+
+  function validate(form: HTMLFormElement): boolean {
+    let firstBad: Field | null = null
+    form.querySelectorAll<Field>('input[name]:not([type=hidden]):not(.trap), textarea[name]').forEach((el) => {
+      const msg = fieldError(form, el)
+      const err = el.parentElement?.querySelector<HTMLElement>('.err')
+      if (err) err.textContent = msg
+      el.classList.toggle('is-bad', Boolean(msg))
+      if (msg && !firstBad) firstBad = el
+    })
+    firstBad?.focus()
+    return !firstBad
+  }
+
+  // Ошибка гаснет, как только человек начал исправлять
+  document.querySelectorAll<HTMLFormElement>('form[novalidate]').forEach((form) => {
+    form.addEventListener('input', (e) => {
+      const el = e.target
+      if (!(el instanceof HTMLInputElement) && !(el instanceof HTMLTextAreaElement)) return
+      el.classList.remove('is-bad')
+      const err = el.parentElement?.querySelector<HTMLElement>('.err')
+      if (err) err.textContent = ''
+    })
+  })
+
+  // --- отправка -------------------------------------------------------------
   async function post(url: string, body: unknown) {
     const r = await fetch(url, {
       method: 'POST',
@@ -492,49 +636,19 @@ const CHART_STATUSES = [
     return r.json()
   }
 
-  // Опубликованные отзывы. Пусто — так и пишем, а не оставляем скелет.
-  const list = document.getElementById('reviews-list')
-  if (list) {
-    fetch(`${API}/api/v1/reviews`)
-      .then((r) => (r.ok ? r.json() : { items: [] }))
-      .then((d: { items: { id: string; name: string; role: string; rating: number; body: string }[] }) => {
-        if (!d.items?.length) {
-          list.innerHTML = `<p class="note">${list.dataset.empty}</p>`
-          return
-        }
-        list.innerHTML = d.items
-          .map((x) => {
-            const stars = '★'.repeat(Math.max(1, Math.min(5, x.rating))) + '☆'.repeat(5 - Math.max(1, Math.min(5, x.rating)))
-            const esc = (v: string) => v.replace(/[<>&]/g, (c) => ({ '<': '&lt;', '>': '&gt;', '&': '&amp;' })[c]!)
-            return `<figure class="card review">
-                <div class="stars">${stars}</div>
-                <blockquote>${esc(x.body)}</blockquote>
-                <figcaption>${esc(x.name)}${x.role ? ` · <span>${esc(x.role)}</span>` : ''}</figcaption>
-              </figure>`
-          })
-          .join('')
-      })
-      .catch(() => {
-        list.innerHTML = `<p class="note">${list.dataset.empty}</p>`
-      })
+  function showFail(form: HTMLFormElement) {
+    const m = form.querySelector<HTMLElement>('.form-msg')
+    if (m) m.textContent = m.dataset.failed ?? ''
   }
-
-  // Форма отзыва раскрывается по кнопке: пустая форма на виду только пугает
-  const openBtn = document.getElementById('review-open')
-  const reviewForm = document.getElementById('review-form') as HTMLFormElement | null
-  const cancelBtn = document.getElementById('review-cancel')
-  openBtn?.addEventListener('click', () => {
-    reviewForm?.removeAttribute('hidden')
-    openBtn.setAttribute('hidden', '')
-    reviewForm?.querySelector<HTMLInputElement>('input[name=name]')?.focus()
-  })
-  cancelBtn?.addEventListener('click', () => {
-    reviewForm?.setAttribute('hidden', '')
-    openBtn?.removeAttribute('hidden')
-  })
+  function clearFail(form: HTMLFormElement) {
+    const m = form.querySelector<HTMLElement>('.form-msg')
+    if (m) m.textContent = ''
+  }
 
   reviewForm?.addEventListener('submit', async (e) => {
     e.preventDefault()
+    clearFail(reviewForm)
+    if (!validate(reviewForm)) return
     const f = new FormData(reviewForm)
     const btn = reviewForm.querySelector<HTMLButtonElement>('button[type=submit]')!
     btn.disabled = true
@@ -548,10 +662,17 @@ const CHART_STATUSES = [
         website: f.get('website'), // приманка для ботов
         lang: document.documentElement.lang,
       })
-      say(reviewForm, true)
-      reviewForm.reset()
+      reviewForm.classList.add('is-done')
+      // Показали «спасибо» — и через паузу тихо закрылись, вернув форму в ноль
+      setTimeout(() => {
+        closeModal()
+        reviewForm.classList.remove('is-done')
+        reviewForm.reset()
+        if (ratingInput) ratingInput.value = '5'
+        paint(5)
+      }, 2600)
     } catch {
-      say(reviewForm, false)
+      showFail(reviewForm)
     } finally {
       btn.disabled = false
     }
@@ -560,6 +681,8 @@ const CHART_STATUSES = [
   const contactForm = document.getElementById('contact-form') as HTMLFormElement | null
   contactForm?.addEventListener('submit', async (e) => {
     e.preventDefault()
+    clearFail(contactForm)
+    if (!validate(contactForm)) return
     const f = new FormData(contactForm)
     const btn = contactForm.querySelector<HTMLButtonElement>('button[type=submit]')!
     btn.disabled = true
@@ -572,11 +695,9 @@ const CHART_STATUSES = [
         website: f.get('website'),
         page: location.href,
       })
-      say(contactForm, true)
-      contactForm.reset()
+      contactForm.classList.add('is-done')
     } catch {
-      say(contactForm, false)
-    } finally {
+      showFail(contactForm)
       btn.disabled = false
     }
   })
@@ -1116,97 +1237,6 @@ const CHART_STATUSES = [
     text-underline-offset: 3px;
   }
 
-  /* --- Отзывы ------------------------------------------------------------- */
-  .review blockquote {
-    margin: 10px 0 14px;
-    color: #d7d9d0;
-  }
-  .review figcaption {
-    color: var(--fg-muted);
-    font-size: 0.86rem;
-  }
-  .stars {
-    color: var(--lime);
-    letter-spacing: 2px;
-  }
-  .review-actions {
-    margin-top: 26px;
-  }
-
-  /* --- Формы -------------------------------------------------------------- */
-  .form {
-    margin-top: 26px;
-    max-width: 640px;
-    display: grid;
-    gap: 14px;
-  }
-  .form-row {
-    display: grid;
-    grid-template-columns: 1fr 1fr;
-    gap: 14px;
-  }
-  .form label {
-    display: grid;
-    gap: 6px;
-    font-size: 0.86rem;
-    color: var(--fg-muted);
-  }
-  .form input,
-  .form select,
-  .form textarea {
-    font: inherit;
-    font-size: 0.95rem;
-    color: var(--fg);
-    background: var(--bg);
-    border: 1px solid var(--border);
-    border-radius: 10px;
-    padding: 11px 13px;
-    width: 100%;
-    outline: none;
-    transition: border-color 0.15s ease;
-  }
-  .form input:focus,
-  .form select:focus,
-  .form textarea:focus {
-    border-color: var(--lime);
-  }
-  .form textarea {
-    resize: vertical;
-    min-height: 96px;
-  }
-  /* Приманка для ботов: не видна людям и скринридерам */
-  .trap {
-    position: absolute;
-    left: -9999px;
-    width: 0;
-    height: 0;
-    opacity: 0;
-    pointer-events: none;
-  }
-  .form-actions {
-    display: flex;
-    flex-wrap: wrap;
-    align-items: center;
-    gap: 14px;
-  }
-  .form-msg {
-    font-size: 0.86rem;
-  }
-  .form-msg.is-ok {
-    color: var(--lime);
-  }
-  .form-msg.is-err {
-    color: #ff8f8f;
-  }
-  .contact-mail {
-    margin-top: 18px;
-  }
-  .contact-mail a {
-    color: var(--lime);
-    text-decoration: underline;
-    text-underline-offset: 3px;
-  }
-
   /* --- Подвал ------------------------------------------------------------- */
   .footer-col {
     display: grid;
@@ -1233,9 +1263,6 @@ const CHART_STATUSES = [
   }
 
   @media (max-width: 700px) {
-    .form-row {
-      grid-template-columns: 1fr;
-    }
     .downloads .dl {
       flex: 1 1 100%;
       justify-content: center;
@@ -1246,6 +1273,295 @@ const CHART_STATUSES = [
     .bars {
       height: 118px;
       gap: 6px;
+    }
+  }
+</style>
+
+<style is:global>
+  /* --- Отзывы: карточки приходят из скрипта, стили должны быть глобальными -- */
+  .reviews-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(270px, 1fr));
+    gap: 18px;
+    margin-top: 34px;
+  }
+  .rcard {
+    margin: 0;
+    background: var(--bg);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    padding: 22px;
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+  }
+  .rstars {
+    color: var(--lime);
+    letter-spacing: 3px;
+    font-size: 0.95rem;
+  }
+  .rstars .off {
+    color: rgba(255, 255, 255, 0.16);
+  }
+  .rcard blockquote {
+    margin: 0;
+    flex: 1;
+    color: #d7d9d0;
+    font-size: 0.95rem;
+    line-height: 1.65;
+  }
+  .rcard figcaption {
+    color: var(--fg-muted);
+    font-size: 0.85rem;
+  }
+  .rcard figcaption b {
+    color: var(--fg);
+    font-weight: 600;
+  }
+
+  /* Пустое состояние: приглашение со звёздами, а не строка мелким шрифтом */
+  .reviews-empty {
+    max-width: 520px;
+    margin: 36px auto 0;
+    padding: 42px 28px;
+    text-align: center;
+    background: var(--bg);
+    border: 1px dashed rgba(212, 242, 40, 0.3);
+    border-radius: 18px;
+  }
+  .stars-hero {
+    color: var(--lime);
+    font-size: 1.7rem;
+    letter-spacing: 9px;
+    text-shadow: 0 0 26px rgba(212, 242, 40, 0.45);
+    margin-bottom: 10px;
+  }
+  .reviews-empty p {
+    color: var(--fg-muted);
+  }
+  .review-actions {
+    text-align: center;
+    margin-top: 28px;
+  }
+
+  /* --- Формы ---------------------------------------------------------------- */
+  .contact-card {
+    max-width: 600px;
+    margin: 32px auto 0;
+    background: var(--bg-soft);
+    border: 1px solid var(--border);
+    border-radius: 18px;
+    padding: 26px;
+  }
+  .form-fields {
+    display: grid;
+    gap: 13px;
+  }
+  .form-row {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 13px;
+  }
+  .form-fields label {
+    display: grid;
+    gap: 6px;
+    font-size: 0.84rem;
+    color: var(--fg-muted);
+  }
+  .form-fields input,
+  .form-fields select,
+  .form-fields textarea {
+    font: inherit;
+    font-size: 0.93rem;
+    color: var(--fg);
+    background: var(--bg);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    padding: 10px 13px;
+    width: 100%;
+    outline: none;
+    transition: border-color 0.15s ease, box-shadow 0.15s ease;
+  }
+  .form-fields input:focus,
+  .form-fields select:focus,
+  .form-fields textarea:focus {
+    border-color: var(--lime);
+    box-shadow: 0 0 0 3px rgba(212, 242, 40, 0.13);
+  }
+  .form-fields textarea {
+    resize: vertical;
+    min-height: 92px;
+  }
+  .form-fields .is-bad {
+    border-color: #ff8f8f;
+  }
+  .err {
+    display: block;
+    color: #ff8f8f;
+    font-size: 0.78rem;
+    font-style: normal;
+  }
+  .err:empty {
+    display: none;
+  }
+  .form-select {
+    appearance: none;
+    background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='12' height='8' viewBox='0 0 12 8'><path d='M1 1l5 5 5-5' stroke='%23a2a69a' stroke-width='2' fill='none' stroke-linecap='round' stroke-linejoin='round'/></svg>");
+    background-repeat: no-repeat;
+    background-position: right 13px center;
+    padding-inline-end: 38px;
+  }
+  [dir='rtl'] .form-select {
+    background-position: left 13px center;
+  }
+  .trap {
+    position: absolute;
+    left: -9999px;
+    width: 0;
+    height: 0;
+    opacity: 0;
+    pointer-events: none;
+  }
+  .form-actions {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 14px;
+    margin-top: 2px;
+  }
+  .form-msg {
+    font-size: 0.85rem;
+    color: #ff8f8f;
+  }
+
+  /* Успех: форма уступает место «спасибо», а не пищит строчкой снизу */
+  .form-done {
+    display: none;
+  }
+  form.is-done .form-fields {
+    display: none;
+  }
+  form.is-done .form-done {
+    display: grid;
+    justify-items: center;
+    gap: 12px;
+    text-align: center;
+    padding: 26px 10px;
+  }
+  .done-ic {
+    width: 52px;
+    height: 52px;
+    border-radius: 50%;
+    background: rgba(212, 242, 40, 0.13);
+    display: grid;
+    place-items: center;
+    color: var(--lime);
+  }
+  .contact-mail {
+    text-align: center;
+    margin-top: 18px;
+    color: var(--fg-muted);
+    font-size: 0.9rem;
+  }
+  .contact-mail a {
+    color: var(--lime);
+    text-decoration: underline;
+    text-underline-offset: 3px;
+  }
+
+  /* --- Модалка --------------------------------------------------------------- */
+  .cmodal {
+    position: fixed;
+    inset: 0;
+    z-index: 60;
+    display: grid;
+    place-items: center;
+    padding: 20px;
+  }
+  .cmodal[hidden] {
+    display: none;
+  }
+  .cmodal-backdrop {
+    position: absolute;
+    inset: 0;
+    background: rgba(8, 9, 6, 0.72);
+    backdrop-filter: blur(6px);
+  }
+  .cmodal-card {
+    position: relative;
+    width: 100%;
+    max-width: 520px;
+    max-height: calc(100vh - 40px);
+    overflow-y: auto;
+    background: var(--bg-soft);
+    border: 1px solid var(--border);
+    border-radius: 18px;
+    padding: 26px;
+    box-shadow: 0 30px 80px rgba(0, 0, 0, 0.5);
+    animation: cmodal-pop 0.18s ease-out;
+  }
+  @keyframes cmodal-pop {
+    from {
+      transform: translateY(10px) scale(0.98);
+      opacity: 0;
+    }
+  }
+  .cmodal-x {
+    position: absolute;
+    top: 14px;
+    inset-inline-end: 14px;
+    background: none;
+    border: 0;
+    color: var(--fg-muted);
+    cursor: pointer;
+    padding: 6px;
+    border-radius: 8px;
+    line-height: 0;
+  }
+  .cmodal-x:hover {
+    color: var(--fg);
+    background: rgba(255, 255, 255, 0.06);
+  }
+  .cmodal-title {
+    font-size: 1.25rem;
+    letter-spacing: -0.01em;
+    margin-bottom: 18px;
+  }
+  .rate {
+    display: grid;
+    gap: 6px;
+  }
+  .rate-label {
+    font-size: 0.84rem;
+    color: var(--fg-muted);
+  }
+  .starpick {
+    display: flex;
+    gap: 2px;
+  }
+  .starpick button {
+    background: none;
+    border: 0;
+    padding: 2px;
+    cursor: pointer;
+    color: rgba(255, 255, 255, 0.16);
+    line-height: 0;
+    transition: color 0.1s ease, transform 0.1s ease;
+  }
+  .starpick button.is-on {
+    color: var(--lime);
+  }
+  .starpick button:hover {
+    transform: scale(1.15);
+  }
+
+  @media (max-width: 640px) {
+    .form-row {
+      grid-template-columns: 1fr;
+    }
+    .contact-card,
+    .cmodal-card {
+      padding: 20px;
     }
   }
 </style>

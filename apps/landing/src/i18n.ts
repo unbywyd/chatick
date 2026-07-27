@@ -85,6 +85,8 @@ type Dict = {
     failed: string
     support: string
   }
+  /** Сообщения кастомной валидации форм */
+  formErrors: { required: string; email: string; short: string }
   cta: { title: string; subtitle: string; button: string }
   footer: {
     rights: string
@@ -246,6 +248,11 @@ export const dict: Record<LocaleCode, Dict> = {
       failed: 'Could not send. Please write to support@chatick.com instead.',
       support: 'Or email us directly:',
     },
+    formErrors: {
+      required: 'This field is required',
+      email: 'Enter a valid email',
+      short: 'At least {n} characters',
+    },
     footer: {
       rights: 'All rights reserved.',
       forAi: 'For AI assistants',
@@ -397,6 +404,11 @@ export const dict: Record<LocaleCode, Dict> = {
       failed: 'Не отправилось. Напишите, пожалуйста, на support@chatick.com.',
       support: 'Или напишите напрямую:',
     },
+    formErrors: {
+      required: 'Обязательное поле',
+      email: 'Введите корректную почту',
+      short: 'Минимум {n} символов',
+    },
     footer: {
       rights: 'Все права защищены.',
       forAi: 'Для ИИ-ассистентов',
@@ -547,6 +559,11 @@ export const dict: Record<LocaleCode, Dict> = {
       sent: 'נשלח — תודה. תשובה תגיע באימייל.',
       failed: 'השליחה נכשלה. כתבו ל-support@chatick.com.',
       support: 'או כתבו ישירות:',
+    },
+    formErrors: {
+      required: 'שדה חובה',
+      email: 'הזינו אימייל תקין',
+      short: 'לפחות {n} תווים',
     },
     footer: {
       rights: 'כל הזכויות שמורות.',
