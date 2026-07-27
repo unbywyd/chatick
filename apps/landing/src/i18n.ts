@@ -11,6 +11,8 @@ type Feature = { title: string; text: string }
 type Dict = {
   meta: { title: string; description: string }
   nav: { start: string }
+  /** Честное предупреждение: продукт ещё сырой */
+  beta: { badge: string; note: string; warn: string }
   hero: {
     title1: string
     titleAccent: string
@@ -56,6 +58,8 @@ type Dict = {
     soon: string
     web: string
     mobileSoon: string
+    /** короткая подпись для кнопки в шапке */
+    heroWin: string
   }
   /** Отзывы */
   reviews: {
@@ -119,6 +123,7 @@ export const dict: Record<LocaleCode, Dict> = {
         'Team chat with an AI dispatcher, tasks, collaborative documents, files and access — in one place. Connect Claude Code and let it work in your project as you.',
     },
     nav: { start: 'Get started' },
+    beta: { badge: 'Beta', note: 'Chatick is in beta: it works, it is used daily, and things still change and occasionally break.', warn: 'Beta software. Expect rough edges, and please report anything broken — every report is read.' },
     hero: {
       title1: 'Your project.',
       titleAccent: ' One chat.',
@@ -225,6 +230,7 @@ export const dict: Record<LocaleCode, Dict> = {
       soon: 'Coming soon',
       web: 'Open in browser',
       mobileSoon: 'Mobile apps are on the roadmap.',
+      heroWin: 'Download for Windows',
     },
     reviews: {
       title: 'What people say',
@@ -279,6 +285,7 @@ export const dict: Record<LocaleCode, Dict> = {
         'Чат команды с ИИ-диспетчером, задачи, совместные документы, файлы и доступы — в одном месте. Подключите Claude Code, и он будет работать в проекте от вашего имени.',
     },
     nav: { start: 'Начать' },
+    beta: { badge: 'Бета', note: 'Chatick в бете: он работает и используется каждый день, но всё ещё меняется и иногда ломается.', warn: 'Бета-версия. Возможны шероховатости — пишите о поломках, каждое сообщение читают.' },
     hero: {
       title1: 'Ваш проект.',
       titleAccent: ' Один чат.',
@@ -385,6 +392,7 @@ export const dict: Record<LocaleCode, Dict> = {
       soon: 'Скоро',
       web: 'Открыть в браузере',
       mobileSoon: 'Мобильные приложения — в планах.',
+      heroWin: 'Скачать для Windows',
     },
     reviews: {
       title: 'Что говорят',
@@ -439,6 +447,7 @@ export const dict: Record<LocaleCode, Dict> = {
         'צ׳אט צוות עם מנהל AI, משימות, מסמכים משותפים, קבצים והרשאות — במקום אחד. חברו את Claude Code והוא יעבוד בפרויקט בשמכם.',
     },
     nav: { start: 'להתחיל' },
+    beta: { badge: 'בטא', note: 'Chatick בגרסת בטא: הוא עובד ומשמש מדי יום, אך עדיין משתנה ולעיתים נשבר.', warn: 'גרסת בטא. ייתכנו תקלות — דווחו עליהן, כל דיווח נקרא.' },
     hero: {
       title1: 'הפרויקט שלכם.',
       titleAccent: ' צ׳אט אחד.',
@@ -545,6 +554,7 @@ export const dict: Record<LocaleCode, Dict> = {
       soon: 'בקרוב',
       web: 'פתחו בדפדפן',
       mobileSoon: 'אפליקציות לנייד בתוכניות.',
+      heroWin: 'הורדה ל-Windows',
     },
     reviews: {
       title: 'מה אומרים',

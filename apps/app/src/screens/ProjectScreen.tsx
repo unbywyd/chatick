@@ -257,6 +257,13 @@ export function ProjectLayout() {
                 </Button>
               </div>
             </div>
+          ) : token.status === 'loading' ? (
+            // Ждём токен проекта. Иначе вкладки успевают сходить за данными со
+            // старым токеном — сервер узнаёт проект по нему, и на экране
+            // оказывается содержимое предыдущего проекта.
+            <div className="grid h-full place-items-center p-6">
+              <span className="text-sm text-muted-foreground">…</span>
+            </div>
           ) : (
             <Outlet context={{ project: project.data, meId: me.data?.id } satisfies ProjectOutletCtx} />
           )}
