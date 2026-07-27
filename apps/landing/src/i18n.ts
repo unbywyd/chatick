@@ -19,6 +19,8 @@ type Dict = {
     cta: string
     ctaSecondary: string
     note: string
+    /** Полоса под кнопками: экспорт, открытый код, бэкапы */
+    trust: string[]
   }
   pain: { title: string; items: Feature[] }
   solution: { title: string; subtitle: string; items: Feature[] }
@@ -41,7 +43,7 @@ type Dict = {
   }
   how: { title: string; steps: Feature[] }
   /** Доверие: безопасность, бэкапы, надёжность, бесплатность */
-  trust: { title: string; subtitle: string; items: Feature[] }
+  trust: { title: string; subtitle: string; noLock: Feature; items: Feature[] }
   /** Кто это сделал */
   author: { tag: string; title: string; text: string; sites: string }
   /** Скачивание десктопных версий */
@@ -70,6 +72,7 @@ type Dict = {
     sent: string
     failed: string
     cancel: string
+    ph: { name: string; role: string; email: string; body: string }
   }
   /** Контактная форма */
   contact: {
@@ -84,6 +87,7 @@ type Dict = {
     sent: string
     failed: string
     support: string
+    ph: { name: string; email: string; message: string }
   }
   /** Сообщения кастомной валидации форм */
   formErrors: { required: string; email: string; short: string }
@@ -124,6 +128,7 @@ export const dict: Record<LocaleCode, Dict> = {
       cta: 'Get started',
       ctaSecondary: 'Ask your AI about us',
       note: 'Free while in beta',
+      trust: ['Open source', 'Free', 'Reliable: backups, export & import'],
     },
     pain: {
       title: 'Sound familiar?',
@@ -195,6 +200,7 @@ export const dict: Record<LocaleCode, Dict> = {
     trust: {
       title: 'Built to be trusted with your team’s work',
       subtitle: 'The unglamorous parts, done properly — losing someone’s work once is enough to lose them.',
+      noLock: { title: 'No lock-in, by design', text: 'Export and import everything, whenever you want. The source code is open: if you like the system, run it on your own servers — and if we ever stop maintaining it, nothing you built here dies with us.' },
       items: [
         { title: 'Free, and honestly so', text: 'No card, no trial countdown, no seats to count. Every project gets room for real work, and the limits are stated plainly instead of hidden in a plan comparison.' },
         { title: 'Backed up, not hoped for', text: 'The database is backed up on a schedule and the copies are encrypted. Deleted documents and notes stay recoverable for seven days — a mistaken click is not the end of the story.' },
@@ -234,6 +240,7 @@ export const dict: Record<LocaleCode, Dict> = {
       sent: 'Thank you — your review will appear here once it has been read.',
       failed: 'Could not send. Please try again, or write to support@chatick.com.',
       cancel: 'Cancel',
+      ph: { name: 'Jane Cooper', role: 'Team lead', email: 'you@company.com', body: 'What does Chatick change for your team?' },
     },
     contact: {
       title: 'Get in touch',
@@ -247,6 +254,7 @@ export const dict: Record<LocaleCode, Dict> = {
       sent: 'Sent — thank you. You will get an answer by email.',
       failed: 'Could not send. Please write to support@chatick.com instead.',
       support: 'Or email us directly:',
+      ph: { name: 'Jane Cooper', email: 'you@company.com', message: 'What happened, or what would you like to see?' },
     },
     formErrors: {
       required: 'This field is required',
@@ -280,6 +288,7 @@ export const dict: Record<LocaleCode, Dict> = {
       cta: 'Начать',
       ctaSecondary: 'Спросите свой ИИ о нас',
       note: 'Бесплатно на время беты',
+      trust: ['Открытый код', 'Бесплатно', 'Надёжно: бэкапы, экспорт и импорт'],
     },
     pain: {
       title: 'Знакомо?',
@@ -351,6 +360,7 @@ export const dict: Record<LocaleCode, Dict> = {
     trust: {
       title: 'Сделан так, чтобы ему можно было доверить работу',
       subtitle: 'Скучные вещи сделаны честно — потерять чужую работу достаточно один раз.',
+      noLock: { title: 'Никакой привязки — намеренно', text: 'Экспорт и импорт всего в любой момент. Исходный код открыт: понравилась система — разверните её на своих серверах. Даже если мы когда-нибудь перестанем её поддерживать, всё, что вы здесь построили, останется с вами.' },
       items: [
         { title: 'Бесплатно и честно', text: 'Без карты, без таймера пробного периода, без подсчёта мест. Каждому проекту — место под реальную работу, а лимиты названы прямо, а не спрятаны в сравнении тарифов.' },
         { title: 'Бэкапы, а не надежда', text: 'База копируется по расписанию, копии зашифрованы. Удалённые документы и заметки можно вернуть семь дней — случайный клик не конец истории.' },
@@ -390,6 +400,7 @@ export const dict: Record<LocaleCode, Dict> = {
       sent: 'Спасибо — отзыв появится здесь после прочтения.',
       failed: 'Не отправилось. Попробуйте ещё раз или напишите на support@chatick.com.',
       cancel: 'Отмена',
+      ph: { name: 'Анна Смирнова', role: 'Тимлид', email: 'you@company.com', body: 'Что Chatick изменил для вашей команды?' },
     },
     contact: {
       title: 'Связаться',
@@ -403,6 +414,7 @@ export const dict: Record<LocaleCode, Dict> = {
       sent: 'Отправлено — спасибо. Ответ придёт на почту.',
       failed: 'Не отправилось. Напишите, пожалуйста, на support@chatick.com.',
       support: 'Или напишите напрямую:',
+      ph: { name: 'Анна Смирнова', email: 'you@company.com', message: 'Что случилось или чего не хватает?' },
     },
     formErrors: {
       required: 'Обязательное поле',
@@ -436,6 +448,7 @@ export const dict: Record<LocaleCode, Dict> = {
       cta: 'להתחיל',
       ctaSecondary: 'שאלו את ה-AI שלכם עלינו',
       note: 'חינם בתקופת הבטא',
+      trust: ['קוד פתוח', 'חינם', 'אמין: גיבויים, ייצוא ויבוא'],
     },
     pain: {
       title: 'נשמע מוכר?',
@@ -507,6 +520,7 @@ export const dict: Record<LocaleCode, Dict> = {
     trust: {
       title: 'נבנה כדי שאפשר יהיה להפקיד בו את העבודה',
       subtitle: 'החלקים המשעממים נעשו כמו שצריך — לאבד עבודה פעם אחת זה מספיק.',
+      noLock: { title: 'בלי נעילה — בכוונה', text: 'ייצוא וייבוא של הכל, בכל רגע. הקוד פתוח: אהבתם את המערכת — הריצו אותה על השרתים שלכם. גם אם אי פעם נפסיק לתחזק אותה, כל מה שבניתם כאן יישאר אצלכם.' },
       items: [
         { title: 'חינם, באמת', text: 'בלי כרטיס אשראי, בלי שעון ניסיון ובלי לספור משתמשים. לכל פרויקט יש מקום לעבודה אמיתית, והמגבלות נאמרות בפירוש.' },
         { title: 'גיבוי, לא תקווה', text: 'מסד הנתונים מגובה באופן קבוע והעותקים מוצפנים. מסמכים ופתקים שנמחקו ניתנים לשחזור שבעה ימים.' },
@@ -546,6 +560,7 @@ export const dict: Record<LocaleCode, Dict> = {
       sent: 'תודה — חוות הדעת תופיע כאן לאחר קריאה.',
       failed: 'השליחה נכשלה. נסו שוב או כתבו ל-support@chatick.com.',
       cancel: 'ביטול',
+      ph: { name: 'דנה לוי', role: 'ראש צוות', email: 'you@company.com', body: 'מה Chatick שינה עבור הצוות שלכם?' },
     },
     contact: {
       title: 'צרו קשר',
@@ -559,6 +574,7 @@ export const dict: Record<LocaleCode, Dict> = {
       sent: 'נשלח — תודה. תשובה תגיע באימייל.',
       failed: 'השליחה נכשלה. כתבו ל-support@chatick.com.',
       support: 'או כתבו ישירות:',
+      ph: { name: 'דנה לוי', email: 'you@company.com', message: 'מה קרה או מה חסר לכם?' },
     },
     formErrors: {
       required: 'שדה חובה',

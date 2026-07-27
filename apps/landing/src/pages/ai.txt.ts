@@ -51,7 +51,7 @@ updates into task changes instead of chat noise.
 
 ## Pricing and status
 
-Currently in beta and free. There is a trial AI budget per project; a company
+Open source with full export and import: a company can self-host the system at any time, so there is no lock-in. Currently in beta and free. There is a trial AI budget per project; a company
 can avoid platform AI costs entirely by connecting its own model key.
 
 ## Connecting yourself to a workspace

@@ -86,6 +86,29 @@ const CHART_STATUSES = [
         <a class="btn btn-ghost" href="#ask">{t.hero.ctaSecondary}</a>
         <span class="note">{t.hero.note}</span>
       </div>
+
+      <!-- Три столпа — сразу в шапке, а не в подвале: опенсурс, бесплатно, надёжно -->
+      <ul class="hero-trust">
+        <li>
+          <svg viewBox="0 0 24 24" width="16" height="16" fill="none" aria-hidden="true">
+            <path d="m8 8-4 4 4 4m8-8 4 4-4 4" stroke="#d4f228" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" />
+          </svg>
+          {t.hero.trust[0]}
+        </li>
+        <li>
+          <svg viewBox="0 0 24 24" width="16" height="16" aria-hidden="true">
+            <path d="M12 3l1.9 5.6 5.6 1.4-5.6 1.9L12 17.5l-1.9-5.6L4.5 10l5.6-1.4L12 3z" fill="#d4f228" />
+          </svg>
+          {t.hero.trust[1]}
+        </li>
+        <li>
+          <svg viewBox="0 0 24 24" width="16" height="16" fill="none" aria-hidden="true">
+            <path d="M12 3l7 3v5.2c0 4.4-3 7.6-7 8.8-4-1.2-7-4.4-7-8.8V6l7-3z" stroke="#d4f228" stroke-width="2" stroke-linejoin="round" />
+            <path d="m9 11.6 2 2 4-4" stroke="#d4f228" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" />
+          </svg>
+          {t.hero.trust[2]}
+        </li>
+      </ul>
     </div>
   </section>
 
@@ -280,6 +303,21 @@ const CHART_STATUSES = [
     <div class="container">
       <h2>{t.trust.title}</h2>
       <p class="section-sub">{t.trust.subtitle}</p>
+
+      <!-- Отдельной карточкой, а не пунктом в сетке: для компании это главное -->
+      <div class="trust-lock">
+        <span class="trust-lock-ic" aria-hidden="true">
+          <svg viewBox="0 0 24 24" width="24" height="24" fill="none">
+            <rect x="4" y="10.5" width="16" height="10" rx="2.5" stroke="currentColor" stroke-width="2" />
+            <path d="M8 10.5V7a4 4 0 0 1 7.8-1.3" stroke="currentColor" stroke-width="2" stroke-linecap="round" />
+          </svg>
+        </span>
+        <div>
+          <h3>{t.trust.noLock.title}</h3>
+          <p>{t.trust.noLock.text}</p>
+        </div>
+      </div>
+
       <div class="grid grid-3">
         {
           t.trust.items.map((item) => (
@@ -376,27 +414,35 @@ const CHART_STATUSES = [
           <div class="form-row">
             <label>
               <span>{t.contact.name}</span>
-              <input name="name" maxlength="120" autocomplete="name" />
+              <input name="name" maxlength="120" autocomplete="name" placeholder={t.contact.ph.name} />
               <em class="err"></em>
             </label>
             <label>
               <span>{t.contact.email}</span>
-              <input name="email" type="email" required autocomplete="email" />
+              <input name="email" type="email" required autocomplete="email" placeholder={t.contact.ph.email} />
               <em class="err"></em>
             </label>
           </div>
-          <label>
+          <!-- Свой список: нативный select не стилизуется и выглядит чужим -->
+          <div class="sel" id="topic-sel">
             <span>{t.contact.topic}</span>
-            <select name="topic" class="form-select">
-              <option value="question">{t.contact.topics.question}</option>
-              <option value="bug">{t.contact.topics.bug}</option>
-              <option value="feature">{t.contact.topics.feature}</option>
-              <option value="other">{t.contact.topics.other}</option>
-            </select>
-          </label>
+            <input type="hidden" name="topic" value="question" />
+            <button type="button" class="sel-btn" aria-haspopup="listbox" aria-expanded="false">
+              <span class="sel-value">{t.contact.topics.question}</span>
+              <svg viewBox="0 0 24 24" width="16" height="16" fill="none" aria-hidden="true">
+                <path d="m6 9 6 6 6-6" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" />
+              </svg>
+            </button>
+            <ul class="sel-menu" role="listbox" hidden>
+              <li role="option" aria-selected="true" data-v="question">{t.contact.topics.question}</li>
+              <li role="option" aria-selected="false" data-v="bug">{t.contact.topics.bug}</li>
+              <li role="option" aria-selected="false" data-v="feature">{t.contact.topics.feature}</li>
+              <li role="option" aria-selected="false" data-v="other">{t.contact.topics.other}</li>
+            </ul>
+          </div>
           <label>
             <span>{t.contact.message}</span>
-            <textarea name="body" rows="4" required minlength="10" maxlength="5000"></textarea>
+            <textarea name="body" rows="4" required minlength="10" maxlength="5000" placeholder={t.contact.ph.message}></textarea>
             <em class="err"></em>
           </label>
           <input class="trap" type="text" name="website" tabindex="-1" autocomplete="off" aria-hidden="true" />
@@ -446,18 +492,18 @@ const CHART_STATUSES = [
         <div class="form-row">
           <label>
             <span>{t.reviews.name}</span>
-            <input name="name" required maxlength="80" autocomplete="name" />
+            <input name="name" required maxlength="80" autocomplete="name" placeholder={t.reviews.ph.name} />
             <em class="err"></em>
           </label>
           <label>
             <span>{t.reviews.role}</span>
-            <input name="role" maxlength="80" autocomplete="organization-title" />
+            <input name="role" maxlength="80" autocomplete="organization-title" placeholder={t.reviews.ph.role} />
             <em class="err"></em>
           </label>
         </div>
         <label>
           <span>{t.reviews.email}</span>
-          <input name="email" type="email" required autocomplete="email" />
+          <input name="email" type="email" required autocomplete="email" placeholder={t.reviews.ph.email} />
           <em class="err"></em>
         </label>
         <div class="rate">
@@ -473,7 +519,7 @@ const CHART_STATUSES = [
         </div>
         <label>
           <span>{t.reviews.text}</span>
-          <textarea name="body" rows="4" required minlength="20" maxlength="2000"></textarea>
+          <textarea name="body" rows="4" required minlength="20" maxlength="2000" placeholder={t.reviews.ph.body}></textarea>
           <em class="err"></em>
         </label>
         <input class="trap" type="text" name="website" tabindex="-1" autocomplete="off" aria-hidden="true" />
@@ -587,6 +633,36 @@ const CHART_STATUSES = [
     b.addEventListener('mouseenter', () => paint(i + 1))
   })
   pick?.addEventListener('mouseleave', () => paint(Number(ratingInput?.value ?? 5)))
+
+  // --- свой выпадающий список ----------------------------------------------
+  const topicSel = document.getElementById('topic-sel')
+  if (topicSel) {
+    const btn = topicSel.querySelector<HTMLButtonElement>('.sel-btn')!
+    const menu = topicSel.querySelector<HTMLElement>('.sel-menu')!
+    const label = topicSel.querySelector<HTMLElement>('.sel-value')!
+    const hiddenInput = topicSel.querySelector<HTMLInputElement>('input[type=hidden]')!
+    const options = Array.from(menu.querySelectorAll<HTMLElement>('[role=option]'))
+    const setOpen = (v: boolean) => {
+      menu.hidden = !v
+      btn.setAttribute('aria-expanded', String(v))
+    }
+    btn.addEventListener('click', () => setOpen(menu.hidden))
+    options.forEach((o) =>
+      o.addEventListener('click', () => {
+        hiddenInput.value = o.dataset.v ?? 'question'
+        label.textContent = o.textContent
+        options.forEach((x) => x.setAttribute('aria-selected', String(x === o)))
+        setOpen(false)
+      }),
+    )
+    // клик мимо и Esc закрывают — как у любого выпадающего
+    document.addEventListener('click', (e) => {
+      if (!topicSel.contains(e.target as Node)) setOpen(false)
+    })
+    window.addEventListener('keydown', (e) => {
+      if (e.key === 'Escape') setOpen(false)
+    })
+  }
 
   // --- валидация ------------------------------------------------------------
   type Field = HTMLInputElement | HTMLTextAreaElement
@@ -1404,16 +1480,6 @@ const CHART_STATUSES = [
   .err:empty {
     display: none;
   }
-  .form-select {
-    appearance: none;
-    background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='12' height='8' viewBox='0 0 12 8'><path d='M1 1l5 5 5-5' stroke='%23a2a69a' stroke-width='2' fill='none' stroke-linecap='round' stroke-linejoin='round'/></svg>");
-    background-repeat: no-repeat;
-    background-position: right 13px center;
-    padding-inline-end: 38px;
-  }
-  [dir='rtl'] .form-select {
-    background-position: left 13px center;
-  }
   .trap {
     position: absolute;
     left: -9999px;
@@ -1555,9 +1621,164 @@ const CHART_STATUSES = [
     transform: scale(1.15);
   }
 
+  /* --- Шапка: полоса «никакой привязки» ------------------------------------ */
+  .hero-trust {
+    list-style: none;
+    margin: 24px 0 0;
+    padding: 0;
+    display: flex;
+    flex-wrap: wrap;
+    justify-content: center;
+    gap: 10px 24px;
+  }
+  .hero-trust li {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    padding: 8px 15px;
+    border: 1px solid var(--border);
+    border-radius: 999px;
+    background: rgba(255, 255, 255, 0.03);
+    color: var(--fg);
+    font-size: 0.88rem;
+    font-weight: 600;
+  }
+
+  /* --- Карточка «без привязки» ---------------------------------------------- */
+  .trust-lock {
+    display: flex;
+    gap: 18px;
+    align-items: flex-start;
+    max-width: 860px;
+    margin: 32px auto 0;
+    padding: 24px;
+    background: linear-gradient(135deg, rgba(212, 242, 40, 0.08), rgba(212, 242, 40, 0.02));
+    border: 1px solid rgba(212, 242, 40, 0.3);
+    border-radius: 18px;
+  }
+  .trust-lock-ic {
+    flex: none;
+    width: 46px;
+    height: 46px;
+    display: grid;
+    place-items: center;
+    border-radius: 12px;
+    background: rgba(212, 242, 40, 0.14);
+    color: var(--lime);
+  }
+  .trust-lock h3 {
+    margin: 0 0 6px;
+    font-size: 1.05rem;
+  }
+  .trust-lock p {
+    margin: 0;
+    color: #d7d9d0;
+    font-size: 0.95rem;
+    line-height: 1.65;
+  }
+
+  /* Ошибка под полем не растягивает соседнее: строка выравнивается по верху,
+     а внутренняя сетка label не раздаёт лишнюю высоту своим рядам */
+  .form-row {
+    align-items: start;
+  }
+  .form-fields label {
+    align-content: start;
+  }
+
+  .form-fields input::placeholder,
+  .form-fields textarea::placeholder {
+    color: rgba(244, 245, 240, 0.28);
+  }
+
+  /* --- Свой выпадающий список ---------------------------------------------- */
+  .sel {
+    position: relative;
+    display: grid;
+    gap: 6px;
+    font-size: 0.84rem;
+    color: var(--fg-muted);
+  }
+  .sel-btn {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 10px;
+    font: inherit;
+    font-size: 0.93rem;
+    color: var(--fg);
+    background: var(--bg);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    padding: 10px 13px;
+    width: 100%;
+    cursor: pointer;
+    transition: border-color 0.15s ease, box-shadow 0.15s ease;
+  }
+  .sel-btn:focus-visible {
+    outline: none;
+    border-color: var(--lime);
+    box-shadow: 0 0 0 3px rgba(212, 242, 40, 0.13);
+  }
+  .sel-btn svg {
+    color: var(--fg-muted);
+    flex: none;
+    transition: transform 0.15s ease;
+  }
+  .sel-btn[aria-expanded='true'] svg {
+    transform: rotate(180deg);
+  }
+  .sel-menu {
+    position: absolute;
+    top: calc(100% + 6px);
+    inset-inline: 0;
+    z-index: 30;
+    margin: 0;
+    padding: 6px;
+    list-style: none;
+    background: var(--bg);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    box-shadow: 0 18px 50px rgba(0, 0, 0, 0.45);
+    display: grid;
+    gap: 2px;
+    animation: sel-pop 0.14s ease-out;
+  }
+  .sel-menu[hidden] {
+    display: none;
+  }
+  @keyframes sel-pop {
+    from {
+      transform: translateY(-4px);
+      opacity: 0;
+    }
+  }
+  .sel-menu li {
+    padding: 9px 12px;
+    border-radius: 8px;
+    cursor: pointer;
+    color: var(--fg);
+    font-size: 0.93rem;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+  }
+  .sel-menu li:hover {
+    background: rgba(255, 255, 255, 0.06);
+  }
+  .sel-menu li[aria-selected='true'] {
+    color: var(--lime);
+  }
+  .sel-menu li[aria-selected='true']::after {
+    content: '\2713';
+  }
+
   @media (max-width: 640px) {
     .form-row {
       grid-template-columns: 1fr;
+    }
+    .trust-lock {
+      flex-direction: column;
     }
     .contact-card,
     .cmodal-card {
