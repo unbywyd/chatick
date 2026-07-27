@@ -32,6 +32,7 @@ import { FileViewer, type ViewerFile } from '@/components/files/FileViewer'
 import { ShareDialog } from '@/components/ShareDialog'
 import { StorageSettings } from '@/components/files/StorageSettings'
 import { ClipboardBanner } from '@/components/ui/clipboard-banner'
+import { DragHandle } from '@/components/ui/drag-handle'
 import { usePasteFiles } from '@/hooks/usePasteFiles'
 
 type FileRow = {
@@ -422,14 +423,16 @@ function FileCard({
     <div
       onClick={selectMode ? onToggle : onOpen}
       draggable={!selectMode}
-      onDragStart={(e) =>
+      onDragStart={(e) => {
+        e.dataTransfer.effectAllowed = 'copy'
         e.dataTransfer.setData('application/x-chatick-file', JSON.stringify({ id: file.id, name: file.name, mime: file.mime, size: file.size }))
-      }
+      }}
       className={cn(
         'group flex cursor-pointer items-center gap-3 overflow-hidden rounded-lg border bg-card px-3 py-2.5 transition-colors hover:bg-accent/50',
         selected && 'border-brand bg-accent',
       )}
     >
+      {!selectMode && <DragHandle className="-ms-1" />}
       {selectMode && (
         <span className="shrink-0">
           {selected ? <CheckSquare className="size-5 text-brand" /> : <Square className="size-5 text-muted-foreground" />}

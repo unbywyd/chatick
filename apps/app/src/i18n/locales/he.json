@@ -926,7 +926,8 @@
   },
   "common": {
     "save": "שמירה",
-    "cancel": "ביטול"
+    "cancel": "ביטול",
+    "dragToChat": "גררו לצ׳אט"
   },
   "people": {
     "add": "הוספת אנשים…",

@@ -12,6 +12,7 @@ import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { DocEditor } from '@/components/documents/DocEditor'
 import { useConfirm } from '@/components/ui/confirm'
+import { DragHandle } from '@/components/ui/drag-handle'
 import {
   DropdownMenu,
   DropdownMenuTrigger,
@@ -143,13 +144,15 @@ export function DocumentsTab({ projectId, meId }: { projectId: string; meId?: st
               // Перетаскивание в чат: документ — такой же предмет разговора,
               // как задача или файл, и ссылку на него хочется бросить сразу.
               draggable
-              onDragStart={(e) =>
+              onDragStart={(e) => {
+                e.dataTransfer.effectAllowed = 'copy'
                 e.dataTransfer.setData('application/x-chatick-document', JSON.stringify({ id: d.id, name: d.title }))
-              }
+              }}
               onClick={() => setOpenId(d.id)}
               className="flex h-full w-full flex-col gap-2 rounded-lg border bg-card p-3 text-start transition-colors hover:border-brand/50 hover:bg-accent"
             >
               <span className="flex items-start gap-2">
+                <DragHandle className="mt-0.5 -ms-1" />
                 <FileText className="mt-0.5 size-4 shrink-0 text-muted-foreground" />
                 {/* место под меню, чтобы длинный заголовок не уезжал под него */}
                 <span className="min-w-0 flex-1 truncate pe-6 text-sm font-medium">{d.title}</span>

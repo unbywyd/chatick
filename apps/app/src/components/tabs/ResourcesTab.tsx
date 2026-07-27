@@ -23,6 +23,7 @@ import { api } from '@/lib/api'
 import { cn } from '@/lib/utils'
 import { Input } from '@/components/ui/input'
 import { Button } from '@/components/ui/button'
+import { DragHandle } from '@/components/ui/drag-handle'
 import { useConfirm } from '@/components/ui/confirm'
 
 type ResourceRow = {
@@ -116,15 +117,21 @@ export function ResourcesTab({ projectId, isAdmin }: { projectId: string; isAdmi
             key={r.id}
             id={`resource-${r.id}`}
             draggable
-            onDragStart={(e) => e.dataTransfer.setData('application/x-chatick-resource', JSON.stringify({ id: r.id, name: r.name }))}
+            onDragStart={(e) => {
+              // copy — иначе браузер считает, что бросать некуда, и рисует
+              // курсор запрета до самого композера.
+              e.dataTransfer.effectAllowed = 'copy'
+              e.dataTransfer.setData('application/x-chatick-resource', JSON.stringify({ id: r.id, name: r.name }))
+            }}
             // Прямая ссылка подсвечивает нужный ресурс: список бывает длинным,
             // и «вот он, где-то здесь» — плохой ответ на присланную ссылку.
             className={cn(
-              'rounded-lg border bg-card px-3 py-2.5 transition-colors',
+              'group rounded-lg border bg-card px-3 py-2.5 transition-colors',
               resourceId === r.id && 'border-brand ring-1 ring-brand',
             )}
           >
             <div className="flex items-center gap-3">
+              <DragHandle className="-ms-1" />
               <span className="grid size-9 shrink-0 place-items-center rounded-md bg-secondary">
                 {r.url ? <LinkIcon className="size-4" /> : <KeyRound className="size-4" />}
               </span>

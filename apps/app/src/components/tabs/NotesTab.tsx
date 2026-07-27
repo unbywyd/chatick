@@ -37,6 +37,7 @@ import { DatePicker } from '@/components/ui/date-picker'
 import { Select, SelectTrigger, SelectValue, SelectContent, SelectItem } from '@/components/ui/select'
 import { useConfirm } from '@/components/ui/confirm'
 import { Popover, PopoverTrigger, PopoverContent } from '@/components/ui/popover'
+import { DragHandle } from '@/components/ui/drag-handle'
 
 // Заметки проекта (SPEC §8.31): решения, противоречия, договорённости, напоминания.
 // Одна лента с типами и тегами вместо трёх отдельных разделов.
@@ -358,12 +359,13 @@ export function NotesTab({ projectId }: { projectId: string }) {
                 // Перетаскивание в чат: на заметку ссылаются в разговоре чаще
                 // всего — «мы же договорились» становится ссылкой.
                 draggable
-                onDragStart={(e) =>
+                onDragStart={(e) => {
+                  e.dataTransfer.effectAllowed = 'copy'
                   e.dataTransfer.setData(
                     'application/x-chatick-note',
                     JSON.stringify({ id: n.id, name: n.title || t('journal.untitled') }),
                   )
-                }
+                }}
                 className={cn(
                   'group rounded-lg border bg-card p-3 transition-colors hover:bg-accent/50',
                   focusId === n.id && 'border-brand ring-1 ring-brand',
@@ -371,6 +373,7 @@ export function NotesTab({ projectId }: { projectId: string }) {
                 onClick={() => focusId === n.id && clearFocus()}
               >
                 <div className="flex items-start gap-3">
+                  <DragHandle className="mt-0.5 -ms-1" />
                   <Icon className={cn('mt-0.5 size-4 shrink-0', className)} />
                   <div className="min-w-0 flex-1">
                     <div className="flex flex-wrap items-center gap-2">

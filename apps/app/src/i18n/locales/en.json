@@ -926,7 +926,8 @@
   },
   "common": {
     "save": "Save",
-    "cancel": "Cancel"
+    "cancel": "Cancel",
+    "dragToChat": "Drag into chat"
   },
   "people": {
     "add": "Add people…",
