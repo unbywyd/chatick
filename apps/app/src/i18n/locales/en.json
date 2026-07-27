@@ -1076,6 +1076,9 @@
     "revoked": "Public link revoked",
     "views": "Opened {{count}} time",
     "views_other": "Opened {{count}} times",
-    "onlyAdmins": "Only project owners and admins can publish links."
+    "onlyAdmins": "Only project owners and admins can publish links.",
+    "gone": "This link no longer works — it was revoked or has expired.",
+    "failed": "Could not open the link. Try again later.",
+    "footer": "Shared from Chatick"
   }
 }

@@ -6,6 +6,7 @@ import { db } from '../db/client.js'
 import { credentials, files, messages, notes, projects, shares, tasks, users } from '../db/schema.js'
 import { requireSession, type SessionEnv } from '../auth.js'
 import { getObjectStream, resolveStorage } from '../lib/s3.js'
+import { sanitizeHtml } from '../lib/sanitize-html.js'
 import { hasPermission, projectRoleOf, type ProjectPermission } from './projects.js'
 
 // Публичный доступ по ссылке (SPEC §8.34).
@@ -203,7 +204,10 @@ async function readEntity(type: Entity, id: string) {
     }
     case 'note': {
       const r = await db.query.notes.findFirst({ where: and(eq(notes.id, id), isNull(notes.deletedAt)) })
-      return r ? { note: { title: r.title, body: r.body, type: r.type, tags: r.tags, createdAt: r.createdAt } } : null
+      if (!r) return null
+      // Санитизируем на отдаче, а не полагаемся на запись: публичную страницу
+      // открывает кто угодно, и цена пропущенного скрипта здесь другая.
+      return { note: { title: r.title, body: sanitizeHtml(r.body), type: r.type, tags: r.tags, createdAt: r.createdAt } }
     }
     case 'resource': {
       const r = await db.query.credentials.findFirst({
@@ -226,9 +230,16 @@ async function readEntity(type: Entity, id: string) {
     }
     case 'task': {
       const r = await db.query.tasks.findFirst({ where: and(eq(tasks.id, id), isNull(tasks.deletedAt)) })
-      return r
-        ? { task: { number: r.number, title: r.title, description: r.description, status: r.status, dueDate: r.dueDate } }
-        : null
+      if (!r) return null
+      return {
+        task: {
+          number: r.number,
+          title: r.title,
+          description: sanitizeHtml(r.description),
+          status: r.status,
+          dueDate: r.dueDate,
+        },
+      }
     }
   }
 }

@@ -11,6 +11,7 @@ import { ThemeProvider } from './providers/theme'
 import { ConfirmProvider } from './components/ui/confirm'
 import { ProjectLayout, useProjectCtx } from './screens/ProjectScreen'
 import { LoginScreen, AuthCallback } from './screens/LoginScreen'
+import { PublicShareScreen } from './screens/PublicShareScreen'
 import { InviteScreen } from './screens/InviteScreen'
 import { ConnectScreen } from './screens/ConnectScreen'
 import { StartScreen } from './screens/StartScreen'
@@ -114,6 +115,8 @@ createRoot(document.getElementById('root')!).render(
               <Route path="/invite/:token" element={<InviteScreen />} />
               {/* подключение внешнего ИИ (Claude Code) — SPEC §8.27 */}
               <Route path="/connect" element={<ConnectScreen />} />
+              {/* публичная ссылка: открывается без входа — SPEC §8.34 */}
+              <Route path="/s/:slug" element={<PublicShareScreen />} />
               {/* Компания и её табы адресуемы: /start/:companyId/(projects|team|settings) */}
               <Route path="/start" element={<StartScreen />} />
               <Route path="/start/:companyId" element={<StartScreen />} />
