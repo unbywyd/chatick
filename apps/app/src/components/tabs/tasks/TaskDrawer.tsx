@@ -41,6 +41,7 @@ import { TaskNotes } from './TaskNotes'
 import { usePasteFiles } from '@/hooks/usePasteFiles'
 import { useProjectSocket } from '@/hooks/useProjectSocket'
 import { STATUSES, PRIORITIES, STATUS_ICON, STATUS_COLOR, PRIORITY_DOT, fmtEstimate, type Task, type Member, type TaskGroup } from './types'
+import { parseDuration } from '@/lib/time-parse'
 
 type Attachment = {
   id: string
@@ -81,7 +82,7 @@ export function TaskDrawer({
   const navigate = useNavigate()
   const [title, setTitle] = useState(task.title)
   const [description, setDescription] = useState(task.description)
-  const [estimate, setEstimate] = useState(task.estimateMinutes?.toString() ?? '')
+  const [estimate, setEstimate] = useState(fmtEstimate(task.estimateMinutes))
   const [assigneeQuery, setAssigneeQuery] = useState('')
   const [uploading, setUploading] = useState(0)
   const [dragOver, setDragOver] = useState(false)
@@ -105,7 +106,7 @@ export function TaskDrawer({
   useEffect(() => {
     setTitle(task.title)
     setDescription(task.description)
-    setEstimate(task.estimateMinutes?.toString() ?? '')
+    setEstimate(fmtEstimate(task.estimateMinutes))
   }, [task.id, task.title, task.description, task.estimateMinutes])
 
   useEffect(() => {
@@ -358,19 +359,25 @@ export function TaskDrawer({
             {/* Оценка времени (SPEC §8.13) */}
             <PropRow label={t('tasks.estimate')}>
               <div className="flex items-center gap-2">
+                {/* Текстовое поле, а не number: формат тот же, что в трекере и в
+                    таблице — 230 значит 2:30, а числовой ввод такого не примет. */}
                 <input
-                  type="number"
-                  min={0}
                   value={estimate}
                   onChange={(e) => setEstimate(e.target.value)}
                   onBlur={() => {
-                    const next = estimate === '' ? null : Math.max(0, Number(estimate) || 0)
+                    const trimmed = estimate.trim()
+                    const next = trimmed === '' ? null : parseDuration(trimmed)
+                    // непонятный ввод откатываем к сохранённому, а не обнуляем
+                    if (trimmed !== '' && next === null) {
+                      setEstimate(fmtEstimate(task.estimateMinutes))
+                      return
+                    }
                     if (next !== (task.estimateMinutes ?? null)) onPatch({ estimateMinutes: next })
                   }}
-                  placeholder={t('tasks.estimatePlaceholder')}
+                  placeholder="2:30"
                   className="h-8 w-28 rounded-md border bg-background px-2 text-sm outline-none focus:ring-2 focus:ring-ring"
                 />
-                <span className="text-xs text-muted-foreground">{t('tasks.minutes')}{task.estimateMinutes ? ` · ${fmtEstimate(task.estimateMinutes)}` : ''}</span>
+                <span className="text-xs text-muted-foreground">{t('tasks.estimateHint')}</span>
               </div>
             </PropRow>
 

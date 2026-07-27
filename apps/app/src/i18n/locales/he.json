@@ -213,7 +213,8 @@
     "markDone": "סמן כבוצע",
     "assignToMe": "הקצה לי",
     "copyLink": "העתק קישור",
-    "moreActions": "עוד"
+    "moreActions": "עוד",
+    "estimateHint": "למשל 45 או 2:30"
   },
   "files": {
     "search": "חיפוש קבצים…",

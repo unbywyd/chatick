@@ -195,6 +195,27 @@
       /* --- подключение ассистента --- */
       .connect { padding: 12px 10px; }
       .connect-hint { color: var(--muted); margin-bottom: 10px; }
+      /* Строка-приглашение для ассистента: без неё за кодом всё равно надо
+         идти в приложение, и вкладка теряет смысл. */
+      .invite { margin-bottom: 12px; }
+      .invite-row { display: flex; gap: 6px; }
+      .invite-row code {
+        min-width: 0; flex: 1;
+        border: 1px solid var(--line); border-radius: 7px;
+        background: var(--bg); color: var(--muted);
+        font: 11px/1.5 ui-monospace, 'SF Mono', Menlo, monospace;
+        padding: 7px 9px;
+        white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+      }
+      .invite-row button {
+        flex: 0 0 auto;
+        border: 1px solid var(--brand); border-radius: 7px;
+        background: var(--brand); color: #111;
+        font: inherit; font-weight: 600; padding: 0 11px; cursor: pointer;
+      }
+      .invite-row button:hover { background: #e2ff62; }
+      .invite-row button.done { background: var(--card); border-color: var(--line); color: var(--brand); }
+
       .code-input {
         width: 100%;
         border: 1px solid var(--line); border-radius: 8px;
@@ -608,6 +629,14 @@
 
         return `
           <div class="connect">
+            <div class="invite">
+              <p class="connect-hint">${T('connectInviteHint', 'Paste this into your assistant:')}</p>
+              <div class="invite-row">
+                <code id="inviteLine">${escape(state.strings?.inviteLine || '')}</code>
+                <button id="copyInvite">${T('connectCopy', 'Copy')}</button>
+              </div>
+            </div>
+
             <p class="connect-hint">${T('connectHint', 'Enter the code shown by your assistant')}</p>
             <input id="codeInput" class="code-input" maxlength="12" spellcheck="false"
                    placeholder="XXXX-XXXX" value="${escape(connect.code)}" />
@@ -679,6 +708,24 @@
           btn.onclick = () => {
             connect.target = btn.dataset.target
             refreshConnect()
+          }
+        }
+
+        const copyBtn = $('copyInvite')
+        if (copyBtn) {
+          copyBtn.onclick = async () => {
+            try {
+              await navigator.clipboard.writeText(state.strings?.inviteLine || '')
+              copyBtn.textContent = T('connectCopied', 'Copied')
+              copyBtn.classList.add('done')
+              // Возвращаем подпись: кнопка должна снова выглядеть нажимаемой.
+              setTimeout(() => {
+                copyBtn.textContent = T('connectCopy', 'Copy')
+                copyBtn.classList.remove('done')
+              }, 1600)
+            } catch {
+              /* буфер недоступен — строку видно, можно выделить руками */
+            }
           }
         }
 

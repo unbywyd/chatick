@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react'
 import { useLocation, useNavigate } from 'react-router-dom'
 import { useTranslation } from 'react-i18next'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
-import { api, getSessionToken } from '@/lib/api'
+import { api, API_URL, getSessionToken } from '@/lib/api'
 
 // Связь веб-приложения с десктопной оболочкой (SPEC §8.33).
 //
@@ -290,6 +290,11 @@ export function useDesktopSync() {
         statusReview: t('tasks.status.review'),
         statusDone: t('tasks.status.done'),
         connectHint: t('desktop.connectHint'),
+        // строка-приглашение для ассистента — та же, что на вкладке «Подключение»
+        inviteLine: `${t('connect.pastePrefix')} ${API_URL.replace(/\/$/, '')}/x`,
+        connectInviteHint: t('connect.pastePrefix'),
+        connectCopy: t('connect.copy'),
+        connectCopied: t('connect.copied'),
         connectActsAsYou: t('desktop.connectActsAsYou'),
         connectProject: t('desktop.connectProject'),
         connectWhere: t('desktop.connectWhere'),

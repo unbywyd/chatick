@@ -213,7 +213,8 @@
     "markDone": "Mark as done",
     "assignToMe": "Assign to me",
     "copyLink": "Copy link",
-    "moreActions": "More actions"
+    "moreActions": "More actions",
+    "estimateHint": "e.g. 45 or 2:30"
   },
   "files": {
     "search": "Search files…",

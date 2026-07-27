@@ -213,7 +213,8 @@
     "markDone": "Пометить готово",
     "assignToMe": "Назначить на меня",
     "copyLink": "Копировать ссылку",
-    "moreActions": "Ещё"
+    "moreActions": "Ещё",
+    "estimateHint": "например 45 или 2:30"
   },
   "files": {
     "search": "Поиск файлов…",
