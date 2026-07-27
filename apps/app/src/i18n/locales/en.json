@@ -266,7 +266,8 @@
     "google": "Open in Google Viewer",
     "original": "Original",
     "failed": "Failed to load the file",
-    "noPreview": "No preview available for this file type"
+    "noPreview": "No preview available for this file type",
+    "open": "Open"
   },
   "perms": {
     "title": "Permissions",

@@ -301,12 +301,28 @@ async function readEntity(type: Entity, id: string) {
  */
 publicShareRoute.get('/:slug/raw', async (c) => {
   const row = await db.query.shares.findFirst({
-    where: and(eq(shares.slug, c.req.param('slug')), eq(shares.entityType, 'file'), isNull(shares.revokedAt)),
+    where: and(eq(shares.slug, c.req.param('slug')), isNull(shares.revokedAt)),
   })
   if (!row) return c.json({ error: 'Link not found or revoked' }, 404)
   if (row.expiresAt && row.expiresAt.getTime() < Date.now()) return c.json({ error: 'Link expired' }, 410)
 
-  const file = await db.query.files.findFirst({ where: and(eq(files.id, row.entityId), isNull(files.deletedAt)) })
+  // Ссылка на файл отдаёт сам файл; ссылка на сообщение — его вложение по
+  // ?file=<id>. Чужой файл по такой ссылке не достать: сверяем, что вложение
+  // принадлежит именно этому сообщению.
+  let fileId = row.entityId
+  if (row.entityType === 'message') {
+    const wanted = c.req.query('file')
+    if (!wanted) return c.json({ error: 'file is required' }, 400)
+    const att = await db.query.files.findFirst({
+      where: and(eq(files.id, wanted), eq(files.messageId, row.entityId), isNull(files.deletedAt)),
+    })
+    if (!att) return c.json({ error: 'Not found' }, 404)
+    fileId = att.id
+  } else if (row.entityType !== 'file') {
+    return c.json({ error: 'Not a file link' }, 400)
+  }
+
+  const file = await db.query.files.findFirst({ where: and(eq(files.id, fileId), isNull(files.deletedAt)) })
   if (!file) return c.json({ error: 'Not found' }, 404)
 
   try {

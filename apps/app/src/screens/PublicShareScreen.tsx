@@ -19,7 +19,12 @@ type Payload = {
   file?: { id: string; name: string; mime: string; size: number; createdAt: string }
   note?: { title: string; body: string; type: string; tags: string[]; createdAt: string }
   resource?: { title: string; url: string | null; description: string }
-  message?: { text: string; createdAt: string; author: { name: string; avatarUrl: string | null } | null }
+  message?: {
+    text: string
+    createdAt: string
+    author: { name: string; avatarUrl: string | null } | null
+    attachments?: { id: string; name: string; mime: string; size: number }[]
+  }
   task?: { number: string; title: string; description: string; status: string; dueDate: string | null }
 }
 
@@ -127,7 +132,32 @@ export function PublicShareScreen() {
               <p className="text-xs text-muted-foreground">{date(data.message.createdAt)}</p>
             </div>
           </div>
-          <p className="whitespace-pre-wrap text-sm">{stripMentions(data.message.text)}</p>
+          {/* Сообщение из одной скрепки — это картинка, а не пустота: без
+              вложений такая страница выглядела бы сломанной. */}
+          {data.message.text.trim() && data.message.text.trim() !== '📎' && (
+            <p className="whitespace-pre-wrap text-sm">{stripMentions(data.message.text)}</p>
+          )}
+          {data.message.attachments?.map((a) =>
+            a.mime.startsWith('image/') ? (
+              <img
+                key={a.id}
+                src={`${API_URL.replace(/\/$/, '')}/s/${encodeURIComponent(slug)}/raw?file=${a.id}`}
+                alt={a.name}
+                className="max-h-[70vh] w-full rounded-lg border object-contain"
+              />
+            ) : (
+              <a
+                key={a.id}
+                href={`${API_URL.replace(/\/$/, '')}/s/${encodeURIComponent(slug)}/raw?file=${a.id}`}
+                download={a.name}
+                className="inline-flex items-center gap-2 rounded-md border bg-card px-3 py-2 text-sm hover:bg-accent"
+              >
+                <Download className="size-3.5" />
+                {a.name}
+                <span className="text-xs text-muted-foreground">{formatSize(a.size)}</span>
+              </a>
+            ),
+          )}
         </article>
       )}
 

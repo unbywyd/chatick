@@ -861,6 +861,36 @@ function MessageTaskPins({ pins }: { pins: NonNullable<ChatMessage['taskPins']> 
   )
 }
 
+/** Меню вложения: открыть или поделиться ИМЕННО файлом. */
+function FileMenu({
+  file,
+  onOpen,
+  onShare,
+  children,
+}: {
+  file: { name: string }
+  onOpen: () => void
+  onShare: () => void
+  children: React.ReactNode
+}) {
+  const { t } = useTranslation()
+  return (
+    <ContextMenu>
+      <ContextMenuTrigger asChild>{children}</ContextMenuTrigger>
+      <ContextMenuContent>
+        <ContextMenuItem onSelect={onOpen}>
+          <Search className="size-4" />
+          {t('viewer.open')}
+        </ContextMenuItem>
+        <ContextMenuItem onSelect={onShare}>
+          <Share2 className="size-4" />
+          {t('tasks.share')}
+        </ContextMenuItem>
+      </ContextMenuContent>
+    </ContextMenu>
+  )
+}
+
 function MessageAttachments({
   attachments,
   canPublish = false,
@@ -897,35 +927,39 @@ function MessageAttachments({
 
   return (
     <div className="mt-1.5 space-y-1.5">
+      {/* У вложения своё контекстное меню: правый клик по картинке — это про
+          картинку, а не про сообщение, в котором она пришла. */}
       {images.length > 0 && (
         <div className="flex flex-wrap gap-1.5">
           {images.map((a) => (
-            <button
-              key={a.id}
-              onClick={() => setViewing(a)}
-              title={a.name}
-              className="block max-h-52 max-w-64 overflow-hidden rounded-lg border transition-opacity hover:opacity-90"
-            >
-              {previews.data?.[a.id] ? (
-                <img src={previews.data[a.id]} alt={a.name} className="max-h-52 max-w-64 object-cover" loading="lazy" />
-              ) : (
-                <span className="grid h-24 w-32 place-items-center bg-secondary text-xs text-muted-foreground">…</span>
-              )}
-            </button>
+            <FileMenu key={a.id} file={a} onOpen={() => setViewing(a)} onShare={() => setSharingFile(a)}>
+              <button
+                onClick={() => setViewing(a)}
+                title={a.name}
+                className="block max-h-52 max-w-64 overflow-hidden rounded-lg border transition-opacity hover:opacity-90"
+              >
+                {previews.data?.[a.id] ? (
+                  <img src={previews.data[a.id]} alt={a.name} className="max-h-52 max-w-64 object-cover" loading="lazy" />
+                ) : (
+                  <span className="grid h-24 w-32 place-items-center bg-secondary text-xs text-muted-foreground">…</span>
+                )}
+              </button>
+            </FileMenu>
           ))}
         </div>
       )}
       {others.length > 0 && (
         <div className="flex flex-wrap gap-1.5">
           {others.map((a) => (
-            <button
-              key={a.id}
-              onClick={() => setViewing(a)}
-              className="inline-flex max-w-56 items-center gap-1.5 rounded-md border bg-card px-2 py-1 text-xs transition-colors hover:bg-accent"
-              title={a.name}
-            >
-              📎 <span className="truncate">{a.name}</span>
-            </button>
+            <FileMenu key={a.id} file={a} onOpen={() => setViewing(a)} onShare={() => setSharingFile(a)}>
+              <button
+                onClick={() => setViewing(a)}
+                className="inline-flex max-w-56 items-center gap-1.5 rounded-md border bg-card px-2 py-1 text-xs transition-colors hover:bg-accent"
+                title={a.name}
+              >
+                📎 <span className="truncate">{a.name}</span>
+              </button>
+            </FileMenu>
           ))}
         </div>
       )}
