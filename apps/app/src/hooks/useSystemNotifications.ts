@@ -1,0 +1,155 @@
+import { useCallback, useEffect, useRef, useState } from 'react'
+import { useQuery, useQueryClient } from '@tanstack/react-query'
+import { useNavigate } from 'react-router-dom'
+import { api, getSessionToken } from '@/lib/api'
+import { loadNotifySettings, type NotifySettings } from '@/lib/notify-settings'
+import type { InboxNotification } from '@/hooks/useOpenNotification'
+import { normalizeLink } from '@/hooks/useOpenNotification'
+
+// Системные уведомления — общие для веба и десктопа (SPEC §8.22).
+//
+// В десктопе всплывашку рисует Electron через мост, в браузере — Notification
+// API. Различаются только эти две строки; всё остальное — что показывать, чего
+// не повторять, когда молчать — одинаково, и держать это в двух копиях значило
+// бы чинить дважды.
+
+type Inbox = { unreadTotal: number; items: InboxNotification[] }
+
+type DesktopBridge = { notify: (p: { title: string; body?: string; link?: string }) => void }
+
+const SEEN_KEY = 'chatick_desktop_seen'
+
+/**
+ * Что человек уже видел. Общий ключ с десктопом: в Electron открыт тот же
+ * localStorage, и без общей памяти одно уведомление показалось бы дважды.
+ */
+function readSeen(): Set<string> {
+  try {
+    return new Set(JSON.parse(localStorage.getItem(SEEN_KEY) || '[]') as string[])
+  } catch {
+    return new Set()
+  }
+}
+
+function writeSeen(seen: Set<string>) {
+  // Храним последние 200: список уведомлений не бесконечен, а localStorage да.
+  localStorage.setItem(SEEN_KEY, JSON.stringify([...seen].slice(-200)))
+}
+
+/** Разрешение браузера: в Electron не спрашиваем — там своё, системное. */
+export function browserPermission(): NotificationPermission | 'unsupported' {
+  if (typeof window === 'undefined' || !('Notification' in window)) return 'unsupported'
+  return Notification.permission
+}
+
+export async function requestBrowserPermission(): Promise<NotificationPermission | 'unsupported'> {
+  if (!('Notification' in window)) return 'unsupported'
+  try {
+    return await Notification.requestPermission()
+  } catch {
+    return Notification.permission
+  }
+}
+
+/** Настройки с подпиской на изменения со страницы настройки. */
+export function useNotifySettings(): NotifySettings {
+  const [s, setS] = useState<NotifySettings>(loadNotifySettings)
+  useEffect(() => {
+    const reload = () => setS(loadNotifySettings())
+    window.addEventListener('notify-settings:changed', reload)
+    window.addEventListener('storage', reload)
+    return () => {
+      window.removeEventListener('notify-settings:changed', reload)
+      window.removeEventListener('storage', reload)
+    }
+  }, [])
+  return s
+}
+
+/**
+ * Показывает системные уведомления о новом в инбоксе.
+ *
+ * Вызывается один раз на приложение. Опрос оставлен подстраховкой на редкую
+ * минуту: основной сигнал — событие по сокету, которое приходит сразу.
+ */
+export function useSystemNotifications() {
+  const navigate = useNavigate()
+  const qc = useQueryClient()
+  const settings = useNotifySettings()
+  const authed = Boolean(getSessionToken())
+
+  const bridge: DesktopBridge | undefined =
+    typeof window !== 'undefined'
+      ? (window as unknown as { chatickDesktop?: DesktopBridge }).chatickDesktop
+      : undefined
+
+  const inbox = useQuery({
+    queryKey: ['inbox'],
+    enabled: authed,
+    queryFn: () => api<Inbox>('/api/v1/inbox?onlyUnread=1&limit=50'),
+    // Подстраховка, а не основной путь: событие по сокету приходит сразу.
+    refetchInterval: 60_000,
+  })
+
+  // Настройки в ref: показ вызывается из обработчика сокета, и пересоздавать
+  // подписку на каждое изменение галочки незачем.
+  const settingsRef = useRef(settings)
+  settingsRef.current = settings
+
+  const show = useCallback(
+    (n: InboxNotification) => {
+      const s = settingsRef.current
+      if (!s.enabled) return
+      // Окно на виду — человек и так всё видит; всплывашка только отвлекает.
+      if (s.muteWhenFocused && document.visibilityState === 'visible' && document.hasFocus()) return
+
+      // summary — фраза ИИ о том, чего от человека хотят; она полезнее заголовка
+      const title = n.summary || n.title
+      const body = n.summary ? n.title : n.body
+      const link = normalizeLink(n.link, n.projectId)
+
+      if (bridge) {
+        bridge.notify({ title, body, link })
+        return
+      }
+      if (!('Notification' in window) || Notification.permission !== 'granted') return
+      const notification = new Notification(title, {
+        body,
+        icon: '/logo-small.png',
+        // tag — чтобы десять событий не выстроились в десять всплывашек:
+        // система заменит предыдущую по тому же проекту.
+        tag: `chatick-${n.projectId}`,
+        silent: !s.sound,
+      })
+      notification.onclick = () => {
+        window.focus()
+        navigate(link)
+        notification.close()
+      }
+    },
+    [bridge, navigate],
+  )
+
+  // Показ новых: и после опроса, и после обновления по сокету — сюда приходит
+  // всё, что попало в инбокс.
+  useEffect(() => {
+    if (!inbox.data) return
+    const seen = readSeen()
+    const fresh = inbox.data.items.filter((n) => !seen.has(n.id))
+    if (!fresh.length) return
+    // Не больше трёх за раз: если накопилось двадцать, показывать двадцать
+    // всплывашек — наказание, а не помощь.
+    for (const n of fresh.slice(0, 3)) show(n)
+    for (const n of fresh) seen.add(n.id)
+    writeSeen(seen)
+  }, [inbox.data, show])
+
+  // Сокет присылает 'notification' — обновляем инбокс сразу, не дожидаясь
+  // следующего опроса. Слушаем событие окна: сокет живёт в другом хуке.
+  useEffect(() => {
+    if (!authed) return
+    const onPing = () => qc.invalidateQueries({ queryKey: ['inbox'] })
+    window.addEventListener('chatick:notification', onPing)
+    return () => window.removeEventListener('chatick:notification', onPing)
+  }, [authed, qc])
+}

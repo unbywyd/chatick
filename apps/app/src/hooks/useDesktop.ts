@@ -160,7 +160,8 @@ export function useDesktopSync() {
     queryKey: ['inbox'],
     enabled: Boolean(bridge) && authed,
     queryFn: () => api<Inbox>('/api/v1/inbox?onlyUnread=1&limit=50'),
-    refetchInterval: 30_000,
+    // Только для трея и бейджа: показ уведомлений идёт по сокету, мгновенно.
+    refetchInterval: 60_000,
   })
 
   const running = useQuery({
@@ -331,26 +332,8 @@ export function useDesktopSync() {
     })
   }, [bridge, authed, inbox.data, running.data?.items, projects.data, tasks.data, bridgeSessions.data, company, activeProjectId, t, i18n])
 
-  // --- системные уведомления -------------------------------------------------
-  useEffect(() => {
-    if (!bridge || !inbox.data) return
-    const seen = readSeen()
-    const fresh = inbox.data.items.filter((n) => !seen.has(n.id))
-    if (!fresh.length) return
-
-    // Показываем только то, чего человек ещё не видел: иначе при каждом опросе
-    // сыпались бы одни и те же уведомления.
-    for (const n of fresh.slice(0, 3)) {
-      bridge.notify({
-        // summary — фраза ИИ о том, чего от человека хотят; она полезнее заголовка
-        title: n.summary || n.title,
-        body: n.summary ? n.title : n.body,
-        link: n.link,
-      })
-      seen.add(n.id)
-    }
-    writeSeen(seen)
-  }, [bridge, inbox.data])
+  // Системные уведомления показывает useSystemNotifications — общий хук для
+  // веба и десктопа. Раньше это жило здесь и работало только в Electron.
 
   // --- команды из главного процесса -----------------------------------------
   useEffect(() => {
@@ -509,23 +492,4 @@ export function useDesktopSync() {
       offRevoke()
     }
   }, [bridge, navigate, qc, running.data?.items, tasks.data, activeProjectId])
-}
-
-// --- что уже показывали -------------------------------------------------------
-// Держим в localStorage: пережить перезапуск важнее, чем занять память.
-
-const SEEN_KEY = 'chatick_desktop_seen'
-
-function readSeen(): Set<string> {
-  try {
-    return new Set(JSON.parse(localStorage.getItem(SEEN_KEY) || '[]') as string[])
-  } catch {
-    return new Set()
-  }
-}
-
-function writeSeen(seen: Set<string>) {
-  // Храним последние 200: список уведомлений не бесконечен, а localStorage да.
-  const list = [...seen].slice(-200)
-  localStorage.setItem(SEEN_KEY, JSON.stringify(list))
 }

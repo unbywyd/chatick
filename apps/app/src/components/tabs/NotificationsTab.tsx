@@ -6,6 +6,12 @@ import { Bell, Clock } from 'lucide-react'
 import { api } from '@/lib/api'
 import { Switch } from '@/components/ui/switch'
 import { Button } from '@/components/ui/button'
+import { saveNotifySettings } from '@/lib/notify-settings'
+import {
+  browserPermission,
+  requestBrowserPermission,
+  useNotifySettings,
+} from '@/hooks/useSystemNotifications'
 import { Select, SelectTrigger, SelectValue, SelectContent, SelectItem } from '@/components/ui/select'
 
 // Уведомления и подписки проекта (SPEC §8.9): личные подписки + напоминания задач.
@@ -57,6 +63,9 @@ export function NotificationsTab({ projectId, isAdmin }: { projectId: string; is
         </h1>
         <p className="mt-1 text-sm text-muted-foreground">{t('notif.subtitle')}</p>
       </div>
+
+      {/* Системные уведомления этого устройства */}
+      <SystemNotifySettings />
 
       {/* Суточный email-дайджест (глобально, вместо мгновенных писем) */}
       <DigestSettings />
@@ -318,6 +327,83 @@ function DigestSettings() {
             ))}
             </SelectContent>
           </Select>
+        </label>
+      )}
+    </section>
+  )
+}
+
+/**
+ * Системные уведомления — всплывашки операционной системы.
+ *
+ * Настройки этого устройства, а не учётной записи: за рабочим ноутбуком и
+ * домашним компьютером ответ обычно разный, и хранить их на сервере значило бы
+ * навязывать один выбор всем машинам сразу.
+ */
+function SystemNotifySettings() {
+  const { t } = useTranslation()
+  const settings = useNotifySettings()
+  const [perm, setPerm] = useState<NotificationPermission | 'unsupported'>(browserPermission)
+  // В Electron разрешение спрашивает система при первом показе — здесь нечего
+  // просить, и кнопка бы только путала.
+  const isDesktop = typeof window !== 'undefined' && Boolean((window as { chatickDesktop?: unknown }).chatickDesktop)
+
+  const set = (patch: Partial<typeof settings>) => saveNotifySettings({ ...settings, ...patch })
+
+  const ask = async () => {
+    const next = await requestBrowserPermission()
+    setPerm(next)
+    if (next === 'denied') toast.error(t('notif.systemDenied'))
+  }
+
+  return (
+    <section className="space-y-2.5 rounded-xl border bg-card p-4">
+      <h2 className="text-sm font-semibold">{t('notif.system')}</h2>
+      <p className="text-xs text-muted-foreground">{t('notif.systemHint')}</p>
+
+      {/* Разрешение спрашиваем по кнопке, а не при загрузке: непрошеный запрос
+          браузеры прячут, а человек, которого спросили не вовремя, жмёт
+          «запретить» — и вернуть это можно только через настройки браузера. */}
+      {!isDesktop && perm !== 'granted' && (
+        <div className="flex items-center justify-between gap-3 rounded-lg border border-dashed p-3">
+          <p className="text-xs text-muted-foreground">
+            {perm === 'denied' ? t('notif.systemDenied') : t('notif.systemAsk')}
+          </p>
+          {perm !== 'denied' && perm !== 'unsupported' && (
+            <Button variant="outline" size="sm" onClick={ask}>
+              {t('notif.systemAllow')}
+            </Button>
+          )}
+        </div>
+      )}
+
+      <label className="flex cursor-pointer items-center justify-between gap-3 py-1">
+        <div>
+          <span className="block text-sm">{t('notif.systemEnabled')}</span>
+          <span className="block text-xs text-muted-foreground">{t('notif.systemEnabledHint')}</span>
+        </div>
+        <Switch checked={settings.enabled} onCheckedChange={(v) => set({ enabled: v })} />
+      </label>
+
+      <label className="flex cursor-pointer items-center justify-between gap-3 py-1">
+        <div>
+          <span className="block text-sm">{t('notif.systemMuteFocused')}</span>
+          <span className="block text-xs text-muted-foreground">{t('notif.systemMuteFocusedHint')}</span>
+        </div>
+        <Switch
+          checked={settings.muteWhenFocused}
+          disabled={!settings.enabled}
+          onCheckedChange={(v) => set({ muteWhenFocused: v })}
+        />
+      </label>
+
+      {!isDesktop && (
+        <label className="flex cursor-pointer items-center justify-between gap-3 py-1">
+          <div>
+            <span className="block text-sm">{t('notif.systemSound')}</span>
+            <span className="block text-xs text-muted-foreground">{t('notif.systemSoundHint')}</span>
+          </div>
+          <Switch checked={settings.sound} disabled={!settings.enabled} onCheckedChange={(v) => set({ sound: v })} />
         </label>
       )}
     </section>

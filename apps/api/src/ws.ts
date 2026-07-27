@@ -19,11 +19,26 @@ type PresenceUser = { id: string; name: string; avatarUrl: string | null }
 
 const rooms = new Map<string, Set<Client>>() // projectId -> clients
 
+// Тот же набор клиентов, но по пользователю. Комнаты привязаны к проекту, и
+// уведомление о событии в проекте Б не доходило до человека, открывшего
+// проект А, — он узнавал о нём только следующим опросом. Уведомления
+// адресованы человеку, а не месту, поэтому им нужен свой указатель.
+const byUser = new Map<string, Set<Client>>() // userId -> clients
+
 function roomClients(projectId: string): Set<Client> {
   let set = rooms.get(projectId)
   if (!set) {
     set = new Set()
     rooms.set(projectId, set)
+  }
+  return set
+}
+
+function userClients(userId: string): Set<Client> {
+  let set = byUser.get(userId)
+  if (!set) {
+    set = new Set()
+    byUser.set(userId, set)
   }
   return set
 }
@@ -42,6 +57,19 @@ export function sendToUser(projectId: string, userId: string, event: string, pay
   const msg = JSON.stringify({ event, payload })
   for (const c of rooms.get(projectId) ?? []) {
     if (c.userId === userId && c.ws.readyState === WebSocket.OPEN) c.ws.send(msg)
+  }
+}
+
+/**
+ * Событие человеку во все его вкладки, в каком бы проекте они ни были.
+ *
+ * Для уведомлений: они адресованы человеку, и ждать, пока он вернётся в тот
+ * самый проект, незачем.
+ */
+export function sendToUserAnywhere(userId: string, event: string, payload: unknown) {
+  const msg = JSON.stringify({ event, payload })
+  for (const c of byUser.get(userId) ?? []) {
+    if (c.ws.readyState === WebSocket.OPEN) c.ws.send(msg)
   }
 }
 
@@ -140,6 +168,7 @@ export function attachWs(server: Server) {
 
     const client: Client = { ws, userId: payload.sub, projectId: payload.projectId }
     roomClients(client.projectId).add(client)
+    userClients(client.userId).add(client)
     void pushPresence(client.projectId)
     // отдать текущие локи новому клиенту
     for (const l of locksOf(client.projectId)) ws.send(JSON.stringify({ event: 'task_lock', payload: { taskId: l.taskId, user: l.user } }))
@@ -187,6 +216,11 @@ export function attachWs(server: Server) {
       releaseAllLocksOf(client)
       const set = rooms.get(client.projectId)
       set?.delete(client)
+      // Тот же клиент лежит и в пользовательском указателе — иначе туда
+      // копились бы закрытые сокеты.
+      const mine = byUser.get(client.userId)
+      mine?.delete(client)
+      if (mine?.size === 0) byUser.delete(client.userId)
       const openDoc = client.docId
       if (set?.size === 0) rooms.delete(client.projectId)
       void pushPresence(client.projectId)

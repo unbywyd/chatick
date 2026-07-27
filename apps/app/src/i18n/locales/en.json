@@ -578,7 +578,18 @@
     "minInterval": "(min every 12h)",
     "subscriptionsHint": "These appear in the bell. Email is sent once a day as a digest, not per event.",
     "digest": "Daily email digest",
-    "digestHint": "One email a day summarising your unread notifications — instead of an email per event."
+    "digestHint": "One email a day summarising your unread notifications — instead of an email per event.",
+    "system": "System notifications",
+    "systemHint": "Pop-ups from your operating system. These settings apply to this device only.",
+    "systemAsk": "Your browser hasn't been asked for permission yet.",
+    "systemAllow": "Allow",
+    "systemDenied": "Notifications are blocked in your browser settings — allow them there to turn this on.",
+    "systemEnabled": "Show notifications",
+    "systemEnabledHint": "When someone mentions you or assigns you a task.",
+    "systemMuteFocused": "Stay quiet while the app is in front of me",
+    "systemMuteFocusedHint": "You already see what's happening — no need for a pop-up.",
+    "systemSound": "Play a sound",
+    "systemSoundHint": "Off by default: a sound interrupts more than a pop-up."
   },
   "projTeam": {
     "title": "Project team",

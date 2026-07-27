@@ -107,8 +107,13 @@ export function useProjectSocket(projectId: string | undefined, events: SocketEv
           if (event === 'doc_presence') {
             eventsRef.current.onDocPresence?.(payload as { docId: string; users: PresenceUser[] })
           }
-          // новое in-app уведомление → обновить колокольчик (SPEC §8.22)
-          if (event === 'notification') qc.invalidateQueries({ queryKey: ['inbox'] })
+          // новое in-app уведомление → колокольчик и системная всплывашка.
+          // Через событие окна: показом занимается отдельный хук уровня
+          // приложения, а сокет живёт здесь и знать о нём не должен.
+          if (event === 'notification') {
+            qc.invalidateQueries({ queryKey: ['inbox'] })
+            window.dispatchEvent(new CustomEvent('chatick:notification'))
+          }
         } catch {
           /* ignore */
         }

@@ -1,7 +1,7 @@
 import { and, eq, inArray } from 'drizzle-orm'
 import { db } from '../db/client.js'
 import { users, projects, projectMembers, notificationOptOuts, notificationLog, notifications } from '../db/schema.js'
-import { sendToUser } from '../ws.js'
+import { sendToUserAnywhere } from '../ws.js'
 import { projectLlm, complete } from './llm.js'
 
 // Единая точка отправки уведомлений (SPEC §8.9).
@@ -108,7 +108,7 @@ async function summarizeAsk(
   await db.update(notifications).set({ summary }).where(eq(notifications.id, notificationId))
   // подсказать колокольчику, что текст уточнился
   const row = await db.query.notifications.findFirst({ where: eq(notifications.id, notificationId) })
-  if (row) sendToUser(projectId, row.userId, 'notification', { projectId })
+  if (row) sendToUserAnywhere(row.userId, 'notification', { projectId, id: row.id })
 }
 
 function tr(lang: Lang, key: string, vars: Record<string, string>): string {
@@ -219,8 +219,9 @@ export async function notify(params: NotifyParams): Promise<void> {
         await db.insert(notificationLog).values({ userId: user.id, projectId, event, dedupeKey }).onConflictDoNothing()
       }
 
-      // realtime: подсветить колокольчик у получателя, если он онлайн
-      sendToUser(projectId, user.id, 'notification', { projectId })
+      // realtime: колокольчик и системное уведомление у получателя, где бы
+      // он сейчас ни находился — уведомление адресовано ему, а не проекту.
+      sendToUserAnywhere(user.id, 'notification', { projectId })
     }
   } catch (err) {
     console.error('[notify] failed:', err)

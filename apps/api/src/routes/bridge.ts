@@ -36,7 +36,7 @@ import { readPresence } from './auth.js'
 import { createShare, revokeShare, type ShareEntityType } from './shares.js'
 import { notifyChatMentions } from './messages.js'
 import { htmlToText, sanitizeHtml } from '../lib/sanitize-html.js'
-import { broadcast, sendToUser } from '../ws.js'
+import { broadcast, sendToUserAnywhere } from '../ws.js'
 import { env } from '../env.js'
 
 // Мост для внешнего ИИ (SPEC §8.27). Всё выполняется ОТ ИМЕНИ пользователя,
@@ -448,7 +448,7 @@ bridgeRoute.post('/inbox/read', async (c) => {
   if (id.projectId) conds.push(eq(notifications.projectId, id.projectId))
 
   await db.update(notifications).set({ readAt: new Date() }).where(and(...conds))
-  sendToUser(id.projectId ?? '', id.userId, 'notification', {})
+  sendToUserAnywhere(id.userId, 'notification', {})
   return c.json({ ok: true })
 })
 

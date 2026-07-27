@@ -6,6 +6,7 @@ import { Toaster } from 'sonner'
 import './index.css'
 import './i18n'
 import { useDesktopSync, usePresence } from './hooks/useDesktop'
+import { useSystemNotifications } from './hooks/useSystemNotifications'
 import { UpdateBanner } from './components/UpdateBanner'
 import { ThemeProvider } from './providers/theme'
 import { ConfirmProvider } from './components/ui/confirm'
@@ -35,6 +36,8 @@ const queryClient = new QueryClient()
 function DesktopSync() {
   useDesktopSync()
   usePresence()
+  // Системные уведомления — и в браузере, и в Electron.
+  useSystemNotifications()
   return null
 }
 
