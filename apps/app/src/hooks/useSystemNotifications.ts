@@ -73,7 +73,21 @@ export async function testNotification(title: string, body: string): Promise<str
     if (next !== 'granted') return next
   }
   if (Notification.permission !== 'granted') return Notification.permission
-  new Notification(title, { body, icon: '/logo-small.png' })
+
+  const n = new Notification(title, { body, icon: '/logo-small.png', requireInteraction: true })
+  // Браузер принял вызов — это ещё не значит, что система его показала.
+  // Windows молча проглатывает всплывашки при включённом «Не беспокоить», и
+  // разницу видно только по этим событиям.
+  n.onshow = () => console.info('[chatick] система показала уведомление')
+  n.onerror = () => console.warn('[chatick] система отказалась показывать уведомление')
+  n.onclick = () => {
+    window.focus()
+    n.close()
+  }
+  // Если за секунду не показалось — почти наверняка «Не беспокоить».
+  window.setTimeout(() => {
+    console.info('[chatick] пробное: проверьте «Не беспокоить» в Windows, если всплывашки не было')
+  }, 1000)
   return null
 }
 
