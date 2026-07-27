@@ -45,7 +45,11 @@
     "leftCompany": "Вы вышли из компании",
     "leaveConfirm": "Выйти из «{{name}}»?",
     "leaveHint": "Доступ к её проектам пропадёт. Вернуться можно будет только по новому приглашению.",
-    "createCompany": "Создать компанию"
+    "createCompany": "Создать компанию",
+    "deleteCompany": "Удалить компанию",
+    "deleteCompanyTitle": "Удалить компанию?",
+    "deleteAllProjects": "все проекты этой компании",
+    "companyDeleted": "Компания «{{name}}» удалена"
   },
   "companyTabs": {
     "projects": "Проекты",
@@ -381,7 +385,8 @@
     "deleteIrreversible": "Отменить это будет нельзя.",
     "deleteConfirmLabel": "Введите «{{name}}» для подтверждения:",
     "deleteAction": "Удалить проект",
-    "deleted": "Проект «{{name}}» удалён"
+    "deleted": "Проект «{{name}}» удалён",
+    "deleteNotify": "Всем участникам придёт письмо об этом."
   },
   "about": {
     "noDescription": "Описания пока нет.",

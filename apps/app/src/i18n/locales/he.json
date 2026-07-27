@@ -45,7 +45,11 @@
     "leftCompany": "יצאתם מהחברה",
     "leaveConfirm": "לצאת מ־«{{name}}»?",
     "leaveHint": "הגישה לפרויקטים שלה תיעלם. חזרה תתאפשר רק בהזמנה חדשה.",
-    "createCompany": "יצירת חברה"
+    "createCompany": "יצירת חברה",
+    "deleteCompany": "מחיקת חברה",
+    "deleteCompanyTitle": "למחוק את החברה?",
+    "deleteAllProjects": "כל הפרויקטים של החברה",
+    "companyDeleted": "החברה «{{name}}» נמחקה"
   },
   "companyTabs": {
     "projects": "פרויקטים",
@@ -381,7 +385,8 @@
     "deleteIrreversible": "לא ניתן לבטל פעולה זו.",
     "deleteConfirmLabel": "הקלידו «{{name}}» לאישור:",
     "deleteAction": "מחיקת פרויקט",
-    "deleted": "הפרויקט «{{name}}» נמחק"
+    "deleted": "הפרויקט «{{name}}» נמחק",
+    "deleteNotify": "כל המשתתפים יקבלו על כך מייל."
   },
   "about": {
     "noDescription": "אין עדיין תיאור.",

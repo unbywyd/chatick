@@ -9,10 +9,10 @@ import { Avatar } from '@/components/ui/avatar'
 import { AvatarGroup } from '@/components/ui/avatar-group'
 import { ProjectBadge } from '@/components/ui/project-badge'
 import { CompanySwitcher } from '@/components/CompanySwitcher'
+import { DeleteProjectDialog } from '@/components/DeleteProjectDialog'
 import { useConfirm } from '@/components/ui/confirm'
 import { DropdownMenu, DropdownMenuTrigger, DropdownMenuContent, DropdownMenuItem } from '@/components/ui/dropdown-menu'
 import { ProjectSettingsDialog } from '@/components/ProjectSettingsDialog'
-import { DeleteProjectDialog } from '@/components/DeleteProjectDialog'
 import {
   api,
   logout,
@@ -75,6 +75,7 @@ export function StartScreen() {
 
   const company = companiesQ.data?.companies.find((c) => c.id === companyId)
   const [leaving, setLeaving] = useState<Company | null>(null)
+  const [deletingCompany, setDeletingCompany] = useState<Company | null>(null)
   const confirm = useConfirm()
 
   const leave = useMutation({
@@ -118,6 +119,7 @@ export function StartScreen() {
                 onSelect={setCompanyId}
                 onCreate={() => setCompanyId(null)}
                 onLeave={setLeaving}
+                onDelete={setDeletingCompany}
               />
             </>
           )}
@@ -147,6 +149,20 @@ export function StartScreen() {
         ) : null}
         </div>
       </main>
+
+      {deletingCompany && (
+        <DeleteProjectDialog
+          kind="company"
+          projectId={deletingCompany.id}
+          projectName={deletingCompany.name}
+          onClose={() => setDeletingCompany(null)}
+          onDeleted={() => {
+            setDeletingCompany(null)
+            qc.invalidateQueries({ queryKey: ['companies'] })
+            navigate('/start', { replace: true })
+          }}
+        />
+      )}
     </div>
   )
 }

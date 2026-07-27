@@ -14,11 +14,14 @@ import { Input } from '@/components/ui/input'
 // на которое жмут не читая, а действие, требующее посмотреть на то, что удаляешь.
 
 export function DeleteProjectDialog({
+  kind = 'project',
   projectId,
   projectName,
   onClose,
   onDeleted,
 }: {
+  /** компания уносит с собой ещё и все проекты — предупреждаем об этом отдельно */
+  kind?: 'project' | 'company'
   projectId: string
   projectName: string
   onClose: () => void
@@ -29,9 +32,12 @@ export function DeleteProjectDialog({
 
   const remove = useMutation({
     mutationFn: () =>
-      api(`/api/v1/projects/${projectId}`, { method: 'DELETE', body: JSON.stringify({ confirm }) }),
+      api(`/api/v1/${kind === 'company' ? 'companies' : 'projects'}/${projectId}`, {
+        method: 'DELETE',
+        body: JSON.stringify({ confirm }),
+      }),
     onSuccess: () => {
-      toast.success(t('project.deleted', { name: projectName }))
+      toast.success(t(kind === 'company' ? 'start.companyDeleted' : 'project.deleted', { name: projectName }))
       onDeleted()
     },
     onError: (e) => toast.error(e instanceof Error ? e.message : String(e)),
@@ -44,11 +50,12 @@ export function DeleteProjectDialog({
       <div className="w-full max-w-md rounded-xl border bg-card p-6 shadow-xl" onClick={(e) => e.stopPropagation()}>
         <h2 className="flex items-center gap-2 text-lg font-bold text-destructive">
           <AlertTriangle className="size-5" />
-          {t('project.deleteTitle')}
+          {t(kind === 'company' ? 'start.deleteCompanyTitle' : 'project.deleteTitle')}
         </h2>
 
         <p className="mt-3 text-sm text-muted-foreground">{t('project.deleteWhat')}</p>
         <ul className="mt-2 list-inside list-disc space-y-0.5 text-sm text-muted-foreground">
+          {kind === 'company' && <li className="font-medium text-destructive">{t('start.deleteAllProjects')}</li>}
           <li>{t('project.deleteTasks')}</li>
           <li>{t('project.deleteChat')}</li>
           <li>{t('project.deleteDocs')}</li>
@@ -56,6 +63,7 @@ export function DeleteProjectDialog({
           <li>{t('project.deleteTime')}</li>
         </ul>
         <p className="mt-3 text-sm font-medium text-destructive">{t('project.deleteIrreversible')}</p>
+        <p className="mt-1 text-xs text-muted-foreground">{t('project.deleteNotify')}</p>
 
         <label className="mt-4 block text-sm">
           {t('project.deleteConfirmLabel', { name: projectName })}
@@ -77,7 +85,7 @@ export function DeleteProjectDialog({
             disabled={!matches || remove.isPending}
             onClick={() => remove.mutate()}
           >
-            {t('project.deleteAction')}
+            {t(kind === 'company' ? 'start.deleteCompany' : 'project.deleteAction')}
           </Button>
         </div>
       </div>

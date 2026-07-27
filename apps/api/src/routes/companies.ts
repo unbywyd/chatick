@@ -3,8 +3,10 @@ import { zValidator } from '@hono/zod-validator'
 import { z } from 'zod'
 import { and, eq, inArray, isNull, sql } from 'drizzle-orm'
 import { nanoid } from 'nanoid'
+import { deleteObject, resolveStorage } from '../lib/s3.js'
+import { sendDeletedMail } from '../lib/mails.js'
 import { db } from '../db/client.js'
-import { companies, companyMembers, companyInvites, messages, projectMembers, projects, tasks, timeEntries, users } from '../db/schema.js'
+import { companies, companyMembers, companyInvites, files, messages, projectMembers, projects, tasks, timeEntries, users } from '../db/schema.js'
 import { requireSession, type SessionEnv } from '../auth.js'
 import { sendInviteMail } from '../lib/mail-invite.js'
 import { encrypt } from '../lib/crypto.js'
@@ -332,6 +334,83 @@ companiesRoute.delete('/:companyId/members/:userId', async (c) => {
     .delete(companyMembers)
     .where(and(eq(companyMembers.companyId, companyId), eq(companyMembers.userId, userId)))
   return c.json({ ok: true })
+})
+
+/**
+ * Удаление компании (SPEC §3.1).
+ *
+ * Уносит все её проекты со всем содержимым — это самое разрушительное
+ * действие в продукте. Поэтому: только админ, подтверждение вводом названия
+ * (проверяется на сервере, клиент можно обойти) и зачистка файлов из
+ * хранилища, которую каскад базы не сделает.
+ *
+ * Ассистенту через мост недоступно намеренно.
+ */
+companiesRoute.delete('/:companyId', async (c) => {
+  const { sub } = c.get('session')
+  const { companyId } = c.req.param()
+
+  if ((await memberRoleIn(companyId, sub)) !== 'admin') {
+    return c.json({ error: 'Only a company admin can delete the company' }, 403)
+  }
+
+  const company = await db.query.companies.findFirst({ where: eq(companies.id, companyId) })
+  if (!company) return c.json({ error: 'Not found' }, 404)
+
+  const body = (await c.req.json().catch(() => ({}))) as Record<string, unknown>
+  if (typeof body.confirm !== 'string' || body.confirm.trim() !== company.name) {
+    return c.json({ error: 'Confirmation does not match the company name', expected: company.name }, 400)
+  }
+
+  // Участников собираем ДО удаления: после каскада писать будет некому.
+  const recipients = await db
+    .select({ email: users.email, locale: users.locale })
+    .from(companyMembers)
+    .innerJoin(users, eq(users.id, companyMembers.userId))
+    .where(and(eq(companyMembers.companyId, companyId), sql`${companyMembers.userId} <> ${sub}`))
+  const actor = await db.query.users.findFirst({ where: eq(users.id, sub) })
+
+  // Файлы сначала: упадём на них — компания ещё цела и можно повторить.
+  // Наоборот остались бы объекты, к которым уже никто не знает пути.
+  const projectIds = (await db.select({ id: projects.id }).from(projects).where(eq(projects.companyId, companyId))).map(
+    (p) => p.id,
+  )
+  let deletedFiles = 0
+  for (const projectId of projectIds) {
+    const rows = await db
+      .select({ key: files.key, originalKey: files.originalKey })
+      .from(files)
+      .where(eq(files.projectId, projectId))
+    if (!rows.length) continue
+    try {
+      const store = await resolveStorage(projectId)
+      for (const r of rows) {
+        for (const key of [r.key, r.originalKey].filter(Boolean) as string[]) {
+          await deleteObject(store, key).catch(() => {
+            // один непослушный объект не должен блокировать удаление
+          })
+        }
+      }
+      deletedFiles += rows.length
+    } catch (err) {
+      console.error('[companies] storage cleanup failed:', err)
+    }
+  }
+
+  await db.delete(companies).where(eq(companies.id, companyId))
+
+  // Письма в фоне: ответ не должен ждать почтовый сервер.
+  for (const r of recipients) {
+    void sendDeletedMail({
+      to: r.email,
+      locale: r.locale,
+      kind: 'company',
+      name: company.name,
+      actorName: actor?.name || actor?.email || '—',
+    })
+  }
+
+  return c.json({ ok: true, deletedProjects: projectIds.length, deletedFiles, notified: recipients.length })
 })
 
 /**

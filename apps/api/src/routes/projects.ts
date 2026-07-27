@@ -9,7 +9,7 @@ import { companies, companyMembers, files, FREE_STORAGE_BYTES, messages, notific
 import { encrypt } from '../lib/crypto.js'
 import { PutObjectCommand, DeleteObjectCommand, S3Client } from '@aws-sdk/client-s3'
 import { requireSession, requireProject, signProjectToken, type SessionEnv, type ProjectEnv } from '../auth.js'
-import { sendAddedToProjectMail, sendRemovedFromProjectMail } from '../lib/mails.js'
+import { sendAddedToProjectMail, sendDeletedMail, sendRemovedFromProjectMail } from '../lib/mails.js'
 import { companyLlm } from '../lib/llm.js'
 import { stripMentions } from '../lib/notify.js'
 import { s3Client, s3Bucket, getObjectStream, deleteObject, isCustomStorage, resolveStorage, S3_KEY_PREFIX } from '../lib/s3.js'
@@ -576,6 +576,15 @@ projectsRoute.delete('/:projectId', async (c) => {
     return c.json({ error: 'Confirmation does not match the project name', expected: project.name }, 400)
   }
 
+  // Список участников собираем ДО удаления: после каскада писать будет некому.
+  // Себя исключаем — тот, кто удалил, и так знает.
+  const recipients = await db
+    .select({ email: users.email, locale: users.locale })
+    .from(projectMembers)
+    .innerJoin(users, eq(users.id, projectMembers.userId))
+    .where(and(eq(projectMembers.projectId, projectId), sql`${projectMembers.userId} <> ${sub}`))
+  const actor = await db.query.users.findFirst({ where: eq(users.id, sub) })
+
   // Сначала файлы: если упадём на них, проект ещё цел и можно повторить.
   // Наоборот — остались бы объекты, к которым уже никто не знает пути.
   const rows = await db.select({ key: files.key, originalKey: files.originalKey }).from(files).where(eq(files.projectId, projectId))
@@ -597,7 +606,18 @@ projectsRoute.delete('/:projectId', async (c) => {
   // Остальное уносит каскад: 24 таблицы ссылаются на проект с on delete cascade.
   await db.delete(projects).where(eq(projects.id, projectId))
 
-  return c.json({ ok: true, deletedFiles: rows.length })
+  // Письма в фоне: ответ не должен ждать почтовый сервер.
+  for (const r of recipients) {
+    void sendDeletedMail({
+      to: r.email,
+      locale: r.locale,
+      kind: 'project',
+      name: project.name,
+      actorName: actor?.name || actor?.email || '—',
+    })
+  }
+
+  return c.json({ ok: true, deletedFiles: rows.length, notified: recipients.length })
 })
 
 // Участники проекта

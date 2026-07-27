@@ -45,7 +45,11 @@
     "leftCompany": "You left the company",
     "leaveConfirm": "Leave «{{name}}»?",
     "leaveHint": "You will lose access to its projects. Getting back in requires a new invitation.",
-    "createCompany": "Create a company"
+    "createCompany": "Create a company",
+    "deleteCompany": "Delete company",
+    "deleteCompanyTitle": "Delete company?",
+    "deleteAllProjects": "all projects of this company",
+    "companyDeleted": "Company «{{name}}» deleted"
   },
   "companyTabs": {
     "projects": "Projects",
@@ -381,7 +385,8 @@
     "deleteIrreversible": "This cannot be undone.",
     "deleteConfirmLabel": "Type «{{name}}» to confirm:",
     "deleteAction": "Delete project",
-    "deleted": "Project «{{name}}» deleted"
+    "deleted": "Project «{{name}}» deleted",
+    "deleteNotify": "Everyone involved will get an email about it."
   },
   "about": {
     "noDescription": "No description yet.",

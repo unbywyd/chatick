@@ -88,6 +88,63 @@ export async function sendRemovedFromProjectMail(p: { to: string; locale?: strin
   await send(p.to, fmt(s.subject, v), { lang, title: fmt(s.title, v), paragraphs: [fmt(s.body, v)] })
 }
 
+// --- Проект или компания удалены ------------------------------------------
+//
+// Человек должен узнать, а не обнаружить пропажу: он мог держать там задачи,
+// файлы и переписку. Пишем прямо, что удалено безвозвратно, и называем того,
+// кто это сделал — вопросы будут к нему, а не к нам.
+
+const DELETED: Record<MailLang, { subject: string; title: string; body: string; gone: string; ask: string }> = {
+  en: {
+    subject: '{{what}} «{{name}}» has been deleted',
+    title: '{{what}} «{{name}}» is gone',
+    body: '{{actor}} deleted it. We are sorry — this cannot be undone.',
+    gone: 'Tasks, chat history, documents, notes, files and tracked hours were removed along with it.',
+    ask: 'If this looks like a mistake, talk to {{actor}} — only they can create it anew.',
+  },
+  ru: {
+    subject: '{{what}} «{{name}}» удалён',
+    title: '{{what}} «{{name}}» больше нет',
+    body: '{{actor}} удалил его. Нам жаль — восстановить это нельзя.',
+    gone: 'Вместе с ним исчезли задачи, переписка, документы, заметки, файлы и учтённые часы.',
+    ask: 'Если это ошибка, поговорите с {{actor}} — создать заново может только он.',
+  },
+  he: {
+    subject: '{{what}} «{{name}}» נמחק',
+    title: '{{what}} «{{name}}» כבר לא קיים',
+    body: '{{actor}} מחק אותו. מצטערים — לא ניתן לשחזר.',
+    gone: 'יחד איתו נמחקו משימות, היסטוריית צ׳אט, מסמכים, רשומות, קבצים ושעות שנרשמו.',
+    ask: 'אם זו טעות, דברו עם {{actor}} — רק הוא יכול ליצור מחדש.',
+  },
+}
+
+const WHAT: Record<MailLang, { project: string; company: string }> = {
+  en: { project: 'Project', company: 'Company' },
+  ru: { project: 'Проект', company: 'Компания' },
+  he: { project: 'הפרויקט', company: 'החברה' },
+}
+
+/**
+ * Письмо об удалении проекта или компании.
+ * Отправляем каждому участнику, кроме того, кто удалил: он и так знает.
+ */
+export async function sendDeletedMail(p: {
+  to: string
+  locale?: string | null
+  kind: 'project' | 'company'
+  name: string
+  actorName: string
+}) {
+  const lang = mailLang(p.locale)
+  const s = DELETED[lang]
+  const v = { what: WHAT[lang][p.kind], name: p.name, actor: p.actorName }
+  await send(p.to, fmt(s.subject, v), {
+    lang,
+    title: fmt(s.title, v),
+    paragraphs: [fmt(s.body, v), fmt(s.gone, v), fmt(s.ask, v)],
+  })
+}
+
 // --- Напоминание о задачах ------------------------------------------------
 
 const REMIND: Record<MailLang, { subject: string; title: string; intro: string; cta: string }> = {
