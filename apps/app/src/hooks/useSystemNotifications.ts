@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
-import { useQuery, useQueryClient } from '@tanstack/react-query'
+import { useQuery, useQueryClient, type QueryClient } from '@tanstack/react-query'
 import { useNavigate } from 'react-router-dom'
 import { api, API_URL, getSessionToken } from '@/lib/api'
 import { loadNotifySettings, type NotifySettings } from '@/lib/notify-settings'
@@ -16,7 +16,14 @@ import { normalizeLink } from '@/hooks/useOpenNotification'
 type Inbox = { unreadTotal: number; items: InboxNotification[] }
 
 type DesktopBridge = {
-  notify: (p: { title: string; body?: string; link?: string; silent?: boolean }) => void
+  notify: (p: {
+    title: string
+    body?: string
+    link?: string
+    silent?: boolean
+    /** чтобы клик по всплывашке пометил уведомление прочитанным */
+    notificationId?: string
+  }) => void
 }
 
 const SEEN_KEY = 'chatick_desktop_seen'
@@ -53,6 +60,18 @@ function readSeen(): Set<string> {
 function writeSeen(seen: Set<string>) {
   // Храним последние 200: список уведомлений не бесконечен, а localStorage да.
   localStorage.setItem(SEEN_KEY, JSON.stringify([...seen].slice(-200)))
+}
+
+/** Пометить прочитанным и обновить всё, что показывает счётчики. */
+export async function markNotificationRead(id: string, qc: QueryClient) {
+  try {
+    await api('/api/v1/inbox/read', { method: 'POST', body: JSON.stringify({ ids: [id] }) })
+    qc.invalidateQueries({ queryKey: ['inbox'] })
+    qc.invalidateQueries({ queryKey: ['inbox-system'] })
+    qc.invalidateQueries({ queryKey: ['sidebar-projects'] })
+  } catch {
+    /* не дошло — счётчик поправится следующим опросом */
+  }
 }
 
 /** Разрешение браузера: в Electron не спрашиваем — там своё, системное. */
@@ -165,7 +184,7 @@ export function useSystemNotifications() {
       const link = normalizeLink(n.link, n.projectId)
 
       if (bridge) {
-        bridge.notify({ title, body, link, silent: !s.sound })
+        bridge.notify({ title, body, link, silent: !s.sound, notificationId: n.id })
         return true
       }
       if (!('Notification' in window)) return skip('браузер не поддерживает Notification API')
@@ -191,6 +210,9 @@ export function useSystemNotifications() {
         window.focus()
         navigate(link)
         notification.close()
+        // Клик — это прочтение: уведомление привело человека на место, и
+        // висеть непрочитанным ему больше незачем.
+        void markNotificationRead(n.id, qc)
       }
       return true
     },

@@ -409,7 +409,10 @@ function registerIpc() {
   // Клик ведёт туда, где событие произошло: уведомление без перехода бесполезно.
   n.on('click', () => {
     showWindow()
-    if (payload?.link) send('navigate', payload.link)
+    // Объект, а не строка: вместе со ссылкой уходит id, иначе уведомление
+    // останется непрочитанным — по ссылке его не опознать, несколько разных
+    // ведут в одно место.
+    if (payload?.link) send('navigate', { link: payload.link, notificationId: payload.notificationId ?? null })
   })
   n.show()
   })
