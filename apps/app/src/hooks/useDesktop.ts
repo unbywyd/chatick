@@ -316,6 +316,7 @@ export function useDesktopSync() {
         allRead: t('desktop.allRead'),
         due: t('desktop.due'),
         launchAtLogin: t('desktop.launchAtLogin'),
+        reload: t('desktop.reload'),
         quit: t('desktop.quit'),
         timerRunning: t('desktop.timerRunning'),
         signIn: t('desktop.signIn'),

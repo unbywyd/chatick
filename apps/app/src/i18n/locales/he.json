@@ -1020,6 +1020,7 @@
     "connectRevoked": "החיבור נסגר",
     "projectOpen": "פתיחה",
     "projectHere": "פעיל",
-    "taskSetStatus": "שינוי סטטוס"
+    "taskSetStatus": "שינוי סטטוס",
+    "reload": "רענון"
   }
 }

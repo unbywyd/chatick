@@ -65,7 +65,10 @@ function createWindow() {
     win.loadURL('http://localhost:5173')
     win.webContents.openDevTools({ mode: 'detach' })
   } else if (LOAD_MODE === 'remote') {
-    win.loadURL(APP_URL)
+    // Интерфейс грузится с сайта, значит обновляется сам — но только если мы
+    // не отдадим человеку вчерашнюю копию из кеша. Ассеты именованы хешем и
+    // кешируются вечно; index.html спрашиваем у сервера каждый раз.
+    win.loadURL(APP_URL, { extraHeaders: ['pragma: no-cache', 'cache-control: no-cache', ''].join('\n') })
   } else {
     win.loadFile(path.join(__dirname, 'web', 'index.html'))
   }
@@ -142,6 +145,17 @@ function buildTrayMenu() {
     {
       label: state.authed ? tr('openApp', 'Open Chatick') : tr('signIn', 'Sign in'),
       click: showWindow,
+    },
+    { type: 'separator' },
+    {
+      label: tr('reload', 'Reload'),
+      click: async () => {
+        // Полная перезагрузка с чисткой кеша: последняя линия обороны, если
+        // страница всё-таки залипла на старой версии.
+        await win?.webContents.session.clearCache()
+        win?.webContents.reloadIgnoringCache()
+        showWindow()
+      },
     },
     { type: 'separator' },
     {

@@ -490,10 +490,15 @@ function TableRow({
         )}
       </td>
       {/* Инлайн-статус */}
-      <td className="whitespace-nowrap px-2 py-1.5 align-middle">
+      {/* Отступы — на самих кнопках, а не на ячейке: иначе попасть по мелкому
+          элементу в плотной строке трудно, а промах открывает задачу. */}
+      <td className="whitespace-nowrap align-middle">
         <DropdownMenu>
           <DropdownMenuTrigger asChild>
-            <button disabled={!canEdit} className="inline-flex items-center gap-1.5 whitespace-nowrap text-xs disabled:opacity-70">
+            <button
+              disabled={!canEdit}
+              className="inline-flex h-full w-full items-center gap-1.5 whitespace-nowrap px-2 py-1.5 text-start text-xs hover:bg-accent/60 disabled:opacity-70"
+            >
               <StatusIcon className={cn('size-3.5 shrink-0', STATUS_COLOR[task.status])} />
               {t(`tasks.status.${task.status}`)}
             </button>
@@ -512,10 +517,14 @@ function TableRow({
         </DropdownMenu>
       </td>
       {/* Приоритет-флаг */}
-      <td className="px-2 py-1.5 text-center align-middle">
+      <td className="align-middle">
         <DropdownMenu>
           <DropdownMenuTrigger asChild>
-            <button disabled={!canEdit} title={t(`tasks.priority.${task.priority}`)} className="disabled:opacity-70">
+            <button
+              disabled={!canEdit}
+              title={t(`tasks.priority.${task.priority}`)}
+              className="flex h-full w-full items-center justify-center px-2 py-1.5 hover:bg-accent/60 disabled:opacity-70"
+            >
               <Flag className={cn('size-3.5', PRIORITY_COLOR[task.priority])} />
             </button>
           </DropdownMenuTrigger>
@@ -530,11 +539,11 @@ function TableRow({
         </DropdownMenu>
       </td>
       {/* Инлайн-оценка времени */}
-      <td className="px-2 py-1.5 align-middle text-xs">
+      <td className="align-middle text-xs">
         <EstimateCell mins={task.estimateMinutes} canEdit={canEdit} onSave={(m) => onPatch(task.id, { estimateMinutes: m })} />
       </td>
       {/* Инлайн-ассайни (с поиском по имени при большом составе) */}
-      <td className="px-2 py-1.5 align-middle">
+      <td className="align-middle">
         <AssigneePicker
           assignee={task.assignee}
           members={members}
@@ -573,7 +582,10 @@ function AssigneePicker({
   return (
     <DropdownMenu onOpenChange={(o) => !o && setQ('')}>
       <DropdownMenuTrigger asChild>
-        <button disabled={!canEdit} className="inline-flex items-center gap-1.5 text-xs disabled:opacity-70">
+        <button
+          disabled={!canEdit}
+          className="inline-flex h-full w-full items-center gap-1.5 px-2 py-1.5 text-start text-xs hover:bg-accent/60 disabled:opacity-70"
+        >
           {assignee ? (
             <>
               <Avatar name={assignee.name} src={assignee.avatarUrl} size={20} />
@@ -640,7 +652,7 @@ function EstimateCell({ mins, canEdit, onSave }: { mins: number | null; canEdit:
         }}
         onKeyDown={(e) => e.key === 'Enter' && (e.target as HTMLInputElement).blur()}
         placeholder="2:30"
-        className="w-16 rounded border bg-background px-1 py-0.5 text-xs"
+        className="mx-2 my-0.5 w-16 rounded border bg-background px-1 py-0.5 text-xs"
       />
     )
   }
@@ -651,7 +663,7 @@ function EstimateCell({ mins, canEdit, onSave }: { mins: number | null; canEdit:
         setVal(fmtEstimate(mins))
         setEditing(true)
       }}
-      className="text-muted-foreground hover:text-foreground disabled:hover:text-muted-foreground"
+      className="h-full w-full px-2 py-1.5 text-start text-muted-foreground hover:bg-accent/60 hover:text-foreground disabled:hover:bg-transparent disabled:hover:text-muted-foreground"
     >
       {mins ? fmtEstimate(mins) : '—'}
     </button>
