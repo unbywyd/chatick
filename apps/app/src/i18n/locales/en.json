@@ -984,7 +984,8 @@
     "onlyMine": "Only mine",
     "startOnTask": "Start timer on this task",
     "startedOnTask": "Timer started on the task",
-    "stopped": "Timer stopped"
+    "stopped": "Timer stopped",
+    "resetFilters": "Reset filters"
   },
   "period": {
     "today": "Today",

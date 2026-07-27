@@ -3,7 +3,7 @@ import { useSearchParams } from 'react-router-dom'
 import { useQuery } from '@tanstack/react-query'
 import { useTranslation } from 'react-i18next'
 import { toast } from 'sonner'
-import { Download, Search } from 'lucide-react'
+import { Download, Search, X } from 'lucide-react'
 import { api } from '@/lib/api'
 import { Avatar } from '@/components/ui/avatar'
 import { Button } from '@/components/ui/button'
@@ -35,7 +35,7 @@ const BOM = '\ufeff'
 type Member = { user: { id: string; name: string; email: string; avatarUrl: string | null } }
 
 export function CompanyTimeTab({ companyId }: { companyId: string }) {
-  const { t } = useTranslation()
+  const { t, i18n } = useTranslation()
   // Фильтры живут в адресе: ссылку на отчёт можно переслать, а переход с
   // обзора не теряется — начальное состояние useState срабатывает только при
   // первом монтировании, и компонент про него не узнавал.
@@ -60,7 +60,9 @@ export function CompanyTimeTab({ companyId }: { companyId: string }) {
 
   const members = useQuery({
     queryKey: ['company-members', companyId],
-    queryFn: () => api<{ members: Member[] }>(`/api/v1/companies/${companyId}/members`),
+    // сервер отдаёт массив, а не { members: [...] } — из-за этого список был
+    // пуст, и выбранный человек не находился
+    queryFn: () => api<Member[]>(`/api/v1/companies/${companyId}/members`),
   })
 
   const query = useMemo(() => {
@@ -157,6 +159,19 @@ export function CompanyTimeTab({ companyId }: { companyId: string }) {
 
   const maxMinutes = Math.max(1, ...people.map((p) => p.minutes))
 
+  // Что сейчас применено — строкой под панелью. Фильтр может прийти из
+  // адреса (ссылка на отчёт), и тогда человек видит непонятно урезанный
+  // список, не понимая почему.
+  const selectedPerson = (members.data ?? []).find((m) => m.user.id === userId)?.user
+  const defaults = resolvePreset('lastMonth')
+  const periodChanged = period.from !== defaults.from || period.to !== defaults.to
+  const activeFilters = Boolean(userId) || periodChanged || Boolean(q.trim())
+
+  const resetAll = () => {
+    setQ('')
+    setParams(new URLSearchParams(), { replace: true })
+  }
+
   return (
     <div className="space-y-4">
       {/* Панель липкая: со списком в двадцать человек период и итог уезжают
@@ -174,7 +189,7 @@ export function CompanyTimeTab({ companyId }: { companyId: string }) {
         <PeoplePicker
           single
           className="w-52"
-          people={(members.data?.members ?? []).map((m) => m.user)}
+          people={(members.data ?? []).map((m) => m.user)}
           value={userId ? [userId] : []}
           onChange={(ids) => setUserId(ids[0] ?? '')}
           placeholder={t('time.everyone')}
@@ -199,6 +214,32 @@ export function CompanyTimeTab({ companyId }: { companyId: string }) {
           </span>
         </span>
       </div>
+
+      {/* Что применено — чипсами с крестиками. Фильтр мог прийти из адреса
+          (ссылка на отчёт), и без этого список выглядит необъяснимо урезанным,
+          а снять фильтр нечем. */}
+      {activeFilters && (
+        <div className="flex flex-wrap items-center gap-2 text-xs">
+          {periodChanged && (
+            <FilterChip
+              label={`${new Date(period.from).toLocaleDateString(i18n.language)} — ${new Date(period.to).toLocaleDateString(i18n.language)}`}
+              onClear={() => setPeriod(resolvePreset('lastMonth'))}
+            />
+          )}
+          {userId && (
+            <FilterChip
+              label={selectedPerson?.name ?? userId}
+              avatar={selectedPerson ? { name: selectedPerson.name, src: selectedPerson.avatarUrl } : undefined}
+              onClear={() => setUserId('')}
+            />
+          )}
+          {q.trim() && <FilterChip label={`"${q.trim()}"`} onClear={() => setQ('')} />}
+
+          <button onClick={resetAll} className="text-xs text-muted-foreground underline-offset-4 hover:underline">
+            {t('time.resetFilters')}
+          </button>
+        </div>
+      )}
 
       {report.isLoading ? (
         <p className="py-10 text-center text-sm text-muted-foreground">…</p>
@@ -243,5 +284,30 @@ export function CompanyTimeTab({ companyId }: { companyId: string }) {
         </ul>
       )}
     </div>
+  )
+}
+
+/** Применённый фильтр: видно, что включено, и снимается одним нажатием. */
+function FilterChip({
+  label,
+  avatar,
+  onClear,
+}: {
+  label: string
+  avatar?: { name: string; src: string | null }
+  onClear: () => void
+}) {
+  return (
+    <span className="inline-flex items-center gap-1.5 rounded-full border bg-card py-0.5 pe-1.5 ps-2 text-xs">
+      {avatar && <Avatar name={avatar.name} src={avatar.src} size={16} />}
+      <span className="max-w-52 truncate">{label}</span>
+      <button
+        type="button"
+        onClick={onClear}
+        className="rounded-full p-0.5 text-muted-foreground transition-colors hover:text-destructive"
+      >
+        <X className="size-3" />
+      </button>
+    </span>
   )
 }

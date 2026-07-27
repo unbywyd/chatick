@@ -984,7 +984,8 @@
     "onlyMine": "שלי בלבד",
     "startOnTask": "הפעלת טיימר על המשימה",
     "startedOnTask": "הטיימר הופעל על המשימה",
-    "stopped": "הטיימר נעצר"
+    "stopped": "הטיימר נעצר",
+    "resetFilters": "איפוס מסננים"
   },
   "period": {
     "today": "היום",

@@ -35,7 +35,10 @@ export function PeoplePicker({
   const inputRef = useRef<HTMLInputElement>(null)
 
   const byId = useMemo(() => new Map(people.map((p) => [p.id, p])), [people])
-  const picked = value.map((id) => byId.get(id)).filter(Boolean) as Person[]
+  // Человека может не оказаться в списке — например, список ещё грузится или
+  // он вышел из компании. Показываем чипс всё равно: иначе фильтр выглядит
+  // пустым, хотя он применён, и снять его нечем.
+  const picked: Person[] = value.map((id) => byId.get(id) ?? { id, name: '…' })
 
   const matches = useMemo(() => {
     const needle = q.trim().toLowerCase()
@@ -59,7 +62,7 @@ export function PeoplePicker({
 
   return (
     <div className={cn('space-y-1.5', className)}>
-      {!single && picked.length > 0 && (
+      {picked.length > 0 && (
         <div className="flex flex-wrap gap-1.5">
           {picked.map((p) => (
             <span
@@ -86,28 +89,11 @@ export function PeoplePicker({
             type="button"
             className={cn(
               'flex h-9 w-full items-center gap-2 rounded-md border bg-background px-2 text-sm transition-colors hover:bg-accent',
-              single && picked[0] ? 'text-foreground' : 'text-muted-foreground',
+              'text-muted-foreground',
             )}
           >
-            {single && picked[0] ? (
-              <>
-                <Avatar name={picked[0].name} src={picked[0].avatarUrl} size={20} />
-                <span className="min-w-0 flex-1 truncate text-start">{picked[0].name}</span>
-                <X
-                  className="size-3.5 shrink-0 text-muted-foreground transition-colors hover:text-destructive"
-                  onClick={(e) => {
-                    // сброс, не открывая список
-                    e.stopPropagation()
-                    onChange([])
-                  }}
-                />
-              </>
-            ) : (
-              <>
-                <Search className="size-3.5 shrink-0" />
-                <span className="min-w-0 flex-1 truncate text-start">{placeholder ?? t('people.add')}</span>
-              </>
-            )}
+            <Search className="size-3.5 shrink-0" />
+            <span className="min-w-0 flex-1 truncate text-start">{placeholder ?? t('people.add')}</span>
           </button>
         </PopoverTrigger>
         <PopoverContent className="w-[var(--radix-popover-trigger-width)] p-0" align="start">
