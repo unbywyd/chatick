@@ -446,7 +446,8 @@
     "dropHere": "שחררו כדי לצרף",
     "pasteFromClipboard": "הדבקה מהלוח",
     "clipboardEmpty": "הלוח ריק",
-    "clipboardDenied": "אין גישה ללוח"
+    "clipboardDenied": "אין גישה ללוח",
+    "chooseFile": "בחירת קובץ"
   },
   "chatSearch": {
     "title": "חיפוש בצ׳אט",

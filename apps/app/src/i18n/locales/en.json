@@ -446,7 +446,8 @@
     "dropHere": "Drop to attach",
     "pasteFromClipboard": "Paste from clipboard",
     "clipboardEmpty": "Clipboard is empty",
-    "clipboardDenied": "Clipboard access denied"
+    "clipboardDenied": "Clipboard access denied",
+    "chooseFile": "Choose a file"
   },
   "chatSearch": {
     "title": "Search chat",

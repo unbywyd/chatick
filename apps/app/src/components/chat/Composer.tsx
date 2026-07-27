@@ -5,12 +5,19 @@ import StarterKit from '@tiptap/starter-kit'
 import Placeholder from '@tiptap/extension-placeholder'
 import Mention from '@tiptap/extension-mention'
 import tippy, { type Instance } from 'tippy.js'
-import { Bold, CheckSquare, ClipboardPaste, Code, FileText, Image as ImageIcon, Italic, KeyRound, List, Loader2, NotebookPen, Paperclip, SendHorizontal, Strikethrough, X, Zap } from 'lucide-react'
+import { Bold, Check, CheckSquare, ClipboardPaste, Code, FileText, Image as ImageIcon, Italic, KeyRound, List, Loader2, NotebookPen, Paperclip, SendHorizontal, Strikethrough, X, Zap } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
 import { toast } from 'sonner'
 import { useQuery } from '@tanstack/react-query'
 import { api, API_URL, getProjectToken } from '@/lib/api'
 import { cn } from '@/lib/utils'
+import {
+  DropdownMenu,
+  DropdownMenuTrigger,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuSeparator,
+} from '@/components/ui/dropdown-menu'
 import { filesFromClipboard } from '@/lib/clipboard'
 import { MentionList, type MentionItem, type MentionListRef } from './MentionList'
 
@@ -180,8 +187,14 @@ export function Composer({
 
   // Внешний запрос фокуса: «Ответить» на сообщении ставит курсор сюда, чтобы
   // не приходилось отдельно кликать в поле.
+  //
+  // Через кадр, а не сразу: пункт меню закрывается уже после нашего вызова и
+  // возвращает фокус на кнопку, которая меню открыла — курсор из поля уходил
+  // ровно в тот момент, когда мы его туда поставили.
   useEffect(() => {
-    if (focusSignal && editor && !disabled) editor.commands.focus('end')
+    if (!focusSignal || !editor || disabled) return
+    const timer = window.setTimeout(() => editor.commands.focus('end'), 0)
+    return () => window.clearTimeout(timer)
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [focusSignal, editor])
 
@@ -386,24 +399,41 @@ export function Composer({
         <div className="min-w-0 flex-1">
           <EditorContent editor={editor} />
         </div>
-        <button
-          type="button"
-          onClick={() => fileRef.current?.click()}
-          disabled={disabled}
-          title={t('chat.attach')}
-          className="rounded-md p-2 text-muted-foreground transition-colors hover:text-foreground disabled:opacity-40"
-        >
-          <Paperclip className="size-4" />
-        </button>
-        <button
-          type="button"
-          onClick={pasteFromClipboard}
-          disabled={disabled}
-          title={t('composer.pasteFromClipboard')}
-          className="rounded-md p-2 text-muted-foreground transition-colors hover:text-foreground disabled:opacity-40"
-        >
-          <ClipboardPaste className="size-4" />
-        </button>
+        {/* Одна скрепка вместо трёх кнопок: способов приложить файл больше,
+            чем места в ряду, и каждый новый его не добавит. */}
+        <DropdownMenu>
+          <DropdownMenuTrigger asChild>
+            <button
+              type="button"
+              disabled={disabled}
+              title={t('chat.attach')}
+              className={cn(
+                'rounded-md p-2 transition-colors disabled:opacity-40',
+                keepOriginal ? 'text-brand' : 'text-muted-foreground hover:text-foreground',
+              )}
+            >
+              <Paperclip className="size-4" />
+            </button>
+          </DropdownMenuTrigger>
+          <DropdownMenuContent align="start">
+            <DropdownMenuItem onSelect={() => fileRef.current?.click()}>
+              <Paperclip className="size-3.5" />
+              {t('composer.chooseFile')}
+            </DropdownMenuItem>
+            <DropdownMenuItem onSelect={pasteFromClipboard}>
+              <ClipboardPaste className="size-3.5" />
+              {t('composer.pasteFromClipboard')}
+            </DropdownMenuItem>
+            <DropdownMenuSeparator />
+            {/* Режим, а не действие: включил — и следующие картинки уходят
+                без сжатия, пока не выключишь. */}
+            <DropdownMenuItem onSelect={() => setKeepOriginal((v) => !v)}>
+              <ImageIcon className={cn('size-3.5', keepOriginal && 'text-brand')} />
+              <span className="flex-1">{t('chat.keepOriginal')}</span>
+              {keepOriginal && <Check className="size-3.5 text-brand" />}
+            </DropdownMenuItem>
+          </DropdownMenuContent>
+        </DropdownMenu>
 
         {/* Молния: режим отправки мимо проверки ИИ. Залипает — включил и
             пишешь дальше, пока не выключишь. Видна только руководству
@@ -422,18 +452,7 @@ export function Composer({
             <Zap className={cn('size-4', bypassAi && 'fill-current')} />
           </button>
         )}
-        <button
-          type="button"
-          onClick={() => setKeepOriginal((v) => !v)}
-          disabled={disabled}
-          title={t('chat.keepOriginal')}
-          className={cn(
-            'rounded-md p-2 transition-colors disabled:opacity-40',
-            keepOriginal ? 'text-brand' : 'text-muted-foreground hover:text-foreground',
-          )}
-        >
-          <ImageIcon className="size-4" />
-        </button>
+
         <input
           ref={fileRef}
           type="file"
