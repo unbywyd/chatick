@@ -65,15 +65,9 @@ export function PublicShareScreen() {
         <article className="space-y-4">
           <Header icon={<FileText className="size-4" />} title={data.file.name} sub={date(data.file.createdAt)} />
 
-          {/* Картинку показываем сразу: за ней и приходят по ссылке, а
-              скачивать ради взгляда — лишний шаг. */}
-          {data.file.mime.startsWith('image/') ? (
-            <img src={raw} alt={data.file.name} className="max-h-[70vh] w-full rounded-lg border object-contain" />
-          ) : data.file.mime.startsWith('video/') ? (
-            <video src={raw} controls className="max-h-[70vh] w-full rounded-lg border" />
-          ) : data.file.mime === 'application/pdf' ? (
-            <iframe src={raw} title={data.file.name} className="h-[70vh] w-full rounded-lg border" />
-          ) : null}
+          {/* Смотреть и слушать — прямо здесь: по ссылке приходят посмотреть,
+              а скачивать ради этого файл — лишний шаг. */}
+          <Preview mime={data.file.mime} url={raw} name={data.file.name} />
 
           <div className="flex items-center justify-between gap-3">
             <span className="text-xs text-muted-foreground">{formatSize(data.file.size)}</span>
@@ -137,27 +131,23 @@ export function PublicShareScreen() {
           {data.message.text.trim() && data.message.text.trim() !== '📎' && (
             <p className="whitespace-pre-wrap text-sm">{stripMentions(data.message.text)}</p>
           )}
-          {data.message.attachments?.map((a) =>
-            a.mime.startsWith('image/') ? (
-              <img
-                key={a.id}
-                src={`${API_URL.replace(/\/$/, '')}/s/${encodeURIComponent(slug)}/raw?file=${a.id}`}
-                alt={a.name}
-                className="max-h-[70vh] w-full rounded-lg border object-contain"
-              />
-            ) : (
-              <a
-                key={a.id}
-                href={`${API_URL.replace(/\/$/, '')}/s/${encodeURIComponent(slug)}/raw?file=${a.id}`}
-                download={a.name}
-                className="inline-flex items-center gap-2 rounded-md border bg-card px-3 py-2 text-sm hover:bg-accent"
-              >
-                <Download className="size-3.5" />
-                {a.name}
-                <span className="text-xs text-muted-foreground">{formatSize(a.size)}</span>
-              </a>
-            ),
-          )}
+          {data.message.attachments?.map((a) => {
+            const url = `${API_URL.replace(/\/$/, '')}/s/${encodeURIComponent(slug)}/raw?file=${a.id}`
+            return (
+              <div key={a.id} className="space-y-2">
+                <Preview mime={a.mime} url={url} name={a.name} />
+                <a
+                  href={url}
+                  download={a.name}
+                  className="inline-flex items-center gap-2 rounded-md border bg-card px-3 py-2 text-sm hover:bg-accent"
+                >
+                  <Download className="size-3.5" />
+                  {a.name}
+                  <span className="text-xs text-muted-foreground">{formatSize(a.size)}</span>
+                </a>
+              </div>
+            )
+          })}
         </article>
       )}
 
@@ -175,6 +165,29 @@ export function PublicShareScreen() {
       )}
     </Shell>
   )
+}
+
+/**
+ * Показ содержимого прямо на странице.
+ *
+ * Картинку, видео, звук и PDF смотрят по ссылке, а не скачивают: заставлять
+ * человека сохранять файл ради взгляда — плохой ответ на присланную ссылку.
+ * Остальное честно предлагаем скачать: браузер всё равно не покажет.
+ */
+function Preview({ mime, url, name }: { mime: string; url: string; name: string }) {
+  if (mime.startsWith('image/')) {
+    return <img src={url} alt={name} className="max-h-[70vh] w-full rounded-lg border object-contain" />
+  }
+  if (mime.startsWith('video/')) {
+    return <video src={url} controls className="max-h-[70vh] w-full rounded-lg border" />
+  }
+  if (mime.startsWith('audio/')) {
+    return <audio src={url} controls className="w-full" />
+  }
+  if (mime === 'application/pdf') {
+    return <iframe src={url} title={name} className="h-[70vh] w-full rounded-lg border" />
+  }
+  return null
 }
 
 /** Обёртка страницы: шапка с логотипом и проектом, из которого пришли. */

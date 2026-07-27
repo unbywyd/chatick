@@ -101,7 +101,22 @@ export async function deleteObject(store: ResolvedStorage, key: string) {
 }
 
 /** Стрим объекта (для прокси-отдачи файла через API). */
-export async function getObjectStream(store: ResolvedStorage, key: string): Promise<{ body: Readable; contentType?: string; contentLength?: number }> {
-  const res = await store.client.send(new GetObjectCommand({ Bucket: store.bucket, Key: key }))
-  return { body: res.Body as Readable, contentType: res.ContentType, contentLength: res.ContentLength }
+/**
+ * Поток объекта из хранилища.
+ *
+ * range нужен аудио и видео: без частичных запросов браузер тянет файл целиком
+ * и перемотка по длинной записи работает рывками либо не работает вовсе.
+ */
+export async function getObjectStream(
+  store: ResolvedStorage,
+  key: string,
+  range?: string,
+): Promise<{ body: Readable; contentType?: string; contentLength?: number; contentRange?: string }> {
+  const res = await store.client.send(new GetObjectCommand({ Bucket: store.bucket, Key: key, Range: range }))
+  return {
+    body: res.Body as Readable,
+    contentType: res.ContentType,
+    contentLength: res.ContentLength,
+    contentRange: res.ContentRange,
+  }
 }

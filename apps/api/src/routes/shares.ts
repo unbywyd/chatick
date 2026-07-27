@@ -327,15 +327,19 @@ publicShareRoute.get('/:slug/raw', async (c) => {
 
   try {
     const store = await resolveStorage(file.projectId)
-    const { body, contentType, contentLength } = await getObjectStream(store, file.key)
+    // Частичный запрос — для перемотки аудио и видео.
+    const range = c.req.header('range')
+    const { body, contentType, contentLength, contentRange } = await getObjectStream(store, file.key, range)
     const web = Readable.toWeb(body) as ReadableStream
     c.header('Content-Type', contentType || file.mime)
     // inline: по ссылке приходят посмотреть, а не обязательно скачать
     c.header('Content-Disposition', `inline; filename*=UTF-8''${encodeURIComponent(file.name)}`)
     if (contentLength) c.header('Content-Length', String(contentLength))
-    // Публичная ссылку можно отозвать — вечный кеш сделал бы отзыв бесполезным
+    c.header('Accept-Ranges', 'bytes')
+    if (contentRange) c.header('Content-Range', contentRange)
+    // Публичную ссылку можно отозвать — вечный кеш сделал бы отзыв бесполезным
     c.header('Cache-Control', 'public, max-age=300')
-    return c.body(web)
+    return c.body(web, range && contentRange ? 206 : 200)
   } catch (e) {
     console.error('[shares] file read failed:', e)
     return c.json({ error: 'Read failed' }, 500)
