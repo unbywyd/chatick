@@ -91,6 +91,18 @@ export async function testNotification(title: string, body: string): Promise<str
   return null
 }
 
+/**
+ * Забыть, что уже показывали. Уведомления придут заново — кнопкой из настроек.
+ *
+ * Список «показанных» — единственное, что стоит между накопившимися
+ * уведомлениями и человеком, и когда показ ломался, туда попадало лишнее.
+ * Чинить это разовой миграцией ненадёжно: она отрабатывает один раз и молча.
+ */
+export function forgetShownNotifications() {
+  localStorage.removeItem(SEEN_KEY)
+  window.dispatchEvent(new CustomEvent('chatick:notification'))
+}
+
 /** Разрешение браузера: в Electron не спрашиваем — там своё, системное. */
 export function browserPermission(): NotificationPermission | 'unsupported' {
   if (typeof window === 'undefined' || !('Notification' in window)) return 'unsupported'
@@ -167,9 +179,8 @@ export function useSystemNotifications() {
   // подписку на каждое изменение галочки незачем.
   const settingsRef = useRef(settings)
   settingsRef.current = settings
-  // Запрос разрешения — один раз за сеанс: диалог браузера не должен всплывать
-  // на каждое входящее уведомление.
-  const askedRef = useRef(false)
+  /** последняя причина отказа — чтобы не повторять её в консоли */
+  const lastSkipRef = useRef<string | null>(null)
 
   /**
    * Показать уведомление. Возвращает false, если показать не удалось или
@@ -183,7 +194,12 @@ export function useSystemNotifications() {
       // Почему промолчали — видно в консоли. Без этого «не работает» и
       // «молчим намеренно» выглядят одинаково, и разобраться нельзя.
       const skip = (why: string) => {
-        console.info('[chatick] уведомление не показано:', why)
+        // Одна причина — одна строка: сорок одинаковых сообщений подряд
+        // скрывают всё остальное в консоли.
+        if (lastSkipRef.current !== why) {
+          lastSkipRef.current = why
+          console.info('[chatick] уведомление не показано:', why)
+        }
         return false
       }
       if (!s.enabled) return skip('выключено в настройках')
@@ -205,17 +221,12 @@ export function useSystemNotifications() {
       if (Notification.permission === 'denied')
         return skip('уведомления запрещены в настройках сайта — разрешить можно только там')
       if (Notification.permission === 'default') {
-        // Разрешение ещё не спрашивали. Тумблер «Уведомления» в панели сайта —
-        // это не то же самое: он лишь снимает запрет, а выдать разрешение
-        // может только сам запрос. Просим один раз и молча: человек уже дал
-        // понять, что уведомления ему нужны.
-        if (!askedRef.current) {
-          askedRef.current = true
-          void requestBrowserPermission().then((next) => {
-            if (next === 'granted') qc.invalidateQueries({ queryKey: ['inbox-system'] })
-          })
-        }
-        return skip('разрешение ещё не выдано — запросили сейчас')
+        // Просить разрешение отсюда нельзя. Браузер показывает диалог только в
+        // ответ на действие человека; запрос из кода он молча игнорирует, а за
+        // повторы включает защиту от навязчивых сайтов — после неё диалог не
+        // появится уже никогда, и кнопка «Разрешить» перестанет работать.
+        // Поэтому спрашиваем только по клику — из полоски и настроек.
+        return skip('разрешение не выдано — нажмите «Разрешить» в полоске внизу')
       }
       const notification = new Notification(title, {
         body,

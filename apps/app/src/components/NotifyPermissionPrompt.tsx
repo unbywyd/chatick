@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react'
 import { useTranslation } from 'react-i18next'
+import { toast } from 'sonner'
 import { Bell, X } from 'lucide-react'
 import { getSessionToken } from '@/lib/api'
 import { Button } from '@/components/ui/button'
@@ -64,8 +65,20 @@ export function NotifyPermissionPrompt() {
           onClick={async () => {
             const next = await requestBrowserPermission()
             setPerm(next)
-            // Ответили — полоска своё дело сделала, в любом случае убираем.
-            if (next !== 'default') dismiss()
+            if (next === 'granted') {
+              toast.success(t('notif.permGranted'))
+              dismiss()
+              return
+            }
+            if (next === 'denied') {
+              toast.error(t('notif.systemDenied'))
+              dismiss()
+              return
+            }
+            // Остались на 'default' — браузер не показал диалог. Так он себя
+            // ведёт, когда включает тихий режим запросов; разрешить можно
+            // только вручную, через значок в адресной строке.
+            toast.error(t('notif.permBlocked'))
           }}
         >
           {t('notif.systemAllow')}

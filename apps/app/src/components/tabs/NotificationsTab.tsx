@@ -10,6 +10,7 @@ import { saveNotifySettings } from '@/lib/notify-settings'
 import {
   browserPermission,
   requestBrowserPermission,
+  forgetShownNotifications,
   testNotification,
   useNotifySettings,
 } from '@/hooks/useSystemNotifications'
@@ -402,6 +403,17 @@ function SystemNotifySettings() {
       {/* Проверка на месте: не надо ждать настоящего события, чтобы понять,
           доходят ли уведомления. */}
       <div className="pt-1">
+        <Button
+          variant="outline"
+          size="sm"
+          className="me-2"
+          onClick={() => {
+            forgetShownNotifications()
+            toast.success(t('notif.replayed'))
+          }}
+        >
+          {t('notif.replay')}
+        </Button>
         <Button
           variant="outline"
           size="sm"

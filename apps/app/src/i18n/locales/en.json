@@ -596,7 +596,11 @@
     "testTitle": "Chatick",
     "testBody": "Notifications are working.",
     "testFailed": "Couldn't show a notification — check your browser settings.",
-    "testSent": "Sent — check the corner of your screen."
+    "testSent": "Sent — check the corner of your screen.",
+    "replay": "Show unread again",
+    "replayed": "Unread notifications will come through again.",
+    "permGranted": "Notifications are on.",
+    "permBlocked": "Your browser didn't show the prompt. Click the icon at the left of the address bar and allow notifications there."
   },
   "projTeam": {
     "title": "Project team",
