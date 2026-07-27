@@ -45,12 +45,13 @@ export function NotificationsTab({ projectId, isAdmin }: { projectId: string; is
 
   const prefs = useQuery({
     queryKey: ['notif-prefs', projectId],
-    queryFn: () => api<{ prefs: Record<Event, boolean> }>(`/api/v1/notifications/prefs`),
+    // Подписки живут внутри проекта — нужен project-токен, а не сессионный.
+    queryFn: () => api<{ prefs: Record<Event, boolean> }>(`/api/v1/notifications/prefs`, {}, 'project'),
   })
 
   const togglePref = useMutation({
     mutationFn: ({ event, enabled }: { event: Event; enabled: boolean }) =>
-      api(`/api/v1/notifications/prefs`, { method: 'PATCH', body: JSON.stringify({ event, enabled }) }),
+      api(`/api/v1/notifications/prefs`, { method: 'PATCH', body: JSON.stringify({ event, enabled }) }, 'project'),
     onSuccess: () => qc.invalidateQueries({ queryKey: ['notif-prefs', projectId] }),
     onError: onErr,
   })
@@ -102,7 +103,7 @@ function ReminderConfig({ projectId, isAdmin }: { projectId: string; isAdmin: bo
 
   const q = useQuery({
     queryKey: ['task-reminder', projectId],
-    queryFn: () => api<{ reminder: Reminder | null }>(`/api/v1/notifications/reminders`),
+    queryFn: () => api<{ reminder: Reminder | null }>(`/api/v1/notifications/reminders`, {}, 'project'),
   })
 
   const [form, setForm] = useState<Reminder>({
@@ -132,7 +133,7 @@ function ReminderConfig({ projectId, isAdmin }: { projectId: string; isAdmin: bo
           audience: form.audience,
           statuses: form.statuses.split(',').filter(Boolean),
         }),
-      }),
+      }, 'project'),
     onSuccess: () => {
       toast.success(t('notif.saved'))
       qc.invalidateQueries({ queryKey: ['task-reminder', projectId] })
@@ -406,8 +407,11 @@ function SystemNotifySettings() {
           size="sm"
           onClick={async () => {
             const why = await testNotification(t('notif.testTitle'), t('notif.testBody'))
-            if (why === 'denied') toast.error(t('notif.systemDenied'))
-            else if (why) toast.error(t('notif.testFailed'))
+            console.info('[chatick] пробное уведомление:', why ?? 'показано')
+            // Молчание кнопки неотличимо от поломки — отвечаем всегда.
+            if (!why) toast.success(t('notif.testSent'))
+            else if (why === 'denied') toast.error(t('notif.systemDenied'))
+            else toast.error(t('notif.testFailed'))
           }}
         >
           {t('notif.test')}

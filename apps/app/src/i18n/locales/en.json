@@ -595,7 +595,8 @@
     "test": "Send a test notification",
     "testTitle": "Chatick",
     "testBody": "Notifications are working.",
-    "testFailed": "Couldn't show a notification — check your browser settings."
+    "testFailed": "Couldn't show a notification — check your browser settings.",
+    "testSent": "Sent — check the corner of your screen."
   },
   "projTeam": {
     "title": "Project team",
