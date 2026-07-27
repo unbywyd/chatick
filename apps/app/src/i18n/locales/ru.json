@@ -1098,7 +1098,8 @@
     "projectHere": "активен",
     "taskSetStatus": "Сменить статус",
     "reload": "Обновить",
-    "about": "О проекте"
+    "about": "О проекте",
+    "updateReady": "Перезапустить и обновить"
   },
   "update": {
     "available": "Вышла новая версия",

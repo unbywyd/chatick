@@ -1096,7 +1096,8 @@
     "projectHere": "פעיל",
     "taskSetStatus": "שינוי סטטוס",
     "reload": "רענון",
-    "about": "אודות"
+    "about": "אודות",
+    "updateReady": "הפעילו מחדש לעדכון"
   },
   "update": {
     "available": "זמינה גרסה חדשה",

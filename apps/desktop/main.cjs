@@ -1,4 +1,5 @@
 const { app, BrowserWindow, Tray, Menu, Notification, globalShortcut, shell, ipcMain, nativeImage } = require('electron')
+const { autoUpdater } = require('electron-updater')
 const path = require('node:path')
 const fs = require('node:fs')
 
@@ -18,6 +19,8 @@ const APP_URL = process.env.CHATICK_URL || 'https://app.chatick.com'
 let win = null
 let tray = null
 let quitting = false
+/** версия скачанного обновления — показываем в трее, что перезапуск не зря */
+let updateReady = ''
 /** Куда человек перетащил панель; null — держимся значка в трее. */
 let panelPos = null
 
@@ -157,6 +160,18 @@ function buildTrayMenu() {
         showWindow()
       },
     },
+    ...(updateReady
+      ? [
+          {
+            label: `${tr('updateReady', 'Restart to update')} (${updateReady})`,
+            click: () => {
+              quitting = true
+              autoUpdater.quitAndInstall()
+            },
+          },
+          { type: 'separator' },
+        ]
+      : []),
     {
       label: tr('notifySettings', 'Notification settings'),
       click: () => {
@@ -481,6 +496,39 @@ if (!app.requestSingleInstanceLock()) {
 } else {
   app.on('second-instance', showWindow)
 
+/**
+ * Обновление оболочки.
+ *
+ * Интерфейс грузится с сайта и обновляется сам при каждом запуске — здесь
+ * речь только про саму программу: главный процесс, трей, уведомления. Их
+ * иначе не обновить, кроме как переустановкой.
+ *
+ * Ставим тихо и применяем при выходе: прерывать работу ради перезапуска —
+ * худшее, что может сделать программа, в которой люди переписываются.
+ */
+function setupUpdates() {
+  // В разработке обновляться неоткуда и незачем
+  if (isDev || !app.isPackaged) return
+
+  autoUpdater.autoDownload = true
+  autoUpdater.autoInstallOnAppQuit = true
+
+  autoUpdater.on('update-downloaded', (info) => {
+    console.log('[desktop] обновление готово, поставится при выходе:', info?.version)
+    updateReady = info?.version ?? ''
+    refreshTray()
+  })
+  autoUpdater.on('error', (e) => {
+    // Молча: недоступный сервер обновлений — не повод пугать человека
+    console.warn('[desktop] проверка обновлений не удалась:', e?.message ?? e)
+  })
+
+  const check = () => autoUpdater.checkForUpdates().catch(() => {})
+  check()
+  // Раз в шесть часов: приложение живёт в трее неделями
+  setInterval(check, 6 * 60 * 60 * 1000)
+}
+
   app.whenReady().then(() => {
     // Windows связывает уведомления с приложением по AppUserModelID. Без него
     // система молча выбрасывает всплывашки: Notification.isSupported() врёт
@@ -493,6 +541,7 @@ if (!app.requestSingleInstanceLock()) {
     createWindow()
     createTray()
     registerShortcuts()
+    setupUpdates()
 
     app.on('activate', () => {
       if (BrowserWindow.getAllWindows().length === 0) createWindow()

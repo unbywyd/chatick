@@ -1,6 +1,6 @@
 {
   "name": "@chatick/desktop",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "private": true,
   "main": "main.cjs",
   "scripts": {
@@ -30,7 +30,9 @@
       "web/**/*"
     ],
     "win": {
-      "target": "nsis",
+      "target": [
+        "nsis"
+      ],
       "icon": "assets/icon.png"
     },
     "mac": {
@@ -45,8 +47,23 @@
     },
     "nsis": {
       "oneClick": false,
+      "perMachine": false,
       "allowToChangeInstallationDirectory": true,
-      "createDesktopShortcut": true
-    }
+      "createDesktopShortcut": true,
+      "createStartMenuShortcut": true,
+      "shortcutName": "Chatick",
+      "artifactName": "Chatick-Setup-${version}.${ext}",
+      "deleteAppDataOnUninstall": false
+    },
+    "publish": [
+      {
+        "provider": "generic",
+        "url": "https://chatick.com/releases",
+        "channel": "latest"
+      }
+    ]
+  },
+  "dependencies": {
+    "electron-updater": "^6.8.9"
   }
 }

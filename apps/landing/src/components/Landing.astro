@@ -14,10 +14,10 @@ const GITHUB = 'https://github.com/unbywyd/chatick'
 
 // Кнопки скачивания пока без файлов: сборки ещё не выкладываются, и вести
 // на пустоту хуже, чем честно сказать «скоро».
+const VERSION = '0.2.0'
 const DOWNLOADS = [
-  { key: 'windows' as const, href: '', icon: 'windows' },
+  { key: 'windows' as const, href: `/releases/Chatick-Setup-${VERSION}.exe`, icon: 'windows' },
   { key: 'mac' as const, href: '', icon: 'apple' },
-  { key: 'linux' as const, href: '', icon: 'linux' },
 ]
 
 // Цифры для графиков — то, что видно на овервью в самом продукте.
@@ -90,10 +90,16 @@ const CHART_STATUSES = [
       <!-- Три столпа — сразу в шапке, а не в подвале: опенсурс, бесплатно, надёжно -->
       <ul class="hero-trust">
         <li>
-          <svg viewBox="0 0 24 24" width="16" height="16" fill="none" aria-hidden="true">
-            <path d="m8 8-4 4 4 4m8-8 4 4-4 4" stroke="#d4f228" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" />
-          </svg>
-          {t.hero.trust[0]}
+          <!-- «Открытый код» ведёт на код: обещание, которое можно проверить -->
+          <a href={GITHUB} target="_blank" rel="noopener" title={t.footer.github}>
+            <svg viewBox="0 0 16 16" width="16" height="16" fill="#d4f228" aria-hidden="true">
+              <path d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27s1.36.09 2 .27c1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.01 8.01 0 0 0 16 8c0-4.42-3.58-8-8-8Z" />
+            </svg>
+            {t.hero.trust[0]}
+            <svg class="pill-out" viewBox="0 0 24 24" width="13" height="13" fill="none" aria-hidden="true">
+              <path d="M14 4h6v6M20 4l-8.5 8.5M18 14v4a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" />
+            </svg>
+          </a>
         </li>
         <li>
           <svg viewBox="0 0 24 24" width="16" height="16" aria-hidden="true">
@@ -1642,6 +1648,20 @@ const CHART_STATUSES = [
     color: var(--fg);
     font-size: 0.88rem;
     font-weight: 600;
+  }
+
+  .hero-trust a {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    color: inherit;
+  }
+  .hero-trust li:has(a):hover {
+    border-color: rgba(212, 242, 40, 0.5);
+    background: rgba(212, 242, 40, 0.07);
+  }
+  .pill-out {
+    color: var(--fg-muted);
   }
 
   /* --- Карточка «без привязки» ---------------------------------------------- */

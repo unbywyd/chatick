@@ -322,6 +322,7 @@ export function useDesktopSync() {
         launchAtLogin: t('desktop.launchAtLogin'),
         reload: t('desktop.reload'),
         notifySettings: t('notif.system'),
+        updateReady: t('desktop.updateReady'),
         quit: t('desktop.quit'),
         timerRunning: t('desktop.timerRunning'),
         signIn: t('desktop.signIn'),

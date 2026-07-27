@@ -38,6 +38,10 @@ Written in English only: this file is published on the website.
 - Originals of optimised images are no longer stored, which leaves far more of
   a project's storage for actual work.
 
+- Windows installer, with the shell updating itself in the background and
+  applying the update on exit. The interface itself already updates on every
+  launch, since it is loaded from the web.
+
 ### Fixed
 
 - Notifications never appeared in the browser at all, and on Windows they were

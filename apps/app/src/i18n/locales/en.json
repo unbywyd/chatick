@@ -1096,7 +1096,8 @@
     "projectHere": "active",
     "taskSetStatus": "Change status",
     "reload": "Reload",
-    "about": "About"
+    "about": "About",
+    "updateReady": "Restart to update"
   },
   "update": {
     "available": "A new version is available",

@@ -1,102 +1,118 @@
-# Deploy — chatick-next на webtopro
+# Deploy
 
-> Сервер, доступы и правила безопасности: `.local-notes/SERVER.md` (не в git).
-> Все команды на сервере — после `ssh myserver` и:
-> ```bash
-> export PATH=/root/.nvm/versions/node/v22.18.0/bin:$PATH
-> export PM2_HOME=/root/.pm2
-> ```
+Chatick is a pnpm + Turbo monorepo with three deployable parts:
 
-## Раскладка
+| App | What it is | Where it ends up |
+|---|---|---|
+| `apps/api` | Hono + Drizzle + Postgres | a Node process behind a reverse proxy |
+| `apps/app` | Vite + React SPA | static files |
+| `apps/landing` | Astro | static files |
 
-| Что | Значение |
-|---|---|
-| Каталог | `/var/www/chatick-next` |
-| PM2-процесс | `chatick-next-api` |
-| Порт API | `3200` (3160 — старый chatick, 3180 — vexelkit) |
-| БД | `chatick_next` на локальном Postgres `:55432`, юзер `chatick_next` |
-| Домены | `api.chatick.com` → :3200; `app.chatick.com` → `apps/app/dist`; `cp.chatick.com` → админка (позже) |
+Everything specific to a particular server — hostnames, ports, credentials —
+lives in the environment, not in this file.
 
-## Этап 0 — потушить старый chatick (ничего не удалять!)
+## Requirements
+
+- Node 22+
+- pnpm 10+
+- PostgreSQL 15+
+- An S3-compatible bucket (Cloudflare R2 works) for files and avatars
+- An SMTP account for invitations, digests and notifications
+
+## Configuration
+
+Copy `apps/api/.env.example` to `apps/api/.env` and fill it in. The required
+values are the database URL, `JWT_SECRET` and `ENCRYPTION_KEY`; the rest enable
+optional pieces — Google sign-in, the AI dispatcher, file storage, email.
 
 ```bash
-pm2 stop chatick-api      # именно stop, НЕ delete
-pm2 save
+# a 32-byte key, hex-encoded
+openssl rand -hex 32
 ```
 
-- БД `chatick`, `chatick_shadow` — не трогать.
-- `/var/www/chatick/monorepo` — не трогать.
-- R2-бакеты `chatick-assets`, `chatick-private` — не трогать.
-- nginx-вхосты перепишем на этапе 3 (старый конфиг сохранить: `cp /etc/nginx/sites-enabled/chatick.com /root/backup-nginx-chatick.com.$(date +%F)`).
+The web app reads `VITE_API_URL` at build time — set it before building, or the
+app will look for the API on localhost.
 
-## Этап 1 — БД
+## Build
 
 ```bash
-# под postgres-суперюзером (уточнить как заходить: sudo -u postgres psql -p 55432)
-CREATE USER chatick_next WITH PASSWORD '<из .local-notes/CREDENTIALS.md>';
-CREATE DATABASE chatick_next OWNER chatick_next;
-```
-
-## Этап 2 — код и процесс
-
-```bash
-mkdir -p /var/www/chatick-next && cd /var/www/chatick-next
-git clone git@github.com:unbywyd/chatick-next.git .   # репо создать заранее
-corepack enable && corepack prepare pnpm@10.28.2 --activate  # если ещё не
 pnpm install
+pnpm --filter @chatick/api build
+pnpm --filter @chatick/app build      # → apps/app/dist
+pnpm --filter @chatick/landing build  # → apps/landing/dist
+```
 
-# .env: залить локальный apps/api/.env (с NODE_ENV=production, CORS_ORIGIN=https://app.chatick.com)
-# .env.production для apps/app уже в репо (VITE_API_URL=https://api.chatick.com)
+The landing build fails on purpose when the version in `package.json` has no
+entry in `CHANGELOG.md`. That is the guard which keeps a release from shipping
+without a description — see `apps/landing/src/changelog.ts`.
 
-pnpm build
-cd apps/api && pnpm db:migrate && cd ../..
+## Database
 
-cd apps/api
-pm2 start pnpm --name chatick-next-api -- start
+Migrations are plain SQL under `apps/api/drizzle`, applied in the order listed
+in `apps/api/drizzle/meta/_journal.json`:
+
+```bash
+psql "$DATABASE_URL" -f apps/api/drizzle/0001_....sql
+```
+
+Apply them in order on a fresh database. They are written to be re-runnable, so
+applying one twice is harmless.
+
+## Running the API
+
+Any process manager will do. With PM2:
+
+```bash
+pm2 start apps/api/dist/server.js --name chatick-api
 pm2 save
 ```
 
-## Этап 3 — nginx
+The API serves HTTP and a WebSocket on the same port. Whatever sits in front of
+it must:
 
-Правим `/etc/nginx/sites-enabled/chatick.com` (бэкап сделан на этапе 0):
+- pass WebSocket upgrades through to `/ws` and `/yjs`;
+- allow long-lived connections (`proxy_read_timeout` well above the default) —
+  chat, presence and collaborative documents depend on them;
+- allow request bodies large enough for uploads (50 MB is a sensible ceiling).
 
-- `api.chatick.com` → `proxy_pass http://127.0.0.1:3200;` (было 3160). Оставить `proxy_read_timeout 86400s` (SSE/WebSocket), `client_max_body_size 50M`.
-- `app.chatick.com` → `root /var/www/chatick-next/apps/app/dist;` + `try_files $uri $uri/ /index.html;`
-- `chat.chatick.com` → 301 на `app.chatick.com` (или 404) — поддомен освобождаем.
-- `chatick.com` / `www` — пока оставить как есть (basic-auth заглушка старого лендинга) или 301 на app.
-- `cp.chatick.com` — пока не трогаем; при готовности админки → `proxy_pass http://127.0.0.1:3201;`.
+## Serving the static parts
 
-TLS-сертификаты уже покрывают все поддомены — перевыпуск не нужен.
+Point one virtual host at `apps/app/dist` and another at `apps/landing/dist`,
+with an SPA-style fallback to `index.html` for the app.
 
-```bash
-nginx -t && systemctl reload nginx
+Caching matters here. Hashed assets under `/assets/` and `/_astro/` can be
+cached forever; `index.html` and `version.json` must not be cached at all, or
+people keep running yesterday's build after a deploy:
+
+```nginx
+location ~* ^/(index\.html|version\.json)$ {
+    add_header Cache-Control "no-cache, no-store, must-revalidate";
+}
+location ~* ^/(assets|_astro)/ {
+    add_header Cache-Control "public, max-age=31536000, immutable";
+}
 ```
 
-## Этап 4 — smoke
+## Desktop releases
+
+`pnpm --filter @chatick/desktop dist` produces a Windows installer in
+`apps/desktop/release`. The desktop shell loads the interface from the deployed
+web app, so a new build is only needed when the shell itself changes.
+
+Updates are served from a plain directory: upload the installer together with
+`latest.yml` to wherever `build.publish.url` points, and installed copies pick
+the update up on their own.
+
+## Deploying an update
 
 ```bash
-curl -s https://api.chatick.com/health
-curl -s -o /dev/null -w 'app: %{http_code}\n' https://app.chatick.com/
-pm2 logs chatick-next-api --lines 50 --nostream
+git pull
+pnpm install
+pnpm --filter @chatick/api build
+pnpm --filter @chatick/app build
+pnpm --filter @chatick/landing build
+# apply any new migration
+pm2 restart chatick-api
 ```
 
-## Обновление прода (обычный цикл)
-
-```bash
-cd /var/www/chatick-next
-git pull --ff-only
-pnpm install          # если менялся pnpm-lock.yaml
-pnpm build
-cd apps/api && pnpm db:migrate && cd ../..   # если есть новые миграции
-pm2 restart chatick-next-api --update-env
-```
-
-Только фронт: `pnpm --filter @chatick/app build` — nginx подхватит dist без рестарта.
-
-## Откат на старый chatick (если что)
-
-```bash
-pm2 stop chatick-next-api
-pm2 start chatick-api
-# nginx: вернуть бэкап конфига, nginx -t && systemctl reload nginx
-```
+The static parts need no restart — the files are replaced in place.
