@@ -316,10 +316,6 @@ function CompanyHome({
   const navigate = useNavigate()
   // таб компании — из URL: /start/:companyId/:companyTab (settings адресуем — на него ведёт чат без LLM)
   const { companyTab } = useParams()
-  // Что смотрели на обзоре — чтобы вкладка «Часы» открылась на том же
-  // человеке и периоде, а не сбрасывала выбор.
-  const [reportFor, setReportFor] = useState<{ userId: string; period: Period } | null>(null)
-
   const tab = (['overview', 'projects', 'team', 'time', 'connect', 'backup', 'settings'] as const).includes(companyTab as never)
     ? (companyTab as 'overview' | 'projects' | 'team' | 'time' | 'connect' | 'backup' | 'settings')
     : 'overview'
@@ -357,17 +353,21 @@ function CompanyHome({
         <OverviewTab
           companyId={company.id}
           onOpenProject={onEntered}
-          onOpenReport={(userId, period) => {
-            setReportFor({ userId, period })
-            navigate(`/start/${company.id}/time`)
-          }}
+          // Фильтры едут в адресе: ссылку можно переслать, и вкладка «Часы»
+          // прочитает их сама, даже если уже была смонтирована.
+          onOpenReport={(userId, period) =>
+            navigate(
+              `/start/${company.id}/time?user=${encodeURIComponent(userId)}` +
+                `&from=${encodeURIComponent(period.from)}&to=${encodeURIComponent(period.to)}`,
+            )
+          }
         />
       ) : tab === 'projects' ? (
         <ProjectsTab company={company} canManage={canManage} onEntered={onEntered} />
       ) : tab === 'team' ? (
         <TeamTab company={company} meId={meId} />
       ) : tab === 'time' && canManage ? (
-        <CompanyTimeTab companyId={company.id} initialUserId={reportFor?.userId} initialPeriod={reportFor?.period} />
+        <CompanyTimeTab companyId={company.id} />
       ) : tab === 'connect' && canManage ? (
         <CompanyConnectTab company={company} />
       ) : tab === 'backup' && isAdmin ? (

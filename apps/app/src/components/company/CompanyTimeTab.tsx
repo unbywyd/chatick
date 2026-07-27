@@ -1,4 +1,5 @@
 import { useMemo, useState } from 'react'
+import { useSearchParams } from 'react-router-dom'
 import { useQuery } from '@tanstack/react-query'
 import { useTranslation } from 'react-i18next'
 import { toast } from 'sonner'
@@ -33,19 +34,28 @@ type Report = { people: Person[]; totalMinutes: number }
 const BOM = '\ufeff'
 type Member = { user: { id: string; name: string; email: string; avatarUrl: string | null } }
 
-export function CompanyTimeTab({
-  companyId,
-  initialUserId,
-  initialPeriod,
-}: {
-  companyId: string
-  /** приходят с обзора: человек и период, которые там смотрели */
-  initialUserId?: string
-  initialPeriod?: Period
-}) {
+export function CompanyTimeTab({ companyId }: { companyId: string }) {
   const { t } = useTranslation()
-  const [period, setPeriod] = useState<Period>(() => initialPeriod ?? resolvePreset('lastMonth'))
-  const [userId, setUserId] = useState(initialUserId ?? '')
+  // Фильтры живут в адресе: ссылку на отчёт можно переслать, а переход с
+  // обзора не теряется — начальное состояние useState срабатывает только при
+  // первом монтировании, и компонент про него не узнавал.
+  const [params, setParams] = useSearchParams()
+  const period: Period = {
+    from: params.get('from') || resolvePreset('lastMonth').from,
+    to: params.get('to') || resolvePreset('lastMonth').to,
+  }
+  const userId = params.get('user') ?? ''
+
+  const patchParams = (next: Record<string, string | null>) => {
+    const p = new URLSearchParams(params)
+    for (const [k, v] of Object.entries(next)) {
+      if (v) p.set(k, v)
+      else p.delete(k)
+    }
+    setParams(p, { replace: true })
+  }
+  const setPeriod = (v: Period) => patchParams({ from: v.from, to: v.to })
+  const setUserId = (v: string) => patchParams({ user: v || null })
   const [q, setQ] = useState('')
 
   const members = useQuery({
