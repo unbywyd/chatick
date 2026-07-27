@@ -3,7 +3,7 @@ import { zValidator } from '@hono/zod-validator'
 import { z } from 'zod'
 import { and, asc, desc, eq, gt, ilike, inArray, lt, lte, sql } from 'drizzle-orm'
 import { db } from '../db/client.js'
-import { chatSummaries, files, messages, sandboxMessages, tasks, users } from '../db/schema.js'
+import { chatSummaries, credentials, documents, files, messages, notes, sandboxMessages, tasks, users } from '../db/schema.js'
 import { requireProject, type ProjectEnv } from '../auth.js'
 import { broadcast, sendToUser } from '../ws.js'
 import { evaluateMessage, sandboxReply, aiChatReply } from '../lib/dispatcher.js'
@@ -55,12 +55,60 @@ export const messagesRoute = new Hono<ProjectEnv>()
 messagesRoute.use('*', requireProject)
 
 type Attachment = { id: string; name: string; mime: string; size: number; deleted?: boolean }
-type TaskPin = { id: string; number: string; title: string; status: string }
+/**
+ * Пин — ссылка на сущность проекта, приложенная к сообщению.
+ *
+ * Раньше пинились только задачи, поэтому колонка называется task_refs. Формат
+ * расширен: строка «note:abc» вместо голого id. Старые записи (голый id)
+ * читаются как задачи — переписывать историю ради переименования незачем.
+ */
+type PinKind = 'task' | 'note' | 'document' | 'resource'
+type TaskPin = { id: string; kind: PinKind; number?: string; title: string; status?: string }
 
-async function taskPinsOf(ids: string[], projectId: string): Promise<TaskPin[]> {
-  if (!ids.length) return []
-  const rows = await db.query.tasks.findMany({ where: and(eq(tasks.projectId, projectId), inArray(tasks.id, ids)) })
-  return rows.map((t) => ({ id: t.id, number: t.number, title: t.title, status: t.status }))
+const parsePinRef = (ref: string): { kind: PinKind; id: string } => {
+  const i = ref.indexOf(':')
+  if (i < 0) return { kind: 'task', id: ref } // старый формат
+  const kind = ref.slice(0, i) as PinKind
+  return { kind: ['task', 'note', 'document', 'resource'].includes(kind) ? kind : 'task', id: ref.slice(i + 1) }
+}
+
+async function taskPinsOf(refs: string[], projectId: string): Promise<TaskPin[]> {
+  if (!refs.length) return []
+  const parsed = refs.map(parsePinRef)
+  const byKind = (k: PinKind) => parsed.filter((p) => p.kind === k).map((p) => p.id)
+
+  const out = new Map<string, TaskPin>()
+
+  const taskIds = byKind('task')
+  if (taskIds.length) {
+    const rows = await db.query.tasks.findMany({ where: and(eq(tasks.projectId, projectId), inArray(tasks.id, taskIds)) })
+    for (const t of rows) out.set(`task:${t.id}`, { id: t.id, kind: 'task', number: t.number, title: t.title, status: t.status })
+  }
+
+  const noteIds = byKind('note')
+  if (noteIds.length) {
+    const rows = await db.query.notes.findMany({ where: and(eq(notes.projectId, projectId), inArray(notes.id, noteIds)) })
+    for (const n of rows) out.set(`note:${n.id}`, { id: n.id, kind: 'note', title: n.title })
+  }
+
+  const docIds = byKind('document')
+  if (docIds.length) {
+    const rows = await db.query.documents.findMany({
+      where: and(eq(documents.projectId, projectId), inArray(documents.id, docIds)),
+    })
+    for (const d of rows) out.set(`document:${d.id}`, { id: d.id, kind: 'document', title: d.title })
+  }
+
+  const resIds = byKind('resource')
+  if (resIds.length) {
+    const rows = await db.query.credentials.findMany({
+      where: and(eq(credentials.projectId, projectId), inArray(credentials.id, resIds)),
+    })
+    for (const r of rows) out.set(`resource:${r.id}`, { id: r.id, kind: 'resource', title: r.name })
+  }
+
+  // Порядок как прислали: человек ставил пины в осмысленной последовательности.
+  return parsed.map((p) => out.get(`${p.kind}:${p.id}`)).filter(Boolean) as TaskPin[]
 }
 
 async function attachmentsOf(messageIds: string[]): Promise<Map<string, Attachment[]>> {

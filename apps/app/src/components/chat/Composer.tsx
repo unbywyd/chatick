@@ -5,7 +5,7 @@ import StarterKit from '@tiptap/starter-kit'
 import Placeholder from '@tiptap/extension-placeholder'
 import Mention from '@tiptap/extension-mention'
 import tippy, { type Instance } from 'tippy.js'
-import { Bold, CheckSquare, ClipboardPaste, Code, FileText, Image as ImageIcon, Italic, List, Loader2, Paperclip, SendHorizontal, Strikethrough, X, Zap } from 'lucide-react'
+import { Bold, CheckSquare, ClipboardPaste, Code, FileText, Image as ImageIcon, Italic, KeyRound, List, Loader2, NotebookPen, Paperclip, SendHorizontal, Strikethrough, X, Zap } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
 import { toast } from 'sonner'
 import { useQuery } from '@tanstack/react-query'
@@ -20,6 +20,10 @@ export type PendingAttachment = { id: string; name: string; mime: string; size: 
 
 // Композер чата: tiptap + markdown-база, bubble-меню инструментов по выделению,
 // mentions (@участники + @AI первым), Enter=отправить / Shift+Enter=перенос
+/** Что можно приложить к сообщению ссылкой (SPEC §8.34). */
+export type PinKind = 'task' | 'note' | 'document' | 'resource'
+type Pin = { id: string; kind: PinKind; number?: string; title: string }
+
 export function Composer({
   disabled,
   placeholder,
@@ -47,7 +51,7 @@ export function Composer({
   // перед каждым сообщением.
   const [bypassAi, setBypassAi] = useState(false)
   const [attachments, setAttachments] = useState<PendingAttachment[]>([])
-  const [taskPins, setTaskPins] = useState<{ id: string; number: string; title: string }[]>([])
+  const [taskPins, setTaskPins] = useState<Pin[]>([])
   const [uploading, setUploading] = useState(0)
   const [dropActive, setDropActive] = useState(false) // подсветка зоны при наведении файла/задачи
   // «отправить оригинал» — как в WhatsApp: без сжатия картинок
@@ -219,7 +223,8 @@ export function Composer({
       markdown: markdown || '📎',
       mentionIds,
       attachmentIds: attachments.map((a) => a.id),
-      taskRefs: taskPins.map((p) => p.id),
+      // «kind:id» — задачи остаются как есть для старых записей
+      taskRefs: taskPins.map((p) => (p.kind === 'task' ? p.id : `${p.kind}:${p.id}`)),
       raw,
     })
     editor.commands.clearContent()
@@ -256,26 +261,30 @@ export function Composer({
         if (taskData) {
           try {
             const task = JSON.parse(taskData) as { id: string; number: string; title: string }
-            setTaskPins((prev) => (prev.some((x) => x.id === task.id) ? prev : [...prev, { id: task.id, number: task.number, title: task.title }]))
+            setTaskPins((prev) =>
+              prev.some((x) => x.id === task.id && x.kind === 'task')
+                ? prev
+                : [...prev, { id: task.id, kind: 'task' as const, number: task.number, title: task.title }],
+            )
             return
           } catch { /* fallthrough */ }
         }
-        // D&D ресурса, документа, заметки → ссылка-ярлык в текст.
-        //
-        // Ссылка ведёт на САМУ сущность, а не на список: раньше ресурс кидал
-        // на /resources, и получателю оставалось искать его глазами.
-        const dropped: [string, string, string][] = [
-          ['application/x-chatick-resource', 'resources', '🔗'],
-          ['application/x-chatick-document', 'documents', '📄'],
-          ['application/x-chatick-note', 'notes', '📓'],
+        // Ресурс, документ, заметка → пин, как задача и файл. Раньше сюда
+        // вставлялась markdown-ссылка прямо в текст: она мешала писать, её
+        // можно было случайно испортить, и выглядела она как сырая разметка.
+        const dropped: [string, PinKind][] = [
+          ['application/x-chatick-resource', 'resource'],
+          ['application/x-chatick-document', 'document'],
+          ['application/x-chatick-note', 'note'],
         ]
-        for (const [mime, tab, icon] of dropped) {
+        for (const [mime, kind] of dropped) {
           const raw = e.dataTransfer.getData(mime)
-          if (!raw || !editor) continue
+          if (!raw) continue
           try {
             const r = JSON.parse(raw) as { id: string; name: string }
-            const pid = window.location.hash.split('/')[2]
-            editor.chain().focus().insertContent(`[${icon} ${r.name}](#/p/${pid}/${tab}/${r.id}) `).run()
+            setTaskPins((prev) =>
+              prev.some((x) => x.id === r.id && x.kind === kind) ? prev : [...prev, { id: r.id, kind, title: r.name }],
+            )
             return
           } catch { /* fallthrough */ }
         }
@@ -302,12 +311,30 @@ export function Composer({
       {hasPins && (
         <div className="flex flex-wrap gap-1.5 border-b px-2.5 py-2">
           {taskPins.map((p) => (
-            <span key={p.id} className="inline-flex max-w-52 items-center gap-1.5 rounded-full border border-brand/40 bg-accent px-2 py-1 text-xs">
-              <CheckSquare className="size-3 shrink-0 text-brand" />
+            <span
+              key={`${p.kind}:${p.id}`}
+              className="inline-flex max-w-52 items-center gap-1.5 rounded-full border border-brand/40 bg-accent px-2 py-1 text-xs"
+            >
+              {/* Иконка по типу: чипсы стоят рядом, и «задача» на документе
+                  сбивает с толку сильнее, чем отсутствие иконки вообще. */}
+              {p.kind === 'task' ? (
+                <CheckSquare className="size-3 shrink-0 text-brand" />
+              ) : p.kind === 'note' ? (
+                <NotebookPen className="size-3 shrink-0 text-brand" />
+              ) : p.kind === 'document' ? (
+                <FileText className="size-3 shrink-0 text-brand" />
+              ) : (
+                <KeyRound className="size-3 shrink-0 text-brand" />
+              )}
               <span className="truncate">
-                <span className="font-medium">{p.number}</span> {p.title}
+                {p.number && <span className="font-medium">{p.number} </span>}
+                {p.title}
               </span>
-              <button type="button" onClick={() => setTaskPins((prev) => prev.filter((x) => x.id !== p.id))} className="text-muted-foreground hover:text-destructive">
+              <button
+                type="button"
+                onClick={() => setTaskPins((prev) => prev.filter((x) => !(x.id === p.id && x.kind === p.kind)))}
+                className="text-muted-foreground hover:text-destructive"
+              >
                 <X className="size-3" />
               </button>
             </span>

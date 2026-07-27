@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useNavigate, useParams, useSearchParams } from 'react-router-dom'
 import { useInfiniteQuery, useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { ArrowDown, Bot, CheckSquare, Copy, Users, BrainCircuit, Loader2, Menu, MoreHorizontal, NotebookPen, PanelsTopLeft, Reply, Search, Settings, Share2, Trash2, UserPlus, X } from 'lucide-react'
+import { ArrowDown, Bot, CheckSquare, Copy, FileText, Users, BrainCircuit, KeyRound, Loader2, Menu, MoreHorizontal, NotebookPen, PanelsTopLeft, Reply, Search, Settings, Share2, Trash2, UserPlus, X } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
 import ReactMarkdown from 'react-markdown'
 import { toast } from 'sonner'
@@ -818,21 +818,36 @@ function MessageRow({
 }
 
 // Прикреплённые задачи-пины — карточки-ссылки на задачу
+/** Приложенные к сообщению сущности: задача, заметка, документ, ресурс. */
 function MessageTaskPins({ pins }: { pins: NonNullable<ChatMessage['taskPins']> }) {
   const navigate = useNavigate()
   const { id: projectId } = useParams()
+
+  // Вкладка и иконка зависят от типа: у старых записей типа нет — это задачи.
+  const tabOf = (kind?: string) =>
+    kind === 'note' ? 'notes' : kind === 'document' ? 'documents' : kind === 'resource' ? 'resources' : 'tasks'
+
   return (
     <div className="mt-1.5 flex flex-wrap gap-1.5">
       {pins.map((p) => (
         <button
-          key={p.id}
-          onClick={() => navigate(`/p/${projectId}/tasks/${p.id}`)}
+          key={`${p.kind ?? 'task'}:${p.id}`}
+          onClick={() => navigate(`/p/${projectId}/${tabOf(p.kind)}/${p.id}`)}
           className="inline-flex max-w-64 items-center gap-1.5 rounded-md border border-brand/40 bg-accent px-2 py-1 text-xs transition-colors hover:bg-accent/70"
           title={p.title}
         >
-          <CheckSquare className="size-3.5 shrink-0 text-brand" />
+          {p.kind === 'note' ? (
+            <NotebookPen className="size-3.5 shrink-0 text-brand" />
+          ) : p.kind === 'document' ? (
+            <FileText className="size-3.5 shrink-0 text-brand" />
+          ) : p.kind === 'resource' ? (
+            <KeyRound className="size-3.5 shrink-0 text-brand" />
+          ) : (
+            <CheckSquare className="size-3.5 shrink-0 text-brand" />
+          )}
           <span className="truncate">
-            <span className="font-medium">{p.number}</span> {p.title}
+            {p.number && <span className="font-medium">{p.number} </span>}
+            {p.title}
           </span>
         </button>
       ))}
