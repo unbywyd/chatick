@@ -351,6 +351,39 @@ filesRoute.post('/', async (c) => {
 })
 
 // Получить прокси-URL для просмотра (стабильный, на нашем домене, для iframe/img/Google)
+/**
+ * Один файл по id (SPEC §8.34).
+ *
+ * Нужен прямым ссылкам: они могут вести на файл, которого нет в загруженной
+ * странице списка, и без этого ссылка «не открывалась» без объяснимой причины.
+ */
+filesRoute.get('/:fileId', async (c) => {
+  const { projectId, sub } = c.get('auth')
+  if (!(await hasPermission(projectId, sub, 'files.read'))) return c.json({ error: 'Forbidden' }, 403)
+
+  const row = await db
+    .select({ file: files, uploader: users })
+    .from(files)
+    .leftJoin(users, eq(users.id, files.uploadedById))
+    .where(and(eq(files.id, c.req.param('fileId')), eq(files.projectId, projectId)))
+    .limit(1)
+  const r = row[0]
+  if (!r) return c.json({ error: 'Not found' }, 404)
+
+  return c.json({
+    id: r.file.id,
+    name: r.file.name,
+    mime: r.file.mime,
+    size: Number(r.file.size),
+    createdAt: r.file.createdAt,
+    taskId: r.file.taskId,
+    messageId: r.file.messageId,
+    hasOriginal: Boolean(r.file.originalKey),
+    deleted: Boolean(r.file.deletedAt),
+    uploader: r.uploader ? { id: r.uploader.id, name: r.uploader.name, avatarUrl: r.uploader.avatarUrl } : null,
+  })
+})
+
 filesRoute.get('/:fileId/view-url', async (c) => {
   const { projectId } = c.get('auth')
   const fileId = c.req.param('fileId')

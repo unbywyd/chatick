@@ -127,14 +127,17 @@ createRoot(document.getElementById('root')!).render(
                 <Route path="chat" element={<TasksPage />} />
                 {/* :taskId — прямая ссылка на задачу (drawer открыт по URL) */}
                 <Route path="tasks/:taskId?" element={<TasksPage />} />
-                <Route path="files" element={<FilesPage />} />
-                <Route path="resources" element={<ResourcesPage />} />
+                {/* :fileId и далее — прямые ссылки на сущности: ими делятся
+                    в чате, и открываться они должны сразу нужной, а не
+                    списком, в котором надо ещё найти. */}
+                <Route path="files/:fileId?" element={<FilesPage />} />
+                <Route path="resources/:resourceId?" element={<ResourcesPage />} />
                 <Route path="team" element={<TeamPage />} />
                 <Route path="notifications" element={<NotificationsPage />} />
                 <Route path="ai" element={<AiPage />} />
                 <Route path="history" element={<HistoryPage />} />
-                <Route path="documents" element={<DocumentsPage />} />
-                <Route path="notes" element={<NotesPage />} />
+                <Route path="documents/:documentId?" element={<DocumentsPage />} />
+                <Route path="notes/:noteId?" element={<NotesPage />} />
                 {/* трекинг — страница проекта, но НЕ вкладка: попадают из сайдбара */}
                 <Route path="time" element={<TimePage />} />
               </Route>

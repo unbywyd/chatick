@@ -16,7 +16,7 @@ import {
   Trash2,
   X,
 } from 'lucide-react'
-import { useNavigate } from 'react-router-dom'
+import { useNavigate, useParams } from 'react-router-dom'
 import { api } from '@/lib/api'
 import { cn } from '@/lib/utils'
 import { Input } from '@/components/ui/input'
@@ -44,6 +44,7 @@ export function ResourcesTab({ projectId, isAdmin }: { projectId: string; isAdmi
   const confirm = useConfirm()
   const [q, setQ] = useState('')
   const [editing, setEditing] = useState<ResourceRow | 'new' | null>(null)
+  const { resourceId } = useParams()
   const [showAudit, setShowAudit] = useState(false)
 
   const list = useQuery({ queryKey: ['resources', projectId], queryFn: () => api<ResourceRow[]>('/api/v1/resources', {}, 'project') })
@@ -99,9 +100,15 @@ export function ResourcesTab({ projectId, isAdmin }: { projectId: string; isAdmi
           .map((r) => (
           <li
             key={r.id}
+            id={`resource-${r.id}`}
             draggable
             onDragStart={(e) => e.dataTransfer.setData('application/x-chatick-resource', JSON.stringify({ id: r.id, name: r.name }))}
-            className="rounded-lg border bg-card px-3 py-2.5"
+            // Прямая ссылка подсвечивает нужный ресурс: список бывает длинным,
+            // и «вот он, где-то здесь» — плохой ответ на присланную ссылку.
+            className={cn(
+              'rounded-lg border bg-card px-3 py-2.5 transition-colors',
+              resourceId === r.id && 'border-brand ring-1 ring-brand',
+            )}
           >
             <div className="flex items-center gap-3">
               <span className="grid size-9 shrink-0 place-items-center rounded-md bg-secondary">

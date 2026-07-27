@@ -1,7 +1,7 @@
 import { useMemo, useState } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { useTranslation } from 'react-i18next'
-import { useSearchParams } from 'react-router-dom'
+import { useNavigate, useParams, useSearchParams } from 'react-router-dom'
 import { toast } from 'sonner'
 import {
   AlertTriangle,
@@ -80,6 +80,7 @@ export function NotesTab({ projectId }: { projectId: string }) {
   const qc = useQueryClient()
   const confirm = useConfirm()
   const [params, setParams] = useSearchParams()
+  const navigate = useNavigate()
 
   const [q, setQ] = useState('')
   const [types, setTypes] = useState<NoteType[]>([])
@@ -141,9 +142,15 @@ export function NotesTab({ projectId }: { projectId: string }) {
     onError: onErr,
   })
 
-  // дип-линк ?note=<id> из уведомления
-  const focusId = params.get('note')
+  // Прямая ссылка на заметку: /p/<id>/notes/<noteId>. Старый вид ?note=<id>
+  // продолжает работать — он разошёлся в уведомлениях и письмах.
+  const { noteId } = useParams()
+  const focusId = noteId ?? params.get('note')
   const clearFocus = () => {
+    if (noteId) {
+      navigate(`/p/${projectId}/notes`, { replace: true })
+      return
+    }
     const next = new URLSearchParams(params)
     next.delete('note')
     setParams(next, { replace: true })

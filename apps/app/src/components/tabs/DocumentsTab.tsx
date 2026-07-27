@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from 'react'
+import { useNavigate, useParams } from 'react-router-dom'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { useTranslation } from 'react-i18next'
 import { toast } from 'sonner'
@@ -34,7 +35,13 @@ export function DocumentsTab({ projectId }: { projectId: string }) {
   const { t, i18n } = useTranslation()
   const qc = useQueryClient()
   const confirm = useConfirm()
-  const [openId, setOpenId] = useState<string | null>(null)
+  // Открытый документ живёт в адресе: ссылкой на документ делятся, и она
+  // должна открывать его сразу — раньше это был локальный оверлей, из
+  // которого нельзя было ни сослаться, ни вернуться кнопкой «назад».
+  const { documentId: openId } = useParams()
+  const navigate = useNavigate()
+  const setOpenId = (id: string | null) =>
+    navigate(id ? `/p/${projectId}/documents/${id}` : `/p/${projectId}/documents`)
   const [q, setQ] = useState('')
   const onErr = (e: unknown) => toast.error(e instanceof Error ? e.message : String(e))
 

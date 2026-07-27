@@ -20,7 +20,7 @@ import {
   X,
 } from 'lucide-react'
 import { CalendarDays, MessagesSquare } from 'lucide-react'
-import { useNavigate } from 'react-router-dom'
+import { useNavigate, useParams } from 'react-router-dom'
 import { api, API_URL, getProjectToken } from '@/lib/api'
 import { cn } from '@/lib/utils'
 import { Input } from '@/components/ui/input'
@@ -84,7 +84,20 @@ export function FilesTab({ projectId, isAdmin = false }: { projectId: string; is
   const [toDate, setToDate] = useState<Date | undefined>()
   const [dragOver, setDragOver] = useState(false)
   const [uploading, setUploading] = useState<string[]>([])
-  const [viewing, setViewing] = useState<ViewerFile | null>(null)
+  // Открытый файл живёт в адресе: ссылкой на файл делятся, и она должна
+  // открывать именно его, а не список, в котором его ещё надо найти.
+  const { fileId: openFileId } = useParams()
+  const openFile = (id: string | null) =>
+    navigate(id ? `/p/${projectId}/files/${id}` : `/p/${projectId}/files`)
+
+  // Прямая ссылка может вести на файл, которого нет в загруженной странице —
+  // тогда тянем его отдельно, иначе ссылка «не открывается» без причины.
+  const directFile = useQuery({
+    queryKey: ['file', openFileId],
+    enabled: Boolean(openFileId),
+    queryFn: () => api<ViewerFile>(`/api/v1/files/${openFileId}`, {}, 'project'),
+    retry: false,
+  })
   const [selectMode, setSelectMode] = useState(false)
   const [selected, setSelected] = useState<Set<string>>(new Set())
   const inputRef = useRef<HTMLInputElement>(null)
@@ -105,6 +118,9 @@ export function FilesTab({ projectId, isAdmin = false }: { projectId: string; is
     getNextPageParam: (last) => (last.hasMore ? last.page + 1 : undefined),
   })
   const items = useMemo(() => (filesQ.data?.pages ?? []).flatMap((p) => p.items), [filesQ.data])
+  // Файл ищем среди загруженных; если ссылка ведёт на файл вне текущей
+  // страницы списка — запрашиваем его отдельно.
+  const viewing = items.find((f) => f.id === openFileId) ?? directFile.data ?? null
   const storage = filesQ.data?.pages[0]?.storage
   const usedPct = storage && storage.limit > 0 ? Math.min(100, (storage.used / storage.limit) * 100) : 0
 
@@ -321,7 +337,7 @@ export function FilesTab({ projectId, isAdmin = false }: { projectId: string; is
             selectMode={selectMode}
             selected={selected.has(f.id)}
             onToggle={() => toggle(f.id)}
-            onOpen={() => setViewing(f)}
+            onOpen={() => openFile(f.id)}
             onJumpToChat={f.messageId ? () => navigate({ search: `?msg=${f.messageId}` }) : undefined}
             onDelete={async () => {
               if (await confirm({ title: t('files.deleteConfirm', { name: f.name }), destructive: true, confirmLabel: t('files.delete') }))
@@ -346,7 +362,7 @@ export function FilesTab({ projectId, isAdmin = false }: { projectId: string; is
         </div>
       )}
 
-      {viewing && <FileViewer file={viewing} onClose={() => setViewing(null)} />}
+      {viewing && <FileViewer file={viewing} onClose={() => openFile(null)} />}
     </div>
   )
 }
