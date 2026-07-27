@@ -35,6 +35,9 @@ export function CompanySwitcher({
   // Своя компания — та, где человек админ. Заводить вторую незачем: для
   // разделения работы существуют проекты.
   const hasOwn = companies.some((c) => c.myRole === 'admin')
+  const canCreate = Boolean(onCreate) && !hasOwn
+  // Уйти можно только из чужой: свою без хозяина не оставишь.
+  const canLeave = current.myRole !== 'admin'
 
   return (
     <DropdownMenu>
@@ -68,9 +71,11 @@ export function CompanySwitcher({
           </DropdownMenuItem>
         ))}
 
-        <DropdownMenuSeparator />
+        {/* Черта только когда под ней что-то есть: у человека со своей
+            единственной компанией оба пункта ниже скрыты. */}
+        {(canCreate || canLeave) && <DropdownMenuSeparator />}
 
-        {onCreate && !hasOwn && (
+        {canCreate && (
           <DropdownMenuItem onSelect={onCreate}>
             <Plus className="size-4" />
             {t('start.createCompany')}
@@ -80,7 +85,7 @@ export function CompanySwitcher({
         {/* Выйти можно только из чужой: свою без хозяина не оставишь. Удаление
             здесь не показываем — необратимому место в опасной зоне настроек,
             а не в меню, куда заходят просто сменить компанию. */}
-        {current.myRole !== 'admin' && (
+        {canLeave && (
           <DropdownMenuItem
             onSelect={() => onLeave(current)}
             className={cn('text-destructive focus:text-destructive')}

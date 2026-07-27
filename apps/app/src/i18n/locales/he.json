@@ -1008,7 +1008,8 @@
     "projects": "פרויקטים",
     "empty": "אין עדיין פרויקטים",
     "weekOf": "שבוע מ-{{date}}",
-    "overdueShort": "באיחור: {{count}}"
+    "overdueShort": "באיחור: {{count}}",
+    "reportFor": "דוח שעות: {{name}}"
   },
   "desktop": {
     "start": "הפעלת טיימר",

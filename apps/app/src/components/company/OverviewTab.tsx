@@ -1,6 +1,7 @@
+import { useState } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import { useTranslation } from 'react-i18next'
-import { AlertTriangle, CheckCircle2, Clock, FolderKanban, MessageSquare, Users } from 'lucide-react'
+import { AlertTriangle, CheckCircle2, Clock, Download, FolderKanban, MessageSquare, Users } from 'lucide-react'
 import {
   Area,
   AreaChart,
@@ -15,6 +16,7 @@ import {
 } from 'recharts'
 import { api } from '@/lib/api'
 import { cn } from '@/lib/utils'
+import { PeriodPicker, resolvePreset, type Period } from '@/components/ui/period-picker'
 import { Avatar } from '@/components/ui/avatar'
 import { ProjectBadge } from '@/components/ui/project-badge'
 import { formatDuration } from '@/lib/time-parse'
@@ -57,12 +59,27 @@ const CHART_STYLE = {
   fontSize: '0.75rem',
 }
 
-export function OverviewTab({ companyId }: { companyId: string }) {
+export function OverviewTab({
+  companyId,
+  onOpenProject,
+  onOpenReport,
+}: {
+  companyId: string
+  onOpenProject?: (id: string) => void
+  /** отчёт по человеку за тот же период — на вкладке «Часы» */
+  onOpenReport?: (userId: string, period: Period) => void
+}) {
   const { t, i18n } = useTranslation()
 
+  // По умолчанию — текущий месяц: за него смотрят и по нему платят.
+  const [period, setPeriod] = useState<Period>(() => resolvePreset('thisMonth'))
+
   const q = useQuery({
-    queryKey: ['company-overview', companyId],
-    queryFn: () => api<Overview>(`/api/v1/companies/${companyId}/overview`),
+    queryKey: ['company-overview', companyId, period.from, period.to],
+    queryFn: () =>
+      api<Overview>(
+        `/api/v1/companies/${companyId}/overview?from=${encodeURIComponent(period.from)}&to=${encodeURIComponent(period.to)}`,
+      ),
   })
 
   const d = q.data
@@ -77,6 +94,12 @@ export function OverviewTab({ companyId }: { companyId: string }) {
 
   return (
     <div className="space-y-5">
+      {/* Период сверху: цифры без указания срока читаются как «за всё время»,
+          а смотрят обычно за месяц. */}
+      <div className="flex justify-end">
+        <PeriodPicker value={period} onChange={setPeriod} className="w-52" />
+      </div>
+
       {/* Цифры, за которыми приходят в первую очередь */}
       <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
         <Metric icon={Clock} label={t('overview.hours')} value={formatDuration(totals?.minutes ?? 0)} />
@@ -207,6 +230,17 @@ export function OverviewTab({ companyId }: { companyId: string }) {
                     <span className="w-16 shrink-0 text-end font-mono text-sm tabular-nums">
                       {formatDuration(p.minutes)}
                     </span>
+                    {/* Отчёт за тот же период, что на экране: собирать его
+                        заново на другой вкладке — лишняя работа. */}
+                    {onOpenReport && (
+                      <button
+                        onClick={() => onOpenReport(p.userId, period)}
+                        title={t('overview.reportFor', { name: p.name })}
+                        className="shrink-0 rounded p-1 text-muted-foreground hover:bg-accent hover:text-foreground"
+                      >
+                        <Download className="size-3.5" />
+                      </button>
+                    )}
                   </li>
                 )
               })}
@@ -220,7 +254,16 @@ export function OverviewTab({ companyId }: { companyId: string }) {
         <h2 className="mb-3 text-sm font-semibold">{t('overview.projects')}</h2>
         <ul className="space-y-2">
           {d.projects.map((p) => (
-            <li key={p.id} className="flex items-center gap-3">
+            // Строка кликается целиком: на обзоре видно, где что происходит,
+            // и уходить за этим в список проектов — лишний шаг.
+            <li
+              key={p.id}
+              onClick={() => onOpenProject?.(p.id)}
+              className={cn(
+                '-mx-2 flex items-center gap-3 rounded-md px-2 py-1 transition-colors',
+                onOpenProject && 'cursor-pointer hover:bg-accent',
+              )}
+            >
               <ProjectBadge name={p.name} color={p.color} logoUrl={p.logoUrl} size={28} />
               <div className="min-w-0 flex-1">
                 <div className="flex items-baseline gap-2">

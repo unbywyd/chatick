@@ -89,9 +89,18 @@ companiesRoute.get('/:companyId/overview', async (c) => {
   })
   if (!membership) return c.json({ error: 'Forbidden' }, 403)
 
-  // окно в 12 недель: три месяца — тот срок, на котором видно тренд
-  const since = new Date()
-  since.setDate(since.getDate() - 84)
+  // Период задаёт клиент; по умолчанию — текущий месяц: именно за него
+  // обычно смотрят и по нему платят. Часы и активность считаем в этих
+  // границах, иначе «за всё время» смешивает вчерашнее с прошлогодним.
+  const q = c.req.query()
+  const now = new Date()
+  const since = q.from ? new Date(q.from) : new Date(now.getFullYear(), now.getMonth(), 1)
+  const until = q.to ? new Date(q.to) : now
+  if (Number.isNaN(since.getTime()) || Number.isNaN(until.getTime())) {
+    return c.json({ error: 'Invalid period' }, 400)
+  }
+  const period = { from: since.toISOString(), to: until.toISOString() }
+  const inPeriod = sql`${timeEntries.startedAt} >= ${period.from}::timestamptz and ${timeEntries.startedAt} <= ${period.to}::timestamptz`
 
   const projectRows = await db.query.projects.findMany({ where: eq(projects.companyId, companyId) })
   const ids = projectRows.map((p) => p.id)
@@ -123,7 +132,7 @@ companiesRoute.get('/:companyId/overview', async (c) => {
         minutes: sql<number>`coalesce(sum(extract(epoch from (${timeEntries.endedAt} - ${timeEntries.startedAt})) / 60), 0)::int`,
       })
       .from(timeEntries)
-      .where(and(inArray(timeEntries.projectId, ids), sql`${timeEntries.endedAt} is not null`))
+      .where(and(inArray(timeEntries.projectId, ids), sql`${timeEntries.endedAt} is not null`, inPeriod))
       .groupBy(timeEntries.projectId),
 
     db
@@ -139,7 +148,8 @@ companiesRoute.get('/:companyId/overview', async (c) => {
       from ${timeEntries}
       where ${timeEntries.projectId} in ${ids}
         and ${timeEntries.endedAt} is not null
-        and ${timeEntries.startedAt} >= ${since.toISOString()}::timestamptz
+        and ${timeEntries.startedAt} >= ${period.from}::timestamptz
+        and ${timeEntries.startedAt} <= ${period.to}::timestamptz
       group by date_trunc('week', ${timeEntries.startedAt})
       order by date_trunc('week', ${timeEntries.startedAt})
     `),
@@ -159,7 +169,7 @@ companiesRoute.get('/:companyId/overview', async (c) => {
       and(
         inArray(timeEntries.projectId, ids),
         sql`${timeEntries.endedAt} is not null`,
-        sql`${timeEntries.startedAt} >= ${since.toISOString()}::timestamptz`,
+        inPeriod,
       ),
     )
     .groupBy(timeEntries.userId, users.name, users.avatarUrl)
@@ -194,6 +204,7 @@ companiesRoute.get('/:companyId/overview', async (c) => {
     .where(eq(companyMembers.companyId, companyId))
 
   return c.json({
+    period,
     projects: list.sort((a, b) => b.minutes - a.minutes),
     totals: {
       projects: list.length,

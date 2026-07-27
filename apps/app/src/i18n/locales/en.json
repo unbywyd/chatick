@@ -1008,7 +1008,8 @@
     "projects": "Projects",
     "empty": "No projects yet",
     "weekOf": "Week of {{date}}",
-    "overdueShort": "{{count}} overdue"
+    "overdueShort": "{{count}} overdue",
+    "reportFor": "Hours report for {{name}}"
   },
   "desktop": {
     "start": "Start timer",

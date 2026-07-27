@@ -33,10 +33,19 @@ type Report = { people: Person[]; totalMinutes: number }
 const BOM = '\ufeff'
 type Member = { user: { id: string; name: string; email: string; avatarUrl: string | null } }
 
-export function CompanyTimeTab({ companyId }: { companyId: string }) {
+export function CompanyTimeTab({
+  companyId,
+  initialUserId,
+  initialPeriod,
+}: {
+  companyId: string
+  /** приходят с обзора: человек и период, которые там смотрели */
+  initialUserId?: string
+  initialPeriod?: Period
+}) {
   const { t } = useTranslation()
-  const [period, setPeriod] = useState<Period>(() => resolvePreset('lastMonth'))
-  const [userId, setUserId] = useState('')
+  const [period, setPeriod] = useState<Period>(() => initialPeriod ?? resolvePreset('lastMonth'))
+  const [userId, setUserId] = useState(initialUserId ?? '')
   const [q, setQ] = useState('')
 
   const members = useQuery({

@@ -9,6 +9,7 @@ import { Avatar } from '@/components/ui/avatar'
 import { AvatarGroup } from '@/components/ui/avatar-group'
 import { ProjectBadge } from '@/components/ui/project-badge'
 import { CompanySwitcher } from '@/components/CompanySwitcher'
+import type { Period } from '@/components/ui/period-picker'
 import { DangerZone, DangerAction } from '@/components/company/DangerZone'
 import { DeleteProjectDialog } from '@/components/DeleteProjectDialog'
 import { useConfirm } from '@/components/ui/confirm'
@@ -315,6 +316,10 @@ function CompanyHome({
   const navigate = useNavigate()
   // таб компании — из URL: /start/:companyId/:companyTab (settings адресуем — на него ведёт чат без LLM)
   const { companyTab } = useParams()
+  // Что смотрели на обзоре — чтобы вкладка «Часы» открылась на том же
+  // человеке и периоде, а не сбрасывала выбор.
+  const [reportFor, setReportFor] = useState<{ userId: string; period: Period } | null>(null)
+
   const tab = (['overview', 'projects', 'team', 'time', 'connect', 'backup', 'settings'] as const).includes(companyTab as never)
     ? (companyTab as 'overview' | 'projects' | 'team' | 'time' | 'connect' | 'backup' | 'settings')
     : 'overview'
@@ -347,13 +352,22 @@ function CompanyHome({
       </nav>
 
       {tab === 'overview' ? (
-        <OverviewTab companyId={company.id} />
+        // Вход в проект (токен, правила чата) отрабатывает ProjectLayout —
+        // здесь достаточно перейти по адресу.
+        <OverviewTab
+          companyId={company.id}
+          onOpenProject={onEntered}
+          onOpenReport={(userId, period) => {
+            setReportFor({ userId, period })
+            navigate(`/start/${company.id}/time`)
+          }}
+        />
       ) : tab === 'projects' ? (
         <ProjectsTab company={company} canManage={canManage} onEntered={onEntered} />
       ) : tab === 'team' ? (
         <TeamTab company={company} meId={meId} />
       ) : tab === 'time' && canManage ? (
-        <CompanyTimeTab companyId={company.id} />
+        <CompanyTimeTab companyId={company.id} initialUserId={reportFor?.userId} initialPeriod={reportFor?.period} />
       ) : tab === 'connect' && canManage ? (
         <CompanyConnectTab company={company} />
       ) : tab === 'backup' && isAdmin ? (
