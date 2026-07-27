@@ -16,7 +16,17 @@ import {
   tasks,
   users,
 } from '../db/schema.js'
-import { hasPermission, memberDomains, type ProjectPermission } from './projects.js'
+import {
+  canCreateProjects,
+  companyRoleOf,
+  defaultPermissions,
+  hasPermission,
+  memberDomains,
+  projectRoleOf,
+  PROJECT_COLORS,
+  type ProjectPermission,
+} from './projects.js'
+import { nanoid } from 'nanoid'
 import { authenticateBridge, closeSession, startDeviceAuth, pollDeviceAuth, type BridgeIdentity } from '../lib/bridge-auth.js'
 import { connectDoc, guideDoc } from '../lib/bridge-docs.js'
 import { logActivity } from '../lib/audit.js'
@@ -172,6 +182,107 @@ bridgeRoute.get('/projects', async (c) => {
         : 'Pass ?project=<id> on every project-scoped call.'
       : undefined,
   })
+})
+
+// --- Управление проектами (SPEC §8.27) --------------------------------------
+//
+// Доступно только компанейскому туннелю: у проектного нет и понятия «компания»,
+// а создание проекта — действие на её уровне. Права те же, что в интерфейсе:
+// заводить проекты могут админы и менеджеры компании.
+//
+// Состав участников и удаление проекта намеренно оставлены человеку: первое
+// раздаёт доступ к чужим данным, второе необратимо.
+
+bridgeRoute.post('/projects', async (c) => {
+  const id = auth(c as never)
+  if (!id.companyId) {
+    return c.json({ error: 'Company-wide access required', hint: 'Ask the human to grant company-wide access.' }, 403)
+  }
+  if (!canCreateProjects(await companyRoleOf(id.companyId, id.userId))) {
+    return c.json({ error: 'Only company admins and managers can create projects' }, 403)
+  }
+
+  const body = (await c.req.json().catch(() => ({}))) as Record<string, unknown>
+  const name = typeof body.name === 'string' ? body.name.trim() : ''
+  if (!name) return c.json({ error: 'name is required' }, 400)
+  const about = typeof body.about === 'string' ? body.about.slice(0, 5000) : ''
+  const chatRules = typeof body.chatRules === 'string' ? body.chatRules.slice(0, 4000) : ''
+
+  const slug = `${name.toLowerCase().replace(/[^a-z0-9а-яё]+/gi, '-').replace(/^-+|-+$/g, '').slice(0, 40) || 'project'}-${nanoid(6)}`
+  const [project] = await db
+    .insert(projects)
+    .values({
+      companyId: id.companyId,
+      name: name.slice(0, 120),
+      about,
+      slug,
+      chatRules,
+      color: PROJECT_COLORS[Math.floor(Math.random() * PROJECT_COLORS.length)]!,
+    })
+    .returning()
+
+  // Владелец — человек, от чьего имени работает туннель: проект должен
+  // остаться его, даже когда ассистента отключат.
+  await db.insert(projectMembers).values({
+    projectId: project!.id,
+    userId: id.userId,
+    role: 'owner',
+    permissions: JSON.stringify(defaultPermissions('owner')),
+    rulesAcceptedAt: new Date(),
+  })
+
+  await logActivity({
+    projectId: project!.id,
+    actorId: id.userId,
+    action: 'create',
+    entityType: 'project',
+    entityId: project!.id,
+    entityLabel: project!.name,
+  })
+
+  return c.json({ id: project!.id, name: project!.name, slug: project!.slug }, 201)
+})
+
+bridgeRoute.patch('/projects/:id', async (c) => {
+  const id = auth(c as never)
+  const projectId = c.req.param('id')
+
+  const project = await db.query.projects.findFirst({ where: eq(projects.id, projectId) })
+  if (!project) return c.json({ error: 'Not found' }, 404)
+
+  // Туннель на проект правит только свой проект; компанейский — любой в своей
+  // компании, но по-прежнему в рамках роли человека.
+  if (id.projectId && id.projectId !== projectId) return c.json({ error: 'Forbidden' }, 403)
+  if (id.companyId && project.companyId !== id.companyId) return c.json({ error: 'Forbidden' }, 403)
+
+  const member = await projectRoleOf(projectId, id.userId)
+  const companyRole = await companyRoleOf(project.companyId, id.userId)
+  if (!(member?.role === 'owner' || member?.role === 'admin' || canCreateProjects(companyRole))) {
+    return c.json({ error: 'Only project owners/admins and company managers can change settings' }, 403)
+  }
+
+  const body = (await c.req.json().catch(() => ({}))) as Record<string, unknown>
+  const patch: Record<string, unknown> = {}
+  if (typeof body.name === 'string' && body.name.trim()) patch.name = body.name.trim().slice(0, 120)
+  if (typeof body.about === 'string') patch.about = body.about.slice(0, 5000)
+  if (typeof body.chatRules === 'string') patch.chatRules = body.chatRules.slice(0, 4000)
+  if (typeof body.color === 'string' && /^#[0-9a-fA-F]{6}$/.test(body.color)) patch.color = body.color
+  if (!Object.keys(patch).length) {
+    return c.json({ error: 'Nothing to update', hint: 'Supported: name, about, chatRules, color.' }, 400)
+  }
+
+  const [updated] = await db.update(projects).set(patch).where(eq(projects.id, projectId)).returning()
+
+  await logActivity({
+    projectId,
+    actorId: id.userId,
+    action: 'update',
+    entityType: 'project',
+    entityId: projectId,
+    entityLabel: updated!.name,
+  })
+
+  return c.json({ id: updated!.id, name: updated!.name, about: updated!.about, chatRules: updated!.chatRules, color: updated!.color })
 })
 
 // --- Контекст проекта -------------------------------------------------------

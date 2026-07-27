@@ -307,6 +307,14 @@ carry the answer.
                                and responsibilities, sprints, task counts
 
 Start with GET /x/context if you need to understand the project before acting.
+
+## Project settings
+
+  PATCH  /x/projects/<id>      {"name"?, "about"?, "chatRules"?, "color"?}
+
+Requires being an owner/admin of the project (or a company manager). Membership
+and deleting the project are deliberately left to humans: the first hands out
+access to other people's data, the second cannot be undone.
 `
 }
 
@@ -379,6 +387,13 @@ Everything below behaves exactly as in a single-project connection, but takes
   POST   /x/inbox/read                  {"ids":[...]} or {"all":true}
          Each item has whatIsAsked (AI-written), project.id, entityType/entityId.
          Start every "check what's waiting for me" request here.
+
+  POST   /x/projects                    {"name","about?","chatRules?"} — new project
+  PATCH  /x/projects/<id>               {"name"?,"about"?,"chatRules"?,"color"?}
+         Creating requires company admin/manager; the person you act for becomes
+         the owner. Adding members and deleting a project are left to humans:
+         the first hands out access to other people's data, the second cannot be
+         undone. Ask them to do it in the app.
   GET    /x/files?project=<id>          POST multipart to upload
   GET    /x/resources?project=<id>      metadata only; secret values never exposed
 

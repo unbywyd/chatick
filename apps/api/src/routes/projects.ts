@@ -195,7 +195,7 @@ export async function companyRoleOf(companyId: string, userId: string) {
   return m?.role ?? null
 }
 
-const canCreateProjects = (role: string | null) => role === 'admin' || role === 'manager'
+export const canCreateProjects = (role: string | null) => role === 'admin' || role === 'manager'
 
 // Список проектов компании, где юзер участник (или все — для admin/manager)
 projectsRoute.get('/', zValidator('query', z.object({ companyId: z.string().min(1) })), async (c) => {
