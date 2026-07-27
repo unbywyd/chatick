@@ -21,6 +21,7 @@ import {
   taskNotes,
   tasks,
   users,
+  FREE_STORAGE_BYTES,
 } from '../db/schema.js'
 import { decrypt, encrypt } from './crypto.js'
 
@@ -280,7 +281,7 @@ export async function importCompany(
     .values({
       name: String(src.name ?? 'Imported company'),
       logoUrl: (src.logoUrl as string) ?? null,
-      storageLimit: String(src.storageLimit ?? 5 * 1024 * 1024 * 1024),
+      storageLimit: String(src.storageLimit ?? FREE_STORAGE_BYTES),
       maxProjects: String(src.maxProjects ?? '0'),
       maxMembers: String(src.maxMembers ?? '0'),
       plan: String(src.plan ?? 'free'),

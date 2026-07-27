@@ -1,4 +1,6 @@
 import { useMemo, useRef, useState } from 'react'
+import { useQuery } from '@tanstack/react-query'
+import { api } from '@/lib/api'
 import { useTranslation } from 'react-i18next'
 import { Eye, MessageCircleQuestion, ShieldCheck, ChevronDown } from 'lucide-react'
 import { Switch } from '@/components/ui/switch'
@@ -84,7 +86,10 @@ const PROJECT_COLORS = [
 ] as const
 
 const GB = 1024 * 1024 * 1024
-const STORAGE_OPTIONS = [1, 2, 5, 10, 50] as const // GB
+// Варианты не выше бесплатного пула компании: эффективный лимит всё равно
+// считается как минимум из проектного и остатка компании, и предлагать 50 ГБ
+// значит обещать то, чего нет.
+const STORAGE_OPTIONS = [1, 2] as const // GB
 
 const PROJECT_LANGUAGES = [
   { code: 'en', label: 'English' },
@@ -106,12 +111,15 @@ export function ProjectSettingsForm({
   value,
   onChange,
   showName = true,
+  projectId,
   onLogoUpload,
   onLogoRemove,
 }: {
   value: ProjectSettings
   onChange: (v: ProjectSettings) => void
   showName?: boolean
+  /** существующий проект — нужен, чтобы узнать, чьё хранилище используется */
+  projectId?: string
   // загрузка логотипа возможна только у существующего проекта: файл кладётся
   // сразу, поэтому в форме создания эти обработчики не передаются
   onLogoUpload?: (file: File) => void
@@ -119,6 +127,14 @@ export function ProjectSettingsForm({
 }) {
   const { t } = useTranslation()
   const [tab, setTab] = useState<FormTab>('general')
+
+  // Чьё хранилище у проекта: на своём лимит не применяется и не показывается.
+  const storage = useQuery({
+    queryKey: ['storage-config', projectId],
+    enabled: Boolean(projectId),
+    queryFn: () => api<{ provider: 'platform' | 'custom' }>(`/api/v1/projects/${projectId}/storage`),
+  })
+  const customStorage = storage.data?.provider === 'custom'
   const logoInput = useRef<HTMLInputElement>(null)
   const time = { ...DEFAULT_TIME_CONFIG, ...(value.timeConfig ?? {}) }
   // список зон длинный и не меняется — собираем один раз на монтирование
@@ -249,7 +265,9 @@ export function ProjectSettingsForm({
             />
           </Field>
 
-          {/* Лимит хранилища проекта (override; по умолчанию наследует пул компании) */}
+          {/* Лимит хранилища. На своём R2 его не показываем вовсе: там платит
+              клиент, ограничивать нечего, а лишний контрол только путает. */}
+          {!customStorage && (
           <div className="flex items-center justify-between gap-3">
             <div>
               <p className="text-sm font-medium">{t('projectForm.storageLimit')}</p>
@@ -274,6 +292,7 @@ export function ProjectSettingsForm({
               </DropdownMenuContent>
             </DropdownMenu>
           </div>
+          )}
         </div>
       )}
 

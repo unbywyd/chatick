@@ -112,6 +112,7 @@ export function ProjectSettingsDialog({ projectId, onClose }: { projectId: strin
             <ProjectSettingsForm
               value={form}
               onChange={setForm}
+              projectId={projectId}
               onLogoUpload={(f) => uploadLogo.mutate(f)}
               onLogoRemove={() => removeLogo.mutate()}
             />

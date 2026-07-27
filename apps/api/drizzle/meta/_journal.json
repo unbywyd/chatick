@@ -274,6 +274,13 @@
       "when": 1785066485112,
       "tag": "0038_timer_event",
       "breakpoints": true
+    },
+    {
+      "idx": 39,
+      "version": "7",
+      "when": 1785066486112,
+      "tag": "0039_free_storage_2gb",
+      "breakpoints": true
     }
   ]
 }

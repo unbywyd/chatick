@@ -5,14 +5,14 @@ import { and, eq, inArray, isNull, sql } from 'drizzle-orm'
 import { nanoid } from 'nanoid'
 import sharp from 'sharp'
 import { db } from '../db/client.js'
-import { companies, companyMembers, files, messages, notifications, projects, projectMembers, projectStorage, tasks, users } from '../db/schema.js'
+import { companies, companyMembers, files, FREE_STORAGE_BYTES, messages, notifications, projects, projectMembers, projectStorage, tasks, users } from '../db/schema.js'
 import { encrypt } from '../lib/crypto.js'
 import { PutObjectCommand, DeleteObjectCommand, S3Client } from '@aws-sdk/client-s3'
 import { requireSession, requireProject, signProjectToken, type SessionEnv, type ProjectEnv } from '../auth.js'
 import { sendAddedToProjectMail, sendRemovedFromProjectMail } from '../lib/mails.js'
 import { companyLlm } from '../lib/llm.js'
 import { stripMentions } from '../lib/notify.js'
-import { s3Client, s3Bucket, getObjectStream, deleteObject, resolveStorage, S3_KEY_PREFIX } from '../lib/s3.js'
+import { s3Client, s3Bucket, getObjectStream, deleteObject, isCustomStorage, resolveStorage, S3_KEY_PREFIX } from '../lib/s3.js'
 
 export const projectsRoute = new Hono<SessionEnv>()
 projectsRoute.use('*', requireSession)
@@ -455,7 +455,16 @@ projectsRoute.patch(
       const current = JSON.parse(project.timeConfig || '{}')
       patch.timeConfig = JSON.stringify({ ...current, ...timeConfig })
     }
-    if (storageLimit !== undefined) patch.storageLimit = storageLimit === null ? null : String(storageLimit)
+    if (storageLimit !== undefined) {
+      // Выше бесплатного пула компании ставить нечего: эффективный лимит всё
+      // равно считается как минимум из проектного и остатка компании, а
+      // цифра «50 ГБ» в настройках была бы обещанием, которого никто не даёт.
+      // На своём хранилище лимит вообще не применяется — там платит клиент.
+      const custom = await isCustomStorage(projectId)
+      const capped =
+        storageLimit === null || custom ? storageLimit : Math.min(storageLimit, FREE_STORAGE_BYTES)
+      patch.storageLimit = capped === null ? null : String(capped)
+    }
     if (aiConfig !== undefined) {
       const current = JSON.parse(project.aiConfig || '{}')
       patch.aiConfig = JSON.stringify({ ...current, ...aiConfig })

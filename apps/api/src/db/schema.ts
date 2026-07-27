@@ -54,6 +54,14 @@ export const apiTokens = pgTable(
 
 export const companyRole = pgEnum('company_role', ['admin', 'manager', 'member'])
 
+/**
+ * Бесплатный пул хранилища на компанию (SPEC §7).
+ *
+ * Считается только для платформенного хранилища: подключил своё R2 — платишь
+ * за него сам, и ограничивать там нечего.
+ */
+export const FREE_STORAGE_BYTES = 2 * 1024 * 1024 * 1024
+
 export const companies = pgTable('companies', {
   id: id(),
   name: text('name').notNull(),
@@ -63,7 +71,7 @@ export const companies = pgTable('companies', {
   llmModel: text('llm_model'),
   llmKeyEncrypted: text('llm_key_encrypted'),
   // Лимиты уровня компании (задел под подписки; настраиваются через БД). 0 = без лимита.
-  storageLimit: text('storage_limit').notNull().default(String(5 * 1024 * 1024 * 1024)), // общий пул хранилища
+  storageLimit: text('storage_limit').notNull().default(String(FREE_STORAGE_BYTES)), // общий пул хранилища
   maxProjects: text('max_projects').notNull().default('0'), // 0 = без лимита
   maxMembers: text('max_members').notNull().default('0'),
   plan: text('plan').notNull().default('free'), // ярлык тарифа (для будущего биллинга)
