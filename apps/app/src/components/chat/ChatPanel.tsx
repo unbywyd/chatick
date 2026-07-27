@@ -14,6 +14,7 @@ import { useProjectSocket, type ChatMessage } from '@/hooks/useProjectSocket'
 import { Composer, AI_MENTION_ID } from './Composer'
 import { SandboxOverlay } from './SandboxOverlay'
 import { AvatarRow } from '@/components/ui/avatar-row'
+import { Avatar } from '@/components/ui/avatar'
 import { ShareDialog } from '@/components/ShareDialog'
 import { AiOverlay } from './AiOverlay'
 import { FileViewer, type ViewerFile } from '@/components/files/FileViewer'
@@ -381,29 +382,41 @@ export function ChatPanel({
               <PanelsTopLeft className="size-4" />
             </button>
           )}
-          {/* Presence: кто онлайн — аватарки с тултипом */}
-          <div className="flex items-center -space-x-1.5" title={online.map((u) => u.name).join(', ')}>
-            {online.slice(0, 5).map((u) => (
-              <span key={u.id} title={u.name} className="relative inline-block">
-                {u.avatarUrl ? (
-                  <img src={u.avatarUrl} alt={u.name} className="size-6 rounded-full ring-2 ring-background" referrerPolicy="no-referrer" />
-                ) : (
-                  <span className="grid size-6 place-items-center rounded-full bg-secondary text-[10px] font-semibold ring-2 ring-background">
-                    {u.name[0]?.toUpperCase()}
-                  </span>
-                )}
-                <span className="absolute -bottom-px -end-px size-2 rounded-full bg-brand ring-2 ring-background" />
-              </span>
-            ))}
-            {online.length > 5 && (
-              <span className="grid size-6 place-items-center rounded-full bg-secondary text-[10px] ring-2 ring-background">
-                +{online.length - 5}
-              </span>
-            )}
-            {!connected && online.length === 0 && (
-              <span className="text-[10px] text-muted-foreground">{t('chat.connecting')}</span>
-            )}
-          </div>
+          {/* Кто онлайн — счётчиком, а не второй стопкой аватарок: слева уже
+              висят участники проекта, и человек видел себя дважды подряд.
+              Список открывается по клику — он нужен изредка, а место занимал
+              всегда. */}
+          {!connected && online.length === 0 ? (
+            <span className="text-[10px] text-muted-foreground">{t('chat.connecting')}</span>
+          ) : (
+            online.length > 0 && (
+              <DropdownMenu>
+                <DropdownMenuTrigger asChild>
+                  <button
+                    title={t('chat.onlineNow', { count: online.length })}
+                    className="inline-flex cursor-pointer items-center gap-1.5 rounded-full border border-brand/40 bg-brand/10 px-2 py-1 text-xs font-semibold text-brand transition-colors hover:bg-brand/20"
+                  >
+                    <span className="size-1.5 rounded-full bg-brand" />
+                    {online.length}
+                  </button>
+                </DropdownMenuTrigger>
+                <DropdownMenuContent align="end" className="w-56">
+                  <p className="px-2 py-1.5 text-xs text-muted-foreground">
+                    {t('chat.onlineNow', { count: online.length })}
+                  </p>
+                  {online.map((u) => (
+                    <DropdownMenuItem key={u.id} className="gap-2">
+                      <span className="relative">
+                        <Avatar name={u.name} src={u.avatarUrl} size={22} />
+                        <span className="absolute -bottom-px -end-px size-2 rounded-full bg-brand ring-2 ring-popover" />
+                      </span>
+                      <span className="truncate">{u.name}</span>
+                    </DropdownMenuItem>
+                  ))}
+                </DropdownMenuContent>
+              </DropdownMenu>
+            )
+          )}
 
           <Button variant="ghost" size="icon" title={t('chatSearch.title')} onClick={() => setSearchOpen(true)}>
             <Search className="size-4" />

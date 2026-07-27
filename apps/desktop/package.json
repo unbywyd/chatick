@@ -6,7 +6,7 @@
   "scripts": {
     "dev": "electron . --dev",
     "build": "echo \"desktop: packaging via electron-builder (pnpm dist) — skipped in turbo build\"",
-    "dist": "electron-builder",
+    "dist": "node scripts/copy-license.mjs && electron-builder",
     "typecheck": "echo \"desktop: plain js, nothing to typecheck\"",
     "start": "electron .",
     "sync-web": "node scripts/sync-web.mjs"
@@ -23,6 +23,7 @@
       "output": "release"
     },
     "files": [
+      "LICENSE.txt",
       "main.cjs",
       "preload.cjs",
       "offline.html",
@@ -53,7 +54,8 @@
       "createStartMenuShortcut": true,
       "shortcutName": "Chatick",
       "artifactName": "Chatick-Setup-${version}.${ext}",
-      "deleteAppDataOnUninstall": false
+      "deleteAppDataOnUninstall": false,
+      "license": "LICENSE.txt"
     },
     "publish": [
       {

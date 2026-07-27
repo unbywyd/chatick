@@ -458,7 +458,10 @@
     "actions": "פעולות על ההודעה",
     "typing": "{{names}} בודק הודעה…",
     "bypassOn": "שליחה ללא בדיקת AI — לחצו לכיבוי",
-    "bypassOff": "שליחה ללא בדיקת AI"
+    "bypassOff": "שליחה ללא בדיקת AI",
+    "onlineNow": "{{count}} מחוברים",
+    "onlineNow_one": "{{count}} מחובר",
+    "onlineNow_other": "{{count}} מחוברים"
   },
   "composer": {
     "dropHere": "שחררו כדי לצרף",

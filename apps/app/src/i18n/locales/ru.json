@@ -460,7 +460,12 @@
     "actions": "Действия с сообщением",
     "typing": "{{names}} проверяет сообщение…",
     "bypassOn": "Отправка без проверки ИИ — нажмите, чтобы выключить",
-    "bypassOff": "Отправлять без проверки ИИ"
+    "bypassOff": "Отправлять без проверки ИИ",
+    "onlineNow": "{{count}} онлайн",
+    "onlineNow_one": "{{count}} онлайн",
+    "onlineNow_few": "{{count}} онлайн",
+    "onlineNow_many": "{{count}} онлайн",
+    "onlineNow_other": "{{count}} онлайн"
   },
   "composer": {
     "dropHere": "Отпустите, чтобы прикрепить",

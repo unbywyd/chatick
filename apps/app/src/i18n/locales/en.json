@@ -458,7 +458,10 @@
     "actions": "Message actions",
     "typing": "{{names}} is checking a message…",
     "bypassOn": "Sending without AI check — click to turn off",
-    "bypassOff": "Send without AI check"
+    "bypassOff": "Send without AI check",
+    "onlineNow": "{{count}} online",
+    "onlineNow_one": "{{count}} online",
+    "onlineNow_other": "{{count}} online"
   },
   "composer": {
     "dropHere": "Drop to attach",
