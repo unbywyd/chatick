@@ -122,7 +122,8 @@ function langOf(locale: string | null | undefined): Lang {
 }
 
 /** Убирает mention-разметку из текста для читаемого превью в письме. */
-function stripMentions(text: string): string {
+/** «@[Имя](id)» → «@Имя»: разметка нужна редактору, а не читателю. */
+export function stripMentions(text: string): string {
   return text.replace(/@\[([^\]]*)\]\([^)]+\)/g, '@$1').replace(/\s+/g, ' ').trim()
 }
 

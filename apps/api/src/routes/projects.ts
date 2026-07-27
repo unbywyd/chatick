@@ -5,13 +5,14 @@ import { and, eq, inArray, isNull, sql } from 'drizzle-orm'
 import { nanoid } from 'nanoid'
 import sharp from 'sharp'
 import { db } from '../db/client.js'
-import { companies, companyMembers, messages, notifications, projects, projectMembers, projectStorage, tasks, users } from '../db/schema.js'
+import { companies, companyMembers, files, messages, notifications, projects, projectMembers, projectStorage, tasks, users } from '../db/schema.js'
 import { encrypt } from '../lib/crypto.js'
 import { PutObjectCommand, DeleteObjectCommand, S3Client } from '@aws-sdk/client-s3'
 import { requireSession, requireProject, signProjectToken, type SessionEnv, type ProjectEnv } from '../auth.js'
 import { sendAddedToProjectMail, sendRemovedFromProjectMail } from '../lib/mails.js'
 import { companyLlm } from '../lib/llm.js'
-import { s3Client, s3Bucket, getObjectStream, S3_KEY_PREFIX } from '../lib/s3.js'
+import { stripMentions } from '../lib/notify.js'
+import { s3Client, s3Bucket, getObjectStream, deleteObject, resolveStorage, S3_KEY_PREFIX } from '../lib/s3.js'
 
 export const projectsRoute = new Hono<SessionEnv>()
 projectsRoute.use('*', requireSession)
@@ -294,7 +295,8 @@ projectsRoute.get('/', zValidator('query', z.object({ companyId: z.string().min(
       authorName: string | null
     }[]) {
       lastMessage.set(r.projectId, {
-        text: (r.text ?? '').slice(0, 140),
+        // в превью показываем «@Имя», а не разметку редактора
+        text: stripMentions(r.text ?? '').slice(0, 140),
         author: r.authorName ?? 'AI',
         at: r.createdAt,
       })
@@ -532,6 +534,61 @@ projectsRoute.delete('/:projectId/logo', async (c) => {
   }
   await db.update(projects).set({ logoUrl: null, logoKey: null }).where(eq(projects.id, projectId))
   return c.json({ ok: true })
+})
+
+/**
+ * Удаление проекта (SPEC §4.2).
+ *
+ * Необратимо и уносит всё: задачи, переписку, документы, заметки, историю
+ * времени и файлы. Поэтому три рубежа:
+ *   1. только владелец проекта или админ компании;
+ *   2. подтверждение вводом названия (проверяем и на сервере — клиент можно
+ *      обойти);
+ *   3. файлы вычищаются из хранилища, иначе они переживут проект и продолжат
+ *      занимать место.
+ *
+ * Ассистенту через мост эта операция НЕ доступна намеренно.
+ */
+projectsRoute.delete('/:projectId', async (c) => {
+  const { sub } = c.get('session')
+  const projectId = c.req.param('projectId')
+
+  const project = await db.query.projects.findFirst({ where: eq(projects.id, projectId) })
+  if (!project) return c.json({ error: 'Not found' }, 404)
+
+  const membership = await projectRoleOf(projectId, sub)
+  const companyRole = await companyRoleOf(project.companyId, sub)
+  if (!(membership?.role === 'owner' || companyRole === 'admin')) {
+    return c.json({ error: 'Only the project owner or a company admin can delete a project' }, 403)
+  }
+
+  const body = (await c.req.json().catch(() => ({}))) as Record<string, unknown>
+  if (typeof body.confirm !== 'string' || body.confirm.trim() !== project.name) {
+    return c.json({ error: 'Confirmation does not match the project name', expected: project.name }, 400)
+  }
+
+  // Сначала файлы: если упадём на них, проект ещё цел и можно повторить.
+  // Наоборот — остались бы объекты, к которым уже никто не знает пути.
+  const rows = await db.select({ key: files.key, originalKey: files.originalKey }).from(files).where(eq(files.projectId, projectId))
+  if (rows.length) {
+    try {
+      const store = await resolveStorage(projectId)
+      for (const r of rows) {
+        for (const key of [r.key, r.originalKey].filter(Boolean) as string[]) {
+          await deleteObject(store, key).catch(() => {
+            // один непослушный объект не должен блокировать удаление проекта
+          })
+        }
+      }
+    } catch (err) {
+      console.error('[projects] storage cleanup failed:', err)
+    }
+  }
+
+  // Остальное уносит каскад: 24 таблицы ссылаются на проект с on delete cascade.
+  await db.delete(projects).where(eq(projects.id, projectId))
+
+  return c.json({ ok: true, deletedFiles: rows.length })
 })
 
 // Участники проекта

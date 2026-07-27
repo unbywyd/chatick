@@ -3,11 +3,14 @@ import { useNavigate, useParams } from 'react-router-dom'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { useTranslation } from 'react-i18next'
 import { toast } from 'sonner'
-import { Building2, Plus, FolderKanban, Check, Mail, Search, X } from 'lucide-react'
+import { Building2, Plus, FolderKanban, Check, Mail, MoreVertical, Search, Settings, Trash2, X } from 'lucide-react'
 import { ProfileMenu } from '@/components/ProfileMenu'
 import { Avatar } from '@/components/ui/avatar'
 import { AvatarGroup } from '@/components/ui/avatar-group'
 import { ProjectBadge } from '@/components/ui/project-badge'
+import { DropdownMenu, DropdownMenuTrigger, DropdownMenuContent, DropdownMenuItem } from '@/components/ui/dropdown-menu'
+import { ProjectSettingsDialog } from '@/components/ProjectSettingsDialog'
+import { DeleteProjectDialog } from '@/components/DeleteProjectDialog'
 import {
   api,
   logout,
@@ -390,6 +393,8 @@ function ProjectsTab({
   const [creating, setCreating] = useState(false)
   const [form, setForm] = useState<ProjectSettings>({ name: '', about: '', chatRules: '', aiConfig: DEFAULT_AI_CONFIG })
   const [rulesModal, setRulesModal] = useState<{ projectId: string; projectName: string; chatRules: string } | null>(null)
+  const [settingsFor, setSettingsFor] = useState<string | null>(null)
+  const [deleting, setDeleting] = useState<{ id: string; name: string } | null>(null)
 
   const projectsQ = useQuery({
     queryKey: ['projects', company.id],
@@ -523,6 +528,38 @@ function ProjectsTab({
                           {unread > 99 ? '99+' : unread}
                         </span>
                       )}
+                      {/* Настройки и удаление — под тремя точками: на карточке
+                          им не место, а искать их внутри проекта не всегда удобно. */}
+                      {(p.myRole === 'owner' || canManage) && (
+                        <DropdownMenu>
+                          <DropdownMenuTrigger asChild>
+                            <button
+                              onClick={(e) => e.stopPropagation()}
+                              className={cn(
+                                'shrink-0 rounded p-1 text-muted-foreground hover:bg-accent hover:text-foreground',
+                                unread > 0 ? '' : 'ms-auto',
+                              )}
+                            >
+                              <MoreVertical className="size-4" />
+                            </button>
+                          </DropdownMenuTrigger>
+                          <DropdownMenuContent align="end" onClick={(e) => e.stopPropagation()}>
+                            <DropdownMenuItem onSelect={() => setSettingsFor(p.id)}>
+                              <Settings className="size-4" />
+                              {t('tabs.settings')}
+                            </DropdownMenuItem>
+                            {p.myRole === 'owner' && (
+                              <DropdownMenuItem
+                                onSelect={() => setDeleting({ id: p.id, name: p.name })}
+                                className="text-destructive focus:text-destructive"
+                              >
+                                <Trash2 className="size-4" />
+                                {t('project.deleteAction')}
+                              </DropdownMenuItem>
+                            )}
+                          </DropdownMenuContent>
+                        </DropdownMenu>
+                      )}
                     </div>
                     <div className="mt-1 flex items-center gap-2">
                       <AvatarGroup members={p.members ?? []} total={p.memberCount} size={22} />
@@ -591,6 +628,20 @@ function ProjectsTab({
         <p className="rounded-lg border border-dashed p-6 text-center text-sm text-muted-foreground">
           {q ? t('start.nothingFound') : t('start.noProjects')}
         </p>
+      )}
+
+      {settingsFor && <ProjectSettingsDialog projectId={settingsFor} onClose={() => setSettingsFor(null)} />}
+
+      {deleting && (
+        <DeleteProjectDialog
+          projectId={deleting.id}
+          projectName={deleting.name}
+          onClose={() => setDeleting(null)}
+          onDeleted={() => {
+            setDeleting(null)
+            qc.invalidateQueries({ queryKey: ['projects', company.id] })
+          }}
+        />
       )}
 
       {rulesModal && (

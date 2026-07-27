@@ -364,7 +364,18 @@
     "menu": "תפריט",
     "language": "שפה",
     "theme": "ערכת נושא",
-    "resizeChat": "גררו לשינוי הרוחב · לחיצה כפולה לאיפוס"
+    "resizeChat": "גררו לשינוי הרוחב · לחיצה כפולה לאיפוס",
+    "deleteTitle": "למחוק את הפרויקט?",
+    "deleteWhat": "הכול שבפרויקט יימחק יחד איתו:",
+    "deleteTasks": "משימות, ספרינטים ותגובות",
+    "deleteChat": "כל היסטוריית הצ׳אט",
+    "deleteDocs": "מסמכים ורשומות יומן",
+    "deleteFiles": "קבצים שהועלו — גם מהאחסון",
+    "deleteTime": "שעות שנרשמו ודוחות",
+    "deleteIrreversible": "לא ניתן לבטל פעולה זו.",
+    "deleteConfirmLabel": "הקלידו «{{name}}» לאישור:",
+    "deleteAction": "מחיקת פרויקט",
+    "deleted": "הפרויקט «{{name}}» נמחק"
   },
   "about": {
     "noDescription": "אין עדיין תיאור.",

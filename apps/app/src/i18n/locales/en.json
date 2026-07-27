@@ -364,7 +364,18 @@
     "menu": "Menu",
     "language": "Language",
     "theme": "Theme",
-    "resizeChat": "Drag to resize · double-click to reset"
+    "resizeChat": "Drag to resize · double-click to reset",
+    "deleteTitle": "Delete project?",
+    "deleteWhat": "Everything in this project goes with it:",
+    "deleteTasks": "tasks, sprints and comments",
+    "deleteChat": "the whole chat history",
+    "deleteDocs": "documents and journal notes",
+    "deleteFiles": "uploaded files — removed from storage too",
+    "deleteTime": "tracked hours and reports",
+    "deleteIrreversible": "This cannot be undone.",
+    "deleteConfirmLabel": "Type «{{name}}» to confirm:",
+    "deleteAction": "Delete project",
+    "deleted": "Project «{{name}}» deleted"
   },
   "about": {
     "noDescription": "No description yet.",
