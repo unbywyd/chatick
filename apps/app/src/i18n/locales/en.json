@@ -1055,5 +1055,10 @@
   "update": {
     "available": "A new version is available",
     "reload": "Reload"
+  },
+  "danger": {
+    "title": "Danger zone",
+    "deleteCompanyHint": "Deletes the company with all its projects, files and history. Members will be notified by email.",
+    "deleteProjectHint": "Deletes the project with all tasks, chat, files and tracked hours. Members will be notified by email."
   }
 }

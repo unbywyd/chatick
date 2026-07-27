@@ -5,6 +5,7 @@ import { toast } from 'sonner'
 import { X } from 'lucide-react'
 import { api, API_URL, getSessionToken } from '@/lib/api'
 import { Button } from '@/components/ui/button'
+import { DangerZone, DangerAction } from '@/components/company/DangerZone'
 import {
   ProjectSettingsForm,
   DEFAULT_AI_CONFIG,
@@ -29,7 +30,16 @@ type ProjectDetails = {
   storageLimit?: string | number | null
 }
 
-export function ProjectSettingsDialog({ projectId, onClose }: { projectId: string; onClose: () => void }) {
+export function ProjectSettingsDialog({
+  projectId,
+  onClose,
+  onDelete,
+}: {
+  projectId: string
+  onClose: () => void
+  /** удаление доступно только владельцу — решает вызывающий */
+  onDelete?: () => void
+}) {
   const { t } = useTranslation()
   const qc = useQueryClient()
   const [form, setForm] = useState<ProjectSettings | null>(null)
@@ -118,6 +128,19 @@ export function ProjectSettingsDialog({ projectId, onClose }: { projectId: strin
             />
           ) : (
             <p className="py-8 text-center text-sm text-muted-foreground">…</p>
+          )}
+
+          {/* Необратимое — отдельным блоком внизу, а не пунктом в меню
+              карточки, куда легко попасть мимоходом. */}
+          {form && onDelete && (
+            <DangerZone>
+              <DangerAction
+                title={t('project.deleteAction')}
+                description={t('danger.deleteProjectHint')}
+                actionLabel={t('project.deleteAction')}
+                onAction={onDelete}
+              />
+            </DangerZone>
           )}
         </div>
 

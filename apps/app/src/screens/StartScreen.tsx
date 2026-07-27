@@ -3,12 +3,13 @@ import { useNavigate, useParams } from 'react-router-dom'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { useTranslation } from 'react-i18next'
 import { toast } from 'sonner'
-import { Building2, Plus, FolderKanban, Check, Mail, MoreVertical, Search, Settings, Trash2, X } from 'lucide-react'
+import { Building2, Plus, FolderKanban, Check, Mail, MoreVertical, Search, Settings, X } from 'lucide-react'
 import { ProfileMenu } from '@/components/ProfileMenu'
 import { Avatar } from '@/components/ui/avatar'
 import { AvatarGroup } from '@/components/ui/avatar-group'
 import { ProjectBadge } from '@/components/ui/project-badge'
 import { CompanySwitcher } from '@/components/CompanySwitcher'
+import { DangerZone, DangerAction } from '@/components/company/DangerZone'
 import { DeleteProjectDialog } from '@/components/DeleteProjectDialog'
 import { useConfirm } from '@/components/ui/confirm'
 import { DropdownMenu, DropdownMenuTrigger, DropdownMenuContent, DropdownMenuItem } from '@/components/ui/dropdown-menu'
@@ -119,7 +120,6 @@ export function StartScreen() {
                 onSelect={setCompanyId}
                 onCreate={() => setCompanyId(null)}
                 onLeave={setLeaving}
-                onDelete={setDeletingCompany}
               />
             </>
           )}
@@ -145,7 +145,12 @@ export function StartScreen() {
             onChanged={() => qc.invalidateQueries({ queryKey: ['companies'] })}
           />
         ) : company ? (
-          <CompanyHome company={company} meId={me.data?.id} onEntered={(id) => navigate(`/p/${id}`)} />
+          <CompanyHome
+            company={company}
+            meId={me.data?.id}
+            onEntered={(id) => navigate(`/p/${id}`)}
+            onDeleteCompany={setDeletingCompany}
+          />
         ) : null}
         </div>
       </main>
@@ -299,9 +304,11 @@ function CompanyHome({
   company,
   meId,
   onEntered,
+  onDeleteCompany,
 }: {
   company: Company
   meId?: string
+  onDeleteCompany: (c: Company) => void
   onEntered: (projectId: string) => void
 }) {
   const { t } = useTranslation()
@@ -352,7 +359,22 @@ function CompanyHome({
       ) : tab === 'backup' && isAdmin ? (
         <BackupTab company={company} />
       ) : (
-        <LlmSettings companyId={company.id} isAdmin={company.myRole === 'admin'} />
+        <>
+          <LlmSettings companyId={company.id} isAdmin={company.myRole === 'admin'} />
+
+          {/* Необратимое — отдельно и внизу: рядом с обычными настройками до
+              него дотягиваются случайно. */}
+          {isAdmin && (
+            <DangerZone>
+              <DangerAction
+                title={t('start.deleteCompany')}
+                description={t('danger.deleteCompanyHint')}
+                actionLabel={t('start.deleteCompany')}
+                onAction={() => onDeleteCompany(company)}
+              />
+            </DangerZone>
+          )}
+        </>
       )}
     </div>
   )
@@ -445,7 +467,7 @@ function ProjectsTab({
   const [creating, setCreating] = useState(false)
   const [form, setForm] = useState<ProjectSettings>({ name: '', about: '', chatRules: '', aiConfig: DEFAULT_AI_CONFIG })
   const [rulesModal, setRulesModal] = useState<{ projectId: string; projectName: string; chatRules: string } | null>(null)
-  const [settingsFor, setSettingsFor] = useState<string | null>(null)
+  const [settingsFor, setSettingsFor] = useState<{ id: string; name: string; owner: boolean } | null>(null)
   const [deleting, setDeleting] = useState<{ id: string; name: string } | null>(null)
 
   const projectsQ = useQuery({
@@ -595,20 +617,13 @@ function ProjectsTab({
                               <MoreVertical className="size-4" />
                             </button>
                           </DropdownMenuTrigger>
+                          {/* Удаления здесь нет: оно живёт в опасной зоне
+                              настроек, куда просто так не заходят. */}
                           <DropdownMenuContent align="end" onClick={(e) => e.stopPropagation()}>
-                            <DropdownMenuItem onSelect={() => setSettingsFor(p.id)}>
+                            <DropdownMenuItem onSelect={() => setSettingsFor({ id: p.id, name: p.name, owner: p.myRole === 'owner' })}>
                               <Settings className="size-4" />
                               {t('tabs.settings')}
                             </DropdownMenuItem>
-                            {p.myRole === 'owner' && (
-                              <DropdownMenuItem
-                                onSelect={() => setDeleting({ id: p.id, name: p.name })}
-                                className="text-destructive focus:text-destructive"
-                              >
-                                <Trash2 className="size-4" />
-                                {t('project.deleteAction')}
-                              </DropdownMenuItem>
-                            )}
                           </DropdownMenuContent>
                         </DropdownMenu>
                       )}
@@ -682,7 +697,20 @@ function ProjectsTab({
         </p>
       )}
 
-      {settingsFor && <ProjectSettingsDialog projectId={settingsFor} onClose={() => setSettingsFor(null)} />}
+      {settingsFor && (
+        <ProjectSettingsDialog
+          projectId={settingsFor.id}
+          onClose={() => setSettingsFor(null)}
+          onDelete={
+            settingsFor.owner
+              ? () => {
+                  setDeleting({ id: settingsFor.id, name: settingsFor.name })
+                  setSettingsFor(null)
+                }
+              : undefined
+          }
+        />
+      )}
 
       {deleting && (
         <DeleteProjectDialog

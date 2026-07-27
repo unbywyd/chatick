@@ -1,5 +1,5 @@
 import { useTranslation } from 'react-i18next'
-import { Building2, Check, ChevronsUpDown, LogOut, Plus, Trash2 } from 'lucide-react'
+import { Building2, Check, ChevronsUpDown, LogOut, Plus } from 'lucide-react'
 import type { Company } from '@/lib/api'
 import { cn } from '@/lib/utils'
 import {
@@ -22,7 +22,6 @@ export function CompanySwitcher({
   onSelect,
   onCreate,
   onLeave,
-  onDelete,
 }: {
   companies: Company[]
   current: Company
@@ -30,7 +29,6 @@ export function CompanySwitcher({
   /** создать свою — только если её ещё нет */
   onCreate?: () => void
   onLeave: (company: Company) => void
-  onDelete: (company: Company) => void
 }) {
   const { t } = useTranslation()
 
@@ -79,17 +77,10 @@ export function CompanySwitcher({
           </DropdownMenuItem>
         )}
 
-        {/* Из чужой — выйти, свою — удалить: уйти из неё нельзя, иначе она
-            осталась бы без хозяина вместе со всеми проектами. */}
-        {current.myRole === 'admin' ? (
-          <DropdownMenuItem
-            onSelect={() => onDelete(current)}
-            className={cn('text-destructive focus:text-destructive')}
-          >
-            <Trash2 className="size-4" />
-            {t('start.deleteCompany')}
-          </DropdownMenuItem>
-        ) : (
+        {/* Выйти можно только из чужой: свою без хозяина не оставишь. Удаление
+            здесь не показываем — необратимому место в опасной зоне настроек,
+            а не в меню, куда заходят просто сменить компанию. */}
+        {current.myRole !== 'admin' && (
           <DropdownMenuItem
             onSelect={() => onLeave(current)}
             className={cn('text-destructive focus:text-destructive')}
