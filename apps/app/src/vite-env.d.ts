@@ -7,3 +7,6 @@ interface ImportMetaEnv {
 interface ImportMeta {
   readonly env: ImportMetaEnv
 }
+
+/** Отпечаток сборки — подставляется vite (см. vite.config.ts). */
+declare const __BUILD_VERSION__: string

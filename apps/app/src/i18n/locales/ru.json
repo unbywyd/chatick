@@ -1024,5 +1024,9 @@
     "projectHere": "активен",
     "taskSetStatus": "Сменить статус",
     "reload": "Обновить"
+  },
+  "update": {
+    "available": "Вышла новая версия",
+    "reload": "Обновить"
   }
 }

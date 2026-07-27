@@ -1022,5 +1022,9 @@
     "projectHere": "פעיל",
     "taskSetStatus": "שינוי סטטוס",
     "reload": "רענון"
+  },
+  "update": {
+    "available": "זמינה גרסה חדשה",
+    "reload": "רענון"
   }
 }
