@@ -3,7 +3,7 @@ import { Hono } from 'hono'
 import { and, eq, isNull, or, sql } from 'drizzle-orm'
 import { nanoid } from 'nanoid'
 import { db } from '../db/client.js'
-import { credentials, documents, files, messages, notes, projects, shares, tasks, users } from '../db/schema.js'
+import { credentials, files, messages, notes, projects, shares, tasks, users } from '../db/schema.js'
 import { requireSession, type SessionEnv } from '../auth.js'
 import { getObjectStream, resolveStorage } from '../lib/s3.js'
 import { hasPermission, projectRoleOf, type ProjectPermission } from './projects.js'
@@ -16,12 +16,17 @@ import { hasPermission, projectRoleOf, type ProjectPermission } from './projects
 
 export const sharesRoute = new Hono<SessionEnv>()
 
-type Entity = 'file' | 'document' | 'note' | 'resource' | 'message' | 'task'
+/**
+ * Документы намеренно не здесь: у них своя публичность (documents.publicSlug)
+ * с готовой страницей /d/:slug и правами на редактирование. Второй механизм
+ * рядом означал бы два места, где документ «публичный», и два места, где это
+ * можно забыть отозвать.
+ */
+type Entity = 'file' | 'note' | 'resource' | 'message' | 'task'
 
 /** Право, без которого делиться нельзя: делятся тем, что имеют право читать. */
 const READ_PERMISSION: Record<Entity, ProjectPermission | null> = {
   file: 'files.read',
-  document: 'documents.read',
   note: 'notes.read',
   resource: 'resources.read',
   // Чат читают все участники проекта — отдельного права на него нет.
@@ -35,10 +40,6 @@ async function locate(type: Entity, id: string): Promise<{ projectId: string; ti
     case 'file': {
       const r = await db.query.files.findFirst({ where: and(eq(files.id, id), isNull(files.deletedAt)) })
       return r ? { projectId: r.projectId, title: r.name } : null
-    }
-    case 'document': {
-      const r = await db.query.documents.findFirst({ where: and(eq(documents.id, id), isNull(documents.deletedAt)) })
-      return r ? { projectId: r.projectId, title: r.title } : null
     }
     case 'note': {
       const r = await db.query.notes.findFirst({ where: and(eq(notes.id, id), isNull(notes.deletedAt)) })
@@ -199,10 +200,6 @@ async function readEntity(type: Entity, id: string) {
     case 'file': {
       const r = await db.query.files.findFirst({ where: and(eq(files.id, id), isNull(files.deletedAt)) })
       return r ? { file: { id: r.id, name: r.name, mime: r.mime, size: Number(r.size), createdAt: r.createdAt } } : null
-    }
-    case 'document': {
-      const r = await db.query.documents.findFirst({ where: and(eq(documents.id, id), isNull(documents.deletedAt)) })
-      return r ? { document: { title: r.title, content: r.content, updatedAt: r.updatedAt } } : null
     }
     case 'note': {
       const r = await db.query.notes.findFirst({ where: and(eq(notes.id, id), isNull(notes.deletedAt)) })

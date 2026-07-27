@@ -15,8 +15,10 @@ import {
   Search,
   Trash2,
   X,
+  Share2,
 } from 'lucide-react'
 import { useNavigate, useParams } from 'react-router-dom'
+import { ShareDialog } from '@/components/ShareDialog'
 import { api } from '@/lib/api'
 import { cn } from '@/lib/utils'
 import { Input } from '@/components/ui/input'
@@ -45,6 +47,7 @@ export function ResourcesTab({ projectId, isAdmin }: { projectId: string; isAdmi
   const [q, setQ] = useState('')
   const [editing, setEditing] = useState<ResourceRow | 'new' | null>(null)
   const { resourceId } = useParams()
+  const [sharing, setSharing] = useState<ResourceRow | null>(null)
   const [showAudit, setShowAudit] = useState(false)
 
   const list = useQuery({ queryKey: ['resources', projectId], queryFn: () => api<ResourceRow[]>('/api/v1/resources', {}, 'project') })
@@ -62,6 +65,7 @@ export function ResourcesTab({ projectId, isAdmin }: { projectId: string; isAdmi
   })
 
   return (
+    <>
     <div className="mx-auto w-full max-w-6xl p-6">
       <div className="flex items-center gap-2">
         <div className="relative flex-1">
@@ -133,6 +137,9 @@ export function ResourcesTab({ projectId, isAdmin }: { projectId: string; isAdmi
                   <MessagesSquare className="size-4" />
                 </Button>
               )}
+              <Button variant="ghost" size="icon" title={t('tasks.share')} onClick={() => setSharing(r)}>
+                <Share2 className="size-4" />
+              </Button>
               <Button variant="ghost" size="icon" title={t('about.edit')} onClick={() => setEditing(r)}>
                 <Pencil className="size-4" />
               </Button>
@@ -156,6 +163,17 @@ export function ResourcesTab({ projectId, isAdmin }: { projectId: string; isAdmi
         )}
       </ul>
     </div>
+      {sharing && (
+        <ShareDialog
+          type="resource"
+          id={sharing.id}
+          title={sharing.name}
+          appPath={`/p/${projectId}/resources/${sharing.id}`}
+          canPublish={isAdmin}
+          onClose={() => setSharing(null)}
+        />
+      )}
+    </>
   )
 }
 

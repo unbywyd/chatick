@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
 import { useTranslation } from 'react-i18next'
-import { Download, ExternalLink, Loader2, X } from 'lucide-react'
+import { Download, ExternalLink, Loader2, Share2, X } from 'lucide-react'
 import * as XLSX from 'xlsx'
 import { api } from '@/lib/api'
 import { cn } from '@/lib/utils'
@@ -25,7 +25,16 @@ function kindOf(file: ViewerFile): 'image' | 'video' | 'audio' | 'pdf' | 'sheet'
 }
 
 // Встроенный просмотрщик: картинки, PDF, таблицы (SheetJS локально), текст, office → Google Viewer
-export function FileViewer({ file, onClose }: { file: ViewerFile; onClose: () => void }) {
+export function FileViewer({
+  file,
+  onClose,
+  onShare,
+}: {
+  file: ViewerFile
+  onClose: () => void
+  /** есть право делиться — решает вызывающий */
+  onShare?: () => void
+}) {
   const { t } = useTranslation()
   const kind = kindOf(file)
   const [url, setUrl] = useState<string | null>(null)
@@ -97,6 +106,14 @@ export function FileViewer({ file, onClose }: { file: ViewerFile; onClose: () =>
         {file.hasOriginal && (
           <Button variant="outline" size="sm" className="border-white/20 bg-white/10 text-white hover:bg-white/20" onClick={() => download(true)}>
             {t('viewer.original')}
+          </Button>
+        )}
+        {/* Поделиться, а не скачать: ссылку можно переслать, и человек увидит
+            превью вместо файла в загрузках. */}
+        {onShare && (
+          <Button variant="outline" size="sm" className="border-white/20 bg-white/10 text-white hover:bg-white/20" onClick={onShare}>
+            <Share2 className="size-3.5" />
+            {t('tasks.share')}
           </Button>
         )}
         <Button variant="outline" size="sm" className="border-white/20 bg-white/10 text-white hover:bg-white/20" onClick={() => download(false)}>

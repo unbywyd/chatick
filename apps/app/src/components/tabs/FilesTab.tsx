@@ -29,6 +29,7 @@ import { useConfirm } from '@/components/ui/confirm'
 import { Popover, PopoverTrigger, PopoverContent } from '@/components/ui/popover'
 import { Calendar } from '@/components/ui/calendar'
 import { FileViewer, type ViewerFile } from '@/components/files/FileViewer'
+import { ShareDialog } from '@/components/ShareDialog'
 import { StorageSettings } from '@/components/files/StorageSettings'
 import { ClipboardBanner } from '@/components/ui/clipboard-banner'
 import { usePasteFiles } from '@/hooks/usePasteFiles'
@@ -87,6 +88,7 @@ export function FilesTab({ projectId, isAdmin = false }: { projectId: string; is
   // Открытый файл живёт в адресе: ссылкой на файл делятся, и она должна
   // открывать именно его, а не список, в котором его ещё надо найти.
   const { fileId: openFileId } = useParams()
+  const [sharing, setSharing] = useState<ViewerFile | null>(null)
   const openFile = (id: string | null) =>
     navigate(id ? `/p/${projectId}/files/${id}` : `/p/${projectId}/files`)
 
@@ -362,7 +364,20 @@ export function FilesTab({ projectId, isAdmin = false }: { projectId: string; is
         </div>
       )}
 
-      {viewing && <FileViewer file={viewing} onClose={() => openFile(null)} />}
+      {viewing && (
+        <FileViewer file={viewing} onClose={() => openFile(null)} onShare={() => setSharing(viewing)} />
+      )}
+
+      {sharing && (
+        <ShareDialog
+          type="file"
+          id={sharing.id}
+          title={sharing.name}
+          appPath={`/p/${projectId}/files/${sharing.id}`}
+          canPublish={isAdmin}
+          onClose={() => setSharing(null)}
+        />
+      )}
     </div>
   )
 }

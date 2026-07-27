@@ -2,6 +2,8 @@ import { useMemo, useState } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { useTranslation } from 'react-i18next'
 import { useNavigate, useParams, useSearchParams } from 'react-router-dom'
+import { useProjectCtx } from '@/screens/ProjectScreen'
+import { ShareDialog } from '@/components/ShareDialog'
 import { toast } from 'sonner'
 import {
   AlertTriangle,
@@ -21,6 +23,7 @@ import {
   Split,
   Trash2,
   X,
+  Share2,
 } from 'lucide-react'
 import { api } from '@/lib/api'
 import { cn } from '@/lib/utils'
@@ -76,6 +79,9 @@ type Note = {
 type Member = { user: { id: string; name: string; email: string; avatarUrl: string | null } }
 
 export function NotesTab({ projectId }: { projectId: string }) {
+  // Публиковать наружу может только руководство проекта — см. ShareDialog.
+  const { project } = useProjectCtx()
+  const isAdmin = project?.myRole === 'owner' || project?.myRole === 'admin'
   const { t, i18n } = useTranslation()
   const qc = useQueryClient()
   const confirm = useConfirm()
@@ -145,6 +151,7 @@ export function NotesTab({ projectId }: { projectId: string }) {
   // Прямая ссылка на заметку: /p/<id>/notes/<noteId>. Старый вид ?note=<id>
   // продолжает работать — он разошёлся в уведомлениях и письмах.
   const { noteId } = useParams()
+  const [sharing, setSharing] = useState<Note | null>(null)
   const focusId = noteId ?? params.get('note')
   const clearFocus = () => {
     if (noteId) {
@@ -164,6 +171,17 @@ export function NotesTab({ projectId }: { projectId: string }) {
 
   const toggle = <T,>(arr: T[], v: T): T[] => (arr.includes(v) ? arr.filter((x) => x !== v) : [...arr, v])
   const hasFilters = Boolean(q || types.length || tags.length || authorId || mentions || from || to || companyWide)
+
+  const shareDialog = sharing && (
+    <ShareDialog
+      type="note"
+      id={sharing.id}
+      title={sharing.title || t('journal.untitled')}
+      appPath={`/p/${projectId}/notes/${sharing.id}`}
+      canPublish={isAdmin}
+      onClose={() => setSharing(null)}
+    />
+  )
 
   if (editing) {
     return (
@@ -185,6 +203,7 @@ export function NotesTab({ projectId }: { projectId: string }) {
 
   return (
     <div className="mx-auto w-full max-w-6xl space-y-4 p-6">
+      {shareDialog}
       <div className="flex items-center justify-between gap-3">
         <div>
           <h1 className="flex items-center gap-2 text-xl font-bold tracking-tight">
@@ -414,6 +433,15 @@ export function NotesTab({ projectId }: { projectId: string }) {
                             onClick={() => toTask.mutate(n.id)}
                           >
                             <CheckSquare className={cn('size-3.5', n.taskId && 'text-brand')} />
+                          </Button>
+                          <Button
+                            variant="ghost"
+                            size="icon"
+                            className="size-7"
+                            title={t('tasks.share')}
+                            onClick={() => setSharing(n)}
+                          >
+                            <Share2 className="size-3.5" />
                           </Button>
                           <Button
                             variant="ghost"

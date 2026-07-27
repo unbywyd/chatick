@@ -1064,5 +1064,18 @@
     "title": "Danger zone",
     "deleteCompanyHint": "Deletes the company with all its projects, files and history. Members will be notified by email.",
     "deleteProjectHint": "Deletes the project with all tasks, chat, files and tracked hours. Members will be notified by email."
+  },
+  "share": {
+    "title": "Share",
+    "appLink": "Link for the team",
+    "appLinkHint": "Opens for anyone with access to this project. Others will see the sign-in page.",
+    "publicLink": "Public link",
+    "publicWarning": "Works without signing in — anyone who gets the link can open it. Share only what may leave the team.",
+    "publish": "Create public link",
+    "revoke": "Revoke",
+    "revoked": "Public link revoked",
+    "views": "Opened {{count}} time",
+    "views_other": "Opened {{count}} times",
+    "onlyAdmins": "Only project owners and admins can publish links."
   }
 }

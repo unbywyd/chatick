@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useNavigate, useParams, useSearchParams } from 'react-router-dom'
 import { useInfiniteQuery, useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { ArrowDown, Bot, CheckSquare, Copy, Users, BrainCircuit, Loader2, Menu, MoreHorizontal, NotebookPen, PanelsTopLeft, Reply, Search, Settings, Trash2, UserPlus, X } from 'lucide-react'
+import { ArrowDown, Bot, CheckSquare, Copy, Users, BrainCircuit, Loader2, Menu, MoreHorizontal, NotebookPen, PanelsTopLeft, Reply, Search, Settings, Share2, Trash2, UserPlus, X } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
 import ReactMarkdown from 'react-markdown'
 import { toast } from 'sonner'
@@ -14,6 +14,7 @@ import { useProjectSocket, type ChatMessage } from '@/hooks/useProjectSocket'
 import { Composer, AI_MENTION_ID } from './Composer'
 import { SandboxOverlay } from './SandboxOverlay'
 import { AvatarRow } from '@/components/ui/avatar-row'
+import { ShareDialog } from '@/components/ShareDialog'
 import { AiOverlay } from './AiOverlay'
 import { FileViewer, type ViewerFile } from '@/components/files/FileViewer'
 import { NOTE_META, NOTE_TYPES, type NoteType } from '@/components/tabs/NotesTab'
@@ -61,6 +62,8 @@ export function ChatPanel({
   const [replyTo, setReplyTo] = useState<ChatMessage | null>(null)
   /** счётчик-сигнал: меняется — композер забирает фокус */
   const [focusComposer, setFocusComposer] = useState(0)
+  /** сообщение, которым делятся */
+  const [sharing, setSharing] = useState<ChatMessage | null>(null)
   const [sandboxStream, setSandboxStream] = useState('') // постепенная печать ответа ИИ
   const [aiThinking, setAiThinking] = useState(false) // ai-режим: ждём ответ
   const [searchOpen, setSearchOpen] = useState(false)
@@ -453,6 +456,7 @@ export function ChatPanel({
                       setReplyTo(m)
                       setFocusComposer((n) => n + 1)
                     }}
+                    onShare={() => setSharing(m)}
                     onJump={jumpTo}
                     replyTo={m.replyToId ? byId.get(m.replyToId) : undefined}
                   />
@@ -505,6 +509,19 @@ export function ChatPanel({
       )}
 
       {/* Sandbox поверх чата (SPEC §5.5.3) */}
+      {/* Ссылка на сообщение: «ты же говорил» перестаёт быть спором, когда
+          можно показать пальцем. */}
+      {sharing && (
+        <ShareDialog
+          type="message"
+          id={sharing.id}
+          title={sharing.text.slice(0, 80)}
+          appPath={`/p/${projectId}/chat?msg=${sharing.id}`}
+          canPublish={myRole === 'owner' || myRole === 'admin'}
+          onClose={() => setSharing(null)}
+        />
+      )}
+
       {sandboxId && (
         <SandboxOverlay
           messageId={sandboxId}
@@ -627,6 +644,7 @@ function MessageRow({
   picking,
   onPick,
   onReply,
+  onShare,
   onJump,
   replyTo,
 }: {
@@ -639,6 +657,7 @@ function MessageRow({
   picking: boolean
   onPick: () => void
   onReply: () => void
+  onShare: () => void
   /** перейти к процитированному сообщению */
   onJump: (id: string) => void
   /** сообщение, на которое отвечают — для цитаты сверху */
@@ -679,6 +698,10 @@ function MessageRow({
       <Item onSelect={copyText}>
         <Copy className="size-4" />
         {t('chat.copy')}
+      </Item>
+      <Item onSelect={onShare}>
+        <Share2 className="size-4" />
+        {t('tasks.share')}
       </Item>
       {canDelete && (
         <>
