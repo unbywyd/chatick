@@ -40,7 +40,12 @@
     "statsNoTasks": "אין עדיין משימות",
     "noMembers": "אין חברים",
     "noMessages": "אין עדיין הודעות",
-    "mineShort": "{{n}} שלי"
+    "mineShort": "{{n}} שלי",
+    "leaveCompany": "יציאה מהחברה",
+    "leftCompany": "יצאתם מהחברה",
+    "leaveConfirm": "לצאת מ־«{{name}}»?",
+    "leaveHint": "הגישה לפרויקטים שלה תיעלם. חזרה תתאפשר רק בהזמנה חדשה.",
+    "createCompany": "יצירת חברה"
   },
   "companyTabs": {
     "projects": "פרויקטים",

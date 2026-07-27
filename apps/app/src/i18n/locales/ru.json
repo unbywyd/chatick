@@ -40,7 +40,12 @@
     "statsNoTasks": "Задач пока нет",
     "noMembers": "Нет участников",
     "noMessages": "Сообщений пока нет",
-    "mineShort": "моих {{n}}"
+    "mineShort": "моих {{n}}",
+    "leaveCompany": "Выйти из компании",
+    "leftCompany": "Вы вышли из компании",
+    "leaveConfirm": "Выйти из «{{name}}»?",
+    "leaveHint": "Доступ к её проектам пропадёт. Вернуться можно будет только по новому приглашению.",
+    "createCompany": "Создать компанию"
   },
   "companyTabs": {
     "projects": "Проекты",

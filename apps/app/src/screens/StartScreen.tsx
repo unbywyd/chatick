@@ -8,6 +8,8 @@ import { ProfileMenu } from '@/components/ProfileMenu'
 import { Avatar } from '@/components/ui/avatar'
 import { AvatarGroup } from '@/components/ui/avatar-group'
 import { ProjectBadge } from '@/components/ui/project-badge'
+import { CompanySwitcher } from '@/components/CompanySwitcher'
+import { useConfirm } from '@/components/ui/confirm'
 import { DropdownMenu, DropdownMenuTrigger, DropdownMenuContent, DropdownMenuItem } from '@/components/ui/dropdown-menu'
 import { ProjectSettingsDialog } from '@/components/ProjectSettingsDialog'
 import { DeleteProjectDialog } from '@/components/DeleteProjectDialog'
@@ -72,6 +74,33 @@ export function StartScreen() {
   }, [me.error, navigate])
 
   const company = companiesQ.data?.companies.find((c) => c.id === companyId)
+  const [leaving, setLeaving] = useState<Company | null>(null)
+  const confirm = useConfirm()
+
+  const leave = useMutation({
+    mutationFn: (id: string) => api(`/api/v1/companies/${id}/leave`, { method: 'POST' }),
+    onSuccess: () => {
+      toast.success(t('start.leftCompany'))
+      qc.invalidateQueries({ queryKey: ['companies'] })
+      navigate('/start', { replace: true })
+    },
+    onError: (e) => toast.error(e instanceof Error ? e.message : String(e)),
+  })
+
+  // Выход спрашиваем подтверждением: доступ к проектам компании пропадёт, и
+  // вернуться можно будет только по новому приглашению.
+  useEffect(() => {
+    if (!leaving) return
+    const c = leaving
+    setLeaving(null)
+    void confirm({
+      title: t('start.leaveConfirm', { name: c.name }),
+      description: t('start.leaveHint'),
+      destructive: true,
+      confirmLabel: t('start.leaveCompany'),
+    }).then((ok) => ok && leave.mutate(c.id))
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [leaving])
 
   return (
     <div className="flex h-dvh flex-col">
@@ -81,13 +110,15 @@ export function StartScreen() {
           {company && (
             <>
               <span className="text-muted-foreground">/</span>
-              <button
-                onClick={() => setCompanyId(null)}
-                className="text-sm font-medium underline-offset-4 hover:underline"
-                title={t('start.changeCompany')}
-              >
-                {company.name}
-              </button>
+              {/* Переключатель вместо ссылки назад: менять компанию, уходя со
+                  страницы, на которой работаешь, — лишний шаг. */}
+              <CompanySwitcher
+                companies={companiesQ.data?.companies ?? []}
+                current={company}
+                onSelect={setCompanyId}
+                onCreate={() => setCompanyId(null)}
+                onLeave={setLeaving}
+              />
             </>
           )}
         </div>
@@ -217,24 +248,29 @@ function CompanyPicker({
         </section>
       )}
 
-      <section className="space-y-2">
-        <h2 className="text-sm font-semibold text-muted-foreground">
-          {companies.length ? t('start.orCreateCompany') : t('start.createFirstCompany')}
-        </h2>
-        <form
-          className="flex gap-2"
-          onSubmit={(e) => {
-            e.preventDefault()
-            if (name.trim()) createCompany.mutate(name.trim())
-          }}
-        >
-          <Input value={name} onChange={(e) => setName(e.target.value)} placeholder={t('start.companyName')} className="h-10" />
-          <Button variant="brand" type="submit" disabled={!name.trim() || createCompany.isPending} className="h-10">
-            <Plus className="size-4" />
-            {t('start.create')}
-          </Button>
-        </form>
-      </section>
+      {/* Своя компания одна: если она уже есть, форму не показываем — сервер
+          всё равно откажет, а предлагать неисполнимое незачем. Участвовать в
+          чужих можно в скольких угодно, туда попадают по приглашению. */}
+      {!companies.some((c) => c.myRole === 'admin') && (
+        <section className="space-y-2">
+          <h2 className="text-sm font-semibold text-muted-foreground">
+            {companies.length ? t('start.orCreateCompany') : t('start.createFirstCompany')}
+          </h2>
+          <form
+            className="flex gap-2"
+            onSubmit={(e) => {
+              e.preventDefault()
+              if (name.trim()) createCompany.mutate(name.trim())
+            }}
+          >
+            <Input value={name} onChange={(e) => setName(e.target.value)} placeholder={t('start.companyName')} className="h-10" />
+            <Button variant="brand" type="submit" disabled={!name.trim() || createCompany.isPending} className="h-10">
+              <Plus className="size-4" />
+              {t('start.create')}
+            </Button>
+          </form>
+        </section>
+      )}
     </div>
   )
 }

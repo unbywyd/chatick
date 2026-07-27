@@ -40,7 +40,12 @@
     "statsNoTasks": "No tasks yet",
     "noMembers": "No members",
     "noMessages": "No messages yet",
-    "mineShort": "{{n}} mine"
+    "mineShort": "{{n}} mine",
+    "leaveCompany": "Leave company",
+    "leftCompany": "You left the company",
+    "leaveConfirm": "Leave «{{name}}»?",
+    "leaveHint": "You will lose access to its projects. Getting back in requires a new invitation.",
+    "createCompany": "Create a company"
   },
   "companyTabs": {
     "projects": "Projects",

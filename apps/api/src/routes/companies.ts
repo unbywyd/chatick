@@ -43,6 +43,19 @@ companiesRoute.post(
     const { sub } = c.get('session')
     const { name, logoUrl } = c.req.valid('json')
 
+    // Своя компания — одна. Участвовать можно в скольких угодно: это чужие
+    // пространства, куда позвали. А заводить их пачками незачем — проекты
+    // для того и существуют.
+    const own = await db.query.companyMembers.findFirst({
+      where: and(eq(companyMembers.userId, sub), eq(companyMembers.role, 'admin')),
+    })
+    if (own) {
+      return c.json(
+        { error: 'You already have a company', hint: 'Create projects inside it, or ask to be invited elsewhere.' },
+        409,
+      )
+    }
+
     const [company] = await db.insert(companies).values({ name, logoUrl }).returning()
     await db.insert(companyMembers).values({ companyId: company!.id, userId: sub, role: 'admin' })
 
@@ -318,6 +331,46 @@ companiesRoute.delete('/:companyId/members/:userId', async (c) => {
   await db
     .delete(companyMembers)
     .where(and(eq(companyMembers.companyId, companyId), eq(companyMembers.userId, userId)))
+  return c.json({ ok: true })
+})
+
+/**
+ * Выйти из компании самому (SPEC §3.1).
+ *
+ * Отдельно от удаления участника админом: уйти из чужого пространства человек
+ * вправе без чьего-либо разрешения. Единственный админ уйти не может — иначе
+ * компания осталась бы без хозяина, а вместе с ней и все её проекты.
+ */
+companiesRoute.post('/:companyId/leave', async (c) => {
+  const { sub } = c.get('session')
+  const { companyId } = c.req.param()
+
+  const role = await memberRoleIn(companyId, sub)
+  if (!role) return c.json({ error: 'Not a member' }, 404)
+
+  if (role === 'admin') {
+    const admins = await db.query.companyMembers.findMany({
+      where: and(eq(companyMembers.companyId, companyId), eq(companyMembers.role, 'admin')),
+    })
+    if (admins.length <= 1) {
+      return c.json(
+        { error: 'You are the only admin', hint: 'Make someone else an admin first, or delete the company.' },
+        400,
+      )
+    }
+  }
+
+  // Из проектов компании тоже выходим: доступ к ним держался на членстве.
+  const projectIds = (await db.select({ id: projects.id }).from(projects).where(eq(projects.companyId, companyId))).map(
+    (p) => p.id,
+  )
+  if (projectIds.length) {
+    await db
+      .delete(projectMembers)
+      .where(and(inArray(projectMembers.projectId, projectIds), eq(projectMembers.userId, sub)))
+  }
+
+  await db.delete(companyMembers).where(and(eq(companyMembers.companyId, companyId), eq(companyMembers.userId, sub)))
   return c.json({ ok: true })
 })
 
