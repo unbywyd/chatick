@@ -1,0 +1,123 @@
+---
+import Doc from '../layouts/Doc.astro'
+
+// Политика приватности — только на английском (см. Doc.astro).
+// Написана по тому, что приложение действительно хранит и куда действительно
+// передаёт данные: обещания, расходящиеся с кодом, хуже их отсутствия.
+const UPDATED = 'July 28, 2026'
+---
+
+<Doc
+  title="Privacy Policy — Chatick"
+  description="What Chatick stores, why, who else sees it, and how to get it deleted."
+  path="/privacy"
+>
+  <h1>Privacy Policy</h1>
+  <p class="updated">Last updated: {UPDATED}</p>
+
+  <p>
+    This describes what Chatick stores, why it stores it, who else it is shared with, and how you get rid of it. It is
+    written to match what the software actually does.
+  </p>
+
+  <h2>What we collect</h2>
+
+  <h3>Account</h3>
+  <p>
+    When you sign in with Google we receive and store your <strong>email address, name and profile picture</strong>. We
+    also keep your interface language, and a phone number only if you enter one yourself. We never receive your Google
+    password.
+  </p>
+
+  <h3>What you put in</h3>
+  <p>
+    Messages, tasks, comments, time entries, documents, notes, files and resources you create or upload. This is your
+    working content — we store it so the service can show it back to you and to the people in your projects.
+  </p>
+
+  <h3>Technical</h3>
+  <p>
+    Standard server logs (IP address, browser, requested pages, timestamps) kept for security and debugging, and an
+    authentication token in your browser's local storage so you stay signed in. Chatick does not use advertising
+    cookies and does not run third-party analytics or trackers on the application.
+  </p>
+
+  <h2>Who else processes it</h2>
+  <p>To run the service, data passes through a small number of providers:</p>
+  <ul>
+    <li>
+      <strong>Anthropic</strong> — message content and related project data are sent to the language model so the AI
+      dispatcher can summarise, route and answer. This is the core AI feature.
+    </li>
+    <li><strong>Google</strong> — sign-in only; they confirm who you are.</li>
+    <li><strong>Cloudflare R2</strong> — object storage for uploaded files and avatars.</li>
+    <li><strong>An email provider</strong> — to deliver invitations, notifications and digests.</li>
+    <li><strong>Hetzner</strong> — the servers in Germany where the database runs.</li>
+  </ul>
+  <p>
+    We do not sell your data, and we do not share it for advertising. Nobody outside these providers gets access,
+    except where the law requires it.
+  </p>
+
+  <h2>Public links are public</h2>
+  <p>
+    Chatick lets you publish a file, document, note, resource or message as a public link that works without signing
+    in. Anyone with the link can read it, and search engines may find it if the link is posted somewhere public. That
+    is the point of the feature — but it is your decision each time, and you can revoke any link, after which it stops
+    working immediately.
+  </p>
+
+  <h2>Where it lives, and for how long</h2>
+  <p>
+    Data is stored on servers in Germany (EU). We keep your content for as long as your account exists. Deleted
+    projects and companies are removed along with their files. Deleted documents and notes are recoverable for 7 days,
+    then purged. Server logs are rotated regularly.
+  </p>
+
+  <h2>Backups</h2>
+  <p>
+    The database is backed up regularly so that a failure does not cost you your work. Backups are encrypted and kept
+    on a retention window, which means a deleted item may persist in a backup for a short period after deletion before
+    it ages out.
+  </p>
+
+  <h2>Security</h2>
+  <ul>
+    <li>All traffic runs over HTTPS.</li>
+    <li>Stored credentials in the "Resources" section are encrypted before they reach the database.</li>
+    <li>Access inside a project is governed by roles, and every project holds its own scoped access token.</li>
+    <li>Sensitive actions — deleting a project or a company — require explicit confirmation and notify every member.</li>
+  </ul>
+  <p>
+    No service can promise perfect security, and we will not pretend otherwise. If you find a vulnerability, please
+    write to <a href="mailto:support@chatick.com">support@chatick.com</a> — reports are welcome and taken seriously.
+  </p>
+
+  <h2>Your rights</h2>
+  <p>Wherever you live, and specifically under GDPR if you are in the EU, you can:</p>
+  <ul>
+    <li>ask what we hold about you and get a copy;</li>
+    <li>correct anything wrong — most of it you can edit yourself;</li>
+    <li>delete your account and its content;</li>
+    <li>object to processing, or ask us to restrict it;</li>
+    <li>complain to your local data protection authority.</li>
+  </ul>
+  <p>
+    To exercise any of these, write to <a href="mailto:support@chatick.com">support@chatick.com</a>. We answer within
+    30 days.
+  </p>
+
+  <h2>Children</h2>
+  <p>Chatick is not intended for anyone under 16, and we do not knowingly collect their data.</p>
+
+  <h2>Changes</h2>
+  <p>
+    When this policy changes materially, the date above changes and the change is noted in the
+    <a href="/changelog">changelog</a>.
+  </p>
+
+  <h2>Contact</h2>
+  <p>
+    Privacy questions, data requests, anything else: <a href="mailto:support@chatick.com">support@chatick.com</a>.
+  </p>
+</Doc>

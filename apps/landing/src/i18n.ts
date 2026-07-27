@@ -40,8 +40,61 @@ type Dict = {
     hint: string
   }
   how: { title: string; steps: Feature[] }
+  /** Доверие: безопасность, бэкапы, надёжность, бесплатность */
+  trust: { title: string; subtitle: string; items: Feature[] }
+  /** Кто это сделал */
+  author: { tag: string; title: string; text: string; sites: string }
+  /** Скачивание десктопных версий */
+  download: {
+    title: string
+    subtitle: string
+    windows: string
+    mac: string
+    linux: string
+    soon: string
+    web: string
+    mobileSoon: string
+  }
+  /** Отзывы */
+  reviews: {
+    title: string
+    subtitle: string
+    empty: string
+    leave: string
+    name: string
+    role: string
+    email: string
+    rating: string
+    text: string
+    send: string
+    sent: string
+    failed: string
+    cancel: string
+  }
+  /** Контактная форма */
+  contact: {
+    title: string
+    subtitle: string
+    name: string
+    email: string
+    topic: string
+    topics: { question: string; bug: string; feature: string; other: string }
+    message: string
+    send: string
+    sent: string
+    failed: string
+    support: string
+  }
   cta: { title: string; subtitle: string; button: string }
-  footer: { rights: string; forAi: string }
+  footer: {
+    rights: string
+    forAi: string
+    terms: string
+    privacy: string
+    changelog: string
+    github: string
+    madeBy: string
+  }
 }
 
 // Промпт, который пользователь копирует и вставляет в свой ИИ.
@@ -137,7 +190,71 @@ export const dict: Record<LocaleCode, Dict> = {
       subtitle: 'Web today. Desktop for Windows & macOS next.',
       button: 'Open Chatick',
     },
-    footer: { rights: 'All rights reserved.', forAi: 'For AI assistants' },
+    trust: {
+      title: 'Built to be trusted with your team’s work',
+      subtitle: 'The unglamorous parts, done properly — losing someone’s work once is enough to lose them.',
+      items: [
+        { title: 'Free, and honestly so', text: 'No card, no trial countdown, no seats to count. Every project gets room for real work, and the limits are stated plainly instead of hidden in a plan comparison.' },
+        { title: 'Backed up, not hoped for', text: 'The database is backed up on a schedule and the copies are encrypted. Deleted documents and notes stay recoverable for seven days — a mistaken click is not the end of the story.' },
+        { title: 'Encrypted where it matters', text: 'Everything travels over HTTPS. Credentials kept in Resources are encrypted before they reach the database, and access inside a project is decided by roles.' },
+        { title: 'Dangerous things ask twice', text: 'Deleting a project or a company wipes everything belonging to it, files included. So it lives in a clearly marked danger zone, needs confirmation, and emails every member afterwards.' },
+        { title: 'Servers in the EU', text: 'Data sits on servers in Germany. Export it or delete it whenever you like — the privacy page names exactly who else processes it.' },
+        { title: 'Nothing hidden in the log', text: 'Every release is written down before it ships; the build refuses to run otherwise. What changed is always readable on the changelog page.' },
+      ],
+    },
+    author: {
+      tag: 'Who built this',
+      title: 'One developer who writes code all day, every day',
+      text: 'Fifteen years of building software, and hands-on familiarity with just about every tool teams are asked to live in. Chatick is what was left after removing everything those tools add and nobody uses.',
+      sites: 'More work:',
+    },
+    download: {
+      title: 'Use it wherever you work',
+      subtitle: 'The same workspace in the browser and on your desktop, with a tray panel that keeps the timer and your notifications one click away.',
+      windows: 'Download for Windows',
+      mac: 'Download for macOS',
+      linux: 'Download for Linux',
+      soon: 'Coming soon',
+      web: 'Open in browser',
+      mobileSoon: 'Mobile apps are on the roadmap.',
+    },
+    reviews: {
+      title: 'What people say',
+      subtitle: 'Reviews are read before they appear here.',
+      empty: 'No reviews published yet. Yours could be the first.',
+      leave: 'Leave a review',
+      name: 'Your name',
+      role: 'Role (optional)',
+      email: 'Email',
+      rating: 'Rating',
+      text: 'Your review',
+      send: 'Send review',
+      sent: 'Thank you — your review will appear here once it has been read.',
+      failed: 'Could not send. Please try again, or write to support@chatick.com.',
+      cancel: 'Cancel',
+    },
+    contact: {
+      title: 'Get in touch',
+      subtitle: 'Questions, bugs, ideas — all of it reaches a person, not a queue.',
+      name: 'Your name',
+      email: 'Email',
+      topic: 'Topic',
+      topics: { question: 'Question', bug: 'Bug report', feature: 'Feature idea', other: 'Something else' },
+      message: 'Message',
+      send: 'Send message',
+      sent: 'Sent — thank you. You will get an answer by email.',
+      failed: 'Could not send. Please write to support@chatick.com instead.',
+      support: 'Or email us directly:',
+    },
+    footer: {
+      rights: 'All rights reserved.',
+      forAi: 'For AI assistants',
+      terms: 'Terms',
+      privacy: 'Privacy',
+      changelog: 'Changelog',
+      github: 'Source on GitHub',
+      madeBy: 'Built by',
+    },
   },
 
   ru: {
@@ -224,7 +341,71 @@ export const dict: Record<LocaleCode, Dict> = {
       subtitle: 'Веб уже сегодня. Десктоп для Windows и macOS — следом.',
       button: 'Открыть Chatick',
     },
-    footer: { rights: 'Все права защищены.', forAi: 'Для ИИ-ассистентов' },
+    trust: {
+      title: 'Сделан так, чтобы ему можно было доверить работу',
+      subtitle: 'Скучные вещи сделаны честно — потерять чужую работу достаточно один раз.',
+      items: [
+        { title: 'Бесплатно и честно', text: 'Без карты, без таймера пробного периода, без подсчёта мест. Каждому проекту — место под реальную работу, а лимиты названы прямо, а не спрятаны в сравнении тарифов.' },
+        { title: 'Бэкапы, а не надежда', text: 'База копируется по расписанию, копии зашифрованы. Удалённые документы и заметки можно вернуть семь дней — случайный клик не конец истории.' },
+        { title: 'Шифруется там, где важно', text: 'Всё идёт по HTTPS. Доступы, сложенные в «Ресурсы», шифруются до того, как попадут в базу, а доступ внутри проекта определяют роли.' },
+        { title: 'Опасное переспрашивает', text: 'Удаление проекта или компании стирает всё их содержимое вместе с файлами — поэтому живёт в красной зоне, требует подтверждения и рассылает письма всем участникам.' },
+        { title: 'Серверы в ЕС', text: 'Данные лежат в Германии. Их можно выгрузить или удалить в любой момент, а на странице приватности перечислено, кто ещё их обрабатывает.' },
+        { title: 'Ничего не прячется', text: 'Каждая версия описана до выпуска — иначе сборка просто не пройдёт. Что изменилось, всегда видно в журнале версий.' },
+      ],
+    },
+    author: {
+      tag: 'Кто это сделал',
+      title: 'Один разработчик, который пишет код целыми днями',
+      text: 'Пятнадцать лет в разработке и рабочее знакомство почти со всеми программами, в которых заставляют жить команды. Chatick — это то, что осталось после удаления всего, чем никто не пользуется.',
+      sites: 'Другие работы:',
+    },
+    download: {
+      title: 'Работайте там, где удобно',
+      subtitle: 'Одно и то же рабочее место в браузере и на компьютере, с панелью в трее: таймер и уведомления в одном клике.',
+      windows: 'Скачать для Windows',
+      mac: 'Скачать для macOS',
+      linux: 'Скачать для Linux',
+      soon: 'Скоро',
+      web: 'Открыть в браузере',
+      mobileSoon: 'Мобильные приложения — в планах.',
+    },
+    reviews: {
+      title: 'Что говорят',
+      subtitle: 'Отзывы читают перед публикацией.',
+      empty: 'Отзывов пока нет. Ваш может стать первым.',
+      leave: 'Оставить отзыв',
+      name: 'Ваше имя',
+      role: 'Должность (необязательно)',
+      email: 'Почта',
+      rating: 'Оценка',
+      text: 'Отзыв',
+      send: 'Отправить',
+      sent: 'Спасибо — отзыв появится здесь после прочтения.',
+      failed: 'Не отправилось. Попробуйте ещё раз или напишите на support@chatick.com.',
+      cancel: 'Отмена',
+    },
+    contact: {
+      title: 'Связаться',
+      subtitle: 'Вопросы, баги, идеи — всё попадает к человеку, а не в очередь.',
+      name: 'Ваше имя',
+      email: 'Почта',
+      topic: 'Тема',
+      topics: { question: 'Вопрос', bug: 'Ошибка', feature: 'Идея', other: 'Другое' },
+      message: 'Сообщение',
+      send: 'Отправить',
+      sent: 'Отправлено — спасибо. Ответ придёт на почту.',
+      failed: 'Не отправилось. Напишите, пожалуйста, на support@chatick.com.',
+      support: 'Или напишите напрямую:',
+    },
+    footer: {
+      rights: 'Все права защищены.',
+      forAi: 'Для ИИ-ассистентов',
+      terms: 'Условия',
+      privacy: 'Приватность',
+      changelog: 'Журнал версий',
+      github: 'Исходный код на GitHub',
+      madeBy: 'Сделано',
+    },
   },
 
   he: {
@@ -311,6 +492,70 @@ export const dict: Record<LocaleCode, Dict> = {
       subtitle: 'זמין בדפדפן היום. גרסת דסקטופ ל-Windows ו-macOS בקרוב.',
       button: 'לפתוח את Chatick',
     },
-    footer: { rights: 'כל הזכויות שמורות.', forAi: 'לעוזרי AI' },
+    trust: {
+      title: 'נבנה כדי שאפשר יהיה להפקיד בו את העבודה',
+      subtitle: 'החלקים המשעממים נעשו כמו שצריך — לאבד עבודה פעם אחת זה מספיק.',
+      items: [
+        { title: 'חינם, באמת', text: 'בלי כרטיס אשראי, בלי שעון ניסיון ובלי לספור משתמשים. לכל פרויקט יש מקום לעבודה אמיתית, והמגבלות נאמרות בפירוש.' },
+        { title: 'גיבוי, לא תקווה', text: 'מסד הנתונים מגובה באופן קבוע והעותקים מוצפנים. מסמכים ופתקים שנמחקו ניתנים לשחזור שבעה ימים.' },
+        { title: 'הצפנה במקום שחשוב', text: 'הכל עובר ב-HTTPS. אישורי גישה מוצפנים לפני שהם מגיעים למסד הנתונים, והגישה בפרויקט נקבעת לפי תפקידים.' },
+        { title: 'פעולות מסוכנות שואלות פעמיים', text: 'מחיקת פרויקט או חברה מוחקת גם את הקבצים — לכן זה דורש אישור ושולח הודעה לכל החברים.' },
+        { title: 'שרתים באיחוד האירופי', text: 'הנתונים שמורים בגרמניה. אפשר לייצא או למחוק אותם בכל רגע.' },
+        { title: 'שום דבר לא מוסתר', text: 'כל גרסה מתועדת לפני שהיא יוצאת — אחרת הבנייה פשוט נכשלת.' },
+      ],
+    },
+    author: {
+      tag: 'מי בנה את זה',
+      title: 'מפתח אחד שכותב קוד כל היום',
+      text: 'חמש עשרה שנות פיתוח והיכרות מעשית עם כמעט כל כלי שצוותים נדרשים לחיות בו. Chatick הוא מה שנשאר אחרי שמסירים את כל מה שאיש לא משתמש בו.',
+      sites: 'עבודות נוספות:',
+    },
+    download: {
+      title: 'עבדו איפה שנוח לכם',
+      subtitle: 'אותו מרחב עבודה בדפדפן ובמחשב, עם לוח במגש המערכת.',
+      windows: 'הורדה ל-Windows',
+      mac: 'הורדה ל-macOS',
+      linux: 'הורדה ל-Linux',
+      soon: 'בקרוב',
+      web: 'פתחו בדפדפן',
+      mobileSoon: 'אפליקציות לנייד בתוכניות.',
+    },
+    reviews: {
+      title: 'מה אומרים',
+      subtitle: 'חוות הדעת נקראות לפני פרסום.',
+      empty: 'עדיין אין חוות דעת. שלכם יכולה להיות הראשונה.',
+      leave: 'כתיבת חוות דעת',
+      name: 'השם שלכם',
+      role: 'תפקיד (רשות)',
+      email: 'אימייל',
+      rating: 'דירוג',
+      text: 'חוות הדעת',
+      send: 'שליחה',
+      sent: 'תודה — חוות הדעת תופיע כאן לאחר קריאה.',
+      failed: 'השליחה נכשלה. נסו שוב או כתבו ל-support@chatick.com.',
+      cancel: 'ביטול',
+    },
+    contact: {
+      title: 'צרו קשר',
+      subtitle: 'שאלות, תקלות ורעיונות — הכל מגיע לאדם.',
+      name: 'השם שלכם',
+      email: 'אימייל',
+      topic: 'נושא',
+      topics: { question: 'שאלה', bug: 'תקלה', feature: 'רעיון', other: 'אחר' },
+      message: 'הודעה',
+      send: 'שליחה',
+      sent: 'נשלח — תודה. תשובה תגיע באימייל.',
+      failed: 'השליחה נכשלה. כתבו ל-support@chatick.com.',
+      support: 'או כתבו ישירות:',
+    },
+    footer: {
+      rights: 'כל הזכויות שמורות.',
+      forAi: 'לעוזרי AI',
+      terms: 'תנאי שימוש',
+      privacy: 'פרטיות',
+      changelog: 'יומן גרסאות',
+      github: 'קוד ב-GitHub',
+      madeBy: 'נבנה על ידי',
+    },
   },
 }

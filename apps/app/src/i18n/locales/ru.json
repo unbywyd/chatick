@@ -409,7 +409,8 @@
       "feature": "Предложение",
       "billing": "Оплата",
       "other": "Другое"
-    }
+    },
+    "supportMail": "Или напишите: support@chatick.com"
   },
   "roles": {
     "admin": "Админ",

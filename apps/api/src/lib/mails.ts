@@ -201,6 +201,32 @@ export async function sendFeedbackMail(p: {
   })
 }
 
+/**
+ * Новый отзыв с сайта — письмо администраторам.
+ *
+ * Только на английском: получатель здесь один — тот, кто ведёт площадку, и
+ * гадать про его язык незачем.
+ */
+export async function sendReviewMail(p: {
+  to: string
+  id: string
+  name: string
+  email: string
+  rating: number
+  body: string
+}) {
+  const stars = '★'.repeat(Math.max(1, Math.min(5, p.rating))) + '☆'.repeat(5 - Math.max(1, Math.min(5, p.rating)))
+  await send(p.to, `New review from ${p.name} (${p.rating}/5)`, {
+    lang: 'en',
+    title: 'New review awaiting moderation',
+    paragraphs: [
+      `${p.name} <${p.email}> left a review: ${stars}`,
+      p.body,
+      'It is not visible on the site yet — publish it once you have read it.',
+    ],
+  })
+}
+
 // --- Напоминание о задачах ------------------------------------------------
 
 const REMIND: Record<MailLang, { subject: string; title: string; intro: string; cta: string }> = {

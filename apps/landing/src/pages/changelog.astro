@@ -1,0 +1,141 @@
+---
+import Doc from '../layouts/Doc.astro'
+import { assertChangelogMatchesVersion, productVersion } from '../changelog'
+
+// Журнал версий — только на английском (см. Doc.astro).
+//
+// Сверка здесь намеренная: если версия в package.json не описана в
+// CHANGELOG.md, сборка падает и релиз не уедет молча.
+const releases = assertChangelogMatchesVersion()
+const version = productVersion()
+
+const TONE: Record<string, string> = {
+  Added: 'added',
+  Changed: 'changed',
+  Fixed: 'fixed',
+  Removed: 'removed',
+}
+---
+
+<Doc
+  title="Changelog — Chatick"
+  description="Every released version of Chatick and what changed in it."
+  path="/changelog"
+>
+  <h1>Changelog</h1>
+  <p class="updated">Currently running {version}. Newest first.</p>
+
+  {
+    releases.map((r, i) => (
+      <section class="release">
+        <div class="release-head">
+          <h2>
+            {r.version}
+            {i === 0 && <span class="badge">latest</span>}
+          </h2>
+          <span class="date">{r.date}</span>
+        </div>
+
+        {r.sections.map((s) => (
+          <div class="group">
+            {s.title && <h3 class:list={['tag', TONE[s.title] ?? '']}>{s.title}</h3>}
+            <ul>
+              {s.items.map((item) => (
+                <li set:html={item.replace(/`([^`]+)`/g, '<code>$1</code>')} />
+              ))}
+            </ul>
+          </div>
+        ))}
+      </section>
+    ))
+  }
+
+  <p class="foot-note">
+    Every release is described here before it ships — the build refuses to run when a version has no entry.
+  </p>
+</Doc>
+
+<style>
+  .release {
+    border-top: 1px solid var(--border);
+    padding-top: 26px;
+    margin-top: 34px;
+  }
+  .release:first-of-type {
+    border-top: none;
+    margin-top: 26px;
+  }
+  .release-head {
+    display: flex;
+    align-items: baseline;
+    justify-content: space-between;
+    gap: 14px;
+    flex-wrap: wrap;
+  }
+  .release-head h2 {
+    margin: 0;
+    display: inline-flex;
+    align-items: center;
+    gap: 10px;
+    font-size: 26px;
+  }
+  .badge {
+    background: var(--lime);
+    color: var(--lime-dark);
+    font-size: 11px;
+    font-weight: 800;
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+    padding: 3px 9px;
+    border-radius: 999px;
+  }
+  .date {
+    color: var(--fg-muted);
+    font-size: 14px;
+    white-space: nowrap;
+  }
+  .group {
+    margin-top: 18px;
+  }
+  .tag {
+    display: inline-block;
+    font-size: 11px;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.07em;
+    padding: 2px 9px;
+    border-radius: 999px;
+    border: 1px solid var(--border);
+    color: var(--fg-muted);
+    margin: 0 0 10px;
+  }
+  .tag.added {
+    color: var(--lime);
+    border-color: rgba(212, 242, 40, 0.35);
+  }
+  .tag.fixed {
+    color: #7fd1ff;
+    border-color: rgba(127, 209, 255, 0.3);
+  }
+  .tag.changed {
+    color: #ffc46b;
+    border-color: rgba(255, 196, 107, 0.3);
+  }
+  .group ul {
+    margin-left: 20px;
+  }
+  .foot-note {
+    margin-top: 46px;
+    padding-top: 22px;
+    border-top: 1px solid var(--border);
+    color: var(--fg-muted);
+    font-size: 14px;
+  }
+  :global(.doc code) {
+    background: var(--bg-soft);
+    border: 1px solid var(--border);
+    border-radius: 5px;
+    padding: 1px 6px;
+    font-size: 0.9em;
+  }
+</style>

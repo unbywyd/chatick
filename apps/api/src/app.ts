@@ -14,6 +14,7 @@ import { notificationsRoute } from './routes/notifications.js'
 import { aiRoute } from './routes/ai.js'
 import { activityRoute } from './routes/activity.js'
 import { inboxRoute } from './routes/inbox.js'
+import { reviewsRoute } from './routes/reviews.js'
 import { documentsRoute, documentsPublicRoute } from './routes/documents.js'
 import { notesRoute } from './routes/notes.js'
 import { timeRoute } from './routes/time.js'
@@ -40,6 +41,8 @@ app.route('/api/v1/notifications', notificationsRoute)
 app.route('/api/v1/ai', aiRoute)
 app.route('/api/v1/activity', activityRoute)
 app.route('/api/v1/inbox', inboxRoute)
+// отзывы — публичные: их оставляют и читают без входа
+app.route('/api/v1/reviews', reviewsRoute)
 app.route('/api/v1/documents', documentsRoute)
 app.route('/api/v1/notes', notesRoute)
 app.route('/api/v1/time', timeRoute)

@@ -409,7 +409,8 @@
       "feature": "הצעה",
       "billing": "תשלום",
       "other": "אחר"
-    }
+    },
+    "supportMail": "או כתבו: support@chatick.com"
   },
   "roles": {
     "admin": "אדמין",

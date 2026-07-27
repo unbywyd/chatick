@@ -908,6 +908,33 @@ export const feedback = pgTable(
   (t) => [index('feedback_status_idx').on(t.status, t.createdAt)],
 )
 
+export const reviewStatus = pgEnum('review_status', ['pending', 'published', 'rejected'])
+
+/**
+ * Отзывы с сайта (SPEC §8.37).
+ *
+ * Появляются на сайте только после одобрения: отзыв виден всем, и пускать туда
+ * что угодно без просмотра — значит однажды опубликовать спам или гадость от
+ * своего же имени. Поэтому по умолчанию 'pending'.
+ */
+export const reviews = pgTable(
+  'reviews',
+  {
+    id: id(),
+    name: text('name').notNull(),
+    // Почта не публикуется — нужна, чтобы ответить автору
+    email: text('email').notNull(),
+    role: text('role').notNull().default(''), // «Team lead», «Founder» — рядом с именем
+    rating: integer('rating').notNull().default(5),
+    body: text('body').notNull(),
+    status: reviewStatus('status').notNull().default('pending'),
+    userId: text('user_id').references(() => users.id, { onDelete: 'set null' }),
+    meta: text('meta'),
+    createdAt: createdAt(),
+  },
+  (t) => [index('reviews_status_idx').on(t.status, t.createdAt)],
+)
+
 /**
  * Настройки площадки: то, что меняют без выката новой сборки.
  *

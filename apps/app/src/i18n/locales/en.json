@@ -409,7 +409,8 @@
       "feature": "Feature request",
       "billing": "Billing",
       "other": "Other"
-    }
+    },
+    "supportMail": "Or email us: support@chatick.com"
   },
   "roles": {
     "admin": "Admin",

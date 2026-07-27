@@ -1,0 +1,209 @@
+---
+import { LOCALES, type LocaleCode } from '../i18n'
+
+// Обёртка для текстовых страниц: условия, приватность, журнал версий.
+//
+// Они только на английском — это юридические и технические тексты, и перевод,
+// который разойдётся с оригиналом, хуже его отсутствия. Поэтому язык здесь
+// не переключается, а есть только возврат на сайт.
+
+interface Props {
+  title: string
+  description: string
+  path: string
+  locale?: LocaleCode
+}
+
+const { title, description, path, locale = 'en' } = Astro.props
+const canonical = new URL(path, Astro.site)
+const home = LOCALES.find((l) => l.code === locale)?.path ?? '/'
+---
+
+<!doctype html>
+<html lang="en" dir="ltr">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>{title}</title>
+    <meta name="description" content={description} />
+    <link rel="canonical" href={canonical} />
+    <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
+    <meta name="theme-color" content="#141611" />
+    <meta property="og:title" content={title} />
+    <meta property="og:description" content={description} />
+    <meta property="og:type" content="article" />
+    <meta property="og:url" content={canonical} />
+  </head>
+  <body>
+    <header class="doc-nav">
+      <div class="container doc-nav-inner">
+        <a class="logo" href={home}>
+          <svg viewBox="0 0 48 48" fill="none" width="26" height="26" aria-hidden="true">
+            <path
+              d="M24 4C12.4 4 3 12.7 3 23.5c0 5.4 2.4 10.3 6.2 13.8L8 44l8.4-3.2c2.4.7 4.9 1.2 7.6 1.2 11.6 0 21-8.7 21-19.5S35.6 4 24 4Z"
+              stroke="currentColor"
+              stroke-width="4"
+              stroke-linejoin="round"></path>
+            <path
+              d="M15 24.5 21 30l12-12"
+              stroke="#d4f228"
+              stroke-width="5.5"
+              stroke-linecap="round"
+              stroke-linejoin="round"></path>
+          </svg>
+          <span>Chatick</span>
+        </a>
+        <a class="doc-back" href={home}>← Back to site</a>
+      </div>
+    </header>
+
+    <main class="doc container">
+      <slot />
+    </main>
+
+    <footer class="doc-footer">
+      <div class="container">
+        <p>
+          © {new Date().getFullYear()} Chatick ·
+          <a href="/terms">Terms</a> ·
+          <a href="/privacy">Privacy</a> ·
+          <a href="/changelog">Changelog</a> ·
+          <a href="mailto:support@chatick.com">support@chatick.com</a>
+        </p>
+      </div>
+    </footer>
+  </body>
+</html>
+
+<style is:global>
+  :root {
+    --lime: #d4f228;
+    --lime-dark: #1c2003;
+    --bg: #141611;
+    --bg-soft: #1b1e17;
+    --fg: #f4f5f0;
+    --fg-muted: #a2a69a;
+    --border: rgba(255, 255, 255, 0.09);
+    --radius: 14px;
+  }
+  * {
+    margin: 0;
+    padding: 0;
+    box-sizing: border-box;
+  }
+  body {
+    background: var(--bg);
+    color: var(--fg);
+    font-family: 'Segoe UI', system-ui, -apple-system, sans-serif;
+    line-height: 1.7;
+    -webkit-font-smoothing: antialiased;
+  }
+  a {
+    color: inherit;
+  }
+  .container {
+    max-width: 760px;
+    margin: 0 auto;
+    padding: 0 24px;
+  }
+  .doc-nav {
+    border-bottom: 1px solid var(--border);
+    position: sticky;
+    top: 0;
+    background: rgba(20, 22, 17, 0.9);
+    backdrop-filter: blur(10px);
+    z-index: 10;
+  }
+  .doc-nav-inner {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 16px;
+    height: 62px;
+    max-width: 1060px;
+  }
+  .logo {
+    display: inline-flex;
+    align-items: center;
+    gap: 9px;
+    font-weight: 800;
+    font-size: 18px;
+    text-decoration: none;
+  }
+  .doc-back {
+    color: var(--fg-muted);
+    font-size: 14px;
+    text-decoration: none;
+  }
+  .doc-back:hover {
+    color: var(--fg);
+  }
+  .doc {
+    padding: 56px 24px 80px;
+  }
+  .doc h1 {
+    font-size: clamp(30px, 5vw, 42px);
+    line-height: 1.15;
+    letter-spacing: -0.02em;
+    margin-bottom: 10px;
+  }
+  .doc .updated {
+    color: var(--fg-muted);
+    font-size: 14px;
+    margin-bottom: 40px;
+  }
+  .doc h2 {
+    font-size: 21px;
+    margin: 38px 0 12px;
+    letter-spacing: -0.01em;
+  }
+  .doc h3 {
+    font-size: 16px;
+    margin: 24px 0 8px;
+    color: var(--lime);
+  }
+  .doc p,
+  .doc li {
+    color: #d7d9d0;
+  }
+  .doc p {
+    margin-bottom: 14px;
+  }
+  .doc ul,
+  .doc ol {
+    margin: 0 0 16px 22px;
+  }
+  .doc li {
+    margin-bottom: 7px;
+  }
+  .doc a {
+    color: var(--lime);
+    text-decoration: underline;
+    text-underline-offset: 3px;
+  }
+  .doc strong {
+    color: var(--fg);
+  }
+  .doc-footer {
+    border-top: 1px solid var(--border);
+    padding: 26px 0;
+    color: var(--fg-muted);
+    font-size: 14px;
+    text-align: center;
+  }
+  .doc-footer a {
+    color: var(--fg-muted);
+    text-decoration: none;
+  }
+  .doc-footer a:hover {
+    color: var(--fg);
+  }
+  @media (max-width: 640px) {
+    .doc {
+      padding: 36px 20px 60px;
+    }
+    .doc-footer p {
+      line-height: 2;
+    }
+  }
+</style>

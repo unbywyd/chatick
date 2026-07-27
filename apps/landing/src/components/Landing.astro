@@ -8,6 +8,35 @@ interface Props {
 const { locale } = Astro.props
 const t = dict[locale]
 const APP_URL = 'https://app.chatick.com'
+const API_URL = 'https://api.chatick.com'
+const SUPPORT = 'support@chatick.com'
+const GITHUB = 'https://github.com/unbywyd/chatick'
+
+// Кнопки скачивания пока без файлов: сборки ещё не выкладываются, и вести
+// на пустоту хуже, чем честно сказать «скоро».
+const DOWNLOADS = [
+  { key: 'windows' as const, href: '', icon: 'windows' },
+  { key: 'mac' as const, href: '', icon: 'apple' },
+  { key: 'linux' as const, href: '', icon: 'linux' },
+]
+
+// Цифры для графиков — то, что видно на овервью в самом продукте.
+const CHART_HOURS = [
+  { d: 'Mon', v: 6.5 },
+  { d: 'Tue', v: 7.5 },
+  { d: 'Wed', v: 5 },
+  { d: 'Thu', v: 8 },
+  { d: 'Fri', v: 6 },
+  { d: 'Sat', v: 2 },
+  { d: 'Sun', v: 1 },
+]
+const CHART_MAX = 8
+const CHART_STATUSES = [
+  { label: 'Done', v: 46, color: '#d4f228' },
+  { label: 'In progress', v: 28, color: '#7fd1ff' },
+  { label: 'Review', v: 14, color: '#ffc46b' },
+  { label: 'To do', v: 12, color: '#6d7566' },
+]
 ---
 
 <header class="nav">
@@ -194,6 +223,216 @@ const APP_URL = 'https://app.chatick.com'
     </div>
   </section>
 
+  <!-- ЧИСЛА: что видно в самом продукте -->
+  <section class="section section-soft">
+    <div class="container">
+      <h2>{t.workspace.title}</h2>
+      <p class="section-sub">{t.workspace.subtitle}</p>
+
+      <div class="charts">
+        <!-- Часы за неделю -->
+        <figure class="chart-card">
+          <figcaption class="chart-head">
+            <span class="chart-title">Hours this week</span>
+            <span class="chart-total">34h 00m</span>
+          </figcaption>
+          <div class="bars" role="img" aria-label="Hours tracked per day this week">
+            {
+              CHART_HOURS.map((h) => (
+                <div class="bar-col">
+                  <div class="bar-track">
+                    <div class="bar-fill" style={`height:${Math.round((h.v / CHART_MAX) * 100)}%`} />
+                  </div>
+                  <span class="bar-label">{h.d}</span>
+                </div>
+              ))
+            }
+          </div>
+        </figure>
+
+        <!-- Задачи по статусам -->
+        <figure class="chart-card">
+          <figcaption class="chart-head">
+            <span class="chart-title">Tasks by status</span>
+            <span class="chart-total">100</span>
+          </figcaption>
+          <div class="stack" role="img" aria-label="Share of tasks by status">
+            {CHART_STATUSES.map((x) => <span class="stack-part" style={`width:${x.v}%;background:${x.color}`} />)}
+          </div>
+          <ul class="legend">
+            {
+              CHART_STATUSES.map((x) => (
+                <li>
+                  <i style={`background:${x.color}`} />
+                  <span>{x.label}</span>
+                  <b>{x.v}%</b>
+                </li>
+              ))
+            }
+          </ul>
+        </figure>
+      </div>
+    </div>
+  </section>
+
+  <!-- ДОВЕРИЕ -->
+  <section class="section">
+    <div class="container">
+      <h2>{t.trust.title}</h2>
+      <p class="section-sub">{t.trust.subtitle}</p>
+      <div class="grid grid-3">
+        {
+          t.trust.items.map((item) => (
+            <div class="card">
+              <h3>{item.title}</h3>
+              <p>{item.text}</p>
+            </div>
+          ))
+        }
+      </div>
+    </div>
+  </section>
+
+  <!-- СКАЧАТЬ -->
+  <section class="section section-soft" id="download">
+    <div class="container">
+      <h2>{t.download.title}</h2>
+      <p class="section-sub">{t.download.subtitle}</p>
+      <div class="downloads">
+        {
+          DOWNLOADS.map((d) => (
+            <a
+              class:list={['dl', { 'dl-soon': !d.href }]}
+              href={d.href || '#download'}
+              aria-disabled={!d.href}
+            >
+              <span class="dl-os">{t.download[d.key]}</span>
+              {!d.href && <span class="dl-badge">{t.download.soon}</span>}
+            </a>
+          ))
+        }
+        <a class="dl dl-web" href={APP_URL}>
+          <span class="dl-os">{t.download.web}</span>
+        </a>
+      </div>
+      <p class="note">{t.download.mobileSoon}</p>
+    </div>
+  </section>
+
+  <!-- АВТОР -->
+  <section class="section">
+    <div class="container">
+      <div class="author">
+        <span class="tag">{t.author.tag}</span>
+        <h2>{t.author.title}</h2>
+        <p class="section-sub">{t.author.text}</p>
+        <p class="author-sites">
+          {t.author.sites}
+          <a href="https://webtopro.com" target="_blank" rel="noopener">webtopro.com</a>
+          <a href="https://unbywyd.com" target="_blank" rel="noopener">unbywyd.com</a>
+        </p>
+      </div>
+    </div>
+  </section>
+
+  <!-- ОТЗЫВЫ -->
+  <section class="section section-soft" id="reviews">
+    <div class="container">
+      <h2>{t.reviews.title}</h2>
+      <p class="section-sub">{t.reviews.subtitle}</p>
+
+      <div class="grid grid-3" id="reviews-list" data-empty={t.reviews.empty}>
+        <p class="note reviews-loading">…</p>
+      </div>
+
+      <div class="review-actions">
+        <button class="btn btn-ghost" id="review-open" type="button">{t.reviews.leave}</button>
+      </div>
+
+      <form class="form" id="review-form" hidden>
+        <div class="form-row">
+          <label>
+            <span>{t.reviews.name}</span>
+            <input name="name" required maxlength="80" autocomplete="name" />
+          </label>
+          <label>
+            <span>{t.reviews.role}</span>
+            <input name="role" maxlength="80" />
+          </label>
+        </div>
+        <div class="form-row">
+          <label>
+            <span>{t.reviews.email}</span>
+            <input name="email" type="email" required autocomplete="email" />
+          </label>
+          <label>
+            <span>{t.reviews.rating}</span>
+            <select name="rating">
+              <option value="5">★★★★★</option>
+              <option value="4">★★★★☆</option>
+              <option value="3">★★★☆☆</option>
+              <option value="2">★★☆☆☆</option>
+              <option value="1">★☆☆☆☆</option>
+            </select>
+          </label>
+        </div>
+        <label>
+          <span>{t.reviews.text}</span>
+          <textarea name="body" rows="4" required minlength="20" maxlength="2000"></textarea>
+        </label>
+        <input class="trap" type="text" name="website" tabindex="-1" autocomplete="off" aria-hidden="true" />
+        <div class="form-actions">
+          <button class="btn" type="submit">{t.reviews.send}</button>
+          <button class="btn btn-ghost" type="button" id="review-cancel">{t.reviews.cancel}</button>
+          <span class="form-msg" data-sent={t.reviews.sent} data-failed={t.reviews.failed}></span>
+        </div>
+      </form>
+    </div>
+  </section>
+
+  <!-- КОНТАКТЫ -->
+  <section class="section" id="contact">
+    <div class="container">
+      <h2>{t.contact.title}</h2>
+      <p class="section-sub">{t.contact.subtitle}</p>
+
+      <form class="form" id="contact-form">
+        <div class="form-row">
+          <label>
+            <span>{t.contact.name}</span>
+            <input name="name" maxlength="120" autocomplete="name" />
+          </label>
+          <label>
+            <span>{t.contact.email}</span>
+            <input name="email" type="email" required autocomplete="email" />
+          </label>
+        </div>
+        <label>
+          <span>{t.contact.topic}</span>
+          <select name="topic">
+            <option value="question">{t.contact.topics.question}</option>
+            <option value="bug">{t.contact.topics.bug}</option>
+            <option value="feature">{t.contact.topics.feature}</option>
+            <option value="other">{t.contact.topics.other}</option>
+          </select>
+        </label>
+        <label>
+          <span>{t.contact.message}</span>
+          <textarea name="body" rows="5" required minlength="10" maxlength="5000"></textarea>
+        </label>
+        <input class="trap" type="text" name="website" tabindex="-1" autocomplete="off" aria-hidden="true" />
+        <div class="form-actions">
+          <button class="btn" type="submit">{t.contact.send}</button>
+          <span class="form-msg" data-sent={t.contact.sent} data-failed={t.contact.failed}></span>
+        </div>
+      </form>
+
+      <p class="note contact-mail">
+        {t.contact.support} <a href={`mailto:${SUPPORT}`}>{SUPPORT}</a>
+      </p>
+    </div>
+  </section>
+
   <!-- CTA -->
   <section class="section cta">
     <div class="container">
@@ -206,10 +445,142 @@ const APP_URL = 'https://app.chatick.com'
 
 <footer class="footer">
   <div class="container footer-inner">
-    <span>© 2026 Chatick. {t.footer.rights}</span>
-    <a class="footer-link" href="/ai.txt">{t.footer.forAi}</a>
+    <div class="footer-col">
+      <span>© {new Date().getFullYear()} Chatick. {t.footer.rights}</span>
+      <span class="footer-by">
+        {t.footer.madeBy}
+        <a href="https://webtopro.com" target="_blank" rel="noopener">webtopro.com</a>
+      </span>
+    </div>
+    <nav class="footer-links">
+      <a class="footer-link" href="/terms">{t.footer.terms}</a>
+      <a class="footer-link" href="/privacy">{t.footer.privacy}</a>
+      <a class="footer-link" href="/changelog">{t.footer.changelog}</a>
+      <a class="footer-link" href={`mailto:${SUPPORT}`}>{SUPPORT}</a>
+      <a class="footer-link footer-gh" href={GITHUB} target="_blank" rel="noopener" title={t.footer.github}>
+        <svg viewBox="0 0 16 16" width="17" height="17" fill="currentColor" aria-hidden="true">
+          <path d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27s1.36.09 2 .27c1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.01 8.01 0 0 0 16 8c0-4.42-3.58-8-8-8Z"></path>
+        </svg>
+        <span class="footer-gh-label">GitHub</span>
+      </a>
+      <a class="footer-link" href="/ai.txt">{t.footer.forAi}</a>
+    </nav>
   </div>
 </footer>
+
+<script>
+  // --- Отзывы и контактная форма ------------------------------------------
+  // Лендинг статический, поэтому обе формы говорят с API напрямую. Ответ
+  // показываем на месте: молчание в ответ на «Отправить» неотличимо от поломки.
+  const API = 'https://api.chatick.com'
+
+  function say(form: HTMLFormElement, ok: boolean) {
+    const el = form.querySelector<HTMLElement>('.form-msg')
+    if (!el) return
+    el.textContent = ok ? el.dataset.sent! : el.dataset.failed!
+    el.classList.toggle('is-ok', ok)
+    el.classList.toggle('is-err', !ok)
+  }
+
+  async function post(url: string, body: unknown) {
+    const r = await fetch(url, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(body),
+    })
+    if (!r.ok) throw new Error(String(r.status))
+    return r.json()
+  }
+
+  // Опубликованные отзывы. Пусто — так и пишем, а не оставляем скелет.
+  const list = document.getElementById('reviews-list')
+  if (list) {
+    fetch(`${API}/api/v1/reviews`)
+      .then((r) => (r.ok ? r.json() : { items: [] }))
+      .then((d: { items: { id: string; name: string; role: string; rating: number; body: string }[] }) => {
+        if (!d.items?.length) {
+          list.innerHTML = `<p class="note">${list.dataset.empty}</p>`
+          return
+        }
+        list.innerHTML = d.items
+          .map((x) => {
+            const stars = '★'.repeat(Math.max(1, Math.min(5, x.rating))) + '☆'.repeat(5 - Math.max(1, Math.min(5, x.rating)))
+            const esc = (v: string) => v.replace(/[<>&]/g, (c) => ({ '<': '&lt;', '>': '&gt;', '&': '&amp;' })[c]!)
+            return `<figure class="card review">
+                <div class="stars">${stars}</div>
+                <blockquote>${esc(x.body)}</blockquote>
+                <figcaption>${esc(x.name)}${x.role ? ` · <span>${esc(x.role)}</span>` : ''}</figcaption>
+              </figure>`
+          })
+          .join('')
+      })
+      .catch(() => {
+        list.innerHTML = `<p class="note">${list.dataset.empty}</p>`
+      })
+  }
+
+  // Форма отзыва раскрывается по кнопке: пустая форма на виду только пугает
+  const openBtn = document.getElementById('review-open')
+  const reviewForm = document.getElementById('review-form') as HTMLFormElement | null
+  const cancelBtn = document.getElementById('review-cancel')
+  openBtn?.addEventListener('click', () => {
+    reviewForm?.removeAttribute('hidden')
+    openBtn.setAttribute('hidden', '')
+    reviewForm?.querySelector<HTMLInputElement>('input[name=name]')?.focus()
+  })
+  cancelBtn?.addEventListener('click', () => {
+    reviewForm?.setAttribute('hidden', '')
+    openBtn?.removeAttribute('hidden')
+  })
+
+  reviewForm?.addEventListener('submit', async (e) => {
+    e.preventDefault()
+    const f = new FormData(reviewForm)
+    const btn = reviewForm.querySelector<HTMLButtonElement>('button[type=submit]')!
+    btn.disabled = true
+    try {
+      await post(`${API}/api/v1/reviews`, {
+        name: f.get('name'),
+        role: f.get('role'),
+        email: f.get('email'),
+        rating: Number(f.get('rating')),
+        body: f.get('body'),
+        website: f.get('website'), // приманка для ботов
+        lang: document.documentElement.lang,
+      })
+      say(reviewForm, true)
+      reviewForm.reset()
+    } catch {
+      say(reviewForm, false)
+    } finally {
+      btn.disabled = false
+    }
+  })
+
+  const contactForm = document.getElementById('contact-form') as HTMLFormElement | null
+  contactForm?.addEventListener('submit', async (e) => {
+    e.preventDefault()
+    const f = new FormData(contactForm)
+    const btn = contactForm.querySelector<HTMLButtonElement>('button[type=submit]')!
+    btn.disabled = true
+    try {
+      await post(`${API}/api/v1/about/feedback`, {
+        name: f.get('name'),
+        email: f.get('email'),
+        topic: f.get('topic'),
+        body: f.get('body'),
+        website: f.get('website'),
+        page: location.href,
+      })
+      say(contactForm, true)
+      contactForm.reset()
+    } catch {
+      say(contactForm, false)
+    } finally {
+      btn.disabled = false
+    }
+  })
+</script>
 
 <script>
   // Запоминаем явный выбор языка (для автодетекта на корне)
@@ -575,6 +946,306 @@ const APP_URL = 'https://app.chatick.com'
     }
     .footer-inner {
       flex-direction: column;
+    }
+  }
+</style>
+
+<style>
+  /* --- Графики ------------------------------------------------------------ */
+  .charts {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+    gap: 18px;
+    margin-top: 30px;
+  }
+  .chart-card {
+    background: var(--bg);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    padding: 20px;
+  }
+  .chart-head {
+    display: flex;
+    align-items: baseline;
+    justify-content: space-between;
+    gap: 12px;
+    margin-bottom: 18px;
+  }
+  .chart-title {
+    font-weight: 600;
+    font-size: 0.95rem;
+  }
+  .chart-total {
+    color: var(--lime);
+    font-weight: 700;
+  }
+  .bars {
+    display: flex;
+    align-items: flex-end;
+    gap: 10px;
+    height: 140px;
+  }
+  .bar-col {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 8px;
+    height: 100%;
+  }
+  .bar-track {
+    flex: 1;
+    width: 100%;
+    display: flex;
+    align-items: flex-end;
+    background: rgba(255, 255, 255, 0.04);
+    border-radius: 6px;
+    overflow: hidden;
+  }
+  .bar-fill {
+    width: 100%;
+    background: linear-gradient(180deg, var(--lime), rgba(212, 242, 40, 0.45));
+    border-radius: 6px 6px 0 0;
+    animation: grow 0.7s ease-out both;
+  }
+  @keyframes grow {
+    from {
+      height: 0 !important;
+    }
+  }
+  .bar-label {
+    font-size: 0.72rem;
+    color: var(--fg-muted);
+  }
+  .stack {
+    display: flex;
+    height: 14px;
+    border-radius: 999px;
+    overflow: hidden;
+    margin-bottom: 18px;
+  }
+  .stack-part {
+    height: 100%;
+  }
+  .legend {
+    list-style: none;
+    display: grid;
+    gap: 9px;
+  }
+  .legend li {
+    display: flex;
+    align-items: center;
+    gap: 9px;
+    font-size: 0.86rem;
+    color: var(--fg-muted);
+  }
+  .legend i {
+    width: 10px;
+    height: 10px;
+    border-radius: 3px;
+    flex: none;
+  }
+  .legend b {
+    margin-inline-start: auto;
+    color: var(--fg);
+    font-weight: 600;
+  }
+
+  /* --- Скачивание --------------------------------------------------------- */
+  .downloads {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 12px;
+    margin: 28px 0 16px;
+  }
+  .dl {
+    display: inline-flex;
+    align-items: center;
+    gap: 10px;
+    border: 1px solid var(--border);
+    background: var(--bg);
+    border-radius: 999px;
+    padding: 12px 22px;
+    font-weight: 600;
+    font-size: 0.93rem;
+    transition: border-color 0.15s ease, transform 0.15s ease;
+  }
+  .dl:hover {
+    border-color: rgba(212, 242, 40, 0.5);
+    transform: translateY(-1px);
+  }
+  .dl-soon {
+    opacity: 0.62;
+    cursor: default;
+  }
+  .dl-soon:hover {
+    transform: none;
+    border-color: var(--border);
+  }
+  .dl-badge {
+    font-size: 0.7rem;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    color: var(--fg-muted);
+    border: 1px solid var(--border);
+    border-radius: 999px;
+    padding: 2px 8px;
+  }
+  .dl-web {
+    background: var(--lime);
+    color: var(--lime-dark);
+    border-color: transparent;
+  }
+
+  /* --- Автор -------------------------------------------------------------- */
+  .author {
+    max-width: 720px;
+  }
+  .author-sites {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 14px;
+    margin-top: 18px;
+    color: var(--fg-muted);
+    font-size: 0.92rem;
+  }
+  .author-sites a {
+    color: var(--lime);
+    text-decoration: underline;
+    text-underline-offset: 3px;
+  }
+
+  /* --- Отзывы ------------------------------------------------------------- */
+  .review blockquote {
+    margin: 10px 0 14px;
+    color: #d7d9d0;
+  }
+  .review figcaption {
+    color: var(--fg-muted);
+    font-size: 0.86rem;
+  }
+  .stars {
+    color: var(--lime);
+    letter-spacing: 2px;
+  }
+  .review-actions {
+    margin-top: 26px;
+  }
+
+  /* --- Формы -------------------------------------------------------------- */
+  .form {
+    margin-top: 26px;
+    max-width: 640px;
+    display: grid;
+    gap: 14px;
+  }
+  .form-row {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 14px;
+  }
+  .form label {
+    display: grid;
+    gap: 6px;
+    font-size: 0.86rem;
+    color: var(--fg-muted);
+  }
+  .form input,
+  .form select,
+  .form textarea {
+    font: inherit;
+    font-size: 0.95rem;
+    color: var(--fg);
+    background: var(--bg);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    padding: 11px 13px;
+    width: 100%;
+    outline: none;
+    transition: border-color 0.15s ease;
+  }
+  .form input:focus,
+  .form select:focus,
+  .form textarea:focus {
+    border-color: var(--lime);
+  }
+  .form textarea {
+    resize: vertical;
+    min-height: 96px;
+  }
+  /* Приманка для ботов: не видна людям и скринридерам */
+  .trap {
+    position: absolute;
+    left: -9999px;
+    width: 0;
+    height: 0;
+    opacity: 0;
+    pointer-events: none;
+  }
+  .form-actions {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 14px;
+  }
+  .form-msg {
+    font-size: 0.86rem;
+  }
+  .form-msg.is-ok {
+    color: var(--lime);
+  }
+  .form-msg.is-err {
+    color: #ff8f8f;
+  }
+  .contact-mail {
+    margin-top: 18px;
+  }
+  .contact-mail a {
+    color: var(--lime);
+    text-decoration: underline;
+    text-underline-offset: 3px;
+  }
+
+  /* --- Подвал ------------------------------------------------------------- */
+  .footer-col {
+    display: grid;
+    gap: 4px;
+  }
+  .footer-by a {
+    color: var(--fg-muted);
+    text-decoration: underline;
+    text-underline-offset: 3px;
+  }
+  .footer-by a:hover {
+    color: var(--fg);
+  }
+  .footer-links {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 18px;
+  }
+  .footer-gh {
+    display: inline-flex;
+    align-items: center;
+    gap: 7px;
+  }
+
+  @media (max-width: 700px) {
+    .form-row {
+      grid-template-columns: 1fr;
+    }
+    .downloads .dl {
+      flex: 1 1 100%;
+      justify-content: center;
+    }
+    .footer-links {
+      gap: 14px;
+    }
+    .bars {
+      height: 118px;
+      gap: 6px;
     }
   }
 </style>

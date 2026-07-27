@@ -55,6 +55,13 @@ export function AboutDialog({ me, onClose }: { me?: Me; onClose: () => void }) {
               </a>
             )}
 
+            {/* Прямая почта: не всем удобна форма, а адрес работает всегда */}
+            <p className="mt-4 text-xs text-muted-foreground">
+              <a href="mailto:support@chatick.com" className="hover:text-foreground hover:underline">
+                {t('about.supportMail')}
+              </a>
+            </p>
+
             <div className="mt-6 flex justify-end gap-2">
               <Button variant="outline" onClick={onClose}>
                 {t('files.cancel')}
