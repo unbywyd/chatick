@@ -1,9 +1,9 @@
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { useNavigate, useParams, useSearchParams } from 'react-router-dom'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { useTranslation } from 'react-i18next'
 import { toast } from 'sonner'
-import { ArrowLeft, Download, FileText, Globe, History, Link2, Plus, RotateCcw, Search, Trash2 } from 'lucide-react'
+import { ArrowLeft, Download, FileText, Globe, History, Link2, MoreVertical, Plus, RotateCcw, Search, Trash2 } from 'lucide-react'
 import { api, API_URL, withDocImageAuth, type Me } from '@/lib/api'
 import { useDocPresence } from '@/hooks/useProjectSocket'
 import { cn } from '@/lib/utils'
@@ -29,9 +29,13 @@ type DocListItem = {
   author: { id: string; name: string; avatarUrl: string | null } | null
 }
 type Doc = { id: string; title: string; content: string; publicSlug: string | null; updatedAt: string }
-type Member = { user: { id: string; name: string; email: string; avatarUrl: string | null } }
+type Member = {
+  user: { id: string; name: string; email: string; avatarUrl: string | null }
+  role?: 'owner' | 'admin' | 'member'
+  permissions?: Record<string, boolean>
+}
 
-export function DocumentsTab({ projectId }: { projectId: string }) {
+export function DocumentsTab({ projectId, meId }: { projectId: string; meId?: string }) {
   const { t, i18n } = useTranslation()
   const qc = useQueryClient()
   const confirm = useConfirm()
@@ -53,6 +57,12 @@ export function DocumentsTab({ projectId }: { projectId: string }) {
     queryKey: ['project-members', projectId],
     queryFn: () => api<Member[]>(`/api/v1/projects/${projectId}/members`),
   })
+
+  // Удаление — по тому же праву, что проверяет сервер (documents.delete).
+  // Кнопка, которая приведёт к 403, хуже отсутствующей: она обещает то, чего
+  // не будет.
+  const me = useMemo(() => (members.data ?? []).find((m) => m.user.id === meId), [members.data, meId])
+  const canDelete = me?.role === 'owner' || me?.role === 'admin' || Boolean(me?.permissions?.['documents.delete'])
 
   const create = useMutation({
     mutationFn: () => api<Doc>('/api/v1/documents', { method: 'POST', body: JSON.stringify({ title: t('docs.untitled'), content: '' }) }, 'project'),
@@ -127,7 +137,8 @@ export function DocumentsTab({ projectId }: { projectId: string }) {
       <ul className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
         {list.isLoading && <p className="text-sm text-muted-foreground">…</p>}
         {(list.data ?? []).map((d) => (
-          <li key={d.id}>
+          // group — чтобы «три точки» проявлялись при наведении на карточку
+          <li key={d.id} className="group relative">
             <button
               // Перетаскивание в чат: документ — такой же предмет разговора,
               // как задача или файл, и ссылку на него хочется бросить сразу.
@@ -140,7 +151,8 @@ export function DocumentsTab({ projectId }: { projectId: string }) {
             >
               <span className="flex items-start gap-2">
                 <FileText className="mt-0.5 size-4 shrink-0 text-muted-foreground" />
-                <span className="min-w-0 flex-1 truncate text-sm font-medium">{d.title}</span>
+                {/* место под меню, чтобы длинный заголовок не уезжал под него */}
+                <span className="min-w-0 flex-1 truncate pe-6 text-sm font-medium">{d.title}</span>
                 {d.publicSlug && <Globe className="mt-0.5 size-3 shrink-0 text-brand" />}
               </span>
               {d.preview && <span className="line-clamp-3 flex-1 text-xs text-muted-foreground">{d.preview}</span>}
@@ -150,6 +162,39 @@ export function DocumentsTab({ projectId }: { projectId: string }) {
                 <span className="ms-auto shrink-0">{new Date(d.updatedAt).toLocaleDateString(i18n.language)}</span>
               </span>
             </button>
+
+            {/* Меню — соседом кнопки, а не внутри: вложенная кнопка в кнопку
+                невалидна, и клик по ней открывал бы заодно сам документ. */}
+            {canDelete && (
+              <DropdownMenu>
+                <DropdownMenuTrigger asChild>
+                  <button
+                    title={t('docs.menu')}
+                    onClick={(e) => e.stopPropagation()}
+                    className="absolute end-2 top-2 cursor-pointer rounded p-1 text-muted-foreground opacity-0 transition-opacity hover:bg-accent hover:text-foreground focus:opacity-100 group-hover:opacity-100"
+                  >
+                    <MoreVertical className="size-4" />
+                  </button>
+                </DropdownMenuTrigger>
+                <DropdownMenuContent align="end">
+                  <DropdownMenuItem
+                    onSelect={async () => {
+                      if (
+                        await confirm({
+                          title: t('docs.deleteConfirm', { title: d.title }),
+                          destructive: true,
+                          confirmLabel: t('files.delete'),
+                        })
+                      )
+                        remove.mutate(d.id)
+                    }}
+                  >
+                    <Trash2 className="size-4 text-destructive" />
+                    {t('files.delete')}
+                  </DropdownMenuItem>
+                </DropdownMenuContent>
+              </DropdownMenu>
+            )}
           </li>
         ))}
         {list.data && list.data.length === 0 && (

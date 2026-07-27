@@ -32,18 +32,26 @@ export function useBindings(): Bindings {
   return bindings
 }
 
-/**
- * Печатает ли человек прямо сейчас.
- *
- * Внутри поля ввода команда не должна перебивать набор текста. Alt-сочетания
- * символов не дают, но Ctrl+B в редакторе — это жирный шрифт, и отнимать его
- * нельзя. Проще целиком уступать фокус полю.
- */
+/** Стоит ли курсор в поле ввода. */
 function isTyping(target: EventTarget | null): boolean {
   const el = target as HTMLElement | null
   if (!el || !el.tagName) return false
   const tag = el.tagName.toLowerCase()
   return tag === 'input' || tag === 'textarea' || tag === 'select' || el.isContentEditable
+}
+
+/**
+ * Уступить ли сочетание полю, в котором сейчас печатают.
+ *
+ * Уступаем не всё подряд, а только то, что полю действительно нужно: Ctrl+B и
+ * Ctrl+I в редакторе — это жирный и курсив, Ctrl+A — выделить всё. Alt же
+ * символов не даёт и в редакторе ничем не занят, поэтому Alt-команды работают
+ * и из поля: иначе «фокус в ИИ» не нажать из чата, а именно оттуда его и
+ * жмут — ради этого перехода клавиша и нужна.
+ */
+function yieldsToField(e: KeyboardEvent): boolean {
+  if (!isTyping(e.target)) return false
+  return !e.altKey
 }
 
 export type ShortcutHandlers = {
@@ -108,11 +116,13 @@ export function useShortcuts(handlers: ShortcutHandlers, opts: { enabled?: boole
   useEffect(() => {
     if (!enabled) return
     const onKey = (e: KeyboardEvent) => {
-      if (isTyping(e.target)) return
+      if (yieldsToField(e)) return
 
       // «?» — шпаргалка. Отдельно от остальных: это одиночная клавиша, и
-      // Shift здесь часть самого символа, а не модификатор.
+      // Shift здесь часть самого символа, а не модификатор. В поле не ловим:
+      // там это просто знак вопроса.
       if (e.key === '?' && !e.ctrlKey && !e.metaKey && !e.altKey) {
+        if (isTyping(e.target)) return
         e.preventDefault()
         setCheatSheet((v) => !v)
         return

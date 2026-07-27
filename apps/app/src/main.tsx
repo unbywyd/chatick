@@ -87,8 +87,9 @@ function NotesPage() {
 }
 
 function DocumentsPage() {
+  const { meId } = useProjectCtx()
   const { id } = useParams()
-  return id ? <DocumentsTab projectId={id} /> : null
+  return id ? <DocumentsTab projectId={id} meId={meId} /> : null
 }
 function HistoryPage() {
   const { project } = useProjectCtx()
