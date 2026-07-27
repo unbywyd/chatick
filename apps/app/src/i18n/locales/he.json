@@ -392,7 +392,23 @@
     "noDescription": "אין עדיין תיאור.",
     "rules": "כללי הצ׳אט",
     "members": "חברים",
-    "edit": "עריכה"
+    "edit": "עריכה",
+    "title": "אודות",
+    "contactUs": "יצירת קשר",
+    "topic": "נושא הפנייה",
+    "yourName": "השם שלכם",
+    "yourEmail": "המייל שלכם",
+    "message": "הודעה",
+    "messagePlaceholder": "מה קרה או מה חסר?",
+    "send": "שליחה",
+    "sent": "ההודעה נשלחה — תודה",
+    "topics": {
+      "question": "שאלה",
+      "bug": "משהו לא עובד",
+      "feature": "הצעה",
+      "billing": "תשלום",
+      "other": "אחר"
+    }
   },
   "roles": {
     "admin": "אדמין",
@@ -1055,7 +1071,8 @@
     "projectOpen": "פתיחה",
     "projectHere": "פעיל",
     "taskSetStatus": "שינוי סטטוס",
-    "reload": "רענון"
+    "reload": "רענון",
+    "about": "אודות"
   },
   "update": {
     "available": "זמינה גרסה חדשה",

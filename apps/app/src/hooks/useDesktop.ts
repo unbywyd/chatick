@@ -28,6 +28,7 @@ type DesktopBridge = {
   onTaskStatus: (fn: (p: { taskId: string; status: string }) => void) => () => void
   onTaskTimer: (fn: (taskId: string) => void) => () => void
   onConnectRefresh: (fn: () => void) => () => void
+  onOpenAbout: (fn: () => void) => () => void
   onConnectRevoke: (fn: (id: string) => void) => () => void
 }
 
@@ -469,6 +470,14 @@ export function useDesktopSync() {
       if (id) navigate(`/p/${id}/chat`)
     })
 
+    // «О проекте» из трея: окно уже поднято главным процессом, здесь только
+    // открываем диалог — адресом, чтобы это работало из любого места.
+    const offAbout = bridge.onOpenAbout(() => {
+      const url = new URL(window.location.href)
+      url.hash = `${window.location.hash.split('?')[0]}?about=1`
+      window.location.href = url.toString()
+    })
+
     // Вкладку открыли — обновляем немедленно: минутный опрос показывал бы
     // вчерашнюю картину как раз тогда, когда на неё смотрят.
     const offRefresh = bridge.onConnectRefresh(() => {
@@ -496,6 +505,7 @@ export function useDesktopSync() {
       offTaskStatus()
       offTaskTimer()
       offRefresh()
+      offAbout()
       offRevoke()
     }
   }, [bridge, navigate, qc, running.data?.items, tasks.data, activeProjectId])

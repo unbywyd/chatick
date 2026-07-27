@@ -1,9 +1,9 @@
-import { useRef, useState } from 'react'
-import { useNavigate } from 'react-router-dom'
+import { useEffect, useRef, useState } from 'react'
+import { useNavigate, useSearchParams } from 'react-router-dom'
 import { useQueryClient } from '@tanstack/react-query'
 import { useTranslation } from 'react-i18next'
 import { toast } from 'sonner'
-import { Bell, Bot, Building2, Camera, Check, LogOut, Pencil, Plug, SlidersHorizontal, Users, X } from 'lucide-react'
+import { Bell, Bot, Building2, Camera, Check, Info, LogOut, Pencil, Plug, SlidersHorizontal, Users, X } from 'lucide-react'
 import { api, API_URL, getSessionToken, setSessionToken, setProjectToken, type Me } from '@/lib/api'
 import { Avatar } from '@/components/ui/avatar'
 import {
@@ -15,6 +15,7 @@ import {
 } from '@/components/ui/dropdown-menu'
 import { useConfirm } from '@/components/ui/confirm'
 import { ConnectDialog } from '@/screens/ConnectScreen'
+import { AboutDialog } from '@/components/AboutDialog'
 import { ProjectSettingsDialog } from '@/components/ProjectSettingsDialog'
 import { LanguageSelect } from '@/components/LanguageSelect'
 import { ThemeToggle } from '@/components/ThemeToggle'
@@ -33,6 +34,19 @@ export function ProfileMenu({
   isAdmin?: boolean
 }) {
   const [connectOpen, setConnectOpen] = useState(false)
+  const [aboutOpen, setAboutOpen] = useState(false)
+
+  // ?about=1 в адресе — так «О проекте» открывается из трея и по прямой
+  // ссылке, а не только кликом по этому меню.
+  const [params, setParams] = useSearchParams()
+  useEffect(() => {
+    if (params.get('about') !== '1') return
+    setAboutOpen(true)
+    const next = new URLSearchParams(params)
+    next.delete('about')
+    setParams(next, { replace: true })
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [params.get('about')])
   const [settingsOpen, setSettingsOpen] = useState(false)
   const { t } = useTranslation()
   const navigate = useNavigate()
@@ -207,6 +221,14 @@ export function ProfileMenu({
         </div>
 
         <DropdownMenuSeparator />
+        {/* «О проекте» здесь же, где связь с нами: искать это в отдельном
+            разделе никто не станет. */}
+        <DropdownMenuItem onSelect={() => setAboutOpen(true)}>
+          <Info className="size-4" />
+          {t('about.title')}
+        </DropdownMenuItem>
+
+        <DropdownMenuSeparator />
         <DropdownMenuItem onSelect={logout} className="text-destructive focus:text-destructive">
           <LogOut className="size-4" />
           {t('profile.logout')}
@@ -214,6 +236,7 @@ export function ProfileMenu({
       </DropdownMenuContent>
     </DropdownMenu>
     {connectOpen && <ConnectDialog onClose={() => setConnectOpen(false)} />}
+    {aboutOpen && <AboutDialog me={me} onClose={() => setAboutOpen(false)} />}
     {settingsOpen && projectId && (
       <ProjectSettingsDialog projectId={projectId} onClose={() => setSettingsOpen(false)} />
     )}

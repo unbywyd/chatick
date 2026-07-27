@@ -159,6 +159,14 @@ function buildTrayMenu() {
     },
     { type: 'separator' },
     {
+      label: tr('about', 'About'),
+      click: () => {
+        showWindow()
+        send('open:about')
+      },
+    },
+    { type: 'separator' },
+    {
       label: tr('launchAtLogin', 'Launch at login'),
       type: 'checkbox',
       checked: app.getLoginItemSettings().openAtLogin,

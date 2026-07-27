@@ -145,6 +145,62 @@ export async function sendDeletedMail(p: {
   })
 }
 
+// --- Обращение из формы обратной связи --------------------------------------
+//
+// Письмо админам, а не пользователю: он и так знает, что написал. Здесь важно
+// не оформление, а чтобы всё нужное было на виду — тема, кто, откуда, текст.
+
+const FEEDBACK_TOPIC: Record<MailLang, Record<string, string>> = {
+  en: { question: 'Question', bug: 'Bug', feature: 'Feature request', billing: 'Billing', other: 'Other' },
+  ru: { question: 'Вопрос', bug: 'Ошибка', feature: 'Предложение', billing: 'Оплата', other: 'Другое' },
+  he: { question: 'שאלה', bug: 'תקלה', feature: 'הצעה', billing: 'תשלום', other: 'אחר' },
+}
+
+const FEEDBACK: Record<MailLang, { subject: string; title: string; from: string; guest: string; user: string }> = {
+  en: {
+    subject: '[{{topic}}] message from {{name}}',
+    title: 'New message: {{topic}}',
+    from: 'From: {{name}} <{{email}}>',
+    guest: 'Not signed in — reply by email.',
+    user: 'Registered user.',
+  },
+  ru: {
+    subject: '[{{topic}}] обращение от {{name}}',
+    title: 'Новое обращение: {{topic}}',
+    from: 'От кого: {{name}} <{{email}}>',
+    guest: 'Не авторизован — отвечать по почте.',
+    user: 'Зарегистрированный пользователь.',
+  },
+  he: {
+    subject: '[{{topic}}] פנייה מ־{{name}}',
+    title: 'פנייה חדשה: {{topic}}',
+    from: 'מאת: {{name}} <{{email}}>',
+    guest: 'לא מחובר — להשיב במייל.',
+    user: 'משתמש רשום.',
+  },
+}
+
+export async function sendFeedbackMail(p: {
+  to: string
+  locale?: string | null
+  id: string
+  topic: string
+  body: string
+  name: string
+  email: string
+  registered: boolean
+}) {
+  const lang = mailLang(p.locale)
+  const s = FEEDBACK[lang]
+  const topic = FEEDBACK_TOPIC[lang][p.topic] ?? p.topic
+  const v = { topic, name: p.name || p.email, email: p.email }
+  await send(p.to, fmt(s.subject, v), {
+    lang,
+    title: fmt(s.title, v),
+    paragraphs: [fmt(s.from, v), p.registered ? s.user : s.guest, p.body],
+  })
+}
+
 // --- Напоминание о задачах ------------------------------------------------
 
 const REMIND: Record<MailLang, { subject: string; title: string; intro: string; cta: string }> = {

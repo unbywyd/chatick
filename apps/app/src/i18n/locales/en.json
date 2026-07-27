@@ -392,7 +392,23 @@
     "noDescription": "No description yet.",
     "rules": "Chat rules",
     "members": "Members",
-    "edit": "Edit"
+    "edit": "Edit",
+    "title": "About",
+    "contactUs": "Contact us",
+    "topic": "Topic",
+    "yourName": "Your name",
+    "yourEmail": "Your email",
+    "message": "Message",
+    "messagePlaceholder": "What happened, or what would you like to see?",
+    "send": "Send",
+    "sent": "Message sent — thank you",
+    "topics": {
+      "question": "Question",
+      "bug": "Something is broken",
+      "feature": "Feature request",
+      "billing": "Billing",
+      "other": "Other"
+    }
   },
   "roles": {
     "admin": "Admin",
@@ -1055,7 +1071,8 @@
     "projectOpen": "Open",
     "projectHere": "active",
     "taskSetStatus": "Change status",
-    "reload": "Reload"
+    "reload": "Reload",
+    "about": "About"
   },
   "update": {
     "available": "A new version is available",

@@ -876,3 +876,46 @@ export const shares = pgTable(
     index('shares_project_idx').on(t.projectId),
   ],
 )
+
+// --- Обратная связь и настройки площадки (SPEC §8.35) -----------------------
+
+export const feedbackTopic = pgEnum('feedback_topic', ['question', 'bug', 'feature', 'billing', 'other'])
+export const feedbackStatus = pgEnum('feedback_status', ['new', 'read', 'answered'])
+
+/**
+ * Обращения из формы «Связаться с нами».
+ *
+ * Пишем и от вошедших, и от посторонних: вопрос может быть у того, кто ещё не
+ * завёл аккаунт. Для вошедшего сохраняем связь с пользователем — иначе потом
+ * не понять, о ком речь, а переписка по почте это не восстановит.
+ */
+export const feedback = pgTable(
+  'feedback',
+  {
+    id: id(),
+    topic: feedbackTopic('topic').notNull().default('question'),
+    body: text('body').notNull(),
+    // Имя и почта хранятся отдельно от пользователя: он мог их сменить, а
+    // обращение должно помнить, как с ним связывались тогда.
+    email: text('email').notNull(),
+    name: text('name').notNull().default(''),
+    userId: text('user_id').references(() => users.id, { onDelete: 'set null' }),
+    status: feedbackStatus('status').notNull().default('new'),
+    // Откуда пришли и с чего: помогает воспроизвести жалобу на интерфейс.
+    meta: text('meta'),
+    createdAt: createdAt(),
+  },
+  (t) => [index('feedback_status_idx').on(t.status, t.createdAt)],
+)
+
+/**
+ * Настройки площадки: то, что меняют без выката новой сборки.
+ *
+ * Ключ-значение, а не колонки: список того, что хочется поменять текстом,
+ * растёт быстрее, чем стоит гонять миграции.
+ */
+export const platformSettings = pgTable('platform_settings', {
+  key: text('key').primaryKey(),
+  value: text('value').notNull().default(''),
+  updatedAt: updatedAt(),
+})
