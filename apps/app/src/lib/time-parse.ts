@@ -64,7 +64,17 @@ export function parseDuration(input: string): number | null {
   const mOnly = raw.match(/^(\d+)m$/)
   if (mOnly) return Number(mOnly[1])
 
-  if (/^\d+$/.test(raw)) return Number(raw) // голое число — минуты
+  // Голое число читаем как на часах — так же, как показываем: 10 → 10 минут,
+  // 150 → 1:50, 230 → 2:30. Иначе человек видит «2:30», вводит 230 и получает
+  // три с половиной часа.
+  if (/^\d{1,2}$/.test(raw)) return Number(raw) // до двух цифр — минуты
+  if (/^\d{3,4}$/.test(raw)) {
+    const n = Number(raw)
+    const h = Math.floor(n / 100)
+    const m = n % 100
+    // 190 минутами не бывает — считаем ошибкой ввода, а не 1 ч 90 мин
+    return m < 60 ? h * 60 + m : null
+  }
   return null
 }
 

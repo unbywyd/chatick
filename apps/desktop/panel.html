@@ -166,7 +166,10 @@
       .mini.on { background: var(--brand); border-color: var(--brand); color: #111; }
       /* Иконки статуса — те же, что в приложении: круг → круг с точкой →
          глаз → галочка, и те же цвета. */
-      .status-icon { flex: 0 0 auto; align-self: center; }
+      .status-icon { flex: 0 0 auto; align-self: center; display: block; }
+      /* Внутри кнопки центрирование задаёт сама кнопка (place-items: center):
+         align-self от строки задачи здесь только мешает. */
+      .mini .status-icon { align-self: auto; }
       .st-todo { color: var(--muted); }
       .st-in_progress { color: #38bdf8; }
       .st-review { color: #a78bfa; }
@@ -313,7 +316,7 @@
   </head>
   <body>
     <div class="timer">
-      <button class="play" id="play">▶</button>
+      <button class="play" id="play"></button>
       <div class="timer-info">
         <div class="elapsed idle" id="elapsed">No timer running</div>
         <div class="timer-sub" id="timerSub">Click to start tracking</div>
@@ -356,6 +359,13 @@
        * Иконка статуса задачи. Рисуем svg вручную: тянуть библиотеку иконок
        * в панель ради четырёх фигур несоразмерно.
        */
+      /** Плей и пауза — тоже svg: текстовые символы сидят на базовой линии
+          и в квадратной кнопке смотрятся смещёнными. */
+      const PLAY_ICON =
+        '<svg class="status-icon" width="11" height="11" viewBox="0 0 24 24" fill="currentColor"><path d="M7 4.5v15l13-7.5z"/></svg>'
+      const PAUSE_ICON =
+        '<svg class="status-icon" width="11" height="11" viewBox="0 0 24 24" fill="currentColor"><path d="M7 4.5h3.5v15H7zM13.5 4.5H17v15h-3.5z"/></svg>'
+
       const STATUS_ICONS = {
         todo: '<circle cx="12" cy="12" r="9"/>',
         in_progress: '<circle cx="12" cy="12" r="9"/><circle cx="12" cy="12" r="3.5" fill="currentColor" stroke="none"/>',
@@ -396,7 +406,8 @@
 
       function renderTimer() {
         const t = state.timer
-        $('play').textContent = t ? '⏸' : '▶'
+        // svg, а не символ: текстовый глиф в круглой кнопке сидит не по центру
+        $('play').innerHTML = (t ? PAUSE_ICON : PLAY_ICON).replace(/width="11" height="11"/, 'width="15" height="15"')
         $('play').classList.toggle('running', Boolean(t))
         // Без проекта стартовать нечему — кнопка гаснет, а не молча не срабатывает.
         const canStart = Boolean(t) || Boolean(state.project)
@@ -458,7 +469,7 @@
                 </button>
                 <span class="task-actions">
                   <button class="mini ${running ? 'on' : ''}" data-timer="${escape(t.id)}"
-                          title="${running ? T('stop', 'Stop') : T('start', 'Start timer')}">${running ? '⏸' : '▶'}</button>
+                          title="${running ? T('stop', 'Stop') : T('start', 'Start timer')}">${running ? PAUSE_ICON : PLAY_ICON}</button>
                   <button class="mini" data-status="${escape(t.id)}" data-current="${escape(t.status || 'todo')}"
                           title="${T('taskSetStatus', 'Change status')}">${statusIcon(t.status || 'todo', 13)}</button>
                 </span>

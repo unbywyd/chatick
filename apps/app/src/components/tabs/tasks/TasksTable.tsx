@@ -41,6 +41,7 @@ import {
   type Status,
   type Priority,
 } from './types'
+import { parseDuration } from '@/lib/time-parse'
 
 // Табличный вид задач (SPEC §8.6): вложенные таблицы по группам-спринтам,
 // сортировка по колонкам, инлайн-смена статуса/ассайни, drag строк и групп.
@@ -613,24 +614,32 @@ function AssigneePicker({
 }
 
 // Инлайн-ячейка оценки времени: показывает «2ч 30м», по клику — ввод минут
+/**
+ * Оценка времени: показываем и вводим одинаково — 2:30.
+ *
+ * Ввод разбирает parseDuration, тот же, что в трекере: 45 → 45 минут,
+ * 230 → 2:30, принимает и «2:30», и «1h30». Хранится по-прежнему в минутах.
+ */
 function EstimateCell({ mins, canEdit, onSave }: { mins: number | null; canEdit: boolean; onSave: (m: number | null) => void }) {
   const [editing, setEditing] = useState(false)
-  const [val, setVal] = useState(mins?.toString() ?? '')
+  const [val, setVal] = useState(fmtEstimate(mins))
   if (editing && canEdit) {
     return (
       <input
         autoFocus
-        type="number"
-        min={0}
         value={val}
         onChange={(e) => setVal(e.target.value)}
         onBlur={() => {
           setEditing(false)
-          const next = val === '' ? null : Math.max(0, Number(val) || 0)
-          if (next !== mins) onSave(next)
+          const trimmed = val.trim()
+          const next = trimmed === '' ? null : parseDuration(trimmed)
+          // непонятный ввод не трогает сохранённое: молча обнулить оценку хуже,
+          // чем не принять правку
+          if (next !== null && next !== mins) onSave(next)
+          else if (trimmed === '' && mins !== null) onSave(null)
         }}
         onKeyDown={(e) => e.key === 'Enter' && (e.target as HTMLInputElement).blur()}
-        placeholder="мин"
+        placeholder="2:30"
         className="w-16 rounded border bg-background px-1 py-0.5 text-xs"
       />
     )
@@ -639,7 +648,7 @@ function EstimateCell({ mins, canEdit, onSave }: { mins: number | null; canEdit:
     <button
       disabled={!canEdit}
       onClick={() => {
-        setVal(mins?.toString() ?? '')
+        setVal(fmtEstimate(mins))
         setEditing(true)
       }}
       className="text-muted-foreground hover:text-foreground disabled:hover:text-muted-foreground"

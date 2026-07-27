@@ -71,9 +71,13 @@ export function isOverdue(t: Task) {
 }
 
 // Оценка времени: минуты → компактно «2ч 30м» / «45м» / «3ч» (SPEC §8.13)
+/**
+ * Оценка времени в том же виде, что и в трекере: 2:30.
+ *
+ * Один формат на всё приложение — иначе человек видит «2ч 30м», вводит 230 и
+ * не понимает, почему получилось 3:50. Ввод разбирает parseDuration.
+ */
 export function fmtEstimate(mins: number | null): string {
   if (!mins || mins <= 0) return ''
-  const h = Math.floor(mins / 60)
-  const m = mins % 60
-  return [h ? `${h}ч` : '', m ? `${m}м` : ''].filter(Boolean).join(' ')
+  return `${Math.floor(mins / 60)}:${String(mins % 60).padStart(2, '0')}`
 }
