@@ -18,6 +18,7 @@ export function PeoplePicker({
   className,
   single = false,
   clearLabel,
+  hideChips = false,
 }: {
   people: Person[]
   value: string[]
@@ -28,6 +29,11 @@ export function PeoplePicker({
   single?: boolean
   /** подпись пункта «сбросить» в одиночном режиме */
   clearLabel?: string
+  /**
+   * Не рисовать чипс выбранного: когда вызывающий показывает применённые
+   * фильтры сам, чипс здесь дублировал бы их.
+   */
+  hideChips?: boolean
 }) {
   const { t } = useTranslation()
   const [open, setOpen] = useState(false)
@@ -62,7 +68,7 @@ export function PeoplePicker({
 
   return (
     <div className={cn('space-y-1.5', className)}>
-      {picked.length > 0 && (
+      {!hideChips && picked.length > 0 && (
         <div className="flex flex-wrap gap-1.5">
           {picked.map((p) => (
             <span

@@ -183,11 +183,11 @@ export function CompanyTimeTab({ companyId }: { companyId: string }) {
           <Search className="pointer-events-none absolute start-2.5 top-1/2 size-3.5 -translate-y-1/2 text-muted-foreground" />
           <Input value={q} onChange={(e) => setQ(e.target.value)} placeholder={t('people.search')} className="h-9 ps-8" />
         </div>
-        {/* Выбранный виден лицом и именем, и его можно сбросить крестиком.
-            Select показывал пустоту, пока грузился список участников — было
-            непонятно, кто выбран, и снять выбор было нечем. */}
+        {/* Выбранного показывает строка применённых фильтров ниже — здесь
+            чипс дублировал бы её. */}
         <PeoplePicker
           single
+          hideChips
           className="w-52"
           people={(members.data ?? []).map((m) => m.user)}
           value={userId ? [userId] : []}
