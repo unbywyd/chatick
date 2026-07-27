@@ -88,7 +88,9 @@ type InboxItem = {
   readAt?: string | null
 }
 type Inbox = { unreadTotal: number; items: InboxItem[] }
-type Running = { items: { id: string; description: string; startedAt: string; projectId: string; taskId?: string | null }[] }
+type Running = {
+  items: { id: string; description: string; startedAt: string; projectId: string; task?: { id: string } | null }[]
+}
 type ProjectLite = {
   id: string
   name: string
@@ -227,7 +229,7 @@ export function useDesktopSync() {
             description: timer.description,
             startedAt: timer.startedAt,
             projectName: nameOf(timer.projectId),
-            taskId: timer.taskId ?? null,
+            taskId: timer.task?.id ?? null,
           }
         : null,
       notifications: (authed ? inbox.data?.items ?? [] : []).slice(0, 20).map((n) => ({
@@ -434,7 +436,7 @@ export function useDesktopSync() {
       try {
         if (current) await api(`/api/v1/time/${current.id}/stop`, { method: 'POST' }, 'project')
         // Уже шёл таймер именно по этой задаче — значит нажатие было «стоп».
-        if (current?.taskId !== taskId) {
+        if (current?.task?.id !== taskId) {
           await api(
             '/api/v1/time/start',
             { method: 'POST', body: JSON.stringify({ projectId: task.project.id, taskId, description: task.title }) },

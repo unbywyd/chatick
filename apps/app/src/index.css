@@ -104,6 +104,13 @@
   * {
     @apply border-border outline-ring/50;
   }
+  /* В Tailwind v4 сброс ставит кнопкам обычный курсор. Нажимаемое должно
+     выглядеть нажимаемым — иначе половина интерфейса кажется неживой. */
+  button:not(:disabled),
+  [role='button']:not(:disabled),
+  summary {
+    cursor: pointer;
+  }
   /* tiptap */
   .tiptap-editor p.is-editor-empty:first-child::before {
     content: attr(data-placeholder);

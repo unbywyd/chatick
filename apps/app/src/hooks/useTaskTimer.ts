@@ -17,17 +17,17 @@ export function useTaskTimer(projectId: string | undefined) {
 
   return useMutation({
     mutationFn: async (task: { id: string; title: string }) => {
-      const running = await api<{ items: { id: string; taskId?: string | null }[] }>(
+      const running = await api<{ items: { id: string; task?: { id: string } | null }[] }>(
         '/api/v1/time/running',
         {},
         'project',
-      ).catch(() => ({ items: [] as { id: string; taskId?: string | null }[] }))
+      ).catch(() => ({ items: [] as { id: string; task?: { id: string } | null }[] }))
 
       const current = running.items[0]
       if (current) await api(`/api/v1/time/${current.id}/stop`, { method: 'POST' }, 'project')
 
       // Повторное нажатие по той же задаче — это «стоп», а не «перезапуск».
-      if (current?.taskId === task.id) return { started: false }
+      if (current?.task?.id === task.id) return { started: false }
 
       await api(
         '/api/v1/time/start',

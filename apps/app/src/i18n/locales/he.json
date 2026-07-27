@@ -250,7 +250,8 @@
     "selectedCount": "נבחרו: {{count}}",
     "bulkDeleteConfirm": "למחוק את הקבצים שנבחרו ({{count}})?",
     "bulkDeleted": "נמחקו {{count}} קבצים",
-    "limitReached": "הגעת למגבלת האחסון"
+    "limitReached": "הגעת למגבלת האחסון",
+    "cancel": "ביטול"
   },
   "viewer": {
     "google": "לפתוח ב-Google Viewer",
@@ -418,7 +419,7 @@
     "backToLatest": "לאחרונים",
     "verifying": "בודקים את ההודעה שלך…",
     "typing_one": "{{names}} כותב…",
-    "typing_other": "{{names}} כותבים…",
+    "typing_other": "{{names}} בודקים הודעות…",
     "systemEvent": {
       "task_done": "סיים משימה",
       "task_assigned": "הקצה משימה"
@@ -426,7 +427,8 @@
     "reply": "תגובה",
     "copy": "העתקת טקסט",
     "copied": "הועתק",
-    "actions": "פעולות על ההודעה"
+    "actions": "פעולות על ההודעה",
+    "typing": "{{names}} בודק הודעה…"
   },
   "composer": {
     "dropHere": "שחררו כדי לצרף",
@@ -482,7 +484,8 @@
     "history": "היסטוריה",
     "documents": "מסמכים",
     "chat": "צ׳אט",
-    "notes": "הערות"
+    "notes": "הערות",
+    "settings": "הגדרות"
   },
   "notif": {
     "title": "התראות",

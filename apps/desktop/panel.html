@@ -156,7 +156,10 @@
       .status-menu button.on { color: var(--brand); }
       .mini {
         width: 22px; height: 22px;
-        display: grid; place-items: center;
+        /* flex + центрирование по обеим осям и НУЛЕВЫЕ отступы: любой паддинг
+           или строчный контекст сдвигают иконку с середины. */
+        display: flex; align-items: center; justify-content: center;
+        padding: 0; margin: 0; line-height: 0;
         border: 1px solid var(--line); border-radius: 6px;
         background: none; color: var(--muted);
         font: 11px/1 system-ui, sans-serif; cursor: pointer;
@@ -167,9 +170,9 @@
       /* Иконки статуса — те же, что в приложении: круг → круг с точкой →
          глаз → галочка, и те же цвета. */
       .status-icon { flex: 0 0 auto; align-self: center; display: block; }
-      /* Внутри кнопки центрирование задаёт сама кнопка (place-items: center):
-         align-self от строки задачи здесь только мешает. */
-      .mini .status-icon { align-self: auto; }
+      /* Внутри кнопки центрирование задаёт сама кнопка — своё выравнивание и
+         отступы иконки здесь только мешают. */
+      .mini .status-icon { align-self: auto; margin: 0; display: block; }
       .st-todo { color: var(--muted); }
       .st-in_progress { color: #38bdf8; }
       .st-review { color: #a78bfa; }

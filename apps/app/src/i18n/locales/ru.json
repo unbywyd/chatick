@@ -250,7 +250,8 @@
     "selectedCount": "Выбрано: {{count}}",
     "bulkDeleteConfirm": "Удалить выбранные файлы ({{count}})?",
     "bulkDeleted": "Удалено файлов: {{count}}",
-    "limitReached": "Достигнут лимит хранилища"
+    "limitReached": "Достигнут лимит хранилища",
+    "cancel": "Отмена"
   },
   "viewer": {
     "google": "Открыть в Google Viewer",
@@ -420,7 +421,7 @@
     "typing_one": "{{names}} пишет…",
     "typing_few": "{{names}} пишут…",
     "typing_many": "{{names}} пишут…",
-    "typing_other": "{{names}} пишут…",
+    "typing_other": "{{names}} проверяют сообщения…",
     "systemEvent": {
       "task_done": "завершил задачу",
       "task_assigned": "назначил задачу"
@@ -428,7 +429,8 @@
     "reply": "Ответить",
     "copy": "Копировать текст",
     "copied": "Скопировано",
-    "actions": "Действия с сообщением"
+    "actions": "Действия с сообщением",
+    "typing": "{{names}} проверяет сообщение…"
   },
   "composer": {
     "dropHere": "Отпустите, чтобы прикрепить",
@@ -484,7 +486,8 @@
     "history": "История",
     "documents": "Документы",
     "chat": "Чат",
-    "notes": "Заметки"
+    "notes": "Заметки",
+    "settings": "Настройки"
   },
   "notif": {
     "title": "Уведомления",

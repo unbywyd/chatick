@@ -250,7 +250,8 @@
     "selectedCount": "{{count}} selected",
     "bulkDeleteConfirm": "Delete {{count}} selected file(s)?",
     "bulkDeleted": "Deleted {{count}} file(s)",
-    "limitReached": "Storage limit reached"
+    "limitReached": "Storage limit reached",
+    "cancel": "Cancel"
   },
   "viewer": {
     "google": "Open in Google Viewer",
@@ -418,7 +419,7 @@
     "backToLatest": "Back to latest",
     "verifying": "Checking your message…",
     "typing_one": "{{names}} is typing…",
-    "typing_other": "{{names}} are typing…",
+    "typing_other": "{{names}} are checking messages…",
     "systemEvent": {
       "task_done": "completed",
       "task_assigned": "assigned"
@@ -426,7 +427,8 @@
     "reply": "Reply",
     "copy": "Copy text",
     "copied": "Copied",
-    "actions": "Message actions"
+    "actions": "Message actions",
+    "typing": "{{names}} is checking a message…"
   },
   "composer": {
     "dropHere": "Drop to attach",
@@ -482,7 +484,8 @@
     "history": "History",
     "documents": "Documents",
     "chat": "Chat",
-    "notes": "Notes"
+    "notes": "Notes",
+    "settings": "Settings"
   },
   "notif": {
     "title": "Notifications",
