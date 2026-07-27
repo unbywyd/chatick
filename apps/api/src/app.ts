@@ -19,6 +19,7 @@ import { notesRoute } from './routes/notes.js'
 import { timeRoute } from './routes/time.js'
 import { bridgeRoute } from './routes/bridge.js'
 import { backupRoute } from './routes/backup.js'
+import { sharesRoute, publicShareRoute } from './routes/shares.js'
 
 export const app = new Hono()
 
@@ -42,6 +43,8 @@ app.route('/api/v1/documents', documentsRoute)
 app.route('/api/v1/notes', notesRoute)
 app.route('/api/v1/time', timeRoute)
 app.route('/d', documentsPublicRoute) // публичный доступ к документу по слагу
+app.route('/api/v1/shares', sharesRoute) // управление публичными ссылками — SPEC §8.34
+app.route('/s', publicShareRoute) // чтение по публичной ссылке, без входа
 app.route('/x', bridgeRoute) // мост для внешнего ИИ (Claude Code) — SPEC §8.27
 app.route('/api/v1/backup', backupRoute) // экспорт/импорт компании — SPEC §8.28
 

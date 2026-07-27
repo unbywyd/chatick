@@ -281,6 +281,13 @@
       "when": 1785066486112,
       "tag": "0039_free_storage_2gb",
       "breakpoints": true
+    },
+    {
+      "idx": 40,
+      "version": "7",
+      "when": 1785066487112,
+      "tag": "0040_shares",
+      "breakpoints": true
     }
   ]
 }

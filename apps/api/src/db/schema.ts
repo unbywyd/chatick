@@ -834,3 +834,45 @@ export const bridgeSessions = pgTable(
   },
   (t) => [index('bridge_sessions_user_idx').on(t.userId, t.revokedAt)],
 )
+
+// --- Общий доступ по ссылке (SPEC §8.34) ------------------------------------
+//
+// Одна таблица на все сущности вместо колонки в каждой: типов уже пять, и
+// заводить публичный slug отдельно в файлах, документах, заметках, ресурсах и
+// сообщениях означало бы пять раз написать одно и то же — и пять раз забыть
+// про отзыв доступа.
+//
+// Приватная ссылка (scope='project') не создаёт записи вовсе: это просто адрес
+// внутри приложения, доступ по нему решают обычные права. Запись нужна только
+// для публичного доступа — того, что работает без входа.
+
+export const shareEntity = pgEnum('share_entity', ['file', 'document', 'note', 'resource', 'message', 'task'])
+
+export const shares = pgTable(
+  'shares',
+  {
+    id: id(),
+    // Короткая ссылка живёт отдельно от id сущности: по ней нельзя угадать,
+    // что ещё есть в проекте, а отзыв доступа не ломает саму сущность.
+    slug: text('slug').notNull().unique(),
+    entityType: shareEntity('entity_type').notNull(),
+    entityId: text('entity_id').notNull(),
+    // Проект нужен для прав и для зачистки: удалили проект — ссылки умерли.
+    projectId: text('project_id')
+      .notNull()
+      .references(() => projects.id, { onDelete: 'cascade' }),
+    createdById: text('created_by_id').references(() => users.id, { onDelete: 'set null' }),
+    // Срок жизни: null = бессрочно. Ссылку на черновик логично выдать на неделю.
+    expiresAt: timestamp('expires_at', { withTimezone: true }),
+    revokedAt: timestamp('revoked_at', { withTimezone: true }),
+    // Сколько раз открывали — чтобы понимать, ушла ли ссылка дальше адресата.
+    views: text('views').notNull().default('0'),
+    createdAt: createdAt(),
+  },
+  (t) => [
+    // Одна активная ссылка на сущность: вторая означала бы, что отзыв первой
+    // ничего не даёт.
+    index('shares_entity_idx').on(t.entityType, t.entityId),
+    index('shares_project_idx').on(t.projectId),
+  ],
+)
