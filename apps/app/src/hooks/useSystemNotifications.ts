@@ -76,7 +76,21 @@ export function useSystemNotifications() {
   const navigate = useNavigate()
   const qc = useQueryClient()
   const settings = useNotifySettings()
-  const authed = Boolean(getSessionToken())
+  // Токен появляется после входа, а хук монтируется до него — считать один
+  // раз нельзя: в десктопе окно открывается раньше, чем человек вошёл, и
+  // запрос не включился бы уже никогда.
+  const [authed, setAuthed] = useState(() => Boolean(getSessionToken()))
+  useEffect(() => {
+    const check = () => setAuthed(Boolean(getSessionToken()))
+    const timer = window.setInterval(check, 2000)
+    window.addEventListener('storage', check)
+    window.addEventListener('focus', check)
+    return () => {
+      window.clearInterval(timer)
+      window.removeEventListener('storage', check)
+      window.removeEventListener('focus', check)
+    }
+  }, [])
 
   const bridge: DesktopBridge | undefined =
     typeof window !== 'undefined'
@@ -84,7 +98,10 @@ export function useSystemNotifications() {
       : undefined
 
   const inbox = useQuery({
-    queryKey: ['inbox'],
+    // Свой ключ: ['inbox'] уже занят колокольчиком и трейем с другими
+    // условиями enabled, а React Query склеивает запросы по ключу — чьё
+    // условие победит, зависело бы от порядка монтирования.
+    queryKey: ['inbox-system'],
     enabled: authed,
     queryFn: () => api<Inbox>('/api/v1/inbox?onlyUnread=1&limit=50'),
     // Подстраховка, а не основной путь: событие по сокету приходит сразу.
@@ -95,6 +112,9 @@ export function useSystemNotifications() {
   // подписку на каждое изменение галочки незачем.
   const settingsRef = useRef(settings)
   settingsRef.current = settings
+  // Запрос разрешения — один раз за сеанс: диалог браузера не должен всплывать
+  // на каждое входящее уведомление.
+  const askedRef = useRef(false)
 
   /**
    * Показать уведомление. Возвращает false, если показать не удалось или
@@ -122,12 +142,26 @@ export function useSystemNotifications() {
       const link = normalizeLink(n.link, n.projectId)
 
       if (bridge) {
+        console.info('[chatick] уведомление отдано в Electron:', title)
         bridge.notify({ title, body, link })
         return true
       }
       if (!('Notification' in window)) return skip('браузер не поддерживает Notification API')
-      if (Notification.permission !== 'granted')
-        return skip(`нет разрешения браузера (${Notification.permission}) — нажмите «Разрешить»`)
+      if (Notification.permission === 'denied')
+        return skip('уведомления запрещены в настройках сайта — разрешить можно только там')
+      if (Notification.permission === 'default') {
+        // Разрешение ещё не спрашивали. Тумблер «Уведомления» в панели сайта —
+        // это не то же самое: он лишь снимает запрет, а выдать разрешение
+        // может только сам запрос. Просим один раз и молча: человек уже дал
+        // понять, что уведомления ему нужны.
+        if (!askedRef.current) {
+          askedRef.current = true
+          void requestBrowserPermission().then((next) => {
+            if (next === 'granted') qc.invalidateQueries({ queryKey: ['inbox-system'] })
+          })
+        }
+        return skip('разрешение ещё не выдано — запросили сейчас')
+      }
       const notification = new Notification(title, {
         body,
         icon: '/logo-small.png',
@@ -143,7 +177,7 @@ export function useSystemNotifications() {
       }
       return true
     },
-    [bridge, navigate],
+    [bridge, navigate, qc],
   )
 
   // Показ новых: и после опроса, и после обновления по сокету — сюда приходит
@@ -170,7 +204,7 @@ export function useSystemNotifications() {
   // следующего опроса. Слушаем событие окна: сокет живёт в другом хуке.
   useEffect(() => {
     if (!authed) return
-    const onPing = () => qc.invalidateQueries({ queryKey: ['inbox'] })
+    const onPing = () => qc.invalidateQueries({ queryKey: ['inbox-system'] })
     window.addEventListener('chatick:notification', onPing)
     return () => window.removeEventListener('chatick:notification', onPing)
   }, [authed, qc])
