@@ -17,18 +17,30 @@ export function AiOverlay({
   onSend,
   onCleared,
   onClose,
+  focusSignal,
 }: {
   messages: ChatMessage[]
   thinking: boolean
   onSend: (text: string) => void
   onCleared: () => void
   onClose: () => void
+  /** счётчик-сигнал: меняется — поле забирает фокус (горячая клавиша) */
+  focusSignal?: number
 }) {
   const { t } = useTranslation()
   const confirm = useConfirm()
   const [peek, setPeek] = useState(false)
   const [draft, setDraft] = useState('')
   const bottomRef = useRef<HTMLDivElement>(null)
+  const inputRef = useRef<HTMLInputElement>(null)
+
+  // Кадром позже: оверлей и поле появляются в том же рендере, в котором
+  // приходит сигнал, — раньше фокусировать нечего.
+  useEffect(() => {
+    if (!focusSignal) return
+    const timer = window.setTimeout(() => inputRef.current?.focus(), 0)
+    return () => window.clearTimeout(timer)
+  }, [focusSignal])
 
   useEffect(() => {
     bottomRef.current?.scrollIntoView({ behavior: 'smooth' })
@@ -130,6 +142,7 @@ export function AiOverlay({
               }}
             >
               <input
+                ref={inputRef}
                 value={draft}
                 onChange={(e) => setDraft(e.target.value)}
                 placeholder={t('chat.placeholderAi')}

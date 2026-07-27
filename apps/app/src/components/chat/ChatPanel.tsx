@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { useCallback, useEffect, useImperativeHandle, useMemo, useRef, useState } from 'react'
 import { useNavigate, useParams, useSearchParams } from 'react-router-dom'
 import { useInfiniteQuery, useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { ArrowDown, Bot, CheckSquare, Copy, FileText, Users, BrainCircuit, KeyRound, Loader2, Menu, MoreHorizontal, NotebookPen, PanelsTopLeft, Reply, Search, Settings, Share2, Trash2, UserPlus, X } from 'lucide-react'
@@ -29,6 +29,9 @@ const renderMentions = (text: string) => text.replace(mentionRe, '**@$1**')
 /** Разметка упоминаний в цитате не нужна — там важен смысл, а не форматирование. */
 const stripMentionMarkup = (text: string) => text.replace(mentionRe, '@$1')
 
+/** Чем чат управляем снаружи: горячие клавиши ставят фокус в нужное поле. */
+export type ChatPanelHandle = { focusChat: () => void; focusAi: () => void }
+
 export function ChatPanel({
   aiMode = 'assistant',
   myRole,
@@ -36,6 +39,7 @@ export function ChatPanel({
   onOpenSidebar,
   onOpenWork,
   onOpenTeam,
+  ref,
 }: {
   aiMode?: 'observer' | 'assistant' | 'moderator'
   myRole?: 'owner' | 'admin' | 'member' | null
@@ -45,6 +49,7 @@ export function ChatPanel({
   onOpenWork?: () => void
   /** клик по участникам ведёт в команду проекта */
   onOpenTeam?: () => void
+  ref?: React.Ref<ChatPanelHandle>
 }) {
   const { t, i18n } = useTranslation()
   const navigate = useNavigate()
@@ -54,6 +59,22 @@ export function ChatPanel({
   // «ИИ» — не отдельный таб, а оверлей поверх группового чата (единый паттерн с sandbox)
   const [aiOpen, setAiOpen] = useState(false)
   const mode: ChatMode = 'group'
+  // Горячие клавиши «фокус в чат» и «фокус в ИИ»: переключают режим и ставят
+  // курсор в поле — одним нажатием, без промежуточного клика по вкладке.
+  useImperativeHandle(
+    ref,
+    () => ({
+      focusChat: () => {
+        setAiOpen(false)
+        setFocusComposer((v) => v + 1)
+      },
+      focusAi: () => {
+        setAiOpen(true)
+        setFocusAiInput((v) => v + 1)
+      },
+    }),
+    [],
+  )
   const [checkingUsers, setCheckingUsers] = useState<Map<string, string>>(new Map()) // userId -> name («пишет…»)
   // id сообщения, которое сейчас проверяется (null — ничего не ждём)
   const [myPending, setMyPending] = useState<string | null>(null)
@@ -62,6 +83,8 @@ export function ChatPanel({
   const [replyTo, setReplyTo] = useState<ChatMessage | null>(null)
   /** счётчик-сигнал: меняется — композер забирает фокус */
   const [focusComposer, setFocusComposer] = useState(0)
+  /** то же для поля ИИ */
+  const [focusAiInput, setFocusAiInput] = useState(0)
   /** сообщение, которым делятся */
   const [sharing, setSharing] = useState<ChatMessage | null>(null)
   const [sandboxStream, setSandboxStream] = useState('') // постепенная печать ответа ИИ
@@ -506,6 +529,7 @@ export function ChatPanel({
             qc.invalidateQueries({ queryKey: ['messages', projectId] })
           }}
           onClose={() => setAiOpen(false)}
+          focusSignal={focusAiInput}
         />
       )}
 

@@ -3,7 +3,7 @@ import { useNavigate, useSearchParams } from 'react-router-dom'
 import { useQueryClient } from '@tanstack/react-query'
 import { useTranslation } from 'react-i18next'
 import { toast } from 'sonner'
-import { Bell, Bot, Building2, Camera, Check, Info, LogOut, Pencil, Plug, SlidersHorizontal, Users, X } from 'lucide-react'
+import { Bell, Bot, Building2, Camera, Check, Info, Keyboard, LogOut, Pencil, Plug, SlidersHorizontal, Users, X } from 'lucide-react'
 import { api, API_URL, getSessionToken, setSessionToken, setProjectToken, type Me } from '@/lib/api'
 import { Avatar } from '@/components/ui/avatar'
 import {
@@ -190,6 +190,13 @@ export function ProfileMenu({
           <DropdownMenuItem onSelect={() => navigate(`/p/${projectId}/ai`)}>
             <Bot className="size-4" />
             {t('tabs.ai')}
+          </DropdownMenuItem>
+        )}
+
+        {projectId && (
+          <DropdownMenuItem onSelect={() => navigate(`/p/${projectId}/shortcuts`)}>
+            <Keyboard className="size-4" />
+            {t('shortcuts.title')}
           </DropdownMenuItem>
         )}
 

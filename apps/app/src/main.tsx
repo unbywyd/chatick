@@ -25,6 +25,7 @@ import { HistoryTab } from './components/tabs/HistoryTab'
 import { DocumentsTab } from './components/tabs/DocumentsTab'
 import { NotesTab } from './components/tabs/NotesTab'
 import { TimeTab } from './components/tabs/TimeTab'
+import { ShortcutsTab } from './components/tabs/ShortcutsTab'
 
 // HashRouter — единый роутинг для веба и Electron (file://) без доп. настроек.
 const queryClient = new QueryClient()
@@ -143,6 +144,8 @@ createRoot(document.getElementById('root')!).render(
                 <Route path="notes/:noteId?" element={<NotesPage />} />
                 {/* трекинг — страница проекта, но НЕ вкладка: попадают из сайдбара */}
                 <Route path="time" element={<TimePage />} />
+                {/* горячие клавиши — страница настройки, из меню профиля */}
+                <Route path="shortcuts" element={<ShortcutsTab />} />
               </Route>
             </Routes>
           </HashRouter>

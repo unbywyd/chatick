@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react'
-import { useNavigate, useParams } from 'react-router-dom'
+import { useNavigate, useParams, useSearchParams } from 'react-router-dom'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { useTranslation } from 'react-i18next'
 import { toast } from 'sonner'
@@ -62,6 +62,20 @@ export function DocumentsTab({ projectId }: { projectId: string }) {
     },
     onError: onErr,
   })
+
+  // ?create=1 — сразу создать документ: так приходит горячая клавиша. Ref
+  // защищает от повторного создания, пока адрес не успел очиститься.
+  const [params, setParams] = useSearchParams()
+  const creatingRef = useRef(false)
+  useEffect(() => {
+    if (params.get('create') !== '1' || creatingRef.current) return
+    creatingRef.current = true
+    create.mutate()
+    const next = new URLSearchParams(params)
+    next.delete('create')
+    setParams(next, { replace: true })
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [params])
 
   const remove = useMutation({
     mutationFn: (id: string) => api(`/api/v1/documents/${id}`, { method: 'DELETE' }, 'project'),

@@ -233,6 +233,19 @@ export function TasksTab({ projectId, meId }: { projectId: string; meId?: string
     setSearchParams(next, { replace: true })
   }, [searchParams, setSearchParams])
 
+  // ?create=1 — сюда приходит горячая клавиша «новая задача». Задачу заводит
+  // название, поэтому ставим фокус в поле, а не создаём пустую запись.
+  const newTitleRef = useRef<HTMLInputElement>(null)
+  useEffect(() => {
+    if (searchParams.get('create') !== '1') return
+    // Кадром позже: поле появляется вместе со вкладкой, до этого его нет.
+    const timer = window.setTimeout(() => newTitleRef.current?.focus(), 0)
+    const next = new URLSearchParams(searchParams)
+    next.delete('create')
+    setSearchParams(next, { replace: true })
+    return () => window.clearTimeout(timer)
+  }, [searchParams, setSearchParams])
+
   // Drop: вычислить sortOrder между соседями целевой позиции и запатчить status+sortOrder
   const handleDrop = (status: Status, beforeId: string | null) => {
     setDropHint(null)
@@ -313,7 +326,7 @@ export function TasksTab({ projectId, meId }: { projectId: string; meId?: string
                 </DropdownMenuContent>
               </DropdownMenu>
             )}
-            <Input value={newTitle} onChange={(e) => setNewTitle(e.target.value)} placeholder={t('tasks.newPlaceholder')} />
+            <Input ref={newTitleRef} value={newTitle} onChange={(e) => setNewTitle(e.target.value)} placeholder={t('tasks.newPlaceholder')} />
             <Button variant="brand" type="submit" disabled={!newTitle.trim() || create.isPending}>
               <Plus className="size-4" />
               {t('start.create')}

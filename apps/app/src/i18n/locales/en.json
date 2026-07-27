@@ -1099,5 +1099,29 @@
     "gone": "This link no longer works — it was revoked or has expired.",
     "failed": "Could not open the link. Try again later.",
     "footer": "Shared from Chatick"
+  },
+  "shortcuts": {
+    "title": "Keyboard shortcuts",
+    "hint": "Click a shortcut and press the keys you want. Shortcuts don't fire while you're typing in a field.",
+    "press": "Press keys",
+    "reset": "Reset to default",
+    "resetAll": "Reset all",
+    "customize": "Customize",
+    "conflict": "Already used by \"{{action}}\"",
+    "groups": {
+      "create": "Create",
+      "navigate": "Go to",
+      "chat": "Chat"
+    },
+    "actions": {
+      "newTask": "New task",
+      "newDocument": "New document",
+      "addResource": "Add resource",
+      "focusChat": "Focus chat",
+      "focusAi": "Focus AI",
+      "goTasks": "Tasks",
+      "goFiles": "Files",
+      "goTime": "Time tracker"
+    }
   }
 }

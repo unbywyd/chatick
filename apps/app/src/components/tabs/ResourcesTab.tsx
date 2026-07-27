@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { useTranslation } from 'react-i18next'
 import { toast } from 'sonner'
@@ -17,7 +17,7 @@ import {
   X,
   Share2,
 } from 'lucide-react'
-import { useNavigate, useParams } from 'react-router-dom'
+import { useNavigate, useParams, useSearchParams } from 'react-router-dom'
 import { ShareDialog } from '@/components/ShareDialog'
 import { api } from '@/lib/api'
 import { cn } from '@/lib/utils'
@@ -47,6 +47,16 @@ export function ResourcesTab({ projectId, isAdmin }: { projectId: string; isAdmi
   const [q, setQ] = useState('')
   const [editing, setEditing] = useState<ResourceRow | 'new' | null>(null)
   const { resourceId } = useParams()
+  // ?create=1 — просьба открыть форму сразу: так сюда приходит горячая клавиша,
+  // которой всё равно, смонтирована ли вкладка.
+  const [params, setParams] = useSearchParams()
+  useEffect(() => {
+    if (params.get('create') !== '1') return
+    setEditing('new')
+    const next = new URLSearchParams(params)
+    next.delete('create')
+    setParams(next, { replace: true })
+  }, [params, setParams])
   const [sharing, setSharing] = useState<ResourceRow | null>(null)
   const [showAudit, setShowAudit] = useState(false)
 

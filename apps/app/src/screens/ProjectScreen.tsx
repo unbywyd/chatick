@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import { NavLink, Outlet, useLocation, useNavigate, useOutletContext, useParams, useSearchParams } from 'react-router-dom'
 import { useQuery } from '@tanstack/react-query'
 import { useTranslation } from 'react-i18next'
@@ -9,10 +9,12 @@ import { useProjectToken } from '@/hooks/useProjectToken'
 import { useResizable } from '@/hooks/useResizable'
 import { useSidebarCollapsed } from '@/hooks/useSidebarCollapsed'
 import { useMediaQuery } from '@/hooks/useMediaQuery'
-import { ChatPanel } from '@/components/chat/ChatPanel'
+import { ChatPanel, type ChatPanelHandle } from '@/components/chat/ChatPanel'
 import { ProjectSidebar } from '@/components/ProjectSidebar'
 import { Button } from '@/components/ui/button'
 import { ProjectInbox } from '@/components/ProjectInbox'
+import { ShortcutsCheatSheet } from '@/components/ShortcutsCheatSheet'
+import { useShortcuts } from '@/hooks/useShortcuts'
 
 /*
   Оболочка приложения — мессенджер, а не набор страниц (SPEC §8.29).
@@ -68,6 +70,24 @@ export function ProjectLayout() {
   // ссылка и содержимое говорили одно и то же.
   const wide = useMediaQuery('(min-width: 1280px)')
   const [search] = useSearchParams()
+
+  // Горячие клавиши: слушатель один на проект, здесь же и живёт.
+  //
+  // Ниже xl чат и рабочая зона делят одно место, поэтому «фокус в чат» сперва
+  // уводит на /chat — иначе фокус ушёл бы в поле, которого на экране нет.
+  const chatRef = useRef<ChatPanelHandle>(null)
+  const focusChatColumn = useCallback(
+    (fn: (h: ChatPanelHandle) => void) => {
+      if (!wide && id) navigate(`/p/${id}/chat`)
+      // Кадром позже: на узком экране колонка появляется только после перехода.
+      window.setTimeout(() => chatRef.current && fn(chatRef.current), 0)
+    },
+    [wide, id, navigate],
+  )
+  const { cheatSheet, closeCheatSheet } = useShortcuts({
+    focusChat: () => focusChatColumn((h) => h.focusChat()),
+    focusAi: () => focusChatColumn((h) => h.focusAi()),
+  })
   useEffect(() => {
     // ?msg= — переход к конкретному сообщению из уведомления или поиска.
     // Переписав адрес, мы потеряли бы параметр вместе с самим переходом:
@@ -161,6 +181,7 @@ export function ProjectLayout() {
         />
         <div className="min-h-0 flex-1">
           <ChatPanel
+            ref={chatRef}
             onOpenSidebar={() => setSidebarOpen(true)}
             onOpenWork={() => navigate(`/p/${id}/tasks`)}
             onOpenTeam={() => navigate(`/p/${id}/team`)}
@@ -241,6 +262,9 @@ export function ProjectLayout() {
           )}
         </main>
       </div>
+
+      {/* Шпаргалка по «?» — поверх всего, поэтому в самом конце дерева */}
+      {cheatSheet && <ShortcutsCheatSheet onClose={closeCheatSheet} />}
     </div>
   )
 }
