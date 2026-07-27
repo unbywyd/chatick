@@ -1,12 +1,14 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useNavigate, useParams, useSearchParams } from 'react-router-dom'
 import { useInfiniteQuery, useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { ArrowDown, Bot, CheckSquare, Users, BrainCircuit, Loader2, Menu, NotebookPen, PanelsTopLeft, Search, Settings, Trash2, UserPlus, X } from 'lucide-react'
+import { ArrowDown, Bot, CheckSquare, Copy, Users, BrainCircuit, Loader2, Menu, MoreHorizontal, NotebookPen, PanelsTopLeft, Reply, Search, Settings, Trash2, UserPlus, X } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
 import ReactMarkdown from 'react-markdown'
 import { toast } from 'sonner'
 import { api } from '@/lib/api'
 import { cn } from '@/lib/utils'
+import { DropdownMenu, DropdownMenuTrigger, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator } from '@/components/ui/dropdown-menu'
+import { ContextMenu, ContextMenuTrigger, ContextMenuContent, ContextMenuItem, ContextMenuSeparator } from '@/components/ui/context-menu'
 import { Button } from '@/components/ui/button'
 import { useProjectSocket, type ChatMessage } from '@/hooks/useProjectSocket'
 import { Composer, AI_MENTION_ID } from './Composer'
@@ -23,6 +25,8 @@ type Member = { id: string; role: string; user: { id: string; name: string; emai
 // mention-разметка @[Label](id) → рендерим как @Label
 const mentionRe = /@\[([^\]]+)\]\(([^)]+)\)/g
 const renderMentions = (text: string) => text.replace(mentionRe, '**@$1**')
+/** Разметка упоминаний в цитате не нужна — там важен смысл, а не форматирование. */
+const stripMentionMarkup = (text: string) => text.replace(mentionRe, '@$1')
 
 export function ChatPanel({
   aiMode = 'assistant',
@@ -53,6 +57,8 @@ export function ChatPanel({
   // id сообщения, которое сейчас проверяется (null — ничего не ждём)
   const [myPending, setMyPending] = useState<string | null>(null)
   const [sandboxId, setSandboxId] = useState<string | null>(null)
+  /** сообщение, на которое отвечаем (плашка над композером) */
+  const [replyTo, setReplyTo] = useState<ChatMessage | null>(null)
   const [sandboxStream, setSandboxStream] = useState('') // постепенная печать ответа ИИ
   const [aiThinking, setAiThinking] = useState(false) // ai-режим: ждём ответ
   const [searchOpen, setSearchOpen] = useState(false)
@@ -140,6 +146,9 @@ export function ChatPanel({
       .sort((a, b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime())
   }, [historyMessages, live])
   const allMessages = useMemo(() => merged.filter((m) => m.mode === 'group'), [merged])
+  // Цитата ищет исходное сообщение среди загруженных. Если его нет (ушло за
+  // границу истории) — цитаты не будет, но ответ останется читаемым.
+  const byId = useMemo(() => new Map(merged.map((m) => [m.id, m])), [merged])
   const aiMessages = useMemo(() => merged.filter((m) => m.mode === 'ai'), [merged])
   // лента: окно контекста (режим истории) либо обычная лента
   const feed = contextView?.messages ?? allMessages
@@ -255,9 +264,21 @@ export function ChatPanel({
       // «проверяется…» до вердикта; id узнаем из ответа ниже
       const created = await api<ChatMessage & { redirectedToAi?: boolean }>(
         '/api/v1/messages',
-        { method: 'POST', body: JSON.stringify({ text: markdown, mode: sendMode, attachmentIds, taskRefs: taskRefs ?? [], raw: Boolean(raw) }) },
+        {
+          method: 'POST',
+          body: JSON.stringify({
+            text: markdown,
+            mode: sendMode,
+            attachmentIds,
+            taskRefs: taskRefs ?? [],
+            raw: Boolean(raw),
+            // ответ только в групповом чате: беседа с ИИ и так одна нить
+            replyToId: sendMode === 'group' ? replyTo?.id ?? null : null,
+          }),
+        },
         'project',
       )
+      setReplyTo(null)
       if (created.status === 'delivered') {
         setLive((prev) => (prev.some((x) => x.id === created.id) ? prev : [...prev, created]))
       } else if (sendMode === 'group' && !raw) {
@@ -426,6 +447,9 @@ export function ChatPanel({
                     onPick={() =>
                       setPicked((cur) => (cur.includes(m.id) ? cur.filter((x) => x !== m.id) : [...cur, m.id]))
                     }
+                    onReply={() => setReplyTo(m)}
+                    onJump={jumpTo}
+                    replyTo={m.replyToId ? byId.get(m.replyToId) : undefined}
                   />
                 </div>
               )
@@ -533,6 +557,24 @@ export function ChatPanel({
       )}
 
       <footer className="border-t p-3">
+        {/* На что отвечаем — над полем ввода, как в мессенджерах: иначе, начав
+            писать, человек уже не помнит, к чему это относится. */}
+        {replyTo && (
+          <div className="mb-1.5 flex items-start gap-2 rounded-md border-s-2 border-brand bg-muted/50 px-2 py-1.5">
+            <Reply className="mt-0.5 size-3.5 shrink-0 text-brand" />
+            <div className="min-w-0 flex-1">
+              <p className="text-[11px] font-medium text-brand">{replyTo.author?.name ?? 'AI'}</p>
+              <p className="line-clamp-1 text-[11px] text-muted-foreground">{stripMentionMarkup(replyTo.text)}</p>
+            </div>
+            <button
+              onClick={() => setReplyTo(null)}
+              title={t('rules.decline')}
+              className="shrink-0 rounded p-0.5 text-muted-foreground hover:bg-accent hover:text-foreground"
+            >
+              <X className="size-3.5" />
+            </button>
+          </div>
+        )}
         <Composer
           disabled={llmMissing}
           placeholder={llmMissing ? t('chat.noLlmPlaceholder') : t('chat.placeholderGroup')}
@@ -577,6 +619,9 @@ function MessageRow({
   picked,
   picking,
   onPick,
+  onReply,
+  onJump,
+  replyTo,
 }: {
   message: ChatMessage
   compact: boolean
@@ -586,12 +631,63 @@ function MessageRow({
   picked: boolean
   picking: boolean
   onPick: () => void
+  onReply: () => void
+  /** перейти к процитированному сообщению */
+  onJump: (id: string) => void
+  /** сообщение, на которое отвечают — для цитаты сверху */
+  replyTo?: ChatMessage
 }) {
   const { t } = useTranslation()
   const isAi = !message.author
   const time = new Date(message.createdAt).toLocaleTimeString(lang, { hour: '2-digit', minute: '2-digit' })
 
+  const copyText = async () => {
+    try {
+      await navigator.clipboard.writeText(message.text)
+      toast.success(t('chat.copied'))
+    } catch {
+      toast.error(t('composer.clipboardDenied'))
+    }
+  }
+
+  /**
+   * Один набор действий на правый клик и на три точки: пунктов у сообщения
+   * становится больше, и держать их в двух местах — верный способ их
+   * рассинхронизировать. Компоненты пунктов у выпадающего и контекстного меню
+   * разные, поэтому передаём их параметром.
+   */
+  const actions = (
+    Item: typeof DropdownMenuItem | typeof ContextMenuItem,
+    Sep: typeof DropdownMenuSeparator | typeof ContextMenuSeparator,
+  ) => (
+    <>
+      <Item onSelect={onReply}>
+        <Reply className="size-4" />
+        {t('chat.reply')}
+      </Item>
+      <Item onSelect={onPick}>
+        <NotebookPen className="size-4" />
+        {picked ? t('journal.unpick') : t('journal.saveFromChat')}
+      </Item>
+      <Item onSelect={copyText}>
+        <Copy className="size-4" />
+        {t('chat.copy')}
+      </Item>
+      {canDelete && (
+        <>
+          <Sep />
+          <Item onSelect={onDelete} className="text-destructive focus:text-destructive">
+            <Trash2 className="size-4" />
+            {t('chat.deleteMessage')}
+          </Item>
+        </>
+      )}
+    </>
+  )
+
   return (
+    <ContextMenu>
+      <ContextMenuTrigger asChild>
     <div
       className={cn(
         'group relative flex gap-2.5 rounded-md px-2 py-1 transition-colors hover:bg-accent/40',
@@ -600,34 +696,26 @@ function MessageRow({
         picking && !picked && 'opacity-60',
       )}
     >
-      {/* Действия лежат поверх текста, поэтому им нужна своя подложка: без неё
-          значки читаются как часть сообщения и теряются на длинных строках.
-          opacity, а не hidden: показ/скрытие не должно двигать разметку. */}
+      {/* Одна кнопка вместо ряда: действий у сообщения становится больше, и
+          ряд значков поверх текста разрастаться не может. Подложка нужна —
+          без неё кнопка читается как часть сообщения. */}
       <div
         className={cn(
-          'absolute end-1 top-1 z-10 flex items-center gap-0.5 rounded-md border bg-popover p-0.5 shadow-sm transition-opacity',
+          'absolute end-1 top-1 z-10 rounded-md border bg-popover shadow-sm transition-opacity',
           picked ? 'opacity-100' : 'opacity-0 group-hover:opacity-100 focus-within:opacity-100',
         )}
       >
-        <button
-          onClick={onPick}
-          title={t('journal.saveFromChat')}
-          className={cn(
-            'rounded p-1 hover:bg-accent',
-            picked ? 'text-brand' : 'text-muted-foreground hover:text-foreground',
-          )}
-        >
-          <NotebookPen className="size-3.5" />
-        </button>
-        {canDelete && (
-          <button
-            onClick={onDelete}
-            title={t('chat.deleteMessage')}
-            className="rounded p-1 text-muted-foreground hover:bg-accent hover:text-destructive"
-          >
-            <Trash2 className="size-3.5" />
-          </button>
-        )}
+        <DropdownMenu>
+          <DropdownMenuTrigger asChild>
+            <button
+              title={t('chat.actions')}
+              className={cn('rounded p-1 hover:bg-accent', picked ? 'text-brand' : 'text-muted-foreground hover:text-foreground')}
+            >
+              <MoreHorizontal className="size-3.5" />
+            </button>
+          </DropdownMenuTrigger>
+          <DropdownMenuContent align="end">{actions(DropdownMenuItem, DropdownMenuSeparator)}</DropdownMenuContent>
+        </DropdownMenu>
       </div>
       <span className="w-7 shrink-0 select-none">
         {compact ? (
@@ -671,6 +759,19 @@ function MessageRow({
             )}
           </p>
         )}
+        {/* Цитата: видно, на что отвечают, и можно уйти к оригиналу — иначе
+            ответ в длинной ленте теряет смысл. */}
+        {replyTo && (
+          <button
+            onClick={() => onJump(replyTo.id)}
+            className="mb-1 flex w-full max-w-md items-start gap-2 rounded-md border-s-2 border-brand bg-muted/50 px-2 py-1 text-start transition-colors hover:bg-muted"
+          >
+            <span className="min-w-0 flex-1">
+              <span className="block text-[11px] font-medium text-brand">{replyTo.author?.name ?? 'AI'}</span>
+              <span className="line-clamp-1 text-[11px] text-muted-foreground">{stripMentionMarkup(replyTo.text)}</span>
+            </span>
+          </button>
+        )}
         {!(message.text === '📎' && (message.attachments?.length ?? 0) > 0) && (
           <div className="msg-md break-words text-sm">
             <ReactMarkdown>{renderMentions(message.text)}</ReactMarkdown>
@@ -680,6 +781,9 @@ function MessageRow({
         {(message.taskPins?.length ?? 0) > 0 && <MessageTaskPins pins={message.taskPins!} />}
       </div>
     </div>
+      </ContextMenuTrigger>
+      <ContextMenuContent>{actions(ContextMenuItem, ContextMenuSeparator)}</ContextMenuContent>
+    </ContextMenu>
   )
 }
 

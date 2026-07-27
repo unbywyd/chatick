@@ -422,7 +422,11 @@
     "systemEvent": {
       "task_done": "completed",
       "task_assigned": "assigned"
-    }
+    },
+    "reply": "Reply",
+    "copy": "Copy text",
+    "copied": "Copied",
+    "actions": "Message actions"
   },
   "composer": {
     "dropHere": "Drop to attach",
@@ -879,7 +883,8 @@
     "taskExists": "Task already created — open it",
     "hasTask": "task created",
     "taskCreated": "Task {{number}} created",
-    "concerns": "Who it concerns"
+    "concerns": "Who it concerns",
+    "unpick": "Remove from selection"
   },
   "common": {
     "save": "Save",

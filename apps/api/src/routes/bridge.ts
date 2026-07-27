@@ -1444,7 +1444,7 @@ bridgeRoute.post('/messages', async (c) => {
   // агент часто пишет человеку именно затем, чтобы тот увидел (SPEC §8.30).
   {
     const author = await db.query.users.findFirst({ where: eq(users.id, id.userId) })
-    void notifyChatMentions(scope.projectId, row!.id, row!.text, author ?? null)
+    void notifyChatMentions(scope.projectId, row!.id, row!.text, author ?? null, row!.replyToId)
   }
 
   // Привязываем только свои файлы этого проекта и снимаем временный флаг —

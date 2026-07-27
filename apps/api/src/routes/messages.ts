@@ -18,8 +18,18 @@ export async function notifyChatMentions(
   messageId: string,
   text: string,
   author: { id: string; name: string } | null | undefined,
+  replyToId?: string | null,
 ) {
-  const mentioned = extractMentions(text)
+  const recipients = new Set(extractMentions(text))
+
+  // Ответ на сообщение — обращение к его автору, даже без @упоминания:
+  // человек написал именно ему и вправе рассчитывать, что тот увидит.
+  if (replyToId) {
+    const parent = await db.query.messages.findFirst({ where: eq(messages.id, replyToId) })
+    if (parent?.authorId) recipients.add(parent.authorId)
+  }
+
+  const mentioned = [...recipients]
   if (!mentioned.length) return
   await notify({
     projectId,
@@ -239,7 +249,7 @@ messagesRoute.post(
 
     if (raw || attachmentOnly) {
       broadcast(projectId, 'message', message)
-      void notifyChatMentions(projectId, row!.id, text, author)
+      void notifyChatMentions(projectId, row!.id, text, author, replyToId)
       void maybeCompress(projectId)
       return c.json(message, 201)
     }
@@ -260,7 +270,7 @@ messagesRoute.post(
           .where(eq(messages.id, row!.id))
           .returning()
         broadcast(projectId, 'message', serialize(updated!, author, atts.get(row!.id)))
-        void notifyChatMentions(projectId, row!.id, text, author)
+        void notifyChatMentions(projectId, row!.id, text, author, replyToId)
         broadcast(projectId, 'checking_done', { userId: sub }, { except: sub })
         void maybeCompress(projectId) // фоновое сжатие памяти (SPEC §5.6)
       } else {
@@ -387,7 +397,7 @@ messagesRoute.post(
     const atts = await attachmentsOf([msg.id])
     const message = serialize(updated!, author, atts.get(msg.id))
     broadcast(projectId, 'message', message)
-    void notifyChatMentions(projectId, msg.id, finalText, author)
+    void notifyChatMentions(projectId, msg.id, finalText, author, msg.replyToId)
     return c.json(message)
   },
 )

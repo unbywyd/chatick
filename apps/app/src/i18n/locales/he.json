@@ -422,7 +422,11 @@
     "systemEvent": {
       "task_done": "סיים משימה",
       "task_assigned": "הקצה משימה"
-    }
+    },
+    "reply": "תגובה",
+    "copy": "העתקת טקסט",
+    "copied": "הועתק",
+    "actions": "פעולות על ההודעה"
   },
   "composer": {
     "dropHere": "שחררו כדי לצרף",
@@ -879,7 +883,8 @@
     "taskExists": "המשימה כבר נוצרה",
     "hasTask": "נוצרה משימה",
     "taskCreated": "המשימה {{number}} נוצרה",
-    "concerns": "למי זה נוגע"
+    "concerns": "למי זה נוגע",
+    "unpick": "הסרה מהבחירה"
   },
   "common": {
     "save": "שמירה",
