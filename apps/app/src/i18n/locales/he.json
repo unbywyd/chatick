@@ -752,7 +752,11 @@
     "openProject": "פתח פרויקט",
     "openFailed": "לא ניתן לפתוח",
     "hereTitle": "נוגע אליכם כאן: {{count}}",
-    "markRead": "סימון כנקרא"
+    "markRead": "סימון כנקרא",
+    "seeAll": "כל ההתראות",
+    "filterAll": "הכול",
+    "filterUnread": "שלא נקראו",
+    "allProjects": "כל הפרויקטים"
   },
   "docs": {
     "title": "מסמכים",

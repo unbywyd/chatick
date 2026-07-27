@@ -4,9 +4,10 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { useTranslation } from 'react-i18next'
 import { toast } from 'sonner'
 import { Bell, Check, ExternalLink } from 'lucide-react'
-import { api, setProjectToken } from '@/lib/api'
+import { api } from '@/lib/api'
 import { cn } from '@/lib/utils'
 import { Avatar } from '@/components/ui/avatar'
+import { useOpenNotification, type InboxNotification } from '@/hooks/useOpenNotification'
 import {
   DropdownMenu,
   DropdownMenuTrigger,
@@ -15,29 +16,7 @@ import {
 
 // Колокольчик уведомлений (SPEC §8.22): глобальные уведомления из всех проектов,
 // сгруппированные по проекту, со счётчиками; клик ведёт к задаче/сообщению.
-type Notification = {
-  id: string
-  projectId: string
-  projectName: string
-  event: string
-  title: string
-  /** суть запроса словами ИИ — важнее заголовка «X упомянул вас» */
-  summary?: string | null
-  body: string
-  link: string
-  readAt: string | null
-  createdAt: string
-  actor: { id: string; name: string; avatarUrl: string | null } | null
-}
-type Inbox = { unreadTotal: number; unreadByProject: Record<string, number>; items: Notification[] }
-
-// Уведомления, созданные до появления вкладки /chat, ссылаются на /p/<id>?msg=<mid>.
-// Такой путь падает на index-редирект, а он теряет query — дописываем /chat сами.
-function normalizeLink(link: string, projectId: string): string {
-  if (!link) return `/p/${projectId}/tasks`
-  const m = link.match(/^\/p\/([^/?]+)(\?.*)?$/)
-  return m ? `/p/${m[1]}/chat${m[2] ?? ''}` : link
-}
+type Inbox = { unreadTotal: number; unreadByProject: Record<string, number>; items: InboxNotification[] }
 
 export function NotificationBell({ currentProjectId }: { currentProjectId?: string }) {
   const { t, i18n } = useTranslation()
@@ -50,20 +29,12 @@ export function NotificationBell({ currentProjectId }: { currentProjectId?: stri
     refetchInterval: 60_000, // подстраховка; WS-событие обновляет мгновенно
   })
 
-  const markRead = useMutation({
-    mutationFn: (body: { ids?: string[]; projectId?: string; all?: boolean }) =>
-      api('/api/v1/inbox/read', { method: 'POST', body: JSON.stringify(body) }),
-    onSuccess: () => {
-      qc.invalidateQueries({ queryKey: ['inbox'] })
-      qc.invalidateQueries({ queryKey: ['sidebar-projects'] })
-      qc.invalidateQueries({ queryKey: ['projects'] })
-    },
-    onError: (e) => toast.error(e instanceof Error ? e.message : String(e)),
-  })
+  // Переходы и пометка прочитанным — общие со страницей уведомлений.
+  const { openNotification, openProject, markRead } = useOpenNotification(currentProjectId)
 
   // группируем по проектам
   const groups = useMemo(() => {
-    const map = new Map<string, { projectId: string; projectName: string; items: Notification[] }>()
+    const map = new Map<string, { projectId: string; projectName: string; items: InboxNotification[] }>()
     for (const n of inbox.data?.items ?? []) {
       const g = map.get(n.projectId) ?? { projectId: n.projectId, projectName: n.projectName, items: [] }
       g.items.push(n)
@@ -73,47 +44,6 @@ export function NotificationBell({ currentProjectId }: { currentProjectId?: stri
   }, [inbox.data])
 
   const unread = inbox.data?.unreadTotal ?? 0
-
-  // переход по уведомлению: если проект другой — переключаем project-токен
-  const openNotification = async (n: Notification) => {
-    try {
-      if (n.projectId !== currentProjectId) {
-        // Пометку ЖДЁМ: следом идёт reload, и незавершённый запрос просто
-        // не успел бы уйти — уведомление оставалось непрочитанным.
-        await markRead.mutateAsync({ ids: [n.id] })
-        const r = await api<{ token: string; project: { id: string } }>(`/api/v1/projects/${n.projectId}/enter`, {
-          method: 'POST',
-          body: JSON.stringify({ acceptRules: false }),
-        })
-        setProjectToken(r.token)
-        window.location.hash = `#${normalizeLink(n.link, n.projectId)}`
-        window.location.reload()
-        return
-      }
-      markRead.mutate({ ids: [n.id] })
-      navigate(normalizeLink(n.link, n.projectId))
-    } catch {
-      toast.error(t('inbox.openFailed'))
-    }
-  }
-
-  const openProject = async (projectId: string) => {
-    if (projectId === currentProjectId) {
-      navigate(`/p/${projectId}/tasks`)
-      return
-    }
-    try {
-      const r = await api<{ token: string; project: { id: string } }>(`/api/v1/projects/${projectId}/enter`, {
-        method: 'POST',
-        body: JSON.stringify({ acceptRules: false }),
-      })
-      setProjectToken(r.token)
-      window.location.hash = `#/p/${r.project.id}/tasks`
-      window.location.reload()
-    } catch {
-      toast.error(t('inbox.openFailed'))
-    }
-  }
 
   return (
     <DropdownMenu>
@@ -180,6 +110,14 @@ export function NotificationBell({ currentProjectId }: { currentProjectId?: stri
             </ul>
           </div>
         ))}
+
+        {/* Модалка показывает только непрочитанное — за историей отсюда */}
+        <button
+          onClick={() => navigate('/inbox')}
+          className="w-full cursor-pointer border-t px-3 py-2 text-center text-xs text-muted-foreground hover:bg-accent hover:text-foreground"
+        >
+          {t('inbox.seeAll')}
+        </button>
       </DropdownMenuContent>
     </DropdownMenu>
   )

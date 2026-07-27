@@ -754,7 +754,11 @@
     "openProject": "Перейти в проект",
     "openFailed": "Не удалось открыть",
     "hereTitle": "Вас касается здесь: {{count}}",
-    "markRead": "Отметить прочитанным"
+    "markRead": "Отметить прочитанным",
+    "seeAll": "Все уведомления",
+    "filterAll": "Все",
+    "filterUnread": "Непрочитанные",
+    "allProjects": "Все проекты"
   },
   "docs": {
     "title": "Документы",

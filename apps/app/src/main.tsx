@@ -15,6 +15,7 @@ import { PublicShareScreen } from './screens/PublicShareScreen'
 import { InviteScreen } from './screens/InviteScreen'
 import { ConnectScreen } from './screens/ConnectScreen'
 import { StartScreen } from './screens/StartScreen'
+import { InboxScreen } from './screens/InboxScreen'
 import { TasksTab } from './components/tabs/TasksTab'
 import { FilesTab } from './components/tabs/FilesTab'
 import { ResourcesTab } from './components/tabs/ResourcesTab'
@@ -120,6 +121,9 @@ createRoot(document.getElementById('root')!).render(
               {/* публичная ссылка: открывается без входа — SPEC §8.34 */}
               <Route path="/s/:slug" element={<PublicShareScreen />} />
               {/* Компания и её табы адресуемы: /start/:companyId/(projects|team|settings) */}
+              {/* уведомления — глобальная страница: они приходят из всех
+                  проектов сразу, и разбирают их тоже сразу все */}
+              <Route path="/inbox" element={<InboxScreen />} />
               <Route path="/start" element={<StartScreen />} />
               <Route path="/start/:companyId" element={<StartScreen />} />
               <Route path="/start/:companyId/:companyTab" element={<StartScreen />} />

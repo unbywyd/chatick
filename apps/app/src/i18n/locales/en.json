@@ -752,7 +752,11 @@
     "openProject": "Open project",
     "openFailed": "Could not open",
     "hereTitle": "For you here: {{count}}",
-    "markRead": "Mark as read"
+    "markRead": "Mark as read",
+    "seeAll": "All notifications",
+    "filterAll": "All",
+    "filterUnread": "Unread",
+    "allProjects": "All projects"
   },
   "docs": {
     "title": "Documents",
