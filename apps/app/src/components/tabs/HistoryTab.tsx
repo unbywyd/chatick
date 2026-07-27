@@ -84,59 +84,62 @@ function ActivityFeed({ projectId, lang }: { projectId: string; lang: string }) 
 
   return (
     <div className="space-y-3">
-      {/* Фильтры */}
-      <div className="flex flex-wrap items-center gap-1.5">
-        <Select value={entityType || 'all'} onValueChange={(v) => setEntityType(v === 'all' ? '' : v)}>
-          <SelectTrigger className="h-8 w-auto min-w-32 text-xs">
-            <SelectValue />
-          </SelectTrigger>
-          <SelectContent>
-            <SelectItem value="all">{t('history.allTypes')}</SelectItem>
-            {ENTITY_TYPES.map((et) => (
-              <SelectItem key={et} value={et}>
-                {t(`history.entity.${et}`)}
-              </SelectItem>
-            ))}
-          </SelectContent>
-        </Select>
-        <Select value={action || 'all'} onValueChange={(v) => setAction(v === 'all' ? '' : v)}>
-          <SelectTrigger className="h-8 w-auto min-w-32 text-xs">
-            <SelectValue />
-          </SelectTrigger>
-          <SelectContent>
-            <SelectItem value="all">{t('history.allActions')}</SelectItem>
-            {ACTIONS.map((a) => (
-              <SelectItem key={a} value={a}>
-                {t(`history.action.${a}`)}
-              </SelectItem>
-            ))}
-          </SelectContent>
-        </Select>
-        <Select value={actorId || 'all'} onValueChange={(v) => setActorId(v === 'all' ? '' : v)}>
-          <SelectTrigger className="h-8 w-auto min-w-32 text-xs">
-            <SelectValue />
-          </SelectTrigger>
-          <SelectContent>
-            <SelectItem value="all">{t('history.allActors')}</SelectItem>
-            {(members.data ?? []).map((m) => (
-              <SelectItem key={m.user.id} value={m.user.id}>
-                {m.user.name || m.user.email}
-              </SelectItem>
-            ))}
-          </SelectContent>
-        </Select>
-        {hasFilters && (
-          <button onClick={() => { setQ(''); setEntityType(''); setAction(''); setActorId('') }} className={cn(chip, 'text-muted-foreground hover:text-foreground')}>
-            {t('tasks.resetFilters')}
-          </button>
-        )}
-      </div>
+      {/* Фильтры и поиск — один ряд.
+          Поиск не в общем потоке flex-wrap, а отдельной колонкой справа:
+          в общем ряду его выдавливало вниз, стоило добавить ещё фильтр.
+          На узком экране колонки складываются, и поиск идёт во всю ширину. */}
+      <div className="flex flex-col gap-1.5 sm:flex-row sm:items-center">
+        <div className="flex flex-wrap items-center gap-1.5">
+          <Select value={entityType || 'all'} onValueChange={(v) => setEntityType(v === 'all' ? '' : v)}>
+            <SelectTrigger className="h-8 w-auto min-w-32 text-xs">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">{t('history.allTypes')}</SelectItem>
+              {ENTITY_TYPES.map((et) => (
+                <SelectItem key={et} value={et}>
+                  {t(`history.entity.${et}`)}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+          <Select value={action || 'all'} onValueChange={(v) => setAction(v === 'all' ? '' : v)}>
+            <SelectTrigger className="h-8 w-auto min-w-32 text-xs">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">{t('history.allActions')}</SelectItem>
+              {ACTIONS.map((a) => (
+                <SelectItem key={a} value={a}>
+                  {t(`history.action.${a}`)}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+          <Select value={actorId || 'all'} onValueChange={(v) => setActorId(v === 'all' ? '' : v)}>
+            <SelectTrigger className="h-8 w-auto min-w-32 text-xs">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">{t('history.allActors')}</SelectItem>
+              {(members.data ?? []).map((m) => (
+                <SelectItem key={m.user.id} value={m.user.id}>
+                  {m.user.name || m.user.email}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+          {hasFilters && (
+            <button onClick={() => { setQ(''); setEntityType(''); setAction(''); setActorId('') }} className={cn(chip, 'text-muted-foreground hover:text-foreground')}>
+              {t('tasks.resetFilters')}
+            </button>
+          )}
+        </div>
 
-      {/* Поиск отдельным рядом: в общем ряду его выдавливало вниз, стоило
-          появиться ещё одному фильтру. На узком экране — во всю ширину. */}
-      <div className="relative w-full sm:ms-auto sm:w-56">
-        <Search className="pointer-events-none absolute start-2.5 top-1/2 size-3.5 -translate-y-1/2 text-muted-foreground" />
-        <Input value={q} onChange={(e) => setQ(e.target.value)} placeholder={t('history.search')} className="h-8 ps-8 text-xs" />
+        <div className="relative w-full shrink-0 sm:ms-auto sm:w-56">
+          <Search className="pointer-events-none absolute start-2.5 top-1/2 size-3.5 -translate-y-1/2 text-muted-foreground" />
+          <Input value={q} onChange={(e) => setQ(e.target.value)} placeholder={t('history.search')} className="h-8 ps-8 text-xs" />
+        </div>
       </div>
 
       {/* Лента */}
