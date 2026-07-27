@@ -10,6 +10,7 @@ import { saveNotifySettings } from '@/lib/notify-settings'
 import {
   browserPermission,
   requestBrowserPermission,
+  testNotification,
   useNotifySettings,
 } from '@/hooks/useSystemNotifications'
 import { Select, SelectTrigger, SelectValue, SelectContent, SelectItem } from '@/components/ui/select'
@@ -396,6 +397,22 @@ function SystemNotifySettings() {
           onCheckedChange={(v) => set({ muteWhenFocused: v })}
         />
       </label>
+
+      {/* Проверка на месте: не надо ждать настоящего события, чтобы понять,
+          доходят ли уведомления. */}
+      <div className="pt-1">
+        <Button
+          variant="outline"
+          size="sm"
+          onClick={async () => {
+            const why = await testNotification(t('notif.testTitle'), t('notif.testBody'))
+            if (why === 'denied') toast.error(t('notif.systemDenied'))
+            else if (why) toast.error(t('notif.testFailed'))
+          }}
+        >
+          {t('notif.test')}
+        </Button>
+      </div>
 
       {!isDesktop && (
         <label className="flex cursor-pointer items-center justify-between gap-3 py-1">

@@ -591,7 +591,11 @@
     "systemSound": "Play a sound",
     "systemSoundHint": "Off by default: a sound interrupts more than a pop-up.",
     "promptTitle": "Turn on notifications?",
-    "promptHint": "So you don't miss mentions and tasks assigned to you."
+    "promptHint": "So you don't miss mentions and tasks assigned to you.",
+    "test": "Send a test notification",
+    "testTitle": "Chatick",
+    "testBody": "Notifications are working.",
+    "testFailed": "Couldn't show a notification — check your browser settings."
   },
   "projTeam": {
     "title": "Project team",

@@ -36,6 +36,30 @@ function writeSeen(seen: Set<string>) {
   localStorage.setItem(SEEN_KEY, JSON.stringify([...seen].slice(-200)))
 }
 
+/**
+ * Показать пробное уведомление — кнопкой из настроек.
+ *
+ * Ждать настоящего события, чтобы понять, работают ли уведомления, — плохая
+ * проверка: непонятно, что сломалось, если ничего не пришло. Возвращает
+ * причину отказа или null, если показали.
+ */
+export async function testNotification(title: string, body: string): Promise<string | null> {
+  const bridge = (window as unknown as { chatickDesktop?: { notify: (p: unknown) => void } })
+    .chatickDesktop
+  if (bridge) {
+    bridge.notify({ title, body })
+    return null
+  }
+  if (!('Notification' in window)) return 'unsupported'
+  if (Notification.permission === 'default') {
+    const next = await requestBrowserPermission()
+    if (next !== 'granted') return next
+  }
+  if (Notification.permission !== 'granted') return Notification.permission
+  new Notification(title, { body, icon: '/logo-small.png' })
+  return null
+}
+
 /** Разрешение браузера: в Electron не спрашиваем — там своё, системное. */
 export function browserPermission(): NotificationPermission | 'unsupported' {
   if (typeof window === 'undefined' || !('Notification' in window)) return 'unsupported'
@@ -183,10 +207,18 @@ export function useSystemNotifications() {
   // Показ новых: и после опроса, и после обновления по сокету — сюда приходит
   // всё, что попало в инбокс.
   useEffect(() => {
-    if (!inbox.data) return
+    if (!inbox.data) {
+      console.info('[chatick] уведомления ещё не загружены')
+      return
+    }
     const seen = readSeen()
     const fresh = inbox.data.items.filter((n) => !seen.has(n.id))
-    if (!fresh.length) return
+    if (!fresh.length) {
+      console.info(
+        `[chatick] новых нет: пришло ${inbox.data.items.length}, все уже показывали ранее`,
+      )
+      return
+    }
     // Не больше трёх за раз: если накопилось двадцать, показывать двадцать
     // всплывашек — наказание, а не помощь.
     let shown = 0
