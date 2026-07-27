@@ -20,6 +20,23 @@ type DesktopBridge = { notify: (p: { title: string; body?: string; link?: string
 const SEEN_KEY = 'chatick_desktop_seen'
 
 /**
+ * Разовая чистка списка показанных.
+ *
+ * Прежняя версия записывала уведомление в «уже видел», даже когда решала
+ * промолчать, — и оно не показывалось уже никогда. У всех, кто пользовался
+ * приложением в те дни, список испорчен, и починка кода сама по себе их не
+ * спасёт: непоказанное так и останется отфильтрованным. Чистим один раз.
+ */
+const SEEN_REPAIRED = 'chatick_seen_repaired_v1'
+
+function repairSeenOnce() {
+  if (localStorage.getItem(SEEN_REPAIRED)) return
+  localStorage.removeItem(SEEN_KEY)
+  localStorage.setItem(SEEN_REPAIRED, '1')
+  console.info('[chatick] список показанных уведомлений очищен после исправления ошибки')
+}
+
+/**
  * Что человек уже видел. Общий ключ с десктопом: в Electron открыт тот же
  * localStorage, и без общей памяти одно уведомление показалось бы дважды.
  */
@@ -203,6 +220,12 @@ export function useSystemNotifications() {
     },
     [bridge, navigate, qc],
   )
+
+  // Чистка испорченного списка — до первого показа, иначе непоказанные
+  // уведомления так и останутся отфильтрованными.
+  useEffect(() => {
+    repairSeenOnce()
+  }, [])
 
   // Показ новых: и после опроса, и после обновления по сокету — сюда приходит
   // всё, что попало в инбокс.
