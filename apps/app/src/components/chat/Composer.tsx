@@ -260,13 +260,22 @@ export function Composer({
             return
           } catch { /* fallthrough */ }
         }
-        // D&D ресурса → ссылка-ярлык в текст
-        const resData = e.dataTransfer.getData('application/x-chatick-resource')
-        if (resData && editor) {
+        // D&D ресурса, документа, заметки → ссылка-ярлык в текст.
+        //
+        // Ссылка ведёт на САМУ сущность, а не на список: раньше ресурс кидал
+        // на /resources, и получателю оставалось искать его глазами.
+        const dropped: [string, string, string][] = [
+          ['application/x-chatick-resource', 'resources', '🔗'],
+          ['application/x-chatick-document', 'documents', '📄'],
+          ['application/x-chatick-note', 'notes', '📓'],
+        ]
+        for (const [mime, tab, icon] of dropped) {
+          const raw = e.dataTransfer.getData(mime)
+          if (!raw || !editor) continue
           try {
-            const r = JSON.parse(resData) as { id: string; name: string }
+            const r = JSON.parse(raw) as { id: string; name: string }
             const pid = window.location.hash.split('/')[2]
-            editor.chain().focus().insertContent(`[🔗 ${r.name}](#/p/${pid}/resources) `).run()
+            editor.chain().focus().insertContent(`[${icon} ${r.name}](#/p/${pid}/${tab}/${r.id}) `).run()
             return
           } catch { /* fallthrough */ }
         }

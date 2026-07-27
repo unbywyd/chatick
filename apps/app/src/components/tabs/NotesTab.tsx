@@ -355,6 +355,15 @@ export function NotesTab({ projectId }: { projectId: string }) {
           return (
             <li key={n.id}>
               <div
+                // Перетаскивание в чат: на заметку ссылаются в разговоре чаще
+                // всего — «мы же договорились» становится ссылкой.
+                draggable
+                onDragStart={(e) =>
+                  e.dataTransfer.setData(
+                    'application/x-chatick-note',
+                    JSON.stringify({ id: n.id, name: n.title || t('journal.untitled') }),
+                  )
+                }
                 className={cn(
                   'group rounded-lg border bg-card p-3 transition-colors hover:bg-accent/50',
                   focusId === n.id && 'border-brand ring-1 ring-brand',

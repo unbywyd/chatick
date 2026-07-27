@@ -108,30 +108,39 @@ export function DocumentsTab({ projectId }: { projectId: string }) {
         <Input value={q} onChange={(e) => setQ(e.target.value)} placeholder={t('docs.search')} className="ps-9" />
       </div>
 
-      <ul className="space-y-2">
+      {/* Карточки, а не полосы: у документа есть начало текста, и по нему
+          его узнают быстрее, чем по одному заголовку в строке. */}
+      <ul className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
         {list.isLoading && <p className="text-sm text-muted-foreground">…</p>}
         {(list.data ?? []).map((d) => (
           <li key={d.id}>
             <button
+              // Перетаскивание в чат: документ — такой же предмет разговора,
+              // как задача или файл, и ссылку на него хочется бросить сразу.
+              draggable
+              onDragStart={(e) =>
+                e.dataTransfer.setData('application/x-chatick-document', JSON.stringify({ id: d.id, name: d.title }))
+              }
               onClick={() => setOpenId(d.id)}
-              className="flex w-full items-start gap-3 rounded-lg border bg-card px-3 py-2.5 text-start transition-colors hover:bg-accent"
+              className="flex h-full w-full flex-col gap-2 rounded-lg border bg-card p-3 text-start transition-colors hover:border-brand/50 hover:bg-accent"
             >
-              <FileText className="mt-0.5 size-4 shrink-0 text-muted-foreground" />
-              <span className="min-w-0 flex-1">
-                <span className="flex items-center gap-2">
-                  <span className="truncate text-sm font-medium">{d.title}</span>
-                  {d.publicSlug && <Globe className="size-3 shrink-0 text-brand" />}
-                </span>
-                {d.preview && <span className="line-clamp-1 text-xs text-muted-foreground">{d.preview}</span>}
+              <span className="flex items-start gap-2">
+                <FileText className="mt-0.5 size-4 shrink-0 text-muted-foreground" />
+                <span className="min-w-0 flex-1 truncate text-sm font-medium">{d.title}</span>
+                {d.publicSlug && <Globe className="mt-0.5 size-3 shrink-0 text-brand" />}
               </span>
-              <span className="flex shrink-0 items-center gap-2 text-xs text-muted-foreground">
+              {d.preview && <span className="line-clamp-3 flex-1 text-xs text-muted-foreground">{d.preview}</span>}
+              <span className="mt-auto flex items-center gap-2 text-xs text-muted-foreground">
                 {d.author && <Avatar name={d.author.name} src={d.author.avatarUrl} size={18} />}
-                {new Date(d.updatedAt).toLocaleDateString(i18n.language)}
+                <span className="truncate">{d.author?.name}</span>
+                <span className="ms-auto shrink-0">{new Date(d.updatedAt).toLocaleDateString(i18n.language)}</span>
               </span>
             </button>
           </li>
         ))}
-        {list.data && list.data.length === 0 && <p className="py-8 text-center text-sm text-muted-foreground">{t('docs.empty')}</p>}
+        {list.data && list.data.length === 0 && (
+          <p className="col-span-full py-8 text-center text-sm text-muted-foreground">{t('docs.empty')}</p>
+        )}
       </ul>
     </div>
   )
