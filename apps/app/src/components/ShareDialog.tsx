@@ -3,7 +3,7 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { useTranslation } from 'react-i18next'
 import { toast } from 'sonner'
 import { Check, Copy, Globe, Link2, Lock, Trash2, TriangleAlert } from 'lucide-react'
-import { api, API_URL } from '@/lib/api'
+import { api } from '@/lib/api'
 import { Button } from '@/components/ui/button'
 import { cn } from '@/lib/utils'
 
@@ -64,7 +64,9 @@ export function ShareDialog({
   })
 
   const appUrl = `${window.location.origin}/#${appPath}`
-  const publicUrl = share ? `${API_URL.replace(/\/$/, '')}/s/${share.slug}` : ''
+  // Ссылка ведёт на СТРАНИЦУ, а не на JSON: /s/:slug у API — это данные для
+  // неё, и присылать человеку голый ответ сервера было бы издевательством.
+  const publicUrl = share ? `${window.location.origin}/#/s/${share.slug}` : ''
 
   const copy = async (text: string, which: 'app' | 'public') => {
     try {
