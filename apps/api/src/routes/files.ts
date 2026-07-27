@@ -245,7 +245,10 @@ const WEBP_QUALITY = 82
 
 // Загрузка: multipart/form-data, поле "file"; taskId — вложение задачи;
 // keepOriginal=1 — не оптимизировать (как «отправить оригинал» в WhatsApp).
-// Картинки по умолчанию: resize ≤2048px + webp; оригинал сохраняется рядом (originalKey).
+// Картинки по умолчанию: resize ≤2048px + webp. Оригинал НЕ сохраняем —
+// вторая копия съедала бы всё, что даёт оптимизация. Колонка originalKey
+// остаётся ради файлов, загруженных до этого решения: у них оригинал есть,
+// и кнопка «Оригинал» для них продолжает работать.
 filesRoute.post('/', async (c) => {
   const { projectId, sub } = c.get('auth')
   if (!(await hasPermission(projectId, sub, 'files.upload'))) return c.json({ error: 'Forbidden' }, 403)
@@ -293,7 +296,7 @@ filesRoute.post('/', async (c) => {
   const store = await resolveStorage(projectId)
   const kp = store.keyPrefix ? `${store.keyPrefix}/` : ''
   let key = `${kp}${projectId}/${fileId}-${safeName}`
-  let originalKey: string | null = null
+  const originalKey: string | null = null // см. комментарий выше: новые файлы оригинал не хранят
 
   if (!keepOriginal && OPTIMIZABLE.has(mime)) {
     try {
@@ -304,10 +307,9 @@ filesRoute.post('/', async (c) => {
         .toBuffer()
       // применяем только если реально выгодно
       if (optimized.length < buffer.length * 0.9) {
-        originalKey = `${kp}${projectId}/${fileId}-orig-${safeName}`
-        await store.client.send(
-          new PutObjectCommand({ Bucket: store.bucket, Key: originalKey, Body: buffer, ContentType: mime }),
-        )
+        // Оригинал НЕ храним: смысл оптимизации — экономить место, а вторая
+        // копия съедала бы сэкономленное и сверху. Нужен оригинал — есть
+        // «отправлять без сжатия» в меню скрепки.
         buffer = optimized
         outMime = 'image/webp'
         outName = displayName.replace(/\.[^.]+$/, '') + '.webp'
