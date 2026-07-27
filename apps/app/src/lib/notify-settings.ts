@@ -15,7 +15,10 @@ export type NotifySettings = {
 
 export const DEFAULT_NOTIFY: NotifySettings = {
   enabled: true,
-  muteWhenFocused: true,
+  // Не молчим по умолчанию. Молчание при активном окне выглядит ровно как
+  // сломанные уведомления: бейдж загорелся, всплывашки нет, и понять, что
+  // это было намеренно, невозможно. Кому мешает — выключит галочкой.
+  muteWhenFocused: false,
   sound: false,
 }
 

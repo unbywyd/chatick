@@ -96,12 +96,18 @@ export function useSystemNotifications() {
   const settingsRef = useRef(settings)
   settingsRef.current = settings
 
+  /**
+   * Показать уведомление. Возвращает false, если показать не удалось или
+   * решили промолчать, — такие НЕ помечаем показанными, иначе уведомление
+   * пропало бы навсегда: замолчали при активном окне, записали в «видел», и
+   * человек не увидит его уже никогда.
+   */
   const show = useCallback(
-    (n: InboxNotification) => {
+    (n: InboxNotification): boolean => {
       const s = settingsRef.current
-      if (!s.enabled) return
+      if (!s.enabled) return false
       // Окно на виду — человек и так всё видит; всплывашка только отвлекает.
-      if (s.muteWhenFocused && document.visibilityState === 'visible' && document.hasFocus()) return
+      if (s.muteWhenFocused && document.visibilityState === 'visible' && document.hasFocus()) return false
 
       // summary — фраза ИИ о том, чего от человека хотят; она полезнее заголовка
       const title = n.summary || n.title
@@ -110,9 +116,9 @@ export function useSystemNotifications() {
 
       if (bridge) {
         bridge.notify({ title, body, link })
-        return
+        return true
       }
-      if (!('Notification' in window) || Notification.permission !== 'granted') return
+      if (!('Notification' in window) || Notification.permission !== 'granted') return false
       const notification = new Notification(title, {
         body,
         icon: '/logo-small.png',
@@ -126,6 +132,7 @@ export function useSystemNotifications() {
         navigate(link)
         notification.close()
       }
+      return true
     },
     [bridge, navigate],
   )
@@ -139,9 +146,15 @@ export function useSystemNotifications() {
     if (!fresh.length) return
     // Не больше трёх за раз: если накопилось двадцать, показывать двадцать
     // всплывашек — наказание, а не помощь.
-    for (const n of fresh.slice(0, 3)) show(n)
-    for (const n of fresh) seen.add(n.id)
-    writeSeen(seen)
+    let shown = 0
+    for (const n of fresh) {
+      if (shown >= 3) break
+      if (show(n)) {
+        seen.add(n.id)
+        shown++
+      }
+    }
+    if (shown) writeSeen(seen)
   }, [inbox.data, show])
 
   // Сокет присылает 'notification' — обновляем инбокс сразу, не дожидаясь
