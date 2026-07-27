@@ -11,6 +11,9 @@ Written in English only: this file is published on the website.
 
 ### Added
 
+- A Windows installer, with the shell updating itself in the background and
+  applying the update on exit. The interface already updates on every launch,
+  since it is loaded from the web.
 - Keyboard shortcuts for everyday actions — create a task, document or resource,
   jump to files, tasks or the time tracker, move focus between chat and AI.
   Press `?` anywhere for the cheat sheet, or remap them on the shortcuts page.
@@ -37,10 +40,6 @@ Written in English only: this file is published on the website.
   it is clear they can be dragged into the chat.
 - Originals of optimised images are no longer stored, which leaves far more of
   a project's storage for actual work.
-
-- Windows installer, with the shell updating itself in the background and
-  applying the update on exit. The interface itself already updates on every
-  launch, since it is loaded from the web.
 
 ### Fixed
 
