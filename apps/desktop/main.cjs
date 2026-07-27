@@ -386,12 +386,16 @@ function registerIpc() {
   })
 
   ipcMain.on('notify', (_e, payload) => {
-  if (!Notification.isSupported()) return
+  if (!Notification.isSupported()) {
+    console.warn('[chatick] система не поддерживает уведомления')
+    return
+  }
   const n = new Notification({
     title: payload?.title || 'Chatick',
     body: payload?.body || '',
     icon: loadIcon('icon.png'),
   })
+  n.on('failed', (_ev, err) => console.warn('[chatick] уведомление не показано:', err))
   // Клик ведёт туда, где событие произошло: уведомление без перехода бесполезно.
   n.on('click', () => {
     showWindow()
@@ -465,6 +469,12 @@ if (!app.requestSingleInstanceLock()) {
   app.on('second-instance', showWindow)
 
   app.whenReady().then(() => {
+    // Windows связывает уведомления с приложением по AppUserModelID. Без него
+    // система молча выбрасывает всплывашки: Notification.isSupported() врёт
+    // «да», show() отрабатывает без ошибки, и на экране не появляется ничего.
+    // Значение обязано совпадать с appId сборки, иначе Windows считает это
+    // другим приложением.
+    if (process.platform === 'win32') app.setAppUserModelId('com.chatick.app')
     if (process.platform !== 'darwin') Menu.setApplicationMenu(null)
     registerIpc()
     createWindow()

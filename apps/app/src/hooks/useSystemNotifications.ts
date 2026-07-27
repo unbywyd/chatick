@@ -105,9 +105,16 @@ export function useSystemNotifications() {
   const show = useCallback(
     (n: InboxNotification): boolean => {
       const s = settingsRef.current
-      if (!s.enabled) return false
+      // Почему промолчали — видно в консоли. Без этого «не работает» и
+      // «молчим намеренно» выглядят одинаково, и разобраться нельзя.
+      const skip = (why: string) => {
+        console.info('[chatick] уведомление не показано:', why)
+        return false
+      }
+      if (!s.enabled) return skip('выключено в настройках')
       // Окно на виду — человек и так всё видит; всплывашка только отвлекает.
-      if (s.muteWhenFocused && document.visibilityState === 'visible' && document.hasFocus()) return false
+      if (s.muteWhenFocused && document.visibilityState === 'visible' && document.hasFocus())
+        return skip('окно активно, включено «молчать когда приложение передо мной»')
 
       // summary — фраза ИИ о том, чего от человека хотят; она полезнее заголовка
       const title = n.summary || n.title
@@ -118,7 +125,9 @@ export function useSystemNotifications() {
         bridge.notify({ title, body, link })
         return true
       }
-      if (!('Notification' in window) || Notification.permission !== 'granted') return false
+      if (!('Notification' in window)) return skip('браузер не поддерживает Notification API')
+      if (Notification.permission !== 'granted')
+        return skip(`нет разрешения браузера (${Notification.permission}) — нажмите «Разрешить»`)
       const notification = new Notification(title, {
         body,
         icon: '/logo-small.png',

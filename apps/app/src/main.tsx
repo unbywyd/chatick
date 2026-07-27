@@ -8,6 +8,7 @@ import './i18n'
 import { useDesktopSync, usePresence } from './hooks/useDesktop'
 import { useSystemNotifications } from './hooks/useSystemNotifications'
 import { UpdateBanner } from './components/UpdateBanner'
+import { NotifyPermissionPrompt } from './components/NotifyPermissionPrompt'
 import { ThemeProvider } from './providers/theme'
 import { ConfirmProvider } from './components/ui/confirm'
 import { ProjectLayout, useProjectCtx } from './screens/ProjectScreen'
@@ -113,6 +114,8 @@ createRoot(document.getElementById('root')!).render(
             {/* Новая версия приехала — предлагаем перезагрузиться, а не ждём,
                 пока человек догадается сделать это сам. */}
             <UpdateBanner />
+            {/* Без разрешения браузер молчит, а попросить его было негде */}
+            <NotifyPermissionPrompt />
             <Routes>
               <Route path="/" element={<LoginScreen />} />
               <Route path="/login" element={<LoginScreen />} />

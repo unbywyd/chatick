@@ -589,7 +589,9 @@
     "systemMuteFocused": "Stay quiet while the app is in front of me",
     "systemMuteFocusedHint": "You already see what's happening — no need for a pop-up.",
     "systemSound": "Play a sound",
-    "systemSoundHint": "Off by default: a sound interrupts more than a pop-up."
+    "systemSoundHint": "Off by default: a sound interrupts more than a pop-up.",
+    "promptTitle": "Turn on notifications?",
+    "promptHint": "So you don't miss mentions and tasks assigned to you."
   },
   "projTeam": {
     "title": "Project team",
