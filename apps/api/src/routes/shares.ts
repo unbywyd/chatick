@@ -260,11 +260,20 @@ async function readEntity(type: Entity, id: string) {
       const r = await db.query.messages.findFirst({ where: eq(messages.id, id) })
       if (!r) return null
       const author = r.authorId ? await db.query.users.findFirst({ where: eq(users.id, r.authorId) }) : null
+
+      // Вложения — часть сообщения: сообщение из одной скрепки без них
+      // выглядит пустым, а поделиться картинкой хотят чаще, чем текстом.
+      const atts = await db
+        .select()
+        .from(files)
+        .where(and(eq(files.messageId, r.id), isNull(files.deletedAt)))
+
       return {
         message: {
           text: r.text,
           createdAt: r.createdAt,
           author: author ? { name: author.name, avatarUrl: author.avatarUrl } : null,
+          attachments: atts.map((f) => ({ id: f.id, name: f.name, mime: f.mime, size: Number(f.size) })),
         },
       }
     }

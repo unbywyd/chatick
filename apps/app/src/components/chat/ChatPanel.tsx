@@ -15,6 +15,7 @@ import { Composer, AI_MENTION_ID } from './Composer'
 import { SandboxOverlay } from './SandboxOverlay'
 import { AvatarRow } from '@/components/ui/avatar-row'
 import { ShareDialog } from '@/components/ShareDialog'
+import { useProjectCtx } from '@/screens/ProjectScreen'
 import { AiOverlay } from './AiOverlay'
 import { FileViewer, type ViewerFile } from '@/components/files/FileViewer'
 import { NOTE_META, NOTE_TYPES, type NoteType } from '@/components/tabs/NotesTab'
@@ -862,6 +863,10 @@ function MessageAttachments({ attachments }: { attachments: NonNullable<ChatMess
   const images = live.filter((a) => a.mime.startsWith('image/'))
   const others = live.filter((a) => !a.mime.startsWith('image/'))
   const [viewing, setViewing] = useState<ViewerFile | null>(null)
+  /** файл, которым делятся прямо из просмотра */
+  const [sharingFile, setSharingFile] = useState<ViewerFile | null>(null)
+  const { id: projectId } = useParams()
+  const { project } = useProjectCtx()
 
   // inline-превью картинок (через прокси-URL)
   const previews = useQuery({
@@ -918,7 +923,26 @@ function MessageAttachments({ attachments }: { attachments: NonNullable<ChatMess
           🚫 {t('chat.fileDeleted')}
         </span>
       ))}
-      {viewing && <FileViewer file={viewing} onClose={() => setViewing(null)} />}
+      {/* Из просмотра файла делятся ФАЙЛОМ, а не сообщением, в котором он
+          пришёл: у сообщения из одной скрепки и показывать-то нечего. */}
+      {viewing && (
+        <FileViewer
+          file={viewing}
+          onClose={() => setViewing(null)}
+          onShare={() => setSharingFile(viewing)}
+        />
+      )}
+
+      {sharingFile && (
+        <ShareDialog
+          type="file"
+          id={sharingFile.id}
+          title={sharingFile.name}
+          appPath={`/p/${projectId}/files/${sharingFile.id}`}
+          canPublish={project?.myRole === 'owner' || project?.myRole === 'admin'}
+          onClose={() => setSharingFile(null)}
+        />
+      )}
     </div>
   )
 }
