@@ -15,7 +15,6 @@ import { Composer, AI_MENTION_ID } from './Composer'
 import { SandboxOverlay } from './SandboxOverlay'
 import { AvatarRow } from '@/components/ui/avatar-row'
 import { ShareDialog } from '@/components/ShareDialog'
-import { useProjectCtx } from '@/screens/ProjectScreen'
 import { AiOverlay } from './AiOverlay'
 import { FileViewer, type ViewerFile } from '@/components/files/FileViewer'
 import { NOTE_META, NOTE_TYPES, type NoteType } from '@/components/tabs/NotesTab'
@@ -458,6 +457,7 @@ export function ChatPanel({
                       setFocusComposer((n) => n + 1)
                     }}
                     onShare={() => setSharing(m)}
+                    canPublish={myRole === 'owner' || myRole === 'admin'}
                     onJump={jumpTo}
                     replyTo={m.replyToId ? byId.get(m.replyToId) : undefined}
                   />
@@ -646,6 +646,7 @@ function MessageRow({
   onPick,
   onReply,
   onShare,
+  canPublish,
   onJump,
   replyTo,
 }: {
@@ -659,6 +660,8 @@ function MessageRow({
   onPick: () => void
   onReply: () => void
   onShare: () => void
+  /** право публиковать ссылку наружу — у владельца и админа проекта */
+  canPublish: boolean
   /** перейти к процитированному сообщению */
   onJump: (id: string) => void
   /** сообщение, на которое отвечают — для цитаты сверху */
@@ -808,7 +811,9 @@ function MessageRow({
             <ReactMarkdown>{renderMentions(message.text)}</ReactMarkdown>
           </div>
         )}
-        {(message.attachments?.length ?? 0) > 0 && <MessageAttachments attachments={message.attachments!} />}
+        {(message.attachments?.length ?? 0) > 0 && (
+          <MessageAttachments attachments={message.attachments!} canPublish={canPublish} />
+        )}
         {(message.taskPins?.length ?? 0) > 0 && <MessageTaskPins pins={message.taskPins!} />}
       </div>
     </div>
@@ -856,7 +861,14 @@ function MessageTaskPins({ pins }: { pins: NonNullable<ChatMessage['taskPins']> 
   )
 }
 
-function MessageAttachments({ attachments }: { attachments: NonNullable<ChatMessage['attachments']> }) {
+function MessageAttachments({
+  attachments,
+  canPublish = false,
+}: {
+  attachments: NonNullable<ChatMessage['attachments']>
+  /** право публиковать ссылку наружу — решает вызывающий */
+  canPublish?: boolean
+}) {
   const { t } = useTranslation()
   const live = attachments.filter((a) => !a.deleted)
   const deleted = attachments.filter((a) => a.deleted)
@@ -866,7 +878,6 @@ function MessageAttachments({ attachments }: { attachments: NonNullable<ChatMess
   /** файл, которым делятся прямо из просмотра */
   const [sharingFile, setSharingFile] = useState<ViewerFile | null>(null)
   const { id: projectId } = useParams()
-  const { project } = useProjectCtx()
 
   // inline-превью картинок (через прокси-URL)
   const previews = useQuery({
@@ -939,7 +950,7 @@ function MessageAttachments({ attachments }: { attachments: NonNullable<ChatMess
           id={sharingFile.id}
           title={sharingFile.name}
           appPath={`/p/${projectId}/files/${sharingFile.id}`}
-          canPublish={project?.myRole === 'owner' || project?.myRole === 'admin'}
+          canPublish={canPublish}
           onClose={() => setSharingFile(null)}
         />
       )}
