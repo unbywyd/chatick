@@ -457,7 +457,19 @@ function TableRow({
     <tr
       ref={setNodeRef}
       style={style}
-      className={cn('border-b last:border-0 transition-colors hover:bg-accent/40', active && 'bg-accent', isDragging && 'opacity-40')}
+      // Открываем по клику на всей строке: раньше работал только заголовок, и
+      // попасть по нему в плотной таблице было отдельным упражнением. Клики по
+      // кнопкам внутри (статус, приоритет, исполнитель) не считаем — они делают
+      // своё дело на месте.
+      onClick={(e) => {
+        if ((e.target as HTMLElement).closest('button,input,a,[role="menuitem"]')) return
+        onOpen()
+      }}
+      className={cn(
+        'cursor-pointer border-b last:border-0 transition-colors hover:bg-accent/40',
+        active && 'bg-accent',
+        isDragging && 'opacity-40',
+      )}
     >
       {canEdit && (
         <td className="w-6 ps-1">
@@ -467,7 +479,7 @@ function TableRow({
         </td>
       )}
       <td className="px-2 py-1.5 align-middle text-xs text-muted-foreground">{task.number}</td>
-      <td className="cursor-pointer px-2 py-1.5 align-middle" onClick={onOpen}>
+      <td className="px-2 py-1.5 align-middle">
         <span className={cn('line-clamp-1', task.status === 'done' && 'text-muted-foreground line-through')}>{task.title}</span>
         {task.attachmentsCount > 0 && (
           <span className="ms-1 inline-flex items-center gap-0.5 text-xs text-muted-foreground">
