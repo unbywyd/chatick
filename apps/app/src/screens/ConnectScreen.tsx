@@ -26,7 +26,10 @@ import { ThemeToggle } from '@/components/ThemeToggle'
 type BridgeSession = {
   id: string
   clientName: string
-  project: { id: string; name: string }
+  /** Туннель открыт либо на один проект, либо на всю компанию — заполнено одно. */
+  scope: 'company' | 'project'
+  project: { id: string; name: string } | null
+  company: { id: string; name: string } | null
   lastUsedAt: string
   expiresAt: string
   createdAt: string
@@ -357,7 +360,12 @@ export function ConnectPanel({ onClose }: { onClose?: () => void }) {
                 <span className="min-w-0 flex-1">
                   <span className="block truncate text-sm font-medium">{s.clientName}</span>
                   <span className="block text-xs text-muted-foreground">
-                    {s.project.name} · {t('connect.lastUsed')}{' '}
+                    {/* У туннеля на компанию проекта нет — раньше здесь читали
+                        s.project.name и роняли весь экран. */}
+                    {s.scope === 'company'
+                      ? `${s.company?.name ?? ''} · ${t('connect.wholeCompany')}`
+                      : (s.project?.name ?? '')}{' '}
+                    · {t('connect.lastUsed')}{' '}
                     {new Date(s.lastUsedAt).toLocaleString(i18n.language, { hour: '2-digit', minute: '2-digit' })}
                   </span>
                 </span>
