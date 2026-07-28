@@ -30,6 +30,7 @@ import { DocumentsTab } from './components/tabs/DocumentsTab'
 import { NotesTab } from './components/tabs/NotesTab'
 import { TimeTab } from './components/tabs/TimeTab'
 import { ShortcutsTab } from './components/tabs/ShortcutsTab'
+import { ImageViewer } from './components/ImageViewer'
 
 // HashRouter — единый роутинг для веба и Electron (file://) без доп. настроек.
 const queryClient = new QueryClient()
@@ -164,6 +165,10 @@ createRoot(document.getElementById('root')!).render(
             </Routes>
           </HashRouter>
         </ConfirmProvider>
+        {/* Один на всё приложение: картинки приходят из текста задач,
+            документов и заметок — вешать просмотр в каждом месте значит
+            однажды забыть про одно из них. */}
+        <ImageViewer />
         {/* Тоасты в токенах темы (richColors игнорирует тему и светит белым
             в тёмном интерфейсе). Снизу справа — чтобы не перекрывать шапку. */}
         <Toaster

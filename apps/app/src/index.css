@@ -284,6 +284,16 @@
     margin: 0.4em 0;
   }
   .tiptap-editor img.ProseMirror-selectednode { outline: 2px solid var(--brand) }
+  /* Картинку можно открыть — курсор должен об этом говорить, иначе человек
+     и не подумает по ней кликнуть. */
+  .tiptap-readonly img,
+  .msg-md img {
+    cursor: zoom-in;
+  }
+  .tiptap-editor img,
+  .doc-editor img {
+    cursor: pointer; /* клик выделяет, двойной — открывает */
+  }
   .mention {
     color: var(--brand);
     background: color-mix(in oklab, var(--brand) 12%, transparent);

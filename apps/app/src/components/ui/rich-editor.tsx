@@ -180,7 +180,10 @@ export function RichEditor({
   }
 
   return (
-    <div className="relative rounded-md border transition-shadow focus-within:ring-2 focus-within:ring-ring">
+    // Без рамки и подложки: описание задачи — её основное содержимое, а не
+    // поле формы. В чате у сообщений подложки тоже нет, и разнобой заметен.
+    // Что здесь можно печатать, видно по панели инструментов и курсору.
+    <div className="relative rounded-md transition-shadow focus-within:ring-2 focus-within:ring-ring/40">
       <BubbleMenu editor={editor} className="tiptap-bubble">
         <div className="flex rounded-md border bg-popover p-0.5 shadow-lg">
           <Tool active={editor.isActive('bold')} onClick={() => editor.chain().focus().toggleBold().run()}><Bold className="size-3.5" /></Tool>
@@ -201,7 +204,7 @@ export function RichEditor({
       </BubbleMenu>
 
       {preset === 'full' && (
-        <div className="flex flex-wrap gap-0.5 border-b p-1">
+        <div className="flex flex-wrap gap-0.5 border-b p-1 opacity-60 transition-opacity focus-within:opacity-100 hover:opacity-100">
           <Tool active={editor.isActive('heading', { level: 2 })} onClick={() => editor.chain().focus().toggleHeading({ level: 2 }).run()}><Heading2 className="size-3.5" /></Tool>
           <Tool active={editor.isActive('bold')} onClick={() => editor.chain().focus().toggleBold().run()}><Bold className="size-3.5" /></Tool>
           <Tool active={editor.isActive('italic')} onClick={() => editor.chain().focus().toggleItalic().run()}><Italic className="size-3.5" /></Tool>
