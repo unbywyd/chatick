@@ -157,7 +157,25 @@ export function StartScreen() {
             onEntered={(id) => navigate(`/p/${id}`)}
             onDeleteCompany={setDeletingCompany}
           />
-        ) : null}
+        ) : companiesQ.isLoading ? (
+          <p className="py-16 text-center text-sm text-muted-foreground">…</p>
+        ) : (
+          // Компании в адресе нет среди своих: её удалили, из неё вышли или
+          // ссылку прислали чужую. Пустая страница на это не отвечает — человек
+          // видит чёрный экран и решает, что всё сломалось.
+          <div className="grid min-h-[60vh] place-items-center p-6 text-center">
+            <div className="max-w-sm">
+              <span className="mx-auto grid size-14 place-items-center rounded-2xl bg-secondary text-muted-foreground">
+                <Building2 className="size-7" />
+              </span>
+              <h2 className="mt-4 text-base font-semibold">{t('start.companyGoneTitle')}</h2>
+              <p className="mt-2 text-sm text-muted-foreground">{t('start.companyGoneText')}</p>
+              <Button variant="brand" className="mt-5" onClick={() => setCompanyId(null)}>
+                {t('start.companyGoneCta')}
+              </Button>
+            </div>
+          </div>
+        )}
         </div>
       </main>
 

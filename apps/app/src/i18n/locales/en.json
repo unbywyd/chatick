@@ -55,7 +55,10 @@
     "welcomeLeadStrong": "Only your team sees the name, and you can change it any time.",
     "welcomeHint": "The name of your studio, your agency, or just your surname — anything works.",
     "welcomeCta": "Continue",
-    "welcomeFoot": "You can rename or delete the company later in settings. Deleting lives in a separate danger zone, with a confirmation and an email to every member."
+    "welcomeFoot": "You can rename or delete the company later in settings. Deleting lives in a separate danger zone, with a confirmation and an email to every member.",
+    "companyGoneTitle": "This company is not available",
+    "companyGoneText": "It was deleted, you left it, or the link belongs to someone else.",
+    "companyGoneCta": "To my companies"
   },
   "companyTabs": {
     "projects": "Projects",
