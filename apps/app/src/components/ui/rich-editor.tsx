@@ -217,18 +217,6 @@ export function RichEditor({
         </div>
       )}
 
-      {/* в minimal (комментарии) тулбара нет — картинку кладём кнопкой в углу */}
-      {preset === 'minimal' && (
-        <button
-          type="button"
-          title="Image"
-          onMouseDown={(e) => e.preventDefault()}
-          onClick={() => fileRef.current?.click()}
-          className="absolute end-1.5 top-1.5 z-10 rounded p-1 text-muted-foreground transition-colors hover:bg-secondary hover:text-foreground"
-        >
-          <ImageIcon className="size-3.5" />
-        </button>
-      )}
 
       <input
         ref={fileRef}
