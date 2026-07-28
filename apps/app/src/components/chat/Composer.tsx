@@ -37,6 +37,8 @@ export function Composer({
   mentions,
   onSend,
   focusSignal,
+  prefill,
+  onPrefillUsed,
   canBypassAi = false,
 }: {
   disabled?: boolean
@@ -48,6 +50,9 @@ export function Composer({
    * а потом ещё раз кликает в поле, чтобы начать печатать.
    */
   focusSignal?: number
+  /** текст, который надо положить в поле (пример из пустого чата) */
+  prefill?: string | null
+  onPrefillUsed?: () => void
   /** отправка мимо проверки ИИ — только руководству проекта */
   canBypassAi?: boolean
   onSend: (payload: { markdown: string; mentionIds: string[]; attachmentIds: string[]; taskRefs: string[]; raw?: boolean }) => void
@@ -191,6 +196,16 @@ export function Composer({
   // Через кадр, а не сразу: пункт меню закрывается уже после нашего вызова и
   // возвращает фокус на кнопку, которая меню открыла — курсор из поля уходил
   // ровно в тот момент, когда мы его туда поставили.
+  // Пример из пустого чата: кладём в поле и отдаём фокус в конец, чтобы
+  // можно было сразу дописать своё, а не стирать чужое.
+  useEffect(() => {
+    if (!prefill || !editor) return
+    editor.commands.setContent(`<p>${prefill}</p>`)
+    editor.commands.focus('end')
+    onPrefillUsed?.()
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [prefill, editor])
+
   useEffect(() => {
     if (!focusSignal || !editor || disabled) return
     const timer = window.setTimeout(() => editor.commands.focus('end'), 0)

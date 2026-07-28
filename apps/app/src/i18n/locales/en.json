@@ -434,7 +434,6 @@
     "yesterday": "Yesterday",
     "modeGroup": "Group",
     "modeAi": "AI",
-    "groupHint": "Group messages — routed through the AI dispatcher",
     "aiHint": "Private conversation with the project AI",
     "placeholderGroup": "Message the group…",
     "placeholderAi": "Ask the AI…",
@@ -469,7 +468,14 @@
     "onlineNow_one": "{{count}} online",
     "onlineNow_other": "{{count}} online",
     "trialOverTitle": "Trial AI has run out",
-    "trialOverText": "The free trial budget for this company is spent. Connect your own LLM key to keep the chat running — it takes a minute."
+    "trialOverText": "The free trial budget for this company is spent. Connect your own LLM key to keep the chat running — it takes a minute.",
+    "emptyTitle": "This is where the work starts",
+    "emptyLead": "Write as you would in any chat. The AI dispatcher reads along and turns what matters into tasks, so nothing gets lost in the scroll.",
+    "emptyTry": "Try something like:",
+    "emptyEx1": "Landing page is done, please review",
+    "emptyEx2": "@Anna can you take the payment bug?",
+    "emptyEx3": "What is left before the release?",
+    "emptyFoot": "Everything here stays inside this project."
   },
   "composer": {
     "dropHere": "Drop to attach",

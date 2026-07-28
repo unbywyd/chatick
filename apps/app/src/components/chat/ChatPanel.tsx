@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useImperativeHandle, useMemo, useRef, useState } from 'react'
 import { useNavigate, useParams, useSearchParams } from 'react-router-dom'
 import { useInfiniteQuery, useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { ArrowDown, Bot, CheckSquare, Copy, FileText, Users, BrainCircuit, KeyRound, Loader2, Menu, MoreHorizontal, NotebookPen, PanelsTopLeft, Reply, Search, Settings, Share2, Trash2, UserPlus, X } from 'lucide-react'
+import { ArrowDown, Bot, CheckSquare, Copy, FileText, Users, BrainCircuit, KeyRound, Loader2, Menu, MoreHorizontal, NotebookPen, PanelsTopLeft, Reply, Search, Settings, Share2, Trash2, UserPlus, X, MessagesSquare } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
 import ReactMarkdown from 'react-markdown'
 import { toast } from 'sonner'
@@ -84,6 +84,8 @@ export function ChatPanel({
   const [replyTo, setReplyTo] = useState<ChatMessage | null>(null)
   /** счётчик-сигнал: меняется — композер забирает фокус */
   const [focusComposer, setFocusComposer] = useState(0)
+  /** текст примера, подставляемый в поле по клику из пустого чата */
+  const [prefill, setPrefill] = useState<string | null>(null)
   /** то же для поля ИИ */
   const [focusAiInput, setFocusAiInput] = useState(0)
   /** сообщение, которым делятся */
@@ -473,8 +475,39 @@ export function ChatPanel({
                 <Loader2 className="size-4 animate-spin text-muted-foreground" />
               </p>
             )}
+            {/* Пустой чат объясняет, что здесь делают: одна серая строка не
+                отвечала ни на «куда я попал», ни на «с чего начать». Примеры
+                кликабельны — начать разговор проще, когда есть с чего. */}
             {feed.length === 0 && !history.isLoading && (
-              <p className="pt-6 text-center text-sm text-muted-foreground">{t('chat.groupHint')}</p>
+              <div className="mx-auto max-w-sm px-4 pt-10 text-center">
+                <span className="mx-auto grid size-14 place-items-center rounded-2xl bg-brand/10 text-brand">
+                  <MessagesSquare className="size-7" />
+                </span>
+                <h3 className="mt-4 text-base font-semibold">{t('chat.emptyTitle')}</h3>
+                <p className="mt-2 text-sm leading-relaxed text-muted-foreground">{t('chat.emptyLead')}</p>
+
+                {!llmMissing && (
+                  <>
+                    <p className="mt-6 text-xs font-medium uppercase tracking-wide text-muted-foreground">
+                      {t('chat.emptyTry')}
+                    </p>
+                    <div className="mt-3 flex flex-col gap-2">
+                      {['emptyEx1', 'emptyEx2', 'emptyEx3'].map((k) => (
+                        <button
+                          key={k}
+                          type="button"
+                          onClick={() => setPrefill(t(`chat.${k}`))}
+                          className="cursor-pointer rounded-lg border bg-card px-3 py-2 text-start text-sm text-muted-foreground transition-colors hover:border-brand/50 hover:bg-accent hover:text-foreground"
+                        >
+                          {t(`chat.${k}`)}
+                        </button>
+                      ))}
+                    </div>
+                  </>
+                )}
+
+                <p className="mt-6 text-xs text-muted-foreground">{t('chat.emptyFoot')}</p>
+              </div>
             )}
             {feed.map((m, i) => {
               const prev = feed[i - 1]
@@ -653,6 +686,8 @@ export function ChatPanel({
           mentions={mentionItems}
           onSend={(p) => send(p, 'group')}
           focusSignal={focusComposer}
+          prefill={prefill}
+          onPrefillUsed={() => setPrefill(null)}
           canBypassAi={myRole === 'owner' || myRole === 'admin'}
         />
       </footer>
