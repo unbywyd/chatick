@@ -10,6 +10,9 @@ import {
   timeEntries,
   projectMembers,
   projects,
+  companies,
+  companyMembers,
+  companyInvites,
   credentials,
   taskComments,
   taskGroups,
@@ -19,7 +22,10 @@ import {
 import {
   canCreateProjects,
   companyRoleOf,
+  defaultDomainPermissions,
   defaultPermissions,
+  resolveDomains,
+  PERMISSION_LEVELS,
   hasPermission,
   memberDomains,
   projectRoleOf,
@@ -29,6 +35,8 @@ import { nanoid } from 'nanoid'
 import { authenticateBridge, closeSession, startDeviceAuth, pollDeviceAuth, type BridgeIdentity } from '../lib/bridge-auth.js'
 import { connectDoc, guideDoc } from '../lib/bridge-docs.js'
 import { logActivity } from '../lib/audit.js'
+import { sendAddedToProjectMail } from '../lib/mails.js'
+import { sendInviteMail } from '../lib/mail-invite.js'
 import { createNote, noteToTask, NOTE_TYPES, type NoteType } from './notes.js'
 import { readTimeConfig } from './time.js'
 import { readPresence } from './auth.js'
@@ -978,6 +986,264 @@ bridgeRoute.post('/tasks/:id/comments', async (c) => {
 })
 
 // --- Спринты ----------------------------------------------------------------
+
+// --- команда проекта -------------------------------------------------------
+// Управлять командой из редактора: посмотреть, кто есть, позвать человека,
+// сменить роль и уровни доступа. Исключение намеренно оставлено интерфейсу:
+// оно необратимо (уходит письмо, рвутся туннели), а цена ошибки ассистента
+// здесь выше, чем удобство. Понизить до «только чтение» мост может — это
+// откатывается одной строкой.
+
+/** Кто распоряжается людьми проекта: owner/admin проекта или admin компании. */
+async function managesTeam(projectId: string, userId: string): Promise<boolean> {
+  const project = await db.query.projects.findFirst({ where: eq(projects.id, projectId) })
+  if (!project) return false
+  const m = await projectRoleOf(projectId, userId)
+  if (m?.role === 'owner' || m?.role === 'admin') return true
+  return (await companyRoleOf(project.companyId, userId)) === 'admin'
+}
+
+bridgeRoute.get('/members', async (c) => {
+  const id = auth(c as never)
+  const scope = await resolveProject(c as never)
+  if ('error' in scope) return c.json({ error: scope.error }, scope.status)
+  const denied = await require(c as never, 'tasks.read', scope.projectId)
+  if (denied) return c.json(denied, 403)
+
+  const rows = await db
+    .select({ m: projectMembers, u: users })
+    .from(projectMembers)
+    .innerJoin(users, eq(users.id, projectMembers.userId))
+    .where(eq(projectMembers.projectId, scope.projectId))
+
+  return c.json({
+    canManage: await managesTeam(scope.projectId, id.userId),
+    members: rows.map((r) => ({
+      userId: r.u.id,
+      name: r.u.name,
+      email: r.u.email,
+      role: r.m.role,
+      jobTitle: r.m.jobTitle || undefined,
+      responsibility: r.m.responsibility || undefined,
+      permissions: resolveDomains(r.m.role, r.m.permissions),
+    })),
+  })
+})
+
+/** Кандидаты: люди компании, которых ещё нет в проекте. */
+bridgeRoute.get('/members/available', async (c) => {
+  const id = auth(c as never)
+  const scope = await resolveProject(c as never)
+  if ('error' in scope) return c.json({ error: scope.error }, scope.status)
+  if (!(await managesTeam(scope.projectId, id.userId))) {
+    return c.json({ error: 'Forbidden: only project owners/admins manage the team' }, 403)
+  }
+  const project = await db.query.projects.findFirst({ where: eq(projects.id, scope.projectId) })
+  if (!project) return c.json({ error: 'Project not found' }, 404)
+
+  const inProject = new Set(
+    (await db.query.projectMembers.findMany({ where: eq(projectMembers.projectId, scope.projectId) })).map(
+      (m) => m.userId,
+    ),
+  )
+  const rows = await db
+    .select({ m: companyMembers, u: users })
+    .from(companyMembers)
+    .innerJoin(users, eq(users.id, companyMembers.userId))
+    .where(eq(companyMembers.companyId, project.companyId))
+
+  return c.json({
+    canInviteOutsiders: (await companyRoleOf(project.companyId, id.userId)) === 'admin',
+    candidates: rows
+      .filter((r) => !inProject.has(r.u.id))
+      .map((r) => ({ userId: r.u.id, name: r.u.name, email: r.u.email, companyRole: r.m.role })),
+  })
+})
+
+bridgeRoute.post('/members', async (c) => {
+  const id = auth(c as never)
+  const scope = await resolveProject(c as never)
+  if ('error' in scope) return c.json({ error: scope.error }, scope.status)
+  if (!(await managesTeam(scope.projectId, id.userId))) {
+    return c.json({ error: 'Forbidden: only project owners/admins manage the team' }, 403)
+  }
+  const project = await db.query.projects.findFirst({ where: eq(projects.id, scope.projectId) })
+  if (!project) return c.json({ error: 'Project not found' }, 404)
+
+  const body = (await c.req.json().catch(() => ({}))) as {
+    userId?: string
+    email?: string
+    role?: string
+    companyRole?: string
+  }
+  const role = body.role === 'admin' ? 'admin' : 'member'
+
+  // По email искать удобнее: в разговоре звучит адрес, а не внутренний id.
+  let userId = body.userId
+  const email = body.email?.toLowerCase().trim()
+  if (!userId && email) {
+    const u = await db.query.users.findFirst({ where: eq(users.email, email) })
+    if (u) userId = u.id
+  }
+  if (!userId && !email) {
+    return c.json({ error: 'Pass userId or email. See GET /x/members/available.' }, 400)
+  }
+
+  // Человек уже в компании — просто включаем в проект.
+  if (userId && (await companyRoleOf(project.companyId, userId))) {
+    if (await projectRoleOf(scope.projectId, userId)) return c.json({ error: 'Already a member' }, 409)
+
+    await db.insert(projectMembers).values({
+      projectId: scope.projectId,
+      userId,
+      role,
+      permissions: JSON.stringify(defaultDomainPermissions(role)),
+    })
+
+    const target = await db.query.users.findFirst({ where: eq(users.id, userId) })
+    if (target) {
+      await sendAddedToProjectMail({
+        to: target.email,
+        locale: target.locale,
+        projectId: scope.projectId,
+        projectName: project.name,
+      })
+    }
+    await logActivity({
+      projectId: scope.projectId,
+      actorId: id.userId,
+      action: 'create',
+      entityType: 'member',
+      entityId: userId,
+      entityLabel: `${target?.name || target?.email || userId} added to the project`,
+    })
+
+    return c.json({ added: true, userId, role, permissions: defaultDomainPermissions(role) }, 201)
+  }
+
+  // Человека в компании нет. Звать со стороны — решение уровня компании, и
+  // принимает его только её админ. Одним запросом: приглашение в компанию
+  // несёт с собой проект, так что второго шага в интерфейсе не нужно.
+  if (!email) {
+    return c.json({ error: 'User is not a company member — pass email to invite them' }, 400)
+  }
+  if ((await companyRoleOf(project.companyId, id.userId)) !== 'admin') {
+    return c.json(
+      { error: 'Forbidden: only a company admin can invite people from outside the company' },
+      403,
+    )
+  }
+
+  const companyRole =
+    body.companyRole === 'admin' || body.companyRole === 'manager' ? body.companyRole : 'member'
+
+  const pending = await db.query.companyInvites.findFirst({
+    where: and(
+      eq(companyInvites.companyId, project.companyId),
+      eq(companyInvites.email, email),
+      eq(companyInvites.status, 'pending'),
+    ),
+  })
+  if (pending) return c.json({ error: 'Invite already pending for this email' }, 409)
+
+  const token = nanoid(32)
+  await db.insert(companyInvites).values({
+    companyId: project.companyId,
+    email,
+    role: companyRole,
+    token,
+    invitedById: id.userId,
+    projectId: scope.projectId,
+  })
+
+  const company = await db.query.companies.findFirst({ where: eq(companies.id, project.companyId) })
+  const inviter = await db.query.users.findFirst({ where: eq(users.id, id.userId) })
+  await sendInviteMail({
+    to: email,
+    companyName: company?.name ?? '',
+    role: companyRole,
+    token,
+    inviterLocale: inviter?.locale,
+  })
+
+  return c.json(
+    {
+      invited: true,
+      email,
+      companyRole,
+      projectId: scope.projectId,
+      note: 'Invite sent. The person joins the project once they accept it.',
+    },
+    201,
+  )
+})
+
+bridgeRoute.patch('/members/:userId', async (c) => {
+  const id = auth(c as never)
+  const scope = await resolveProject(c as never)
+  if ('error' in scope) return c.json({ error: scope.error }, scope.status)
+  if (!(await managesTeam(scope.projectId, id.userId))) {
+    return c.json({ error: 'Forbidden: only project owners/admins manage the team' }, 403)
+  }
+  const userId = c.req.param('userId')
+  const target = await projectRoleOf(scope.projectId, userId)
+  if (!target) return c.json({ error: 'Not a project member' }, 404)
+  if (target.role === 'owner') return c.json({ error: 'Project owner cannot be changed' }, 400)
+
+  const body = (await c.req.json().catch(() => ({}))) as {
+    role?: string
+    permissions?: Record<string, string>
+    jobTitle?: string
+    responsibility?: string
+  }
+
+  const patch: Record<string, unknown> = {}
+  if (body.jobTitle !== undefined) patch.jobTitle = String(body.jobTitle).slice(0, 200)
+  if (body.responsibility !== undefined) patch.responsibility = String(body.responsibility).slice(0, 400)
+
+  let domains = resolveDomains(target.role, target.permissions)
+  let role: 'owner' | 'admin' | 'member' = target.role
+
+  if (body.role !== undefined) {
+    if (body.role !== 'admin' && body.role !== 'member') {
+      return c.json({ error: 'role must be "admin" or "member"' }, 400)
+    }
+    if (body.role !== role) {
+      role = body.role
+      // Как и в интерфейсе: смена роли сбрасывает уровни на умолчания новой,
+      // иначе понижение выходит показным.
+      domains = defaultDomainPermissions(role)
+      patch.role = role
+    }
+  }
+
+  if (body.permissions) {
+    for (const [domain, level] of Object.entries(body.permissions)) {
+      if (!(domain in domains)) {
+        return c.json({ error: `Unknown permission domain: ${domain}`, domains: Object.keys(domains) }, 400)
+      }
+      if (!PERMISSION_LEVELS.includes(level as never)) {
+        return c.json({ error: `Level must be one of ${PERMISSION_LEVELS.join(', ')} (got "${level}")` }, 400)
+      }
+      domains = { ...domains, [domain]: level }
+    }
+  }
+
+  if (body.role !== undefined || body.permissions) patch.permissions = JSON.stringify(domains)
+  if (!Object.keys(patch).length) return c.json({ error: 'Nothing to change' }, 400)
+
+  await db.update(projectMembers).set(patch).where(eq(projectMembers.id, target.id))
+  await logActivity({
+    projectId: scope.projectId,
+    actorId: id.userId,
+    action: 'update',
+    entityType: 'member',
+    entityId: userId,
+    entityLabel: patch.role ? `role changed to ${role}` : 'permissions changed',
+  })
+
+  return c.json({ ok: true, userId, role, permissions: domains })
+})
 
 bridgeRoute.get('/sprints', async (c) => {
   const id = auth(c as never)

@@ -172,7 +172,7 @@ export function expandPermissions(domains: DomainPermissions): Record<ProjectPer
  * Читает сохранённые права участника. Поддерживает и НОВЫЙ формат
  * ({tasks,files,resources}: уровень), и СТАРЫЙ (плоские булевы оверрайды).
  */
-function resolveDomains(role: 'owner' | 'admin' | 'member', raw: string | null): DomainPermissions {
+export function resolveDomains(role: 'owner' | 'admin' | 'member', raw: string | null): DomainPermissions {
   const base = defaultDomainPermissions(role)
   if (!raw) return base
   let parsed: Record<string, unknown> = {}
