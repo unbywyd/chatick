@@ -7,6 +7,15 @@ refuses to run otherwise, so a release can never ship without a description.
 
 Written in English only: this file is published on the website.
 
+## 0.2.2 — 2026-07-28
+
+### Fixed
+
+- The tray panel was empty in the installed application, while it worked when
+  run from source: `panel.html` and its preload script were simply missing from
+  the package. The list of packaged files was written out by hand, and these two
+  were forgotten. It now uses patterns instead of a hand-kept list.
+
 ## 0.2.1 — 2026-07-28
 
 ### Fixed

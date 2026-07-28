@@ -1,6 +1,6 @@
 {
   "name": "@chatick/desktop",
-  "version": "0.2.1",
+  "version": "0.2.2",
   "private": true,
   "main": "main.cjs",
   "scripts": {
@@ -24,11 +24,11 @@
     },
     "files": [
       "LICENSE.txt",
-      "main.cjs",
-      "preload.cjs",
-      "offline.html",
+      "*.cjs",
+      "*.html",
       "assets/**/*",
-      "web/**/*"
+      "web/**/*",
+      "package.json"
     ],
     "win": {
       "target": [
