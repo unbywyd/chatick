@@ -15,4 +15,12 @@ if (!fs.existsSync(src)) {
 
 fs.rmSync(dest, { recursive: true, force: true })
 fs.cpSync(src, dest, { recursive: true })
+
+// Панель раздаётся с сайта, чтобы её правки доезжали без переустановки —
+// но вшитая копия остаётся запасной на случай, когда сети нет. Держим их
+// одинаковыми: разошедшиеся версии дают неповторимые баги «у меня работает».
+const panelSrc = path.resolve(here, '../panel.html')
+const panelPublic = path.resolve(here, '../../app/public/panel.html')
+fs.copyFileSync(panelSrc, panelPublic)
+console.log('панель синхронизирована с public/')
 console.log(`web скопирован: ${src} -> ${dest}`)

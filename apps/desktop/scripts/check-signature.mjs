@@ -7,7 +7,7 @@
 //
 // Здесь проверяется результат, а не намерение: кто подписал и до какого числа.
 import { execFileSync } from 'node:child_process'
-import { existsSync } from 'node:fs'
+import { existsSync, readFileSync } from 'node:fs'
 import path from 'node:path'
 
 /** Спрашиваем саму Windows: она и будет судить о подписи у пользователя. */
@@ -33,7 +33,25 @@ function signatureOf(file) {
   }
 }
 
+/**
+ * Панель лежит в двух местах: вшитая (запасная, для работы без сети) и та,
+ * что раздаётся с сайта. Разойдясь, они дают неповторимые баги — у одного
+ * человека панель с сайта, у другого вшитая, и ведут себя они по-разному.
+ */
+function checkPanelCopies() {
+  const a = path.join(process.cwd(), 'panel.html')
+  const b = path.join(process.cwd(), '..', 'app', 'public', 'panel.html')
+  if (!existsSync(a) || !existsSync(b)) return
+  if (readFileSync(a, 'utf8') !== readFileSync(b, 'utf8')) {
+    console.log(
+      '\n  ВНИМАНИЕ: apps/desktop/panel.html и apps/app/public/panel.html разошлись.\n' +
+        '  Выполните pnpm --filter @chatick/desktop sync-web перед сборкой.\n',
+    )
+  }
+}
+
 export default async function checkSignature(context) {
+  checkPanelCopies()
   // Пакет для магазина подписывает Microsoft при публикации — своя подпись
   // там не нужна и даже мешает. Ругаться на неё было бы ложной тревогой.
   const forStore = (context.artifactPaths ?? []).some((f) => f.endsWith('.appx') || f.endsWith('.msix'))

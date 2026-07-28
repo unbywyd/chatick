@@ -376,7 +376,25 @@ function createPanel() {
     },
   })
 
-  panel.loadFile(path.join(__dirname, 'panel.html'))
+  // Панель — с сайта, как и окно: её правки тогда доезжают сами, без
+  // переустановки. Половина обновлений оболочки была именно панелью.
+  //
+  // Вшитая копия остаётся запасной: без сети панель обязана открыться, иначе
+  // трей превращается в мёртвый значок. Переключение молчаливое — человеку
+  // незачем знать, откуда взялась разметка.
+  const localPanel = path.join(__dirname, 'panel.html')
+  if (isDev || LOAD_MODE !== 'remote') {
+    panel.loadFile(localPanel)
+  } else {
+    panel.loadURL(`${APP_URL}/panel.html`, {
+      extraHeaders: ['pragma: no-cache', 'cache-control: no-cache', ''].join('\n'),
+    })
+    panel.webContents.once('did-fail-load', (_e, code) => {
+      if (code === -3) return // отменённая навигация — не ошибка
+      console.warn('[desktop] панель с сайта не загрузилась, беру вшитую:', code)
+      panel.loadFile(localPanel)
+    })
+  }
 
   // Состояние — сразу после загрузки. Панель создаётся по первому клику, и
   // send() до окончания загрузки уходит в пустоту: окно оставалось пустым до

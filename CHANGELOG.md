@@ -7,6 +7,23 @@ refuses to run otherwise, so a release can never ship without a description.
 
 Written in English only: this file is published on the website.
 
+## 0.3.6 — 2026-07-28
+
+### Changed
+
+- The tray panel is now loaded from the site, like the app window already
+  was — so fixes to it arrive on their own, without reinstalling. Half of the
+  releases that required a new installer today changed nothing but the panel.
+  A built-in copy stays as a fallback: with no network the panel must still
+  open, otherwise the tray is a dead icon.
+
+### Fixed
+
+- Task changes reach the tray immediately instead of waiting for the next
+  poll. The event was only broadcast inside a project room, and the tray —
+  which lists tasks from every project — belongs to none of them. That is why
+  it only came alive when you opened the app window.
+
 ## 0.3.5 — 2026-07-28
 
 ### Fixed
