@@ -185,7 +185,28 @@
         margin-top: 8px;
       }
       .body { min-width: 0; flex: 1; }
+      /* Кнопка-обёртка вокруг названия задачи. Стили были инлайновыми, и
+         кнопка оставалась строчной — вложенный текст в две строки в ней не
+         раскладывался. */
+      .body-btn {
+        display: block;
+        border: 0; padding: 0;
+        background: none; color: inherit;
+        font: inherit; text-align: start; cursor: pointer;
+      }
       .title { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+      /* Задачи — не строка списка, а формулировка: обрезать её посередине
+         значит прятать смысл. Переносим на две строки, дальше многоточие.
+         Длинное слово (ссылка, путь) рвём принудительно, иначе оно вылезает
+         за край независимо от переноса. */
+      .row .title.wrap {
+        white-space: normal;
+        display: -webkit-box;
+        -webkit-line-clamp: 2;
+        -webkit-box-orient: vertical;
+        overflow-wrap: anywhere;
+        line-height: 1.35;
+      }
       .sub {
         color: var(--muted); font-size: 11.5px;
         white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
@@ -202,7 +223,12 @@
 
       /* Задача — то, на что тратится время: статус и таймер должны меняться
          здесь же, без похода в приложение. */
-      .task-actions { display: flex; gap: 3px; flex: 0 0 auto; align-self: center; }
+      .task-actions {
+        display: flex; gap: 3px; flex: 0 0 auto; align-self: center;
+        /* Кнопки шли внахлёст на текст: у flex-элемента с текстом внутри
+           минимальная ширина по содержимому, и он не давал себя сжать. */
+        margin-inline-start: 4px;
+      }
       /* Кнопки не должны налезать на текст: место под них резервируем всегда. */
       .row .body { min-width: 0; }
 
@@ -690,7 +716,7 @@
               <button class="row" data-link="${escape(n.link)}" data-notification="${escape(n.id)}">
                 ${n.unread ? '<span class="badge-dot"></span>' : '<span class="badge-dot" style="background:transparent"></span>'}
                 <span class="body">
-                  <span class="title">${escape(n.summary || n.title)}</span>
+                  <span class="title wrap">${escape(n.summary || n.title)}</span>
                   ${n.summary ? `<span class="sub">${escape(n.title)}</span>` : ''}
                 </span>
               </button>`)
@@ -758,9 +784,8 @@
               rows.push(`
               <div class="row ${t.status === 'done' ? 'done-row' : ''}">
                 ${statusIcon(t.status || 'todo', 15)}
-                <button class="body" data-link="${escape(t.link)}"
-                        style="border:0;background:none;color:inherit;font:inherit;text-align:start;cursor:pointer;padding:0">
-                  <span class="title">${escape(t.number)} ${escape(t.title)}</span>
+                <button class="body body-btn" data-link="${escape(t.link)}">
+                  <span class="title wrap">${escape(t.number)} ${escape(t.title)}</span>
                   ${t.due ? `<span class="sub">${T('due', 'due')} ${escape(t.due)}</span>` : ''}
                 </button>
                 <span class="task-actions">
