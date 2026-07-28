@@ -296,15 +296,17 @@ export function useDesktopSync() {
           ? {
               id: company.id,
               name: company.name,
-              canGrantCompany: company.myRole === 'admin' || company.myRole === 'manager',
+              // Подключиться к своей компании может любой её участник: туннель
+              // открывает только те проекты, где человек состоит, и с его же
+              // правами — больше своего он ассистенту не выдаст.
+              canGrantCompany: true,
             }
           : null,
       companies: authed
         ? myCompanies.map((c) => ({
             id: c.id,
             name: c.name,
-            // Компанию целиком выдаёт лишь тот, кто ей управляет
-            canGrantCompany: c.myRole === 'admin' || c.myRole === 'manager',
+            canGrantCompany: true,
           }))
         : [],
       connections: (authed ? bridgeSessions.data?.items ?? [] : []).map((x) => ({

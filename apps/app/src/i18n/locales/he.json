@@ -882,7 +882,8 @@
     "nothingFound": "לא נמצא דבר",
     "groupCompanies": "חברות",
     "groupProjects": "פרויקטים",
-    "allProjectsOf": "כל הפרויקטים, כולל עתידיים"
+    "allProjectsOf": "כל הפרויקטים, כולל עתידיים",
+    "singleProjectNote": "— לצמצם לאחד"
   },
   "backup": {
     "title": "ייצוא וייבוא",

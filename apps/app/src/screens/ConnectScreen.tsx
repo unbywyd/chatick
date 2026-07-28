@@ -4,7 +4,7 @@ import { useNavigate, useSearchParams } from 'react-router-dom'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { useTranslation } from 'react-i18next'
 import { toast } from 'sonner'
-import { ArrowLeft, Bot, Check, Copy, Plug, ShieldCheck, X, Search, Building2, FolderKanban } from 'lucide-react'
+import { ArrowLeft, Bot, Check, ChevronDown, Copy, Plug, ShieldCheck, X, Search, Building2, FolderKanban } from 'lucide-react'
 import { api, API_URL, getSessionToken, type Company, type ProjectListItem } from '@/lib/api'
 import { cn } from '@/lib/utils'
 import { Logo } from '@/components/Logo'
@@ -75,12 +75,13 @@ export function ConnectPanel({ onClose }: { onClose?: () => void }) {
   const myCompanies = companies.data?.companies ?? []
   const companyNames = new Map(myCompanies.map((c) => [c.id, c.name]))
 
-  // Цели: компании, которыми человек управляет, и его проекты. Раньше в вебе
-  // компанию целиком выдать было нельзя вовсе — только проект.
+  // Цели: компании человека и его проекты. Компания — обычный выбор:
+  // приложение мультипроектное, и туннель на один проект заставлял бы
+  // переподключаться при каждом переходе. Больше своего человек так не выдаёт:
+  // туннель компании открывает ровно те проекты, где он состоит, и с его же
+  // правами — это проверяется на каждом запросе.
   const targets = [
-    ...myCompanies
-      .filter((c) => c.myRole === 'admin' || c.myRole === 'manager')
-      .map((c) => ({ key: `c:${c.id}`, name: c.name, company: null as string | null, whole: true })),
+    ...myCompanies.map((c) => ({ key: `c:${c.id}`, name: c.name, company: null as string | null, whole: true })),
     ...myProjects.map((p) => ({
       key: `p:${p.id}`,
       name: p.name,
@@ -91,6 +92,7 @@ export function ConnectPanel({ onClose }: { onClose?: () => void }) {
     })),
   ]
   const [q, setQ] = useState('')
+  const [showProjects, setShowProjects] = useState(false)
   const match = (name: string, company: string | null) => {
     const needle = q.trim().toLowerCase()
     if (!needle) return true
@@ -279,21 +281,38 @@ export function ConnectPanel({ onClose }: { onClose?: () => void }) {
 
                   {shownProjects.length > 0 && (
                     <>
-                      <p className="px-0.5 pb-1 pt-2.5 text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">
+                      {/* Один проект — редкий случай: сузить ассистента, когда
+                          редактор чужой или ключ не хочется давать широко.
+                          Обычному человеку это только мешает выбирать, поэтому
+                          свёрнуто. Поиск раскрывает само: иначе найденное
+                          пряталось бы за закрытым блоком. */}
+                      <button
+                        type="button"
+                        onClick={() => setShowProjects((v) => !v)}
+                        className="mt-2.5 flex w-full items-center gap-1 px-0.5 py-1 text-[10px] font-semibold uppercase tracking-wider text-muted-foreground hover:text-foreground"
+                      >
+                        <ChevronDown
+                          className={cn('size-3 transition-transform', !(showProjects || q.trim()) && '-rotate-90')}
+                        />
                         {t('connect.groupProjects')}
-                      </p>
-                      <div className="space-y-1">
-                        {shownProjects.map((x) => (
-                          <TargetRow
-                            key={x.key}
-                            active={projectId === x.key}
-                            onClick={() => setProjectId(x.key)}
-                            title={x.name}
-                            note={x.company}
-                            icon={<FolderKanban className="size-4" />}
-                          />
-                        ))}
-                      </div>
+                        <span className="font-normal normal-case tracking-normal opacity-60">
+                          {t('connect.singleProjectNote')}
+                        </span>
+                      </button>
+                      {(showProjects || q.trim()) && (
+                        <div className="space-y-1">
+                          {shownProjects.map((x) => (
+                            <TargetRow
+                              key={x.key}
+                              active={projectId === x.key}
+                              onClick={() => setProjectId(x.key)}
+                              title={x.name}
+                              note={x.company}
+                              icon={<FolderKanban className="size-4" />}
+                            />
+                          ))}
+                        </div>
+                      )}
                     </>
                   )}
 

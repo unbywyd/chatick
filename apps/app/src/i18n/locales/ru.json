@@ -886,7 +886,8 @@
     "nothingFound": "Ничего не найдено",
     "groupCompanies": "Компании",
     "groupProjects": "Проекты",
-    "allProjectsOf": "Все проекты, включая будущие"
+    "allProjectsOf": "Все проекты, включая будущие",
+    "singleProjectNote": "— сузить до одного"
   },
   "backup": {
     "title": "Экспорт и импорт",

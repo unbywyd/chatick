@@ -882,7 +882,8 @@
     "nothingFound": "Nothing found",
     "groupCompanies": "Companies",
     "groupProjects": "Projects",
-    "allProjectsOf": "All projects, including future ones"
+    "allProjectsOf": "All projects, including future ones",
+    "singleProjectNote": "— narrow to one"
   },
   "backup": {
     "title": "Export & import",

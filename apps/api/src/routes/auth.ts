@@ -284,15 +284,21 @@ auth.post('/bridge/approve', requireSession, async (c) => {
 
   const { approveUserCode } = await import('../lib/bridge-auth.js')
 
-  // Доступ ко ВСЕЙ компании — только админам и менеджерам: обычный участник
-  // не должен раздавать ассистенту проекты, которыми сам не управляет.
+  // Подключиться к компании может любой её участник. Раньше это давали только
+  // админам и менеджерам — из опасения, что участник «раздаст ассистенту
+  // проекты, которыми не управляет». Опасение неверное: туннель компании
+  // открывает ровно те проекты, где человек СОСТОИТ (resolveProject проверяет
+  // членство), и с ровно его правами (hasPermission на каждом запросе).
+  // Больше, чем есть у самого человека, ассистент так не получит.
+  //
+  // Взамен ограничение загоняло обычного участника — то есть большинство — в
+  // туннель на один проект, хотя приложение мультипроектное: переподключаться
+  // при каждом переходе между проектами никто не станет.
   if (companyId) {
     const membership = await db.query.companyMembers.findFirst({
       where: and(eq(companyMembers.companyId, companyId), eq(companyMembers.userId, sub)),
     })
-    if (!membership || (membership.role !== 'admin' && membership.role !== 'manager')) {
-      return c.json({ error: 'Only company admins and managers can grant company-wide access' }, 403)
-    }
+    if (!membership) return c.json({ error: 'You are not a member of this company' }, 403)
     const ok = await approveUserCode(code, sub, { companyId })
     return ok ? c.json({ ok: true }) : c.json({ error: 'Code not found or expired' }, 404)
   }
