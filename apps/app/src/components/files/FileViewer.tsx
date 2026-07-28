@@ -5,6 +5,7 @@ import * as XLSX from 'xlsx'
 import { api } from '@/lib/api'
 import { cn } from '@/lib/utils'
 import { Button } from '@/components/ui/button'
+import { ZoomableImage } from '@/components/ZoomableImage'
 
 export type ViewerFile = { id: string; name: string; mime: string; hasOriginal?: boolean }
 
@@ -131,7 +132,7 @@ export function FileViewer({
         ) : !url ? (
           <Loader2 className="size-6 animate-spin text-white/70" />
         ) : kind === 'image' ? (
-          <img src={url} alt={file.name} className="max-h-full max-w-full rounded-lg object-contain" />
+          <ZoomableImage src={url} alt={file.name} />
         ) : kind === 'video' ? (
           <video src={url} controls autoPlay className="max-h-full max-w-full rounded-lg" />
         ) : kind === 'audio' ? (

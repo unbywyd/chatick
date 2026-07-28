@@ -76,17 +76,24 @@ export function TaskNotes({ taskId, canEdit, notesPending }: { taskId: string; c
 
       {!loading && notes.length === 0 && <p className="text-xs text-muted-foreground">{t('notes.empty')}</p>}
 
-      <ul className="space-y-2">
+      <ul className="space-y-1">
         {notes.map((n) => {
           const meta = KIND[n.kind]
           const Icon = meta.icon
           return (
-            <li key={n.id} className={cn('rounded-lg border p-2.5', meta.className)}>
-              <div className="mb-1 flex items-center gap-1.5">
+            /* Без рамки и заливки: это подсказки к задаче, а не сообщения об
+               ошибках. Кнопка удаления показывается при наведении — висеть
+               постоянно ей незачем, убирают заметки редко. */
+            <li key={n.id} className="group -mx-1 rounded-md px-1 py-1 hover:bg-secondary/40">
+              <div className="mb-0.5 flex items-center gap-1.5">
                 <Icon className={cn('size-3.5', meta.dot)} />
                 <span className="text-xs font-medium">{t(`notes.kind.${n.kind}`)}</span>
                 {canEdit && (
-                  <button className="ms-auto text-muted-foreground hover:text-destructive" title={t('files.delete')} onClick={() => remove.mutate(n.id)}>
+                  <button
+                    className="ms-auto text-muted-foreground opacity-0 transition-opacity hover:text-destructive focus-visible:opacity-100 group-hover:opacity-100"
+                    title={t('files.delete')}
+                    onClick={() => remove.mutate(n.id)}
+                  >
                     <X className="size-3.5" />
                   </button>
                 )}

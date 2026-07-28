@@ -500,7 +500,9 @@ export function TaskDrawer({
             >
               {/* Превью картинок сеткой (удалённые — не показываем как превью) */}
               {(attachments.data ?? []).some((a) => a.mime.startsWith('image/') && !a.deleted) && (
-                <div className="mb-2 grid grid-cols-3 gap-2">
+                // Мельче и больше в ряд: это опознавательные знаки, а не
+                // галерея — разглядывают их в просмотрщике по клику.
+                <div className="mb-2 grid grid-cols-[repeat(auto-fill,minmax(84px,1fr))] gap-2">
                   {attachments.data!
                     .filter((a) => a.mime.startsWith('image/') && !a.deleted)
                     .map((a) => (
