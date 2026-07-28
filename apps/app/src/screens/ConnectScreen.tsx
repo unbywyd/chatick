@@ -131,7 +131,15 @@ export function ConnectPanel({ onClose }: { onClose?: () => void }) {
     mutationFn: () =>
       api('/api/v1/auth/bridge/approve', {
         method: 'POST',
-        body: JSON.stringify({ code: code.trim(), projectId }),
+        // Ключ цели несёт её вид: «c:» — компания целиком, «p:» — проект.
+        // Префикс надо снять, иначе сервер ищет проект с таким id и отвечает
+        // «вы не участник этого проекта» — при том, что участник.
+        body: JSON.stringify({
+          code: code.trim(),
+          ...(projectId.startsWith('c:')
+            ? { companyId: projectId.slice(2) }
+            : { projectId: projectId.replace(/^p:/, '') }),
+        }),
       }),
     onSuccess: () => {
       toast.success(t('connect.approved'))
