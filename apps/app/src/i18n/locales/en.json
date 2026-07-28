@@ -709,7 +709,9 @@
     "pricingHint": "Known models inherit default prices. Set your own to override; leave blank to reset.",
     "inputPerM": "Input /1M",
     "outputPerM": "Output /1M",
-    "activeNow": "Active now"
+    "activeNow": "Working now",
+    "notActiveHint": "No company key yet — the trial AI is answering meanwhile",
+    "selected": "Selected"
   },
   "notes": {
     "title": "AI notes",

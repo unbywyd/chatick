@@ -81,6 +81,12 @@ export function AiUsageTab({ projectId, isAdmin }: { projectId: string; isAdmin:
         <div className="grid gap-2 sm:grid-cols-3">
           {(['company', 'trial', 'custom'] as const).map((s) => {
             const disabled = s === 'trial' && !cfg?.trialAvailable
+            const picked = source === s
+            const active = cfg?.activeSource === s
+            // Выбран, но не работает — так бывает у «ключа компании», пока
+            // ключа нет: за него отвечает пробный. Молчать об этом нельзя,
+            // но и подсвечивать две карточки сразу — значит противоречить себе.
+            const pickedButIdle = picked && Boolean(cfg?.activeSource) && !active
             return (
               <button
                 key={s}
@@ -88,20 +94,27 @@ export function AiUsageTab({ projectId, isAdmin }: { projectId: string; isAdmin:
                 onClick={() => setSource(s)}
                 className={cn(
                   'rounded-lg border p-3 text-start text-sm transition-colors disabled:opacity-50',
-                  source === s ? 'border-brand bg-accent' : 'hover:bg-secondary',
+                  // Подсветка — у того, кто работает: это ответ на вопрос
+                  // «какой ИИ сейчас обслуживает проект».
+                  active ? 'border-brand bg-accent' : picked ? 'border-border/80 bg-secondary/50' : 'hover:bg-secondary',
                 )}
               >
-                <div className="flex items-center gap-2 font-medium">
+                <div className="flex flex-wrap items-center gap-2 font-medium">
                   {t(`ai.sourceOpt.${s}.label`)}
-                  {/* Настройка и действительность расходятся: без ключа компании
-                      чат обслуживает пробный ИИ. Показываем, что работает сейчас. */}
-                  {cfg?.activeSource === s && (
+                  {active && (
                     <span className="rounded-full bg-brand/15 px-2 py-0.5 text-[10px] font-semibold text-brand">
                       {t('ai.activeNow')}
                     </span>
                   )}
+                  {picked && !active && (
+                    <span className="rounded-full border px-2 py-0.5 text-[10px] font-medium text-muted-foreground">
+                      {t('ai.selected')}
+                    </span>
+                  )}
                 </div>
-                <div className="mt-0.5 text-xs text-muted-foreground">{t(`ai.sourceOpt.${s}.hint`)}</div>
+                <div className="mt-0.5 text-xs text-muted-foreground">
+                  {pickedButIdle ? t('ai.notActiveHint') : t(`ai.sourceOpt.${s}.hint`)}
+                </div>
               </button>
             )
           })}
