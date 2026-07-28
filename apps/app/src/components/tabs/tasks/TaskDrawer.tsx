@@ -38,6 +38,7 @@ import { RichEditor } from '@/components/ui/rich-editor'
 import { Avatar } from '@/components/ui/avatar'
 import { TaskComments } from './TaskComments'
 import { TaskNotes } from './TaskNotes'
+import { TaskChecklist } from './TaskChecklist'
 import { usePasteFiles } from '@/hooks/usePasteFiles'
 import { useProjectSocket } from '@/hooks/useProjectSocket'
 import { STATUSES, PRIORITIES, STATUS_ICON, STATUS_COLOR, PRIORITY_DOT, fmtEstimate, type Task, type Member, type TaskGroup } from './types'
@@ -792,6 +793,10 @@ export function TaskDrawer({
               <RichEditor value={task.description} onChange={() => {}} mentions={[]} preset="full" readOnly />
             </div>
           )}
+
+          {/* Чек-лист между описанием и вложениями: это часть постановки
+              задачи, а не приложение к ней. */}
+          <TaskChecklist taskId={task.id} canEdit={canEdit} />
 
           {attachmentsSection}
 

@@ -160,6 +160,15 @@ Example — handle everything waiting for me:
   POST   /x/tasks              {"title","description?","assignee?","status?","priority?","dueDate?","estimateMinutes?","sprintId?"}
   PATCH  /x/tasks/<id>         any subset of the same fields
   DELETE /x/tasks/<id>
+  GET    /x/tasks/<id>/checklist          items, done/total
+  POST   /x/tasks/<id>/checklist          {"items":["...","..."]} or {"text":"...","note":"..."}
+  PATCH  /x/tasks/<id>/checklist/<itemId> {"done"?, "note"?, "text"?}
+
+  A checklist is the task broken into steps, or questions waiting for an
+  answer. The note under an item is optional — most items are just things to
+  do. Ticking is manual and reversible: answering and considering it done are
+  separate decisions, and nothing happens automatically when all are ticked.
+
   GET    /x/tasks/<id>/comments
   POST   /x/tasks/<id>/comments   {"text"}
   GET    /x/sprints

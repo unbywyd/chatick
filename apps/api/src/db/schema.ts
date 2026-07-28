@@ -323,6 +323,36 @@ export const taskComments = pgTable(
 // Тело — markdown, генерируется ИИ при создании задачи (если включено generateTaskNotes).
 export const taskNoteKind = pgEnum('task_note_kind', ['fact', 'issue', 'recommendation', 'rebuttal'])
 
+/**
+ * Чек-лист задачи (SPEC §8.37).
+ *
+ * Задача часто не одно действие, а список: пройтись и отметить. К пункту
+ * иногда нужен ответ, но чаще нет — поэтому заметка необязательна.
+ *
+ * Галочки ставятся только руками: ответить и счесть сделанным — разные
+ * решения. Права те же, что у самой задачи: чек-лист её часть, а не
+ * отдельная сущность со своим доступом.
+ */
+export const taskChecklist = pgTable(
+  'task_checklist',
+  {
+    id: id(),
+    taskId: text('task_id').notNull().references(() => tasks.id, { onDelete: 'cascade' }),
+    projectId: text('project_id').notNull().references(() => projects.id, { onDelete: 'cascade' }),
+    text: text('text').notNull(),
+    /** Ответ или заметка под пунктом; пусто — обычное дело. */
+    note: text('note').notNull().default(''),
+    done: boolean('done').notNull().default(false),
+    // Кто закрыл — первое, что спрашивают в задаче на несколько человек.
+    doneById: text('done_by_id').references(() => users.id, { onDelete: 'set null' }),
+    doneAt: timestamp('done_at', { withTimezone: true }),
+    sortOrder: integer('sort_order').notNull().default(0),
+    createdAt: createdAt(),
+    updatedAt: updatedAt(),
+  },
+  (t) => [index('task_checklist_task_idx').on(t.taskId, t.sortOrder)],
+)
+
 export const taskNotes = pgTable(
   'task_notes',
   {

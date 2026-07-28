@@ -1266,5 +1266,13 @@
     "keepOriginalHint": "No compression — they will take more space. Images are normally resized to 2048 px and converted to webp.",
     "send": "Upload",
     "remove": "Remove from list"
+  },
+  "checklist": {
+    "title": "Checklist",
+    "add": "Add",
+    "addPlaceholder": "New item — press Enter to add",
+    "addNote": "+ note",
+    "notePlaceholder": "Answer or note…",
+    "doneBy": "Checked by {{name}}"
   }
 }

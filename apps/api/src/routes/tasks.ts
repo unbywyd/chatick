@@ -1,9 +1,9 @@
 import { Hono } from 'hono'
 import { zValidator } from '@hono/zod-validator'
 import { z } from 'zod'
-import { and, asc, desc, eq, sql } from 'drizzle-orm'
+import { and, asc, desc, eq, isNull, sql } from 'drizzle-orm'
 import { db } from '../db/client.js'
-import { files, projects, taskComments, taskGroups, taskNotes, tasks, users } from '../db/schema.js'
+import { files, projects, taskChecklist, taskComments, taskGroups, taskNotes, tasks, users } from '../db/schema.js'
 import { requireProject, type ProjectEnv } from '../auth.js'
 import { hasPermission, ownsOrManages } from './projects.js'
 import { improveTask, validateTask, generateTaskNotes } from '../lib/llm.js'
@@ -442,6 +442,133 @@ async function commentFiles(commentIds: string[]) {
 }
 
 // Список комментариев задачи
+// --- чек-лист задачи (SPEC §8.37) -------------------------------------------
+//
+// Права те же, что у самой задачи: чек-лист — её часть, а не отдельная
+// сущность со своим доступом. Кому задача принадлежит, тот и отмечает.
+// Отдельных уведомлений нет: человек и так смотрит на свою задачу.
+
+/** Есть ли доступ к задаче и можно ли её менять. */
+async function checklistAccess(projectId: string, taskId: string, userId: string) {
+  const task = await db.query.tasks.findFirst({
+    where: and(eq(tasks.id, taskId), eq(tasks.projectId, projectId), isNull(tasks.deletedAt)),
+  })
+  if (!task) return { error: 'Not found', status: 404 as const }
+  if (!(await hasPermission(projectId, userId, 'tasks.read'))) return { error: 'Forbidden', status: 403 as const }
+  return { task }
+}
+
+const checklistItem = (r: typeof taskChecklist.$inferSelect, who?: { id: string; name: string } | null) => ({
+  id: r.id,
+  text: r.text,
+  note: r.note,
+  done: r.done,
+  doneBy: who ? { id: who.id, name: who.name } : null,
+  doneAt: r.doneAt,
+  sortOrder: r.sortOrder,
+})
+
+tasksRoute.get('/:taskId/checklist', async (c) => {
+  const { projectId, sub } = c.get('auth')
+  const access = await checklistAccess(projectId, c.req.param('taskId'), sub)
+  if ('error' in access) return c.json({ error: access.error }, access.status)
+
+  const rows = await db
+    .select({ item: taskChecklist, who: users })
+    .from(taskChecklist)
+    .leftJoin(users, eq(users.id, taskChecklist.doneById))
+    .where(eq(taskChecklist.taskId, access.task.id))
+    .orderBy(asc(taskChecklist.sortOrder), asc(taskChecklist.createdAt))
+
+  return c.json({ items: rows.map((r) => checklistItem(r.item, r.who)) })
+})
+
+tasksRoute.post(
+  '/:taskId/checklist',
+  zValidator('json', z.object({ text: z.string().min(1).max(500), note: z.string().max(4000).optional() })),
+  async (c) => {
+    const { projectId, sub } = c.get('auth')
+    const access = await checklistAccess(projectId, c.req.param('taskId'), sub)
+    if ('error' in access) return c.json({ error: access.error }, access.status)
+    // Менять чек-лист — то же, что менять задачу.
+    if (!(await hasPermission(projectId, sub, 'tasks.edit'))) return c.json({ error: 'Forbidden' }, 403)
+
+    const { text: body, note } = c.req.valid('json')
+    // Новый пункт — в конец: список читают сверху вниз, и дописанное внизу
+    // не сбивает уже пройденное.
+    const [{ maxSort }] = (await db
+      .select({ maxSort: sql<number>`coalesce(max(${taskChecklist.sortOrder}), 0)` })
+      .from(taskChecklist)
+      .where(eq(taskChecklist.taskId, access.task.id))) as [{ maxSort: number }]
+
+    const [row] = await db
+      .insert(taskChecklist)
+      .values({ taskId: access.task.id, projectId, text: body.trim(), note: note ?? '', sortOrder: maxSort + 1 })
+      .returning()
+
+    tasksChanged(projectId, [access.task.assigneeId, access.task.createdById])
+    return c.json(checklistItem(row!), 201)
+  },
+)
+
+tasksRoute.patch(
+  '/:taskId/checklist/:itemId',
+  zValidator(
+    'json',
+    z.object({
+      text: z.string().min(1).max(500).optional(),
+      note: z.string().max(4000).optional(),
+      done: z.boolean().optional(),
+      sortOrder: z.number().int().optional(),
+    }),
+  ),
+  async (c) => {
+    const { projectId, sub } = c.get('auth')
+    const access = await checklistAccess(projectId, c.req.param('taskId'), sub)
+    if ('error' in access) return c.json({ error: access.error }, access.status)
+    if (!(await hasPermission(projectId, sub, 'tasks.edit'))) return c.json({ error: 'Forbidden' }, 403)
+
+    const existing = await db.query.taskChecklist.findFirst({
+      where: and(eq(taskChecklist.id, c.req.param('itemId')), eq(taskChecklist.taskId, access.task.id)),
+    })
+    if (!existing) return c.json({ error: 'Not found' }, 404)
+
+    const b = c.req.valid('json')
+    const patch: Record<string, unknown> = { updatedAt: new Date() }
+    if (b.text !== undefined) patch.text = b.text.trim()
+    if (b.note !== undefined) patch.note = b.note
+    if (b.sortOrder !== undefined) patch.sortOrder = b.sortOrder
+    if (b.done !== undefined) {
+      patch.done = b.done
+      // Снять галочку можно так же свободно, как поставить: передумать —
+      // обычное дело, а не исключение. Отметку о том, кто закрыл, при этом
+      // стираем: она про закрытие, а не про историю.
+      patch.doneById = b.done ? sub : null
+      patch.doneAt = b.done ? new Date() : null
+    }
+
+    const [row] = await db.update(taskChecklist).set(patch).where(eq(taskChecklist.id, existing.id)).returning()
+    const who = row!.doneById ? await db.query.users.findFirst({ where: eq(users.id, row!.doneById) }) : null
+
+    tasksChanged(projectId, [access.task.assigneeId, access.task.createdById])
+    return c.json(checklistItem(row!, who ?? null))
+  },
+)
+
+tasksRoute.delete('/:taskId/checklist/:itemId', async (c) => {
+  const { projectId, sub } = c.get('auth')
+  const access = await checklistAccess(projectId, c.req.param('taskId'), sub)
+  if ('error' in access) return c.json({ error: access.error }, access.status)
+  if (!(await hasPermission(projectId, sub, 'tasks.edit'))) return c.json({ error: 'Forbidden' }, 403)
+
+  await db
+    .delete(taskChecklist)
+    .where(and(eq(taskChecklist.id, c.req.param('itemId')), eq(taskChecklist.taskId, access.task.id)))
+
+  tasksChanged(projectId, [access.task.assigneeId, access.task.createdById])
+  return c.json({ ok: true })
+})
+
 tasksRoute.get('/:taskId/comments', async (c) => {
   const { projectId, sub } = c.get('auth')
   if (!(await hasPermission(projectId, sub, 'tasks.read'))) return c.json({ error: 'Forbidden' }, 403)

@@ -1,22 +1,23 @@
 import { Hono } from 'hono'
-import { and, desc, eq, gt, ilike, inArray, isNull, lt, or, sql } from 'drizzle-orm'
+import { and, asc, desc, eq, gt, ilike, inArray, isNull, lt, or, sql } from 'drizzle-orm'
 import { db } from '../db/client.js'
 import {
+  companies,
+  companyInvites,
+  companyMembers,
+  credentials,
   documents,
   files,
   messages,
   notes,
   notifications,
-  timeEntries,
   projectMembers,
   projects,
-  companies,
-  companyMembers,
-  companyInvites,
-  credentials,
+  taskChecklist,
   taskComments,
   taskGroups,
   tasks,
+  timeEntries,
   users,
 } from '../db/schema.js'
 import {
@@ -1037,6 +1038,119 @@ bridgeRoute.delete('/tasks/:id', async (c) => {
 })
 
 // --- Комментарии к задаче ---------------------------------------------------
+
+// --- чек-лист задачи --------------------------------------------------------
+//
+// Ассистент и задаёт вопросы по задаче, и закрывает пункты, когда сделал.
+// Права те же, что у человека, от чьего имени он работает.
+
+bridgeRoute.get('/tasks/:id/checklist', async (c) => {
+  const scope = await resolveProject(c as never)
+  if ('error' in scope) return c.json({ error: scope.error }, scope.status)
+  const denied = await require(c as never, 'tasks.read', scope.projectId)
+  if (denied) return c.json(denied, 403)
+
+  const task = await db.query.tasks.findFirst({
+    where: and(eq(tasks.id, c.req.param('id')), eq(tasks.projectId, scope.projectId), isNull(tasks.deletedAt)),
+  })
+  if (!task) return c.json({ error: 'Task not found' }, 404)
+
+  const rows = await db
+    .select({ item: taskChecklist, who: users })
+    .from(taskChecklist)
+    .leftJoin(users, eq(users.id, taskChecklist.doneById))
+    .where(eq(taskChecklist.taskId, task.id))
+    .orderBy(asc(taskChecklist.sortOrder), asc(taskChecklist.createdAt))
+
+  const items = rows.map((r) => ({
+    id: r.item.id,
+    text: r.item.text,
+    note: r.item.note || undefined,
+    done: r.item.done,
+    doneBy: r.who ? r.who.name || r.who.email : undefined,
+  }))
+  const done = items.filter((i) => i.done).length
+  return c.json({ items, done, total: items.length })
+})
+
+bridgeRoute.post('/tasks/:id/checklist', async (c) => {
+  const id = auth(c as never)
+  const scope = await resolveProject(c as never)
+  if ('error' in scope) return c.json({ error: scope.error }, scope.status)
+  const denied = await require(c as never, 'tasks.edit', scope.projectId)
+  if (denied) return c.json(denied, 403)
+
+  const task = await db.query.tasks.findFirst({
+    where: and(eq(tasks.id, c.req.param('id')), eq(tasks.projectId, scope.projectId), isNull(tasks.deletedAt)),
+  })
+  if (!task) return c.json({ error: 'Task not found' }, 404)
+  if (!(await ownsOrManages(scope.projectId, id.userId, [task.createdById, task.assigneeId]))) {
+    return c.json({ error: 'Forbidden: you can only edit tasks you created or that are assigned to you' }, 403)
+  }
+
+  const body = (await c.req.json().catch(() => ({}))) as { items?: unknown; text?: unknown; note?: unknown }
+  // Списком за раз: вопросы к задаче обычно задают пачкой, а не по одному.
+  const incoming = Array.isArray(body.items)
+    ? body.items
+    : typeof body.text === 'string'
+      ? [{ text: body.text, note: body.note }]
+      : []
+  const parsed = incoming
+    .map((x) => (typeof x === 'string' ? { text: x, note: '' } : (x as { text?: unknown; note?: unknown })))
+    .filter((x) => typeof x.text === 'string' && (x.text as string).trim())
+    .map((x) => ({ text: (x.text as string).trim().slice(0, 500), note: typeof x.note === 'string' ? x.note.slice(0, 4000) : '' }))
+
+  if (!parsed.length) return c.json({ error: 'Pass text or items: ["...", ...]' }, 400)
+
+  const [{ maxSort }] = (await db
+    .select({ maxSort: sql<number>`coalesce(max(${taskChecklist.sortOrder}), 0)` })
+    .from(taskChecklist)
+    .where(eq(taskChecklist.taskId, task.id))) as [{ maxSort: number }]
+
+  const rows = await db
+    .insert(taskChecklist)
+    .values(parsed.map((p, i) => ({ taskId: task.id, projectId: scope.projectId, text: p.text, note: p.note, sortOrder: maxSort + i + 1 })))
+    .returning()
+
+  tasksChanged(scope.projectId, [task.assigneeId, task.createdById])
+  return c.json({ added: rows.length, items: rows.map((r) => ({ id: r.id, text: r.text, done: r.done })) }, 201)
+})
+
+bridgeRoute.patch('/tasks/:id/checklist/:itemId', async (c) => {
+  const id = auth(c as never)
+  const scope = await resolveProject(c as never)
+  if ('error' in scope) return c.json({ error: scope.error }, scope.status)
+  const denied = await require(c as never, 'tasks.edit', scope.projectId)
+  if (denied) return c.json(denied, 403)
+
+  const task = await db.query.tasks.findFirst({
+    where: and(eq(tasks.id, c.req.param('id')), eq(tasks.projectId, scope.projectId), isNull(tasks.deletedAt)),
+  })
+  if (!task) return c.json({ error: 'Task not found' }, 404)
+  if (!(await ownsOrManages(scope.projectId, id.userId, [task.createdById, task.assigneeId]))) {
+    return c.json({ error: 'Forbidden: you can only edit tasks you created or that are assigned to you' }, 403)
+  }
+
+  const existing = await db.query.taskChecklist.findFirst({
+    where: and(eq(taskChecklist.id, c.req.param('itemId')), eq(taskChecklist.taskId, task.id)),
+  })
+  if (!existing) return c.json({ error: 'Checklist item not found' }, 404)
+
+  const b = (await c.req.json().catch(() => ({}))) as { text?: unknown; note?: unknown; done?: unknown }
+  const patch: Record<string, unknown> = { updatedAt: new Date() }
+  if (typeof b.text === 'string' && b.text.trim()) patch.text = b.text.trim().slice(0, 500)
+  if (typeof b.note === 'string') patch.note = b.note.slice(0, 4000)
+  if (typeof b.done === 'boolean') {
+    patch.done = b.done
+    patch.doneById = b.done ? id.userId : null
+    patch.doneAt = b.done ? new Date() : null
+  }
+  if (Object.keys(patch).length === 1) return c.json({ error: 'Nothing to change. Supported: text, note, done.' }, 400)
+
+  const [row] = await db.update(taskChecklist).set(patch).where(eq(taskChecklist.id, existing.id)).returning()
+  tasksChanged(scope.projectId, [task.assigneeId, task.createdById])
+  return c.json({ id: row!.id, text: row!.text, note: row!.note || undefined, done: row!.done })
+})
 
 bridgeRoute.get('/tasks/:id/comments', async (c) => {
   const id = auth(c as never)
