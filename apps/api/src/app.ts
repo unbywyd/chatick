@@ -1,4 +1,5 @@
 import { Hono } from 'hono'
+import { HTTPException } from 'hono/http-exception'
 import { cors } from 'hono/cors'
 import { logger } from 'hono/logger'
 import { env, isProd } from './env.js'
@@ -60,10 +61,10 @@ app.route('/api/v1/backup', backupRoute) // экспорт/импорт комп
 
 app.notFound((c) => c.json({ error: 'Not found' }, 404))
 app.onError((err, c) => {
-  // Сломанный JSON в теле — ошибка того, кто прислал, а не сервера. Отдавать
-  // на неё 500 вдвойне неудобно: клиент думает, что упали мы, а в логах
-  // копится шум от чужих кривых запросов, в котором тонут настоящие аварии.
-  if (err instanceof SyntaxError) return c.json({ error: 'Malformed JSON body' }, 400)
+  // HTTPException несёт собственный статус — например, 400 на сломанный JSON в
+  // теле. Затирать его на 500 вдвойне неудобно: клиент думает, что упали мы, а
+  // в логах копится шум от чужих кривых запросов, в котором тонут аварии.
+  if (err instanceof HTTPException) return c.json({ error: err.message }, err.status)
   console.error(err)
   return c.json({ error: isProd ? 'Internal error' : String(err) }, 500)
 })
