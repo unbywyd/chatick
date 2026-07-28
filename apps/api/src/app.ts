@@ -60,6 +60,10 @@ app.route('/api/v1/backup', backupRoute) // экспорт/импорт комп
 
 app.notFound((c) => c.json({ error: 'Not found' }, 404))
 app.onError((err, c) => {
+  // Сломанный JSON в теле — ошибка того, кто прислал, а не сервера. Отдавать
+  // на неё 500 вдвойне неудобно: клиент думает, что упали мы, а в логах
+  // копится шум от чужих кривых запросов, в котором тонут настоящие аварии.
+  if (err instanceof SyntaxError) return c.json({ error: 'Malformed JSON body' }, 400)
   console.error(err)
   return c.json({ error: isProd ? 'Internal error' : String(err) }, 500)
 })
