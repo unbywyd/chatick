@@ -65,14 +65,18 @@ export function ImageViewer() {
   useEffect(() => {
     if (!shot) return
     const onKey = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') setShot(null)
+      if (e.key !== 'Escape') return
+      // Не даём тому же нажатию закрыть заодно и то, что под просмотром:
+      // из задачи Esc закрывал и картинку, и саму задачу.
+      e.stopPropagation()
+      setShot(null)
     }
-    document.addEventListener('keydown', onKey)
+    document.addEventListener('keydown', onKey, true)
     // Фон не должен ехать под окном просмотра.
     const prev = document.body.style.overflow
     document.body.style.overflow = 'hidden'
     return () => {
-      document.removeEventListener('keydown', onKey)
+      document.removeEventListener('keydown', onKey, true)
       document.body.style.overflow = prev
     }
   }, [shot])

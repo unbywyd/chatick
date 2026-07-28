@@ -801,7 +801,7 @@ export function TaskDrawer({
           </div>
 
           {/* Комментарии (SPEC §8.9) */}
-          <div className="rounded-xl border bg-card p-4">
+          <div>
             <TaskComments taskId={task.id} members={members} lang={i18n.language} meId={meId} onFilesChanged={refresh} />
           </div>
         </div>

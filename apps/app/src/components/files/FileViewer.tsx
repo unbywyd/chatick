@@ -45,10 +45,18 @@ export function FileViewer({
   const [wb, setWb] = useState<XLSX.WorkBook | null>(null)
   const [error, setError] = useState(false)
 
+  // Esc закрывает просмотрщик — и на этом останавливается. Иначе то же
+  // нажатие доходит до задачи под ним, и одним Esc закрывается и картинка,
+  // и сама задача. Перехватываем на фазе погружения: наш обработчик должен
+  // отработать раньше тех, что висят ниже.
   useEffect(() => {
-    const onKey = (e: KeyboardEvent) => e.key === 'Escape' && onClose()
-    window.addEventListener('keydown', onKey)
-    return () => window.removeEventListener('keydown', onKey)
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key !== 'Escape') return
+      e.stopPropagation()
+      onClose()
+    }
+    window.addEventListener('keydown', onKey, true)
+    return () => window.removeEventListener('keydown', onKey, true)
   }, [onClose])
 
   useEffect(() => {

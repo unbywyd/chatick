@@ -16,6 +16,16 @@ import { FileViewer, type ViewerFile } from '@/components/files/FileViewer'
 
 // Комментарии к задаче (SPEC §8.9): минимальный Tiptap + mentions + ответы + файлы.
 
+/**
+ * Текст без разметки — для мест в одну строку: цитата ответа. Редактор
+ * хранит HTML, и теги в такой строке видны как текст.
+ */
+const plainText = (html: string) => {
+  const el = document.createElement('div')
+  el.innerHTML = html
+  return (el.textContent ?? '').trim()
+}
+
 type CommentFile = { id: string; name: string; mime: string; deleted: boolean }
 type Comment = {
   id: string
@@ -75,6 +85,28 @@ export function TaskComments({
   const commentsQ = useQuery({
     queryKey: ['task-comments', taskId],
     queryFn: () => api<Comment[]>(`/api/v1/tasks/${taskId}/comments`, {}, 'project'),
+  })
+
+  // Ссылки на превью картинок из вложений. Тем же способом, что во
+  // вложениях задачи: presigned на час, запрашиваем разом на все комментарии.
+  const previewUrls = useQuery({
+    queryKey: ['comment-previews', taskId, commentsQ.data?.map((c) => c.files.map((f) => f.id).join(',')).join('|')],
+    enabled: Boolean(commentsQ.data?.some((c) => c.files.some((f) => f.mime.startsWith('image/') && !f.deleted))),
+    queryFn: async () => {
+      const images = (commentsQ.data ?? []).flatMap((c) => c.files.filter((f) => f.mime.startsWith('image/') && !f.deleted))
+      const entries = await Promise.all(
+        images.map(async (f) => {
+          try {
+            const { url } = await api<{ url: string }>(`/api/v1/files/${f.id}/view-url`, {}, 'project')
+            return [f.id, url] as const
+          } catch {
+            // Файл мог исчезнуть — показываем скрепку вместо битой картинки.
+            return [f.id, ''] as const
+          }
+        }),
+      )
+      return Object.fromEntries(entries) as Record<string, string>
+    },
   })
 
   const refresh = () => {
@@ -143,13 +175,13 @@ export function TaskComments({
     <div className="space-y-3">
       <h3 className="text-sm font-semibold">{t('tasks.comments')}</h3>
 
-      <ul className="space-y-2.5">
+      <ul className="space-y-1.5">
         {(commentsQ.data ?? []).map((c) => {
           const parent = c.replyToId ? byId.get(c.replyToId) : null
           const mine = c.author?.id === meId
           return (
-            <li key={c.id} className="rounded-lg border bg-card px-3 py-2">
-              <div className="mb-1 flex items-center gap-2">
+            <li key={c.id} className="rounded-lg border bg-card px-3 py-1.5">
+              <div className="flex items-center gap-2">
                 <Avatar name={c.author?.name ?? 'AI'} src={c.author?.avatarUrl} size={20} />
                 <span className="text-xs font-medium">{c.author?.name ?? 'AI'}</span>
                 <span className="text-xs text-muted-foreground">{new Date(c.createdAt).toLocaleString(lang)}</span>
@@ -186,7 +218,7 @@ export function TaskComments({
 
               {parent && (
                 <div className="mb-1 border-s-2 ps-2 text-xs text-muted-foreground">
-                  <span className="font-medium">{parent.author?.name ?? 'AI'}:</span> <span className="line-clamp-1">{renderMentions(parent.body)}</span>
+                  <span className="font-medium">{parent.author?.name ?? 'AI'}:</span> <span className="line-clamp-1">{plainText(renderMentions(parent.body))}</span>
                 </div>
               )}
 
@@ -202,7 +234,7 @@ export function TaskComments({
               )}
 
               {c.files.length > 0 && (
-                <div className="mt-1.5 flex flex-wrap gap-1.5">
+                <div className="mt-1 flex flex-wrap gap-1.5">
                   {c.files.map((f) =>
                     f.deleted ? (
                       <span key={f.id} className="inline-flex items-center gap-1 rounded border border-dashed px-1.5 py-0.5 text-xs text-muted-foreground line-through">
@@ -212,9 +244,16 @@ export function TaskComments({
                       <button
                         key={f.id}
                         onClick={() => setViewing({ id: f.id, name: f.name, mime: f.mime })}
-                        className="inline-flex items-center gap-1 rounded border px-1.5 py-0.5 text-xs transition-colors hover:border-brand hover:text-brand"
+                        className="inline-flex items-center gap-1.5 rounded border py-0.5 pe-1.5 ps-1 text-xs transition-colors hover:border-brand hover:text-brand"
                       >
-                        <Paperclip className="size-3" /> {f.name}
+                        {/* Превью вместо скрепки: по имени вроде
+                            «354881888_6f937116-….webp» не понять, что внутри. */}
+                        {f.mime.startsWith('image/') && previewUrls.data?.[f.id] ? (
+                          <img src={previewUrls.data[f.id]} alt="" className="size-5 rounded object-cover" />
+                        ) : (
+                          <Paperclip className="size-3" />
+                        )}
+                        {f.name}
                       </button>
                     ),
                   )}

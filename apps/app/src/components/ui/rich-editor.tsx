@@ -102,7 +102,16 @@ export function RichEditor({
     ],
     content: withInlineImageAuth(value),
     editorProps: {
-      attributes: { class: cn('tiptap-editor max-h-[50vh] min-h-16 overflow-y-auto px-3 py-2 text-sm outline-none', className) },
+      attributes: {
+        // В режиме чтения ни отступы, ни минимальная высота не нужны: это
+        // просто текст. С ними каждый комментарий занимал лишние полсотни
+        // пикселей пустоты сверху и снизу.
+        class: cn(
+          'tiptap-editor text-sm outline-none',
+          readOnly ? '' : 'max-h-[50vh] min-h-16 overflow-y-auto px-3 py-2',
+          className,
+        ),
+      },
       handleKeyDown: (_v, event) => {
         if (onSubmit && event.key === 'Enter' && (event.ctrlKey || event.metaKey)) {
           event.preventDefault()
