@@ -17,6 +17,41 @@ const GOOGLE_AUTH_URL = 'https://accounts.google.com/o/oauth2/v2/auth'
 const GOOGLE_TOKEN_URL = 'https://oauth2.googleapis.com/token'
 const GOOGLE_USERINFO_URL = 'https://www.googleapis.com/oauth2/v3/userinfo'
 
+/**
+ * Переносит аватарку из Google в наше хранилище.
+ *
+ * Прямые ссылки lh3.googleusercontent.com ненадёжны как основа: они отдают
+ * картинку только запросам без referrer, живут не вечно и меняются вместе с
+ * фото в аккаунте. Панель в трее из-за этого показывала пустой кружок.
+ * Забираем один раз при входе — дальше картинка наша.
+ *
+ * Fail-open: не смогли скачать — вход не должен из-за этого падать.
+ */
+async function adoptGoogleAvatar(userId: string, pictureUrl: string): Promise<{ url: string; key: string } | null> {
+  try {
+    const res = await fetch(pictureUrl, { signal: AbortSignal.timeout(7000) })
+    if (!res.ok) return null
+    const raw = Buffer.from(await res.arrayBuffer())
+    if (!raw.length || raw.length > 5 * 1024 * 1024) return null
+
+    const buffer = await sharp(raw, { failOn: 'none' })
+      .rotate()
+      .resize(256, 256, { fit: 'cover' })
+      .webp({ quality: 85 })
+      .toBuffer()
+
+    const key = `${S3_KEY_PREFIX}/avatars/${userId}-${nanoid(6)}.webp`
+    await s3Client().send(
+      new PutObjectCommand({ Bucket: s3Bucket(), Key: key, Body: buffer, ContentType: 'image/webp' }),
+    )
+    const url = `${process.env.API_PUBLIC_URL || 'https://api.chatick.com'}/api/v1/auth/avatar/${userId}?v=${Date.now()}`
+    return { url, key }
+  } catch (e) {
+    console.error('[avatar] не удалось забрать аватарку из Google:', e)
+    return null
+  }
+}
+
 // GET /api/v1/auth/google — редирект на Google consent screen
 auth.get('/google', (c) => {
   const params = new URLSearchParams({
@@ -74,16 +109,41 @@ auth.get('/google/callback', async (c) => {
     if (user) {
       const [updated] = await db
         .update(users)
-        .set({ googleId: info.sub, avatarUrl: info.picture ?? user.avatarUrl, name: user.name || info.name || '' })
+        // Аватарку здесь НЕ трогаем: раньше каждый вход перезаписывал её
+        // ссылкой из Google — и фото, загруженное человеком вручную,
+        // молча заменялось гугловским. Ниже разберёмся отдельно.
+        .set({ googleId: info.sub, name: user.name || info.name || '' })
         .where(eq(users.id, user.id))
         .returning()
       user = updated!
     } else {
       const [created] = await db
         .insert(users)
-        .values({ email, name: info.name ?? '', googleId: info.sub, avatarUrl: info.picture })
+        .values({ email, name: info.name ?? '', googleId: info.sub })
         .returning()
       user = created!
+    }
+
+    // Своя картинка (avatarKey) — неприкосновенна. Забираем гугловскую только
+    // когда её нет вовсе: один раз, при первом входе.
+    if (info.picture && !user.avatarKey) {
+      const moved = await adoptGoogleAvatar(user.id, info.picture)
+      if (moved) {
+        const [withAvatar] = await db
+          .update(users)
+          .set({ avatarUrl: moved.url, avatarKey: moved.key })
+          .where(eq(users.id, user.id))
+          .returning()
+        user = withAvatar!
+      } else if (!user.avatarUrl) {
+        // Не получилось — пусть будет хотя бы прямая ссылка, чем ничего.
+        const [fallback] = await db
+          .update(users)
+          .set({ avatarUrl: info.picture })
+          .where(eq(users.id, user.id))
+          .returning()
+        user = fallback!
+      }
     }
 
     const token = await signSessionToken({ sub: user.id, email: user.email })
