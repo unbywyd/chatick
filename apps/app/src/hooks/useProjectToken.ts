@@ -10,6 +10,8 @@ type State =
   | { status: 'ready' }
   | { status: 'loading' }
   | { status: 'needRules'; chatRules: string; projectName: string }
+  /** проекта больше нет: удалили, пока человек был внутри */
+  | { status: 'gone' }
   | { status: 'error'; message: string }
 
 /** Декодирует projectId из текущего project-токена, не проверяя подпись. */
@@ -50,6 +52,13 @@ export function useProjectToken(projectId: string | undefined): State & { accept
       setState({ status: 'ready' })
     } catch (e) {
       const err = e as { status?: number; body?: { needRulesAccept?: boolean; chatRules?: string; projectName?: string } }
+      // Проект удалён или доступ отобрали — это не «ошибка сети», а состояние,
+      // которое надо объяснить словами.
+      if (err.status === 404 || err.status === 403) {
+        setProjectToken(null)
+        setState({ status: 'gone' })
+        return
+      }
       if (err.status === 428 && err.body?.needRulesAccept) {
         setState({
           status: 'needRules',
@@ -64,10 +73,22 @@ export function useProjectToken(projectId: string | undefined): State & { accept
 
   useEffect(() => {
     if (!projectId) return
-    // токен уже от этого проекта — ничего не делаем, переключение бесплатное
+    // Токен уже от этого проекта — показываем сразу, не дожидаясь сервера:
+    // переключение должно быть мгновенным.
+    //
+    // Но проект мог исчезнуть, пока человек сидел внутри: токен-то остался
+    // валидным. Поэтому параллельно перепроверяем — тихо, без экрана загрузки.
     if (projectOfToken(getProjectToken()) === projectId) {
       wanted.current = projectId
       setState({ status: 'ready' })
+      void api(`/api/v1/projects/${projectId}`, {}, 'project').catch((e) => {
+        const err = e as { status?: number }
+        if (wanted.current !== projectId) return
+        if (err.status === 404 || err.status === 403) {
+          setProjectToken(null)
+          setState({ status: 'gone' })
+        }
+      })
       return
     }
     void enter(projectId, false)

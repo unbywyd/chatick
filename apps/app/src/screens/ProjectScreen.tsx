@@ -2,7 +2,7 @@ import { useCallback, useEffect, useRef, useState } from 'react'
 import { NavLink, Outlet, useLocation, useNavigate, useOutletContext, useParams, useSearchParams } from 'react-router-dom'
 import { useQuery } from '@tanstack/react-query'
 import { useTranslation } from 'react-i18next'
-import { ArrowLeft, MessagesSquare, X } from 'lucide-react'
+import { ArrowLeft, MessagesSquare, X, FolderX } from 'lucide-react'
 import { api, getSessionToken, type Me } from '@/lib/api'
 import { cn } from '@/lib/utils'
 import { useProjectToken } from '@/hooks/useProjectToken'
@@ -183,8 +183,10 @@ export function ProjectLayout() {
             chat.dragging && 'after:bg-brand',
           )}
         />
+        {/* Проекта нет — чат ни к чему: он продолжал бы опрашивать сервер и
+            держать сокет ради того, чего больше не существует. */}
         <div className="min-h-0 flex-1">
-          <ChatPanel
+          {token.status === 'gone' ? null : <ChatPanel
             ref={chatRef}
             onOpenSidebar={() => setSidebarOpen(true)}
             onOpenWork={() => navigate(`/p/${id}/tasks`)}
@@ -192,7 +194,7 @@ export function ProjectLayout() {
             aiMode={(project.data?.aiConfig as { mode?: 'observer' | 'assistant' | 'moderator' })?.mode ?? 'assistant'}
             myRole={project.data?.myRole}
             meId={me.data?.id}
-          />
+          />}
         </div>
       </div>
 
@@ -258,6 +260,22 @@ export function ProjectLayout() {
                 <p className="mt-2 text-sm text-muted-foreground">{token.message}</p>
                 <Button variant="outline" className="mt-4" onClick={() => navigate('/start')}>
                   {t('connect.back')}
+                </Button>
+              </div>
+            </div>
+          ) : token.status === 'gone' ? (
+            // Проекта больше нет. Молча оставлять человека в пустом интерфейсе
+            // нельзя: он будет думать, что всё сломалось, и жать по кнопкам,
+            // которые ничего не делают.
+            <div className="grid h-full place-items-center p-6 text-center">
+              <div className="max-w-sm">
+                <span className="mx-auto grid size-14 place-items-center rounded-2xl bg-secondary text-muted-foreground">
+                  <FolderX className="size-7" />
+                </span>
+                <h2 className="mt-4 text-base font-semibold">{t('project.goneTitle')}</h2>
+                <p className="mt-2 text-sm text-muted-foreground">{t('project.goneText')}</p>
+                <Button variant="brand" className="mt-5" onClick={() => navigate('/start')}>
+                  {t('project.goneCta')}
                 </Button>
               </div>
             </div>

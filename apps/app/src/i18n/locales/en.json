@@ -395,7 +395,10 @@
     "deleteConfirmLabel": "Type «{{name}}» to confirm:",
     "deleteAction": "Delete project",
     "deleted": "Project «{{name}}» deleted",
-    "deleteNotify": "Everyone involved will get an email about it."
+    "deleteNotify": "Everyone involved will get an email about it.",
+    "goneTitle": "This project no longer exists",
+    "goneText": "It was deleted, or your access to it was removed. Anything you had here went with it.",
+    "goneCta": "Back to projects"
   },
   "about": {
     "noDescription": "No description yet.",
