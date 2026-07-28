@@ -32,6 +32,7 @@ import { LanguageSelect } from '@/components/LanguageSelect'
 import { Input } from '@/components/ui/input'
 import { Button } from '@/components/ui/button'
 import { TeamTab } from '@/components/company/TeamTab'
+import { NotificationBell } from '@/components/NotificationBell'
 import { OnboardingWizard } from '@/components/OnboardingWizard'
 import { CompanyTimeTab } from '@/components/company/CompanyTimeTab'
 import { OverviewTab } from '@/components/company/OverviewTab'
@@ -129,6 +130,9 @@ export function StartScreen() {
         <div className="flex items-center gap-2">
           <LanguageSelect />
           <ThemeToggle />
+          {/* Уведомления адресованы человеку, а не проекту: до входа в проект
+              они приходили молча, и увидеть их было негде. */}
+          <NotificationBell />
           {/* профиль (фото, имя, выход) доступен и до входа в проект — SPEC §8.19 */}
           <ProfileMenu me={me.data} />
         </div>
