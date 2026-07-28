@@ -7,6 +7,16 @@ refuses to run otherwise, so a release can never ship without a description.
 
 Written in English only: this file is published on the website.
 
+## 0.3.3 — 2026-07-28
+
+### Fixed
+
+- The avatar in the tray header stayed an empty circle even after the picture
+  itself was fine. The panel runs from file://, where an https image is an
+  external resource it may not load — the app window has no such limit, which
+  is why the photo showed there and not here. The main process now fetches it
+  once and hands the panel a ready image.
+
 ## 0.3.2 — 2026-07-28
 
 ### Fixed

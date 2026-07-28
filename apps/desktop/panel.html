@@ -599,13 +599,12 @@
         av.hidden = !me
         if (me) {
           av.title = me.name ? `${me.name} · ${me.email}` : me.email
-          // no-referrer обязателен: Google отдаёт аватарки только так, иначе
-          // приходит пустой ответ и в кружке ничего. onerror оставляет
-          // инициалы — лучше буквы, чем дырка.
+          // Только data: — панель в file:// не может загрузить картинку по
+          // https, это для неё внешний ресурс. Готовую строку присылает
+          // главный процесс; пока её нет, показываем инициалы.
           const fallback = escape(initials(me.name || me.email))
-          av.innerHTML = me.avatarUrl
-            ? `<img src="${escape(me.avatarUrl)}" alt="" referrerpolicy="no-referrer"
-                    onerror="this.parentNode.textContent='${fallback}'">`
+          av.innerHTML = me.avatarData
+            ? `<img src="${escape(me.avatarData)}" alt="" onerror="this.parentNode.textContent='${fallback}'">`
             : fallback
         }
       }

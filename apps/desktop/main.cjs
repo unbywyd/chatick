@@ -66,6 +66,37 @@ function persistState() {
   }, 1000)
 }
 
+/**
+ * Аватарка для панели.
+ *
+ * Панель живёт в file://, и картинку с https она загрузить не может — из её
+ * origin это внешний ресурс. В окне приложения такого ограничения нет, поэтому
+ * там фото видно, а в панели оставался пустой кружок. Скачиваем здесь, в
+ * главном процессе, и отдаём панели готовой строкой data:.
+ *
+ * Кэш по адресу: у ссылки есть ?v=<timestamp>, он меняется при смене фото —
+ * значит новый адрес означает новую картинку, а прежний качать незачем.
+ */
+let avatarCache = { url: null, data: null }
+
+async function avatarDataUri(url) {
+  if (!url) return null
+  if (avatarCache.url === url) return avatarCache.data
+  try {
+    const res = await fetch(url, { signal: AbortSignal.timeout(7000) })
+    if (!res.ok) return null
+    const buf = Buffer.from(await res.arrayBuffer())
+    // 512 КБ хватает с запасом: аватарки у нас 256x256 webp, единицы килобайт.
+    if (!buf.length || buf.length > 512 * 1024) return null
+    const type = res.headers.get('content-type') || 'image/webp'
+    avatarCache = { url, data: `data:${type};base64,${buf.toString('base64')}` }
+    return avatarCache.data
+  } catch {
+    // Нет сети или картинка недоступна — панель покажет инициалы.
+    return null
+  }
+}
+
 const iconPath = (name) => path.join(__dirname, 'assets', name)
 
 function loadIcon(name) {
@@ -471,6 +502,18 @@ function registerIpc() {
     refreshBadge()
     persistState()
     panel?.webContents.send('panel:state', state)
+
+    // Картинка приезжает следом, отдельным обновлением: ждать её, задерживая
+    // всё состояние, незачем — панель тем временем показывает инициалы.
+    const url = state.user?.avatarUrl
+    if (url) {
+      avatarDataUri(url).then((data) => {
+        if (!data || !state.user) return
+        state.user.avatarData = data
+        persistState()
+        panel?.webContents.send('panel:state', state)
+      })
+    }
   })
 
   ipcMain.on('notify', (_e, payload) => {
