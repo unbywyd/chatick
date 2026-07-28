@@ -164,6 +164,11 @@ export function useDesktopSync() {
   const [stateNonce, setStateNonce] = useState(0)
   // Последний непустой список проектов: показываем его, пока грузится новый.
   const lastProjects = useRef<ProjectLite[]>([])
+  // Обработчики из трея живут дольше, чем данные, на которых их создали:
+  // эффект пересоздаётся при смене проекта, и между переходом и приходом
+  // новых данных нажатие читало устаревшее замыкание — «плей» отвечал
+  // «таймер уже идёт», а «стоп» промахивался мимо записи.
+  const liveRef = useRef<{ timer?: Running['items'][0]; projectId?: string; tasks?: TaskLite[] }>({})
   useEffect(() => {
     const check = () => setAuthed(Boolean(getSessionToken()))
     const timer = window.setInterval(check, 2000)
@@ -265,6 +270,7 @@ export function useDesktopSync() {
     if (projects.data) lastProjects.current = projects.data
     const nameOf = (id: string) => projectList.find((p) => p.id === id)?.name
     const timer = authed ? running.data?.items[0] : undefined
+    liveRef.current = { timer, projectId: activeProjectId, tasks: tasks.data?.items }
 
     bridge.setState({
       authed,
@@ -416,13 +422,25 @@ export function useDesktopSync() {
         })
         .catch(() => {})
     })
+    // Токен того проекта, в котором собираемся работать. В localStorage лежит
+    // токен последнего открытого — с ним запрос в другой проект падает, а
+    // человек видит лишь неподвижную кнопку.
+    const enterProject = async (projectId: string) => {
+      const { token } = await api<{ token: string }>(
+        `/api/v1/projects/${projectId}/enter`,
+        { method: 'POST', body: JSON.stringify({ acceptRules: true }) },
+      )
+      setProjectToken(token)
+    }
+
     const offTimer = bridge.onToggleTimer(async () => {
-      const current = running.data?.items[0]
+      // Из ref, а не из замыкания: на момент нажатия данные могли смениться.
+      const current = liveRef.current.timer
 
       // Проект, в котором работаем: для остановки — тот, где идёт таймер, для
       // запуска — открытый в окне. Первое важно: таймер могли забыть в другом
       // проекте, а токен на руках всегда от последнего открытого.
-      const target = current?.projectId ?? activeProjectId
+      const target = current?.projectId ?? liveRef.current.projectId
       if (!target) {
         // Запускать «куда-нибудь» нельзя: часы молча ушли бы не туда.
         bridge.show()
@@ -434,13 +452,7 @@ export function useDesktopSync() {
         // Токен нужного проекта, а не тот, что лежит с прошлого раза. Без
         // этого «плей» и «стоп» молча не срабатывали: запрос уходил с чужим
         // токеном и падал, а человек видел лишь неподвижную кнопку.
-        // acceptRules нужен только при самом первом входе в проект; из трея
-        // сюда попадают уже вошедшие — проект есть в их списке.
-        const { token } = await api<{ token: string }>(
-          `/api/v1/projects/${target}/enter`,
-          { method: 'POST', body: JSON.stringify({ acceptRules: true }) },
-        )
-        setProjectToken(token)
+        await enterProject(target)
 
         if (current) {
           await api(`/api/v1/time/${current.id}/stop`, { method: 'POST' }, 'project')
@@ -490,20 +502,28 @@ export function useDesktopSync() {
     // Таймер прямо на задаче: перебивает текущий, потому что работают над
     // чем-то одним, а два счётчика на одного человека — это уже путаница.
     const offTaskTimer = bridge.onTaskTimer(async (taskId) => {
-      const task = tasks.data?.items.find((x) => x.id === taskId)
+      // Из ref: список задач и текущий таймер к моменту нажатия могли смениться.
+      const task = liveRef.current.tasks?.find((x) => x.id === taskId)
       if (!task) return
-      const current = running.data?.items[0]
+      const current = liveRef.current.timer
       try {
-        if (current) await api(`/api/v1/time/${current.id}/stop`, { method: 'POST' }, 'project')
+        // Остановить надо в том проекте, где часы идут, а запустить — в том,
+        // которому принадлежит задача. Это разные проекты, и токен нужен свой.
+        if (current) {
+          await enterProject(current.projectId)
+          await api(`/api/v1/time/${current.id}/stop`, { method: 'POST' }, 'project')
+        }
         // Уже шёл таймер именно по этой задаче — значит нажатие было «стоп».
         if (current?.task?.id !== taskId) {
+          await enterProject(task.project.id)
           await api(
             '/api/v1/time/start',
             { method: 'POST', body: JSON.stringify({ projectId: task.project.id, taskId, description: task.title }) },
             'project',
           )
         }
-      } catch {
+      } catch (e) {
+        toast.error(e instanceof Error ? e.message : String(e))
         bridge.show()
       }
       qc.invalidateQueries({ queryKey: ['desktop-running'] })
@@ -578,5 +598,8 @@ export function useDesktopSync() {
       offAbout()
       offRevoke()
     }
-  }, [bridge, navigate, qc, running.data?.items, tasks.data, activeProjectId])
+    // Данных таймера в зависимостях нет намеренно: обработчики читают их из
+    // liveRef. Иначе каждая смена проекта снимала и вешала подписки заново, и
+    // нажатие в этот момент уходило в никуда.
+  }, [bridge, navigate, qc])
 }

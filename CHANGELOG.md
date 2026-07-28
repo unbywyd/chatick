@@ -7,6 +7,21 @@ refuses to run otherwise, so a release can never ship without a description.
 
 Written in English only: this file is published on the website.
 
+## 0.2.10 — 2026-07-28
+
+### Fixed
+
+- Play and pause in the tray stopped working the moment you switched projects,
+  until you closed and reopened the panel. The handlers were rebuilt on every
+  switch and captured whichever data existed when they were created — so a
+  press right after a switch acted on a stale picture: play answered "a timer
+  is already running", pause missed the entry. They now read the current state
+  at the moment you press, and are no longer torn down and re-attached.
+- Starting a timer from a task in the tray used the token of whichever project
+  was open last, so it failed silently when the task lived elsewhere. Stopping
+  and starting now each use the token of the project they act on, and failures
+  are shown instead of swallowed.
+
 ## 0.2.9 — 2026-07-28
 
 ### Fixed
