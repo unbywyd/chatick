@@ -7,6 +7,45 @@ refuses to run otherwise, so a release can never ship without a description.
 
 Written in English only: this file is published on the website.
 
+## 0.2.7 — 2026-07-28
+
+### Security
+
+- Removing someone from a project now takes their access away immediately.
+  Project tokens live for 30 days, and chat and the activity feed trusted the
+  token instead of checking membership — so a removed person kept reading and
+  writing in the team chat until the token expired. Everything else was already
+  safe. Roles are re-read from the database too, so a demoted admin no longer
+  keeps admin rights until their token is reissued.
+
+### Added
+
+- Team management from your editor, through the AI bridge: list the team, add
+  someone, change their role, permissions, job title, or area of
+  responsibility — without opening the interface. A company admin can invite a
+  person from outside in a single call: the invite carries the project with it,
+  so accepting it joins both.
+- A member's role in a project can now be changed. Previously it was set once,
+  when they were added — making someone an admin meant removing and re-adding
+  them, losing their job title and history. Permissions reset to the new role's
+  defaults, so a demotion actually takes access away.
+
+### Changed
+
+- Any member of a company can now connect an assistant to the whole company.
+  It used to be limited to admins and managers, which left everyone else with a
+  tunnel to a single project — awkward in an app built around several. The
+  tunnel opens only the projects you are actually in, with your own permissions,
+  so this grants nothing you did not already have. Connecting to one project is
+  still available, tucked away for when you deliberately want a narrower scope.
+- Notes follow the same rule as tasks and documents: your own note is yours to
+  edit and delete, someone else's is read-only.
+
+### Fixed
+
+- A malformed request body returned 500, as if the server had crashed. It now
+  returns 400, and the logs are no longer flooded with false alarms.
+
 ## 0.2.6 — 2026-07-28
 
 ### Fixed
