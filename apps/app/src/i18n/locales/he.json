@@ -639,7 +639,12 @@
     "jobTitlePlaceholder": "למשל מפתח/ת Backend",
     "responsibility": "אחראי/ת על",
     "responsibilityPlaceholder": "למשל API ופריסות",
-    "profileAiNote": "משותף עם ה-AI כדי שיֵדע מי אחראי על מה."
+    "profileAiNote": "משותף עם ה-AI כדי שיֵדע מי אחראי על מה.",
+    "roleChanged": "התפקיד שונה",
+    "promoteConfirm": "להפוך את {{name}} למנהל הפרויקט?",
+    "demoteConfirm": "להעביר את {{name}} בחזרה לחבר צוות?",
+    "roleResetsPermissions": "ההרשאות יאופסו לברירת המחדל של התפקיד החדש — רמות שהוגדרו ידנית יימחקו.",
+    "roleApply": "שינוי תפקיד"
   },
   "theme": {
     "light": "בהיר",

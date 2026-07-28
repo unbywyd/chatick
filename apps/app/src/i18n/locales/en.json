@@ -639,7 +639,12 @@
     "jobTitlePlaceholder": "e.g. Backend developer",
     "responsibility": "Responsible for",
     "responsibilityPlaceholder": "e.g. API & deployments",
-    "profileAiNote": "Shared with the AI so it knows who does what."
+    "profileAiNote": "Shared with the AI so it knows who does what.",
+    "roleChanged": "Role changed",
+    "promoteConfirm": "Make {{name}} a project admin?",
+    "demoteConfirm": "Move {{name}} back to member?",
+    "roleResetsPermissions": "Permissions reset to the new role's defaults — levels you set by hand will be lost.",
+    "roleApply": "Change role"
   },
   "theme": {
     "light": "Light",

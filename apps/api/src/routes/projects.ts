@@ -9,6 +9,7 @@ import { env } from '../env.js'
 import { companyTrialSpendUsd } from '../lib/ai-usage.js'
 import { companies, companyMembers, files, FREE_STORAGE_BYTES, messages, notifications, projects, projectMembers, projectStorage, tasks, users, projectAi } from '../db/schema.js'
 import { encrypt } from '../lib/crypto.js'
+import { logActivity } from '../lib/audit.js'
 import { PutObjectCommand, DeleteObjectCommand, S3Client } from '@aws-sdk/client-s3'
 import { requireSession, requireProject, signProjectToken, type SessionEnv, type ProjectEnv } from '../auth.js'
 import { sendAddedToProjectMail, sendDeletedMail, sendRemovedFromProjectMail } from '../lib/mails.js'
@@ -707,6 +708,56 @@ projectsRoute.patch(
     if (b.responsibility !== undefined) patch.responsibility = b.responsibility
     await db.update(projectMembers).set(patch).where(eq(projectMembers.id, target.id))
     return c.json({ ok: true })
+  },
+)
+
+// Роль участника в проекте — owner/admin проекта или company admin.
+// Раньше роль назначалась один раз, при добавлении, и больше не менялась:
+// чтобы сделать человека админом, его приходилось исключать и звать заново,
+// теряя должность и зону ответственности.
+projectsRoute.patch(
+  '/:projectId/members/:userId/role',
+  zValidator('json', z.object({ role: z.enum(['admin', 'member']) })),
+  async (c) => {
+    const { sub } = c.get('session')
+    const { projectId, userId } = c.req.param()
+    const project = await db.query.projects.findFirst({ where: eq(projects.id, projectId) })
+    if (!project) return c.json({ error: 'Not found' }, 404)
+
+    const me = await projectRoleOf(projectId, sub)
+    const companyRole = await companyRoleOf(project.companyId, sub)
+    if (!(me?.role === 'owner' || me?.role === 'admin' || companyRole === 'admin')) {
+      return c.json({ error: 'Forbidden' }, 403)
+    }
+
+    const target = await projectRoleOf(projectId, userId)
+    if (!target) return c.json({ error: 'Not a project member' }, 404)
+
+    // Владелец — это тот, кто завёл проект; роль не передаётся и не снимается,
+    // иначе проект может остаться без хозяина.
+    if (target.role === 'owner') return c.json({ error: 'Project owner role cannot be changed' }, 400)
+
+    const { role } = c.req.valid('json')
+    if (role === target.role) return c.json({ ok: true, role })
+
+    // Персональные права сбрасываем на умолчания новой роли. Иначе понижение
+    // выходит показным: ярлык сменился, а выставленные вручную crud-уровни
+    // остались, и человек по-прежнему всё удаляет.
+    await db
+      .update(projectMembers)
+      .set({ role, permissions: JSON.stringify(defaultDomainPermissions(role)) })
+      .where(eq(projectMembers.id, target.id))
+
+    await logActivity({
+      projectId,
+      actorId: sub,
+      action: 'update',
+      entityType: 'member',
+      entityId: userId,
+      entityLabel: role === 'admin' ? 'назначен админом проекта' : 'переведён в участники',
+    })
+
+    return c.json({ ok: true, role, domains: defaultDomainPermissions(role) })
   },
 )
 

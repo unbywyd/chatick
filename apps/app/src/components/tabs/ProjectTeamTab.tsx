@@ -8,6 +8,7 @@ import { cn } from '@/lib/utils'
 import { Input } from '@/components/ui/input'
 import { Button } from '@/components/ui/button'
 import { Switch } from '@/components/ui/switch'
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { useConfirm } from '@/components/ui/confirm'
 
 // Таб «Команда» проекта: участники + доменные права инлайн + добавление из компании (SPEC §3.2, §4.3, §8)
@@ -79,6 +80,19 @@ export function ProjectTeamTab({
     onError: onErr,
   })
 
+  const setRole = useMutation({
+    mutationFn: ({ userId, role }: { userId: string; role: 'admin' | 'member' }) =>
+      api(`/api/v1/projects/${projectId}/members/${userId}/role`, {
+        method: 'PATCH',
+        body: JSON.stringify({ role }),
+      }),
+    onSuccess: () => {
+      toast.success(t('projTeam.roleChanged'))
+      refresh()
+    },
+    onError: onErr,
+  })
+
   const removeMember = useMutation({
     mutationFn: (userId: string) => api(`/api/v1/projects/${projectId}/members/${userId}`, { method: 'DELETE' }),
     onSuccess: () => {
@@ -137,9 +151,38 @@ export function ProjectTeamTab({
                   <span className="block truncate text-sm font-medium">{m.user.name || m.user.email}</span>
                   <span className="block truncate text-xs text-muted-foreground">{m.user.email}</span>
                 </span>
-                <span className="rounded-full bg-secondary px-2 py-0.5 text-xs text-secondary-foreground">
-                  {t(`roles.${m.role}`)}
-                </span>
+                {canEdit && !isOwner ? (
+                  <Select
+                    value={m.role}
+                    onValueChange={async (role) => {
+                      if (role === m.role) return
+                      // Понижение отбирает доступ, повышение раздаёт — и то и другое
+                      // стоит подтвердить: права при смене роли сбрасываются на
+                      // умолчания, а выставленные вручную уровни пропадут.
+                      const ok = await confirm({
+                        title: t(role === 'admin' ? 'projTeam.promoteConfirm' : 'projTeam.demoteConfirm', {
+                          name: m.user.name || m.user.email,
+                        }),
+                        description: t('projTeam.roleResetsPermissions'),
+                        confirmLabel: t('projTeam.roleApply'),
+                        destructive: role === 'member',
+                      })
+                      if (ok) setRole.mutate({ userId: m.user.id, role: role as 'admin' | 'member' })
+                    }}
+                  >
+                    <SelectTrigger className="h-8 w-32 shrink-0 text-xs">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="admin">{t('roles.admin')}</SelectItem>
+                      <SelectItem value="member">{t('roles.member')}</SelectItem>
+                    </SelectContent>
+                  </Select>
+                ) : (
+                  <span className="rounded-full bg-secondary px-2 py-0.5 text-xs text-secondary-foreground">
+                    {t(`roles.${m.role}`)}
+                  </span>
+                )}
                 {canEdit && (
                   <>
                     <Button
