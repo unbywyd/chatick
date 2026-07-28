@@ -7,6 +7,16 @@ refuses to run otherwise, so a release can never ship without a description.
 
 Written in English only: this file is published on the website.
 
+## 0.2.1 — 2026-07-28
+
+### Fixed
+
+- The tray panel opened empty. Its state was sent while the window was still
+  loading, so it arrived nowhere, and the panel then waited for the next update
+  from the app — which can be a minute away.
+- The desktop app stopped feeding the tray when it had been opened before
+  signing in: it checked for a session once at startup and never again.
+
 ## 0.2.0 — 2026-07-28
 
 ### Added
