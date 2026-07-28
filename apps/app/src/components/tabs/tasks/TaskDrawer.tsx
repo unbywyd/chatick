@@ -143,6 +143,29 @@ export function TaskDrawer({
   })
 
   const dirty = title !== task.title || description !== task.description
+
+  /**
+   * Выйти из правки, не сохраняя.
+   *
+   * Спрашиваем, только когда есть что терять: подтверждать выход из формы,
+   * в которой ничего не меняли, — лишний вопрос. Блокировка задачи снимается
+   * сама при выходе из режима, иначе она осталась бы занятой для остальных.
+   */
+  async function cancelEditing() {
+    if (dirty) {
+      const ok = await confirm({
+        title: t('tasks.discardTitle'),
+        description: t('tasks.discardHint'),
+        destructive: true,
+        confirmLabel: t('tasks.discardConfirm'),
+      })
+      if (!ok) return
+    }
+    setTitle(task.title)
+    setDescription(task.description)
+    setEstimate(fmtEstimate(task.estimateMinutes))
+    setEditing(false)
+  }
   const refresh = () => {
     qc.invalidateQueries({ queryKey: ['task-files', task.id] })
     qc.invalidateQueries({ queryKey: ['tasks'] }) // attachmentsCount в списке
@@ -469,11 +492,17 @@ export function TaskDrawer({
           {validate.isPending ? <Loader2 className="size-3.5 animate-spin" /> : <Sparkles className="size-3.5" />}
           {t('tasks.checkTask')}
         </Button>
-        {dirty && (
-          <Button variant="brand" size="sm" onClick={() => onPatch({ title: title.trim() || task.title, description })}>
-            {t('projectForm.save')}
+        <div className="flex items-center gap-2">
+          {/* Отмена рядом с сохранением, а не в углу: решают их вместе. */}
+          <Button variant="ghost" size="sm" onClick={() => void cancelEditing()}>
+            {t('files.cancel')}
           </Button>
-        )}
+          {dirty && (
+            <Button variant="brand" size="sm" onClick={() => onPatch({ title: title.trim() || task.title, description })}>
+              {t('projectForm.save')}
+            </Button>
+          )}
+        </div>
       </div>
     </>
   )

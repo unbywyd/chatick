@@ -12,6 +12,7 @@ import { Avatar } from '@/components/ui/avatar'
 import { ClipboardBanner } from '@/components/ui/clipboard-banner'
 import { useConfirm } from '@/components/ui/confirm'
 import type { Member } from './types'
+import { FileViewer, type ViewerFile } from '@/components/files/FileViewer'
 
 // Комментарии к задаче (SPEC §8.9): минимальный Tiptap + mentions + ответы + файлы.
 
@@ -53,6 +54,9 @@ export function TaskComments({
   // Оригиналы и здесь по желанию: механизм общий, и делать в комментариях
   // исключение значит заставлять помнить, где как. По умолчанию сжимаем.
   const [keepOriginal, setKeepOriginal] = useState(false)
+  // Открытый файл вложения: тот же просмотрщик, что и в задаче — с зумом,
+  // pdf и видео. Раньше вложения комментария вообще не открывались.
+  const [viewing, setViewing] = useState<ViewerFile | null>(null)
 
   // Ссылки на превью держим отдельно и освобождаем при смене набора:
   // createObjectURL прямо в разметке создавал бы новую ссылку на каждый
@@ -190,7 +194,10 @@ export function TaskComments({
                 <EditForm initial={c.body} mentions={mentions} onCancel={() => setEditing(null)} onSave={(b) => saveEdit.mutate({ id: c.id, body: b })} />
               ) : (
                 <div className="msg-md break-words text-sm">
-                  <ReactMarkdown>{renderMentions(c.body)}</ReactMarkdown>
+                  {/* Тем же редактором, что и писали: он отдаёт HTML, а
+                      ReactMarkdown его не разбирал и печатал теги как текст.
+                      readOnly — значит просто разметка, без правки. */}
+                  <RichEditor value={renderMentions(c.body)} onChange={() => {}} mentions={[]} preset="minimal" readOnly />
                 </div>
               )}
 
@@ -202,9 +209,13 @@ export function TaskComments({
                         🚫 {f.name}
                       </span>
                     ) : (
-                      <span key={f.id} className="inline-flex items-center gap-1 rounded border px-1.5 py-0.5 text-xs">
+                      <button
+                        key={f.id}
+                        onClick={() => setViewing({ id: f.id, name: f.name, mime: f.mime })}
+                        className="inline-flex items-center gap-1 rounded border px-1.5 py-0.5 text-xs transition-colors hover:border-brand hover:text-brand"
+                      >
                         <Paperclip className="size-3" /> {f.name}
-                      </span>
+                      </button>
                     ),
                   )}
                 </div>
@@ -301,6 +312,7 @@ export function TaskComments({
           </Button>
         </div>
       </div>
+      {viewing && <FileViewer file={viewing} onClose={() => setViewing(null)} />}
     </div>
   )
 }

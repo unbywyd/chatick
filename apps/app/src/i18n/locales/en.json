@@ -240,7 +240,10 @@
     "assignToMe": "Assign to me",
     "copyLink": "Copy link",
     "moreActions": "More actions",
-    "estimateHint": "e.g. 45 or 2:30"
+    "estimateHint": "e.g. 45 or 2:30",
+    "discardTitle": "Discard changes?",
+    "discardHint": "Your edits will not be saved.",
+    "discardConfirm": "Discard"
   },
   "files": {
     "search": "Search files…",

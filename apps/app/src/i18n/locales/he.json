@@ -240,7 +240,10 @@
     "assignToMe": "הקצה לי",
     "copyLink": "העתק קישור",
     "moreActions": "עוד",
-    "estimateHint": "למשל 45 או 2:30"
+    "estimateHint": "למשל 45 או 2:30",
+    "discardTitle": "לבטל את השינויים?",
+    "discardHint": "העריכות לא יישמרו.",
+    "discardConfirm": "ביטול"
   },
   "files": {
     "search": "חיפוש קבצים…",

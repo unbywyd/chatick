@@ -241,7 +241,10 @@
     "assignToMe": "Назначить на меня",
     "copyLink": "Копировать ссылку",
     "moreActions": "Ещё",
-    "estimateHint": "например 45 или 2:30"
+    "estimateHint": "например 45 или 2:30",
+    "discardTitle": "Отменить изменения?",
+    "discardHint": "Правки не сохранятся.",
+    "discardConfirm": "Отменить"
   },
   "files": {
     "search": "Поиск файлов…",
