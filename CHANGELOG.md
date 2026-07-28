@@ -7,6 +7,52 @@ refuses to run otherwise, so a release can never ship without a description.
 
 Written in English only: this file is published on the website.
 
+## 0.2.8 — 2026-07-28
+
+### Added
+
+- Master connection: one tunnel for every project you belong to, across all
+  your companies — including ones you join later. The app is built around
+  several projects, and a tunnel tied to one of them meant reconnecting on
+  every switch. It grants nothing extra: each call still checks your membership
+  and permissions in that particular project.
+- Assistants can now manage the team from your editor: list who is there, add
+  someone, change their role, permissions, job title or area of
+  responsibility. A company admin can invite a person from outside in a single
+  call — the invite carries the project with it. Removing someone stays in the
+  interface: it is irreversible.
+- `GET /x/companies` for assistants — your companies with the projects you are
+  in, and your role in each. Companies with the same name are flagged, so an
+  assistant never picks one by name alone.
+
+### Fixed
+
+- The tray timer went its own way: stopping the clock on the website left it
+  ticking in the tray, and starting one there did nothing visible. The panel
+  had its own copy of the state that nothing refreshed. Timer changes now reach
+  you wherever you are, immediately.
+- Play and stop in the tray failed silently. They used the token of whichever
+  project was open last, so with none open — or a different one — the request
+  died unnoticed. Errors are now shown instead of swallowed.
+- The tray lost the project list when you switched projects, and showed "no
+  notes yet" on the Projects tab.
+- The tray opened empty after launch — only closing and reopening it helped.
+- Connecting an assistant to a company crashed the connect screen, which also
+  froze the tray: everything the panel does goes through the app window.
+- Project names are now unique within a company, case-insensitively. Two
+  projects with the same name made "do it in Redesign" meaningless — most of
+  all for an assistant picking the project by name from a conversation.
+- A malformed request body no longer looks like a server crash.
+
+### Changed
+
+- Any member of a company can connect an assistant to the whole company. It
+  used to be limited to admins and managers, leaving everyone else with a
+  tunnel to a single project.
+- The company picker tells your own companies apart from those you were
+  invited to, shows how many projects are in each, and no longer claims you
+  have one company when you have several.
+
 ## 0.2.7 — 2026-07-28
 
 ### Security

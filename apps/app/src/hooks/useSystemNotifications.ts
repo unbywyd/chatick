@@ -285,6 +285,13 @@ export function useSystemNotifications() {
         try {
           const { event } = JSON.parse(e.data as string) as { event?: string }
           if (event === 'notification') qc.invalidateQueries({ queryKey: ['inbox-system'] })
+          // Часы человека — его собственные, и панель в трее живёт вне
+          // проекта: без личного события она узнавала об остановке только
+          // из опроса, показывая до полуминуты уже остановленный таймер.
+          if (event === 'time') {
+            qc.invalidateQueries({ queryKey: ['desktop-running'] })
+            qc.invalidateQueries({ queryKey: ['time-running'] })
+          }
         } catch {
           /* чужое сообщение — не наша забота */
         }

@@ -58,6 +58,7 @@ export function TimerControl({ collapsed }: { collapsed: boolean }) {
     onTime: () => {
       qc.invalidateQueries({ queryKey: ['time-running', projectId] })
       qc.invalidateQueries({ queryKey: ['time-entries', projectId] })
+      qc.invalidateQueries({ queryKey: ['desktop-running'] })
     },
   })
 
@@ -66,7 +67,12 @@ export function TimerControl({ collapsed }: { collapsed: boolean }) {
   const count = running.data?.items.length ?? 0
 
   const onErr = (e: unknown) => toast.error(e instanceof Error ? e.message : String(e))
-  const refresh = () => qc.invalidateQueries({ queryKey: ['time-running', projectId] })
+  const refresh = () => {
+    qc.invalidateQueries({ queryKey: ['time-running', projectId] })
+    // И панель в трее: у неё свой ключ, и без этого она до полуминуты
+    // показывала таймер, остановленный секунду назад здесь же.
+    qc.invalidateQueries({ queryKey: ['desktop-running'] })
+  }
 
   const [draft, setDraft] = useState('')
 

@@ -7,7 +7,7 @@ import { projects, tasks, timeEntries, users } from '../db/schema.js'
 import { requireProject, requireSession, type ProjectEnv, type SessionEnv } from '../auth.js'
 import { projectRoleOf, companyRoleOf } from './projects.js'
 import { logActivity } from '../lib/audit.js'
-import { broadcast } from '../ws.js'
+import { broadcast, sendToUserAnywhere } from '../ws.js'
 import { translateTimeEntry } from '../lib/llm.js'
 
 // Трекинг времени (SPEC §8.32).
@@ -254,6 +254,9 @@ timeRoute.post(
       .returning()
 
     broadcast(projectId, 'time', { action: 'start', id: row!.id, userId: sub })
+    // И лично человеку: трей живёт вне проекта, а часы — его собственные.
+    // Без этого панель до полуминуты показывала прежнее состояние.
+    sendToUserAnywhere(sub, 'time', { action: 'start', id: row!.id })
     void maybeTranslate(projectId, row!.id, row!.description).catch(() => {})
     return c.json((await hydrate([row!]))[0], 201)
   },
@@ -277,6 +280,7 @@ timeRoute.post('/:id/stop', async (c) => {
   if (endedAt.getTime() - entry.startedAt.getTime() < 1_000) {
     await db.delete(timeEntries).where(eq(timeEntries.id, entry.id))
     broadcast(entry.projectId, 'time', { action: 'delete', id: entry.id, userId: entry.userId })
+    sendToUserAnywhere(entry.userId, 'time', { action: 'delete', id: entry.id })
     return c.json({ discarded: true, reason: 'Stopped within a second — nothing recorded.' })
   }
 
@@ -287,6 +291,7 @@ timeRoute.post('/:id/stop', async (c) => {
     .returning()
 
   broadcast(entry.projectId, 'time', { action: 'stop', id: row!.id, userId: entry.userId })
+  sendToUserAnywhere(entry.userId, 'time', { action: 'stop', id: row!.id })
   return c.json((await hydrate([row!]))[0])
 })
 
