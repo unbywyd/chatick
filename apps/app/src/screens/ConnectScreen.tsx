@@ -4,7 +4,7 @@ import { useNavigate, useSearchParams } from 'react-router-dom'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { useTranslation } from 'react-i18next'
 import { toast } from 'sonner'
-import { ArrowLeft, Bot, Check, Copy, Plug, ShieldCheck, X, Search } from 'lucide-react'
+import { ArrowLeft, Bot, Check, Copy, Plug, ShieldCheck, X, Search, Building2, FolderKanban } from 'lucide-react'
 import { api, API_URL, getSessionToken, type Company, type ProjectListItem } from '@/lib/api'
 import { cn } from '@/lib/utils'
 import { Logo } from '@/components/Logo'
@@ -91,13 +91,13 @@ export function ConnectPanel({ onClose }: { onClose?: () => void }) {
     })),
   ]
   const [q, setQ] = useState('')
-  const shown = q.trim()
-    ? targets.filter(
-        (x) =>
-          x.name.toLowerCase().includes(q.trim().toLowerCase()) ||
-          (x.company ?? '').toLowerCase().includes(q.trim().toLowerCase()),
-      )
-    : targets
+  const match = (name: string, company: string | null) => {
+    const needle = q.trim().toLowerCase()
+    if (!needle) return true
+    return name.toLowerCase().includes(needle) || (company ?? '').toLowerCase().includes(needle)
+  }
+  const shownCompanies = targets.filter((x) => x.whole && match(x.name, null))
+  const shownProjects = targets.filter((x) => !x.whole && match(x.name, x.company))
 
   useEffect(() => {
     if (!projectId && targets.length) setProjectId(targets[0]!.key)
@@ -230,44 +230,71 @@ export function ConnectPanel({ onClose }: { onClose?: () => void }) {
               </p>
               <div>
                 <p className="text-xs font-medium text-muted-foreground">{t('connect.chooseProject')}</p>
-                {/* Поиск появляется, когда список перестаёт читаться взглядом */}
-                {targets.length > 6 && (
-                  <div className="relative mt-1.5">
-                    <Search className="pointer-events-none absolute start-2.5 top-1/2 size-3.5 -translate-y-1/2 text-muted-foreground" />
-                    <input
-                      value={q}
-                      onChange={(e) => setQ(e.target.value)}
-                      placeholder={t('connect.search')}
-                      className="h-8 w-full rounded-md border bg-transparent ps-8 pe-3 text-sm outline-none focus:ring-2 focus:ring-ring"
-                    />
-                  </div>
-                )}
-                <div className="mt-1.5 max-h-44 space-y-1 overflow-y-auto pe-1">
-                  {shown.map((x) => (
-                    <button
-                      key={x.key}
-                      onClick={() => setProjectId(x.key)}
-                      className={cn(
-                        'flex w-full cursor-pointer items-center gap-2 rounded-md border px-2.5 py-2 text-start text-sm transition-colors',
-                        projectId === x.key ? 'border-brand bg-accent' : 'hover:bg-secondary',
-                      )}
-                    >
-                      <span className="min-w-0 flex-1">
-                        <span className="block truncate">{x.name}</span>
-                        {x.company && <span className="block truncate text-[11px] text-muted-foreground">{x.company}</span>}
-                      </span>
-                      {x.whole && (
-                        <span className="shrink-0 rounded-full border px-1.5 py-0.5 text-[10px] text-muted-foreground">
-                          {t('connect.wholeCompany')}
-                        </span>
-                      )}
-                    </button>
-                  ))}
-                  {!shown.length && (
-                    <p className="py-4 text-center text-xs text-muted-foreground">{t('connect.nothingFound')}</p>
+
+                {/* Поиск всегда: даже с четырьмя целями искать быстрее, чем
+                    водить глазами по списку, а с двадцатью — единственный
+                    способ. Порог «показывать после N» только сбивает: поле то
+                    появляется, то исчезает. */}
+                <div className="relative mt-1.5">
+                  <Search className="pointer-events-none absolute start-2.5 top-1/2 size-3.5 -translate-y-1/2 text-muted-foreground" />
+                  <input
+                    value={q}
+                    onChange={(e) => setQ(e.target.value)}
+                    placeholder={t('connect.search')}
+                    className="h-8 w-full rounded-md border bg-transparent ps-8 pe-3 text-sm outline-none focus:ring-2 focus:ring-ring"
+                  />
+                </div>
+
+                <div className="mt-2 max-h-56 overflow-y-auto pe-1">
+                  {/* Компании и проекты — разные вещи: выдать компанию значит
+                      открыть доступ ко всем её проектам сразу, включая будущие.
+                      В одном плоском списке это различие терялось. */}
+                  {shownCompanies.length > 0 && (
+                    <>
+                      <p className="px-0.5 pb-1 pt-0.5 text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">
+                        {t('connect.groupCompanies')}
+                      </p>
+                      <div className="space-y-1">
+                        {shownCompanies.map((x) => (
+                          <TargetRow
+                            key={x.key}
+                            active={projectId === x.key}
+                            onClick={() => setProjectId(x.key)}
+                            title={x.name}
+                            note={t('connect.allProjectsOf')}
+                            icon={<Building2 className="size-4" />}
+                          />
+                        ))}
+                      </div>
+                    </>
+                  )}
+
+                  {shownProjects.length > 0 && (
+                    <>
+                      <p className="px-0.5 pb-1 pt-2.5 text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">
+                        {t('connect.groupProjects')}
+                      </p>
+                      <div className="space-y-1">
+                        {shownProjects.map((x) => (
+                          <TargetRow
+                            key={x.key}
+                            active={projectId === x.key}
+                            onClick={() => setProjectId(x.key)}
+                            title={x.name}
+                            note={x.company}
+                            icon={<FolderKanban className="size-4" />}
+                          />
+                        ))}
+                      </div>
+                    </>
+                  )}
+
+                  {!shownCompanies.length && !shownProjects.length && (
+                    <p className="py-6 text-center text-xs text-muted-foreground">{t('connect.nothingFound')}</p>
                   )}
                 </div>
               </div>
+
               <p className="text-xs text-muted-foreground">{t('connect.actsAsYou')}</p>
               <div className="flex gap-2">
                 <Button variant="brand" size="sm" disabled={!projectId || approve.isPending} onClick={() => approve.mutate()}>
@@ -384,5 +411,37 @@ export function ConnectDialog({ onClose }: { onClose: () => void }) {
       </div>
     </div>,
     document.body,
+  )
+}
+
+/** Строка выбора: одна высота у компаний и проектов, чтобы список читался. */
+function TargetRow({
+  active,
+  onClick,
+  title,
+  note,
+  icon,
+}: {
+  active: boolean
+  onClick: () => void
+  title: string
+  note?: string | null
+  icon: React.ReactNode
+}) {
+  return (
+    <button
+      onClick={onClick}
+      className={cn(
+        'flex w-full cursor-pointer items-center gap-2.5 rounded-md border px-2.5 py-1.5 text-start transition-colors',
+        active ? 'border-brand bg-accent' : 'hover:bg-secondary',
+      )}
+    >
+      <span className={cn('shrink-0', active ? 'text-brand' : 'text-muted-foreground')}>{icon}</span>
+      <span className="min-w-0 flex-1">
+        <span className="block truncate text-sm leading-tight">{title}</span>
+        {note && <span className="block truncate text-[11px] leading-tight text-muted-foreground">{note}</span>}
+      </span>
+      {active && <Check className="size-3.5 shrink-0 text-brand" />}
+    </button>
   )
 }

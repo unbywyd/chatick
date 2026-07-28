@@ -240,7 +240,7 @@
       /* Свой список, а не <select>: нативный выпадающий список — отдельное
          окно ОС, оно забирает фокус, и панель закрывалась по blur на каждом
          клике. Заодно он не поддаётся оформлению. */
-      .picker { display: flex; flex-direction: column; gap: 3px; max-height: 132px; overflow-y: auto; }
+      .picker { display: flex; flex-direction: column; gap: 3px; max-height: 176px; overflow-y: auto; }
       .picker::-webkit-scrollbar { width: 6px; }
       .picker::-webkit-scrollbar-thumb { background: #2e2e2e; border-radius: 3px; }
       .pick {
@@ -253,6 +253,10 @@
       .pick:hover { background: #1e1e1e; }
       .pick-body { display: flex; flex-direction: column; align-items: flex-start; gap: 1px; min-width: 0; flex: 1; }
       .pick-sub { font-size: 10px; color: #7a7a7a; }
+      .pick-group {
+        font-size: 9px; text-transform: uppercase; letter-spacing: .08em;
+        color: #6a6a6a; padding: 6px 2px 2px; font-weight: 600;
+      }
       .target-search {
         width: 100%; box-sizing: border-box; margin-bottom: 6px; padding: 7px 10px;
         background: #131313; border: 1px solid #2a2a2a; border-radius: 8px;
@@ -614,18 +618,16 @@
           ...grantable.map((c) => ({
             key: `c:${c.id}`,
             name: c.name,
-            tag: T('connectWholeCompany', 'whole company'),
+            sub: T('connectAllProjectsOf', 'all projects, including future ones'),
             color: null,
-            company: null,
           })),
           // Подпись компанией: с несколькими компаниями одинаковые названия
           // проектов не редкость, и без неё непонятно, какой из них какой.
           ...projects.map((p) => ({
             key: `p:${p.id}`,
             name: p.name,
-            tag: null,
             color: p.color,
-            company: companyNames.size > 1 ? companyNames.get(p.companyId) || null : null,
+            sub: companyNames.size > 1 ? companyNames.get(p.companyId) || null : null,
           })),
         ]
         if (!connect.target && targets.length) connect.target = targets[0].key
@@ -634,22 +636,30 @@
         // простыню, и кнопку «Разрешить» приходится искать прокруткой.
         const q = (connect.q || '').trim().toLowerCase()
         const shown = q
-          ? targets.filter((x) => x.name.toLowerCase().includes(q) || (x.company || '').toLowerCase().includes(q))
+          ? targets.filter((x) => x.name.toLowerCase().includes(q) || (x.sub || '').toLowerCase().includes(q))
           : targets
 
-        const picker = shown
-          .map(
-            (x) => `
+        // Компании и проекты — разное: выдать компанию значит открыть доступ ко
+        // всем её проектам, включая будущие. В плоском списке это терялось.
+        const row = (x) => `
               <button class="pick ${x.key === connect.target ? 'on' : ''}" data-target="${escape(x.key)}">
                 <span class="dot" style="background:${escape(x.color || '#3a3a3a')}"></span>
                 <span class="pick-body">
                   <span class="pick-name">${escape(x.name)}</span>
-                  ${x.company ? `<span class="pick-sub">${escape(x.company)}</span>` : ''}
+                  ${x.sub ? `<span class="pick-sub">${escape(x.sub)}</span>` : ''}
                 </span>
-                ${x.tag ? `<span class="pick-tag">${escape(x.tag)}</span>` : ''}
-              </button>`,
-          )
-          .join('')
+              </button>`
+        const groupCompanies = shown.filter((x) => x.key[0] === 'c')
+        const groupProjects = shown.filter((x) => x.key[0] === 'p')
+        const picker =
+          (groupCompanies.length
+            ? `<div class="pick-group">${T('connectGroupCompanies', 'Companies')}</div>` +
+              groupCompanies.map(row).join('')
+            : '') +
+          (groupProjects.length
+            ? `<div class="pick-group">${T('connectGroupProjects', 'Projects')}</div>` +
+              groupProjects.map(row).join('')
+            : '')
 
         const conns = (state.connections || [])
           .map(
@@ -683,12 +693,8 @@
                      <div class="connect-who">${escape(connect.clientName)}</div>
                      <div class="connect-warn">${T('connectActsAsYou', 'Will act on your behalf in the chosen project')}</div>
                      <label class="connect-label">${T('connectWhere', 'Where to grant access')}</label>
-                     ${
-                       targets.length > 6
-                         ? `<input id="targetSearch" class="target-search" spellcheck="false"
-                                   placeholder="${T('connectSearch', 'Search…')}" value="${escape(connect.q || '')}" />`
-                         : ''
-                     }
+                     <input id="targetSearch" class="target-search" spellcheck="false"
+                            placeholder="${T('connectSearch', 'Search…')}" value="${escape(connect.q || '')}" />
                      <div class="picker">${
                        picker ||
                        `<p class="empty">${

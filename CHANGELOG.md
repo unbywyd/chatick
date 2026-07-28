@@ -7,6 +7,18 @@ refuses to run otherwise, so a release can never ship without a description.
 
 Written in English only: this file is published on the website.
 
+## 0.2.4 — 2026-07-28
+
+### Changed
+
+- Choosing where to grant an assistant access now separates companies from
+  projects instead of mixing them into one flat list. Granting a company opens
+  every project inside it, including ones created later — that is a different
+  decision from granting a single project, and the list now says so.
+- The search box is always there rather than appearing once the list grows past
+  a threshold: a field that comes and goes is harder to rely on than one that
+  is simply always present.
+
 ## 0.2.3 — 2026-07-28
 
 ### Fixed

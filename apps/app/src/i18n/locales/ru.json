@@ -878,7 +878,10 @@
     "wholeCompany": "Вся компания",
     "waitingForAi": "Ждём, пока ИИ подключится…",
     "search": "Найти проект…",
-    "nothingFound": "Ничего не найдено"
+    "nothingFound": "Ничего не найдено",
+    "groupCompanies": "Компании",
+    "groupProjects": "Проекты",
+    "allProjectsOf": "Все проекты, включая будущие"
   },
   "backup": {
     "title": "Экспорт и импорт",

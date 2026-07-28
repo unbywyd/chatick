@@ -874,7 +874,10 @@
     "wholeCompany": "Whole company",
     "waitingForAi": "Waiting for your AI to connect…",
     "search": "Search projects…",
-    "nothingFound": "Nothing found"
+    "nothingFound": "Nothing found",
+    "groupCompanies": "Companies",
+    "groupProjects": "Projects",
+    "allProjectsOf": "All projects, including future ones"
   },
   "backup": {
     "title": "Export & import",

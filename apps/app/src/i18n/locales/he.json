@@ -874,7 +874,10 @@
     "wholeCompany": "כל החברה",
     "waitingForAi": "ממתינים שה-AI יתחבר…",
     "search": "חיפוש פרויקט…",
-    "nothingFound": "לא נמצא דבר"
+    "nothingFound": "לא נמצא דבר",
+    "groupCompanies": "חברות",
+    "groupProjects": "פרויקטים",
+    "allProjectsOf": "כל הפרויקטים, כולל עתידיים"
   },
   "backup": {
     "title": "ייצוא וייבוא",
