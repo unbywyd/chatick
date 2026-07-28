@@ -1,0 +1,1900 @@
+---
+import { LOCALES, dict, type LocaleCode } from '../i18n'
+
+interface Props {
+  locale: LocaleCode
+}
+
+const { locale } = Astro.props
+const t = dict[locale]
+const APP_URL = 'https://app.chatick.com'
+const API_URL = 'https://api.chatick.com'
+const SUPPORT = 'support@chatick.com'
+const GITHUB = 'https://github.com/unbywyd/chatick'
+
+// Кнопки скачивания пока без файлов: сборки ещё не выкладываются, и вести
+// на пустоту хуже, чем честно сказать «скоро».
+const WIN_ICON =
+  '<svg viewBox="0 0 24 24" width="18" height="18" fill="currentColor" aria-hidden="true"><path d="M3 5.6l7.2-1v6.9H3V5.6zm0 12.8l7.2 1v-6.8H3v5.8zM11.1 19.6L21 21v-8.3h-9.9v6.9zM11.1 3v7.5H21V2l-9.9 1z"/></svg>'
+const APPLE_ICON =
+  '<svg viewBox="0 0 24 24" width="18" height="18" fill="currentColor" aria-hidden="true"><path d="M16.4 12.7c0-2.4 2-3.6 2.1-3.6-1.1-1.7-2.9-1.9-3.6-1.9-1.5-.2-3 .9-3.7.9-.8 0-2-.9-3.2-.8-1.7 0-3.2 1-4 2.5-1.7 3-.4 7.4 1.2 9.8.8 1.2 1.8 2.5 3 2.4 1.2 0 1.7-.8 3.1-.8 1.4 0 1.8.8 3.1.8 1.3 0 2.1-1.2 2.9-2.3.9-1.3 1.3-2.6 1.3-2.7-.1 0-2.5-1-2.5-3.8zM14 5.2c.7-.8 1.1-2 1-3.2-1 0-2.2.7-2.9 1.5-.6.7-1.2 1.9-1 3 1.1.1 2.2-.6 2.9-1.3z"/></svg>'
+const VERSION = '0.2.3'
+const DOWNLOADS = [
+  { key: 'windows' as const, href: `/releases/Chatick-Setup-${VERSION}.exe`, icon: 'windows' },
+  { key: 'mac' as const, href: '', icon: 'apple' },
+]
+
+// Цифры для графиков — то, что видно на овервью в самом продукте.
+const CHART_HOURS = [
+  { d: 'Mon', v: 6.5 },
+  { d: 'Tue', v: 7.5 },
+  { d: 'Wed', v: 5 },
+  { d: 'Thu', v: 8 },
+  { d: 'Fri', v: 6 },
+  { d: 'Sat', v: 2 },
+  { d: 'Sun', v: 1 },
+]
+const CHART_MAX = 8
+const CHART_STATUSES = [
+  { label: 'Done', v: 46, color: '#d4f228' },
+  { label: 'In progress', v: 28, color: '#7fd1ff' },
+  { label: 'Review', v: 14, color: '#ffc46b' },
+  { label: 'To do', v: 12, color: '#6d7566' },
+]
+---
+
+<header class="nav">
+  <div class="container nav-inner">
+    <a class="logo" href={LOCALES.find((l) => l.code === locale)!.path}>
+      <svg viewBox="0 0 48 48" fill="none" width="30" height="30" aria-hidden="true">
+        <path
+          d="M24 4C12.4 4 3 12.7 3 23.5c0 5.4 2.4 10.3 6.2 13.8L8 44l8.4-3.2c2.4.7 4.9 1.2 7.6 1.2 11.6 0 21-8.7 21-19.5S35.6 4 24 4Z"
+          stroke="currentColor"
+          stroke-width="4"
+          stroke-linejoin="round"></path>
+        <path d="M15 24.5 21 30l12-12" stroke="#d4f228" stroke-width="5.5" stroke-linecap="round" stroke-linejoin="round"
+        ></path>
+      </svg>
+      <span>Chatick</span>
+    </a>
+    <div class="nav-actions">
+      <nav class="langs" aria-label="Language">
+        {
+          LOCALES.map((l) => (
+            <a href={l.path} class:list={['lang', { active: l.code === locale }]} data-lang={l.code} lang={l.code}>
+              {l.label}
+            </a>
+          ))
+        }
+      </nav>
+      <a class="btn btn-sm" href={APP_URL}>{t.nav.start}</a>
+    </div>
+  </div>
+</header>
+
+<main>
+  <!-- HERO -->
+  <section class="hero">
+    <div class="container">
+      <!-- Честно и сразу: человек должен понимать, что ставит -->
+      <div class="beta-line">
+        <span class="beta-badge">{t.beta.badge}</span>
+        <span class="beta-note">{t.beta.note}</span>
+      </div>
+      <h1>
+        {t.hero.title1}<span class="accent">{t.hero.titleAccent}</span>{t.hero.title2}
+      </h1>
+      <p class="subtitle">{t.hero.subtitle}</p>
+      <div class="hero-cta">
+        <a class="btn" href={APP_URL}>
+          {t.hero.cta}
+          <svg viewBox="0 0 24 24" width="18" height="18" fill="none" class="arrow" aria-hidden="true">
+            <path d="M5 12h14m-6-6 6 6-6 6" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"></path>
+          </svg>
+        </a>
+        <a class="btn btn-ghost" href="#ask">{t.hero.ctaSecondary}</a>
+        <!-- Сборка готова — предлагаем её сразу, а не прячем внизу страницы -->
+        <a class="btn btn-ghost btn-win" href={DOWNLOADS[0]!.href} download>
+          <svg viewBox="0 0 24 24" width="17" height="17" fill="currentColor" aria-hidden="true"><path d="M3 5.6l7.2-1v6.9H3V5.6zm0 12.8l7.2 1v-6.8H3v5.8zM11.1 19.6L21 21v-8.3h-9.9v6.9zM11.1 3v7.5H21V2l-9.9 1z"/></svg>
+          {t.download.heroWin}
+        </a>
+      </div>
+      <p class="note hero-note">{t.hero.note}</p>
+
+      <!-- Три столпа — сразу в шапке, а не в подвале: опенсурс, бесплатно, надёжно -->
+      <ul class="hero-trust">
+        <li>
+          <!-- «Открытый код» ведёт на код: обещание, которое можно проверить -->
+          <a href={GITHUB} target="_blank" rel="noopener" title={t.footer.github}>
+            <svg viewBox="0 0 16 16" width="16" height="16" fill="#d4f228" aria-hidden="true">
+              <path d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27s1.36.09 2 .27c1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.01 8.01 0 0 0 16 8c0-4.42-3.58-8-8-8Z" />
+            </svg>
+            {t.hero.trust[0]}
+            <svg class="pill-out" viewBox="0 0 24 24" width="13" height="13" fill="none" aria-hidden="true">
+              <path d="M14 4h6v6M20 4l-8.5 8.5M18 14v4a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" />
+            </svg>
+          </a>
+        </li>
+        <li>
+          <svg viewBox="0 0 24 24" width="16" height="16" aria-hidden="true">
+            <path d="M12 3l1.9 5.6 5.6 1.4-5.6 1.9L12 17.5l-1.9-5.6L4.5 10l5.6-1.4L12 3z" fill="#d4f228" />
+          </svg>
+          {t.hero.trust[1]}
+        </li>
+        <li>
+          <svg viewBox="0 0 24 24" width="16" height="16" fill="none" aria-hidden="true">
+            <path d="M12 3l7 3v5.2c0 4.4-3 7.6-7 8.8-4-1.2-7-4.4-7-8.8V6l7-3z" stroke="#d4f228" stroke-width="2" stroke-linejoin="round" />
+            <path d="m9 11.6 2 2 4-4" stroke="#d4f228" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" />
+          </svg>
+          {t.hero.trust[2]}
+        </li>
+      </ul>
+    </div>
+  </section>
+
+  <!-- PAIN -->
+  <section class="section">
+    <div class="container">
+      <h2>{t.pain.title}</h2>
+      <div class="grid grid-4">
+        {
+          t.pain.items.map((item) => (
+            <div class="card card-pain">
+              <h3>{item.title}</h3>
+              <p>{item.text}</p>
+            </div>
+          ))
+        }
+      </div>
+    </div>
+  </section>
+
+  <!-- SOLUTION -->
+  <section class="section section-soft">
+    <div class="container">
+      <h2>{t.solution.title}</h2>
+      <p class="section-sub">{t.solution.subtitle}</p>
+      <div class="grid grid-4">
+        {
+          t.solution.items.map((item) => (
+            <div class="card card-solution">
+              <svg viewBox="0 0 24 24" width="22" height="22" fill="none" aria-hidden="true">
+                <path d="m5 13 4 4L19 7" stroke="#d4f228" stroke-width="3" stroke-linecap="round" stroke-linejoin="round" />
+              </svg>
+              <h3>{item.title}</h3>
+              <p>{item.text}</p>
+            </div>
+          ))
+        }
+      </div>
+    </div>
+  </section>
+
+  <!-- WORKSPACE: что ещё есть, кроме чата -->
+  <section class="section">
+    <div class="container">
+      <h2>{t.workspace.title}</h2>
+      <p class="section-sub">{t.workspace.subtitle}</p>
+      <div class="grid grid-3">
+        {
+          t.workspace.items.map((item) => (
+            <div class="card card-feature">
+              <h3>{item.title}</h3>
+              <p>{item.text}</p>
+            </div>
+          ))
+        }
+      </div>
+    </div>
+  </section>
+
+  <!-- BRIDGE: подключение своего ИИ -->
+  <section class="section section-soft">
+    <div class="container">
+      <div class="bridge">
+        <div class="bridge-copy">
+          <span class="tag">{t.bridge.tag}</span>
+          <h2>{t.bridge.title}</h2>
+          <p class="section-sub bridge-sub">{t.bridge.subtitle}</p>
+          <ul class="bridge-points">
+            {
+              t.bridge.points.map((p) => (
+                <li>
+                  <svg viewBox="0 0 24 24" width="18" height="18" fill="none" aria-hidden="true">
+                    <path d="m5 13 4 4L19 7" stroke="#d4f228" stroke-width="3" stroke-linecap="round" stroke-linejoin="round" />
+                  </svg>
+                  <span>{p}</span>
+                </li>
+              ))
+            }
+          </ul>
+          <p class="bridge-security">{t.bridge.security}</p>
+        </div>
+        <div class="bridge-demo" aria-hidden="true">
+          <div class="term">
+            <span class="term-dots"><i></i><i></i><i></i></span>
+            <pre><code><span class="c-dim">you ▸</span> connect to my Chatick project
+<span class="c-dim">ai  ▸</span> reading https://api.chatick.com/x
+<span class="c-dim">ai  ▸</span> open app.chatick.com/#/connect
+      and enter code <span class="c-accent">ABCD-2345</span>
+<span class="c-dim">ai  ▸</span> connected as Artyom · My Project
+<span class="c-dim">you ▸</span> what's on my plate?
+<span class="c-dim">ai  ▸</span> 3 open tasks, 1 in review
+</code></pre>
+          </div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ASK YOUR AI: копируемый промпт -->
+  <section class="section ask" id="ask">
+    <div class="container">
+      <span class="tag">{t.ask.tag}</span>
+      <h2>{t.ask.title}</h2>
+      <p class="section-sub">{t.ask.subtitle}</p>
+
+      <div class="prompt-box">
+        <p class="prompt-text" id="prompt-text">{t.ask.prompt}</p>
+        <button class="btn copy-btn" id="copy-prompt" data-copied={t.ask.copied}>
+          <svg viewBox="0 0 24 24" width="17" height="17" fill="none" aria-hidden="true">
+            <rect x="9" y="9" width="12" height="12" rx="2.5" stroke="currentColor" stroke-width="2"></rect>
+            <path d="M5 15V5.5A2.5 2.5 0 0 1 7.5 3H15" stroke="currentColor" stroke-width="2" stroke-linecap="round"></path>
+          </svg>
+          <span class="copy-label">{t.ask.copy}</span>
+        </button>
+      </div>
+      <p class="note ask-hint">{t.ask.hint}</p>
+    </div>
+  </section>
+
+  <!-- HOW -->
+  <section class="section">
+    <div class="container">
+      <h2>{t.how.title}</h2>
+      <div class="grid grid-3">
+        {
+          t.how.steps.map((step, i) => (
+            <div class="card card-step">
+              <span class="step-num">{i + 1}</span>
+              <h3>{step.title}</h3>
+              <p>{step.text}</p>
+            </div>
+          ))
+        }
+      </div>
+    </div>
+  </section>
+
+  <!-- ЧИСЛА: что видно в самом продукте -->
+  <section class="section section-soft">
+    <div class="container">
+      <h2>{t.workspace.title}</h2>
+      <p class="section-sub">{t.workspace.subtitle}</p>
+
+      <div class="charts">
+        <!-- Часы за неделю -->
+        <figure class="chart-card">
+          <figcaption class="chart-head">
+            <span class="chart-title">Hours this week</span>
+            <span class="chart-total">34h 00m</span>
+          </figcaption>
+          <div class="bars" role="img" aria-label="Hours tracked per day this week">
+            {
+              CHART_HOURS.map((h) => (
+                <div class="bar-col">
+                  <div class="bar-track">
+                    <div class="bar-fill" style={`height:${Math.round((h.v / CHART_MAX) * 100)}%`} />
+                  </div>
+                  <span class="bar-label">{h.d}</span>
+                </div>
+              ))
+            }
+          </div>
+        </figure>
+
+        <!-- Задачи по статусам -->
+        <figure class="chart-card">
+          <figcaption class="chart-head">
+            <span class="chart-title">Tasks by status</span>
+            <span class="chart-total">100</span>
+          </figcaption>
+          <div class="stack" role="img" aria-label="Share of tasks by status">
+            {CHART_STATUSES.map((x) => <span class="stack-part" style={`width:${x.v}%;background:${x.color}`} />)}
+          </div>
+          <ul class="legend">
+            {
+              CHART_STATUSES.map((x) => (
+                <li>
+                  <i style={`background:${x.color}`} />
+                  <span>{x.label}</span>
+                  <b>{x.v}%</b>
+                </li>
+              ))
+            }
+          </ul>
+        </figure>
+      </div>
+    </div>
+  </section>
+
+  <!-- ДОВЕРИЕ -->
+  <section class="section">
+    <div class="container">
+      <h2>{t.trust.title}</h2>
+      <p class="section-sub">{t.trust.subtitle}</p>
+
+      <!-- Отдельной карточкой, а не пунктом в сетке: для компании это главное -->
+      <div class="trust-lock">
+        <span class="trust-lock-ic" aria-hidden="true">
+          <svg viewBox="0 0 24 24" width="24" height="24" fill="none">
+            <rect x="4" y="10.5" width="16" height="10" rx="2.5" stroke="currentColor" stroke-width="2" />
+            <path d="M8 10.5V7a4 4 0 0 1 7.8-1.3" stroke="currentColor" stroke-width="2" stroke-linecap="round" />
+          </svg>
+        </span>
+        <div>
+          <h3>{t.trust.noLock.title}</h3>
+          <p>{t.trust.noLock.text}</p>
+        </div>
+      </div>
+
+      <div class="grid grid-3">
+        {
+          t.trust.items.map((item) => (
+            <div class="card">
+              <h3>{item.title}</h3>
+              <p>{item.text}</p>
+            </div>
+          ))
+        }
+      </div>
+    </div>
+  </section>
+
+  <!-- СКАЧАТЬ -->
+  <section class="section section-soft" id="download">
+    <div class="container">
+      <h2>{t.download.title}</h2>
+      <p class="section-sub">{t.download.subtitle}</p>
+      <div class="downloads">
+        {
+          DOWNLOADS.map((d) => (
+            <a
+              class:list={['dl', { 'dl-soon': !d.href }]}
+              href={d.href || '#download'}
+              aria-disabled={!d.href}
+              download={d.href ? true : undefined}
+            >
+              <span class="dl-ic" set:html={d.icon === 'windows' ? WIN_ICON : APPLE_ICON} />
+              <span class="dl-os">{t.download[d.key]}</span>
+              {!d.href && <span class="dl-badge">{t.download.soon}</span>}
+            </a>
+          ))
+        }
+        <a class="dl dl-web" href={APP_URL}>
+          <span class="dl-os">{t.download.web}</span>
+        </a>
+      </div>
+      <p class="dl-warn">
+        <svg viewBox="0 0 24 24" width="16" height="16" fill="none" aria-hidden="true">
+          <path d="M12 9v4.5m0 3.2v.1M10.3 3.9 2.6 17.2A2 2 0 0 0 4.3 20h15.4a2 2 0 0 0 1.7-2.8L13.7 3.9a2 2 0 0 0-3.4 0Z" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" />
+        </svg>
+        {t.beta.warn}
+      </p>
+      <p class="note">{t.download.mobileSoon}</p>
+    </div>
+  </section>
+
+  <!-- АВТОР -->
+  <section class="section">
+    <div class="container">
+      <div class="author">
+        <span class="tag">{t.author.tag}</span>
+        <h2>{t.author.title}</h2>
+        <p class="section-sub">{t.author.text}</p>
+        <p class="author-sites">
+          {t.author.sites}
+          <a href="https://webtopro.com" target="_blank" rel="noopener">webtopro.com</a>
+          <a href="https://unbywyd.com" target="_blank" rel="noopener">unbywyd.com</a>
+        </p>
+      </div>
+    </div>
+  </section>
+
+  <!-- ОТЗЫВЫ -->
+  <section class="section section-soft" id="reviews">
+    <div class="container">
+      <h2>{t.reviews.title}</h2>
+      <p class="section-sub">{t.reviews.subtitle}</p>
+
+      <div class="reviews-grid" id="reviews-list" hidden></div>
+
+      <!-- Пустое состояние — приглашение, а не серая строка -->
+      <div class="reviews-empty" id="reviews-empty" hidden>
+        <div class="stars-hero" aria-hidden="true">★★★★★</div>
+        <p>{t.reviews.empty}</p>
+      </div>
+
+      <div class="review-actions">
+        <button class="btn" id="review-open" type="button">
+          <svg viewBox="0 0 24 24" width="17" height="17" fill="none" aria-hidden="true"><path d="M12 3.3l2.7 5.4 6 .9-4.3 4.2 1 6-5.4-2.8-5.4 2.8 1-6L3.3 9.6l6-.9L12 3.3z" stroke="currentColor" stroke-width="2" stroke-linejoin="round"/></svg>
+          {t.reviews.leave}
+        </button>
+      </div>
+    </div>
+  </section>
+
+  <!-- КОНТАКТЫ -->
+  <section class="section" id="contact">
+    <div class="container">
+      <h2>{t.contact.title}</h2>
+      <p class="section-sub">{t.contact.subtitle}</p>
+
+      <form
+        class="contact-card"
+        id="contact-form"
+        novalidate
+        data-err-required={t.formErrors.required}
+        data-err-email={t.formErrors.email}
+        data-err-short={t.formErrors.short}
+      >
+        <div class="form-fields">
+          <div class="form-row">
+            <label>
+              <span>{t.contact.name}</span>
+              <input name="name" maxlength="120" autocomplete="name" placeholder={t.contact.ph.name} />
+              <em class="err"></em>
+            </label>
+            <label>
+              <span>{t.contact.email}</span>
+              <input name="email" type="email" required autocomplete="email" placeholder={t.contact.ph.email} />
+              <em class="err"></em>
+            </label>
+          </div>
+          <!-- Свой список: нативный select не стилизуется и выглядит чужим -->
+          <div class="sel" id="topic-sel">
+            <span>{t.contact.topic}</span>
+            <input type="hidden" name="topic" value="question" />
+            <button type="button" class="sel-btn" aria-haspopup="listbox" aria-expanded="false">
+              <span class="sel-value">{t.contact.topics.question}</span>
+              <svg viewBox="0 0 24 24" width="16" height="16" fill="none" aria-hidden="true">
+                <path d="m6 9 6 6 6-6" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" />
+              </svg>
+            </button>
+            <ul class="sel-menu" role="listbox" hidden>
+              <li role="option" aria-selected="true" data-v="question">{t.contact.topics.question}</li>
+              <li role="option" aria-selected="false" data-v="bug">{t.contact.topics.bug}</li>
+              <li role="option" aria-selected="false" data-v="feature">{t.contact.topics.feature}</li>
+              <li role="option" aria-selected="false" data-v="other">{t.contact.topics.other}</li>
+            </ul>
+          </div>
+          <label>
+            <span>{t.contact.message}</span>
+            <textarea name="body" rows="4" required minlength="10" maxlength="5000" placeholder={t.contact.ph.message}></textarea>
+            <em class="err"></em>
+          </label>
+          <input class="trap" type="text" name="website" tabindex="-1" autocomplete="off" aria-hidden="true" />
+          <div class="form-actions">
+            <button class="btn" type="submit">{t.contact.send}</button>
+            <span class="form-msg" data-failed={t.contact.failed}></span>
+          </div>
+        </div>
+        <div class="form-done" aria-live="polite">
+          <span class="done-ic"><svg viewBox="0 0 24 24" width="26" height="26" fill="none" aria-hidden="true"><path d="m5 13 4 4L19 7" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"/></svg></span>
+          <p>{t.contact.sent}</p>
+        </div>
+      </form>
+
+      <p class="contact-mail">
+        {t.contact.support} <a href={`mailto:${SUPPORT}`}>{SUPPORT}</a>
+      </p>
+    </div>
+  </section>
+
+  <!-- CTA -->
+  <section class="section cta">
+    <div class="container">
+      <h2>{t.cta.title}</h2>
+      <p class="section-sub">{t.cta.subtitle}</p>
+      <a class="btn" href={APP_URL}>{t.cta.button}</a>
+    </div>
+  </section>
+</main>
+
+<!-- Модалка отзыва: форма не мозолит глаза на странице, а приходит по кнопке -->
+<div class="cmodal" id="review-modal" hidden>
+  <div class="cmodal-backdrop" data-close></div>
+  <div class="cmodal-card" role="dialog" aria-modal="true" aria-labelledby="review-modal-title">
+    <button class="cmodal-x" type="button" data-close aria-label="Close">
+      <svg viewBox="0 0 24 24" width="18" height="18" fill="none" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"/></svg>
+    </button>
+    <h3 class="cmodal-title" id="review-modal-title">{t.reviews.leave}</h3>
+    <form
+      id="review-form"
+      novalidate
+      data-err-required={t.formErrors.required}
+      data-err-email={t.formErrors.email}
+      data-err-short={t.formErrors.short}
+    >
+      <div class="form-fields">
+        <div class="form-row">
+          <label>
+            <span>{t.reviews.name}</span>
+            <input name="name" required maxlength="80" autocomplete="name" placeholder={t.reviews.ph.name} />
+            <em class="err"></em>
+          </label>
+          <label>
+            <span>{t.reviews.role}</span>
+            <input name="role" maxlength="80" autocomplete="organization-title" placeholder={t.reviews.ph.role} />
+            <em class="err"></em>
+          </label>
+        </div>
+        <label>
+          <span>{t.reviews.email}</span>
+          <input name="email" type="email" required autocomplete="email" placeholder={t.reviews.ph.email} />
+          <em class="err"></em>
+        </label>
+        <div class="rate">
+          <span class="rate-label">{t.reviews.rating}</span>
+          <div class="starpick" id="starpick">
+              <button type="button" class="is-on" aria-label="1"><svg viewBox="0 0 24 24" width="26" height="26" aria-hidden="true"><path d="M12 2.6l2.9 5.9 6.5.9-4.7 4.6 1.1 6.5L12 17.4l-5.8 3.1 1.1-6.5L2.6 9.4l6.5-.9L12 2.6z" fill="currentColor"/></svg></button>
+              <button type="button" class="is-on" aria-label="2"><svg viewBox="0 0 24 24" width="26" height="26" aria-hidden="true"><path d="M12 2.6l2.9 5.9 6.5.9-4.7 4.6 1.1 6.5L12 17.4l-5.8 3.1 1.1-6.5L2.6 9.4l6.5-.9L12 2.6z" fill="currentColor"/></svg></button>
+              <button type="button" class="is-on" aria-label="3"><svg viewBox="0 0 24 24" width="26" height="26" aria-hidden="true"><path d="M12 2.6l2.9 5.9 6.5.9-4.7 4.6 1.1 6.5L12 17.4l-5.8 3.1 1.1-6.5L2.6 9.4l6.5-.9L12 2.6z" fill="currentColor"/></svg></button>
+              <button type="button" class="is-on" aria-label="4"><svg viewBox="0 0 24 24" width="26" height="26" aria-hidden="true"><path d="M12 2.6l2.9 5.9 6.5.9-4.7 4.6 1.1 6.5L12 17.4l-5.8 3.1 1.1-6.5L2.6 9.4l6.5-.9L12 2.6z" fill="currentColor"/></svg></button>
+              <button type="button" class="is-on" aria-label="5"><svg viewBox="0 0 24 24" width="26" height="26" aria-hidden="true"><path d="M12 2.6l2.9 5.9 6.5.9-4.7 4.6 1.1 6.5L12 17.4l-5.8 3.1 1.1-6.5L2.6 9.4l6.5-.9L12 2.6z" fill="currentColor"/></svg></button>
+          </div>
+          <input type="hidden" name="rating" value="5" />
+        </div>
+        <label>
+          <span>{t.reviews.text}</span>
+          <textarea name="body" rows="4" required minlength="20" maxlength="2000" placeholder={t.reviews.ph.body}></textarea>
+          <em class="err"></em>
+        </label>
+        <input class="trap" type="text" name="website" tabindex="-1" autocomplete="off" aria-hidden="true" />
+        <div class="form-actions">
+          <button class="btn" type="submit">{t.reviews.send}</button>
+          <span class="form-msg" data-failed={t.reviews.failed}></span>
+        </div>
+      </div>
+      <div class="form-done" aria-live="polite">
+        <span class="done-ic"><svg viewBox="0 0 24 24" width="26" height="26" fill="none" aria-hidden="true"><path d="m5 13 4 4L19 7" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"/></svg></span>
+        <p>{t.reviews.sent}</p>
+      </div>
+    </form>
+  </div>
+</div>
+
+<footer class="footer">
+  <div class="container footer-inner">
+    <div class="footer-col">
+      <span>© {new Date().getFullYear()} Chatick. {t.footer.rights}</span>
+      <span class="footer-by">
+        {t.footer.madeBy}
+        <a href="https://webtopro.com" target="_blank" rel="noopener">webtopro.com</a>
+      </span>
+    </div>
+    <nav class="footer-links">
+      <a class="footer-link" href="/terms">{t.footer.terms}</a>
+      <a class="footer-link" href="/privacy">{t.footer.privacy}</a>
+      <a class="footer-link" href="/changelog">{t.footer.changelog}</a>
+      <a class="footer-link" href={`mailto:${SUPPORT}`}>{SUPPORT}</a>
+      <a class="footer-link footer-gh" href={GITHUB} target="_blank" rel="noopener" title={t.footer.github}>
+        <svg viewBox="0 0 16 16" width="17" height="17" fill="currentColor" aria-hidden="true">
+          <path d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27s1.36.09 2 .27c1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.01 8.01 0 0 0 16 8c0-4.42-3.58-8-8-8Z"></path>
+        </svg>
+        <span class="footer-gh-label">GitHub</span>
+      </a>
+      <a class="footer-link" href="/ai.txt">{t.footer.forAi}</a>
+    </nav>
+  </div>
+</footer>
+
+<script>
+  // --- Отзывы и контактная форма ------------------------------------------
+  // Лендинг статический, формы говорят с API напрямую. Валидация своя:
+  // браузерные пузыри выглядят чужеродно и не переводятся вместе со страницей.
+  const API = 'https://api.chatick.com'
+  const EMAIL_RE = /^[^@\s]+@[^@\s]+\.[^@\s]+$/
+
+  const esc = (v: string) => v.replace(/[<>&]/g, (c) => ({ '<': '&lt;', '>': '&gt;', '&': '&amp;' })[c]!)
+
+  // --- список отзывов или пустое состояние --------------------------------
+  const list = document.getElementById('reviews-list')
+  const emptyBox = document.getElementById('reviews-empty')
+  if (list && emptyBox) {
+    fetch(`${API}/api/v1/reviews`)
+      .then((r) => (r.ok ? r.json() : { items: [] }))
+      .catch(() => ({ items: [] }))
+      .then((d: { items?: { name: string; role: string; rating: number; body: string }[] }) => {
+        const items = d.items ?? []
+        if (!items.length) {
+          emptyBox.hidden = false
+          return
+        }
+        list.innerHTML = items
+          .map((x) => {
+            const n = Math.max(1, Math.min(5, x.rating))
+            const stars = '★'.repeat(n) + `<span class="off">${'★'.repeat(5 - n)}</span>`
+            return `<figure class="rcard">
+                <div class="rstars">${stars}</div>
+                <blockquote>${esc(x.body)}</blockquote>
+                <figcaption><b>${esc(x.name)}</b>${x.role ? ` · ${esc(x.role)}` : ''}</figcaption>
+              </figure>`
+          })
+          .join('')
+        list.hidden = false
+      })
+  }
+
+  // --- модалка -------------------------------------------------------------
+  const modal = document.getElementById('review-modal')
+  const openBtn = document.getElementById('review-open')
+  const reviewForm = document.getElementById('review-form') as HTMLFormElement | null
+
+  function openModal() {
+    if (!modal) return
+    modal.hidden = false
+    document.documentElement.style.overflow = 'hidden' // страница под модалкой не крутится
+    modal.querySelector<HTMLInputElement>('input[name=name]')?.focus()
+  }
+  function closeModal() {
+    if (!modal) return
+    modal.hidden = true
+    document.documentElement.style.overflow = ''
+  }
+  openBtn?.addEventListener('click', openModal)
+  modal?.querySelectorAll('[data-close]').forEach((el) => el.addEventListener('click', closeModal))
+  window.addEventListener('keydown', (e) => {
+    if (e.key === 'Escape' && modal && !modal.hidden) closeModal()
+  })
+
+  // --- звёзды: кликабельные, с живым предпросмотром ------------------------
+  const pick = document.getElementById('starpick')
+  const ratingInput = reviewForm?.querySelector<HTMLInputElement>('input[name=rating]') ?? null
+  const stars = pick ? Array.from(pick.querySelectorAll('button')) : []
+  const paint = (n: number) => stars.forEach((b, i) => b.classList.toggle('is-on', i < n))
+  stars.forEach((b, i) => {
+    b.addEventListener('click', () => {
+      if (ratingInput) ratingInput.value = String(i + 1)
+      paint(i + 1)
+    })
+    b.addEventListener('mouseenter', () => paint(i + 1))
+  })
+  pick?.addEventListener('mouseleave', () => paint(Number(ratingInput?.value ?? 5)))
+
+  // --- свой выпадающий список ----------------------------------------------
+  const topicSel = document.getElementById('topic-sel')
+  if (topicSel) {
+    const btn = topicSel.querySelector<HTMLButtonElement>('.sel-btn')!
+    const menu = topicSel.querySelector<HTMLElement>('.sel-menu')!
+    const label = topicSel.querySelector<HTMLElement>('.sel-value')!
+    const hiddenInput = topicSel.querySelector<HTMLInputElement>('input[type=hidden]')!
+    const options = Array.from(menu.querySelectorAll<HTMLElement>('[role=option]'))
+    const setOpen = (v: boolean) => {
+      menu.hidden = !v
+      btn.setAttribute('aria-expanded', String(v))
+    }
+    btn.addEventListener('click', () => setOpen(menu.hidden))
+    options.forEach((o) =>
+      o.addEventListener('click', () => {
+        hiddenInput.value = o.dataset.v ?? 'question'
+        label.textContent = o.textContent
+        options.forEach((x) => x.setAttribute('aria-selected', String(x === o)))
+        setOpen(false)
+      }),
+    )
+    // клик мимо и Esc закрывают — как у любого выпадающего
+    document.addEventListener('click', (e) => {
+      if (!topicSel.contains(e.target as Node)) setOpen(false)
+    })
+    window.addEventListener('keydown', (e) => {
+      if (e.key === 'Escape') setOpen(false)
+    })
+  }
+
+  // --- валидация ------------------------------------------------------------
+  type Field = HTMLInputElement | HTMLTextAreaElement
+
+  function fieldError(form: HTMLFormElement, el: Field): string {
+    const v = el.value.trim()
+    if (el.required && !v) return form.dataset.errRequired ?? ''
+    if (el instanceof HTMLInputElement && el.type === 'email' && v && !EMAIL_RE.test(v))
+      return form.dataset.errEmail ?? ''
+    const min = Number(el.getAttribute('minlength') ?? 0)
+    if (min > 0 && v && v.length < min) return (form.dataset.errShort ?? '').replace('{n}', String(min))
+    return ''
+  }
+
+  function validate(form: HTMLFormElement): boolean {
+    let firstBad: Field | null = null
+    form.querySelectorAll<Field>('input[name]:not([type=hidden]):not(.trap), textarea[name]').forEach((el) => {
+      const msg = fieldError(form, el)
+      const err = el.parentElement?.querySelector<HTMLElement>('.err')
+      if (err) err.textContent = msg
+      el.classList.toggle('is-bad', Boolean(msg))
+      if (msg && !firstBad) firstBad = el
+    })
+    firstBad?.focus()
+    return !firstBad
+  }
+
+  // Ошибка гаснет, как только человек начал исправлять
+  document.querySelectorAll<HTMLFormElement>('form[novalidate]').forEach((form) => {
+    form.addEventListener('input', (e) => {
+      const el = e.target
+      if (!(el instanceof HTMLInputElement) && !(el instanceof HTMLTextAreaElement)) return
+      el.classList.remove('is-bad')
+      const err = el.parentElement?.querySelector<HTMLElement>('.err')
+      if (err) err.textContent = ''
+    })
+  })
+
+  // --- отправка -------------------------------------------------------------
+  async function post(url: string, body: unknown) {
+    const r = await fetch(url, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(body),
+    })
+    if (!r.ok) throw new Error(String(r.status))
+    return r.json()
+  }
+
+  function showFail(form: HTMLFormElement) {
+    const m = form.querySelector<HTMLElement>('.form-msg')
+    if (m) m.textContent = m.dataset.failed ?? ''
+  }
+  function clearFail(form: HTMLFormElement) {
+    const m = form.querySelector<HTMLElement>('.form-msg')
+    if (m) m.textContent = ''
+  }
+
+  reviewForm?.addEventListener('submit', async (e) => {
+    e.preventDefault()
+    clearFail(reviewForm)
+    if (!validate(reviewForm)) return
+    const f = new FormData(reviewForm)
+    const btn = reviewForm.querySelector<HTMLButtonElement>('button[type=submit]')!
+    btn.disabled = true
+    try {
+      await post(`${API}/api/v1/reviews`, {
+        name: f.get('name'),
+        role: f.get('role'),
+        email: f.get('email'),
+        rating: Number(f.get('rating')),
+        body: f.get('body'),
+        website: f.get('website'), // приманка для ботов
+        lang: document.documentElement.lang,
+      })
+      reviewForm.classList.add('is-done')
+      // Показали «спасибо» — и через паузу тихо закрылись, вернув форму в ноль
+      setTimeout(() => {
+        closeModal()
+        reviewForm.classList.remove('is-done')
+        reviewForm.reset()
+        if (ratingInput) ratingInput.value = '5'
+        paint(5)
+      }, 2600)
+    } catch {
+      showFail(reviewForm)
+    } finally {
+      btn.disabled = false
+    }
+  })
+
+  const contactForm = document.getElementById('contact-form') as HTMLFormElement | null
+  contactForm?.addEventListener('submit', async (e) => {
+    e.preventDefault()
+    clearFail(contactForm)
+    if (!validate(contactForm)) return
+    const f = new FormData(contactForm)
+    const btn = contactForm.querySelector<HTMLButtonElement>('button[type=submit]')!
+    btn.disabled = true
+    try {
+      await post(`${API}/api/v1/about/feedback`, {
+        name: f.get('name'),
+        email: f.get('email'),
+        topic: f.get('topic'),
+        body: f.get('body'),
+        website: f.get('website'),
+        page: location.href,
+      })
+      contactForm.classList.add('is-done')
+    } catch {
+      showFail(contactForm)
+      btn.disabled = false
+    }
+  })
+</script>
+
+<script>
+  // Запоминаем явный выбор языка (для автодетекта на корне)
+  document.querySelectorAll<HTMLAnchorElement>('.lang').forEach((a) =>
+    a.addEventListener('click', () => localStorage.setItem('chatick_lang', a.dataset.lang!)),
+  )
+
+  // Копирование промпта «спросите свой ИИ»
+  const copyBtn = document.getElementById('copy-prompt')
+  const promptEl = document.getElementById('prompt-text')
+  if (copyBtn && promptEl) {
+    const label = copyBtn.querySelector('.copy-label')!
+    const original = label.textContent!
+    copyBtn.addEventListener('click', async () => {
+      try {
+        await navigator.clipboard.writeText(promptEl.textContent!.trim())
+      } catch {
+        // старые браузеры и http: выделяем текст, чтобы скопировать вручную
+        const range = document.createRange()
+        range.selectNodeContents(promptEl)
+        const sel = window.getSelection()
+        sel?.removeAllRanges()
+        sel?.addRange(range)
+      }
+      label.textContent = copyBtn.dataset.copied!
+      copyBtn.classList.add('is-copied')
+      setTimeout(() => {
+        label.textContent = original
+        copyBtn.classList.remove('is-copied')
+      }, 2400)
+    })
+  }
+</script>
+
+<style>
+  .nav {
+    position: sticky;
+    top: 0;
+    backdrop-filter: blur(12px);
+    background: rgba(20, 22, 17, 0.82);
+    border-bottom: 1px solid var(--border);
+    z-index: 10;
+  }
+  .nav-inner {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    height: 62px;
+  }
+  .logo {
+    display: inline-flex;
+    align-items: center;
+    gap: 9px;
+    font-weight: 800;
+    font-size: 1.15rem;
+    letter-spacing: -0.02em;
+  }
+  .nav-actions {
+    display: flex;
+    align-items: center;
+    gap: 18px;
+  }
+  .langs {
+    display: flex;
+    gap: 4px;
+  }
+  .lang {
+    font-size: 0.8rem;
+    color: var(--fg-muted);
+    padding: 4px 9px;
+    border-radius: 8px;
+  }
+  .lang:hover {
+    color: var(--fg);
+  }
+  .lang.active {
+    color: var(--lime);
+    background: rgba(212, 242, 40, 0.1);
+  }
+  .btn-sm {
+    padding: 8px 18px;
+    font-size: 0.85rem;
+  }
+
+  .hero {
+    padding: 110px 0 90px;
+    text-align: center;
+  }
+  .hero h1 {
+    font-size: clamp(2.3rem, 6vw, 4rem);
+    line-height: 1.1;
+    letter-spacing: -0.03em;
+    font-weight: 800;
+  }
+  .accent {
+    color: var(--lime);
+  }
+  .subtitle {
+    max-width: 640px;
+    margin: 26px auto 0;
+    color: var(--fg-muted);
+    font-size: 1.1rem;
+  }
+  .hero-cta {
+    margin-top: 40px;
+    display: flex;
+    flex-wrap: wrap;
+    justify-content: center;
+    align-items: center;
+    gap: 12px;
+  }
+  .hero-note {
+    margin-top: 14px;
+  }
+  .note {
+    font-size: 0.82rem;
+    color: var(--fg-muted);
+  }
+  .arrow {
+    transition: transform 0.15s ease;
+  }
+  [dir='rtl'] .arrow {
+    transform: scaleX(-1);
+  }
+
+  .section {
+    padding: 80px 0;
+  }
+  .section-soft {
+    background: var(--bg-soft);
+    border-block: 1px solid var(--border);
+  }
+  h2 {
+    font-size: clamp(1.6rem, 3.5vw, 2.2rem);
+    letter-spacing: -0.02em;
+    text-align: center;
+  }
+  .section-sub {
+    text-align: center;
+    color: var(--fg-muted);
+    margin-top: 12px;
+  }
+  .grid {
+    display: grid;
+    gap: 18px;
+    margin-top: 44px;
+  }
+  .grid-4 {
+    grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  }
+  .grid-3 {
+    grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+  }
+  .card {
+    background: var(--bg-soft);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    padding: 24px;
+  }
+  .section-soft .card {
+    background: var(--bg);
+  }
+  .card h3 {
+    font-size: 1rem;
+    margin-bottom: 8px;
+  }
+  .card p {
+    color: var(--fg-muted);
+    font-size: 0.92rem;
+  }
+  .card-solution svg {
+    margin-bottom: 12px;
+  }
+  .card-step {
+    position: relative;
+    padding-top: 30px;
+  }
+  .step-num {
+    position: absolute;
+    top: -16px;
+    inset-inline-start: 22px;
+    width: 34px;
+    height: 34px;
+    display: grid;
+    place-items: center;
+    background: var(--lime);
+    color: var(--lime-dark);
+    font-weight: 800;
+    border-radius: 10px;
+  }
+
+  .cta {
+    text-align: center;
+    padding-bottom: 110px;
+  }
+  .cta .btn {
+    margin-top: 30px;
+  }
+
+  .footer {
+    border-top: 1px solid var(--border);
+    padding: 26px 0;
+    color: var(--fg-muted);
+    font-size: 0.82rem;
+    text-align: center;
+  }
+
+  /* --- Вторая кнопка в hero --------------------------------------------- */
+  .btn-ghost {
+    background: transparent;
+    color: var(--fg);
+    border: 1px solid var(--border);
+  }
+  .btn-ghost:hover {
+    border-color: var(--lime);
+    box-shadow: none;
+  }
+
+  /* --- Ярлык секции ------------------------------------------------------ */
+  .tag {
+    display: inline-block;
+    margin-bottom: 12px;
+    padding: 4px 12px;
+    border-radius: 999px;
+    background: rgba(212, 242, 40, 0.12);
+    color: var(--lime);
+    font-size: 0.74rem;
+    font-weight: 700;
+    letter-spacing: 0.04em;
+    text-transform: uppercase;
+  }
+
+  /* --- Возможности рабочего пространства -------------------------------- */
+  .card-feature h3 {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+
+  /* --- Мост для ИИ ------------------------------------------------------- */
+  .bridge {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 44px;
+    align-items: center;
+  }
+  .bridge h2 {
+    text-align: start;
+  }
+  .bridge-sub {
+    text-align: start;
+    margin-inline: 0;
+  }
+  .bridge-points {
+    list-style: none;
+    margin-top: 22px;
+    display: grid;
+    gap: 12px;
+  }
+  .bridge-points li {
+    display: flex;
+    gap: 10px;
+    align-items: flex-start;
+    color: var(--fg-muted);
+    font-size: 0.94rem;
+  }
+  .bridge-points svg {
+    flex: 0 0 auto;
+    margin-top: 3px;
+  }
+  .bridge-security {
+    margin-top: 20px;
+    font-weight: 700;
+    color: var(--lime);
+    font-size: 0.9rem;
+  }
+  /* имитация терминала: показывает, как выглядит подключение */
+  .term {
+    background: #0d0f0a;
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    overflow: hidden;
+  }
+  .term-dots {
+    display: flex;
+    gap: 6px;
+    padding: 12px 14px;
+    border-bottom: 1px solid var(--border);
+  }
+  .term-dots i {
+    width: 10px;
+    height: 10px;
+    border-radius: 50%;
+    background: rgba(255, 255, 255, 0.16);
+  }
+  .term pre {
+    padding: 16px;
+    overflow-x: auto;
+    font-size: 0.8rem;
+    line-height: 1.75;
+    font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  }
+  .c-dim {
+    color: #6c7160;
+  }
+  .c-accent {
+    color: var(--lime);
+    font-weight: 700;
+  }
+
+  /* --- Спросите свой ИИ --------------------------------------------------- */
+  .ask {
+    text-align: center;
+  }
+  .prompt-box {
+    max-width: 720px;
+    margin: 26px auto 0;
+    padding: 20px;
+    background: var(--bg-soft);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    display: flex;
+    flex-direction: column;
+    gap: 16px;
+    align-items: center;
+  }
+  .prompt-text {
+    color: var(--fg);
+    font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+    font-size: 0.86rem;
+    line-height: 1.7;
+    text-align: start;
+    word-break: break-word;
+  }
+  .copy-btn {
+    border: 0;
+    cursor: pointer;
+    font-size: 0.94rem;
+    font-family: inherit;
+  }
+  .copy-btn.is-copied {
+    background: #2b7a3d;
+    color: #f4f5f0;
+  }
+  .ask-hint {
+    margin-top: 14px;
+  }
+
+  .footer-inner {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+  }
+  .footer-link {
+    color: var(--fg-muted);
+    border-bottom: 1px dotted var(--border);
+  }
+  .footer-link:hover {
+    color: var(--lime);
+  }
+
+  @media (max-width: 860px) {
+    .bridge {
+      grid-template-columns: 1fr;
+      gap: 28px;
+    }
+    .footer-inner {
+      flex-direction: column;
+    }
+  }
+</style>
+
+<style>
+  /* --- Графики ------------------------------------------------------------ */
+  .charts {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+    gap: 18px;
+    margin-top: 30px;
+  }
+  .chart-card {
+    background: var(--bg);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    padding: 20px;
+  }
+  .chart-head {
+    display: flex;
+    align-items: baseline;
+    justify-content: space-between;
+    gap: 12px;
+    margin-bottom: 18px;
+  }
+  .chart-title {
+    font-weight: 600;
+    font-size: 0.95rem;
+  }
+  .chart-total {
+    color: var(--lime);
+    font-weight: 700;
+  }
+  .bars {
+    display: flex;
+    align-items: flex-end;
+    gap: 10px;
+    height: 140px;
+  }
+  .bar-col {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 8px;
+    height: 100%;
+  }
+  .bar-track {
+    flex: 1;
+    width: 100%;
+    display: flex;
+    align-items: flex-end;
+    background: rgba(255, 255, 255, 0.04);
+    border-radius: 6px;
+    overflow: hidden;
+  }
+  .bar-fill {
+    width: 100%;
+    background: linear-gradient(180deg, var(--lime), rgba(212, 242, 40, 0.45));
+    border-radius: 6px 6px 0 0;
+    animation: grow 0.7s ease-out both;
+  }
+  @keyframes grow {
+    from {
+      height: 0 !important;
+    }
+  }
+  .bar-label {
+    font-size: 0.72rem;
+    color: var(--fg-muted);
+  }
+  .stack {
+    display: flex;
+    height: 14px;
+    border-radius: 999px;
+    overflow: hidden;
+    margin-bottom: 18px;
+  }
+  .stack-part {
+    height: 100%;
+  }
+  .legend {
+    list-style: none;
+    display: grid;
+    gap: 9px;
+  }
+  .legend li {
+    display: flex;
+    align-items: center;
+    gap: 9px;
+    font-size: 0.86rem;
+    color: var(--fg-muted);
+  }
+  .legend i {
+    width: 10px;
+    height: 10px;
+    border-radius: 3px;
+    flex: none;
+  }
+  .legend b {
+    margin-inline-start: auto;
+    color: var(--fg);
+    font-weight: 600;
+  }
+
+  /* --- Скачивание --------------------------------------------------------- */
+  .downloads {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 12px;
+    margin: 28px 0 16px;
+  }
+  .dl {
+    display: inline-flex;
+    align-items: center;
+    gap: 10px;
+    border: 1px solid var(--border);
+    background: var(--bg);
+    border-radius: 999px;
+    padding: 12px 22px;
+    font-weight: 600;
+    font-size: 0.93rem;
+    transition: border-color 0.15s ease, transform 0.15s ease;
+  }
+  .dl:hover {
+    border-color: rgba(212, 242, 40, 0.5);
+    transform: translateY(-1px);
+  }
+  .dl-soon {
+    opacity: 0.62;
+    cursor: default;
+  }
+  .dl-soon:hover {
+    transform: none;
+    border-color: var(--border);
+  }
+  .dl-badge {
+    font-size: 0.7rem;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    color: var(--fg-muted);
+    border: 1px solid var(--border);
+    border-radius: 999px;
+    padding: 2px 8px;
+  }
+  .dl-web {
+    background: var(--lime);
+    color: var(--lime-dark);
+    border-color: transparent;
+  }
+
+  /* --- Автор -------------------------------------------------------------- */
+  .author {
+    max-width: 720px;
+  }
+  .author-sites {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 14px;
+    margin-top: 18px;
+    color: var(--fg-muted);
+    font-size: 0.92rem;
+  }
+  .author-sites a {
+    color: var(--lime);
+    text-decoration: underline;
+    text-underline-offset: 3px;
+  }
+
+  /* --- Подвал ------------------------------------------------------------- */
+  .footer-col {
+    display: grid;
+    gap: 4px;
+  }
+  .footer-by a {
+    color: var(--fg-muted);
+    text-decoration: underline;
+    text-underline-offset: 3px;
+  }
+  .footer-by a:hover {
+    color: var(--fg);
+  }
+  .footer-links {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 18px;
+  }
+  .footer-gh {
+    display: inline-flex;
+    align-items: center;
+    gap: 7px;
+  }
+
+  @media (max-width: 700px) {
+    .downloads .dl {
+      flex: 1 1 100%;
+      justify-content: center;
+    }
+    .footer-links {
+      gap: 14px;
+    }
+    .bars {
+      height: 118px;
+      gap: 6px;
+    }
+  }
+</style>
+
+<style is:global>
+  /* --- Отзывы: карточки приходят из скрипта, стили должны быть глобальными -- */
+  .reviews-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(270px, 1fr));
+    gap: 18px;
+    margin-top: 34px;
+  }
+  .rcard {
+    margin: 0;
+    background: var(--bg);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    padding: 22px;
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+  }
+  .rstars {
+    color: var(--lime);
+    letter-spacing: 3px;
+    font-size: 0.95rem;
+  }
+  .rstars .off {
+    color: rgba(255, 255, 255, 0.16);
+  }
+  .rcard blockquote {
+    margin: 0;
+    flex: 1;
+    color: #d7d9d0;
+    font-size: 0.95rem;
+    line-height: 1.65;
+  }
+  .rcard figcaption {
+    color: var(--fg-muted);
+    font-size: 0.85rem;
+  }
+  .rcard figcaption b {
+    color: var(--fg);
+    font-weight: 600;
+  }
+
+  /* Пустое состояние: приглашение со звёздами, а не строка мелким шрифтом */
+  .reviews-empty {
+    max-width: 520px;
+    margin: 36px auto 0;
+    padding: 42px 28px;
+    text-align: center;
+    background: var(--bg);
+    border: 1px dashed rgba(212, 242, 40, 0.3);
+    border-radius: 18px;
+  }
+  .stars-hero {
+    color: var(--lime);
+    font-size: 1.7rem;
+    letter-spacing: 9px;
+    text-shadow: 0 0 26px rgba(212, 242, 40, 0.45);
+    margin-bottom: 10px;
+  }
+  .reviews-empty p {
+    color: var(--fg-muted);
+  }
+  .review-actions {
+    text-align: center;
+    margin-top: 28px;
+  }
+
+  /* --- Формы ---------------------------------------------------------------- */
+  .contact-card {
+    max-width: 600px;
+    margin: 32px auto 0;
+    background: var(--bg-soft);
+    border: 1px solid var(--border);
+    border-radius: 18px;
+    padding: 26px;
+  }
+  .form-fields {
+    display: grid;
+    gap: 13px;
+  }
+  .form-row {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 13px;
+  }
+  .form-fields label {
+    display: grid;
+    gap: 6px;
+    font-size: 0.84rem;
+    color: var(--fg-muted);
+  }
+  .form-fields input,
+  .form-fields select,
+  .form-fields textarea {
+    font: inherit;
+    font-size: 0.93rem;
+    color: var(--fg);
+    background: var(--bg);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    padding: 10px 13px;
+    width: 100%;
+    outline: none;
+    transition: border-color 0.15s ease, box-shadow 0.15s ease;
+  }
+  .form-fields input:focus,
+  .form-fields select:focus,
+  .form-fields textarea:focus {
+    border-color: var(--lime);
+    box-shadow: 0 0 0 3px rgba(212, 242, 40, 0.13);
+  }
+  .form-fields textarea {
+    resize: vertical;
+    min-height: 92px;
+  }
+  .form-fields .is-bad {
+    border-color: #ff8f8f;
+  }
+  .err {
+    display: block;
+    color: #ff8f8f;
+    font-size: 0.78rem;
+    font-style: normal;
+  }
+  .err:empty {
+    display: none;
+  }
+  .trap {
+    position: absolute;
+    left: -9999px;
+    width: 0;
+    height: 0;
+    opacity: 0;
+    pointer-events: none;
+  }
+  .form-actions {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 14px;
+    margin-top: 2px;
+  }
+  .form-msg {
+    font-size: 0.85rem;
+    color: #ff8f8f;
+  }
+
+  /* Успех: форма уступает место «спасибо», а не пищит строчкой снизу */
+  .form-done {
+    display: none;
+  }
+  form.is-done .form-fields {
+    display: none;
+  }
+  form.is-done .form-done {
+    display: grid;
+    justify-items: center;
+    gap: 12px;
+    text-align: center;
+    padding: 26px 10px;
+  }
+  .done-ic {
+    width: 52px;
+    height: 52px;
+    border-radius: 50%;
+    background: rgba(212, 242, 40, 0.13);
+    display: grid;
+    place-items: center;
+    color: var(--lime);
+  }
+  .contact-mail {
+    text-align: center;
+    margin-top: 18px;
+    color: var(--fg-muted);
+    font-size: 0.9rem;
+  }
+  .contact-mail a {
+    color: var(--lime);
+    text-decoration: underline;
+    text-underline-offset: 3px;
+  }
+
+  /* --- Модалка --------------------------------------------------------------- */
+  .cmodal {
+    position: fixed;
+    inset: 0;
+    z-index: 60;
+    display: grid;
+    place-items: center;
+    padding: 20px;
+  }
+  .cmodal[hidden] {
+    display: none;
+  }
+  .cmodal-backdrop {
+    position: absolute;
+    inset: 0;
+    background: rgba(8, 9, 6, 0.72);
+    backdrop-filter: blur(6px);
+  }
+  .cmodal-card {
+    position: relative;
+    width: 100%;
+    max-width: 520px;
+    max-height: calc(100vh - 40px);
+    overflow-y: auto;
+    background: var(--bg-soft);
+    border: 1px solid var(--border);
+    border-radius: 18px;
+    padding: 26px;
+    box-shadow: 0 30px 80px rgba(0, 0, 0, 0.5);
+    animation: cmodal-pop 0.18s ease-out;
+  }
+  @keyframes cmodal-pop {
+    from {
+      transform: translateY(10px) scale(0.98);
+      opacity: 0;
+    }
+  }
+  .cmodal-x {
+    position: absolute;
+    top: 14px;
+    inset-inline-end: 14px;
+    background: none;
+    border: 0;
+    color: var(--fg-muted);
+    cursor: pointer;
+    padding: 6px;
+    border-radius: 8px;
+    line-height: 0;
+  }
+  .cmodal-x:hover {
+    color: var(--fg);
+    background: rgba(255, 255, 255, 0.06);
+  }
+  .cmodal-title {
+    font-size: 1.25rem;
+    letter-spacing: -0.01em;
+    margin-bottom: 18px;
+  }
+  .rate {
+    display: grid;
+    gap: 6px;
+  }
+  .rate-label {
+    font-size: 0.84rem;
+    color: var(--fg-muted);
+  }
+  .starpick {
+    display: flex;
+    gap: 2px;
+  }
+  .starpick button {
+    background: none;
+    border: 0;
+    padding: 2px;
+    cursor: pointer;
+    color: rgba(255, 255, 255, 0.16);
+    line-height: 0;
+    transition: color 0.1s ease, transform 0.1s ease;
+  }
+  .starpick button.is-on {
+    color: var(--lime);
+  }
+  .starpick button:hover {
+    transform: scale(1.15);
+  }
+
+  /* --- Шапка: полоса «никакой привязки» ------------------------------------ */
+  .hero-trust {
+    list-style: none;
+    margin: 24px 0 0;
+    padding: 0;
+    display: flex;
+    flex-wrap: wrap;
+    justify-content: center;
+    gap: 10px 24px;
+  }
+  .hero-trust li {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    padding: 8px 15px;
+    border: 1px solid var(--border);
+    border-radius: 999px;
+    background: rgba(255, 255, 255, 0.03);
+    color: var(--fg);
+    font-size: 0.88rem;
+    font-weight: 600;
+  }
+
+  .hero-trust a {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    color: inherit;
+  }
+  .hero-trust li:has(a):hover {
+    border-color: rgba(212, 242, 40, 0.5);
+    background: rgba(212, 242, 40, 0.07);
+  }
+  .pill-out {
+    color: var(--fg-muted);
+  }
+
+  .btn-win {
+    gap: 9px;
+  }
+  .dl-ic {
+    display: inline-flex;
+    color: var(--fg-muted);
+    line-height: 0;
+  }
+  .dl-web .dl-ic,
+  .dl:hover .dl-ic {
+    color: inherit;
+  }
+
+  /* --- Бейдж «бета» ---------------------------------------------------------- */
+  .beta-line {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    justify-content: center;
+    gap: 12px;
+    margin-bottom: 22px;
+  }
+  .beta-badge {
+    background: var(--lime);
+    color: var(--lime-dark);
+    font-size: 0.72rem;
+    font-weight: 800;
+    letter-spacing: 0.14em;
+    text-transform: uppercase;
+    padding: 5px 13px;
+    border-radius: 999px;
+    flex: none;
+  }
+  .beta-note {
+    color: var(--fg-muted);
+    font-size: 0.88rem;
+    max-width: 620px;
+    text-align: center;
+  }
+  .dl-warn {
+    display: inline-flex;
+    align-items: flex-start;
+    gap: 9px;
+    margin-bottom: 10px;
+    padding: 11px 15px;
+    border: 1px solid rgba(255, 196, 107, 0.35);
+    background: rgba(255, 196, 107, 0.07);
+    border-radius: 12px;
+    color: #ffc46b;
+    font-size: 0.86rem;
+    text-align: start;
+  }
+  .dl-warn svg {
+    flex: none;
+    margin-top: 2px;
+  }
+
+  /* --- Карточка «без привязки» ---------------------------------------------- */
+  .trust-lock {
+    display: flex;
+    gap: 18px;
+    align-items: flex-start;
+    max-width: 860px;
+    margin: 32px auto 0;
+    padding: 24px;
+    background: linear-gradient(135deg, rgba(212, 242, 40, 0.08), rgba(212, 242, 40, 0.02));
+    border: 1px solid rgba(212, 242, 40, 0.3);
+    border-radius: 18px;
+  }
+  .trust-lock-ic {
+    flex: none;
+    width: 46px;
+    height: 46px;
+    display: grid;
+    place-items: center;
+    border-radius: 12px;
+    background: rgba(212, 242, 40, 0.14);
+    color: var(--lime);
+  }
+  .trust-lock h3 {
+    margin: 0 0 6px;
+    font-size: 1.05rem;
+  }
+  .trust-lock p {
+    margin: 0;
+    color: #d7d9d0;
+    font-size: 0.95rem;
+    line-height: 1.65;
+  }
+
+  /* Ошибка под полем не растягивает соседнее: строка выравнивается по верху,
+     а внутренняя сетка label не раздаёт лишнюю высоту своим рядам */
+  .form-row {
+    align-items: start;
+  }
+  .form-fields label {
+    align-content: start;
+  }
+
+  .form-fields input::placeholder,
+  .form-fields textarea::placeholder {
+    color: rgba(244, 245, 240, 0.28);
+  }
+
+  /* --- Свой выпадающий список ---------------------------------------------- */
+  .sel {
+    position: relative;
+    display: grid;
+    gap: 6px;
+    font-size: 0.84rem;
+    color: var(--fg-muted);
+  }
+  .sel-btn {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 10px;
+    font: inherit;
+    font-size: 0.93rem;
+    color: var(--fg);
+    background: var(--bg);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    padding: 10px 13px;
+    width: 100%;
+    cursor: pointer;
+    transition: border-color 0.15s ease, box-shadow 0.15s ease;
+  }
+  .sel-btn:focus-visible {
+    outline: none;
+    border-color: var(--lime);
+    box-shadow: 0 0 0 3px rgba(212, 242, 40, 0.13);
+  }
+  .sel-btn svg {
+    color: var(--fg-muted);
+    flex: none;
+    transition: transform 0.15s ease;
+  }
+  .sel-btn[aria-expanded='true'] svg {
+    transform: rotate(180deg);
+  }
+  .sel-menu {
+    position: absolute;
+    top: calc(100% + 6px);
+    inset-inline: 0;
+    z-index: 30;
+    margin: 0;
+    padding: 6px;
+    list-style: none;
+    background: var(--bg);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    box-shadow: 0 18px 50px rgba(0, 0, 0, 0.45);
+    display: grid;
+    gap: 2px;
+    animation: sel-pop 0.14s ease-out;
+  }
+  .sel-menu[hidden] {
+    display: none;
+  }
+  @keyframes sel-pop {
+    from {
+      transform: translateY(-4px);
+      opacity: 0;
+    }
+  }
+  .sel-menu li {
+    padding: 9px 12px;
+    border-radius: 8px;
+    cursor: pointer;
+    color: var(--fg);
+    font-size: 0.93rem;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+  }
+  .sel-menu li:hover {
+    background: rgba(255, 255, 255, 0.06);
+  }
+  .sel-menu li[aria-selected='true'] {
+    color: var(--lime);
+  }
+  .sel-menu li[aria-selected='true']::after {
+    content: '\2713';
+  }
+
+  @media (max-width: 560px) {
+    .hero-cta {
+      flex-direction: column;
+    }
+    .hero-cta .btn {
+      width: 100%;
+      justify-content: center;
+    }
+  }
+  @media (max-width: 640px) {
+    .form-row {
+      grid-template-columns: 1fr;
+    }
+    .trust-lock {
+      flex-direction: column;
+    }
+    .contact-card,
+    .cmodal-card {
+      padding: 20px;
+    }
+  }
+</style>
