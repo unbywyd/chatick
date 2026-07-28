@@ -29,7 +29,16 @@ function relTime(iso: string, locale: string): string {
   return d.toLocaleDateString(locale, { day: 'numeric', month: 'short' })
 }
 
-export function ProjectSidebar({ me, onPick }: { me?: Me; onPick?: () => void }) {
+export function ProjectSidebar({
+  me,
+  companyId,
+  onPick,
+}: {
+  me?: Me
+  /** компания ОТКРЫТОГО проекта — не обязательно своя */
+  companyId?: string
+  onPick?: () => void
+}) {
   const { t, i18n } = useTranslation()
   const navigate = useNavigate()
   const { id: activeId } = useParams()
@@ -46,7 +55,14 @@ export function ProjectSidebar({ me, onPick }: { me?: Me; onPick?: () => void })
     queryKey: ['companies'],
     queryFn: () => api<{ companies: Company[] }>('/api/v1/companies'),
   })
-  const company = companies.data?.companies[0]
+  // Компания открытого проекта, а не первая из списка.
+  //
+  // Брать первую было ошибкой: зайдя по приглашению в чужой проект,
+  // человек видел в шапке своё название компании и свои проекты в списке —
+  // при том, что открыт был чужой. Пока приглашений не было, разницы никто
+  // не замечал.
+  const myCompanies = companies.data?.companies ?? []
+  const company = (companyId && myCompanies.find((c) => c.id === companyId)) || myCompanies[0]
   const projects = useQuery({
     queryKey: ['sidebar-projects', company?.id],
     enabled: Boolean(company?.id),

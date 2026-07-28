@@ -148,7 +148,11 @@ export function ProjectLayout() {
           sidebarOpen ? 'translate-x-0' : '-translate-x-full rtl:translate-x-full',
         )}
       >
-        <ProjectSidebar me={me.data} onPick={() => setSidebarOpen(false)} />
+        <ProjectSidebar
+          me={me.data}
+          companyId={project.data?.companyId}
+          onPick={() => setSidebarOpen(false)}
+        />
       </aside>
       {sidebarOpen && (
         <div className="fixed inset-0 z-30 bg-black/50 md:hidden" onClick={() => setSidebarOpen(false)} />
