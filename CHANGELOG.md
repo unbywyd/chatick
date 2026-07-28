@@ -7,6 +7,20 @@ refuses to run otherwise, so a release can never ship without a description.
 
 Written in English only: this file is published on the website.
 
+## 0.2.5 — 2026-07-28
+
+### Fixed
+
+- "About" showed 0.1.0 no matter which version was running: it read the version
+  of the API package, which nobody ever bumps, instead of the product version
+  that the build checks against the changelog.
+
+### Changed
+
+- The desktop app now looks for updates every hour instead of every six, and
+  "Reload" in the tray asks the server for a new version too — that is what
+  someone pressing it expects, not just a page refresh.
+
 ## 0.2.4 — 2026-07-28
 
 ### Changed

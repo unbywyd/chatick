@@ -21,6 +21,8 @@ let tray = null
 let quitting = false
 /** версия скачанного обновления — показываем в трее, что перезапуск не зря */
 let updateReady = ''
+/** проверить обновления вручную; задаётся в setupUpdates */
+let checkUpdates = () => {}
 /** Куда человек перетащил панель; null — держимся значка в трее. */
 let panelPos = null
 
@@ -153,6 +155,9 @@ function buildTrayMenu() {
     {
       label: tr('reload', 'Reload'),
       click: async () => {
+        // Заодно спрашиваем сервер о новой версии: человек, нажавший
+        // «Обновить», ждёт именно этого — а не только перезагрузки страницы.
+        checkUpdates()
         // Полная перезагрузка с чисткой кеша: последняя линия обороны, если
         // страница всё-таки залипла на старой версии.
         await win?.webContents.session.clearCache()
@@ -531,10 +536,11 @@ function setupUpdates() {
     console.warn('[desktop] проверка обновлений не удалась:', e?.message ?? e)
   })
 
-  const check = () => autoUpdater.checkForUpdates().catch(() => {})
-  check()
-  // Раз в шесть часов: приложение живёт в трее неделями
-  setInterval(check, 6 * 60 * 60 * 1000)
+  checkUpdates = () => autoUpdater.checkForUpdates().catch(() => {})
+  checkUpdates()
+  // Раз в час: приложение живёт в трее неделями, и шесть часов означали, что
+  // о свежей версии человек узнаёт в лучшем случае к вечеру.
+  setInterval(checkUpdates, 60 * 60 * 1000)
 }
 
   app.whenReady().then(() => {

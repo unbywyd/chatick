@@ -1,4 +1,6 @@
 import { Hono } from 'hono'
+import { readFileSync } from 'node:fs'
+import { fileURLToPath } from 'node:url'
 import { eq, inArray, sql } from 'drizzle-orm'
 import { db } from '../db/client.js'
 import { feedback, platformSettings, users } from '../db/schema.js'
@@ -18,7 +20,25 @@ import { s3Client, s3Bucket, S3_KEY_PREFIX } from '../lib/s3.js'
 export const aboutRoute = new Hono()
 
 /** Версия сборки: тот же отпечаток, что видит клиент. */
-const VERSION = process.env.npm_package_version ?? '0.1.0'
+/**
+ * Версия продукта — из корневого package.json, того же, что сверяется с
+ * CHANGELOG при сборке. npm_package_version отдавал версию apps/api, которую
+ * никто не поднимал: в «О проекте» годами висело бы 0.1.0.
+ */
+function productVersion(): string {
+  for (const rel of ['../../../../package.json', '../../../package.json']) {
+    try {
+      const path = fileURLToPath(new URL(rel, import.meta.url))
+      const pkg = JSON.parse(readFileSync(path, 'utf8')) as { name?: string; version?: string }
+      if (pkg.name === 'chatick-next' && pkg.version) return pkg.version
+    } catch {
+      /* пробуем следующий путь */
+    }
+  }
+  return process.env.npm_package_version ?? '0.0.0'
+}
+
+const VERSION = productVersion()
 
 async function settings(): Promise<Record<string, string>> {
   const rows = await db.select().from(platformSettings)
