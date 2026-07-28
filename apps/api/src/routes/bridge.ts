@@ -595,13 +595,23 @@ const EXT_BY_MIME: Record<string, string> = {
   'video/mp4': '.mp4',
 }
 
+/** Расширение, которого не хватает имени. Уже есть — возвращаем пустую строку. */
+function extFor(name: string, mime: string): string {
+  const known = EXT_BY_MIME[mime] ?? (name.includes('.') ? name.slice(name.lastIndexOf('.')) : '')
+  if (!known) return ''
+  return name.toLowerCase().endsWith(known.toLowerCase()) ? '' : known
+}
+
 const fileView = (f: typeof files.$inferSelect) => ({
   id: f.id,
   name: f.name,
   mime: f.mime,
   // Расширение по типу: скачав файл под именем без него, ассистент пытается
   // прочитать webp как текст и получает экран двоичного мусора.
-  ext: EXT_BY_MIME[f.mime] ?? (f.name.includes('.') ? f.name.slice(f.name.lastIndexOf('.')) : ''),
+  //
+  // Пустое, если имя уже оканчивается на него: иначе наивная склейка
+  // name + ext даёт «shot.webp.webp», и подстраховываться приходится читателю.
+  ext: extFor(f.name, f.mime),
   size: Number(f.size),
   contentUrl: `${(process.env.API_PUBLIC_URL || 'https://api.chatick.com').replace(/\/$/, '')}/x/files/${f.id}/content`,
 })
@@ -1705,16 +1715,10 @@ bridgeRoute.get('/files', async (c) => {
     .where(and(...conds))
     .orderBy(desc(files.createdAt))
     .limit(limit)
+  // Через ту же fileView, что и вложения: два ручных описания одного ответа
+  // разошлись — ext добавили в одно место и забыли про другое.
   return c.json({
-    items: rows.map((f) => ({
-      id: f.id,
-      name: f.name,
-      mime: f.mime,
-      size: Number(f.size),
-      taskId: f.taskId,
-      createdAt: f.createdAt,
-      contentUrl: `${(process.env.API_PUBLIC_URL || 'https://api.chatick.com').replace(/\/$/, '')}/x/files/${f.id}/content`,
-    })),
+    items: rows.map((f) => ({ ...fileView(f), taskId: f.taskId, createdAt: f.createdAt })),
   })
 })
 

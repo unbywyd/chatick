@@ -203,10 +203,13 @@ Example — handle everything waiting for me:
   The same image also appears in the task's "attachments", so in practice you
   rarely need to parse the HTML at all.
 
-  Save with the right extension. Each attachment carries "ext" derived from its
-  mime type — write the file as <name><ext> (image/webp -> .webp). Saved under
-  a name with no extension, an image is easily mistaken for text and read as a
-  screenful of binary noise.
+  Save with the right extension. Every file — in "attachments" and in
+  GET /x/files alike — carries "ext". Write it as <name><ext> and nothing else:
+  "ext" is empty when the name already ends with it, so the concatenation is
+  always safe and never produces "shot.webp.webp".
+
+  This matters: saved under a name with no extension, an image is easily
+  mistaken for text and read back as a screenful of binary noise.
 
 ## Documents
 
