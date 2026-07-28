@@ -244,7 +244,75 @@ const CHART_STATUSES = [
   </section>
 
   <!-- HOW -->
-  <section class="section">
+  <section class="section" id="download">
+    <div class="container">
+      <h2>{t.download.title}</h2>
+      <p class="section-sub">{t.download.subtitle}</p>
+      {/* Браузер — путь без единого предупреждения, поэтому он первый и
+          единственный крупной кнопкой. Сборки без подписи предлагать наравне
+          нечестно: человек упрётся в окно SmartScreen, не понимая почему. */}
+      <div class="downloads">
+        <a class="dl dl-web" href={APP_URL}>
+          <span class="dl-os">{t.download.web}</span>
+        </a>
+      </div>
+      <p class="dl-warn">
+        <svg viewBox="0 0 24 24" width="16" height="16" fill="none" aria-hidden="true">
+          <path d="M12 9v4.5m0 3.2v.1M10.3 3.9 2.6 17.2A2 2 0 0 0 4.3 20h15.4a2 2 0 0 0 1.7-2.8L13.7 3.9a2 2 0 0 0-3.4 0Z" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" />
+        </svg>
+        {t.beta.warn}
+      </p>
+
+      {/* Десктоп — отдельно и с оговоркой. Сказать про отсутствие подписи
+          самим, до установки, лучше, чем позволить Windows сказать это за нас
+          на языке «неизвестный издатель». */}
+      <div class="unsigned">
+        <div class="unsigned-head">
+          <svg viewBox="0 0 24 24" width="17" height="17" fill="none" aria-hidden="true">
+            <path d="M12 9v4.5m0 3.2v.1M10.3 3.9 2.6 17.2A2 2 0 0 0 4.3 20h15.4a2 2 0 0 0 1.7-2.8L13.7 3.9a2 2 0 0 0-3.4 0Z" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" />
+          </svg>
+          <span>{t.download.unsignedTitle}</span>
+        </div>
+        <p class="unsigned-text">{t.download.unsignedText}</p>
+        <div class="unsigned-actions">
+          {
+            DOWNLOADS.map((d) => (
+              <a
+                class:list={['dl dl-small', { 'dl-soon': !d.href }]}
+                href={d.href || '#download'}
+                aria-disabled={!d.href}
+                download={d.href ? true : undefined}
+              >
+                <span class="dl-ic" set:html={d.icon === 'windows' ? WIN_ICON : APPLE_ICON} />
+                <span class="dl-os">{t.download[d.key]}</span>
+                {!d.href && <span class="dl-badge">{t.download.soon}</span>}
+              </a>
+            ))
+          }
+          <button class="how-btn" id="howBtn" type="button" aria-expanded="false">
+            <span class="how-mark">?</span>
+            {t.download.howTo}
+          </button>
+        </div>
+        <div class="how-pop" id="howPop" hidden>
+          <ol class="how-steps">
+            <li>{t.download.step1}</li>
+            <li>{t.download.step2}</li>
+            <li>{t.download.step3}</li>
+          </ol>
+          <p class="how-source">
+            {t.download.sourceHint}{' '}
+            <a href="https://github.com/unbywyd/chatick" target="_blank" rel="noopener">github.com/unbywyd/chatick</a>
+          </p>
+          <button class="how-close" id="howClose" type="button">{t.download.howToClose}</button>
+        </div>
+      </div>
+      <p class="note">{t.download.mobileSoon}</p>
+    </div>
+  </section>
+
+  <!-- АВТОР -->
+  <section class="section section-soft">
     <div class="container">
       <h2>{t.how.title}</h2>
       <div class="grid grid-3">
@@ -347,74 +415,6 @@ const CHART_STATUSES = [
   </section>
 
   <!-- СКАЧАТЬ -->
-  <section class="section section-soft" id="download">
-    <div class="container">
-      <h2>{t.download.title}</h2>
-      <p class="section-sub">{t.download.subtitle}</p>
-      {/* Браузер — путь без единого предупреждения, поэтому он первый и
-          единственный крупной кнопкой. Сборки без подписи предлагать наравне
-          нечестно: человек упрётся в окно SmartScreen, не понимая почему. */}
-      <div class="downloads">
-        <a class="dl dl-web" href={APP_URL}>
-          <span class="dl-os">{t.download.web}</span>
-        </a>
-      </div>
-      <p class="dl-warn">
-        <svg viewBox="0 0 24 24" width="16" height="16" fill="none" aria-hidden="true">
-          <path d="M12 9v4.5m0 3.2v.1M10.3 3.9 2.6 17.2A2 2 0 0 0 4.3 20h15.4a2 2 0 0 0 1.7-2.8L13.7 3.9a2 2 0 0 0-3.4 0Z" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" />
-        </svg>
-        {t.beta.warn}
-      </p>
-
-      {/* Десктоп — отдельно и с оговоркой. Сказать про отсутствие подписи
-          самим, до установки, лучше, чем позволить Windows сказать это за нас
-          на языке «неизвестный издатель». */}
-      <div class="unsigned">
-        <div class="unsigned-head">
-          <svg viewBox="0 0 24 24" width="17" height="17" fill="none" aria-hidden="true">
-            <path d="M12 9v4.5m0 3.2v.1M10.3 3.9 2.6 17.2A2 2 0 0 0 4.3 20h15.4a2 2 0 0 0 1.7-2.8L13.7 3.9a2 2 0 0 0-3.4 0Z" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" />
-          </svg>
-          <span>{t.download.unsignedTitle}</span>
-        </div>
-        <p class="unsigned-text">{t.download.unsignedText}</p>
-        <div class="unsigned-actions">
-          {
-            DOWNLOADS.map((d) => (
-              <a
-                class:list={['dl dl-small', { 'dl-soon': !d.href }]}
-                href={d.href || '#download'}
-                aria-disabled={!d.href}
-                download={d.href ? true : undefined}
-              >
-                <span class="dl-ic" set:html={d.icon === 'windows' ? WIN_ICON : APPLE_ICON} />
-                <span class="dl-os">{t.download[d.key]}</span>
-                {!d.href && <span class="dl-badge">{t.download.soon}</span>}
-              </a>
-            ))
-          }
-          <button class="how-btn" id="howBtn" type="button" aria-expanded="false">
-            <span class="how-mark">?</span>
-            {t.download.howTo}
-          </button>
-        </div>
-        <div class="how-pop" id="howPop" hidden>
-          <ol class="how-steps">
-            <li>{t.download.step1}</li>
-            <li>{t.download.step2}</li>
-            <li>{t.download.step3}</li>
-          </ol>
-          <p class="how-source">
-            {t.download.sourceHint}{' '}
-            <a href="https://github.com/unbywyd/chatick" target="_blank" rel="noopener">github.com/unbywyd/chatick</a>
-          </p>
-          <button class="how-close" id="howClose" type="button">{t.download.howToClose}</button>
-        </div>
-      </div>
-      <p class="note">{t.download.mobileSoon}</p>
-    </div>
-  </section>
-
-  <!-- АВТОР -->
   <section class="section">
     <div class="container">
       <div class="author">
@@ -1337,17 +1337,16 @@ const CHART_STATUSES = [
     border: 1px solid var(--border);
     border-radius: var(--radius);
     background: var(--bg-soft);
-    text-align: start;
   }
   .unsigned-head {
-    display: flex; align-items: center; gap: 9px;
+    display: flex; align-items: center; justify-content: center; gap: 9px;
     font-weight: 700; color: var(--fg);
   }
   .unsigned-head svg { flex: 0 0 auto; color: var(--lime); }
   .unsigned-text { margin-top: 8px; color: var(--fg-muted); font-size: .94rem; }
   .unsigned-actions {
     margin-top: 14px;
-    display: flex; flex-wrap: wrap; align-items: center; gap: 10px;
+    display: flex; flex-wrap: wrap; align-items: center; justify-content: center; gap: 10px;
   }
   .dl-small { padding: 10px 16px; font-size: .92rem; }
   .how-btn {
@@ -1367,7 +1366,12 @@ const CHART_STATUSES = [
     border: 1px solid var(--border); border-radius: 12px;
     background: var(--bg);
   }
-  .how-steps { margin: 0; padding-inline-start: 20px; color: var(--fg-muted); font-size: .92rem; }
+  .how-steps {
+    margin: 0 auto; max-width: 460px;
+    padding-inline-start: 20px;
+    color: var(--fg-muted); font-size: .92rem;
+    text-align: start;
+  }
   .how-steps li + li { margin-top: 8px; }
   .how-source { margin-top: 12px; color: var(--fg-muted); font-size: .88rem; }
   .how-source a { color: var(--lime); text-decoration: underline; text-underline-offset: 3px; }
@@ -1379,9 +1383,14 @@ const CHART_STATUSES = [
   }
   .how-close:hover { border-color: var(--lime); color: var(--lime); }
 
+  /* Секция задаёт выравнивание сама: .section его не определяет, и по центру
+     оказывались только заголовок с подзаголовком — у них свои стили. Кнопки,
+     плашка и примечание оставались у левого края. */
+  #download .container { text-align: center; }
   .downloads {
     display: flex;
     flex-wrap: wrap;
+    justify-content: center;
     gap: 12px;
     margin: 28px 0 16px;
   }
