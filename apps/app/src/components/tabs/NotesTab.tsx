@@ -398,8 +398,12 @@ export function NotesTab({ projectId }: { projectId: string }) {
                     {n.body && (
                       // Токен подставляем на рендере: в теле он не хранится,
                       // иначе картинки отдают 401 и мигают на каждой перерисовке.
-                      // Свёрнутая заметка показывает две строки — чтобы понять,
-                      // о чём она, её раскрывают кликом, не уходя со списка.
+                      //
+                      // Свёрнутая заметка ужимает текст до двух строк, но
+                      // картинку показывает всегда — скриншот и есть содержание
+                      // такой заметки, прятать его до раскрытия бессмысленно.
+                      // Поэтому обрезаем абзацы, а не блок целиком: line-clamp
+                      // на всём теле схлопнул бы и картинки.
                       <div
                         onClick={(e) => {
                           // Клик по картинке забирает просмотрщик — не сворачиваем.
@@ -408,8 +412,11 @@ export function NotesTab({ projectId }: { projectId: string }) {
                           setExpanded((prev) => ({ ...prev, [n.id]: !prev[n.id] }))
                         }}
                         className={cn(
-                          'prose prose-sm mt-1 max-w-none cursor-pointer text-xs text-muted-foreground [&_img]:my-1 [&_img]:max-h-64 [&_img]:cursor-zoom-in [&_img]:rounded [&_p]:m-0',
-                          !expanded[n.id] && 'line-clamp-2 [&_img]:hidden',
+                          'prose prose-sm mt-1 max-w-none cursor-pointer text-xs text-muted-foreground [&_img]:my-1 [&_img]:cursor-zoom-in [&_img]:rounded [&_p]:m-0',
+                          expanded[n.id]
+                            ? '[&_img]:max-h-96'
+                            : // Превью: видно, что за картинка, но карточка остаётся карточкой.
+                              '[&_img]:max-h-28 [&_p]:line-clamp-2',
                         )}
                         title={expanded[n.id] ? t('journal.collapse') : t('journal.expand')}
                         dangerouslySetInnerHTML={{ __html: withInlineImageAuth(n.body) }}
