@@ -987,8 +987,10 @@
     },
     "picked": "נבחרו {{count}} הודעות",
     "toTask": "יצירת משימה מההערה",
-    "taskExists": "המשימה כבר נוצרה",
-    "hasTask": "נוצרה משימה",
+    "openTask": "פתיחת משימה {{number}}",
+    "taskGone": "המשימה נמחקה",
+    "expand": "הצגה מלאה",
+    "collapse": "כיווץ",
     "taskCreated": "המשימה {{number}} נוצרה",
     "concerns": "למי זה נוגע",
     "unpick": "הסרה מהבחירה"
@@ -1272,6 +1274,8 @@
     "addPlaceholder": "פריט חדש — Enter להוספה",
     "addNote": "+ הערה",
     "notePlaceholder": "תשובה או הערה…",
+    "copy": "העתקת שאלה ותשובה",
+    "dragHint": "גררו לצ׳אט כדי לשאול",
     "doneBy": "סומן על ידי {{name}}"
   }
 }

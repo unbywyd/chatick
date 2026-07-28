@@ -45,6 +45,9 @@ const serialize = (
   n: typeof notes.$inferSelect,
   author?: { id: string; name: string; avatarUrl: string | null } | null,
   projectName?: string,
+  // Задача, выросшая из заметки. Одного taskId мало: «задача создана» без
+  // номера и названия — тупик, из которого не перейти к самой задаче.
+  task?: { id: string; number: string; title: string; status: string } | null,
 ) => ({
   id: n.id,
   projectId: n.projectId,
@@ -58,6 +61,7 @@ const serialize = (
   mentionedIds: parseJson<string[]>(n.mentionedIds, []),
   remindAt: n.remindAt,
   taskId: n.taskId,
+  task: task ?? null,
   createdVia: n.createdVia,
   author: author ?? null,
   createdAt: n.createdAt,
@@ -126,10 +130,13 @@ notesRoute.get('/', zValidator('query', listQuery), async (c) => {
   }
 
   const rows = await db
-    .select({ n: notes, author: users, project: projects })
+    .select({ n: notes, author: users, project: projects, task: tasks })
     .from(notes)
     .leftJoin(users, eq(users.id, notes.authorId))
     .leftJoin(projects, eq(projects.id, notes.projectId))
+    // Удалённую задачу не подставляем: заметка переживает задачу, и ссылка
+    // в никуда хуже её отсутствия.
+    .leftJoin(tasks, and(eq(tasks.id, notes.taskId), sql`${tasks.deletedAt} is null`))
     .where(and(...conds))
     .orderBy(desc(notes.createdAt))
     .limit(f.limit)
@@ -140,6 +147,7 @@ notesRoute.get('/', zValidator('query', listQuery), async (c) => {
         r.n,
         r.author ? { id: r.author.id, name: r.author.name, avatarUrl: r.author.avatarUrl } : null,
         r.project?.name,
+        r.task ? { id: r.task.id, number: r.task.number, title: r.task.title, status: r.task.status } : null,
       ),
     ),
   )
@@ -161,10 +169,11 @@ notesRoute.get('/:id', async (c) => {
   const { projectId, sub } = c.get('auth')
   if (!(await hasPermission(projectId, sub, 'notes.read'))) return c.json({ error: 'Forbidden' }, 403)
   const row = await db
-    .select({ n: notes, author: users, project: projects })
+    .select({ n: notes, author: users, project: projects, task: tasks })
     .from(notes)
     .leftJoin(users, eq(users.id, notes.authorId))
     .leftJoin(projects, eq(projects.id, notes.projectId))
+    .leftJoin(tasks, and(eq(tasks.id, notes.taskId), sql`${tasks.deletedAt} is null`))
     .where(and(eq(notes.id, c.req.param('id')), alive))
     .limit(1)
   const found = row[0]
@@ -182,6 +191,7 @@ notesRoute.get('/:id', async (c) => {
       found.n,
       found.author ? { id: found.author.id, name: found.author.name, avatarUrl: found.author.avatarUrl } : null,
       found.project?.name,
+      found.task ? { id: found.task.id, number: found.task.number, title: found.task.title, status: found.task.status } : null,
     ),
   )
 })

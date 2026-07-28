@@ -25,7 +25,7 @@ import {
   X,
   Share2,
 } from 'lucide-react'
-import { api } from '@/lib/api'
+import { api, withInlineImageAuth } from '@/lib/api'
 import { cn } from '@/lib/utils'
 import { Avatar } from '@/components/ui/avatar'
 import { Button } from '@/components/ui/button'
@@ -72,6 +72,8 @@ type Note = {
   mentionedIds: string[]
   remindAt: string | null
   taskId: string | null
+  /** Задача, выросшая из заметки, — с номером и названием, чтобы было куда перейти. */
+  task: { id: string; number: string; title: string; status: string } | null
   createdVia: string
   author: { id: string; name: string; avatarUrl: string | null } | null
   createdAt: string
@@ -98,6 +100,9 @@ export function NotesTab({ projectId }: { projectId: string }) {
   const [to, setTo] = useState('')
   const [companyWide, setCompanyWide] = useState(false)
   const [editing, setEditing] = useState<Note | 'new' | null>(null)
+  // Какие заметки раскрыты целиком. По id, а не одна на весь список:
+  // заметки сравнивают между собой, и схлопывать соседнюю незачем.
+  const [expanded, setExpanded] = useState<Record<string, boolean>>({})
 
   const onErr = (e: unknown) => toast.error(e instanceof Error ? e.message : String(e))
 
@@ -391,9 +396,23 @@ export function NotesTab({ projectId }: { projectId: string }) {
                       )}
                     </div>
                     {n.body && (
+                      // Токен подставляем на рендере: в теле он не хранится,
+                      // иначе картинки отдают 401 и мигают на каждой перерисовке.
+                      // Свёрнутая заметка показывает две строки — чтобы понять,
+                      // о чём она, её раскрывают кликом, не уходя со списка.
                       <div
-                        className="prose-sm mt-1 line-clamp-2 text-xs text-muted-foreground [&_p]:m-0"
-                        dangerouslySetInnerHTML={{ __html: n.body }}
+                        onClick={(e) => {
+                          // Клик по картинке забирает просмотрщик — не сворачиваем.
+                          if ((e.target as HTMLElement).closest('img')) return
+                          e.stopPropagation()
+                          setExpanded((prev) => ({ ...prev, [n.id]: !prev[n.id] }))
+                        }}
+                        className={cn(
+                          'prose prose-sm mt-1 max-w-none cursor-pointer text-xs text-muted-foreground [&_img]:my-1 [&_img]:max-h-64 [&_img]:cursor-zoom-in [&_img]:rounded [&_p]:m-0',
+                          !expanded[n.id] && 'line-clamp-2 [&_img]:hidden',
+                        )}
+                        title={expanded[n.id] ? t('journal.collapse') : t('journal.expand')}
+                        dangerouslySetInnerHTML={{ __html: withInlineImageAuth(n.body) }}
                       />
                     )}
                     <div className="mt-1.5 flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
@@ -415,10 +434,29 @@ export function NotesTab({ projectId }: { projectId: string }) {
                           {n.sources.length}
                         </span>
                       )}
-                      {n.taskId && (
-                        <span className="inline-flex items-center gap-1 text-brand">
+                      {/* Не «задача создана», а какая именно: номер и название,
+                          по клику — переход. Без этого метка сообщает о факте,
+                          из которого некуда пойти. */}
+                      {n.task && !foreign && (
+                        <button
+                          onClick={(e) => {
+                            e.stopPropagation()
+                            navigate(`/p/${projectId}/tasks/${n.task!.id}`)
+                          }}
+                          title={t('journal.openTask', { number: n.task.number })}
+                          className="inline-flex max-w-[22rem] items-center gap-1 rounded bg-brand/10 px-1.5 py-0.5 text-brand hover:bg-brand/20"
+                        >
+                          <CheckSquare className="size-3 shrink-0" />
+                          <span className="font-medium">{n.task.number}</span>
+                          <span className="truncate opacity-80">{n.task.title}</span>
+                        </button>
+                      )}
+                      {/* Задача была, но её удалили: молчать нельзя — заметка
+                          выглядела бы необработанной и её завели бы заново. */}
+                      {n.taskId && !n.task && (
+                        <span className="inline-flex items-center gap-1 opacity-70">
                           <CheckSquare className="size-3" />
-                          {t('journal.hasTask')}
+                          {t('journal.taskGone')}
                         </span>
                       )}
                       {n.remindAt && (
@@ -436,15 +474,18 @@ export function NotesTab({ projectId }: { projectId: string }) {
                     <div className="flex items-center gap-1 opacity-0 transition-opacity group-hover:opacity-100">
                       {!foreign && (
                         <>
+                          {/* Задача уже есть — кнопка ведёт к ней, а не делает
+                              вторую. Раньше она молча возвращала прежнюю, и
+                              нажатие выглядело как бездействие. */}
                           <Button
                             variant="ghost"
                             size="icon"
                             className="size-7"
-                            title={n.taskId ? t('journal.taskExists') : t('journal.toTask')}
+                            title={n.task ? t('journal.openTask', { number: n.task.number }) : t('journal.toTask')}
                             disabled={toTask.isPending}
-                            onClick={() => toTask.mutate(n.id)}
+                            onClick={() => (n.task ? navigate(`/p/${projectId}/tasks/${n.task.id}`) : toTask.mutate(n.id))}
                           >
-                            <CheckSquare className={cn('size-3.5', n.taskId && 'text-brand')} />
+                            <CheckSquare className={cn('size-3.5', n.task && 'text-brand')} />
                           </Button>
                           <Button
                             variant="ghost"

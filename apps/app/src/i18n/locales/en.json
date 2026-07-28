@@ -987,8 +987,10 @@
     },
     "picked": "{{count}} message(s) selected",
     "toTask": "Create a task from this note",
-    "taskExists": "Task already created — open it",
-    "hasTask": "task created",
+    "openTask": "Open task {{number}}",
+    "taskGone": "task deleted",
+    "expand": "Show in full",
+    "collapse": "Collapse",
     "taskCreated": "Task {{number}} created",
     "concerns": "Who it concerns",
     "unpick": "Remove from selection"
@@ -1273,6 +1275,8 @@
     "addPlaceholder": "New item — press Enter to add",
     "addNote": "+ note",
     "notePlaceholder": "Answer or note…",
+    "copy": "Copy question and answer",
+    "dragHint": "Drag into chat to ask about it",
     "doneBy": "Checked by {{name}}"
   }
 }

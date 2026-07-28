@@ -2,7 +2,7 @@ import { useState } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { useTranslation } from 'react-i18next'
 import { toast } from 'sonner'
-import { Check, ListChecks, Plus, Trash2 } from 'lucide-react'
+import { Check, Copy, GripVertical, ListChecks, Plus, Trash2 } from 'lucide-react'
 import { api } from '@/lib/api'
 import { cn } from '@/lib/utils'
 import { Button } from '@/components/ui/button'
@@ -33,6 +33,22 @@ export function TaskChecklist({ taskId, canEdit }: { taskId: string; canEdit: bo
   // Какой пункт сейчас с раскрытым полем заметки.
   const [noting, setNoting] = useState<string | null>(null)
   const [noteDraft, setNoteDraft] = useState('')
+  // Какой пункт только что скопирован — галочка вместо иконки на пару секунд.
+  const [copied, setCopied] = useState<string | null>(null)
+
+  // Вопрос и ответ одним куском: именно в таком виде их несут в чат или в ИИ.
+  // Без ответа — только вопрос, пустая строка снизу мусорит буфер.
+  const asText = (it: Item) => (it.note.trim() ? `${it.text}\n${it.note.trim()}` : it.text)
+
+  const copy = async (it: Item) => {
+    try {
+      await navigator.clipboard.writeText(asText(it))
+      setCopied(it.id)
+      setTimeout(() => setCopied((c) => (c === it.id ? null : c)), 1500)
+    } catch {
+      toast.error(t('composer.clipboardDenied'))
+    }
+  }
 
   const listQ = useQuery({
     queryKey: ['task-checklist', taskId],
@@ -102,19 +118,33 @@ export function TaskChecklist({ taskId, canEdit }: { taskId: string; canEdit: bo
 
       <ul className="space-y-0.5">
         {items.map((it) => (
-          <li key={it.id} className="group rounded-md px-1 py-1 hover:bg-secondary/40">
+          <li key={it.id} className="group rounded-md px-1 py-1.5 hover:bg-secondary/40">
             <div className="flex items-start gap-2">
+              {/* Ручка перетаскивания: пункт уносят в чат, чтобы спросить о нём
+                  у ассистента, не перенабирая вопрос руками. */}
+              <span
+                draggable
+                onDragStart={(e) => {
+                  e.dataTransfer.setData('text/plain', asText(it))
+                  e.dataTransfer.effectAllowed = 'copy'
+                }}
+                title={t('checklist.dragHint')}
+                className="mt-1 shrink-0 cursor-grab text-muted-foreground opacity-0 transition-opacity active:cursor-grabbing group-hover:opacity-60 hover:!opacity-100"
+              >
+                <GripVertical className="size-4" />
+              </span>
+
               <button
                 disabled={!canEdit}
                 onClick={() => patch.mutate({ id: it.id, done: !it.done })}
                 title={it.doneBy ? t('checklist.doneBy', { name: it.doneBy.name }) : undefined}
                 className={cn(
-                  'mt-0.5 grid size-4 shrink-0 place-items-center rounded border transition-colors',
+                  'mt-0.5 grid size-5 shrink-0 place-items-center rounded-[5px] border-2 transition-colors',
                   it.done ? 'border-brand bg-brand text-brand-foreground' : 'border-border hover:border-brand',
                   !canEdit && 'cursor-default opacity-60',
                 )}
               >
-                {it.done && <Check className="size-3" />}
+                {it.done && <Check className="size-3.5" strokeWidth={3} />}
               </button>
 
               <span className="min-w-0 flex-1">
@@ -143,16 +173,18 @@ export function TaskChecklist({ taskId, canEdit }: { taskId: string; canEdit: bo
                       }
                     }}
                     placeholder={t('checklist.notePlaceholder')}
-                    className="mt-1 w-full resize-none rounded-md border bg-transparent px-2 py-1 text-xs outline-none focus:ring-2 focus:ring-ring"
+                    className="mt-1 w-full resize-none rounded-md border bg-transparent px-2 py-1.5 text-sm outline-none focus:ring-2 focus:ring-ring"
                   />
                 ) : it.note ? (
+                  // Заметку правят по клику, поэтому она сама и есть кнопка:
+                  // на всю ширину и с полем вокруг, чтобы попадать не целясь.
                   <button
                     disabled={!canEdit}
                     onClick={() => {
                       setNoteDraft(it.note)
                       setNoting(it.id)
                     }}
-                    className="mt-0.5 block w-full whitespace-pre-wrap break-words text-start text-xs text-muted-foreground hover:text-foreground disabled:cursor-default"
+                    className="-mx-1 mt-1 block w-[calc(100%+0.5rem)] whitespace-pre-wrap break-words rounded px-1 py-1 text-start text-sm text-muted-foreground hover:bg-secondary/60 hover:text-foreground disabled:cursor-default disabled:hover:bg-transparent"
                   >
                     {it.note}
                   </button>
@@ -162,22 +194,35 @@ export function TaskChecklist({ taskId, canEdit }: { taskId: string; canEdit: bo
                       setNoteDraft('')
                       setNoting(it.id)
                     }}
-                    className="mt-0.5 text-xs text-muted-foreground opacity-0 transition-opacity hover:text-foreground focus-visible:opacity-100 group-hover:opacity-100"
+                    className="mt-1 py-0.5 text-xs text-muted-foreground opacity-0 transition-opacity hover:text-foreground focus-visible:opacity-100 group-hover:opacity-100"
                   >
                     {t('checklist.addNote')}
                   </button>
                 ) : null}
               </span>
 
-              {canEdit && (
+              {/* Копировать может любой, кто видит: чтение прав не требует */}
+              <span className="mt-0.5 flex shrink-0 items-center gap-0.5">
                 <button
-                  onClick={() => remove.mutate(it.id)}
-                  title={t('files.delete')}
-                  className="mt-0.5 shrink-0 text-muted-foreground opacity-0 transition-opacity hover:text-destructive focus-visible:opacity-100 group-hover:opacity-100"
+                  onClick={() => copy(it)}
+                  title={t('checklist.copy')}
+                  className={cn(
+                    'grid size-6 place-items-center rounded transition-opacity hover:bg-secondary focus-visible:opacity-100',
+                    copied === it.id ? 'text-brand opacity-100' : 'text-muted-foreground opacity-0 group-hover:opacity-100',
+                  )}
                 >
-                  <Trash2 className="size-3.5" />
+                  {copied === it.id ? <Check className="size-3.5" /> : <Copy className="size-3.5" />}
                 </button>
-              )}
+                {canEdit && (
+                  <button
+                    onClick={() => remove.mutate(it.id)}
+                    title={t('files.delete')}
+                    className="grid size-6 place-items-center rounded text-muted-foreground opacity-0 transition-opacity hover:bg-secondary hover:text-destructive focus-visible:opacity-100 group-hover:opacity-100"
+                  >
+                    <Trash2 className="size-3.5" />
+                  </button>
+                )}
+              </span>
             </div>
           </li>
         ))}
