@@ -708,7 +708,8 @@
     "pricing": "Model pricing (USD per 1M tokens)",
     "pricingHint": "Known models inherit default prices. Set your own to override; leave blank to reset.",
     "inputPerM": "Input /1M",
-    "outputPerM": "Output /1M"
+    "outputPerM": "Output /1M",
+    "activeNow": "Active now"
   },
   "notes": {
     "title": "AI notes",

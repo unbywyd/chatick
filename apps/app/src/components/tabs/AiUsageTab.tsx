@@ -11,6 +11,9 @@ import { Select, SelectTrigger, SelectValue, SelectContent, SelectItem } from '@
 // ИИ-агент проекта + учёт использования (SPEC §8.11).
 type Config = {
   source: 'company' | 'trial' | 'custom'
+  /** что работает по факту: при 'company' без ключа компании отвечает пробный */
+  activeSource?: 'company' | 'trial' | 'custom' | null
+  trialSpentUsd?: number
   provider: string
   model: string
   hasKey: boolean
@@ -88,7 +91,16 @@ export function AiUsageTab({ projectId, isAdmin }: { projectId: string; isAdmin:
                   source === s ? 'border-brand bg-accent' : 'hover:bg-secondary',
                 )}
               >
-                <div className="font-medium">{t(`ai.sourceOpt.${s}.label`)}</div>
+                <div className="flex items-center gap-2 font-medium">
+                  {t(`ai.sourceOpt.${s}.label`)}
+                  {/* Настройка и действительность расходятся: без ключа компании
+                      чат обслуживает пробный ИИ. Показываем, что работает сейчас. */}
+                  {cfg?.activeSource === s && (
+                    <span className="rounded-full bg-brand/15 px-2 py-0.5 text-[10px] font-semibold text-brand">
+                      {t('ai.activeNow')}
+                    </span>
+                  )}
+                </div>
                 <div className="mt-0.5 text-xs text-muted-foreground">{t(`ai.sourceOpt.${s}.hint`)}</div>
               </button>
             )
@@ -96,7 +108,7 @@ export function AiUsageTab({ projectId, isAdmin }: { projectId: string; isAdmin:
         </div>
 
         {/* Пробный бюджет */}
-        {source === 'trial' && cfg && (
+        {(source === 'trial' || cfg?.activeSource === 'trial') && cfg && (
           <div>
             <div className="mb-1 flex items-center justify-between text-xs">
               <span className="text-muted-foreground">{t('ai.trialUsed', { spent: fmtUsd(cfg.spentUsd), budget: fmtUsd(cfg.trialBudget) })}</span>

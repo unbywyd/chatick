@@ -1,3 +1,4 @@
+import { createPortal } from 'react-dom'
 import { useEffect, useState } from 'react'
 import { useNavigate, useSearchParams } from 'react-router-dom'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
@@ -314,7 +315,10 @@ export function ConnectScreen() {
 
 /** Модалка подключения — основной вход из проекта и из меню профиля. */
 export function ConnectDialog({ onClose }: { onClose: () => void }) {
-  return (
+  // Через портал, в body: диалог открывают из меню профиля в сайдбаре, а на
+  // сайдбаре стоит transition — он создаёт содержащий блок, и position:fixed
+  // внутри отсчитывается от колонки, а не от окна.
+  return createPortal(
     <div className="fixed inset-0 z-50 grid place-items-center bg-black/40 p-4" onClick={onClose}>
       <div
         className="flex max-h-[85dvh] w-full max-w-2xl flex-col overflow-hidden rounded-xl border bg-card shadow-lg"
@@ -322,6 +326,7 @@ export function ConnectDialog({ onClose }: { onClose: () => void }) {
       >
         <ConnectPanel onClose={onClose} />
       </div>
-    </div>
+    </div>,
+    document.body,
   )
 }

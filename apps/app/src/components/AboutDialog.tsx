@@ -1,3 +1,4 @@
+import { createPortal } from 'react-dom'
 import { useState } from 'react'
 import { useMutation, useQuery } from '@tanstack/react-query'
 import { useTranslation } from 'react-i18next'
@@ -27,7 +28,10 @@ export function AboutDialog({ me, onClose }: { me?: Me; onClose: () => void }) {
     queryFn: () => api<{ version: string; text: string; website: string }>('/api/v1/about'),
   })
 
-  return (
+  // Через портал, в body: диалог открывают из меню профиля в сайдбаре, а на
+  // сайдбаре стоит transition — он создаёт содержащий блок, и position:fixed
+  // внутри отсчитывается от колонки, а не от окна.
+  return createPortal(
     <div className="fixed inset-0 z-50 grid place-items-center bg-black/60 p-6" onClick={onClose}>
       <div className="w-full max-w-md rounded-xl border bg-card p-6 shadow-xl" onClick={(e) => e.stopPropagation()}>
         {writing ? (
@@ -74,7 +78,8 @@ export function AboutDialog({ me, onClose }: { me?: Me; onClose: () => void }) {
           </>
         )}
       </div>
-    </div>
+    </div>,
+    document.body,
   )
 }
 

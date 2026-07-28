@@ -3,12 +3,12 @@ import { zValidator } from '@hono/zod-validator'
 import { z } from 'zod'
 import { and, desc, eq, sql } from 'drizzle-orm'
 import { db } from '../db/client.js'
-import { projectAi, aiUsageLog, modelPricing } from '../db/schema.js'
+import { projectAi, aiUsageLog, modelPricing, projects } from '../db/schema.js'
 import { requireProject, type ProjectEnv } from '../auth.js'
 import { encrypt } from '../lib/crypto.js'
 import { env } from '../env.js'
-import { LLM_PROVIDERS } from '../lib/llm.js'
-import { DEFAULT_PRICING, projectSpendUsd } from '../lib/ai-usage.js'
+import { LLM_PROVIDERS, projectLlm } from '../lib/llm.js'
+import { DEFAULT_PRICING, projectSpendUsd, companyTrialSpendUsd } from '../lib/ai-usage.js'
 
 // Настройка ИИ-агента проекта + учёт использования (SPEC §8.11). Project-токен, owner/admin.
 export const aiRoute = new Hono<ProjectEnv>()
@@ -21,8 +21,20 @@ aiRoute.get('/config', async (c) => {
   const { projectId } = c.get('auth')
   const ai = await db.query.projectAi.findFirst({ where: eq(projectAi.projectId, projectId) })
   const spent = await projectSpendUsd(projectId)
+
+  // Что работает НА САМОМ ДЕЛЕ. Выбранный источник и действующий расходятся:
+  // при source='company' без ключа компании чат обслуживает пробный ИИ. В
+  // интерфейсе подсвечивался выбор, и человек видел «Ключ компании» там, где
+  // отвечал пробный.
+  const actual = await projectLlm(projectId)
+  const project = await db.query.projects.findFirst({ where: eq(projects.id, projectId) })
+  const trialSpent = project ? await companyTrialSpendUsd(project.companyId) : 0
+
   return c.json({
     source: ai?.source ?? 'company',
+    /** company | trial | custom — по факту, а не по настройке */
+    activeSource: actual?.usage?.source ?? null,
+    trialSpentUsd: trialSpent,
     provider: ai?.provider ?? '',
     model: ai?.model ?? '',
     hasKey: Boolean(ai?.keyEncrypted),

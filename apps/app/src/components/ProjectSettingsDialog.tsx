@@ -1,4 +1,5 @@
 import { useState } from 'react'
+import { createPortal } from 'react-dom'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { useTranslation } from 'react-i18next'
 import { toast } from 'sonner'
@@ -104,7 +105,11 @@ export function ProjectSettingsDialog({
     onError: (e) => toast.error(e instanceof Error ? e.message : String(e)),
   })
 
-  return (
+  // Через портал, в body. Диалог открывают из меню профиля, а оно живёт в
+  // сайдбаре — на котором стоит transition. Свойство transition создаёт
+  // содержащий блок, и position:fixed внутри начинает отсчитываться от
+  // колонки, а не от окна: диалог сжимался в ширину сайдбара и обрезался.
+  return createPortal(
     <div className="fixed inset-0 z-50 grid place-items-center bg-black/40 p-4" onClick={onClose}>
       <div
         className="flex max-h-[85dvh] w-full max-w-3xl flex-col overflow-hidden rounded-xl border bg-card shadow-lg"
@@ -153,6 +158,7 @@ export function ProjectSettingsDialog({
           </Button>
         </footer>
       </div>
-    </div>
+    </div>,
+    document.body,
   )
 }
