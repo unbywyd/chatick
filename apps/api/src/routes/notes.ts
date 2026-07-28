@@ -5,7 +5,7 @@ import { and, desc, eq, gte, inArray, lte, or, sql } from 'drizzle-orm'
 import { db } from '../db/client.js'
 import { messages, notes, projects, tasks, users } from '../db/schema.js'
 import { requireProject, type ProjectEnv } from '../auth.js'
-import { hasPermission } from './projects.js'
+import { hasPermission, ownsOrManages } from './projects.js'
 import { logActivity } from '../lib/audit.js'
 import { htmlToText, sanitizeHtml } from '../lib/sanitize-html.js'
 import { notify } from '../lib/notify.js'
@@ -291,11 +291,17 @@ notesRoute.post('/', zValidator('json', bodySchema), async (c) => {
 
 notesRoute.patch('/:id', zValidator('json', bodySchema.partial()), async (c) => {
   const { projectId, sub } = c.get('auth')
-  if (!(await hasPermission(projectId, sub, 'notes.write'))) return c.json({ error: 'Forbidden' }, 403)
   const existing = await db.query.notes.findFirst({
     where: and(eq(notes.id, c.req.param('id')), eq(notes.projectId, projectId), alive),
   })
   if (!existing) return c.json({ error: 'Not found' }, 404)
+
+  // Своя заметка — своя ответственность; чужую переписывать нельзя. Журнал
+  // ценен, только если запись остаётся тем, что написал её автор.
+  if (!(await hasPermission(projectId, sub, 'notes.write'))) return c.json({ error: 'Forbidden' }, 403)
+  if (!(await ownsOrManages(projectId, sub, [existing.authorId]))) {
+    return c.json({ error: 'Forbidden: you can only edit notes you wrote' }, 403)
+  }
 
   const p = c.req.valid('json')
   const patch: Partial<typeof notes.$inferInsert> = { updatedAt: new Date() }
@@ -416,11 +422,17 @@ notesRoute.post('/:id/task', async (c) => {
 
 notesRoute.delete('/:id', async (c) => {
   const { projectId, sub } = c.get('auth')
-  if (!(await hasPermission(projectId, sub, 'notes.delete'))) return c.json({ error: 'Forbidden' }, 403)
   const existing = await db.query.notes.findFirst({
     where: and(eq(notes.id, c.req.param('id')), eq(notes.projectId, projectId), alive),
   })
   if (!existing) return c.json({ error: 'Not found' }, 404)
+
+  // Свою заметку участник убирает сам; чужую — только с notes.delete.
+  const canDeleteAny = await hasPermission(projectId, sub, 'notes.delete')
+  const canDeleteOwn =
+    (await hasPermission(projectId, sub, 'notes.write')) &&
+    (await ownsOrManages(projectId, sub, [existing.authorId]))
+  if (!canDeleteAny && !canDeleteOwn) return c.json({ error: 'Forbidden' }, 403)
 
   await db.update(notes).set({ deletedAt: new Date(), deletedById: sub }).where(eq(notes.id, existing.id))
   void logActivity({

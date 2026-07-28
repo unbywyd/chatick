@@ -1350,6 +1350,10 @@ bridgeRoute.patch('/notes/:id', async (c) => {
     where: and(eq(notes.id, c.req.param('id')), eq(notes.projectId, scope.projectId), isNull(notes.deletedAt)),
   })
   if (!existing) return c.json({ error: 'Note not found' }, 404)
+  // Чужую заметку не переписываем — как в интерфейсе
+  if (!(await ownsOrManages(scope.projectId, id.userId, [existing.authorId]))) {
+    return c.json({ error: 'Forbidden: you can only edit notes you wrote' }, 403)
+  }
 
   const b = (await c.req.json().catch(() => ({}))) as Record<string, unknown>
   const patch: Partial<typeof notes.$inferInsert> = { updatedAt: new Date() }
@@ -1423,13 +1427,15 @@ bridgeRoute.delete('/notes/:id', async (c) => {
   const id = auth(c as never)
   const scope = await resolveProject(c as never)
   if ('error' in scope) return c.json({ error: scope.error }, scope.status)
-  const denied = await require(c as never, 'notes.delete', scope.projectId)
-  if (denied) return c.json(denied, 403)
-
   const existing = await db.query.notes.findFirst({
     where: and(eq(notes.id, c.req.param('id')), eq(notes.projectId, scope.projectId), isNull(notes.deletedAt)),
   })
   if (!existing) return c.json({ error: 'Note not found' }, 404)
+
+  // Свою заметку убирает и участник; чужую — только с notes.delete
+  const own = await ownsOrManages(scope.projectId, id.userId, [existing.authorId])
+  const denied = await require(c as never, own ? 'notes.write' : 'notes.delete', scope.projectId)
+  if (denied) return c.json(denied, 403)
   await db.update(notes).set({ deletedAt: new Date(), deletedById: id.userId }).where(eq(notes.id, existing.id))
   void logActivity({
     projectId: scope.projectId,
