@@ -31,7 +31,9 @@ aiRoute.get('/config', async (c) => {
   const trialSpent = project ? await companyTrialSpendUsd(project.companyId) : 0
 
   return c.json({
-    source: ai?.source ?? 'trial',
+    // Тот же расчёт умолчания, что в projectLlm: экран должен показывать то,
+    // что произойдёт, а не то, что лежит в базе (а там пусто, пока не меняли).
+    source: ai?.source ?? (actual?.usage?.source ?? 'trial'),
     /** company | trial | custom — по факту, а не по настройке */
     activeSource: actual?.usage?.source ?? null,
     trialSpentUsd: trialSpent,
