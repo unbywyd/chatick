@@ -100,7 +100,13 @@ ${denied.length ? `\n  NOT ALLOWED: ${denied.join(', ')}\n  Do not attempt these
 
 ## Rules
 
-- "me" means ${id.user.name || id.user.email}. \`assignee=me\` filters to their tasks.
+- "me" means ${id.user.name || id.user.email} <${id.user.email}> — the account this
+  tunnel was opened under, not whoever is talking to you. If a person has two
+  accounts, "assign it to me" may not mean the account you are acting as: say
+  which one you used.
+- Deletions are soft and reversible for 7 days (the response says
+  restorableForDays). Worth knowing before asking for confirmation on every
+  small thing — but ask anyway when the deletion is not obviously wanted.
 - Destructive actions (delete, bulk status changes) need explicit human
   confirmation first. Ask, then act.
 - Write content in the project's language, not the language of the request.

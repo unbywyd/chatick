@@ -66,6 +66,23 @@ export function sendToUser(projectId: string, userId: string, event: string, pay
  * Для уведомлений: они адресованы человеку, и ждать, пока он вернётся в тот
  * самый проект, незачем.
  */
+/**
+ * Сообщает об изменении задач и в проект, и лично тем, кого оно касается.
+ *
+ * Панель в трее показывает задачи из всех проектов сразу и потому ни в одной
+ * комнате не состоит: рассылка по projectId её не достаёт, и список
+ * обновлялся только раз в две минуты — или когда человек открывал окно.
+ *
+ * Кому лично: исполнителю и автору. Остальным хватает комнаты — они и так
+ * смотрят на этот проект.
+ */
+export function tasksChanged(projectId: string, who: (string | null | undefined)[] = []) {
+  broadcast(projectId, 'tasks_changed', {})
+  for (const id of new Set(who.filter(Boolean) as string[])) {
+    sendToUserAnywhere(id, 'tasks_changed', { projectId })
+  }
+}
+
 export function sendToUserAnywhere(userId: string, event: string, payload: unknown) {
   const msg = JSON.stringify({ event, payload })
   for (const c of byUser.get(userId) ?? []) {

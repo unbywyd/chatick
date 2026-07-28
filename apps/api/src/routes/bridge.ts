@@ -44,7 +44,7 @@ import { readPresence } from './auth.js'
 import { createShare, revokeShare, type ShareEntityType } from './shares.js'
 import { notifyChatMentions } from './messages.js'
 import { htmlToText, sanitizeHtml } from '../lib/sanitize-html.js'
-import { broadcast, sendToUserAnywhere } from '../ws.js'
+import { broadcast, sendToUserAnywhere, tasksChanged } from '../ws.js'
 import { env } from '../env.js'
 
 // Мост для внешнего ИИ (SPEC §8.27). Всё выполняется ОТ ИМЕНИ пользователя,
@@ -204,6 +204,9 @@ bridgeRoute.get('/projects', async (c) => {
       about: p.about,
       companyId: p.companyId,
       companyName: companyNames.get(p.companyId),
+      // Язык проекта здесь же: писать на нём требует руководство, а узнать
+      // его иначе можно было только отдельным /x/context на каждый проект.
+      language: (JSON.parse(p.aiConfig || '{}') as { language?: string }).language ?? 'en',
       permissions: perms,
     })
   }
@@ -937,7 +940,7 @@ bridgeRoute.post('/tasks', async (c) => {
     entityId: row!.id,
     entityLabel: `${row!.number} ${row!.title}`,
   })
-  broadcast(scope.projectId, 'tasks_changed', {})
+  tasksChanged(scope.projectId, [null])
   // подтягиваем исполнителя, чтобы агент сразу видел, на кого задача ушла
   const who = row!.assigneeId ? await db.query.users.findFirst({ where: eq(users.id, row!.assigneeId) }) : null
   return c.json(taskView(row!, who), 201)
@@ -999,7 +1002,7 @@ bridgeRoute.patch('/tasks/:id', async (c) => {
     entityId: taskId,
     entityLabel: `${row!.number} ${row!.title}`,
   })
-  broadcast(scope.projectId, 'tasks_changed', {})
+  tasksChanged(scope.projectId, [row!.assigneeId, row!.createdById, existing.assigneeId, existing.createdById])
   const who = row!.assigneeId ? await db.query.users.findFirst({ where: eq(users.id, row!.assigneeId) }) : null
   return c.json(taskView(row!, who))
 })
@@ -1029,7 +1032,7 @@ bridgeRoute.delete('/tasks/:id', async (c) => {
     entityId: taskId,
     entityLabel: `${existing.number} ${existing.title}`,
   })
-  broadcast(scope.projectId, 'tasks_changed', {})
+  tasksChanged(scope.projectId, [existing.assigneeId, existing.createdById])
   return c.json({ ok: true, restorableForDays: 7 })
 })
 

@@ -9,7 +9,7 @@ import { hasPermission, ownsOrManages } from './projects.js'
 import { improveTask, validateTask, generateTaskNotes } from '../lib/llm.js'
 import { buildTeamContext } from '../lib/memory.js'
 import { notify, extractMentions } from '../lib/notify.js'
-import { broadcast } from '../ws.js'
+import { broadcast, tasksChanged } from '../ws.js'
 import { logActivity } from '../lib/audit.js'
 import { postTaskDone, postTaskAssigned } from '../lib/task-events.js'
 
@@ -193,7 +193,7 @@ tasksRoute.post('/', zValidator('json', z.object(taskShape)), async (c) => {
     })()
   }
 
-  broadcast(projectId, 'tasks_changed', {})
+  tasksChanged(projectId, [row!.assigneeId, row!.createdById])
   void logActivity({ projectId, actorId: sub, action: 'create', entityType: 'task', entityId: row!.id, entityLabel: `${row!.number}: ${row!.title}` })
   // назначил на кого-то при создании → автосообщение в чат (SPEC §8.23)
   if (row!.assigneeId) void postTaskAssigned(projectId, sub, row!.assigneeId, row!)
@@ -243,7 +243,7 @@ tasksRoute.patch(
       statusChanged: body.status !== undefined && body.status !== task.status,
       mentions: body.description !== undefined && body.description !== task.description,
     })
-    broadcast(projectId, 'tasks_changed', {})
+    tasksChanged(projectId, [row!.assigneeId, row!.createdById, task.assigneeId])
     const act = body.status !== undefined && body.status !== task.status ? 'status' : body.assigneeId !== undefined ? 'assign' : 'update'
     void logActivity({ projectId, actorId: sub, action: act, entityType: 'task', entityId: row!.id, entityLabel: `${row!.number}: ${row!.title}`, meta: { changed: Object.keys(patch) } })
 
@@ -274,7 +274,7 @@ tasksRoute.delete('/:taskId', async (c) => {
   // soft-delete (SPEC §8.21): восстановимо 7 дней
   await db.update(tasks).set({ deletedAt: new Date(), deletedById: sub }).where(eq(tasks.id, taskId))
   void logActivity({ projectId, actorId: sub, action: 'delete', entityType: 'task', entityId: task.id, entityLabel: `${task.number}: ${task.title}` })
-  broadcast(projectId, 'tasks_changed', {})
+  tasksChanged(projectId, [task.assigneeId, task.createdById])
   return c.json({ ok: true })
 })
 
@@ -308,7 +308,7 @@ tasksRoute.post('/:taskId/restore', async (c) => {
   if (!task) return c.json({ error: 'Not found' }, 404)
   await db.update(tasks).set({ deletedAt: null, deletedById: null }).where(eq(tasks.id, taskId))
   void logActivity({ projectId, actorId: sub, action: 'restore', entityType: 'task', entityId: task.id, entityLabel: `${task.number}: ${task.title}` })
-  broadcast(projectId, 'tasks_changed', {})
+  tasksChanged(projectId, [task.assigneeId, task.createdById])
   return c.json({ ok: true })
 })
 

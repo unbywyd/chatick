@@ -288,6 +288,12 @@ export function useSystemNotifications() {
           // Часы человека — его собственные, и панель в трее живёт вне
           // проекта: без личного события она узнавала об остановке только
           // из опроса, показывая до полуминуты уже остановленный таймер.
+          // Задачи в трее собраны из всех проектов, поэтому и событие о них
+          // приходит личное, а не в комнату проекта.
+          if (event === 'tasks_changed') {
+            qc.invalidateQueries({ queryKey: ['desktop-tasks'] })
+            qc.invalidateQueries({ queryKey: ['inbox'] })
+          }
           if (event === 'time') {
             qc.invalidateQueries({ queryKey: ['desktop-running'] })
             qc.invalidateQueries({ queryKey: ['time-running'] })
