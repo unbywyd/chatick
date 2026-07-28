@@ -471,7 +471,9 @@
     "onlineNow_one": "{{count}} онлайн",
     "onlineNow_few": "{{count}} онлайн",
     "onlineNow_many": "{{count}} онлайн",
-    "onlineNow_other": "{{count}} онлайн"
+    "onlineNow_other": "{{count}} онлайн",
+    "trialOverTitle": "Пробный ИИ закончился",
+    "trialOverText": "Бесплатный пробный бюджет компании израсходован. Подключите свой ключ LLM, чтобы чат работал дальше — это займёт минуту."
   },
   "composer": {
     "dropHere": "Отпустите, чтобы прикрепить",

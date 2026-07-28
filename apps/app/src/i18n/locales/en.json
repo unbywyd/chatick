@@ -467,7 +467,9 @@
     "bypassOff": "Send without AI check",
     "onlineNow": "{{count}} online",
     "onlineNow_one": "{{count}} online",
-    "onlineNow_other": "{{count}} online"
+    "onlineNow_other": "{{count}} online",
+    "trialOverTitle": "Trial AI has run out",
+    "trialOverText": "The free trial budget for this company is spent. Connect your own LLM key to keep the chat running — it takes a minute."
   },
   "composer": {
     "dropHere": "Drop to attach",

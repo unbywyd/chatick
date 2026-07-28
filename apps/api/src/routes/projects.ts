@@ -5,7 +5,9 @@ import { and, eq, inArray, isNull, sql } from 'drizzle-orm'
 import { nanoid } from 'nanoid'
 import sharp from 'sharp'
 import { db } from '../db/client.js'
-import { companies, companyMembers, files, FREE_STORAGE_BYTES, messages, notifications, projects, projectMembers, projectStorage, tasks, users } from '../db/schema.js'
+import { env } from '../env.js'
+import { companyTrialSpendUsd } from '../lib/ai-usage.js'
+import { companies, companyMembers, files, FREE_STORAGE_BYTES, messages, notifications, projects, projectMembers, projectStorage, tasks, users, projectAi } from '../db/schema.js'
 import { encrypt } from '../lib/crypto.js'
 import { PutObjectCommand, DeleteObjectCommand, S3Client } from '@aws-sdk/client-s3'
 import { requireSession, requireProject, signProjectToken, type SessionEnv, type ProjectEnv } from '../auth.js'
@@ -779,7 +781,35 @@ projectsRoute.get('/:projectId/llm-status', requireProject, async (c) => {
   const project = await db.query.projects.findFirst({ where: eq(projects.id, projectId) })
   if (!project) return c.json({ error: 'Not found' }, 404)
   const llm = await companyLlm(project.companyId)
-  return c.json({ configured: Boolean(llm), companyId: project.companyId })
+  if (llm) return c.json({ configured: true, source: 'company', companyId: project.companyId })
+
+  // Пробный ИИ — тоже рабочий ИИ. Раньше здесь отвечали «не настроен», и
+  // человек видел заглушку с просьбой подключить ключ, хотя чат работал.
+  const ai = await db.query.projectAi.findFirst({ where: eq(projectAi.projectId, projectId) })
+  const wantsTrial = (ai?.source ?? 'company') === 'trial'
+  if (wantsTrial && env.AI_TRIAL_KEY) {
+    const spent = await companyTrialSpendUsd(project.companyId)
+    if (spent < env.AI_TRIAL_BUDGET_USD) {
+      return c.json({
+        configured: true,
+        source: 'trial',
+        companyId: project.companyId,
+        trialSpent: spent,
+        trialBudget: env.AI_TRIAL_BUDGET_USD,
+      })
+    }
+    // Бюджет исчерпан — это отдельный случай: не «настройте ИИ», а
+    // «пробный кончился». Разница важна: человек уже видел, как это работает.
+    return c.json({
+      configured: false,
+      source: 'trial_exhausted',
+      companyId: project.companyId,
+      trialSpent: spent,
+      trialBudget: env.AI_TRIAL_BUDGET_USD,
+    })
+  }
+
+  return c.json({ configured: false, source: 'none', companyId: project.companyId })
 })
 
 // --- Хранилище проекта (SPEC §8.10) — только owner/admin проекта / company admin ---

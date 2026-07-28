@@ -24,11 +24,13 @@ const envSchema = z.object({
   // LLM (диспетчер чата) — обязательным станет на этапе ИИ-фич
   ANTHROPIC_API_KEY: z.string().optional(),
 
-  // Пробный ИИ (SPEC §8.11): наш ключ (внутри DeepSeek — в UI не раскрываем) + бюджет $/проект
+  // Пробный ИИ (SPEC §8.11): наш ключ (внутри DeepSeek — в UI не раскрываем).
+  // Бюджет — на КОМПАНИЮ: проектов можно создать сколько угодно, и лимит на
+  // проект означал бы столько же раз по столько же долларов.
   AI_TRIAL_PROVIDER: z.string().default('deepseek'),
-  AI_TRIAL_MODEL: z.string().default('deepseek-chat'),
+  AI_TRIAL_MODEL: z.string().default('deepseek-v4-flash'),
   AI_TRIAL_KEY: z.string().optional(),
-  AI_TRIAL_BUDGET_USD: z.coerce.number().default(2),
+  AI_TRIAL_BUDGET_USD: z.coerce.number().default(0.5),
 
   // S3 / Cloudflare R2
   S3_ENDPOINT: z.string().optional(),

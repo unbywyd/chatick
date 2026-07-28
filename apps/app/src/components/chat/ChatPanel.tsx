@@ -105,7 +105,13 @@ export function ChatPanel({
 
   const llm = useQuery({
     queryKey: ['llm-status', projectId],
-    queryFn: () => api<{ configured: boolean; companyId: string }>(`/api/v1/projects/${projectId}/llm-status`, {}, 'project'),
+    queryFn: () =>
+      api<{
+        configured: boolean
+        companyId: string
+        /** company | trial | trial_exhausted | none */
+        source?: string
+      }>(`/api/v1/projects/${projectId}/llm-status`, {}, 'project'),
     enabled: Boolean(projectId),
   })
   const llmMissing = llm.data ? !llm.data.configured : false
@@ -437,8 +443,14 @@ export function ChatPanel({
             <span className="mx-auto grid size-12 place-items-center rounded-full bg-secondary">
               <BrainCircuit className="size-6 text-muted-foreground" />
             </span>
-            <h3 className="mt-3 text-sm font-semibold">{t('chat.noLlmTitle')}</h3>
-            <p className="mt-1 text-xs text-muted-foreground">{t('chat.noLlmText')}</p>
+            {/* Пробный ИИ кончился — это не «настройте ИИ»: человек уже видел,
+                как он работает, и ему нужен другой текст. */}
+            <h3 className="mt-3 text-sm font-semibold">
+              {t(llm.data?.source === 'trial_exhausted' ? 'chat.trialOverTitle' : 'chat.noLlmTitle')}
+            </h3>
+            <p className="mt-1 text-xs text-muted-foreground">
+              {t(llm.data?.source === 'trial_exhausted' ? 'chat.trialOverText' : 'chat.noLlmText')}
+            </p>
             <Button variant="brand" size="sm" className="mt-4" onClick={() => navigate(`/start/${llm.data!.companyId}/settings`)}>
               <Settings className="size-3.5" />
               {t('chat.noLlmCta')}

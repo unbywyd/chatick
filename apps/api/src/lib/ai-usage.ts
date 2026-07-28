@@ -1,6 +1,6 @@
 import { and, eq, sql } from 'drizzle-orm'
 import { db } from '../db/client.js'
-import { aiUsageLog, modelPricing } from '../db/schema.js'
+import { aiUsageLog, modelPricing, projects } from '../db/schema.js'
 import { env } from '../env.js'
 
 // Учёт использования ИИ + прайсинг моделей (SPEC §8.11).
@@ -85,8 +85,32 @@ export async function projectSpendUsd(projectId: string): Promise<number> {
   return Number(total) || 0
 }
 
-/** Достигнут ли лимит пробного бюджета проекта (SPEC §8.11). */
+/**
+ * Сколько компания уже потратила пробного бюджета.
+ *
+ * Считаем по компании, а не по проекту: регистрация бесплатна, проектов можно
+ * создать сколько угодно, и бюджет «на проект» означал бы столько же раз по
+ * столько же долларов. Компания — верхний уровень, за которым стоит человек.
+ */
+export async function companyTrialSpendUsd(companyId: string): Promise<number> {
+  const [{ total }] = (await db
+    .select({ total: sql<string>`coalesce(sum(cast(${aiUsageLog.costUsd} as numeric)), 0)` })
+    .from(aiUsageLog)
+    .innerJoin(projects, eq(projects.id, aiUsageLog.projectId))
+    .where(
+      and(
+        eq(projects.companyId, companyId),
+        eq(aiUsageLog.source, 'trial'),
+        sql`${aiUsageLog.costUsd} is not null`,
+      ),
+    )) as [{ total: string }]
+  return Number(total) || 0
+}
+
+/** Достигнут ли лимит пробного бюджета компании (SPEC §8.11). */
 export async function trialBudgetExceeded(projectId: string): Promise<boolean> {
-  const spent = await projectSpendUsd(projectId)
+  const project = await db.query.projects.findFirst({ where: eq(projects.id, projectId) })
+  if (!project) return true
+  const spent = await companyTrialSpendUsd(project.companyId)
   return spent >= env.AI_TRIAL_BUDGET_USD
 }
