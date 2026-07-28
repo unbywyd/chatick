@@ -1327,13 +1327,19 @@ const CHART_STATUSES = [
   }
 
   /* --- Автор -------------------------------------------------------------- */
+  /* Блок задавал только ширину: заголовок и подзаголовок центрировались
+     собственными стилями, а ссылки — flex-строка — оставались у левого края.
+     Получалось, что текст по центру, а «More work» уехало влево. */
   .author {
     max-width: 720px;
+    margin: 0 auto;
+    text-align: center;
   }
   .author-sites {
     display: flex;
     flex-wrap: wrap;
     align-items: center;
+    justify-content: center;
     gap: 14px;
     margin-top: 18px;
     color: var(--fg-muted);
