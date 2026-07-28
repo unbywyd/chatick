@@ -30,6 +30,10 @@ export async function sendMail(opts: {
   try {
     await transport.sendMail({
       from: { name: FROM_NAME, address: env.SMTP_FROM_EMAIL! },
+      // Кодировку задаём явно. Без неё nodemailer определяет её сам и на
+      // кириллице промахивается: письмо приходит ромбами. Тег <meta charset>
+      // внутри HTML не спасает — почтовый клиент смотрит на заголовок письма.
+      textEncoding: 'base64',
       // отвечать на noreply бессмысленно — уводим ответы на реальный ящик
       ...(env.SMTP_REPLY_TO ? { replyTo: env.SMTP_REPLY_TO } : {}),
       // почтовики понижают рейтинг рассылкам без штатной отписки
