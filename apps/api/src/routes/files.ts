@@ -7,6 +7,7 @@ import { z } from 'zod'
 import sharp from 'sharp'
 import { PutObjectCommand } from '@aws-sdk/client-s3'
 import { db } from '../db/client.js'
+import { authenticateBridge } from '../lib/bridge-auth.js'
 import { files, companies, documents, projects, tasks, users } from '../db/schema.js'
 import { requireProject, signFileToken, verifyFileToken, verifyToken, type ProjectEnv } from '../auth.js'
 import { hasPermission } from './projects.js'
@@ -86,14 +87,35 @@ filesPublicRoute.get('/doc/:documentId/:fileId', async (c) => {
 // в тексте задачи/комментария навсегда. Авторизация — project-токен в ?t=.
 filesPublicRoute.get('/inline/:fileId', async (c) => {
   const bearer = c.req.header('Authorization')?.replace(/^Bearer\s+/i, '') ?? c.req.query('t')
-  const payload = bearer ? await verifyToken(bearer) : null
-  if (!payload || payload.typ !== 'project') return c.json({ error: 'Unauthorized' }, 401)
-  if (!(await hasPermission(payload.projectId, payload.sub, 'files.read'))) return c.json({ error: 'Forbidden' }, 403)
+  if (!bearer) return c.json({ error: 'Unauthorized' }, 401)
+
+  // Ссылка вида /files/inline/<id> лежит прямо в тексте задачи, и ассистент,
+  // читающий задачу через мост, идёт по ней первым делом. Раньше принимался
+  // только project-токен, и ассистент получал 401 по ссылке из своих же
+  // данных — приходилось догадываться, что тот же id надо запрашивать через
+  // /x/files/<id>/content. Догадка, которая ниоткуда не следовала.
+  const bridge = await authenticateBridge(bearer)
+  let userId: string
+  let projectId: string | null
+  if (bridge) {
+    userId = bridge.userId
+    // Туннель на компанию — проекта в токене нет: берём его у самого файла,
+    // а право на чтение всё равно проверяем ниже.
+    projectId = bridge.projectId
+  } else {
+    const payload = await verifyToken(bearer)
+    if (!payload || payload.typ !== 'project') return c.json({ error: 'Unauthorized' }, 401)
+    userId = payload.sub
+    projectId = payload.projectId
+  }
 
   const file = await db.query.files.findFirst({
-    where: and(eq(files.id, c.req.param('fileId')), eq(files.projectId, payload.projectId)),
+    where: projectId
+      ? and(eq(files.id, c.req.param('fileId')), eq(files.projectId, projectId))
+      : eq(files.id, c.req.param('fileId')),
   })
   if (!file || file.deletedAt) return c.json({ error: 'Not found' }, 404)
+  if (!(await hasPermission(file.projectId, userId, 'files.read'))) return c.json({ error: 'Forbidden' }, 403)
 
   try {
     const store = await resolveStorage(file.projectId)

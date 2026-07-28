@@ -194,8 +194,19 @@ Example — handle everything waiting for me:
   Fetch the bytes with the same token — images, PDFs, anything:
     curl -s <contentUrl> -H 'authorization: Bearer <token>' -o mockup.png
 
-  Descriptions of tasks and documents are HTML and may contain <img> tags
-  pointing at the same file URLs; those need the token too.
+  Inline images. Descriptions of tasks, comments and documents are HTML and
+  may contain <img src=".../files/inline/<id>">. Those URLs accept your bridge
+  token, so you can fetch them directly:
+
+    curl -s '<src from the html>' -H 'authorization: Bearer <token>' -o shot.webp
+
+  The same image also appears in the task's "attachments", so in practice you
+  rarely need to parse the HTML at all.
+
+  Save with the right extension. Each attachment carries "ext" derived from its
+  mime type — write the file as <name><ext> (image/webp -> .webp). Saved under
+  a name with no extension, an image is easily mistaken for text and read as a
+  screenful of binary noise.
 
 ## Documents
 

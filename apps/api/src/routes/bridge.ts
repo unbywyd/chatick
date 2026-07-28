@@ -566,13 +566,42 @@ function parseDue(value: unknown): Date | null | undefined {
 }
 
 /**
+ * Инлайн-картинки, вставленные прямо в текст.
+ *
+ * Такие файлы не привязаны к задаче полем taskId — редактор грузит их отдельно,
+ * — и в attachments не попадали: ассистент видел пустой список и делал вывод,
+ * что смотреть нечего, хотя картинка была вшита в описание. Достаём их из
+ * самого HTML: id — последний сегмент пути в src.
+ */
+function inlineFileIds(html: string | null | undefined): string[] {
+  if (!html) return []
+  const ids = new Set<string>()
+  for (const m of html.matchAll(/\/files\/inline\/([A-Za-z0-9_-]+)/g)) ids.add(m[1]!)
+  return [...ids]
+}
+
+/**
  * Вложение в том же виде, что отдаёт GET /x/files: ассистенту не приходится
  * гадать, как забрать содержимое, — адрес приходит вместе со списком.
  */
+const EXT_BY_MIME: Record<string, string> = {
+  'image/webp': '.webp',
+  'image/png': '.png',
+  'image/jpeg': '.jpg',
+  'image/gif': '.gif',
+  'image/svg+xml': '.svg',
+  'application/pdf': '.pdf',
+  'audio/mpeg': '.mp3',
+  'video/mp4': '.mp4',
+}
+
 const fileView = (f: typeof files.$inferSelect) => ({
   id: f.id,
   name: f.name,
   mime: f.mime,
+  // Расширение по типу: скачав файл под именем без него, ассистент пытается
+  // прочитать webp как текст и получает экран двоичного мусора.
+  ext: EXT_BY_MIME[f.mime] ?? (f.name.includes('.') ? f.name.slice(f.name.lastIndexOf('.')) : ''),
   size: Number(f.size),
   contentUrl: `${(process.env.API_PUBLIC_URL || 'https://api.chatick.com').replace(/\/$/, '')}/x/files/${f.id}/content`,
 })
@@ -588,6 +617,8 @@ async function attachmentsFor(
   column: typeof files.taskId | typeof files.messageId | typeof files.commentId,
   ids: string[],
   projectId: string,
+  /** id => html, откуда достать инлайн-картинки описания */
+  htmlById?: Map<string, string | null>,
 ): Promise<Map<string, ReturnType<typeof fileView>[]>> {
   const map = new Map<string, ReturnType<typeof fileView>[]>()
   if (!ids.length) return map
@@ -601,6 +632,30 @@ async function attachmentsFor(
     const list = map.get(key) ?? []
     list.push(fileView(f))
     map.set(key, list)
+  }
+
+  // Картинки из текста: их id нигде не связан с задачей, кроме самого HTML
+  if (htmlById?.size) {
+    const wanted = new Map<string, string[]>() // fileId -> [ownerId]
+    for (const [ownerId, html] of htmlById) {
+      for (const fid of inlineFileIds(html)) {
+        wanted.set(fid, [...(wanted.get(fid) ?? []), ownerId])
+      }
+    }
+    if (wanted.size) {
+      const inlineRows = await db
+        .select()
+        .from(files)
+        .where(and(inArray(files.id, [...wanted.keys()]), eq(files.projectId, projectId), isNull(files.deletedAt)))
+      for (const f of inlineRows) {
+        for (const ownerId of wanted.get(f.id) ?? []) {
+          const list = map.get(ownerId) ?? []
+          // Один и тот же файл может быть и вложением, и в тексте
+          if (!list.some((x) => x.id === f.id)) list.push(fileView(f))
+          map.set(ownerId, list)
+        }
+      }
+    }
   }
   return map
 }
@@ -662,7 +717,12 @@ bridgeRoute.get('/tasks', async (c) => {
     .orderBy(desc(tasks.updatedAt))
     .limit(limit)
 
-  const byTask = await attachmentsFor(files.taskId, rows.map((r) => r.t.id), scope.projectId)
+  const byTask = await attachmentsFor(
+    files.taskId,
+    rows.map((r) => r.t.id),
+    scope.projectId,
+    new Map(rows.map((r) => [r.t.id, r.t.description])),
+  )
   return c.json({
     items: rows.map((r) => taskView(r.t, r.u, byTask.get(r.t.id))),
     count: rows.length,
@@ -682,7 +742,12 @@ bridgeRoute.get('/tasks/:id', async (c) => {
     .where(and(eq(tasks.id, c.req.param('id')), eq(tasks.projectId, scope.projectId), isNull(tasks.deletedAt)))
     .limit(1)
   if (!row.length) return c.json({ error: 'Not found' }, 404)
-  const attached = await attachmentsFor(files.taskId, [row[0]!.t.id], scope.projectId)
+  const attached = await attachmentsFor(
+    files.taskId,
+    [row[0]!.t.id],
+    scope.projectId,
+    new Map([[row[0]!.t.id, row[0]!.t.description]]),
+  )
   return c.json(taskView(row[0]!.t, row[0]!.u, attached.get(row[0]!.t.id)))
 })
 
