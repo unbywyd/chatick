@@ -46,9 +46,13 @@ export function ImageViewer() {
     const onClick = (e: MouseEvent) => {
       const el = pick(e)
       if (!el) return
-      // В редакторе клик по картинке выделяет её — там открываем двойным,
-      // иначе просмотр мешал бы правке.
-      if (el.closest('.tiptap-editor, .doc-editor')) return
+      // Открываем по одному клику везде, где текст читают. Двойной остаётся
+      // только там, где картинку правят: в редакторе одинарный выделяет её,
+      // и перехватывать его значило бы ломать перетаскивание и удаление.
+      // «Правят» — это когда поле доступно для ввода, а не просто нарисовано
+      // тем же компонентом: у задачи в режиме чтения он тот же самый.
+      const editing = el.closest('.tiptap-editor, .doc-editor')
+      if (editing && (editing as HTMLElement).isContentEditable) return
       e.preventDefault()
       open(el)
     }

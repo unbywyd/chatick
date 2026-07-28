@@ -713,8 +713,10 @@ export function TaskDrawer({
             {meta}
           </div>
 
+          {/* Без карточки: описание — основное содержимое задачи, а не
+              вложенный блок. В чате у сообщений подложки тоже нет. */}
           {task.description?.trim() && (
-            <div className="msg-md max-w-none break-words rounded-xl border bg-card p-4 text-sm">
+            <div className="msg-md max-w-none break-words text-sm">
               <RichEditor value={task.description} onChange={() => {}} mentions={[]} preset="full" readOnly />
             </div>
           )}
