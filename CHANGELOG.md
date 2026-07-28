@@ -7,6 +7,15 @@ refuses to run otherwise, so a release can never ship without a description.
 
 Written in English only: this file is published on the website.
 
+## 0.3.7 — 2026-07-28
+
+### Fixed
+
+- "Reload" in the tray menu did not reload the tray panel — only the app
+  window. It never mattered while the panel was built into the app; now that
+  it loads from the site, it could get stuck on an old version with no way to
+  refresh it short of quitting.
+
 ## 0.3.6 — 2026-07-28
 
 ### Changed

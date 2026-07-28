@@ -940,7 +940,7 @@ bridgeRoute.post('/tasks', async (c) => {
     entityId: row!.id,
     entityLabel: `${row!.number} ${row!.title}`,
   })
-  tasksChanged(scope.projectId, [null])
+  tasksChanged(scope.projectId, [row!.assigneeId, row!.createdById])
   // подтягиваем исполнителя, чтобы агент сразу видел, на кого задача ушла
   const who = row!.assigneeId ? await db.query.users.findFirst({ where: eq(users.id, row!.assigneeId) }) : null
   return c.json(taskView(row!, who), 201)

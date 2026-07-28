@@ -905,9 +905,18 @@
           )
           .join('')
 
+        // Код опознан — на экране остаётся только выбор области. Строка-
+        // приглашение, поле кода и список туннелей в этот момент не нужны, а
+        // места в панели мало: главное действие должно быть целиком видно,
+        // без прокрутки. «Отмена» возвращает всё обратно.
+        const deciding = Boolean(connect.clientName)
+
         return `
           <div class="connect">
-            <div class="invite">
+            ${
+              deciding
+                ? ''
+                : `<div class="invite">
               <p class="connect-hint">${T('connectInviteHint', 'Paste this into your assistant:')}</p>
               <div class="invite-row">
                 <code id="inviteLine">${escape(state.strings?.inviteLine || '')}</code>
@@ -917,7 +926,8 @@
 
             <p class="connect-hint">${T('connectHint', 'Enter the code shown by your assistant')}</p>
             <input id="codeInput" class="code-input" maxlength="12" spellcheck="false"
-                   placeholder="XXXX-XXXX" value="${escape(connect.code)}" />
+                   placeholder="XXXX-XXXX" value="${escape(connect.code)}" />`
+            }
             ${
               connect.clientName
                 ? `<div class="connect-box">
@@ -943,7 +953,7 @@
             }
             ${connect.msg ? `<p class="connect-msg ${connect.msgKind || ''}">${escape(connect.msg)}</p>` : ''}
             ${
-              conns
+              conns && !deciding
                 ? `<div class="conns">
                      <div class="conns-title">${T('connectActive', 'Active connections')}</div>
                      ${conns}
@@ -971,9 +981,16 @@
       }
 
       function bindConnect() {
+        // Поля кода нет, когда код уже опознан и на экране только выбор
+        // области, — но кнопки «Разрешить» и «Отмена» ниже подключить всё
+        // равно надо, иначе они перестают работать.
         const input = $('codeInput')
-        if (!input) return
+        if (input) bindCodeInput(input)
 
+        bindConnectActions()
+      }
+
+      function bindCodeInput(input) {
         // Курсор в поле сразу: вкладку открывают ровно затем, чтобы вставить код.
         if (!connect.clientName && document.activeElement !== input) input.focus()
 
@@ -989,6 +1006,10 @@
           }
         }
 
+      }
+
+      /** Кнопки, которые есть и с полем кода, и без него. */
+      function bindConnectActions() {
         for (const btn of document.querySelectorAll('.pick')) {
           btn.onclick = () => {
             connect.target = btn.dataset.target
@@ -1056,7 +1077,7 @@
         } else if (r.step === 'approved') {
           connect = {
             code: '', clientName: null, target: null, busy: false,
-            msg: T('connectDone', 'Access granted'), msgKind: 'ok',
+            msg: T('connectDone', 'Go back to your assistant and finish connecting'), msgKind: 'ok',
           }
         } else if (r.step === 'revoked') {
           connect.msg = T('connectRevoked', 'Connection closed')
