@@ -189,15 +189,21 @@ export async function sendFeedbackMail(p: {
   name: string
   email: string
   registered: boolean
+  /** приложен ли скриншот — ссылку кладём в письмо, иначе картинку не увидят */
+  hasScreenshot?: boolean
 }) {
   const lang = mailLang(p.locale)
   const s = FEEDBACK[lang]
   const topic = FEEDBACK_TOPIC[lang][p.topic] ?? p.topic
   const v = { topic, name: p.name || p.email, email: p.email }
+  const shot = p.hasScreenshot
+    ? `${process.env.API_PUBLIC_URL || 'https://api.chatick.com'}/api/v1/about/feedback/${p.id}/screenshot`
+    : null
   await send(p.to, fmt(s.subject, v), {
     lang,
     title: fmt(s.title, v),
     paragraphs: [fmt(s.from, v), p.registered ? s.user : s.guest, p.body],
+    ...(shot ? { action: { label: 'Screenshot', url: shot } } : {}),
   })
 }
 

@@ -3,7 +3,7 @@ import { useNavigate, useSearchParams } from 'react-router-dom'
 import { useQueryClient } from '@tanstack/react-query'
 import { useTranslation } from 'react-i18next'
 import { toast } from 'sonner'
-import { Bell, Bot, Building2, Camera, Check, Info, Keyboard, LogOut, Pencil, Plug, SlidersHorizontal, Users, X } from 'lucide-react'
+import { Bell, Bot, Building2, Camera, Check, Info, Keyboard, LogOut, Pencil, Plug, SlidersHorizontal, Users, X, Bug } from 'lucide-react'
 import { api, API_URL, getSessionToken, setSessionToken, setProjectToken, type Me } from '@/lib/api'
 import { Avatar } from '@/components/ui/avatar'
 import {
@@ -16,6 +16,7 @@ import {
 import { useConfirm } from '@/components/ui/confirm'
 import { ConnectDialog } from '@/screens/ConnectScreen'
 import { AboutDialog } from '@/components/AboutDialog'
+import { BugReportDialog } from '@/components/BugReportDialog'
 import { ProjectSettingsDialog } from '@/components/ProjectSettingsDialog'
 import { LanguageSelect } from '@/components/LanguageSelect'
 import { ThemeToggle } from '@/components/ThemeToggle'
@@ -48,6 +49,7 @@ export function ProfileMenu({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [params.get('about')])
   const [settingsOpen, setSettingsOpen] = useState(false)
+  const [bugOpen, setBugOpen] = useState(false)
   const { t } = useTranslation()
   const navigate = useNavigate()
   const qc = useQueryClient()
@@ -237,6 +239,13 @@ export function ProfileMenu({
         <DropdownMenuSeparator />
         {/* «О проекте» здесь же, где связь с нами: искать это в отдельном
             разделе никто не станет. */}
+        {/* Сообщить о проблеме — отдельным пунктом, а не внутри «О проекте»:
+            про баг сообщают в момент, когда он случился. */}
+        <DropdownMenuItem onSelect={() => setBugOpen(true)}>
+          <Bug className="size-4" />
+          {t('bug.title')}
+        </DropdownMenuItem>
+
         <DropdownMenuItem onSelect={() => setAboutOpen(true)}>
           <Info className="size-4" />
           {t('about.title')}
@@ -251,6 +260,7 @@ export function ProfileMenu({
     </DropdownMenu>
     {connectOpen && <ConnectDialog onClose={() => setConnectOpen(false)} />}
     {aboutOpen && <AboutDialog me={me} onClose={() => setAboutOpen(false)} />}
+    {bugOpen && <BugReportDialog me={me} onClose={() => setBugOpen(false)} />}
     {settingsOpen && projectId && (
       <ProjectSettingsDialog projectId={projectId} onClose={() => setSettingsOpen(false)} />
     )}

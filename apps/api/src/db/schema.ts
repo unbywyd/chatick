@@ -909,6 +909,9 @@ export const feedback = pgTable(
     status: feedbackStatus('status').notNull().default('new'),
     // Откуда пришли и с чего: помогает воспроизвести жалобу на интерфейс.
     meta: text('meta'),
+    // Скриншот в хранилище платформы. Один снимок экрана заменяет три письма
+    // с уточнениями, поэтому прикладывать его стоит поощрять.
+    screenshotKey: text('screenshot_key'),
     createdAt: createdAt(),
   },
   (t) => [index('feedback_status_idx').on(t.status, t.createdAt)],

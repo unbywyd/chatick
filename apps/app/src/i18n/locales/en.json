@@ -1214,5 +1214,21 @@
       "add": "Add",
       "foot": "People appear in the project as soon as they accept. You can change their roles, or invite more, in the team settings."
     }
+  },
+  "bug": {
+    "title": "Report a problem",
+    "subtitle": "It reaches a person, not a queue.",
+    "what": "What went wrong?",
+    "placeholder": "What did you do, what did you expect, and what happened instead?",
+    "email": "Your email",
+    "attach": "Attach a screenshot — or just paste one",
+    "note": "The page you are on is sent along.",
+    "send": "Send report",
+    "sent": "Thank you — the report has been sent.",
+    "failed": "Could not send. Please try again.",
+    "tooShort": "Please describe the problem in a little more detail",
+    "needEmail": "A valid email is required so we can answer",
+    "notImage": "Only images can be attached",
+    "tooLarge": "Screenshot is too large (max 8 MB)"
   }
 }
