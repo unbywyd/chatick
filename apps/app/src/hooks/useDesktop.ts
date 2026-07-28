@@ -19,7 +19,7 @@ type DesktopBridge = {
   /** Открыть ссылку в системном браузере (нужно для входа через Google). */
   openExternal: (url: string) => void
   info: () => Promise<{ version: string; platform: string; openAtLogin: boolean }>
-  onToggleTimer: (fn: () => void) => () => void
+  onToggleTimer: (fn: (projectId?: string | null) => void) => () => void
   onNavigate: (fn: (p: string | { link: string; notificationId?: string | null }) => void) => () => void
   /** Ответ панели про введённый код подключения. */
   connectResult: (payload: ConnectResult) => void
@@ -62,9 +62,9 @@ type DesktopState = {
    */
   authed: boolean
   unread: number
-  timer: { id: string; description: string; startedAt: string; projectName?: string; taskId?: string | null } | null
-  notifications: { id: string; title: string; summary?: string | null; link: string; projectName?: string; unread: boolean }[]
-  tasks: { id: string; number: string; title: string; status: string; link: string; projectName?: string; due?: string }[]
+  timer: { id: string; description: string; startedAt: string; projectId: string; projectName?: string; taskId?: string | null } | null
+  notifications: { id: string; title: string; summary?: string | null; link: string; projectId: string; projectName?: string; unread: boolean }[]
+  tasks: { id: string; number: string; title: string; status: string; link: string; projectId: string; projectName?: string; due?: string }[]
   projects: { id: string; name: string; companyId?: string; color?: string; logoUrl?: string | null; unread: number }[]
   project: { id: string; name: string } | null
   /**
@@ -280,6 +280,9 @@ export function useDesktopSync() {
             id: timer.id,
             description: timer.description,
             startedAt: timer.startedAt,
+            // Панели нужен id: по нему она блокирует выбор проекта на бегущем
+            // таймере и оставляет его выбранным после паузы.
+            projectId: timer.projectId,
             projectName: nameOf(timer.projectId),
             taskId: timer.task?.id ?? null,
           }
@@ -289,6 +292,7 @@ export function useDesktopSync() {
         title: n.title,
         summary: n.summary,
         link: n.link,
+        projectId: n.projectId,
         projectName: nameOf(n.projectId),
         unread: !n.readAt,
       })),
@@ -299,6 +303,7 @@ export function useDesktopSync() {
         title: t.title,
         status: t.status,
         link: `/p/${t.project.id}/tasks/${t.id}`,
+        projectId: t.project.id,
         projectName: t.project.name,
         due: t.dueDate ? new Date(t.dueDate).toLocaleDateString() : undefined,
       })),
@@ -386,6 +391,7 @@ export function useDesktopSync() {
         connectGroupProjects: t('connect.groupProjects'),
         connectAllProjectsOf: t('connect.allProjectsOf'),
         connectSearch: t('connect.search'),
+        pickProject: t('desktop.pickProject'),
         updateReady: t('desktop.updateReady'),
         quit: t('desktop.quit'),
         timerRunning: t('desktop.timerRunning'),
@@ -433,14 +439,14 @@ export function useDesktopSync() {
       setProjectToken(token)
     }
 
-    const offTimer = bridge.onToggleTimer(async () => {
+    const offTimer = bridge.onToggleTimer(async (panelProjectId) => {
       // Из ref, а не из замыкания: на момент нажатия данные могли смениться.
       const current = liveRef.current.timer
 
-      // Проект, в котором работаем: для остановки — тот, где идёт таймер, для
-      // запуска — открытый в окне. Первое важно: таймер могли забыть в другом
-      // проекте, а токен на руках всегда от последнего открытого.
-      const target = current?.projectId ?? liveRef.current.projectId
+      // Проект, в котором работаем: для остановки — тот, где идёт таймер;
+      // для запуска — выбранный в панели (дропдаун в шапке), и лишь как
+      // запасной вариант — открытый в окне.
+      const target = current?.projectId ?? panelProjectId ?? liveRef.current.projectId
       if (!target) {
         // Запускать «куда-нибудь» нельзя: часы молча ушли бы не туда.
         bridge.show()

@@ -65,11 +65,58 @@
         color: var(--brand);
       }
       .elapsed.idle { color: var(--muted); font-weight: 400; font-size: 14px; }
-      .timer-sub {
-        margin-top: 2px;
-        color: var(--muted);
-        white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+      /* Проект таймера — дропдаун в шапке. Пока часы идут, он заблокирован:
+         пауза → выбрал другой проект → запустил снова. Один предсказуемый
+         путь вместо трёх кнопок, которые могли разойтись друг с другом. */
+      .proj-btn {
+        -webkit-app-region: no-drag;
+        margin-top: 3px;
+        display: flex; align-items: center; gap: 6px;
+        max-width: 100%;
+        border: 1px solid transparent; border-radius: 6px;
+        background: none; color: var(--muted);
+        font: inherit; font-size: 12px;
+        padding: 2px 7px 2px 5px; cursor: pointer;
       }
+      .proj-btn:not(:disabled):hover { border-color: var(--line); color: var(--text); background: var(--card); }
+      .proj-btn:disabled { cursor: default; }
+      .proj-btn .dot { width: 8px; height: 8px; flex: 0 0 auto; border-radius: 3px; background: #3a3a3a; }
+      .proj-btn .name { min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+      .proj-btn .chev { flex: 0 0 auto; transition: transform .12s; }
+      .proj-btn.open .chev { transform: rotate(180deg); }
+      .proj-btn:disabled .chev { display: none; }
+      .proj-menu {
+        -webkit-app-region: no-drag;
+        position: absolute; z-index: 30;
+        top: 64px; left: 12px; right: 12px;
+        padding: 8px;
+        border: 1px solid var(--line); border-radius: 10px;
+        background: var(--card); box-shadow: 0 12px 32px rgba(0,0,0,.55);
+      }
+      .proj-menu .picker { max-height: 240px; }
+      .proj-menu .pick { background: transparent; }
+      .proj-menu .pick:hover { background: #222; }
+      body.guest .proj-menu { display: none; }
+
+      /* Группы: проект как заголовок, под ним его события или задачи. */
+      .group-head {
+        display: flex; align-items: center; gap: 8px;
+        padding: 7px 10px 5px;
+        cursor: pointer; border-radius: 8px;
+      }
+      .group-head:hover { background: var(--card); }
+      .group-title { min-width: 0; flex: 1; display: flex; align-items: baseline; gap: 7px; }
+      .group-name { font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+      .group-sub { color: var(--muted); font-size: 10.5px; flex: 0 1 auto; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+      .group-cnt {
+        flex: 0 0 auto;
+        background: var(--brand); color: #111;
+        border-radius: 9px; padding: 0 6px;
+        font-size: 10px; font-weight: 700; line-height: 16px;
+      }
+      .group-chev { flex: 0 0 auto; color: var(--muted); transition: transform .12s; }
+      .group-head.closed .group-chev { transform: rotate(-90deg); }
+      .filter-wrap { padding: 4px 4px 6px; }
 
       /* --- вкладки --- */
       nav {
@@ -370,14 +417,21 @@
       <button class="play" id="play"></button>
       <div class="timer-info">
         <div class="elapsed idle" id="elapsed">No timer running</div>
-        <div class="timer-sub" id="timerSub">Click to start tracking</div>
+        <button class="proj-btn" id="projBtn">
+          <span class="dot" id="projDot"></span>
+          <span class="name" id="projName">—</span>
+          <svg class="chev" width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="m6 9 6 6 6-6"/></svg>
+        </button>
       </div>
+    </div>
+    <div class="proj-menu" id="projMenu" hidden>
+      <input id="projSearch" class="target-search" spellcheck="false" placeholder="Search…" />
+      <div class="picker" id="projList"></div>
     </div>
 
     <nav>
       <button data-tab="inbox" class="active"><span data-t="tabInbox">For me</span><span class="count" id="cnt" hidden></span></button>
       <button data-tab="tasks" data-t="tabTasks">Tasks</button>
-      <button data-tab="projects" data-t="tabProjects">Projects</button>
       <button data-tab="connect" data-t="tabConnect">Connect</button>
     </nav>
 
@@ -405,6 +459,30 @@
       const T = (key, fallback) => state.strings?.[key] || fallback
       let tab = 'inbox'
       const $ = (id) => document.getElementById(id)
+
+      // Проект, в который пойдёт время. Живёт в панели и переживает перезапуск:
+      // это выбор человека, а не производная от открытой в окне страницы.
+      let timerProject = null
+      try { timerProject = localStorage.getItem('chatick.timerProject') } catch {}
+      let projMenuOpen = false
+      let projQ = ''
+      // Фильтры вкладок и свёрнутые группы задач.
+      let inboxQ = ''
+      let taskQ = ''
+      let collapsed = {}
+      try { collapsed = JSON.parse(localStorage.getItem('chatick.collapsedTasks') || '{}') } catch {}
+
+      const projectById = (id) => (state.projects || []).find((p) => p.id === id)
+      // Подпись компании — только когда компаний больше одной: иначе это шум.
+      const companyNameOf = (p) => {
+        if (!p || (state.companies || []).length < 2) return ''
+        return (state.companies || []).find((c) => c.id === p.companyId)?.name || ''
+      }
+      const openProjectLink = (id) => `/p/${id}/chat`
+      const refocus = (id) => {
+        const el = $(id)
+        if (el) { el.focus(); el.setSelectionRange(el.value.length, el.value.length) }
+      }
 
       /**
        * Иконка статуса задачи. Рисуем svg вручную: тянуть библиотеку иконок
@@ -455,32 +533,77 @@
           : `${m}:${String(s).padStart(2, '0')}`
       }
 
+      /** Проект таймера: бегущий диктует свой, иначе — выбор человека. */
+      function currentTimerProject() {
+        if (state.timer?.projectId) return state.timer.projectId
+        if (timerProject && projectById(timerProject)) return timerProject
+        // Разумное умолчание — проект, открытый в приложении.
+        if (state.project?.id && projectById(state.project.id)) return state.project.id
+        return null
+      }
+
       function renderTimer() {
         const t = state.timer
         // svg, а не символ: текстовый глиф в круглой кнопке сидит не по центру
         $('play').innerHTML = (t ? PAUSE_ICON : PLAY_ICON).replace(/width="11" height="11"/, 'width="15" height="15"')
         $('play').classList.toggle('running', Boolean(t))
-        // Без проекта стартовать нечему — кнопка гаснет, а не молча не срабатывает.
-        const canStart = Boolean(t) || Boolean(state.project)
-        $('play').disabled = !canStart
         $('play').title = t ? T('stop', 'Stop') : T('start', 'Start timer')
+
+        const selId = currentTimerProject()
+        const sel = selId ? projectById(selId) : null
         if (t) {
           $('elapsed').textContent = elapsedText(t)
           $('elapsed').classList.remove('idle')
-          // Проект показываем всегда, а не только вместо описания: куда
-          // пишется время — половина ответа на вопрос «что сейчас идёт».
-          const what = t.description || T('noTask', 'No task')
-          $('timerSub').textContent = t.projectName ? `${t.projectName} · ${what}` : what
         } else {
           $('elapsed').textContent = T('idle', 'No timer running')
           $('elapsed').classList.add('idle')
-          // Одной строки хватает: «нажмите, чтобы начать» повторяет то, что и
-          // так понятно по кнопке. Полезнее сказать, КУДА пойдёт время —
-          // проектов у человека несколько, и это не праздный вопрос.
-          $('timerSub').textContent = state.project
-            ? state.project.name
-            : T('idleNoProject', 'Open a project to start tracking')
         }
+
+        // Пока часы идут, выбор заблокирован: пауза разблокирует. Один
+        // предсказуемый порядок — пауза → другой проект → плей.
+        const btn = $('projBtn')
+        btn.disabled = Boolean(t)
+        btn.classList.toggle('open', projMenuOpen)
+        const name = t
+          ? `${t.projectName || sel?.name || '—'}${t.description ? ` · ${t.description}` : ''}`
+          : sel
+            ? sel.name
+            : T('pickProject', 'Choose a project')
+        $('projName').textContent = name
+        $('projDot').style.background = sel?.color || '#3a3a3a'
+        // Плей гаснет, только когда стартовать некуда.
+        $('play').disabled = !t && !selId
+        if (!projMenuOpen) $('projMenu').hidden = true
+      }
+
+      /** Список проектов дропдауна: поиск + группировка по компаниям. */
+      function renderProjMenu() {
+        const q = projQ.trim().toLowerCase()
+        const list = (state.projects || []).filter(
+          (p) => !q || p.name.toLowerCase().includes(q) || companyNameOf(p).toLowerCase().includes(q),
+        )
+        const selId = currentTimerProject()
+        const byCompany = new Map()
+        for (const p of list) {
+          if (!byCompany.has(p.companyId)) byCompany.set(p.companyId, [])
+          byCompany.get(p.companyId).push(p)
+        }
+        const multi = (state.companies || []).length > 1
+        let html = ''
+        for (const [cid, items] of byCompany) {
+          if (multi) {
+            const cname = (state.companies || []).find((c) => c.id === cid)?.name || ''
+            html += `<div class="pick-group">${escape(cname)}</div>`
+          }
+          for (const p of items) {
+            html += `
+              <button class="pick ${p.id === selId ? 'on' : ''}" data-proj="${escape(p.id)}">
+                <span class="dot" style="background:${escape(p.color || '#3a3a3a')}"></span>
+                <span class="pick-name">${escape(p.name)}</span>
+              </button>`
+          }
+        }
+        $('projList').innerHTML = html || `<p class="empty">${T('connectNothingFound', 'Nothing found')}</p>`
       }
 
       function renderList() {
@@ -488,72 +611,125 @@
         const rows = []
 
         if (tab === 'inbox') {
-          if (!state.notifications.length) {
+          const projects = state.projects || []
+          const items = state.notifications || []
+          if (!projects.length && !items.length) {
             el.innerHTML = `<p class="empty">${T('emptyInbox', 'Anything that concerns you<br>will show up here')}</p>`
             return
           }
-          for (const n of state.notifications.slice(0, 20)) {
-            rows.push(`
+          const q = inboxQ.trim().toLowerCase()
+          const byProject = new Map()
+          for (const n of items) {
+            const key = n.projectId || '?'
+            if (!byProject.has(key)) byProject.set(key, [])
+            byProject.get(key).push(n)
+          }
+          // Сначала проекты, где что-то произошло (в порядке свежести), потом
+          // пустые — как дорожки в проект. Отдельная вкладка «Проекты» от
+          // этого больше не нужна: отсюда попадаешь куда угодно.
+          const nonEmpty = [...byProject.keys()].map(
+            (id) => projectById(id) || { id, name: byProject.get(id)[0]?.projectName || '—' },
+          )
+          const rest = projects.filter((p) => !byProject.has(p.id))
+          const match = (p) => !q || p.name.toLowerCase().includes(q) || companyNameOf(p).toLowerCase().includes(q)
+
+          rows.push(`<div class="filter-wrap"><input id="inboxSearch" class="target-search" spellcheck="false"
+                       placeholder="${T('connectSearch', 'Search…')}" value="${escape(inboxQ)}" /></div>`)
+
+          // Заголовок группы: имя ведёт в проект — стрелка справа подсказывает.
+          const groupHead = (p, right) => `
+              <div class="group-head" data-open-project="${escape(p.id)}">
+                <span class="avatar" style="width:20px;height:20px;border-radius:6px;font-size:9px;background:${escape(p.color || '#2a2a2a')};color:#fff">
+                  ${p.logoUrl ? `<img src="${escape(p.logoUrl)}" alt="">` : escape(initials(p.name))}
+                </span>
+                <span class="group-title">
+                  <span class="group-name">${escape(p.name)}</span>
+                  ${companyNameOf(p) ? `<span class="group-sub">${escape(companyNameOf(p))}</span>` : ''}
+                </span>
+                ${right}
+                <svg class="group-chev" width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="m9 6 6 6-6 6"/></svg>
+              </div>`
+
+          for (const p of nonEmpty) {
+            if (!match(p)) continue
+            const list = byProject.get(p.id) || []
+            const unread = list.filter((n) => n.unread).length
+            rows.push(groupHead(p, unread ? `<span class="group-cnt">${unread}</span>` : `<span class="group-sub">${T('allRead', 'all read')}</span>`))
+            for (const n of list.slice(0, 8)) {
+              rows.push(`
               <button class="row" data-link="${escape(n.link)}" data-notification="${escape(n.id)}">
                 ${n.unread ? '<span class="badge-dot"></span>' : '<span class="badge-dot" style="background:transparent"></span>'}
                 <span class="body">
                   <span class="title">${escape(n.summary || n.title)}</span>
-                  <span class="sub">${escape(n.projectName || n.title)}</span>
+                  ${n.summary ? `<span class="sub">${escape(n.title)}</span>` : ''}
                 </span>
               </button>`)
+            }
+          }
+          for (const p of rest) {
+            if (!match(p)) continue
+            rows.push(groupHead(p, p.unread
+              ? `<span class="group-sub">${p.unread} ${T('unreadOne', 'unread')}</span>`
+              : `<span class="group-sub">${T('allRead', 'all read')}</span>`))
           }
         }
 
         if (tab === 'tasks') {
-          if (!state.tasks.length) {
+          const items = state.tasks || []
+          if (!items.length) {
             el.innerHTML = `<p class="empty">${T('emptyTasks', 'No open tasks')}</p>`
             return
           }
-          for (const t of state.tasks.slice(0, 30)) {
-            const running = state.timer?.taskId === t.id
+          const q = taskQ.trim().toLowerCase()
+          rows.push(`<div class="filter-wrap"><input id="taskSearch" class="target-search" spellcheck="false"
+                       placeholder="${T('connectSearch', 'Search…')}" value="${escape(taskQ)}" /></div>`)
+          const byProject = new Map()
+          for (const t of items) {
+            const key = t.projectId || '?'
+            if (!byProject.has(key)) byProject.set(key, [])
+            byProject.get(key).push(t)
+          }
+          for (const [pid, list] of byProject) {
+            const p = projectById(pid) || { id: pid, name: list[0].projectName || '—' }
+            const cname = companyNameOf(p)
+            const filtered = q
+              ? list.filter(
+                  (t) =>
+                    `${t.number} ${t.title}`.toLowerCase().includes(q) ||
+                    p.name.toLowerCase().includes(q) ||
+                    cname.toLowerCase().includes(q),
+                )
+              : list
+            if (!filtered.length) continue
+            // Во время поиска свёрнутость игнорируем: найденное должно быть видно.
+            const isClosed = Boolean(collapsed[pid]) && !q
             rows.push(`
+              <div class="group-head ${isClosed ? 'closed' : ''}" data-collapse="${escape(pid)}">
+                <svg class="group-chev" width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="m6 9 6 6 6-6"/></svg>
+                <span class="group-title">
+                  <span class="group-name">${escape(p.name)}</span>
+                  ${cname ? `<span class="group-sub">${escape(cname)}</span>` : ''}
+                </span>
+                <span class="group-sub">${filtered.length}</span>
+              </div>`)
+            if (isClosed) continue
+            // Кнопки плей здесь больше нет: таймер живёт в одном месте — в
+            // шапке. Второй путь к нему был источником рассинхрона и багов.
+            for (const t of filtered) {
+              rows.push(`
               <div class="row">
                 ${statusIcon(t.status || 'todo', 15)}
                 <button class="body" data-link="${escape(t.link)}"
                         style="border:0;background:none;color:inherit;font:inherit;text-align:start;cursor:pointer;padding:0">
                   <span class="title">${escape(t.number)} ${escape(t.title)}</span>
-                  <span class="sub">${escape(t.projectName || '')}${t.due ? ` · ${T('due', 'due')} ${escape(t.due)}` : ''}</span>
+                  ${t.due ? `<span class="sub">${T('due', 'due')} ${escape(t.due)}</span>` : ''}
                 </button>
                 <span class="task-actions">
-                  <button class="mini ${running ? 'on' : ''}" data-timer="${escape(t.id)}"
-                          title="${running ? T('stop', 'Stop') : T('start', 'Start timer')}">${running ? PAUSE_ICON : PLAY_ICON}</button>
                   <button class="mini" data-status="${escape(t.id)}" data-current="${escape(t.status || 'todo')}"
                           title="${T('taskSetStatus', 'Change status')}">${statusIcon(t.status || 'todo', 13)}</button>
                 </span>
               </div>`)
-          }
-        }
-
-        if (tab === 'projects') {
-          if (!state.projects.length) {
-            el.innerHTML = `<p class="empty">${T('emptyProjects', 'No projects yet')}</p>`
-            return
-          }
-          for (const p of state.projects) {
-            const here = state.project?.id === p.id
-            // Строка выбирает проект активным (не открывая окно), кнопка
-            // справа — открывает его в приложении. Это разные намерения.
-            rows.push(`
-              <div class="row ${here ? 'active' : ''}" data-pick="${escape(p.id)}">
-                <span class="avatar" style="background:${escape(p.color || '#2a2a2a')};color:#fff">
-                  ${p.logoUrl ? `<img src="${escape(p.logoUrl)}" alt="">` : escape(initials(p.name))}
-                </span>
-                <span class="body">
-                  <span class="title">${escape(p.name)}</span>
-                  <span class="sub">${p.unread ? `${p.unread} ${T('unreadOne', 'unread')}` : T('allRead', 'all read')}</span>
-                </span>
-                ${
-                  here
-                    ? `<span class="row-here">${T('projectHere', 'active')}</span>`
-                    : ''
-                }
-                <button class="row-open" data-link="/p/${escape(p.id)}/chat">${T('projectOpen', 'Open')}</button>
-              </div>`)
+            }
           }
         }
 
@@ -880,7 +1056,38 @@
       }
 
       // --- события ---
-      $('play').onclick = () => window.panel.toggleTimer()
+      // Стоп проекта не требует; старт уходит в выбранный в шапке.
+      $('play').onclick = () => window.panel.toggleTimer(state.timer ? null : currentTimerProject())
+
+      $('projBtn').onclick = () => {
+        if ($('projBtn').disabled) return
+        projMenuOpen = !projMenuOpen
+        $('projMenu').hidden = !projMenuOpen
+        $('projBtn').classList.toggle('open', projMenuOpen)
+        if (projMenuOpen) {
+          projQ = ''
+          $('projSearch').value = ''
+          renderProjMenu()
+          $('projSearch').focus()
+        }
+      }
+      $('projMenu').onclick = (e) => {
+        const pick = e.target.closest('[data-proj]')
+        if (!pick) return
+        timerProject = pick.dataset.proj
+        try { localStorage.setItem('chatick.timerProject', timerProject) } catch {}
+        projMenuOpen = false
+        $('projMenu').hidden = true
+        renderTimer()
+      }
+      // Клик мимо меню закрывает его.
+      document.addEventListener('click', (e) => {
+        if (!projMenuOpen) return
+        if (e.target.closest('#projMenu') || e.target.closest('#projBtn')) return
+        projMenuOpen = false
+        $('projMenu').hidden = true
+        $('projBtn').classList.remove('open')
+      })
       $('openApp').onclick = () => window.panel.openApp()
       $('close').onclick = () => window.panel.close()
 
@@ -896,21 +1103,6 @@
       })
 
       $('list').onclick = (e) => {
-        // Кнопка «Открыть» — в приложение; сама строка — сделать активным.
-        const open = e.target.closest('[data-link]')
-        if (open) {
-          // id уведомления передаём явно: по ссылке их не различить —
-          // несколько уведомлений одного проекта ведут в одно место.
-          window.panel.open(open.dataset.link, open.dataset.notification || null)
-          return
-        }
-        // Таймер на задаче: перебивает текущий — работают над чем-то одним.
-        const timer = e.target.closest('[data-timer]')
-        if (timer) {
-          window.panel.taskTimer(timer.dataset.timer)
-          return
-        }
-
         // Статус выбирают из списка: «следующий по кругу» заставлял бы
         // угадывать, куда попадёшь, и жать несколько раз.
         const status = e.target.closest('[data-status]')
@@ -918,31 +1110,61 @@
           openStatusMenu(status)
           return
         }
-
-        const pick = e.target.closest('[data-pick]')
-        if (pick) {
-          window.panel.setProject(pick.dataset.pick)
+        // Свернуть/развернуть группу задач.
+        const coll = e.target.closest('[data-collapse]')
+        if (coll) {
+          collapsed[coll.dataset.collapse] = !collapsed[coll.dataset.collapse]
+          try { localStorage.setItem('chatick.collapsedTasks', JSON.stringify(collapsed)) } catch {}
+          renderList()
+          return
+        }
+        // Заголовок группы в «Мне» — дорожка в проект.
+        const head = e.target.closest('[data-open-project]')
+        if (head) {
+          window.panel.open(openProjectLink(head.dataset.openProject))
+          return
+        }
+        const open = e.target.closest('[data-link]')
+        if (open) {
+          // id уведомления передаём явно: по ссылке их не различить —
+          // несколько уведомлений одного проекта ведут в одно место.
+          window.panel.open(open.dataset.link, open.dataset.notification || null)
           return
         }
         const row = e.target.closest('.row')
         if (row?.dataset.link) window.panel.open(row.dataset.link)
       }
 
-      // Поиск по целям подключения: перерисовываем список, не теряя фокус
+      // Все поисковые поля: перерисовываем список, не теряя фокус и курсор.
       document.addEventListener('input', (e) => {
-        if (e.target && e.target.id === 'targetSearch') {
+        const id = e.target?.id
+        if (id === 'targetSearch') {
           connect.q = e.target.value
           render()
-          const el = document.getElementById('targetSearch')
-          if (el) {
-            el.focus()
-            el.setSelectionRange(el.value.length, el.value.length)
-          }
+          refocus('targetSearch')
+        } else if (id === 'projSearch') {
+          projQ = e.target.value
+          renderProjMenu()
+        } else if (id === 'inboxSearch') {
+          inboxQ = e.target.value
+          renderList()
+          refocus('inboxSearch')
+        } else if (id === 'taskSearch') {
+          taskQ = e.target.value
+          renderList()
+          refocus('taskSearch')
         }
       })
 
       window.panel.onState((next) => {
         state = { ...state, ...next }
+        // Пока часы идут, выбор следует за ними: после паузы человек
+        // продолжает там же, где остановился.
+        if (state.timer?.projectId) {
+          timerProject = state.timer.projectId
+          try { localStorage.setItem('chatick.timerProject', timerProject) } catch {}
+        }
+        if (projMenuOpen) renderProjMenu()
         render()
       })
 

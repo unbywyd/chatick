@@ -9,7 +9,7 @@ contextBridge.exposeInMainWorld('panel', {
     ipcRenderer.on('panel:state', handler)
     return () => ipcRenderer.off('panel:state', handler)
   },
-  toggleTimer: () => ipcRenderer.send('panel:toggle-timer'),
+  toggleTimer: (projectId) => ipcRenderer.send('panel:toggle-timer', projectId ?? null),
 
   /**
    * Код подключения ассистента. Панель только передаёт введённое: проверяет

@@ -7,6 +7,24 @@ refuses to run otherwise, so a release can never ship without a description.
 
 Written in English only: this file is published on the website.
 
+## 0.3.0 — 2026-07-28
+
+### Changed
+
+- The tray panel got a rework around one idea: the timer has a single,
+  predictable path. The header now holds a searchable project picker, grouped
+  by company. Pick a project, press play. While the clock is running the
+  picker is locked; pause unlocks it — switch, start again. The play buttons
+  on tasks are gone: a second way to toggle the same timer is where the
+  desync bugs lived.
+- "For me" became a small per-project overview: projects with news first —
+  each with an unread badge and its notifications right under it — and the
+  quiet ones below as one-line rows. Every row jumps into its project, so the
+  separate "Projects" tab is gone. A filter hides projects that do not match.
+- Tasks are grouped by project (labeled with the company when you are in more
+  than one), each group collapsible, with a filter over title, number,
+  project and company.
+
 ## 0.2.10 — 2026-07-28
 
 ### Fixed

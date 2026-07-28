@@ -30,7 +30,8 @@ contextBridge.exposeInMainWorld('chatickDesktop', {
    * несколько раз.
    */
   onToggleTimer: (fn) => {
-    const handler = () => fn()
+    // Панель присылает проект, в который стартовать; null — «стоп».
+    const handler = (_e, projectId) => fn(projectId)
     ipcRenderer.on('timer:toggle', handler)
     return () => ipcRenderer.off('timer:toggle', handler)
   },

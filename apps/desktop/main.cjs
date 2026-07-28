@@ -517,7 +517,7 @@ function registerIpc() {
   // Действия из панели: она сама ничего не умеет, только просит главный процесс.
   // Панель остаётся открытой: человек нажал «старт» и должен увидеть, что
   // таймер действительно пошёл, а не гадать по исчезнувшему окну.
-  ipcMain.on('panel:toggle-timer', () => send('timer:toggle'))
+  ipcMain.on('panel:toggle-timer', (_e, projectId) => send('timer:toggle', projectId ?? null))
   ipcMain.on('panel:open', (_e, payload) => {
     panel?.hide()
     showWindow()

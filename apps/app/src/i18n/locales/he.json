@@ -1148,7 +1148,8 @@
     "about": "אודות",
     "updateReady": "הפעילו מחדש לעדכון",
     "emptyProjects": "אין עדיין פרויקטים",
-    "pickProjectForTimer": "פתחו פרויקט כדי להתחיל מעקב זמן"
+    "pickProjectForTimer": "פתחו פרויקט כדי להתחיל מעקב זמן",
+    "pickProject": "בחרו פרויקט"
   },
   "update": {
     "available": "זמינה גרסה חדשה",
