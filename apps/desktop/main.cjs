@@ -406,6 +406,7 @@ function registerIpc() {
       projects: Array.isArray(next?.projects) ? next.projects : [],
       project: next?.project ?? null,
       company: next?.company ?? null,
+      companies: Array.isArray(next?.companies) ? next.companies : [],
       connections: Array.isArray(next?.connections) ? next.connections : [],
       strings: next?.strings ?? state.strings,
     }

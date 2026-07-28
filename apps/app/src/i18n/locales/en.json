@@ -872,7 +872,9 @@
     "requestsCompanyAccess": "is asking for access to all projects in {{company}}.",
     "companyScopeNote": "It acts as you, only in projects you belong to, and every action is recorded in the project history under your name.",
     "wholeCompany": "Whole company",
-    "waitingForAi": "Waiting for your AI to connect…"
+    "waitingForAi": "Waiting for your AI to connect…",
+    "search": "Search projects…",
+    "nothingFound": "Nothing found"
   },
   "backup": {
     "title": "Export & import",

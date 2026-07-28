@@ -4,7 +4,7 @@ import { useNavigate, useSearchParams } from 'react-router-dom'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { useTranslation } from 'react-i18next'
 import { toast } from 'sonner'
-import { ArrowLeft, Bot, Check, Copy, Plug, ShieldCheck, X } from 'lucide-react'
+import { ArrowLeft, Bot, Check, Copy, Plug, ShieldCheck, X, Search } from 'lucide-react'
 import { api, API_URL, getSessionToken, type Company, type ProjectListItem } from '@/lib/api'
 import { cn } from '@/lib/utils'
 import { Logo } from '@/components/Logo'
@@ -61,17 +61,48 @@ export function ConnectPanel({ onClose }: { onClose?: () => void }) {
     queryFn: async () => {
       const lists = await Promise.all(
         companyIds.map((id) =>
-          api<ProjectListItem[]>(`/api/v1/projects?companyId=${id}`).catch(() => [] as ProjectListItem[]),
+          api<ProjectListItem[]>(`/api/v1/projects?companyId=${id}`)
+            // Компания известна из самого запроса — приклеиваем её здесь,
+            // чтобы потом не гадать, чей это проект.
+            .then((list) => list.map((p) => ({ ...p, companyId: id })))
+            .catch(() => [] as (ProjectListItem & { companyId: string })[]),
         ),
       )
       return lists.flat()
     },
   })
   const myProjects = (projects.data ?? []).filter((p) => p.isMember)
+  const myCompanies = companies.data?.companies ?? []
+  const companyNames = new Map(myCompanies.map((c) => [c.id, c.name]))
+
+  // Цели: компании, которыми человек управляет, и его проекты. Раньше в вебе
+  // компанию целиком выдать было нельзя вовсе — только проект.
+  const targets = [
+    ...myCompanies
+      .filter((c) => c.myRole === 'admin' || c.myRole === 'manager')
+      .map((c) => ({ key: `c:${c.id}`, name: c.name, company: null as string | null, whole: true })),
+    ...myProjects.map((p) => ({
+      key: `p:${p.id}`,
+      name: p.name,
+      // Подпись компанией нужна, когда компаний несколько: одинаковые названия
+      // проектов не редкость, и без неё непонятно, какой из них какой.
+      company: myCompanies.length > 1 ? companyNames.get((p as ProjectListItem & { companyId?: string }).companyId ?? '') ?? null : null,
+      whole: false,
+    })),
+  ]
+  const [q, setQ] = useState('')
+  const shown = q.trim()
+    ? targets.filter(
+        (x) =>
+          x.name.toLowerCase().includes(q.trim().toLowerCase()) ||
+          (x.company ?? '').toLowerCase().includes(q.trim().toLowerCase()),
+      )
+    : targets
 
   useEffect(() => {
-    if (!projectId && myProjects.length) setProjectId(myProjects[0]!.id)
-  }, [myProjects, projectId])
+    if (!projectId && targets.length) setProjectId(targets[0]!.key)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [targets.length, projectId])
 
   // Подтверждение кода НЕ создаёт сессию: она появляется, когда ассистент
   // придёт за токеном (/x/device/poll). Поэтому сразу после «Разрешить»
@@ -197,21 +228,46 @@ export function ConnectPanel({ onClose }: { onClose?: () => void }) {
               <p className="text-sm">
                 <b>{pending.data.clientName}</b> {t('connect.requestsAccess')}
               </p>
-              <label className="block text-xs font-medium text-muted-foreground">
-                {t('connect.chooseProject')}
-                <Select value={projectId} onValueChange={setProjectId}>
-                  <SelectTrigger className="mt-1">
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {myProjects.map((p) => (
-                      <SelectItem key={p.id} value={p.id}>
-                        {p.name}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </label>
+              <div>
+                <p className="text-xs font-medium text-muted-foreground">{t('connect.chooseProject')}</p>
+                {/* Поиск появляется, когда список перестаёт читаться взглядом */}
+                {targets.length > 6 && (
+                  <div className="relative mt-1.5">
+                    <Search className="pointer-events-none absolute start-2.5 top-1/2 size-3.5 -translate-y-1/2 text-muted-foreground" />
+                    <input
+                      value={q}
+                      onChange={(e) => setQ(e.target.value)}
+                      placeholder={t('connect.search')}
+                      className="h-8 w-full rounded-md border bg-transparent ps-8 pe-3 text-sm outline-none focus:ring-2 focus:ring-ring"
+                    />
+                  </div>
+                )}
+                <div className="mt-1.5 max-h-44 space-y-1 overflow-y-auto pe-1">
+                  {shown.map((x) => (
+                    <button
+                      key={x.key}
+                      onClick={() => setProjectId(x.key)}
+                      className={cn(
+                        'flex w-full cursor-pointer items-center gap-2 rounded-md border px-2.5 py-2 text-start text-sm transition-colors',
+                        projectId === x.key ? 'border-brand bg-accent' : 'hover:bg-secondary',
+                      )}
+                    >
+                      <span className="min-w-0 flex-1">
+                        <span className="block truncate">{x.name}</span>
+                        {x.company && <span className="block truncate text-[11px] text-muted-foreground">{x.company}</span>}
+                      </span>
+                      {x.whole && (
+                        <span className="shrink-0 rounded-full border px-1.5 py-0.5 text-[10px] text-muted-foreground">
+                          {t('connect.wholeCompany')}
+                        </span>
+                      )}
+                    </button>
+                  ))}
+                  {!shown.length && (
+                    <p className="py-4 text-center text-xs text-muted-foreground">{t('connect.nothingFound')}</p>
+                  )}
+                </div>
+              </div>
               <p className="text-xs text-muted-foreground">{t('connect.actsAsYou')}</p>
               <div className="flex gap-2">
                 <Button variant="brand" size="sm" disabled={!projectId || approve.isPending} onClick={() => approve.mutate()}>

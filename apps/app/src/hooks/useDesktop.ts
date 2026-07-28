@@ -63,13 +63,15 @@ type DesktopState = {
   timer: { id: string; description: string; startedAt: string; projectName?: string; taskId?: string | null } | null
   notifications: { id: string; title: string; summary?: string | null; link: string; projectName?: string; unread: boolean }[]
   tasks: { id: string; number: string; title: string; status: string; link: string; projectName?: string; due?: string }[]
-  projects: { id: string; name: string; color?: string; logoUrl?: string | null; unread: number }[]
+  projects: { id: string; name: string; companyId?: string; color?: string; logoUrl?: string | null; unread: number }[]
   project: { id: string; name: string } | null
   /**
    * Компания и роль в ней: доступ ко всей компании выдают только админы и
    * менеджеры, и панель не должна предлагать то, что сервер отклонит.
    */
   company: { id: string; name: string; canGrantCompany: boolean } | null
+  /** все компании человека: подключаться можно к любой, не только к первой */
+  companies: { id: string; name: string; canGrantCompany: boolean }[]
   /** Действующие туннели ассистентов — их видно и можно закрыть из панели. */
   connections: { id: string; clientName: string; scope: 'company' | 'project'; where: string }[]
   /**
@@ -95,6 +97,7 @@ type Running = {
 type ProjectLite = {
   id: string
   name: string
+  companyId?: string
   color?: string
   logoUrl?: string | null
   isMember: boolean
@@ -193,12 +196,25 @@ export function useDesktopSync() {
     queryFn: () =>
       api<{ companies: { id: string; name: string; myRole: 'admin' | 'manager' | 'member' }[] }>('/api/v1/companies'),
   })
-  const company = companies.data?.companies[0]
-  const companyId = company?.id
+  const myCompanies = companies.data?.companies ?? []
+  const company = myCompanies[0]
+  const companyIds = myCompanies.map((c) => c.id)
+
+  // Проекты СО ВСЕХ компаний: человек может состоять в нескольких — своей и
+  // тех, куда его позвали. Брать проекты только первой значило, что половину
+  // его работы панель просто не показывает, а подключить к ним ассистента
+  // нельзя вовсе.
   const projects = useQuery({
-    queryKey: ['sidebar-projects', companyId],
-    enabled: Boolean(bridge) && authed && Boolean(companyId),
-    queryFn: () => api<ProjectLite[]>(`/api/v1/projects?companyId=${companyId}`),
+    queryKey: ['tray-projects', companyIds.join(',')],
+    enabled: Boolean(bridge) && authed && companyIds.length > 0,
+    queryFn: async () => {
+      const lists = await Promise.all(
+        companyIds.map((id) =>
+          api<ProjectLite[]>(`/api/v1/projects?companyId=${id}`).catch(() => [] as ProjectLite[]),
+        ),
+      )
+      return lists.flat()
+    },
     refetchInterval: 60_000,
   })
 
@@ -269,6 +285,7 @@ export function useDesktopSync() {
       projects: projectList.map((p) => ({
         id: p.id,
         name: p.name,
+        companyId: p.companyId,
         color: p.color,
         logoUrl: p.logoUrl,
         unread: p.stats?.unread ?? 0,
@@ -282,6 +299,14 @@ export function useDesktopSync() {
               canGrantCompany: company.myRole === 'admin' || company.myRole === 'manager',
             }
           : null,
+      companies: authed
+        ? myCompanies.map((c) => ({
+            id: c.id,
+            name: c.name,
+            // Компанию целиком выдаёт лишь тот, кто ей управляет
+            canGrantCompany: c.myRole === 'admin' || c.myRole === 'manager',
+          }))
+        : [],
       connections: (authed ? bridgeSessions.data?.items ?? [] : []).map((x) => ({
         id: x.id,
         clientName: x.clientName,
