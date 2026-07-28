@@ -301,11 +301,11 @@
       },
       "write": {
         "label": "Write",
-        "hint": "View, create and edit (delete own only)"
+        "hint": "Create, and edit or delete your own"
       },
       "crud": {
         "label": "Full",
-        "hint": "Full access, including deleting others' items"
+        "hint": "Full access, including editing and deleting other people's"
       }
     },
     "aiNote": "The AI dispatcher respects these permissions: a member with Read-only can't create tasks through chat either. Secret values are never shared with the AI."

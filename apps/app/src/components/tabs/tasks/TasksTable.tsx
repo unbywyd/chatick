@@ -58,6 +58,7 @@ export function TasksTable({
   members,
   lang,
   canEdit,
+  canEditTask,
   meId,
   openTaskId,
   onOpen,
@@ -73,6 +74,8 @@ export function TasksTable({
   members: Member[]
   lang: string
   canEdit: boolean
+  /** правило владения задачей — приходит сверху, чтобы не размножать логику */
+  canEditTask?: (task: Task) => boolean
   meId?: string
   openTaskId: string | null
   onOpen: (id: string) => void
@@ -196,6 +199,7 @@ export function TasksTable({
               members={members}
               lang={lang}
               canEdit={canEdit}
+              canEditTask={canEditTask}
               sort={sort}
               onToggleSort={toggleSort}
               openTaskId={openTaskId}
@@ -215,6 +219,7 @@ export function TasksTable({
             members={members}
             lang={lang}
             canEdit={canEdit}
+            canEditTask={canEditTask}
             meId={meId}
             sort={sort}
             onToggleSort={toggleSort}
@@ -261,6 +266,7 @@ function GroupTable({
   members,
   lang,
   canEdit,
+  canEditTask,
   meId,
   sort,
   onToggleSort,
@@ -276,6 +282,8 @@ function GroupTable({
   members: Member[]
   lang: string
   canEdit: boolean
+  /** правило владения задачей — приходит сверху, чтобы не размножать логику */
+  canEditTask?: (task: Task) => boolean
   meId?: string
   sort: { key: SortKey; dir: SortDir } | null
   onToggleSort: (k: SortKey) => void
@@ -395,7 +403,9 @@ function GroupTable({
                   task={task}
                   members={members}
                   lang={lang}
-                  canEdit={canEdit}
+                  // Чужую задачу участник не переписывает: сервер это проверит,
+                  // но лучше не давать начать правку, чем отказать после ввода.
+                  canEdit={canEditTask ? canEditTask(task) : canEdit}
                   meId={meId}
                   active={openTaskId === task.id}
                   onOpen={() => onOpen(task.id)}
@@ -431,6 +441,7 @@ function TableRow({
   members,
   lang,
   canEdit,
+  canEditTask,
   meId,
   active,
   onOpen,
@@ -441,6 +452,8 @@ function TableRow({
   members: Member[]
   lang: string
   canEdit: boolean
+  /** правило владения задачей — приходит сверху, чтобы не размножать логику */
+  canEditTask?: (task: Task) => boolean
   meId?: string
   active: boolean
   onOpen: () => void
@@ -564,11 +577,14 @@ function AssigneePicker({
   assignee,
   members,
   canEdit,
+  canEditTask,
   onSelect,
 }: {
   assignee: Task['assignee']
   members: Member[]
   canEdit: boolean
+  /** правило владения задачей — приходит сверху, чтобы не размножать логику */
+  canEditTask?: (task: Task) => boolean
   onSelect: (id: string | null) => void
 }) {
   const { t } = useTranslation()

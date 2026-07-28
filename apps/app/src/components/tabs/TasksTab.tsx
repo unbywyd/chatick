@@ -73,10 +73,23 @@ export function TasksTab({ projectId, meId }: { projectId: string; meId?: string
   const refresh = () => qc.invalidateQueries({ queryKey: ['tasks', projectId] })
 
   const me = useMemo(() => (membersQ.data ?? []).find((m) => m.user.id === meId), [membersQ.data, meId])
-  // право редактировать: наличие tasks.edit у участника (owner/admin/member с write+)
+  const isManager = me?.role === 'owner' || me?.role === 'admin'
+  // Право работать с задачами вообще: создавать, править свои.
   const canEdit = useMemo(
-    () => me?.role === 'owner' || me?.role === 'admin' || Boolean(me?.permissions?.['tasks.edit']),
-    [me],
+    () => isManager || Boolean(me?.permissions?.['tasks.edit']),
+    [isManager, me],
+  )
+  /**
+   * Право править КОНКРЕТНУЮ задачу: чужую участник не переписывает.
+   *
+   * Сервер это и так проверяет, но без такой же проверки здесь человек
+   * заполнил бы форму и получил отказ уже после ввода — а причину пришлось бы
+   * угадывать.
+   */
+  const canEditTask = useMemo(
+    () => (task: Task) =>
+      canEdit && (isManager || task.createdById === meId || task.assignee?.id === meId),
+    [canEdit, isManager, meId],
   )
 
   const refreshGroups = () => qc.invalidateQueries({ queryKey: ['task-groups', projectId] })
@@ -271,7 +284,7 @@ export function TasksTab({ projectId, meId }: { projectId: string; meId?: string
         members={membersQ.data ?? []}
         groups={groupsQ.data ?? []}
         meId={meId}
-        canEdit={canEdit}
+        canEdit={canEditTask(openTask)}
         onPatch={(body) => patch.mutate({ id: openTask.id, ...body })}
         onDelete={() => remove.mutate(openTask.id)}
         onClose={() => setOpenTaskId(null)}
@@ -520,6 +533,7 @@ export function TasksTab({ projectId, meId }: { projectId: string; meId?: string
                 members={membersQ.data ?? []}
                 lang={i18n.language}
                 canEdit={canEdit}
+                canEditTask={canEditTask}
                 meId={meId}
                 openTaskId={openTaskId ?? null}
                 onOpen={setOpenTaskId}
@@ -569,7 +583,7 @@ export function TasksTab({ projectId, meId }: { projectId: string; meId?: string
                         task={task}
                         lang={i18n.language}
                         active={openTaskId === task.id}
-                        canEdit={canEdit}
+                        canEdit={canEditTask(task)}
                         meId={meId}
                         dragging={dragId === task.id}
                         dropBefore={dropHint?.status === status && dropHint.beforeId === task.id}
