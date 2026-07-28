@@ -9,7 +9,8 @@
     "dist": "node scripts/copy-license.mjs && electron-builder",
     "typecheck": "echo \"desktop: plain js, nothing to typecheck\"",
     "start": "electron .",
-    "sync-web": "node scripts/sync-web.mjs"
+    "sync-web": "node scripts/sync-web.mjs",
+    "dist:store": "node scripts/copy-license.mjs && electron-builder --win appx"
   },
   "devDependencies": {
     "electron": "^38.0.0",
@@ -64,7 +65,21 @@
         "channel": "latest"
       }
     ],
-    "afterAllArtifactBuild": "scripts/check-signature.mjs"
+    "afterAllArtifactBuild": "scripts/check-signature.mjs",
+    "appx": {
+      "applicationId": "Chatick",
+      "identityName": "ArtyomGorlovetskiyunbywyd.Chatick",
+      "publisher": "CN=FF90F930-A8D6-4B21-954E-CE2AC499422A",
+      "publisherDisplayName": "Artyom Gorlovetskiy (unbywyd)",
+      "displayName": "Chatick",
+      "backgroundColor": "#141611",
+      "languages": [
+        "en-US",
+        "ru-RU",
+        "he-IL"
+      ],
+      "showNameOnTiles": true
+    }
   },
   "dependencies": {
     "electron-updater": "^6.8.9"

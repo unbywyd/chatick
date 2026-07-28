@@ -34,6 +34,14 @@ function signatureOf(file) {
 }
 
 export default async function checkSignature(context) {
+  // Пакет для магазина подписывает Microsoft при публикации — своя подпись
+  // там не нужна и даже мешает. Ругаться на неё было бы ложной тревогой.
+  const forStore = (context.artifactPaths ?? []).some((f) => f.endsWith('.appx') || f.endsWith('.msix'))
+  if (forStore) {
+    console.log('\n— подпись —\n  пакет для Microsoft Store: подпишет магазин при публикации\n')
+    return
+  }
+
   const files = (context.artifactPaths ?? []).filter((f) => f.endsWith('.exe'))
   const unpacked = path.join(context.outDir ?? '', 'win-unpacked', 'Chatick.exe')
   if (existsSync(unpacked)) files.unshift(unpacked)

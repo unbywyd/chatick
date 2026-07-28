@@ -264,6 +264,10 @@ function buildTrayMenu() {
       label: tr('launchAtLogin', 'Launch at login'),
       type: 'checkbox',
       checked: app.getLoginItemSettings().openAtLogin,
+      // В версии из магазина автозапуском распоряжается Windows — параметры
+      // приложения, «Автозагрузка». Переключатель здесь ничего бы не менял,
+      // поэтому он неактивен, а не притворяется работающим.
+      enabled: !process.windowsStore,
       click: (item) => app.setLoginItemSettings({ openAtLogin: item.checked }),
     },
     { type: 'separator' },
@@ -618,6 +622,11 @@ if (!app.requestSingleInstanceLock()) {
 function setupUpdates() {
   // В разработке обновляться неоткуда и незачем
   if (isDev || !app.isPackaged) return
+
+  // Из магазина приложение обновляет сам магазин: самообновление там запрещено
+  // правилами, да и не сработало бы — MSIX ставится в неизменяемую папку.
+  // process.windowsStore Electron выставляет сам, когда запуск идёт из пакета.
+  if (process.windowsStore) return
 
   autoUpdater.autoDownload = true
   autoUpdater.autoInstallOnAppQuit = true
