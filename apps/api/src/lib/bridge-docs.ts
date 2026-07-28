@@ -354,11 +354,11 @@ Start with GET /x/context if you need to understand the project before acting.
 
 Managing the team requires being an owner/admin of the project, or an admin of
 the company. GET /x/members works for anyone who can read tasks and reports
-`canManage` so you know whether the rest will be allowed.
+"canManage" so you know whether the rest will be allowed.
 
 Adding someone already in the company puts them in the project right away and
 sends them a notification email. If the email belongs to nobody in the company,
-a **company admin** can still invite them in one call — the invite carries this
+a company admin can still invite them in one call — the invite carries this
 project with it, so accepting the invite joins both. Anyone below company admin
 gets 403 for outsiders and should invite through the interface.
 
@@ -366,7 +366,7 @@ Permission levels per domain (tasks, files, resources, documents, notes):
 
   none | read | write | crud
 
-Changing `role` resets permissions to that role's defaults — set `permissions`
+Changing "role" resets permissions to that role's defaults — set "permissions"
 in the same call if you want to keep custom levels. The project owner cannot be
 changed.
 
@@ -374,9 +374,9 @@ changed.
   PATCH /x/members/<id>  {"permissions": {"files": "crud", "resources": "read"}}
   PATCH /x/members/<id>  {"jobTitle": "Backend developer", "responsibility": "API and deploys"}
 
-Removing a person from a project is **not** available here — do it in the
+Removing a person from a project is NOT available here — do it in the
 interface. It is irreversible, sends them an email, and closes their tunnels.
-To take away access without removing them, set every domain to `none`.
+To take away access without removing them, set every domain to "none".
 
 ## Project settings
 
