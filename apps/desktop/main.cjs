@@ -28,7 +28,39 @@ let panelPos = null
 
 // Состояние, которое присылает веб. Главный процесс не ходит в API сам: он
 // ничего не знает про токены и права, и знать не должен.
+//
+// Последнее известное состояние храним на диске и поднимаем при старте.
+// Без этого панель после запуска трея открывалась пустой: надписи приходят
+// только из окна, а пока оно не проснулось, видны английские запасные
+// значения и пустая строка-приглашение. Данные тут не секретные — списки
+// задач и проектов, тексты интерфейса; токенов и прав здесь нет.
 let state = { authed: true, unread: 0, timer: null }
+
+const statePath = () => path.join(app.getPath('userData'), 'panel-state.json')
+
+function restoreState() {
+  try {
+    const saved = JSON.parse(fs.readFileSync(statePath(), 'utf8'))
+    // Таймер и счётчик непрочитанного — вещи «сейчасные»: показывать вчерашние
+    // значения хуже, чем не показывать никаких.
+    state = { ...saved, timer: null, unread: 0 }
+  } catch {
+    // первого запуска ещё не было, или файл повреждён — это не беда
+  }
+}
+
+let saveTimer = null
+function persistState() {
+  clearTimeout(saveTimer)
+  // Состояние обновляется часто; пишем не чаще раза в секунду.
+  saveTimer = setTimeout(() => {
+    try {
+      fs.writeFileSync(statePath(), JSON.stringify(state))
+    } catch {
+      // не смогли сохранить — панель просто будет пустой при следующем старте
+    }
+  }, 1000)
+}
 
 const iconPath = (name) => path.join(__dirname, 'assets', name)
 
@@ -312,6 +344,11 @@ function createPanel() {
   // следующего обновления от веба, а его можно ждать минуту.
   panel.webContents.on('did-finish-load', () => {
     if (panel && !panel.webContents.isLoading()) panel.webContents.send('panel:state', state)
+    // И просим окно прислать свежее: на первом открытии state ещё пуст —
+    // отсюда «открыл трей сразу после запуска, а там пусто; закрыл, открыл
+    // снова — работает». Второй раз панель уже загружена, а state успел
+    // наполниться.
+    send('desktop:refresh', null)
   })
 
   // Перетащили — запоминаем. Событие приходит и при нашем setPosition,
@@ -417,6 +454,7 @@ function registerIpc() {
     }
     refreshTray()
     refreshBadge()
+    persistState()
     panel?.webContents.send('panel:state', state)
   })
 
@@ -551,6 +589,9 @@ function setupUpdates() {
     // другим приложением.
     if (process.platform === 'win32') app.setAppUserModelId('com.chatick.app')
     if (process.platform !== 'darwin') Menu.setApplicationMenu(null)
+    // До createTray: значок и подсказка рисуются из state, и с прошлой сессии
+    // они уже верные — незачем показывать пустые, пока окно просыпается.
+    restoreState()
     registerIpc()
     createWindow()
     createTray()

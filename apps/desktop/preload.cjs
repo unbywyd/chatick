@@ -67,6 +67,13 @@ contextBridge.exposeInMainWorld('chatickDesktop', {
     ipcRenderer.on('project:set', handler)
     return () => ipcRenderer.off('project:set', handler)
   },
+  // Панель открылась и просит окно прислать состояние заново: на первом
+  // открытии главный процесс ещё пуст, и панель рисуется без надписей.
+  onStateRefresh: (fn) => {
+    const handler = () => fn()
+    ipcRenderer.on('desktop:refresh', handler)
+    return () => ipcRenderer.off('desktop:refresh', handler)
+  },
   onConnectRefresh: (fn) => {
     const handler = () => fn()
     ipcRenderer.on('connect:refresh', handler)

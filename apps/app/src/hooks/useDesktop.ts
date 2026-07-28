@@ -27,6 +27,7 @@ type DesktopBridge = {
   onSetProject: (fn: (id: string) => void) => () => void
   onTaskStatus: (fn: (p: { taskId: string; status: string }) => void) => () => void
   onTaskTimer: (fn: (taskId: string) => void) => () => void
+  onStateRefresh: (fn: () => void) => () => void
   onConnectRefresh: (fn: () => void) => () => void
   onOpenAbout: (fn: () => void) => () => void
   onConnectRevoke: (fn: (id: string) => void) => () => void
@@ -157,6 +158,9 @@ export function useDesktopSync() {
   // окно приложения открывается раньше, чем человек вошёл, и запросы к трею
   // не включались бы уже никогда — панель оставалась пустой.
   const [authed, setAuthed] = useState(() => Boolean(getSessionToken()))
+  // Счётчик-повод переслать состояние в трей. Панель просит его сама, когда
+  // открылась и не увидела надписей.
+  const [stateNonce, setStateNonce] = useState(0)
   useEffect(() => {
     const check = () => setAuthed(Boolean(getSessionToken()))
     const timer = window.setInterval(check, 2000)
@@ -377,7 +381,7 @@ export function useDesktopSync() {
         dir: i18n.dir(),
       },
     })
-  }, [bridge, authed, inbox.data, running.data?.items, projects.data, tasks.data, bridgeSessions.data, company, activeProjectId, t, i18n])
+  }, [bridge, authed, inbox.data, running.data?.items, projects.data, tasks.data, bridgeSessions.data, company, activeProjectId, t, i18n, stateNonce])
 
   // Системные уведомления показывает useSystemNotifications — общий хук для
   // веба и десктопа. Раньше это жило здесь и работало только в Electron.
@@ -513,6 +517,9 @@ export function useDesktopSync() {
     const offRefresh = bridge.onConnectRefresh(() => {
       qc.invalidateQueries({ queryKey: ['bridge-sessions'] })
     })
+    // Панель открылась и не увидела состояния — шлём заново. Иначе первое
+    // открытие трея после запуска показывает пустоту, и только второе работает.
+    const offStateRefresh = bridge.onStateRefresh(() => setStateNonce((n) => n + 1))
 
     // Закрыть туннель прямо из панели: если ассистент больше не нужен,
     // идти за этим в настройки — лишний шаг.
@@ -535,6 +542,7 @@ export function useDesktopSync() {
       offTaskStatus()
       offTaskTimer()
       offRefresh()
+      offStateRefresh()
       offAbout()
       offRevoke()
     }
