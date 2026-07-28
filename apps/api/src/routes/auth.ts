@@ -278,11 +278,21 @@ auth.post('/bridge/approve', requireSession, async (c) => {
   const code = typeof body.code === 'string' ? body.code : ''
   const projectId = typeof body.projectId === 'string' ? body.projectId : ''
   const companyId = typeof body.companyId === 'string' ? body.companyId : ''
-  if (!code || (!projectId && !companyId)) {
-    return c.json({ error: 'code and either projectId or companyId are required' }, 400)
+  const all = body.all === true
+  if (!code || (!projectId && !companyId && !all)) {
+    return c.json({ error: 'code and either projectId, companyId or all:true are required' }, 400)
   }
 
   const { approveUserCode } = await import('../lib/bridge-auth.js')
+
+  // Мастер-доступ: все проекты человека во всех его компаниях. Ничего сверх
+  // собственного он так не выдаёт — каждый запрос всё равно проверяет членство
+  // в конкретном проекте и права в нём. Отдельный режим нужен потому, что
+  // приложение мультикомпанейское: держать по туннелю на компанию неудобно.
+  if (all) {
+    const ok = await approveUserCode(code, sub, { all: true })
+    return ok ? c.json({ ok: true }) : c.json({ error: 'Code not found or expired' }, 404)
+  }
 
   // Подключиться к компании может любой её участник. Раньше это давали только
   // админам и менеджерам — из опасения, что участник «раздаст ассистенту

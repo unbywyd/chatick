@@ -134,13 +134,20 @@ async function resolveProject(c: Ctx): Promise<{ projectId: string } | { error: 
   const asked = c.req.query('project')
   if (!asked) {
     return {
-      error:
-        'This is a company-wide connection: pass ?project=<id> (or projectId in the body). Call GET /x/projects to list available projects.',
+      error: id.scopeAll
+        ? 'This connection covers all your projects: pass ?project=<id> (or projectId in the body). Call GET /x/projects to list them, or GET /x/companies to see them grouped by company.'
+        : 'This is a company-wide connection: pass ?project=<id> (or projectId in the body). Call GET /x/projects to list available projects.',
       status: 400,
     }
   }
   const project = await db.query.projects.findFirst({ where: eq(projects.id, asked) })
-  if (!project || project.companyId !== id.companyId) return { error: 'Project not found in this company', status: 404 }
+  if (!project) return { error: 'Project not found', status: 404 }
+  // Мастер-туннель не привязан к компании — ограничение проверяем только для
+  // компанейского. Членство в проекте проверяется в обоих случаях ниже, и
+  // именно оно решает: шире собственного доступа туннель не даёт.
+  if (!id.scopeAll && project.companyId !== id.companyId) {
+    return { error: 'Project not found in this company', status: 404 }
+  }
   if (!(await memberDomains(asked, id.userId))) {
     return { error: 'You are not a member of that project', status: 403 }
   }
@@ -161,18 +168,43 @@ bridgeRoute.get('/guide', (c) => c.text(guideDoc(auth(c as never))))
 bridgeRoute.get('/projects', async (c) => {
   const id = auth(c as never)
 
-  const rows = id.companyId
-    ? await db.query.projects.findMany({ where: eq(projects.companyId, id.companyId) })
-    : id.projectId
-      ? await db.query.projects.findMany({ where: eq(projects.id, id.projectId) })
-      : []
+  // Мастер: берём проекты по членству — компанией он не ограничен.
+  const rows = id.scopeAll
+    ? (
+        await db
+          .select({ p: projects })
+          .from(projectMembers)
+          .innerJoin(projects, eq(projects.id, projectMembers.projectId))
+          .where(eq(projectMembers.userId, id.userId))
+      ).map((r) => r.p)
+    : id.companyId
+      ? await db.query.projects.findMany({ where: eq(projects.companyId, id.companyId) })
+      : id.projectId
+        ? await db.query.projects.findMany({ where: eq(projects.id, id.projectId) })
+        : []
+
+  // Названия компаний: с мастер-доступом проекты приходят из разных компаний,
+  // и без подписи одинаковые названия не различить.
+  const companyIds = [...new Set(rows.map((p) => p.companyId))]
+  const companyNames = new Map(
+    companyIds.length
+      ? (await db.select().from(companies).where(inArray(companies.id, companyIds))).map((c) => [c.id, c.name])
+      : [],
+  )
 
   const items = []
   for (const p of rows) {
     // показываем только проекты, где человек действительно состоит
     const perms = await memberDomains(p.id, id.userId)
     if (!perms) continue
-    items.push({ id: p.id, name: p.name, about: p.about, permissions: perms })
+    items.push({
+      id: p.id,
+      name: p.name,
+      about: p.about,
+      companyId: p.companyId,
+      companyName: companyNames.get(p.companyId),
+      permissions: perms,
+    })
   }
   // Где человек сейчас: с доступом на всю компанию иначе приходится
   // переспрашивать «а в каком проекте?» — или, что хуже, угадывать.
@@ -181,14 +213,61 @@ bridgeRoute.get('/projects', async (c) => {
 
   return c.json({
     items,
-    scope: id.companyId ? 'company' : 'project',
+    scope: id.scopeAll ? 'all' : id.companyId ? 'company' : 'project',
     activeProject,
     activeProjectName: activeProject ? items.find((x) => x.id === activeProject)?.name : undefined,
-    hint: id.companyId
-      ? activeProject
-        ? `The person is looking at "${items.find((x) => x.id === activeProject)?.name}" right now — prefer it unless told otherwise. Pass ?project=<id> on every project-scoped call.`
-        : 'Pass ?project=<id> on every project-scoped call.'
-      : undefined,
+    hint:
+      id.companyId || id.scopeAll
+        ? activeProject
+          ? `The person is looking at "${items.find((x) => x.id === activeProject)?.name}" right now — prefer it unless told otherwise. Pass ?project=<id> on every project-scoped call.`
+          : 'Pass ?project=<id> on every project-scoped call.'
+        : undefined,
+  })
+})
+
+// Компании человека — со списком его проектов в каждой. Нужно мастер-туннелю:
+// плоский список проектов из разных компаний читается плохо, а решение «в
+// какой компании работаем» ассистент должен принимать осознанно.
+bridgeRoute.get('/companies', async (c) => {
+  const id = auth(c as never)
+
+  const rows = await db
+    .select({ c: companies, role: companyMembers.role })
+    .from(companyMembers)
+    .innerJoin(companies, eq(companies.id, companyMembers.companyId))
+    .where(eq(companyMembers.userId, id.userId))
+
+  // Туннель шире своей области не показывает: проектный — свою компанию,
+  // компанейский — свою, мастер — все.
+  const visible = id.scopeAll
+    ? rows
+    : id.companyId
+      ? rows.filter((r) => r.c.id === id.companyId)
+      : await (async () => {
+          if (!id.projectId) return []
+          const p = await db.query.projects.findFirst({ where: eq(projects.id, id.projectId) })
+          return p ? rows.filter((r) => r.c.id === p.companyId) : []
+        })()
+
+  const items = []
+  for (const r of visible) {
+    const mine = await db
+      .select({ p: projects })
+      .from(projectMembers)
+      .innerJoin(projects, eq(projects.id, projectMembers.projectId))
+      .where(and(eq(projectMembers.userId, id.userId), eq(projects.companyId, r.c.id)))
+    items.push({
+      id: r.c.id,
+      name: r.c.name,
+      myRole: r.role,
+      projects: mine.map((x) => ({ id: x.p.id, name: x.p.name })),
+    })
+  }
+
+  return c.json({
+    items,
+    scope: id.scopeAll ? 'all' : id.companyId ? 'company' : 'project',
+    hint: 'Pass ?project=<id> from these lists on every project-scoped call.',
   })
 })
 

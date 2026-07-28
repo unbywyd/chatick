@@ -74,7 +74,7 @@ type DesktopState = {
   /** все компании человека: подключаться можно к любой, не только к первой */
   companies: { id: string; name: string; canGrantCompany: boolean }[]
   /** Действующие туннели ассистентов — их видно и можно закрыть из панели. */
-  connections: { id: string; clientName: string; scope: 'company' | 'project'; where: string }[]
+  connections: { id: string; clientName: string; scope: 'company' | 'project' | 'all'; where: string }[]
   /**
    * Подписи для панели и трея. Своего i18n у них нет и быть не должно: язык
    * выбирают в приложении, а панель — его продолжение, а не отдельный продукт.
@@ -115,7 +115,7 @@ type TaskLite = {
 type BridgeSessionLite = {
   id: string
   clientName: string
-  scope: 'company' | 'project'
+  scope: 'company' | 'project' | 'all'
   project: { id: string; name: string } | null
   company: { id: string; name: string } | null
   lastUsedAt: string
@@ -317,7 +317,7 @@ export function useDesktopSync() {
         id: x.id,
         clientName: x.clientName,
         scope: x.scope,
-        where: (x.scope === 'company' ? x.company?.name : x.project?.name) ?? '',
+        where: (x.scope === 'all' ? t('connect.allProjects') : x.scope === 'company' ? x.company?.name : x.project?.name) ?? '',
       })),
       strings: {
         start: t('desktop.start'),

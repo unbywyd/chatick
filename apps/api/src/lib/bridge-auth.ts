@@ -33,6 +33,8 @@ export type BridgeIdentity = {
   /** Туннель на один проект: projectId задан. Туннель на компанию: null. */
   projectId: string | null
   companyId: string | null
+  /** Мастер-доступ: все проекты человека, во всех его компаниях. */
+  scopeAll: boolean
   user: { id: string; name: string; email: string }
   project: { id: string; name: string } | null
   company: { id: string; name: string } | null
@@ -77,7 +79,10 @@ export async function lookupUserCode(userCode: string) {
 export async function approveUserCode(
   userCode: string,
   userId: string,
-  scope: { projectId: string; companyId?: never } | { companyId: string; projectId?: never },
+  scope:
+    | { projectId: string; companyId?: never; all?: never }
+    | { companyId: string; projectId?: never; all?: never }
+    | { all: true; projectId?: never; companyId?: never },
 ) {
   const code = await lookupUserCode(userCode)
   if (!code) return false
@@ -88,6 +93,7 @@ export async function approveUserCode(
       userId,
       projectId: scope.projectId ?? null,
       companyId: scope.companyId ?? null,
+      scopeAll: scope.all === true,
     })
     .where(eq(bridgeAuthCodes.id, code.id))
   return true
@@ -111,7 +117,10 @@ export async function pollDeviceAuth(
   if (!row) return { status: 'expired' }
   if (row.expiresAt.getTime() < Date.now()) return { status: 'expired' }
   if (row.status === 'denied') return { status: 'denied' }
-  if (row.status !== 'approved' || !row.userId || (!row.projectId && !row.companyId)) return { status: 'pending' }
+  // Мастер-туннель не привязан ни к чему, поэтому пустые projectId/companyId
+  // для него — норма; отличаем по явному признаку.
+  if (row.status !== 'approved' || !row.userId) return { status: 'pending' }
+  if (!row.scopeAll && !row.projectId && !row.companyId) return { status: 'pending' }
 
   const token = `ck_${randomBytes(32).toString('base64url')}`
   const now = Date.now()
@@ -122,6 +131,7 @@ export async function pollDeviceAuth(
       userId: row.userId,
       projectId: row.projectId,
       companyId: row.companyId,
+      scopeAll: row.scopeAll,
       clientName: row.clientName,
       expiresAt: new Date(now + SESSION_TTL_MS),
     })
@@ -130,7 +140,7 @@ export async function pollDeviceAuth(
   // код одноразовый
   await db.delete(bridgeAuthCodes).where(eq(bridgeAuthCodes.id, row.id))
 
-  const identity = await identityOf(session!.id, row.userId, row.projectId, row.companyId)
+  const identity = await identityOf(session!.id, row.userId, row.projectId, row.companyId, row.scopeAll)
   if (!identity) return { status: 'expired' }
   return { status: 'approved', token, identity }
 }
@@ -140,6 +150,7 @@ async function identityOf(
   userId: string,
   projectId: string | null,
   companyId: string | null,
+  scopeAll = false,
 ): Promise<BridgeIdentity | null> {
   const user = await db.query.users.findFirst({ where: eq(users.id, userId) })
   if (!user) return null
@@ -147,6 +158,21 @@ async function identityOf(
     sessionId,
     userId,
     user: { id: user.id, name: user.name, email: user.email },
+  }
+
+  // Мастер: ни к чему не привязан. Конкретный проект выбирается в каждом
+  // запросе, и там же проверяется, состоит ли человек в нём до сих пор —
+  // права шире собственных туннель не даёт.
+  if (scopeAll) {
+    return {
+      ...base,
+      scopeAll: true,
+      projectId: null,
+      companyId: null,
+      project: null,
+      company: null,
+      permissions: null,
+    }
   }
 
   // Туннель на компанию: конкретный проект выбирается в каждом запросе,
@@ -162,6 +188,7 @@ async function identityOf(
     if (!company || !role) return null
     return {
       ...base,
+      scopeAll: false,
       projectId: null,
       companyId,
       project: null,
@@ -179,6 +206,7 @@ async function identityOf(
   if (!project || !permissions) return null
   return {
     ...base,
+    scopeAll: false,
     projectId,
     companyId: project.companyId,
     project: { id: project.id, name: project.name },
@@ -204,7 +232,7 @@ export async function authenticateBridge(token: string | undefined | null): Prom
   }
 
   await db.update(bridgeSessions).set({ lastUsedAt: new Date() }).where(eq(bridgeSessions.id, row.id))
-  return identityOf(row.id, row.userId, row.projectId, row.companyId)
+  return identityOf(row.id, row.userId, row.projectId, row.companyId, row.scopeAll)
 }
 
 /** Закрыть туннель (человеком со страницы подключения или самим ИИ). */
@@ -230,7 +258,7 @@ export async function listSessions(userId: string) {
     .map((r) => ({
       id: r.s.id,
       clientName: r.s.clientName,
-      scope: r.s.companyId ? ('company' as const) : ('project' as const),
+      scope: r.s.scopeAll ? ('all' as const) : r.s.companyId ? ('company' as const) : ('project' as const),
       project: r.project ? { id: r.project.id, name: r.project.name } : null,
       company: r.company ? { id: r.company.id, name: r.company.name } : null,
       lastUsedAt: r.s.lastUsedAt,

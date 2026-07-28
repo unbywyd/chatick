@@ -808,6 +808,8 @@ export const bridgeAuthCodes = pgTable(
     userId: text('user_id').references(() => users.id, { onDelete: 'cascade' }),
     projectId: text('project_id').references(() => projects.id, { onDelete: 'cascade' }),
     companyId: text('company_id').references(() => companies.id, { onDelete: 'cascade' }),
+    // мастер-доступ: все проекты человека во всех его компаниях
+    scopeAll: boolean('scope_all').notNull().default(false),
     // как ИИ представился — показываем человеку, чтобы он понимал, что одобряет
     clientName: text('client_name').notNull().default('AI assistant'),
     expiresAt: timestamp('expires_at', { withTimezone: true }).notNull(),
@@ -831,6 +833,10 @@ export const bridgeSessions = pgTable(
     // менеджеру нужен доступ ко всем её проектам, а не к одному (SPEC §8.27).
     projectId: text('project_id').references(() => projects.id, { onDelete: 'cascade' }),
     companyId: text('company_id').references(() => companies.id, { onDelete: 'cascade' }),
+    // мастер-доступ: ни проект, ни компания не заданы — открыты все проекты
+    // человека. Отдельным признаком, а не пустотой полей: пустота уже значит
+    // «не подтверждено».
+    scopeAll: boolean('scope_all').notNull().default(false),
     clientName: text('client_name').notNull().default('AI assistant'),
     // туннель сам закрывается после простоя — забытая сессия не живёт вечно
     lastUsedAt: timestamp('last_used_at', { withTimezone: true }).notNull().defaultNow(),

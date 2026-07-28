@@ -27,7 +27,7 @@ type BridgeSession = {
   id: string
   clientName: string
   /** Туннель открыт либо на один проект, либо на всю компанию — заполнено одно. */
-  scope: 'company' | 'project'
+  scope: 'company' | 'project' | 'all'
   project: { id: string; name: string } | null
   company: { id: string; name: string } | null
   lastUsedAt: string
@@ -96,6 +96,7 @@ export function ConnectPanel({ onClose }: { onClose?: () => void }) {
   ]
   const [q, setQ] = useState('')
   const [showProjects, setShowProjects] = useState(false)
+  const [masterMode, setMasterMode] = useState(false)
   const match = (name: string, company: string | null) => {
     const needle = q.trim().toLowerCase()
     if (!needle) return true
@@ -141,9 +142,11 @@ export function ConnectPanel({ onClose }: { onClose?: () => void }) {
         // «вы не участник этого проекта» — при том, что участник.
         body: JSON.stringify({
           code: code.trim(),
-          ...(projectId.startsWith('c:')
-            ? { companyId: projectId.slice(2) }
-            : { projectId: projectId.replace(/^p:/, '') }),
+          ...(masterMode
+            ? { all: true }
+            : projectId.startsWith('c:')
+              ? { companyId: projectId.slice(2) }
+              : { projectId: projectId.replace(/^p:/, '') }),
         }),
       }),
     onSuccess: () => {
@@ -241,7 +244,23 @@ export function ConnectPanel({ onClose }: { onClose?: () => void }) {
               <p className="text-sm">
                 <b>{pending.data.clientName}</b> {t('connect.requestsAccess')}
               </p>
-              <div>
+              {/* Мастер-доступ. Отдельным тумблером, а не строкой в списке:
+                  это не «ещё одна цель», а решение другого рода — открыть всё
+                  сразу, включая компании, куда позовут позже. */}
+              <label className="flex cursor-pointer items-start gap-2.5 rounded-lg border bg-card p-2.5">
+                <input
+                  type="checkbox"
+                  checked={masterMode}
+                  onChange={(e) => setMasterMode(e.target.checked)}
+                  className="mt-0.5 size-4 accent-brand"
+                />
+                <span className="min-w-0">
+                  <span className="block text-sm font-medium">{t('connect.masterTitle')}</span>
+                  <span className="block text-xs text-muted-foreground">{t('connect.masterNote')}</span>
+                </span>
+              </label>
+
+              <div className={cn(masterMode && 'pointer-events-none opacity-40')}>
                 <p className="text-xs font-medium text-muted-foreground">{t('connect.chooseProject')}</p>
 
                 {/* Поиск всегда: даже с четырьмя целями искать быстрее, чем
@@ -327,7 +346,7 @@ export function ConnectPanel({ onClose }: { onClose?: () => void }) {
 
               <p className="text-xs text-muted-foreground">{t('connect.actsAsYou')}</p>
               <div className="flex gap-2">
-                <Button variant="brand" size="sm" disabled={!projectId || approve.isPending} onClick={() => approve.mutate()}>
+                <Button variant="brand" size="sm" disabled={(!projectId && !masterMode) || approve.isPending} onClick={() => approve.mutate()}>
                   <Check className="size-3.5" />
                   {t('connect.allow')}
                 </Button>
@@ -362,9 +381,11 @@ export function ConnectPanel({ onClose }: { onClose?: () => void }) {
                   <span className="block text-xs text-muted-foreground">
                     {/* У туннеля на компанию проекта нет — раньше здесь читали
                         s.project.name и роняли весь экран. */}
-                    {s.scope === 'company'
-                      ? `${s.company?.name ?? ''} · ${t('connect.wholeCompany')}`
-                      : (s.project?.name ?? '')}{' '}
+                    {s.scope === 'all'
+                      ? t('connect.allProjects')
+                      : s.scope === 'company'
+                        ? `${s.company?.name ?? ''} · ${t('connect.wholeCompany')}`
+                        : (s.project?.name ?? '')}{' '}
                     · {t('connect.lastUsed')}{' '}
                     {new Date(s.lastUsedAt).toLocaleString(i18n.language, { hour: '2-digit', minute: '2-digit' })}
                   </span>

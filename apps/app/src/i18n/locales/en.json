@@ -883,7 +883,11 @@
     "groupCompanies": "Companies",
     "groupProjects": "Projects",
     "allProjectsOf": "All projects, including future ones",
-    "singleProjectNote": "— narrow to one"
+    "singleProjectNote": "— narrow to one",
+    "masterTitle": "Master access: all my projects",
+    "masterNote": "Every company and project I belong to, including future ones. Grants nothing extra — the assistant works with my own permissions.",
+    "wholeCompanyShort": "whole company",
+    "allProjects": "all my projects"
   },
   "backup": {
     "title": "Export & import",

@@ -14,7 +14,7 @@ import { Input } from '@/components/ui/input'
 type BridgeSession = {
   id: string
   clientName: string
-  scope: 'company' | 'project'
+  scope: 'company' | 'project' | 'all'
   project: { id: string; name: string } | null
   company: { id: string; name: string } | null
   lastUsedAt: string

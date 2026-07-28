@@ -323,6 +323,13 @@
       "when": 1785066492112,
       "tag": "0045_feedback_screenshot",
       "breakpoints": true
+    },
+    {
+      "idx": 46,
+      "version": "7",
+      "when": 1785066493112,
+      "tag": "0046_bridge_scope_all",
+      "breakpoints": true
     }
   ]
 }

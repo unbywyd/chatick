@@ -883,7 +883,11 @@
     "groupCompanies": "חברות",
     "groupProjects": "פרויקטים",
     "allProjectsOf": "כל הפרויקטים, כולל עתידיים",
-    "singleProjectNote": "— לצמצם לאחד"
+    "singleProjectNote": "— לצמצם לאחד",
+    "masterTitle": "גישה מלאה: כל הפרויקטים שלי",
+    "masterNote": "כל החברות והפרויקטים שאני חבר בהם, כולל עתידיים. לא מוסיף הרשאות — העוזר פועל עם ההרשאות שלי.",
+    "wholeCompanyShort": "כל החברה",
+    "allProjects": "כל הפרויקטים שלי"
   },
   "backup": {
     "title": "ייצוא וייבוא",

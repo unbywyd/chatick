@@ -389,16 +389,44 @@ access to other people's data, the second cannot be undone.
 }
 
 
+/** Строка области в шапке: у мастер-туннеля компании нет. */
+function scopeLine(id: BridgeIdentity): string {
+  if (id.scopeAll) return 'Scope: ALL your companies and projects'
+  return `Company: ${id.company?.name ?? ''} (id: ${id.companyId})`
+}
+
+/** Вступление: чем эта связь отличается и с чего начинать. */
+function scopeIntro(id: BridgeIdentity): string {
+  if (!id.scopeAll) {
+    return [
+      'This is a COMPANY-WIDE connection: you can work across every project in this',
+      'company that this person is a member of.',
+    ].join('\n')
+  }
+  return [
+    'This is a MASTER connection: every project this person belongs to, in every',
+    'company, including ones they are added to later. It grants nothing beyond',
+    'their own access — each call still checks their membership and permissions',
+    'in that particular project.',
+    '',
+    '    GET /x/companies      their companies, each with the projects they are in',
+    '    GET /x/projects       flat list of the same projects, with permissions',
+    '',
+    'Start with GET /x/companies when a company is mentioned by name, and with',
+    'GET /x/projects when a project is. Both report which project the person is',
+    'looking at right now — prefer it unless told otherwise.',
+  ].join('\n')
+}
+
 /** Инструкция для company-туннеля: доступ ко всем проектам компании сразу. */
 function companyGuideDoc(id: BridgeIdentity): string {
   const b = base()
   return `# Chatick — connected as ${id.user.name || id.user.email}
 
-Company: ${id.company?.name ?? ''} (id: ${id.companyId})
+${scopeLine(id)}
 Acting as: ${id.user.name || id.user.email} <${id.user.email}> (id: ${id.userId})
 
-This is a COMPANY-WIDE connection: you can work across every project in this
-company that this person is a member of.
+${scopeIntro(id)}
 
     -H 'authorization: Bearer <token>'
 
@@ -413,6 +441,7 @@ Every project-scoped call needs a project. Add \`?project=<projectId>\`:
 Start here to see what is available and your permissions in each:
 
     GET /x/projects
+    GET /x/companies      the same projects grouped by company, with your role
 
 Without ?project= a call returns 400 telling you the same thing.
 

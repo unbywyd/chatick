@@ -887,7 +887,11 @@
     "groupCompanies": "Компании",
     "groupProjects": "Проекты",
     "allProjectsOf": "Все проекты, включая будущие",
-    "singleProjectNote": "— сузить до одного"
+    "singleProjectNote": "— сузить до одного",
+    "masterTitle": "Мастер-доступ: все мои проекты",
+    "masterNote": "Все компании и проекты, где я состою, включая будущие. Прав не добавляет — ассистент работает с моими.",
+    "wholeCompanyShort": "вся компания",
+    "allProjects": "все мои проекты"
   },
   "backup": {
     "title": "Экспорт и импорт",
