@@ -150,7 +150,21 @@ export function useDesktopSync() {
   const location = useLocation()
   const qc = useQueryClient()
   const bridge = desktop()
-  const authed = Boolean(getSessionToken())
+  // Признак входа пересчитывается, а не берётся один раз при монтировании:
+  // окно приложения открывается раньше, чем человек вошёл, и запросы к трею
+  // не включались бы уже никогда — панель оставалась пустой.
+  const [authed, setAuthed] = useState(() => Boolean(getSessionToken()))
+  useEffect(() => {
+    const check = () => setAuthed(Boolean(getSessionToken()))
+    const timer = window.setInterval(check, 2000)
+    window.addEventListener('storage', check)
+    window.addEventListener('focus', check)
+    return () => {
+      window.clearInterval(timer)
+      window.removeEventListener('storage', check)
+      window.removeEventListener('focus', check)
+    }
+  }, [])
 
   // Активный проект — из адреса: /p/<id>/...
   const activeProjectId = location.pathname.match(/^\/p\/([^/]+)/)?.[1]

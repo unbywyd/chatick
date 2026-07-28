@@ -302,6 +302,13 @@ function createPanel() {
 
   panel.loadFile(path.join(__dirname, 'panel.html'))
 
+  // Состояние — сразу после загрузки. Панель создаётся по первому клику, и
+  // send() до окончания загрузки уходит в пустоту: окно оставалось пустым до
+  // следующего обновления от веба, а его можно ждать минуту.
+  panel.webContents.on('did-finish-load', () => {
+    if (panel && !panel.webContents.isLoading()) panel.webContents.send('panel:state', state)
+  })
+
   // Перетащили — запоминаем. Событие приходит и при нашем setPosition,
   // поэтому пишем только когда панель видима и двигал её человек.
   panel.on('moved', () => {
@@ -324,7 +331,7 @@ function togglePanel() {
   // отменять решение человека при каждом открытии.
   if (panelPos) {
     panel.setPosition(panelPos.x, panelPos.y)
-    panel.webContents.send('panel:state', state)
+    if (!panel.webContents.isLoading()) panel.webContents.send('panel:state', state)
     panel.show()
     panel.focus()
     return
@@ -342,7 +349,7 @@ function togglePanel() {
   const y = below ? iconBounds.y + iconBounds.height + 6 : iconBounds.y - h - 6
 
   panel.setPosition(x, Math.round(Math.max(area.y + 8, y)))
-  panel.webContents.send('panel:state', state)
+  if (!panel.webContents.isLoading()) panel.webContents.send('panel:state', state)
   panel.show()
   panel.focus()
 }
