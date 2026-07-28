@@ -10,7 +10,14 @@ import { ZoomableImage } from '@/components/ZoomableImage'
 export type ViewerFile = { id: string; name: string; mime: string; hasOriginal?: boolean }
 
 // Детекция по mime И расширению (mime бывает octet-stream). Порядок важен: spreadsheet до text.
-function kindOf(file: ViewerFile): 'image' | 'video' | 'audio' | 'pdf' | 'sheet' | 'text' | 'office' | 'other' {
+/**
+ * Что это за файл — и, значит, чем его показывать.
+ *
+ * Вынесено наружу, потому что решать «открывается ли он вообще» приходится и
+ * тем, кто рисует список: иначе такой список заводит собственную проверку,
+ * и она отстаёт от возможностей просмотрщика.
+ */
+export function kindOf(file: ViewerFile): 'image' | 'video' | 'audio' | 'pdf' | 'sheet' | 'text' | 'office' | 'other' {
   const m = file.mime
   const ext = file.name.toLowerCase().match(/\.([a-z0-9]+)$/)?.[1] ?? ''
   if (m.startsWith('image/')) return 'image'

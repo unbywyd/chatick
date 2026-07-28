@@ -33,7 +33,7 @@ import {
 } from '@/components/ui/dropdown-menu'
 import { Popover, PopoverTrigger, PopoverContent } from '@/components/ui/popover'
 import { Calendar } from '@/components/ui/calendar'
-import { FileViewer, type ViewerFile } from '@/components/files/FileViewer'
+import { FileViewer, kindOf, type ViewerFile } from '@/components/files/FileViewer'
 import { RichEditor } from '@/components/ui/rich-editor'
 import { Avatar } from '@/components/ui/avatar'
 import { TaskComments } from './TaskComments'
@@ -211,6 +211,16 @@ export function TaskDrawer({
 
   const open = (att: Attachment) => setViewing({ id: att.id, name: att.name, mime: att.mime })
 
+  // «Скачать» действительно скачивало просмотр: обе кнопки звали open().
+  const download = async (att: Attachment) => {
+    try {
+      const { url } = await api<{ url: string }>(`/api/v1/files/${att.id}/download`, {}, 'project')
+      window.open(url, '_blank')
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : String(e))
+    }
+  }
+
   const removeAtt = useMutation({
     mutationFn: (id: string) => api(`/api/v1/files/${id}`, { method: 'DELETE' }, 'project'),
     onSuccess: refresh,
@@ -218,7 +228,11 @@ export function TaskDrawer({
   })
 
   const confirm = useConfirm()
-  const canPreviewInline = (mime: string) => mime.startsWith('image/') || mime === 'application/pdf'
+  // Спрашиваем сам просмотрщик, а не держим свой список: он умеет видео,
+  // звук, таблицы и текст, а здесь открывались только картинки и pdf —
+  // остальные файлы оставались молчаливыми строками.
+  const canPreviewInline = (file: { name: string; mime: string }) =>
+    kindOf({ id: '', name: file.name, mime: file.mime }) !== 'other'
 
   // редактирование справа — по умолчанию скрыто (открывается кнопкой «Редактировать»)
   const [editing, setEditing] = useState(startEditing)
@@ -575,13 +589,25 @@ export function TaskDrawer({
                   .map((a) => (
                     <li key={a.id} className="flex items-center gap-2 rounded-md border bg-card px-2.5 py-2">
                       <File className="size-4 shrink-0 text-muted-foreground" />
-                      <span className="min-w-0 flex-1 truncate text-sm">{a.name}</span>
-                      {canPreviewInline(a.mime) && (
+                      {/* По имени и кликают: искать глазами кнопку рядом,
+                          когда сама строка выглядит как ссылка, — лишний шаг. */}
+                      {canPreviewInline(a) ? (
+                        <button
+                          className="min-w-0 flex-1 truncate text-start text-sm transition-colors hover:text-brand"
+                          onClick={() => open(a)}
+                          title={t('tasks.preview')}
+                        >
+                          {a.name}
+                        </button>
+                      ) : (
+                        <span className="min-w-0 flex-1 truncate text-sm">{a.name}</span>
+                      )}
+                      {canPreviewInline(a) && (
                         <Button variant="ghost" size="icon" title={t('tasks.preview')} onClick={() => open(a)}>
                           <ExternalLink className="size-3.5" />
                         </Button>
                       )}
-                      <Button variant="ghost" size="icon" title={t('files.download')} onClick={() => open(a)}>
+                      <Button variant="ghost" size="icon" title={t('files.download')} onClick={() => void download(a)}>
                         <Download className="size-3.5" />
                       </Button>
                       <Button variant="ghost" size="icon" title={t('files.delete')} onClick={() => removeAtt.mutate(a.id)}>
