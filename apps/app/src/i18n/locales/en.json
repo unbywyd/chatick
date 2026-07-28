@@ -161,7 +161,7 @@
     "clearDue": "Clear due date",
     "attachments": "Attachments",
     "attach": "Attach",
-    "attachHint": "Drag files here or click Attach",
+    "attachHint": "Drag files here, paste from clipboard, or click Attach",
     "preview": "Preview",
     "manageImages": "Manage images",
     "descriptionPlaceholder": "Description…",

@@ -170,8 +170,9 @@ export function TaskDrawer({
     }
   }
 
-  // вставка файлов/картинок из буфера прямо в задачу (SPEC §8.16)
-  usePasteFiles(upload)
+  // Вставка файлов из буфера прямо в задачу (SPEC §8.16). Только когда правки
+  // разрешены: принять файл и не сохранить его — хуже, чем не принять.
+  usePasteFiles(upload, canEdit)
 
   const open = (att: Attachment) => setViewing({ id: att.id, name: att.name, mime: att.mime })
 
