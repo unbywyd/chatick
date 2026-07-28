@@ -234,7 +234,12 @@ export function useDesktopSync() {
     queryFn: async () => {
       const lists = await Promise.all(
         companyIds.map((id) =>
-          api<ProjectLite[]>(`/api/v1/projects?companyId=${id}`).catch(() => [] as ProjectLite[]),
+          api<ProjectLite[]>(`/api/v1/projects?companyId=${id}`)
+            // Компания известна из самого запроса: сервер её в ответе не
+            // возвращает, а панели она нужна — без неё проекты из разных
+            // компаний не подписать, особенно когда компании одноимённые.
+            .then((list) => list.map((p) => ({ ...p, companyId: id })))
+            .catch(() => [] as ProjectLite[]),
         ),
       )
       return lists.flat()

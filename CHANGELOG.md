@@ -7,6 +7,17 @@ refuses to run otherwise, so a release can never ship without a description.
 
 Written in English only: this file is published on the website.
 
+## 0.3.2 — 2026-07-28
+
+### Fixed
+
+- The company label never appeared next to projects in the timer picker: the
+  projects endpoint does not return the company, and the tray — unlike the
+  connect screen — never attached it.
+- The avatar in the tray header stayed an empty circle. Google serves profile
+  pictures only to requests without a referrer, and the panel was not asking
+  for them that way.
+
 ## 0.3.1 — 2026-07-28
 
 ### Changed
