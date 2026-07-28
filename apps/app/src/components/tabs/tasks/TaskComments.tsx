@@ -69,6 +69,8 @@ export function TaskComments({
   // загрузить прикреплённые файлы (как файлы проекта без владельца-сообщения), получить их id
   async function uploadPending(): Promise<string[]> {
     const ids: string[] = []
+    // В комментариях оригиналы не храним: это переписка, а не хранилище
+    // файлов — за оригиналом идут во вложения задачи.
     for (const file of pending) {
       const fd = new FormData()
       fd.append('file', file)

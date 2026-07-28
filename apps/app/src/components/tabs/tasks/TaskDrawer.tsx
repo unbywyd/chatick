@@ -43,6 +43,7 @@ import { useProjectSocket } from '@/hooks/useProjectSocket'
 import { STATUSES, PRIORITIES, STATUS_ICON, STATUS_COLOR, PRIORITY_DOT, fmtEstimate, type Task, type Member, type TaskGroup } from './types'
 import { parseDuration } from '@/lib/time-parse'
 import { ShareDialog } from '@/components/ShareDialog'
+import { UploadDialog, hasImages } from '@/components/UploadDialog'
 
 type Attachment = {
   id: string
@@ -88,6 +89,8 @@ export function TaskDrawer({
   const [uploading, setUploading] = useState(0)
   const [dragOver, setDragOver] = useState(false)
   const [viewing, setViewing] = useState<ViewerFile | null>(null)
+  // Файлы выбраны, но ещё не отправлены: ждём решения про оригиналы.
+  const [asking, setAsking] = useState<File[] | null>(null)
   const inputRef = useRef<HTMLInputElement>(null)
   const [aiCheck, setAiCheck] = useState<{ advice: string; suggestedTitle: string; suggestedDescription: string } | null>(null)
 
@@ -145,13 +148,14 @@ export function TaskDrawer({
     qc.invalidateQueries({ queryKey: ['tasks'] }) // attachmentsCount в списке
   }
 
-  async function upload(list: FileList | File[]) {
+  async function upload(list: FileList | File[], keepOriginal = false) {
     for (const file of Array.from(list)) {
       setUploading((n) => n + 1)
       try {
         const fd = new FormData()
         fd.append('file', file)
         fd.append('taskId', task.id)
+        if (keepOriginal) fd.append('keepOriginal', '1')
         const res = await fetch(`${API_URL}/api/v1/files`, {
           method: 'POST',
           headers: { Authorization: `Bearer ${getProjectToken()}` },
@@ -172,7 +176,15 @@ export function TaskDrawer({
 
   // Вставка файлов из буфера прямо в задачу (SPEC §8.16). Только когда правки
   // разрешены: принять файл и не сохранить его — хуже, чем не принять.
-  usePasteFiles(upload, canEdit)
+  // Перетаскивание и вставка — тем же путём, что и выбор файла.
+  const pickFiles = (list: FileList | File[]) => {
+    const picked = Array.from(list)
+    if (!picked.length) return
+    if (hasImages(picked)) setAsking(picked)
+    else void upload(picked)
+  }
+
+  usePasteFiles(pickFiles, canEdit)
 
   const open = (att: Attachment) => setViewing({ id: att.id, name: att.name, mime: att.mime })
 
@@ -485,8 +497,11 @@ export function TaskDrawer({
                 multiple
                 className="hidden"
                 onChange={(e) => {
-                  if (e.target.files?.length) upload(e.target.files)
+                  const picked = Array.from(e.target.files ?? [])
                   e.target.value = ''
+                  if (!picked.length) return
+                  // Про оригиналы спрашиваем только когда есть картинки.
+                  pickFiles(picked)
                 }}
               />
             </div>
@@ -644,7 +659,7 @@ export function TaskDrawer({
       onDrop={(e) => {
         e.preventDefault()
         setDragOver(false)
-        if (e.dataTransfer.files.length) upload(e.dataTransfer.files)
+        if (e.dataTransfer.files.length) pickFiles(e.dataTransfer.files)
       }}
     >
       {sharing && (
@@ -781,6 +796,16 @@ export function TaskDrawer({
 
       {/* Встроенный просмотрщик вложений */}
       {viewing && <FileViewer file={viewing} onClose={() => setViewing(null)} />}
+      {asking && (
+        <UploadDialog
+          files={asking}
+          onCancel={() => setAsking(null)}
+          onConfirm={({ files, keepOriginal }) => {
+            setAsking(null)
+            void upload(files, keepOriginal)
+          }}
+        />
+      )}
     </div>
   )
 }

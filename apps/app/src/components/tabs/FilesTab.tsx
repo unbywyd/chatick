@@ -34,6 +34,7 @@ import { StorageSettings } from '@/components/files/StorageSettings'
 import { ClipboardBanner } from '@/components/ui/clipboard-banner'
 import { DragHandle } from '@/components/ui/drag-handle'
 import { usePasteFiles } from '@/hooks/usePasteFiles'
+import { UploadDialog, hasImages } from '@/components/UploadDialog'
 
 type FileRow = {
   id: string
@@ -85,6 +86,8 @@ export function FilesTab({ projectId, isAdmin = false }: { projectId: string; is
   const [fromDate, setFromDate] = useState<Date | undefined>()
   const [toDate, setToDate] = useState<Date | undefined>()
   const [dragOver, setDragOver] = useState(false)
+  // Выбранные, но ещё не отправленные файлы: ждут решения про оригиналы.
+  const [asking, setAsking] = useState<File[] | null>(null)
   const [uploading, setUploading] = useState<string[]>([])
   // Открытый файл живёт в адресе: ссылкой на файл делятся, и она должна
   // открывать именно его, а не список, в котором его ещё надо найти.
@@ -127,7 +130,7 @@ export function FilesTab({ projectId, isAdmin = false }: { projectId: string; is
   const storage = filesQ.data?.pages[0]?.storage
   const usedPct = storage && storage.limit > 0 ? Math.min(100, (storage.used / storage.limit) * 100) : 0
 
-  async function uploadFiles(list: FileList | File[]) {
+  async function uploadFiles(list: FileList | File[], keepOriginal = false) {
     for (const file of Array.from(list)) {
       const label = file.name
       setUploading((u) => [...u, label])
@@ -135,6 +138,7 @@ export function FilesTab({ projectId, isAdmin = false }: { projectId: string; is
         const fd = new FormData()
         fd.append('file', file)
         fd.append('manager', '1') // прямая загрузка в менеджер → постоянный (SPEC §8.17)
+        if (keepOriginal) fd.append('keepOriginal', '1')
         const res = await fetch(`${API_URL}/api/v1/files`, {
           method: 'POST',
           headers: { Authorization: `Bearer ${getProjectToken()}` },
@@ -154,7 +158,16 @@ export function FilesTab({ projectId, isAdmin = false }: { projectId: string; is
   }
 
   // вставка файлов/картинок из буфера (SPEC §8.16)
-  usePasteFiles(uploadFiles)
+  // Перетаскивание и вставка идут тем же путём, что и выбор файла: спросить
+  // про оригиналы в одном случае из трёх — хуже, чем не спрашивать вовсе.
+  const pickFiles = (list: FileList | File[]) => {
+    const picked = Array.from(list)
+    if (!picked.length) return
+    if (hasImages(picked)) setAsking(picked)
+    else void uploadFiles(picked)
+  }
+
+  usePasteFiles(pickFiles)
 
   const remove = useMutation({
     mutationFn: (fileId: string) => api(`/api/v1/files/${fileId}`, { method: 'DELETE' }, 'project'),
@@ -195,7 +208,7 @@ export function FilesTab({ projectId, isAdmin = false }: { projectId: string; is
       onDrop={(e) => {
         e.preventDefault()
         setDragOver(false)
-        if (e.dataTransfer.files.length) uploadFiles(e.dataTransfer.files)
+        if (e.dataTransfer.files.length) pickFiles(e.dataTransfer.files)
       }}
     >
       {/* Прогресс хранилища (для custom — «без лимита», прогресс-бар не рисуем) */}
@@ -261,7 +274,30 @@ export function FilesTab({ projectId, isAdmin = false }: { projectId: string; is
           <UploadCloud className="size-4" />
           {t('files.upload')}
         </Button>
-        <input ref={inputRef} type="file" multiple className="hidden" onChange={(e) => { if (e.target.files?.length) uploadFiles(e.target.files); e.target.value = '' }} />
+        <input
+          ref={inputRef}
+          type="file"
+          multiple
+          className="hidden"
+          onChange={(e) => {
+            const picked = Array.from(e.target.files ?? [])
+            e.target.value = ''
+            if (!picked.length) return
+            // Спрашиваем про оригиналы, только если есть картинки: с одними
+            // документами галочка ни на что не влияет, а шаг добавляет.
+            pickFiles(picked)
+          }}
+        />
+        {asking && (
+          <UploadDialog
+            files={asking}
+            onCancel={() => setAsking(null)}
+            onConfirm={({ files, keepOriginal }) => {
+              setAsking(null)
+              uploadFiles(files, keepOriginal)
+            }}
+          />
+        )}
       </div>
 
       {/* Чипы-тип + период (календарь) */}

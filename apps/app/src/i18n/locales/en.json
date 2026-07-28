@@ -1255,5 +1255,13 @@
     "needEmail": "A valid email is required so we can answer",
     "notImage": "Only images can be attached",
     "tooLarge": "Screenshot is too large (max 8 MB)"
+  },
+  "upload": {
+    "title_one": "Upload {{count}} file",
+    "title_other": "Upload {{count}} files",
+    "keepOriginal": "Keep originals",
+    "keepOriginalHint": "No compression — they will take more space. Images are normally resized to 2048 px and converted to webp.",
+    "send": "Upload",
+    "remove": "Remove from list"
   }
 }
