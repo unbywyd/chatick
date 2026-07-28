@@ -123,7 +123,9 @@
     "badgeHint": "Colour and logo identify the project when the list is collapsed to icons.",
     "logoUpload": "Upload a logo",
     "logoReplace": "Replace the logo",
-    "logoRemove": "Remove"
+    "logoRemove": "Remove",
+    "languageSearch": "Search language…",
+    "languageNotFound": "No such language"
   },
   "aiMode": {
     "observer": {
@@ -1192,7 +1194,9 @@
       "placeholder": "Project name",
       "hint": "A client, a product, or simply \"Website\" — whatever you actually call it.",
       "cta": "Create project",
-      "foot": "Chat rules and AI behaviour have sensible defaults; you can adjust them in the project settings whenever you like."
+      "foot": "Chat rules and AI behaviour have sensible defaults; you can adjust them in the project settings whenever you like.",
+      "language": "Project language",
+      "languageHint": "Tasks, documents and chat are kept in it; the AI translates anything else."
     },
     "team": {
       "title": "Who is working on it with you?",

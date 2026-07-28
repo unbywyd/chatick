@@ -10,6 +10,7 @@ import { COUNTRIES, countryByCode, allTimezones, timezoneOffset } from '@/lib/co
 import { Combobox } from '@/components/ui/combobox'
 import { Select, SelectTrigger, SelectValue, SelectContent, SelectItem } from '@/components/ui/select'
 import { Button } from '@/components/ui/button'
+import { LanguagePicker } from '@/components/ui/language-picker'
 import {
   DropdownMenu,
   DropdownMenuTrigger,
@@ -91,12 +92,6 @@ const GB = 1024 * 1024 * 1024
 // значит обещать то, чего нет.
 const STORAGE_OPTIONS = [1, 2] as const // GB
 
-const PROJECT_LANGUAGES = [
-  { code: 'en', label: 'English' },
-  { code: 'ru', label: 'Русский' },
-  { code: 'he', label: 'עברית' },
-] as const
-
 const MODES: { key: AiMode; icon: typeof Eye }[] = [
   { key: 'observer', icon: Eye },
   { key: 'assistant', icon: MessageCircleQuestion },
@@ -149,7 +144,6 @@ export function ProjectSettingsForm({
     onChange({ ...value, aiConfig: { ...value.aiConfig, [k]: v } })
 
   const rulesLeft = CHAT_RULES_MAX - value.chatRules.length
-  const lang = PROJECT_LANGUAGES.find((l) => l.code === value.aiConfig.language)
 
   return (
     <div>
@@ -239,21 +233,11 @@ export function ProjectSettingsForm({
               <p className="text-sm font-medium">{t('projectForm.language')}</p>
               <p className="text-xs text-muted-foreground">{t('projectForm.languageHint')}</p>
             </div>
-            <DropdownMenu>
-              <DropdownMenuTrigger asChild>
-                <Button variant="outline" size="sm" className="gap-1.5">
-                  {lang?.label ?? value.aiConfig.language}
-                  <ChevronDown className="size-3.5 text-muted-foreground" />
-                </Button>
-              </DropdownMenuTrigger>
-              <DropdownMenuContent align="end">
-                {PROJECT_LANGUAGES.map((l) => (
-                  <DropdownMenuCheckItem key={l.code} checked={l.code === value.aiConfig.language} onSelect={() => setAi('language', l.code)}>
-                    {l.label}
-                  </DropdownMenuCheckItem>
-                ))}
-              </DropdownMenuContent>
-            </DropdownMenu>
+            <LanguagePicker
+              value={value.aiConfig.language}
+              onChange={(code) => setAi('language', code)}
+              className="w-52 shrink-0"
+            />
           </div>
           <Field label={t('projectForm.about')}>
             <textarea

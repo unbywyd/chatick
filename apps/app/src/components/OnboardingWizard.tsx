@@ -5,6 +5,7 @@ import { toast } from 'sonner'
 import { Check, Plus, X } from 'lucide-react'
 import { api } from '@/lib/api'
 import { Button } from '@/components/ui/button'
+import { LanguagePicker } from '@/components/ui/language-picker'
 import { cn } from '@/lib/utils'
 
 // Первый вход: компания → первый проект → команда (SPEC §8.38).
@@ -35,9 +36,13 @@ export function OnboardingWizard({
   /** визард закончен: перейти в проект (или в компанию, если пропустили) */
   onDone: (created: { companyId: string; projectId?: string }) => void
 }) {
-  const { t } = useTranslation()
+  const { t, i18n } = useTranslation()
   const qc = useQueryClient()
   const [name, setName] = useState('')
+  // Язык проекта: на нём ИИ ведёт задачи и переписку. Задавать его потом
+  // поздно — часть переписки уже уйдёт не на том языке. По умолчанию берём
+  // язык интерфейса: он почти всегда и есть язык команды.
+  const [language, setLanguage] = useState(() => (i18n.language || 'en').slice(0, 2))
   const [emails, setEmails] = useState<string[]>([])
   const [draft, setDraft] = useState('')
 
@@ -59,7 +64,7 @@ export function OnboardingWizard({
     mutationFn: (v: string) =>
       api<{ id: string }>('/api/v1/projects', {
         method: 'POST',
-        body: JSON.stringify({ companyId, name: v }),
+        body: JSON.stringify({ companyId, name: v, aiConfig: { language } }),
       }),
     onSuccess: (p) => {
       setName('')
@@ -208,6 +213,15 @@ export function OnboardingWizard({
         )}
 
         <p className="mt-3 text-sm text-muted-foreground">{t(`wizard.${step}.hint`)}</p>
+
+        {/* Язык проекта — второе, что важно знать до первой переписки */}
+        {step === 'project' && (
+          <div className="mt-7">
+            <p className="text-sm font-medium">{t('wizard.project.language')}</p>
+            <p className="mt-0.5 text-xs text-muted-foreground">{t('wizard.project.languageHint')}</p>
+            <LanguagePicker value={language} onChange={setLanguage} className="mt-2 max-w-xs" />
+          </div>
+        )}
 
         <div className="mt-8 flex flex-wrap items-center gap-3">
           <Button
