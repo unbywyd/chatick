@@ -60,6 +60,15 @@ type Dict = {
     mobileSoon: string
     /** короткая подпись для кнопки в шапке */
     heroWin: string
+    /** Приложения пока без подписи — говорим об этом сами, до установки */
+    unsignedTitle: string
+    unsignedText: string
+    howTo: string
+    howToClose: string
+    step1: string
+    step2: string
+    step3: string
+    sourceHint: string
   }
   /** Отзывы */
   reviews: {
@@ -231,6 +240,14 @@ export const dict: Record<LocaleCode, Dict> = {
       web: 'Open in browser',
       mobileSoon: 'Mobile apps are on the roadmap.',
       heroWin: 'Download for Windows',
+      unsignedTitle: 'The desktop builds are not signed yet',
+      unsignedText: 'A code-signing certificate costs money, and Chatick is free with no sponsors behind it. Windows and your browser will warn you about the file. Nothing is hidden: the source is open, and you can build the same app yourself.',
+      howTo: 'What to expect when installing',
+      howToClose: 'Got it',
+      step1: 'Your browser will say the file is downloaded rarely. Choose “Keep” — in Chrome it is hidden under the arrow next to the warning.',
+      step2: 'Windows shows a blue SmartScreen window. Click “More info”, then “Run anyway”.',
+      step3: 'After that it installs normally, and updates itself from then on.',
+      sourceHint: 'Rather build it yourself? The full source is on GitHub.',
     },
     reviews: {
       title: 'What people say',
@@ -393,6 +410,14 @@ export const dict: Record<LocaleCode, Dict> = {
       web: 'Открыть в браузере',
       mobileSoon: 'Мобильные приложения — в планах.',
       heroWin: 'Скачать для Windows',
+      unsignedTitle: 'Сборки для рабочего стола пока без подписи',
+      unsignedText: 'Сертификат для подписи стоит денег, а Chatick бесплатен и без спонсоров. Windows и браузер предупредят вас об этом файле. Скрывать нечего: исходники открыты, и такое же приложение вы можете собрать сами.',
+      howTo: 'Что будет при установке',
+      howToClose: 'Понятно',
+      step1: 'Браузер скажет, что файл скачивают редко. Выберите «Сохранить» — в Chrome это спрятано под стрелкой рядом с предупреждением.',
+      step2: 'Windows покажет синее окно SmartScreen. Нажмите «Подробнее», затем «Выполнить в любом случае».',
+      step3: 'Дальше установка обычная, а обновления приложение ставит само.',
+      sourceHint: 'Хотите собрать сами? Исходники целиком лежат на GitHub.',
     },
     reviews: {
       title: 'Что говорят',
@@ -555,6 +580,14 @@ export const dict: Record<LocaleCode, Dict> = {
       web: 'פתחו בדפדפן',
       mobileSoon: 'אפליקציות לנייד בתוכניות.',
       heroWin: 'הורדה ל-Windows',
+      unsignedTitle: 'גרסאות שולחן העבודה עדיין ללא חתימה',
+      unsignedText: 'תעודת חתימה עולה כסף, ו-Chatick חינמי וללא נותני חסות. Windows והדפדפן יזהירו אתכם על הקובץ. אין מה להסתיר: הקוד פתוח, ואפשר לבנות את אותה אפליקציה בעצמכם.',
+      howTo: 'מה יקרה בהתקנה',
+      howToClose: 'הבנתי',
+      step1: 'הדפדפן יאמר שהקובץ מורד לעיתים רחוקות. בחרו «שמירה» — ב-Chrome זה מוסתר מתחת לחץ שליד האזהרה.',
+      step2: 'Windows יציג חלון SmartScreen כחול. לחצו «מידע נוסף» ואז «הפעל בכל זאת».',
+      step3: 'מכאן ההתקנה רגילה, והאפליקציה מתעדכנת מעצמה.',
+      sourceHint: 'מעדיפים לבנות בעצמכם? הקוד המלא נמצא ב-GitHub.',
     },
     reviews: {
       title: 'מה אומרים',

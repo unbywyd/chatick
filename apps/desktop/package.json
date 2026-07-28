@@ -63,7 +63,8 @@
         "url": "https://chatick.com/releases",
         "channel": "latest"
       }
-    ]
+    ],
+    "afterAllArtifactBuild": "scripts/check-signature.mjs"
   },
   "dependencies": {
     "electron-updater": "^6.8.9"
