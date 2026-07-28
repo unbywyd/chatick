@@ -839,9 +839,6 @@ bridgeRoute.patch('/tasks/:id', async (c) => {
   const id = auth(c as never)
   const scope = await resolveProject(c as never)
   if ('error' in scope) return c.json({ error: scope.error }, scope.status)
-  const denied = await require(c as never, 'tasks.edit', scope.projectId)
-  if (denied) return c.json(denied, 403)
-
   const taskId = c.req.param('id')
   const existing = await db.query.tasks.findFirst({
     where: and(eq(tasks.id, taskId), eq(tasks.projectId, scope.projectId), isNull(tasks.deletedAt)),
@@ -861,12 +858,24 @@ bridgeRoute.patch('/tasks/:id', async (c) => {
     if (resolved === undefined) return c.json({ error: `Unknown assignee: ${String(b.assignee)}` }, 400)
     patch.assigneeId = resolved
   }
+
   if (b.dueDate !== undefined) {
     const due = parseDue(b.dueDate)
     if (due === undefined) return c.json({ error: `Cannot parse dueDate: ${String(b.dueDate)}` }, 400)
     patch.dueDate = due
   }
   if (!Object.keys(patch).length) return c.json({ error: 'Nothing to update' }, 400)
+
+  // Права — по тому, ЧТО меняют, как и в вебе: передвинуть карточку по доске
+  // может любой, кто видит задачи; переписывать её — только tasks.edit.
+  //
+  // Проверяем после разбора всего тела: иначе смена срока или исполнителя
+  // проскочила бы мимо проверки. Раньше мост требовал tasks.edit на любое
+  // изменение, и участник не мог отметить сделанной даже назначенную на него
+  // задачу — при том, что документы и заметки писать ему разрешено.
+  const statusOnly = Object.keys(patch).every((k) => k === 'status' || k === 'groupId' || k === 'sortOrder')
+  const denied = await require(c as never, statusOnly ? 'tasks.changeStatus' : 'tasks.edit', scope.projectId)
+  if (denied) return c.json(denied, 403)
 
   const [row] = await db.update(tasks).set(patch).where(eq(tasks.id, taskId)).returning()
   void logActivity({

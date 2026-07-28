@@ -159,6 +159,10 @@ Example — handle everything waiting for me:
   GET    /x/sprints
   POST   /x/sprints            {"name","startsAt?","endsAt?"}
 
+  Changing only the status (plus sprint or ordering) needs tasks.changeStatus,
+  which every member has — moving a card across the board is not the same as
+  rewriting the task. Touching anything else needs tasks.edit.
+
   assignee accepts "me", a user id, a name or an email.
   dueDate accepts ISO date or "tomorrow", "in 3 days", "next monday".
 
