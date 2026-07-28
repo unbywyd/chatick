@@ -49,7 +49,13 @@
     "deleteCompany": "Delete company",
     "deleteCompanyTitle": "Delete company?",
     "deleteAllProjects": "all projects of this company",
-    "companyDeleted": "Company «{{name}}» deleted"
+    "companyDeleted": "Company «{{name}}» deleted",
+    "welcomeTitle": "What should we call your workspace?",
+    "welcomeLead": "A company is the top level: projects, your team and shared settings live inside it.",
+    "welcomeLeadStrong": "Only your team sees the name, and you can change it any time.",
+    "welcomeHint": "The name of your studio, your agency, or just your surname — anything works.",
+    "welcomeCta": "Continue",
+    "welcomeFoot": "You can rename or delete the company later in settings. Deleting lives in a separate danger zone, with a confirmation and an email to every member."
   },
   "companyTabs": {
     "projects": "Projects",

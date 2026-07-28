@@ -217,6 +217,59 @@ function CompanyPicker({
   const companies = data?.companies ?? []
   const invites = data?.invites ?? []
 
+  // Первый вход: ни компаний, ни приглашений. Тут нет выбора — есть один
+  // вопрос, и строчка с полем на пустом экране выглядела недоделанной.
+  // Поэтому отдельный экран: вопрос крупно, поле под ним, всё остальное молчит.
+  if (!companies.length && !invites.length) {
+    return (
+      <div className="mx-auto flex min-h-[70vh] w-full max-w-xl flex-col justify-center py-10">
+        <h1 className="text-3xl font-bold leading-tight tracking-tight sm:text-4xl">
+          {t('start.welcomeTitle')}
+        </h1>
+        <p className="mt-4 text-base leading-relaxed text-muted-foreground">
+          {t('start.welcomeLead')}{' '}
+          <span className="font-medium text-foreground">{t('start.welcomeLeadStrong')}</span>
+        </p>
+
+        <form
+          className="mt-10"
+          onSubmit={(e) => {
+            e.preventDefault()
+            if (name.trim()) createCompany.mutate(name.trim())
+          }}
+        >
+          {/* Поле-строка, без коробки: на пустом экране рамка ввода выглядит
+              бланком, а строка — вопросом, на который отвечают. */}
+          <input
+            autoFocus
+            value={name}
+            onChange={(e) => setName(e.target.value)}
+            placeholder={t('start.companyName')}
+            maxLength={80}
+            className="w-full border-0 border-b border-border bg-transparent pb-3 text-2xl font-medium outline-none transition-colors placeholder:text-muted-foreground/50 focus:border-brand sm:text-3xl"
+          />
+          <p className="mt-3 text-sm text-muted-foreground">{t('start.welcomeHint')}</p>
+
+          <Button
+            variant="brand"
+            type="submit"
+            disabled={!name.trim() || createCompany.isPending}
+            className="mt-8 h-11 gap-3 px-6 text-base"
+          >
+            {t('start.welcomeCta')}
+            <kbd className="rounded border border-current/30 px-1.5 py-0.5 text-[10px] font-semibold opacity-70">
+              Enter
+            </kbd>
+          </Button>
+        </form>
+
+        <p className="mt-12 max-w-lg text-xs leading-relaxed text-muted-foreground">
+          {t('start.welcomeFoot')}
+        </p>
+      </div>
+    )
+  }
+
   return (
     <div className="space-y-8">
       <div>
