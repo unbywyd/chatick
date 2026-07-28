@@ -30,6 +30,21 @@ export function UploadDialog({
   const [keepOriginal, setKeepOriginal] = useState(false)
   const [list, setList] = useState(files)
 
+  // Диалог переиспользуется: выбрали файлы, отменили, выбрали снова — React
+  // оставляет прежний компонент, и список внутри остаётся от прошлого раза.
+  // Выглядело так, будто новый выбор не срабатывает вовсе.
+  useEffect(() => {
+    setList(files)
+    setKeepOriginal(false)
+  }, [files])
+
+  // Список опустошили крестиками — закрываем: пустое окно с недоступной
+  // кнопкой ничего не сообщает, а закрыть его человек пытается тем же
+  // выбором файлов, который тогда попадает в уже открытый диалог.
+  useEffect(() => {
+    if (!list.length) onCancel()
+  }, [list.length, onCancel])
+
   const images = list.filter((f) => f.type.startsWith('image/'))
   const totalSize = list.reduce((n, f) => n + f.size, 0)
 

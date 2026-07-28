@@ -1,4 +1,4 @@
-import { useState, useRef } from 'react'
+import { useEffect, useMemo, useState, useRef } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { useTranslation } from 'react-i18next'
 import { toast } from 'sonner'
@@ -50,6 +50,18 @@ export function TaskComments({
   const [replyTo, setReplyTo] = useState<Comment | null>(null)
   const [editing, setEditing] = useState<string | null>(null)
   const [pending, setPending] = useState<File[]>([])
+  // Оригиналы и здесь по желанию: механизм общий, и делать в комментариях
+  // исключение значит заставлять помнить, где как. По умолчанию сжимаем.
+  const [keepOriginal, setKeepOriginal] = useState(false)
+
+  // Ссылки на превью держим отдельно и освобождаем при смене набора:
+  // createObjectURL прямо в разметке создавал бы новую ссылку на каждый
+  // перерисовку, и браузер держал бы их все до перезагрузки страницы.
+  const previews = useMemo(
+    () => pending.map((f) => (f.type.startsWith('image/') ? URL.createObjectURL(f) : null)),
+    [pending],
+  )
+  useEffect(() => () => previews.forEach((u) => u && URL.revokeObjectURL(u)), [previews])
   const [editorKey, setEditorKey] = useState(0) // сброс редактора после отправки
   const fileRef = useRef<HTMLInputElement>(null)
 
@@ -69,12 +81,11 @@ export function TaskComments({
   // загрузить прикреплённые файлы (как файлы проекта без владельца-сообщения), получить их id
   async function uploadPending(): Promise<string[]> {
     const ids: string[] = []
-    // В комментариях оригиналы не храним: это переписка, а не хранилище
-    // файлов — за оригиналом идут во вложения задачи.
     for (const file of pending) {
       const fd = new FormData()
       fd.append('file', file)
       fd.append('pending', '1') // временный до отправки комментария (SPEC §8.17)
+      if (keepOriginal) fd.append('keepOriginal', '1')
       const res = await fetch(`${API_URL}/api/v1/files`, { method: 'POST', headers: { Authorization: `Bearer ${getProjectToken()}` }, body: fd })
       if (!res.ok) {
         const b = (await res.json().catch(() => ({}))) as { error?: string }
@@ -99,6 +110,7 @@ export function TaskComments({
       setBody('')
       setReplyTo(null)
       setPending([])
+      setKeepOriginal(false)
       setEditorKey((k) => k + 1)
       refresh()
     },
@@ -226,14 +238,33 @@ export function TaskComments({
         {pending.length > 0 && (
           <div className="mt-1.5 flex flex-wrap gap-1.5">
             {pending.map((f, i) => (
-              <span key={i} className="inline-flex items-center gap-1 rounded border px-1.5 py-0.5 text-xs">
-                <Paperclip className="size-3" /> {f.name}
+              <span key={i} className="inline-flex items-center gap-1.5 rounded border py-0.5 pe-1.5 ps-1 text-xs">
+                {/* Превью вместо скрепки: по имени файла со скриншота не
+                    понять, тот ли он — а прикрепив не тот, узнаёшь об этом
+                    уже после отправки. */}
+                {f.type.startsWith('image/') ? (
+                  <img src={previews[i] ?? ''} alt="" className="size-5 rounded object-cover" />
+                ) : (
+                  <Paperclip className="size-3" />
+                )}
+                {f.name}
                 <button onClick={() => setPending((p) => p.filter((_, j) => j !== i))} className="hover:text-destructive">
                   <X className="size-3" />
                 </button>
               </span>
             ))}
           </div>
+        )}
+        {pending.some((f) => f.type.startsWith('image/')) && (
+          <label className="mt-1.5 flex w-fit cursor-pointer items-center gap-2 text-xs text-muted-foreground hover:text-foreground">
+            <input
+              type="checkbox"
+              checked={keepOriginal}
+              onChange={(e) => setKeepOriginal(e.target.checked)}
+              className="size-3.5 accent-brand"
+            />
+            {t('upload.keepOriginal')}
+          </label>
         )}
         <div className="mt-1.5 flex items-center justify-between">
           <input
@@ -242,8 +273,13 @@ export function TaskComments({
             multiple
             hidden
             onChange={(e) => {
-              if (e.target.files?.length) setPending((p) => [...p, ...Array.from(e.target.files!)])
+              // Файлы забираем ДО сброса value: setPending выполняет функцию
+              // отложенно, а сброс к тому времени уже обнулил e.target.files —
+              // добавлять оказывалось нечего. Сброс нужен, чтобы повторный
+              // выбор того же файла тоже считался изменением.
+              const picked = Array.from(e.target.files ?? [])
               e.target.value = ''
+              if (picked.length) setPending((p) => [...p, ...picked])
             }}
           />
           <div className="flex items-center gap-2">
