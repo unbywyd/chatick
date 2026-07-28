@@ -435,8 +435,10 @@ export function useDesktopSync() {
         // Токен нужного проекта, а не тот, что лежит с прошлого раза. Без
         // этого «плей» и «стоп» молча не срабатывали: запрос уходил с чужим
         // токеном и падал, а человек видел лишь неподвижную кнопку.
+        // acceptRules нужен только при самом первом входе в проект; из трея
+        // сюда попадают уже вошедшие — проект есть в их списке.
         const { token } = await api<{ token: string }>(
-          `/api/v1/projects/${target}/token`,
+          `/api/v1/projects/${target}/enter`,
           { method: 'POST', body: JSON.stringify({ acceptRules: true }) },
         )
         setProjectToken(token)
