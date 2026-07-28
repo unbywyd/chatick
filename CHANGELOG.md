@@ -7,6 +7,20 @@ refuses to run otherwise, so a release can never ship without a description.
 
 Written in English only: this file is published on the website.
 
+## 0.2.6 — 2026-07-28
+
+### Fixed
+
+- Granting access from the web failed with "you are not a member of this
+  project" even for members: the internal prefix that tells a company apart
+  from a project was sent to the server along with the id.
+
+### Changed
+
+- The connect panel in the tray reads better: the selected row is actually
+  visible, Allow carries more weight than Cancel, and an empty list no longer
+  leaves a hole in the middle of the panel.
+
 ## 0.2.5 — 2026-07-28
 
 ### Fixed
