@@ -154,8 +154,12 @@ async function identityOf(
   if (companyId) {
     const company = await db.query.companies.findFirst({ where: eq(companies.id, companyId) })
     const role = await companyRoleOf(companyId, userId)
-    // доступ ко всей компании имеет смысл только для admin/manager
-    if (!company || (role !== 'admin' && role !== 'manager')) return null
+    // Достаточно состоять в компании: туннель открывает только те её проекты,
+    // где человек участник, и с его же правами — они проверяются в каждом
+    // запросе, ниже по течению. Требование admin/manager здесь ничего не
+    // защищало, зато молча ломало обмен кода на токен: подтверждение проходило,
+    // а ассистент получал «expired».
+    if (!company || !role) return null
     return {
       ...base,
       projectId: null,
