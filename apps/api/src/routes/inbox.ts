@@ -1,7 +1,7 @@
 import { Hono } from 'hono'
 import { zValidator } from '@hono/zod-validator'
 import { z } from 'zod'
-import { and, desc, eq, inArray, isNull, sql } from 'drizzle-orm'
+import { and, desc, eq, gte, inArray, isNull, or, sql } from 'drizzle-orm'
 import { db } from '../db/client.js'
 import { notifications, projectMembers, projects, tasks, users, userNotificationPrefs } from '../db/schema.js'
 import { requireSession, type SessionEnv } from '../auth.js'
@@ -85,9 +85,18 @@ inboxRoute.get('/tasks', async (c) => {
     .from(tasks)
     .innerJoin(projects, eq(projects.id, tasks.projectId))
     .innerJoin(projectMembers, and(eq(projectMembers.projectId, tasks.projectId), eq(projectMembers.userId, sub)))
-    .where(and(eq(tasks.assigneeId, sub), isNull(tasks.deletedAt), sql`${tasks.status} <> 'done'`))
+    // Завершённые за трое суток остаются в списке: «готово» нажимают и
+    // случайно, и вернуть статус удобнее там же, где его сменили, — а не
+    // идти в приложение искать задачу, которая только что исчезла.
+    .where(
+      and(
+        eq(tasks.assigneeId, sub),
+        isNull(tasks.deletedAt),
+        or(sql`${tasks.status} <> 'done'`, gte(tasks.updatedAt, sql`now() - interval '3 days'`)),
+      ),
+    )
     .orderBy(desc(tasks.updatedAt))
-    .limit(50)
+    .limit(60)
 
   return c.json({
     items: rows.map((r) => ({

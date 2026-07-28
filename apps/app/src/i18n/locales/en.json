@@ -1149,7 +1149,8 @@
     "updateReady": "Restart to update",
     "emptyProjects": "No projects yet",
     "pickProjectForTimer": "Open a project to start tracking time",
-    "pickProject": "Choose a project"
+    "pickProject": "Choose a project",
+    "showDone": "show recently done"
   },
   "update": {
     "available": "A new version is available",

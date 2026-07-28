@@ -1149,7 +1149,8 @@
     "updateReady": "הפעילו מחדש לעדכון",
     "emptyProjects": "אין עדיין פרויקטים",
     "pickProjectForTimer": "פתחו פרויקט כדי להתחיל מעקב זמן",
-    "pickProject": "בחרו פרויקט"
+    "pickProject": "בחרו פרויקט",
+    "showDone": "הצגת משימות שהושלמו לאחרונה"
   },
   "update": {
     "available": "זמינה גרסה חדשה",

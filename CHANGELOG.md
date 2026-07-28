@@ -7,6 +7,20 @@ refuses to run otherwise, so a release can never ship without a description.
 
 Written in English only: this file is published on the website.
 
+## 0.3.1 — 2026-07-28
+
+### Changed
+
+- The timer's project picker labels every project with its company — inline,
+  on each row, not as group headers: with two companies that share a name,
+  headers told you nothing. The selected project in the header reads
+  "Company · Project" too.
+- Tasks marked done stay in the tray list for three days, hidden behind a
+  "show recently done" toggle. "Done" gets pressed by accident, and undoing it
+  belongs where it happened — not in the app, hunting for a task that just
+  vanished. Done rows are dimmed and sort below open ones.
+- The tray header shows who is signed in — avatar or initials on the right.
+
 ## 0.3.0 — 2026-07-28
 
 ### Changed

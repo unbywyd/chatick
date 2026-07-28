@@ -117,6 +117,18 @@
       .group-chev { flex: 0 0 auto; color: var(--muted); transition: transform .12s; }
       .group-head.closed .group-chev { transform: rotate(-90deg); }
       .filter-wrap { padding: 4px 4px 6px; }
+      /* Кем вошли: маленький ответ на большой вопрос «от чьего имени всё это». */
+      .me-avatar { width: 28px; height: 28px; font-size: 11px; }
+      /* Тумблер завершённых: ссылка, а не кнопка — действие второстепенное. */
+      .done-toggle {
+        border: 0; background: none; cursor: pointer;
+        color: var(--muted); font: inherit; font-size: 11px;
+        padding: 2px 6px; margin: 0 4px 4px;
+      }
+      .done-toggle:hover { color: var(--text); }
+      .done-toggle.on { color: var(--brand); }
+      .row.done-row { opacity: .55; }
+      .row.done-row:hover { opacity: 1; }
 
       /* --- вкладки --- */
       nav {
@@ -423,6 +435,7 @@
           <svg class="chev" width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="m6 9 6 6 6-6"/></svg>
         </button>
       </div>
+      <span class="avatar me-avatar" id="meAvatar" hidden></span>
     </div>
     <div class="proj-menu" id="projMenu" hidden>
       <input id="projSearch" class="target-search" spellcheck="false" placeholder="Search…" />
@@ -471,6 +484,8 @@
       let taskQ = ''
       let collapsed = {}
       try { collapsed = JSON.parse(localStorage.getItem('chatick.collapsedTasks') || '{}') } catch {}
+      let showDone = false
+      try { showDone = localStorage.getItem('chatick.showDone') === '1' } catch {}
 
       const projectById = (id) => (state.projects || []).find((p) => p.id === id)
       // Подпись компании — только когда компаний больше одной: иначе это шум.
@@ -564,16 +579,30 @@
         const btn = $('projBtn')
         btn.disabled = Boolean(t)
         btn.classList.toggle('open', projMenuOpen)
+        const label = (p) => {
+          const cname = companyNameOf(p)
+          return cname ? `${cname} · ${p.name}` : p.name
+        }
         const name = t
-          ? `${t.projectName || sel?.name || '—'}${t.description ? ` · ${t.description}` : ''}`
+          ? `${sel ? label(sel) : t.projectName || '—'}${t.description ? ` · ${t.description}` : ''}`
           : sel
-            ? sel.name
+            ? label(sel)
             : T('pickProject', 'Choose a project')
         $('projName').textContent = name
         $('projDot').style.background = sel?.color || '#3a3a3a'
         // Плей гаснет, только когда стартовать некуда.
         $('play').disabled = !t && !selId
         if (!projMenuOpen) $('projMenu').hidden = true
+
+        const me = state.user
+        const av = $('meAvatar')
+        av.hidden = !me
+        if (me) {
+          av.title = me.name ? `${me.name} · ${me.email}` : me.email
+          av.innerHTML = me.avatarUrl
+            ? `<img src="${escape(me.avatarUrl)}" alt="">`
+            : escape(initials(me.name || me.email))
+        }
       }
 
       /** Список проектов дропдауна: поиск + группировка по компаниям. */
@@ -583,25 +612,19 @@
           (p) => !q || p.name.toLowerCase().includes(q) || companyNameOf(p).toLowerCase().includes(q),
         )
         const selId = currentTimerProject()
-        const byCompany = new Map()
-        for (const p of list) {
-          if (!byCompany.has(p.companyId)) byCompany.set(p.companyId, [])
-          byCompany.get(p.companyId).push(p)
-        }
-        const multi = (state.companies || []).length > 1
+        // Компания — подписью у каждого проекта, а не заголовком группы:
+        // одноимённые проекты (и даже одноимённые компании) иначе не различить.
         let html = ''
-        for (const [cid, items] of byCompany) {
-          if (multi) {
-            const cname = (state.companies || []).find((c) => c.id === cid)?.name || ''
-            html += `<div class="pick-group">${escape(cname)}</div>`
-          }
-          for (const p of items) {
-            html += `
+        for (const p of list) {
+          const cname = companyNameOf(p)
+          html += `
               <button class="pick ${p.id === selId ? 'on' : ''}" data-proj="${escape(p.id)}">
                 <span class="dot" style="background:${escape(p.color || '#3a3a3a')}"></span>
-                <span class="pick-name">${escape(p.name)}</span>
+                <span class="pick-body">
+                  <span class="pick-name">${escape(p.name)}</span>
+                  ${cname ? `<span class="pick-sub">${escape(cname)}</span>` : ''}
+                </span>
               </button>`
-          }
         }
         $('projList').innerHTML = html || `<p class="empty">${T('connectNothingFound', 'Nothing found')}</p>`
       }
@@ -683,8 +706,16 @@
           const q = taskQ.trim().toLowerCase()
           rows.push(`<div class="filter-wrap"><input id="taskSearch" class="target-search" spellcheck="false"
                        placeholder="${T('connectSearch', 'Search…')}" value="${escape(taskQ)}" /></div>`)
+          // Завершённые прячутся за тумблером: случайное «готово» отменяется
+          // здесь же, но обычно этот хвост только мешал бы.
+          const doneCount = items.filter((t) => t.status === 'done').length
+          if (doneCount) {
+            rows.push(`<button class="done-toggle ${showDone ? 'on' : ''}" id="doneToggle">
+              ${showDone ? '✓ ' : ''}${T('showDone', 'show recently done')} (${doneCount})</button>`)
+          }
           const byProject = new Map()
           for (const t of items) {
+            if (t.status === 'done' && !showDone) continue
             const key = t.projectId || '?'
             if (!byProject.has(key)) byProject.set(key, [])
             byProject.get(key).push(t)
@@ -710,14 +741,15 @@
                   <span class="group-name">${escape(p.name)}</span>
                   ${cname ? `<span class="group-sub">${escape(cname)}</span>` : ''}
                 </span>
-                <span class="group-sub">${filtered.length}</span>
+                <span class="group-sub">${filtered.filter((t) => t.status !== 'done').length}</span>
               </div>`)
             if (isClosed) continue
+            filtered.sort((a, b) => (a.status === 'done' ? 1 : 0) - (b.status === 'done' ? 1 : 0))
             // Кнопки плей здесь больше нет: таймер живёт в одном месте — в
             // шапке. Второй путь к нему был источником рассинхрона и багов.
             for (const t of filtered) {
               rows.push(`
-              <div class="row">
+              <div class="row ${t.status === 'done' ? 'done-row' : ''}">
                 ${statusIcon(t.status || 'todo', 15)}
                 <button class="body" data-link="${escape(t.link)}"
                         style="border:0;background:none;color:inherit;font:inherit;text-align:start;cursor:pointer;padding:0">
@@ -1108,6 +1140,13 @@
         const status = e.target.closest('[data-status]')
         if (status) {
           openStatusMenu(status)
+          return
+        }
+        // Показать/спрятать недавно завершённые.
+        if (e.target.closest('#doneToggle')) {
+          showDone = !showDone
+          try { localStorage.setItem('chatick.showDone', showDone ? '1' : '0') } catch {}
+          renderList()
           return
         }
         // Свернуть/развернуть группу задач.

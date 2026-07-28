@@ -3,7 +3,7 @@ import { useLocation, useNavigate } from 'react-router-dom'
 import { useTranslation } from 'react-i18next'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { toast } from 'sonner'
-import { api, API_URL, getSessionToken, setProjectToken } from '@/lib/api'
+import { api, API_URL, getSessionToken, setProjectToken, type Me } from '@/lib/api'
 
 // Связь веб-приложения с десктопной оболочкой (SPEC §8.33).
 //
@@ -74,6 +74,8 @@ type DesktopState = {
   company: { id: string; name: string; canGrantCompany: boolean } | null
   /** все компании человека: подключаться можно к любой, не только к первой */
   companies: { id: string; name: string; canGrantCompany: boolean }[]
+  /** Кто вошёл: аватар в шапке панели отвечает на «от чьего имени всё это». */
+  user: { name: string; email: string; avatarUrl: string | null } | null
   /** Действующие туннели ассистентов — их видно и можно закрыть из панели. */
   connections: { id: string; clientName: string; scope: 'company' | 'project' | 'all'; where: string }[]
   /**
@@ -183,6 +185,14 @@ export function useDesktopSync() {
 
   // Активный проект — из адреса: /p/<id>/...
   const activeProjectId = location.pathname.match(/^\/p\/([^/]+)/)?.[1]
+
+  // Кто вошёл — для аватарки в шапке панели. Ключ общий с приложением.
+  const me = useQuery({
+    queryKey: ['me'],
+    enabled: Boolean(bridge) && authed,
+    queryFn: () => api<Me>('/api/v1/auth/me'),
+    staleTime: 5 * 60_000,
+  })
 
   // Непрочитанные — то же, что показывает колокольчик: только адресованное мне.
   const inbox = useQuery({
@@ -297,7 +307,7 @@ export function useDesktopSync() {
         unread: !n.readAt,
       })),
       // сервер уже отдал только мои и только незакрытые, из всех проектов
-      tasks: (authed ? tasks.data?.items ?? [] : []).slice(0, 30).map((t) => ({
+      tasks: (authed ? tasks.data?.items ?? [] : []).slice(0, 60).map((t) => ({
         id: t.id,
         number: t.number,
         title: t.title,
@@ -316,6 +326,10 @@ export function useDesktopSync() {
         unread: p.stats?.unread ?? 0,
       })),
       project: authed && activeProjectId ? { id: activeProjectId, name: nameOf(activeProjectId) ?? '' } : null,
+      user:
+        authed && me.data
+          ? { name: me.data.name, email: me.data.email, avatarUrl: me.data.avatarUrl }
+          : null,
       company:
         authed && company
           ? {
@@ -392,6 +406,7 @@ export function useDesktopSync() {
         connectAllProjectsOf: t('connect.allProjectsOf'),
         connectSearch: t('connect.search'),
         pickProject: t('desktop.pickProject'),
+        showDone: t('desktop.showDone'),
         updateReady: t('desktop.updateReady'),
         quit: t('desktop.quit'),
         timerRunning: t('desktop.timerRunning'),
@@ -402,7 +417,7 @@ export function useDesktopSync() {
         dir: i18n.dir(),
       },
     })
-  }, [bridge, authed, inbox.data, running.data?.items, projects.data, tasks.data, bridgeSessions.data, company, activeProjectId, t, i18n, stateNonce])
+  }, [bridge, authed, inbox.data, running.data?.items, projects.data, tasks.data, bridgeSessions.data, company, me.data, activeProjectId, t, i18n, stateNonce])
 
   // Системные уведомления показывает useSystemNotifications — общий хук для
   // веба и десктопа. Раньше это жило здесь и работало только в Electron.
