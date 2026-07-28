@@ -108,7 +108,14 @@ export async function uploadInlineImage(file: File): Promise<{ id: string; url: 
 
 // --- types ---
 export type Me = { id: string; email: string; name: string; locale: string; phone: string | null; avatarUrl: string | null }
-export type Company = { id: string; name: string; logoUrl: string | null; myRole: 'admin' | 'manager' | 'member' }
+export type Company = {
+  id: string
+  name: string
+  logoUrl: string | null
+  myRole: 'admin' | 'manager' | 'member'
+  /** сколько проектов внутри — по нему решается, вести ли визардом первого входа */
+  projectsCount?: number
+}
 export type CompanyInvite = { id: string; token: string; role: string; company: { id: string; name: string; logoUrl: string | null } }
 export type ProjectListItem = {
   id: string

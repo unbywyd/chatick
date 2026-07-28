@@ -107,6 +107,11 @@ export const companyInvites = pgTable(
     token: text('token').notNull().unique(),
     status: inviteStatus('status').notNull().default('pending'),
     invitedById: text('invited_by_id').references(() => users.id, { onDelete: 'set null' }),
+    // Куда добавить сразу после принятия. Пригласить нового человека прямо в
+    // проект нельзя — учётной записи ещё нет, а участник проекта ссылается на
+    // пользователя. Поэтому запоминаем намерение здесь и исполняем его, когда
+    // человек примет приглашение и станет существовать.
+    projectId: text('project_id').references(() => projects.id, { onDelete: 'set null' }),
     createdAt: createdAt(),
     updatedAt: updatedAt(),
   },

@@ -31,8 +31,25 @@ companiesRoute.get('/', async (c) => {
     .innerJoin(companies, eq(companies.id, companyInvites.companyId))
     .where(and(eq(companyInvites.email, email), eq(companyInvites.status, 'pending')))
 
+  // Сколько проектов в каждой компании: по этому числу интерфейс решает,
+  // вести ли человека визардом первого входа. Одним запросом здесь — дешевле,
+  // чем отдельным запросом со стороны клиента на каждом заходе в компанию.
+  const ids = memberships.map((m) => m.company.id)
+  const counts = ids.length
+    ? await db
+        .select({ companyId: projects.companyId, count: sql<number>`count(*)::int` })
+        .from(projects)
+        .where(inArray(projects.companyId, ids))
+        .groupBy(projects.companyId)
+    : []
+  const byCompany = new Map(counts.map((r) => [r.companyId, r.count]))
+
   return c.json({
-    companies: memberships.map((m) => ({ ...m.company, myRole: m.role })),
+    companies: memberships.map((m) => ({
+      ...m.company,
+      myRole: m.role,
+      projectsCount: byCompany.get(m.company.id) ?? 0,
+    })),
     invites: invites.map((i) => ({ id: i.id, token: i.token, role: i.role, company: { id: i.company.id, name: i.company.name, logoUrl: i.company.logoUrl } })),
   })
 })
@@ -467,14 +484,30 @@ companiesRoute.post('/:companyId/leave', async (c) => {
 // Пригласить в компанию (email + роль) — с подтверждением (SPEC §3.1)
 companiesRoute.post(
   '/:companyId/invites',
-  zValidator('json', z.object({ email: z.string().email().toLowerCase(), role: z.enum(['admin', 'manager', 'member']).default('member') })),
+  zValidator(
+    'json',
+    z.object({
+      email: z.string().email().toLowerCase(),
+      role: z.enum(['admin', 'manager', 'member']).default('member'),
+      // Необязательный: приглашая в компанию, можно сразу позвать в проект
+      projectId: z.string().optional(),
+    }),
+  ),
   async (c) => {
     const { sub } = c.get('session')
     const companyId = c.req.param('companyId')
     const myRole = await memberRoleIn(companyId, sub)
     if (!canManageInvites(myRole)) return c.json({ error: 'Forbidden' }, 403)
 
-    const { email, role } = c.req.valid('json')
+    const { email, role, projectId } = c.req.valid('json')
+
+    // Проект принимаем только из этой же компании: иначе приглашение стало бы
+    // способом раздать доступ куда угодно.
+    let inviteProjectId: string | null = null
+    if (projectId) {
+      const p = await db.query.projects.findFirst({ where: eq(projects.id, projectId) })
+      if (p?.companyId === companyId) inviteProjectId = p.id
+    }
 
     const existing = await db.query.companyInvites.findFirst({
       where: and(eq(companyInvites.companyId, companyId), eq(companyInvites.email, email), eq(companyInvites.status, 'pending')),
@@ -484,7 +517,7 @@ companiesRoute.post(
     const token = nanoid(32)
     const [invite] = await db
       .insert(companyInvites)
-      .values({ companyId, email, role, token, invitedById: sub })
+      .values({ companyId, email, role, token, invitedById: sub, projectId: inviteProjectId })
       .returning()
 
     const company = await db.query.companies.findFirst({ where: eq(companies.id, companyId) })
@@ -566,6 +599,21 @@ companiesRoute.post('/invites/:token/accept', async (c) => {
     await db.insert(companyMembers).values({ companyId: invite.companyId, userId: sub, role: invite.role })
   }
   await db.update(companyInvites).set({ status: 'accepted' }).where(eq(companyInvites.id, invite.id))
+
+  // Звали сразу в проект — исполняем обещание теперь, когда человек появился.
+  // Молча пропускаем, если проект успели удалить: приглашение в компанию от
+  // этого не должно ломаться.
+  if (invite.projectId) {
+    const project = await db.query.projects.findFirst({ where: eq(projects.id, invite.projectId) })
+    if (project?.companyId === invite.companyId) {
+      const inProject = await db.query.projectMembers.findFirst({
+        where: and(eq(projectMembers.projectId, project.id), eq(projectMembers.userId, sub)),
+      })
+      if (!inProject) {
+        await db.insert(projectMembers).values({ projectId: project.id, userId: sub, role: 'member' })
+      }
+    }
+  }
 
   const company = await db.query.companies.findFirst({ where: eq(companies.id, invite.companyId) })
   return c.json({ ok: true, company })

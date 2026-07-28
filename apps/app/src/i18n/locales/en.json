@@ -1156,5 +1156,42 @@
       "goFiles": "Files",
       "goTime": "Time tracker"
     }
+  },
+  "wizard": {
+    "stepOf": "Step {{current}} of {{total}}",
+    "skip": "Skip for now",
+    "badEmail": "That does not look like an email address",
+    "invitesSent": "{{count}} invitation sent",
+    "invitesSent_other": "{{count}} invitations sent",
+    "invitesFailed": "{{count}} invitation could not be sent",
+    "invitesFailed_other": "{{count}} invitations could not be sent",
+    "company": {
+      "title": "What should we call your workspace?",
+      "lead": "A company is the top level: projects, your team and shared settings live inside it.",
+      "leadStrong": "Only your team sees the name, and you can change it any time.",
+      "placeholder": "Company name",
+      "hint": "The name of your studio, your agency, or just your surname — anything works.",
+      "cta": "Continue",
+      "foot": "You can rename or delete the company later in settings. Deleting lives in a separate danger zone, with a confirmation and an email to every member."
+    },
+    "project": {
+      "title": "What are you working on?",
+      "lead": "A project holds its own chat, tasks, documents and files.",
+      "leadStrong": "Start with one — you can add more at any time.",
+      "placeholder": "Project name",
+      "hint": "A client, a product, or simply \"Website\" — whatever you actually call it.",
+      "cta": "Create project",
+      "foot": "Chat rules and AI behaviour have sensible defaults; you can adjust them in the project settings whenever you like."
+    },
+    "team": {
+      "title": "Who is working on it with you?",
+      "lead": "Invitations go out by email. Everyone you add joins the company and this project at once.",
+      "leadStrong": "Working alone is fine too — you can invite people later.",
+      "placeholder": "name@company.com",
+      "hint": "Type an address and press Enter. Add as many as you need.",
+      "cta": "Send invitations",
+      "add": "Add",
+      "foot": "People appear in the project as soon as they accept. You can change their roles, or invite more, in the team settings."
+    }
   }
 }
