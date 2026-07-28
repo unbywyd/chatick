@@ -6,7 +6,7 @@ import { nanoid } from 'nanoid'
 import { db } from '../db/client.js'
 import { documents, documentVersions, users } from '../db/schema.js'
 import { requireProject, type ProjectEnv } from '../auth.js'
-import { hasPermission } from './projects.js'
+import { hasPermission, ownsOrManages } from './projects.js'
 import { logActivity } from '../lib/audit.js'
 import { htmlToText, sanitizeHtml } from '../lib/sanitize-html.js'
 import { broadcast } from '../ws.js'
@@ -198,7 +198,18 @@ documentsRoute.post('/:id/share', zValidator('json', z.object({ enabled: z.boole
 // Удалить (soft-delete, восстановимо 7 дней — SPEC §8.21)
 documentsRoute.delete('/:id', async (c) => {
   const { projectId, sub } = c.get('auth')
-  if (!(await hasPermission(projectId, sub, 'documents.delete'))) return c.json({ error: 'Forbidden' }, 403)
+  const doc = await db.query.documents.findFirst({
+    where: and(eq(documents.id, c.req.param('id')), eq(documents.projectId, projectId)),
+  })
+  if (!doc) return c.json({ error: 'Not found' }, 404)
+
+  // Свой документ участник удаляет сам: он его и завёл. Чужой — только с
+  // documents.delete. Удаление мягкое, восстановимо 7 дней.
+  const canDeleteAny = await hasPermission(projectId, sub, 'documents.delete')
+  const canDeleteOwn =
+    (await hasPermission(projectId, sub, 'documents.write')) &&
+    (await ownsOrManages(projectId, sub, [doc.createdById]))
+  if (!canDeleteAny && !canDeleteOwn) return c.json({ error: 'Forbidden' }, 403)
   const id = c.req.param('id')
   const d = await db.query.documents.findFirst({ where: and(eq(documents.id, id), eq(documents.projectId, projectId)) })
   if (!d) return c.json({ error: 'Not found' }, 404)

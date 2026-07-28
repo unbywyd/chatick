@@ -5,7 +5,7 @@ import { and, asc, desc, eq, sql } from 'drizzle-orm'
 import { db } from '../db/client.js'
 import { files, projects, taskComments, taskGroups, taskNotes, tasks, users } from '../db/schema.js'
 import { requireProject, type ProjectEnv } from '../auth.js'
-import { hasPermission } from './projects.js'
+import { hasPermission, ownsOrManages } from './projects.js'
 import { improveTask, validateTask, generateTaskNotes } from '../lib/llm.js'
 import { buildTeamContext } from '../lib/memory.js'
 import { notify, extractMentions } from '../lib/notify.js'
@@ -215,9 +215,14 @@ tasksRoute.patch(
     // drag: смена статуса/группы/порядка — по changeStatus (лёгкое перемещение на доске)
     const statusOnly = keys.every((k) => k === 'status' || k === 'sortOrder' || k === 'groupId')
 
+    // Статус — любому, кто видит доску: отметить работу сделанной должен уметь
+    // тот, кто её делает. Всё остальное — только в своей задаче: участник
+    // распоряжается тем, что завёл сам или что назначено на него, а чужую
+    // задачу не переписывает.
     const permitted = statusOnly
       ? (await hasPermission(projectId, sub, 'tasks.changeStatus')) || (await hasPermission(projectId, sub, 'tasks.edit'))
-      : await hasPermission(projectId, sub, 'tasks.edit')
+      : (await hasPermission(projectId, sub, 'tasks.edit')) &&
+        (await ownsOrManages(projectId, sub, [task.createdById, task.assigneeId]))
     if (!permitted) return c.json({ error: 'Forbidden' }, 403)
 
     const patch: Record<string, unknown> = {}
@@ -254,11 +259,17 @@ tasksRoute.patch(
 // Удалить — tasks.delete
 tasksRoute.delete('/:taskId', async (c) => {
   const { projectId, sub } = c.get('auth')
-  if (!(await hasPermission(projectId, sub, 'tasks.delete'))) return c.json({ error: 'Forbidden' }, 403)
-
   const taskId = c.req.param('taskId')
   const task = await db.query.tasks.findFirst({ where: and(eq(tasks.id, taskId), eq(tasks.projectId, projectId)) })
   if (!task) return c.json({ error: 'Not found' }, 404)
+
+  // Свою задачу участник удаляет сам; чужую — только тот, у кого есть
+  // tasks.delete. Удаление мягкое, восстановимо 7 дней.
+  const canDeleteAny = await hasPermission(projectId, sub, 'tasks.delete')
+  const canDeleteOwn =
+    (await hasPermission(projectId, sub, 'tasks.create')) &&
+    (await ownsOrManages(projectId, sub, [task.createdById, task.assigneeId]))
+  if (!canDeleteAny && !canDeleteOwn) return c.json({ error: 'Forbidden' }, 403)
 
   // soft-delete (SPEC §8.21): восстановимо 7 дней
   await db.update(tasks).set({ deletedAt: new Date(), deletedById: sub }).where(eq(tasks.id, taskId))

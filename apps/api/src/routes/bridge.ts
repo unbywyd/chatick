@@ -24,8 +24,7 @@ import {
   memberDomains,
   projectRoleOf,
   PROJECT_COLORS,
-  type ProjectPermission,
-} from './projects.js'
+  type ProjectPermission, ownsOrManages } from './projects.js'
 import { nanoid } from 'nanoid'
 import { authenticateBridge, closeSession, startDeviceAuth, pollDeviceAuth, type BridgeIdentity } from '../lib/bridge-auth.js'
 import { connectDoc, guideDoc } from '../lib/bridge-docs.js'
@@ -876,6 +875,11 @@ bridgeRoute.patch('/tasks/:id', async (c) => {
   const statusOnly = Object.keys(patch).every((k) => k === 'status' || k === 'groupId' || k === 'sortOrder')
   const denied = await require(c as never, statusOnly ? 'tasks.changeStatus' : 'tasks.edit', scope.projectId)
   if (denied) return c.json(denied, 403)
+  // Чужую задачу не переписываем — то же правило, что в интерфейсе: иначе
+  // ассистент может больше, чем человек, от чьего имени он действует.
+  if (!statusOnly && !(await ownsOrManages(scope.projectId, id.userId, [existing.createdById, existing.assigneeId]))) {
+    return c.json({ error: 'Forbidden: you can only edit tasks you created or that are assigned to you' }, 403)
+  }
 
   const [row] = await db.update(tasks).set(patch).where(eq(tasks.id, taskId)).returning()
   void logActivity({
@@ -895,13 +899,17 @@ bridgeRoute.delete('/tasks/:id', async (c) => {
   const id = auth(c as never)
   const scope = await resolveProject(c as never)
   if ('error' in scope) return c.json({ error: scope.error }, scope.status)
-  const denied = await require(c as never, 'tasks.delete', scope.projectId)
-  if (denied) return c.json(denied, 403)
   const taskId = c.req.param('id')
   const existing = await db.query.tasks.findFirst({
     where: and(eq(tasks.id, taskId), eq(tasks.projectId, scope.projectId), isNull(tasks.deletedAt)),
   })
   if (!existing) return c.json({ error: 'Not found' }, 404)
+
+  // Свою задачу удаляет и участник; чужую — только с tasks.delete. То же
+  // правило, что в интерфейсе: удаление мягкое, восстановимо 7 дней.
+  const own = await ownsOrManages(scope.projectId, id.userId, [existing.createdById, existing.assigneeId])
+  const denied = await require(c as never, own ? 'tasks.create' : 'tasks.delete', scope.projectId)
+  if (denied) return c.json(denied, 403)
 
   await db.update(tasks).set({ deletedAt: new Date(), deletedById: id.userId }).where(eq(tasks.id, taskId))
   void logActivity({

@@ -126,8 +126,35 @@ const permissionsSchema = domainPermissionsSchema.partial()
 export function defaultDomainPermissions(role: 'owner' | 'admin' | 'member'): DomainPermissions {
   // Заметки участник пишет наравне с документами: журнал ценен, только если
   // его ведут все, кто видит проблему, а не один админ.
-  if (role === 'member') return { tasks: 'read', files: 'write', resources: 'read', documents: 'write', notes: 'write' }
+  // Участник — полноценный член команды, а не гость: он заводит задачи,
+  // пишет документы и заметки. Прежнее tasks: 'read' означало, что человек не
+  // может создать задачу даже себе, хотя ИИ в чате делает это от его имени.
+  //
+  // Уровень write даёт править ЛЮБУЮ задачу проекта; ограничение «чужое не
+  // трогать» живёт отдельно, в canManageOwn: право и владение — разные вещи.
+  if (role === 'member') return { tasks: 'write', files: 'write', resources: 'read', documents: 'write', notes: 'write' }
   return { tasks: 'crud', files: 'crud', resources: 'crud', documents: 'crud', notes: 'crud' }
+}
+
+/**
+ * Может ли человек распоряжаться конкретной сущностью, а не просто «сущностями
+ * такого рода».
+ *
+ * Разделение простое: со СВОИМ — созданным им или назначенным на него — он
+ * делает что угодно; чужое читает и, для задач, переводит по статусам.
+ * Владельцы и админы проекта не ограничены ничем.
+ *
+ * Без этого правила приходилось выбирать между «участник ничего не может» и
+ * «любой переписывает чужую задачу», и оба варианта плохи.
+ */
+export async function ownsOrManages(
+  projectId: string,
+  userId: string,
+  owners: (string | null | undefined)[],
+): Promise<boolean> {
+  if (owners.some((o) => o && o === userId)) return true
+  const m = await projectRoleOf(projectId, userId)
+  return m?.role === 'owner' || m?.role === 'admin'
 }
 
 /** Разворачивает доменные уровни в плоский набор булевых действий (для UI и legacy). */
