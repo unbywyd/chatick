@@ -3,7 +3,7 @@ import { useNavigate, useParams } from 'react-router-dom'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { useTranslation } from 'react-i18next'
 import { toast } from 'sonner'
-import { Building2, Plus, FolderKanban, Check, Mail, MoreVertical, Search, Settings, X } from 'lucide-react'
+import { Building2, ChevronRight, Plus, FolderKanban, Check, Mail, MoreVertical, Search, Settings, X } from 'lucide-react'
 import { ProfileMenu } from '@/components/ProfileMenu'
 import { Avatar } from '@/components/ui/avatar'
 import { AvatarGroup } from '@/components/ui/avatar-group'
@@ -238,6 +238,10 @@ function CompanyPicker({
   if (loading) return <p className="text-center text-sm text-muted-foreground">…</p>
 
   const companies = data?.companies ?? []
+  // Своя компания — та, где человек админ: он её и завёл. В остальных он по
+  // приглашению, и права там чужие.
+  const ownCompanies = companies.filter((c) => c.myRole === 'admin')
+  const guestCompanies = companies.filter((c) => c.myRole !== 'admin')
   const invites = data?.invites ?? []
 
   // Первый вход: ни компаний, ни приглашений — ведём визардом, а не пустым
@@ -249,8 +253,14 @@ function CompanyPicker({
   return (
     <div className="space-y-8">
       <div>
-        <h1 className="text-xl font-bold tracking-tight">{t('start.companyTitle')}</h1>
-        <p className="mt-1 text-sm text-muted-foreground">{t('start.companySubtitle')}</p>
+        {/* «Ваша компания» врёт, когда их несколько, а на этой странице
+            компанию выбирают — заголовок должен говорить именно об этом. */}
+        <h1 className="text-xl font-bold tracking-tight">
+          {companies.length > 1 ? t('start.pickCompanyTitle') : t('start.companyTitle')}
+        </h1>
+        <p className="mt-1 text-sm text-muted-foreground">
+          {companies.length > 1 ? t('start.pickCompanySubtitle') : t('start.companySubtitle')}
+        </p>
       </div>
 
       {invites.length > 0 && (
@@ -274,30 +284,51 @@ function CompanyPicker({
         </section>
       )}
 
-      {companies.length > 0 && (
-        <section className="space-y-2">
-          <h2 className="text-sm font-semibold text-muted-foreground">{t('start.yourCompanies')}</h2>
-          {companies.map((c) => (
-            <button
-              key={c.id}
-              onClick={() => onSelect(c.id)}
-              className="flex w-full items-center gap-3 rounded-lg border bg-card p-3 text-start transition-colors hover:bg-accent"
-            >
-              {c.logoUrl ? (
-                <img src={c.logoUrl} alt="" className="size-9 rounded-md object-cover" />
-              ) : (
-                <span className="grid size-9 place-items-center rounded-md bg-secondary">
-                  <Building2 className="size-4" />
-                </span>
-              )}
-              <span className="flex-1">
-                <span className="block text-sm font-medium">{c.name}</span>
-                <span className="block text-xs text-muted-foreground">{t(`roles.${c.myRole}`)}</span>
-              </span>
-            </button>
-          ))}
-        </section>
-      )}
+      {/* Свои и чужие компании — разные вещи. В своей человек распоряжается
+          людьми и проектами, в чужой он гость по приглашению; одним списком
+          это различие терялось, а роль мелкой подписью читается не сразу. */}
+      {[
+        { key: 'own' as const, title: t('start.ownCompanies'), list: ownCompanies },
+        { key: 'guest' as const, title: t('start.guestCompanies'), list: guestCompanies },
+      ]
+        .filter((g) => g.list.length > 0)
+        .map((g) => (
+          <section key={g.key} className="space-y-2">
+            {/* Заголовок группы нужен, только когда групп две: с одной он
+                повторяет заголовок страницы. */}
+            {ownCompanies.length > 0 && guestCompanies.length > 0 && (
+              <h2 className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">{g.title}</h2>
+            )}
+            <div className="space-y-2">
+              {g.list.map((c) => (
+                <button
+                  key={c.id}
+                  onClick={() => onSelect(c.id)}
+                  className="group flex w-full items-center gap-3 rounded-xl border bg-card p-3.5 text-start transition-colors hover:border-brand/50 hover:bg-accent"
+                >
+                  {c.logoUrl ? (
+                    <img src={c.logoUrl} alt="" className="size-10 shrink-0 rounded-lg object-cover" />
+                  ) : (
+                    <span className="grid size-10 shrink-0 place-items-center rounded-lg bg-secondary">
+                      <Building2 className="size-4.5" />
+                    </span>
+                  )}
+                  <span className="min-w-0 flex-1">
+                    <span className="block truncate text-sm font-semibold">{c.name}</span>
+                    <span className="block text-xs text-muted-foreground">
+                      {t(`roles.${c.myRole}`)}
+                      {typeof c.projectsCount === 'number' && (
+                        <> · {t('start.projectsCount', { count: c.projectsCount })}</>
+                      )}
+                    </span>
+                  </span>
+                  {/* Стрелка: карточка ведёт внутрь, а не переключает что-то на месте. */}
+                  <ChevronRight className="size-4 shrink-0 text-muted-foreground transition-transform group-hover:translate-x-0.5 group-hover:text-foreground rtl:rotate-180" />
+                </button>
+              ))}
+            </div>
+          </section>
+        ))}
 
       {/* Своя компания одна: если она уже есть, форму не показываем — сервер
           всё равно откажет, а предлагать неисполнимое незачем. Участвовать в

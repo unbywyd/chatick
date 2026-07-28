@@ -58,7 +58,14 @@
     "welcomeFoot": "Компанию можно переименовать или удалить в настройках. Удаление — в отдельной опасной зоне, с подтверждением и письмом всем участникам.",
     "companyGoneTitle": "Компания недоступна",
     "companyGoneText": "Её удалили, вы из неё вышли, или ссылка ведёт в чужую компанию.",
-    "companyGoneCta": "К моим компаниям"
+    "companyGoneCta": "К моим компаниям",
+    "pickCompanyTitle": "Выберите компанию",
+    "pickCompanySubtitle": "Проекты и команда живут внутри компании",
+    "ownCompanies": "Моя компания",
+    "guestCompanies": "Где я участвую",
+    "projectsCount_one": "{{count}} проект",
+    "projectsCount_few": "{{count}} проекта",
+    "projectsCount_many": "{{count}} проектов"
   },
   "companyTabs": {
     "projects": "Проекты",

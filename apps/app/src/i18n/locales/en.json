@@ -58,7 +58,13 @@
     "welcomeFoot": "You can rename or delete the company later in settings. Deleting lives in a separate danger zone, with a confirmation and an email to every member.",
     "companyGoneTitle": "This company is not available",
     "companyGoneText": "It was deleted, you left it, or the link belongs to someone else.",
-    "companyGoneCta": "To my companies"
+    "companyGoneCta": "To my companies",
+    "pickCompanyTitle": "Choose a company",
+    "pickCompanySubtitle": "Projects and people live inside a company",
+    "ownCompanies": "My company",
+    "guestCompanies": "Where I take part",
+    "projectsCount_one": "{{count}} project",
+    "projectsCount_other": "{{count}} projects"
   },
   "companyTabs": {
     "projects": "Projects",

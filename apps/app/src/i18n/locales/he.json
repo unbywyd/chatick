@@ -58,7 +58,13 @@
     "welcomeFoot": "אפשר לשנות את שם החברה או למחוק אותה בהגדרות. המחיקה נמצאת באזור נפרד, עם אישור והודעה לכל החברים.",
     "companyGoneTitle": "החברה אינה זמינה",
     "companyGoneText": "היא נמחקה, עזבתם אותה, או שהקישור שייך למישהו אחר.",
-    "companyGoneCta": "לחברות שלי"
+    "companyGoneCta": "לחברות שלי",
+    "pickCompanyTitle": "בחרו חברה",
+    "pickCompanySubtitle": "פרויקטים וצוות נמצאים בתוך חברה",
+    "ownCompanies": "החברה שלי",
+    "guestCompanies": "היכן שאני משתתף",
+    "projectsCount_one": "פרויקט אחד",
+    "projectsCount_other": "{{count}} פרויקטים"
   },
   "companyTabs": {
     "projects": "פרויקטים",
