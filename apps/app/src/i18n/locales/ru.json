@@ -1139,7 +1139,7 @@
     "connectAllow": "Разрешить",
     "connectCancel": "Отмена",
     "connectBadCode": "Код не найден или истёк",
-    "connectDone": "Доступ выдан",
+    "connectDone": "Вернитесь к вашему ИИ и продолжите подключение",
     "connectFailed": "Не удалось выдать доступ",
     "connectWhere": "Куда выдать доступ",
     "connectWholeCompany": "вся компания",

@@ -1134,7 +1134,7 @@
     "connectAllow": "Allow",
     "connectCancel": "Cancel",
     "connectBadCode": "Code not found or expired",
-    "connectDone": "Access granted",
+    "connectDone": "Go back to your assistant and finish connecting",
     "connectFailed": "Could not grant access",
     "connectWhere": "Where to grant access",
     "connectWholeCompany": "whole company",
