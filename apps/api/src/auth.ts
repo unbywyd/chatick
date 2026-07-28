@@ -1,5 +1,8 @@
 import { SignJWT, jwtVerify } from 'jose'
 import { createMiddleware } from 'hono/factory'
+import { and, eq } from 'drizzle-orm'
+import { db } from './db/client.js'
+import { projectMembers } from './db/schema.js'
 import { env } from './env.js'
 
 const secret = new TextEncoder().encode(env.JWT_SECRET)
@@ -83,6 +86,20 @@ export const requireProject = createMiddleware<ProjectEnv>(async (c, next) => {
   if (!payload || payload.typ !== 'project') {
     return c.json({ error: 'Project token required' }, 401)
   }
-  c.set('auth', payload)
+
+  // Токен живёт 30 дней, а членство кончается в тот момент, когда человека
+  // исключили. Верить проекту и роли из токена — значит оставлять исключённому
+  // доступ до конца срока: он продолжал читать и писать в чат и видеть ленту
+  // (там, где нет hasPermission, ходящего в базу).
+  //
+  // Роль тоже берём из базы, а не из токена: понижённый из админов до
+  // участника иначе сохранял бы админские права до перевыпуска.
+  const membership = await db.query.projectMembers.findFirst({
+    where: and(eq(projectMembers.projectId, payload.projectId), eq(projectMembers.userId, payload.sub)),
+    columns: { role: true },
+  })
+  if (!membership) return c.json({ error: 'Forbidden' }, 403)
+
+  c.set('auth', { ...payload, role: membership.role })
   await next()
 })
