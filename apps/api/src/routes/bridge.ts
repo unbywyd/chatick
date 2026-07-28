@@ -566,6 +566,23 @@ function parseDue(value: unknown): Date | null | undefined {
 }
 
 /**
+ * Файлы, вшитые в произвольный HTML: описание задачи, тело документа, заметки.
+ *
+ * Такие картинки не связаны с сущностью ни одним полем — только ссылкой внутри
+ * текста. Без этого списка ассистент видит «вложений нет» и делает вывод, что
+ * смотреть нечего, хотя картинка вшита в текст.
+ */
+async function inlineAttachments(html: string | null | undefined, projectId: string) {
+  const ids = inlineFileIds(html)
+  if (!ids.length) return []
+  const rows = await db
+    .select()
+    .from(files)
+    .where(and(inArray(files.id, ids), eq(files.projectId, projectId), isNull(files.deletedAt)))
+  return rows.map(fileView)
+}
+
+/**
  * Инлайн-картинки, вставленные прямо в текст.
  *
  * Такие файлы не привязаны к задаче полем taskId — редактор грузит их отдельно,
@@ -905,7 +922,12 @@ bridgeRoute.get('/tasks/:id/comments', async (c) => {
     .where(eq(taskComments.taskId, c.req.param('id')))
     .orderBy(taskComments.createdAt)
   // Файлы комментария привязаны к нему через commentId
-  const byComment = await attachmentsFor(files.commentId, rows.map((r) => r.c.id), scope.projectId)
+  const byComment = await attachmentsFor(
+    files.commentId,
+    rows.map((r) => r.c.id),
+    scope.projectId,
+    new Map(rows.map((r) => [r.c.id, r.c.body])),
+  )
   return c.json({
     items: rows.map((r) => ({
       id: r.c.id,
@@ -1248,6 +1270,7 @@ bridgeRoute.get('/notes/:id', async (c) => {
     title: row.title,
     body: htmlToText(row.body),
     html: row.body,
+    attachments: await inlineAttachments(row.body, scope.projectId),
     tags: JSON.parse(row.tags) as string[],
     scope: row.scope,
     projectId: row.projectId,
@@ -1446,6 +1469,9 @@ bridgeRoute.get('/documents/:id', async (c) => {
   return c.json({
     id: d.id,
     title: d.title,
+    // Картинки, вшитые в документ: как и в задачах, полем они ни с чем не
+    // связаны, и без этого списка ассистент их не найдёт.
+    attachments: await inlineAttachments(d.content, scope.projectId),
     format: asHtml ? 'html' : 'text',
     totalChars: body.length,
     offset,
@@ -1589,7 +1615,12 @@ bridgeRoute.get('/messages', async (c) => {
   // Вложения сообщений: скриншот бага, присланный в чат, ассистент раньше
   // просто не видел — в ответе был только текст.
   const ordered = rows.reverse()
-  const byMessage = await attachmentsFor(files.messageId, ordered.map((r) => r.m.id), scope.projectId)
+  const byMessage = await attachmentsFor(
+    files.messageId,
+    ordered.map((r) => r.m.id),
+    scope.projectId,
+    new Map(ordered.map((r) => [r.m.id, r.m.text])),
+  )
   return c.json({
     items: ordered.map((r) => ({
       id: r.m.id,

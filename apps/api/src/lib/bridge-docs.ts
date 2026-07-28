@@ -194,9 +194,12 @@ Example — handle everything waiting for me:
   Fetch the bytes with the same token — images, PDFs, anything:
     curl -s <contentUrl> -H 'authorization: Bearer <token>' -o mockup.png
 
-  Inline images. Descriptions of tasks, comments and documents are HTML and
-  may contain <img src=".../files/inline/<id>">. Those URLs accept your bridge
-  token, so you can fetch them directly:
+  Inline images. Tasks, documents, notes, comments and chat messages can all
+  carry images embedded in their text as <img src=".../files/inline/<id>">.
+  Every one of them reports those images in "attachments" as well, so reading
+  that field is enough — no HTML parsing needed anywhere.
+
+  Those URLs also accept your bridge token, if you would rather follow them:
 
     curl -s '<src from the html>' -H 'authorization: Bearer <token>' -o shot.webp
 
