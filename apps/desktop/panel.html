@@ -119,6 +119,9 @@
       .filter-wrap { padding: 4px 4px 6px; }
       /* Кем вошли: маленький ответ на большой вопрос «от чьего имени всё это». */
       .me-avatar { width: 28px; height: 28px; font-size: 11px; }
+      /* .avatar задаёт display: grid, и оно перебивает браузерное скрытие по
+         [hidden] — пустой кружок висел даже когда показывать нечего. */
+      .avatar[hidden] { display: none; }
       /* Тумблер завершённых: ссылка, а не кнопка — действие второстепенное. */
       .done-toggle {
         border: 0; background: none; cursor: pointer;

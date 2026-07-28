@@ -7,6 +7,17 @@ refuses to run otherwise, so a release can never ship without a description.
 
 Written in English only: this file is published on the website.
 
+## 0.3.4 — 2026-07-28
+
+### Fixed
+
+- The avatar never reached the tray at all — not the picture, the data. The
+  main process rebuilds the state it passes along from an explicit list of
+  fields, and the new one was not on it: the app sent it, the panel waited for
+  it, and it was dropped in between. Nothing to draw, hence not even initials.
+- The empty circle stayed visible when there was nothing to show: the avatar
+  style sets a display mode, which overrides the browser hiding it.
+
 ## 0.3.3 — 2026-07-28
 
 ### Fixed

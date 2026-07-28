@@ -1,6 +1,6 @@
 {
   "name": "chatick-next",
-  "version": "0.3.3",
+  "version": "0.3.4",
   "private": true,
   "packageManager": "pnpm@10.28.2",
   "engines": {

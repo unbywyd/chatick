@@ -479,12 +479,6 @@ function flushPending() {
 /** IPC регистрируется после whenReady: раньше ipcMain ещё не существует. */
 function registerIpc() {
   ipcMain.on('state:update', (_e, next) => {
-    // Диагностика: сколько раз окно присылало состояние и что в нём с
-    // таймером. Без этого «панель не обновляется» невозможно отличить от
-    // «окно ничего не прислало».
-    if (process.env.CHATICK_DEBUG) {
-      console.log('[state:update] timer=', next?.timer ? 'идёт' : 'нет', 'проектов=', (next?.projects || []).length)
-    }
     state = {
       authed: next?.authed !== false,
       unread: Number(next?.unread) || 0,
@@ -496,6 +490,12 @@ function registerIpc() {
       company: next?.company ?? null,
       companies: Array.isArray(next?.companies) ? next.companies : [],
       connections: Array.isArray(next?.connections) ? next.connections : [],
+      // Состояние здесь пересобирается по списку полей — и всё, чего в списке
+      // нет, молча пропадает по дороге. Аватарка не появлялась именно из-за
+      // этого: веб её слал, панель ждала, а посередине поле выбрасывалось.
+      // Скачанную картинку переносим из прежнего состояния: веб про неё не
+      // знает, её кладёт сюда главный процесс.
+      user: next?.user ? { ...next.user, avatarData: state.user?.avatarData } : null,
       strings: next?.strings ?? state.strings,
     }
     refreshTray()
@@ -506,7 +506,7 @@ function registerIpc() {
     // Картинка приезжает следом, отдельным обновлением: ждать её, задерживая
     // всё состояние, незачем — панель тем временем показывает инициалы.
     const url = state.user?.avatarUrl
-    if (url) {
+    if (url && !state.user.avatarData) {
       avatarDataUri(url).then((data) => {
         if (!data || !state.user) return
         state.user.avatarData = data
