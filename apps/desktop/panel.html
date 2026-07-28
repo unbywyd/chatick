@@ -441,7 +441,7 @@
       <span class="avatar me-avatar" id="meAvatar" hidden></span>
     </div>
     <div class="proj-menu" id="projMenu" hidden>
-      <input id="projSearch" class="target-search" spellcheck="false" placeholder="Search…" />
+      <input id="projSearch" class="target-search" spellcheck="false" data-ph="connectSearch" placeholder="Search…" />
       <div class="picker" id="projList"></div>
     </div>
 
@@ -1073,6 +1073,12 @@
         document.querySelectorAll('[data-t]').forEach((el) => {
           const val = state.strings?.[el.dataset.t]
           if (val) el.textContent = val
+        })
+        // Поля ввода переводятся через placeholder, а не текстом внутри:
+        // поиск в шапке оставался английским, пока это не учитывалось.
+        document.querySelectorAll('[data-ph]').forEach((el) => {
+          const val = state.strings?.[el.dataset.ph]
+          if (val) el.placeholder = val
         })
         document.documentElement.dir = state.strings?.dir === 'rtl' ? 'rtl' : 'ltr'
 

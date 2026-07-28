@@ -7,6 +7,15 @@ refuses to run otherwise, so a release can never ship without a description.
 
 Written in English only: this file is published on the website.
 
+## 0.3.5 — 2026-07-28
+
+### Fixed
+
+- The search field in the tray header stayed in English: input fields are
+  translated through their placeholder, and that was not being updated along
+  with the rest of the labels. "Nothing found" was untranslated too — the
+  string was never passed to the panel at all.
+
 ## 0.3.4 — 2026-07-28
 
 ### Fixed

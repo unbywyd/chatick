@@ -410,6 +410,7 @@ export function useDesktopSync() {
         connectGroupProjects: t('connect.groupProjects'),
         connectAllProjectsOf: t('connect.allProjectsOf'),
         connectSearch: t('connect.search'),
+        connectNothingFound: t('connect.nothingFound'),
         pickProject: t('desktop.pickProject'),
         showDone: t('desktop.showDone'),
         updateReady: t('desktop.updateReady'),
