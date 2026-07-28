@@ -333,7 +333,6 @@ export function useDesktopSync() {
         start: t('desktop.start'),
         stop: t('desktop.stop'),
         idle: t('desktop.idle'),
-        idleHint: t('desktop.idleHint'),
         idleNoProject: t('desktop.idleNoProject'),
         minShort: t('desktop.minShort'),
         noTask: t('time.noTask'),
@@ -545,7 +544,14 @@ export function useDesktopSync() {
     })
     // Панель открылась и не увидела состояния — шлём заново. Иначе первое
     // открытие трея после запуска показывает пустоту, и только второе работает.
-    const offStateRefresh = bridge.onStateRefresh(() => setStateNonce((n) => n + 1))
+    const offStateRefresh = bridge.onStateRefresh(() => {
+      // Панель открыли — значит на неё смотрят прямо сейчас. Пересылать старое
+      // состояние мало: таймер мог запуститься минуту назад, а опрос идёт раз
+      // в полминуты. Перезапрашиваем то, что панель показывает.
+      qc.invalidateQueries({ queryKey: ['desktop-running'] })
+      qc.invalidateQueries({ queryKey: ['inbox'] })
+      setStateNonce((n) => n + 1)
+    })
 
     // Закрыть туннель прямо из панели: если ассистент больше не нужен,
     // идти за этим в настройки — лишний шаг.

@@ -40,8 +40,12 @@
            а его позиция от значка в трее подходит не всем и не всегда. */
         -webkit-app-region: drag;
       }
-      /* Кнопка внутри ручки должна оставаться кнопкой. */
-      .play, .timer-info { -webkit-app-region: no-drag; }
+      /* Кнопка внутри ручки должна оставаться кнопкой. Текст рядом — нет:
+         он был исключён из зоны перетаскивания заодно с кнопкой, и панель
+         переставала таскаться, стоило навести курсор на надпись. */
+      .play { -webkit-app-region: no-drag; }
+      /* Выделять текст в ручке всё равно нельзя — только мешает перетаскиванию. */
+      .timer-info { user-select: none; }
       .play {
         width: 40px; height: 40px;
         flex: 0 0 auto;
@@ -470,10 +474,11 @@
         } else {
           $('elapsed').textContent = T('idle', 'No timer running')
           $('elapsed').classList.add('idle')
-          // Без открытого проекта запускать некуда — говорим об этом заранее,
-          // а не после нажатия.
+          // Одной строки хватает: «нажмите, чтобы начать» повторяет то, что и
+          // так понятно по кнопке. Полезнее сказать, КУДА пойдёт время —
+          // проектов у человека несколько, и это не праздный вопрос.
           $('timerSub').textContent = state.project
-            ? T('idleHint', 'Click to start tracking')
+            ? state.project.name
             : T('idleNoProject', 'Open a project to start tracking')
         }
       }

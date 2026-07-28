@@ -41,9 +41,13 @@ const statePath = () => path.join(app.getPath('userData'), 'panel-state.json')
 function restoreState() {
   try {
     const saved = JSON.parse(fs.readFileSync(statePath(), 'utf8'))
-    // Таймер и счётчик непрочитанного — вещи «сейчасные»: показывать вчерашние
-    // значения хуже, чем не показывать никаких.
-    state = { ...saved, timer: null, unread: 0 }
+    // Таймер и счётчик непрочитанного — вещи «сейчасные»: сохранённые с
+    // прошлого запуска они врут. Но и обнулять их нельзя: окно присылает
+    // состояние, только когда что-то изменилось, а уже идущий таймер —
+    // это отсутствие изменений. Панель так и осталась бы с «не запущен».
+    // Поэтому берём сохранённое как есть, а окно поправит первым же
+    // обновлением — оно приходит сразу после загрузки.
+    state = saved
   } catch {
     // первого запуска ещё не было, или файл повреждён — это не беда
   }
@@ -374,6 +378,10 @@ function togglePanel() {
   if (panelPos) {
     panel.setPosition(panelPos.x, panelPos.y)
     if (!panel.webContents.isLoading()) panel.webContents.send('panel:state', state)
+    // И просим окно прислать свежее: панель открывают, чтобы посмотреть, что
+    // сейчас, а состояние здесь — с последнего изменения в приложении.
+    // Таймер, запущенный до открытия панели, иначе так и не появлялся.
+    send('desktop:refresh', null)
     panel.show()
     panel.focus()
     return
@@ -392,6 +400,7 @@ function togglePanel() {
 
   panel.setPosition(x, Math.round(Math.max(area.y + 8, y)))
   if (!panel.webContents.isLoading()) panel.webContents.send('panel:state', state)
+  send('desktop:refresh', null)
   panel.show()
   panel.focus()
 }
@@ -439,6 +448,12 @@ function flushPending() {
 /** IPC регистрируется после whenReady: раньше ipcMain ещё не существует. */
 function registerIpc() {
   ipcMain.on('state:update', (_e, next) => {
+    // Диагностика: сколько раз окно присылало состояние и что в нём с
+    // таймером. Без этого «панель не обновляется» невозможно отличить от
+    // «окно ничего не прислало».
+    if (process.env.CHATICK_DEBUG) {
+      console.log('[state:update] timer=', next?.timer ? 'идёт' : 'нет', 'проектов=', (next?.projects || []).length)
+    }
     state = {
       authed: next?.authed !== false,
       unread: Number(next?.unread) || 0,

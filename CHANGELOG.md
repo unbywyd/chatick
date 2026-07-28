@@ -7,6 +7,25 @@ refuses to run otherwise, so a release can never ship without a description.
 
 Written in English only: this file is published on the website.
 
+## 0.2.9 — 2026-07-28
+
+### Fixed
+
+- The tray panel showed "no timer running" while the clock was ticking, and
+  pressing play there did nothing visible. The panel only ever heard about a
+  timer when something changed in the app window — and a timer that was already
+  running is, by definition, nothing changing. Opening the panel now asks the
+  app for fresh data instead of replaying whatever it heard last.
+- The tray panel could not be dragged while the cursor was over the text next
+  to the timer — that area had been excluded from the drag handle along with
+  the button.
+
+### Changed
+
+- The tray header says one thing instead of two: with no timer running it now
+  shows which project the time would go to, rather than repeating what the
+  button already makes obvious.
+
 ## 0.2.8 — 2026-07-28
 
 ### Added
