@@ -785,9 +785,11 @@ projectsRoute.get('/:projectId/llm-status', requireProject, async (c) => {
 
   // Пробный ИИ — тоже рабочий ИИ. Раньше здесь отвечали «не настроен», и
   // человек видел заглушку с просьбой подключить ключ, хотя чат работал.
+  // Пробный ИИ идёт в дело и без явного выбора — когда своего ключа нет.
+  // Здесь та же логика, что в projectLlm: иначе заглушка врала бы про рабочий чат.
   const ai = await db.query.projectAi.findFirst({ where: eq(projectAi.projectId, projectId) })
-  const wantsTrial = (ai?.source ?? 'company') === 'trial'
-  if (wantsTrial && env.AI_TRIAL_KEY) {
+  const source = ai?.source ?? 'company'
+  if ((source === 'trial' || source === 'company') && env.AI_TRIAL_KEY) {
     const spent = await companyTrialSpendUsd(project.companyId)
     if (spent < env.AI_TRIAL_BUDGET_USD) {
       return c.json({
