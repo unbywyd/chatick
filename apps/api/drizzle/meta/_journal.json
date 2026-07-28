@@ -309,6 +309,13 @@
       "when": 1785066490112,
       "tag": "0043_invite_project",
       "breakpoints": true
+    },
+    {
+      "idx": 44,
+      "version": "7",
+      "when": 1785066491112,
+      "tag": "0044_ai_default_trial",
+      "breakpoints": true
     }
   ]
 }

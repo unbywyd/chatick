@@ -83,7 +83,10 @@ export async function projectLlm(projectId: string, feature?: string): Promise<L
   const project = await db.query.projects.findFirst({ where: eq(projects.id, projectId) })
   if (!project) return null
   const ai = await db.query.projectAi.findFirst({ where: eq(projectAi.projectId, projectId) })
-  const source = ai?.source ?? 'company'
+  // Умолчание — пробный: у нового проекта ключа компании ещё нет, и выбирать
+  // его за человека значит обещать то, чего нет. Ключ компании — осознанный
+  // выбор, который делают, когда ключ появился.
+  const source = ai?.source ?? 'trial'
 
   if (source === 'trial' && env.AI_TRIAL_KEY && !(await trialBudgetExceeded(projectId))) {
     const provider = (env.AI_TRIAL_PROVIDER as LlmProvider) in LLM_PROVIDERS ? (env.AI_TRIAL_PROVIDER as LlmProvider) : 'deepseek'
@@ -113,20 +116,6 @@ export async function projectLlm(projectId: string, feature?: string): Promise<L
   const cfg = await companyLlm(project.companyId)
   if (cfg) return { ...cfg, usage: { projectId, source: 'company', feature } }
 
-  // Своего ключа нет — отдаём пробный, если он есть и бюджет не исчерпан.
-  //
-  // Раньше пробный включался только явным выбором в настройках, о котором
-  // никто не догадывался: ни один проект его так и не выбрал. Человек упирался
-  // в «ИИ не подключён», хотя доступ был готов.
-  if (env.AI_TRIAL_KEY && !(await trialBudgetExceeded(projectId))) {
-    const provider = (env.AI_TRIAL_PROVIDER as LlmProvider) in LLM_PROVIDERS ? (env.AI_TRIAL_PROVIDER as LlmProvider) : 'deepseek'
-    return {
-      provider,
-      model: env.AI_TRIAL_MODEL || LLM_PROVIDERS[provider].defaultModel,
-      apiKey: env.AI_TRIAL_KEY,
-      usage: { projectId, source: 'trial', feature },
-    }
-  }
   return null
 }
 

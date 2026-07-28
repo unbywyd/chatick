@@ -31,7 +31,7 @@ aiRoute.get('/config', async (c) => {
   const trialSpent = project ? await companyTrialSpendUsd(project.companyId) : 0
 
   return c.json({
-    source: ai?.source ?? 'company',
+    source: ai?.source ?? 'trial',
     /** company | trial | custom — по факту, а не по настройке */
     activeSource: actual?.usage?.source ?? null,
     trialSpentUsd: trialSpent,

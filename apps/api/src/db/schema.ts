@@ -718,7 +718,8 @@ export const projectAi = pgTable(
   'project_ai',
   {
     projectId: text('project_id').primaryKey().references(() => projects.id, { onDelete: 'cascade' }),
-    source: aiSource('source').notNull().default('company'),
+    // Пробный по умолчанию: у нового проекта ключа компании ещё нет
+    source: aiSource('source').notNull().default('trial'),
     // custom: свой провайдер/модель/ключ (ключ шифрован)
     provider: text('provider'),
     model: text('model'),
