@@ -338,9 +338,16 @@ function CompanyHome({
   // Поэтому перезагрузка ничего не теряет.
   const [wizardProject, setWizardProject] = useState<string | null>(null)
   const [wizardDone, setWizardDone] = useState(false)
+  // Визард идёт, пока проектов нет ИЛИ пока не пройден его последний шаг.
+  //
+  // Одного projectsCount мало: создав проект на втором шаге, мы обновляем
+  // список компаний, счётчик становится единицей — и визард закрывался сам,
+  // не показав приглашения. Признак «проектов нет» верно отвечает на вопрос
+  // «нужен ли визард», но перестаёт отвечать на «идёт ли он прямо сейчас».
   const noProjects = (company.projectsCount ?? 0) === 0
+  const inWizard = !wizardDone && (noProjects || Boolean(wizardProject))
 
-  if (canManage && noProjects && !wizardDone) {
+  if (canManage && inWizard) {
     return (
       <OnboardingWizard
         step={wizardProject ? 'team' : 'project'}
