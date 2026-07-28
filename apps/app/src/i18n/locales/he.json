@@ -1146,7 +1146,9 @@
     "taskSetStatus": "שינוי סטטוס",
     "reload": "רענון",
     "about": "אודות",
-    "updateReady": "הפעילו מחדש לעדכון"
+    "updateReady": "הפעילו מחדש לעדכון",
+    "emptyProjects": "אין עדיין פרויקטים",
+    "pickProjectForTimer": "פתחו פרויקט כדי להתחיל מעקב זמן"
   },
   "update": {
     "available": "זמינה גרסה חדשה",

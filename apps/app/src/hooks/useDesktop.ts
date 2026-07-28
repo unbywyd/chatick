@@ -1,8 +1,9 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { useLocation, useNavigate } from 'react-router-dom'
 import { useTranslation } from 'react-i18next'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
-import { api, API_URL, getSessionToken } from '@/lib/api'
+import { toast } from 'sonner'
+import { api, API_URL, getSessionToken, setProjectToken } from '@/lib/api'
 
 // Связь веб-приложения с десктопной оболочкой (SPEC §8.33).
 //
@@ -161,6 +162,8 @@ export function useDesktopSync() {
   // Счётчик-повод переслать состояние в трей. Панель просит его сама, когда
   // открылась и не увидела надписей.
   const [stateNonce, setStateNonce] = useState(0)
+  // Последний непустой список проектов: показываем его, пока грузится новый.
+  const lastProjects = useRef<ProjectLite[]>([])
   useEffect(() => {
     const check = () => setAuthed(Boolean(getSessionToken()))
     const timer = window.setInterval(check, 2000)
@@ -188,9 +191,11 @@ export function useDesktopSync() {
   const running = useQuery({
     queryKey: ['desktop-running'],
     enabled: Boolean(bridge) && authed,
-    queryFn: () => api<Running>('/api/v1/time/running', {}, 'project'),
-    refetchInterval: 60_000,
-    retry: false, // без project-токена запрос вернёт 401 — это нормально
+    // По сессии, а не по project-токену: часы идут у человека, а не у окна.
+    // Со старым запросом панель не знала о таймере, пока не открыт проект —
+    // показывала «не запущен» и не давала остановить идущий.
+    queryFn: () => api<Running>('/api/v1/my/time/running'),
+    refetchInterval: 30_000,
   })
 
   // Проекты нужны панели и для списка, и чтобы подписать, где что произошло.
@@ -252,7 +257,12 @@ export function useDesktopSync() {
 
     // Кеш запросов переживает выход из аккаунта; в панель ничего из прошлой
     // сессии попасть не должно.
-    const projectList = authed ? (projects.data ?? []).filter((p) => p.isMember) : []
+    // Пока запрос перезагружается, data пуст — и панель рисовала «Проектов
+    // пока нет» вместо списка, который был секунду назад. Особенно заметно
+    // при смене проекта из панели: она вызывает переход, компоненты
+    // перемонтируются, и список исчезал на ровном месте.
+    const projectList = authed ? (projects.data ?? lastProjects.current).filter((p) => p.isMember) : []
+    if (projects.data) lastProjects.current = projects.data
     const nameOf = (id: string) => projectList.find((p) => p.id === id)?.name
     const timer = authed ? running.data?.items[0] : undefined
 
@@ -358,7 +368,7 @@ export function useDesktopSync() {
         connectFailed: t('desktop.connectFailed'),
         emptyInbox: t('desktop.emptyInbox'),
         emptyTasks: t('desktop.emptyTasks'),
-        emptyProjects: t('journal.empty'),
+        emptyProjects: t('desktop.emptyProjects'),
         openApp: t('desktop.openApp'),
         close: t('desktop.close'),
         unreadOne: t('desktop.unread'),
@@ -410,23 +420,37 @@ export function useDesktopSync() {
     const offTimer = bridge.onToggleTimer(async () => {
       const current = running.data?.items[0]
 
-      // Запускать «куда-нибудь» нельзя: project-токен остаётся от последнего
-      // открытого проекта, и часы молча ушли бы не туда. Нет открытого
-      // проекта — показываем окно, пусть человек выберет сам.
-      if (!current && !activeProjectId) {
+      // Проект, в котором работаем: для остановки — тот, где идёт таймер, для
+      // запуска — открытый в окне. Первое важно: таймер могли забыть в другом
+      // проекте, а токен на руках всегда от последнего открытого.
+      const target = current?.projectId ?? activeProjectId
+      if (!target) {
+        // Запускать «куда-нибудь» нельзя: часы молча ушли бы не туда.
         bridge.show()
+        toast.info(t('desktop.pickProjectForTimer'))
         return
       }
 
       try {
+        // Токен нужного проекта, а не тот, что лежит с прошлого раза. Без
+        // этого «плей» и «стоп» молча не срабатывали: запрос уходил с чужим
+        // токеном и падал, а человек видел лишь неподвижную кнопку.
+        const { token } = await api<{ token: string }>(
+          `/api/v1/projects/${target}/token`,
+          { method: 'POST', body: JSON.stringify({ acceptRules: true }) },
+        )
+        setProjectToken(token)
+
         if (current) {
           await api(`/api/v1/time/${current.id}/stop`, { method: 'POST' }, 'project')
         } else {
           // projectId передаём явно — по той же причине, что и в веб-контроле
-          await api('/api/v1/time/start', { method: 'POST', body: JSON.stringify({ projectId: activeProjectId }) }, 'project')
+          await api('/api/v1/time/start', { method: 'POST', body: JSON.stringify({ projectId: target }) }, 'project')
         }
-      } catch {
-        // нет прав или проект недоступен — окно откроется, человек разберётся
+      } catch (e) {
+        // Молчаливый отказ — худшее, что здесь может быть: кнопка выглядит
+        // нажатой, а не происходит ничего. Говорим, что пошло не так.
+        toast.error(e instanceof Error ? e.message : String(e))
         bridge.show()
       }
       qc.invalidateQueries({ queryKey: ['desktop-running'] })

@@ -1151,7 +1151,9 @@
     "taskSetStatus": "Сменить статус",
     "reload": "Обновить",
     "about": "О проекте",
-    "updateReady": "Перезапустить и обновить"
+    "updateReady": "Перезапустить и обновить",
+    "emptyProjects": "Проектов пока нет",
+    "pickProjectForTimer": "Откройте проект, чтобы начать учёт времени"
   },
   "update": {
     "available": "Вышла новая версия",

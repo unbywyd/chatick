@@ -4,7 +4,7 @@ import { z } from 'zod'
 import { and, asc, desc, eq, gte, inArray, isNull, lte, sql } from 'drizzle-orm'
 import { db } from '../db/client.js'
 import { projects, tasks, timeEntries, users } from '../db/schema.js'
-import { requireProject, type ProjectEnv } from '../auth.js'
+import { requireProject, requireSession, type ProjectEnv, type SessionEnv } from '../auth.js'
 import { projectRoleOf, companyRoleOf } from './projects.js'
 import { logActivity } from '../lib/audit.js'
 import { broadcast } from '../ws.js'
@@ -145,6 +145,39 @@ timeRoute.get('/running', async (c) => {
   }))
 
   return c.json({ items, config: readTimeConfig(project?.timeConfig) })
+})
+
+/**
+ * Мой идущий таймер — по сессии, без привязки к проекту.
+ *
+ * Трею нужно знать, идут ли часы, даже когда ни один проект не открыт: иначе
+ * панель показывает «таймер не запущен», а он идёт, и остановить его оттуда
+ * нельзя. Записи и так ищутся по человеку — project-токен здесь ничего не
+ * решал, только мешал.
+ */
+export const timeMineRoute = new Hono<SessionEnv>()
+timeMineRoute.use('*', requireSession)
+
+timeMineRoute.get('/running', async (c) => {
+  const { sub } = c.get('session')
+  const rows = await db
+    .select()
+    .from(timeEntries)
+    .where(and(eq(timeEntries.userId, sub), isNull(timeEntries.endedAt)))
+    .orderBy(asc(timeEntries.startedAt))
+
+  const ids = [...new Set(rows.map((r) => r.projectId))]
+  const names = ids.length
+    ? await db.select({ id: projects.id, name: projects.name }).from(projects).where(inArray(projects.id, ids))
+    : []
+  const nameById = new Map(names.map((p) => [p.id, p.name]))
+
+  const items = (await hydrate(rows)).map((item, i) => ({
+    ...item,
+    projectId: rows[i]!.projectId,
+    projectName: nameById.get(rows[i]!.projectId) ?? '—',
+  }))
+  return c.json({ items })
 })
 
 timeRoute.post(

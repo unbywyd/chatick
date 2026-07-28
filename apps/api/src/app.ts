@@ -18,7 +18,7 @@ import { inboxRoute } from './routes/inbox.js'
 import { reviewsRoute } from './routes/reviews.js'
 import { documentsRoute, documentsPublicRoute } from './routes/documents.js'
 import { notesRoute } from './routes/notes.js'
-import { timeRoute } from './routes/time.js'
+import { timeRoute, timeMineRoute } from './routes/time.js'
 import { bridgeRoute } from './routes/bridge.js'
 import { backupRoute } from './routes/backup.js'
 import { sharesRoute, publicShareRoute } from './routes/shares.js'
@@ -47,6 +47,7 @@ app.route('/api/v1/reviews', reviewsRoute)
 app.route('/api/v1/documents', documentsRoute)
 app.route('/api/v1/notes', notesRoute)
 app.route('/api/v1/time', timeRoute)
+app.route('/api/v1/my/time', timeMineRoute) // свой таймер без привязки к проекту — для трея
 app.route('/d', documentsPublicRoute) // публичный доступ к документу по слагу
 app.route('/api/v1/shares', sharesRoute) // управление публичными ссылками — SPEC §8.34
 app.route('/s', publicShareRoute) // чтение по публичной ссылке, без входа

@@ -1146,7 +1146,9 @@
     "taskSetStatus": "Change status",
     "reload": "Reload",
     "about": "About",
-    "updateReady": "Restart to update"
+    "updateReady": "Restart to update",
+    "emptyProjects": "No projects yet",
+    "pickProjectForTimer": "Open a project to start tracking time"
   },
   "update": {
     "available": "A new version is available",
