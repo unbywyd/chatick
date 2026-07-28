@@ -330,6 +330,13 @@
       "when": 1785066493112,
       "tag": "0046_bridge_scope_all",
       "breakpoints": true
+    },
+    {
+      "idx": 47,
+      "version": "7",
+      "when": 1785066494112,
+      "tag": "0047_project_name_unique",
+      "breakpoints": true
     }
   ]
 }

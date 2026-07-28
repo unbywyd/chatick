@@ -21,6 +21,7 @@ import {
 } from '../db/schema.js'
 import {
   canCreateProjects,
+  projectNameTaken,
   companyRoleOf,
   defaultDomainPermissions,
   defaultPermissions,
@@ -249,6 +250,12 @@ bridgeRoute.get('/companies', async (c) => {
           return p ? rows.filter((r) => r.c.id === p.companyId) : []
         })()
 
+  // Названия компаний не уникальны: их заводят не связанные между собой люди,
+  // и запретить второму назвать фирму так же нельзя. Поэтому одноимённые
+  // помечаем явно — иначе на «работаем в WebToPro» ассистент выберет наугад.
+  const seen = new Map<string, number>()
+  for (const r of visible) seen.set(r.c.name, (seen.get(r.c.name) ?? 0) + 1)
+
   const items = []
   for (const r of visible) {
     const mine = await db
@@ -256,18 +263,26 @@ bridgeRoute.get('/companies', async (c) => {
       .from(projectMembers)
       .innerJoin(projects, eq(projects.id, projectMembers.projectId))
       .where(and(eq(projectMembers.userId, id.userId), eq(projects.companyId, r.c.id)))
+    const ambiguous = (seen.get(r.c.name) ?? 0) > 1
     items.push({
       id: r.c.id,
       name: r.c.name,
+      ambiguousName: ambiguous || undefined,
       myRole: r.role,
       projects: mine.map((x) => ({ id: x.p.id, name: x.p.name })),
     })
   }
 
+  const dupes = [...seen.entries()].filter(([, n]) => n > 1).map(([n]) => n)
+
   return c.json({
     items,
     scope: id.scopeAll ? 'all' : id.companyId ? 'company' : 'project',
-    hint: 'Pass ?project=<id> from these lists on every project-scoped call.',
+    hint: dupes.length
+      ? `Pass ?project=<id> from these lists on every project-scoped call. NOTE: more than one company is named ${dupes
+          .map((n) => `"${n}"`)
+          .join(', ')} — never pick by name alone; ask the person which one, or infer it from the project they mean.`
+      : 'Pass ?project=<id> from these lists on every project-scoped call.',
   })
 })
 
@@ -294,6 +309,9 @@ bridgeRoute.post('/projects', async (c) => {
   if (!name) return c.json({ error: 'name is required' }, 400)
   const about = typeof body.about === 'string' ? body.about.slice(0, 5000) : ''
   const chatRules = typeof body.chatRules === 'string' ? body.chatRules.slice(0, 4000) : ''
+  if (await projectNameTaken(id.companyId, name)) {
+    return c.json({ error: `A project named "${name}" already exists in this company` }, 409)
+  }
 
   const slug = `${name.toLowerCase().replace(/[^a-z0-9а-яё]+/gi, '-').replace(/^-+|-+$/g, '').slice(0, 40) || 'project'}-${nanoid(6)}`
   const [project] = await db
@@ -356,6 +374,10 @@ bridgeRoute.patch('/projects/:id', async (c) => {
   if (typeof body.color === 'string' && /^#[0-9a-fA-F]{6}$/.test(body.color)) patch.color = body.color
   if (!Object.keys(patch).length) {
     return c.json({ error: 'Nothing to update', hint: 'Supported: name, about, chatRules, color.' }, 400)
+  }
+
+  if (typeof patch.name === 'string' && (await projectNameTaken(project.companyId, patch.name, projectId))) {
+    return c.json({ error: `A project named "${patch.name}" already exists in this company` }, 409)
   }
 
   const [updated] = await db.update(projects).set(patch).where(eq(projects.id, projectId)).returning()

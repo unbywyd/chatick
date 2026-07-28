@@ -383,6 +383,9 @@ projectsRoute.post(
     const { sub } = c.get('session')
     const { companyId, name, about, chatRules, aiConfig } = c.req.valid('json')
     if (!canCreateProjects(await companyRoleOf(companyId, sub))) return c.json({ error: 'Forbidden' }, 403)
+    if (await projectNameTaken(companyId, name)) {
+      return c.json({ error: 'A project with this name already exists in this company', field: 'name' }, 409)
+    }
 
     const slug = `${name.toLowerCase().replace(/[^a-z0-9а-яё]+/gi, '-').replace(/^-+|-+$/g, '').slice(0, 40) || 'project'}-${nanoid(6)}`
     const [project] = await db
@@ -410,6 +413,23 @@ projectsRoute.post(
     return c.json(project, 201)
   },
 )
+
+/**
+ * Занято ли название проекта в этой компании.
+ *
+ * Люди в компании общие, и два «Редизайна» превращают любую просьбу «сделай в
+ * Редизайне» в загадку — особенно для ИИ, который выбирает проект по названию
+ * из разговора. В базе есть уникальный индекс; эта проверка нужна, чтобы
+ * человек получил внятный ответ, а не ошибку постгреса.
+ */
+export async function projectNameTaken(companyId: string, name: string, exceptId?: string): Promise<boolean> {
+  const rows = await db
+    .select({ id: projects.id, name: projects.name })
+    .from(projects)
+    .where(eq(projects.companyId, companyId))
+  const needle = name.trim().toLowerCase()
+  return rows.some((p) => p.name.trim().toLowerCase() === needle && p.id !== exceptId)
+}
 
 export async function projectRoleOf(projectId: string, userId: string) {
   const m = await db.query.projectMembers.findFirst({
@@ -498,6 +518,10 @@ projectsRoute.patch(
     if (aiConfig !== undefined) {
       const current = JSON.parse(project.aiConfig || '{}')
       patch.aiConfig = JSON.stringify({ ...current, ...aiConfig })
+    }
+
+    if (typeof patch.name === 'string' && (await projectNameTaken(project.companyId, patch.name, projectId))) {
+      return c.json({ error: 'A project with this name already exists in this company', field: 'name' }, 409)
     }
 
     const [updated] = await db.update(projects).set(patch).where(eq(projects.id, projectId)).returning()
