@@ -181,6 +181,22 @@ Example — handle everything waiting for me:
     curl -s -X POST ${b}/x/files -H 'authorization: Bearer <token>' \\
       -F 'file=@./report.pdf' -F 'taskId=<taskId>'
 
+  Reading attachments. Tasks, task comments and chat messages carry an
+  "attachments" array with id, name, mime, size and contentUrl. You do not
+  need to search /x/files to find what belongs to a task — it arrives with
+  the task itself:
+
+    curl -s ${b}/x/tasks/<id> -H 'authorization: Bearer <token>'
+    -> { ..., "attachments": [{ "id": "...", "name": "mockup.png",
+                                "mime": "image/png", "size": 84213,
+                                "contentUrl": "${b}/x/files/<id>/content" }] }
+
+  Fetch the bytes with the same token — images, PDFs, anything:
+    curl -s <contentUrl> -H 'authorization: Bearer <token>' -o mockup.png
+
+  Descriptions of tasks and documents are HTML and may contain <img> tags
+  pointing at the same file URLs; those need the token too.
+
 ## Documents
 
   GET    /x/documents?q=text

@@ -565,7 +565,51 @@ function parseDue(value: unknown): Date | null | undefined {
   return isNaN(parsed) ? undefined : new Date(parsed)
 }
 
-const taskView = (t: typeof tasks.$inferSelect, assignee?: { id: string; name: string } | null) => ({
+/**
+ * Вложение в том же виде, что отдаёт GET /x/files: ассистенту не приходится
+ * гадать, как забрать содержимое, — адрес приходит вместе со списком.
+ */
+const fileView = (f: typeof files.$inferSelect) => ({
+  id: f.id,
+  name: f.name,
+  mime: f.mime,
+  size: Number(f.size),
+  contentUrl: `${(process.env.API_PUBLIC_URL || 'https://api.chatick.com').replace(/\/$/, '')}/x/files/${f.id}/content`,
+})
+
+/**
+ * Вложения нескольких задач или сообщений разом.
+ *
+ * Одним запросом на список, а не по одному на строку: список задач бывает
+ * длинным, и сотня отдельных запросов к базе ради вложений — плохая цена за
+ * удобство.
+ */
+async function attachmentsFor(
+  column: typeof files.taskId | typeof files.messageId | typeof files.commentId,
+  ids: string[],
+  projectId: string,
+): Promise<Map<string, ReturnType<typeof fileView>[]>> {
+  const map = new Map<string, ReturnType<typeof fileView>[]>()
+  if (!ids.length) return map
+  const rows = await db
+    .select()
+    .from(files)
+    .where(and(inArray(column, ids), eq(files.projectId, projectId), isNull(files.deletedAt)))
+  for (const f of rows) {
+    const key = (column === files.taskId ? f.taskId : column === files.messageId ? f.messageId : f.commentId) ?? ''
+    if (!key) continue
+    const list = map.get(key) ?? []
+    list.push(fileView(f))
+    map.set(key, list)
+  }
+  return map
+}
+
+const taskView = (
+  t: typeof tasks.$inferSelect,
+  assignee?: { id: string; name: string } | null,
+  attachments?: ReturnType<typeof fileView>[],
+) => ({
   id: t.id,
   number: t.number,
   title: t.title,
@@ -576,6 +620,10 @@ const taskView = (t: typeof tasks.$inferSelect, assignee?: { id: string; name: s
   dueDate: t.dueDate,
   sprintId: t.groupId,
   assignee: assignee ? { id: assignee.id, name: assignee.name } : null,
+  // Файлы, приложенные к задаче. Раньше их не было в ответе вовсе: ассистент
+  // видел задачу, но не знал, что к ней приложен макет, и узнать это мог
+  // только перебрав все файлы проекта.
+  attachments: attachments ?? [],
   updatedAt: t.updatedAt,
 })
 
@@ -614,7 +662,11 @@ bridgeRoute.get('/tasks', async (c) => {
     .orderBy(desc(tasks.updatedAt))
     .limit(limit)
 
-  return c.json({ items: rows.map((r) => taskView(r.t, r.u)), count: rows.length })
+  const byTask = await attachmentsFor(files.taskId, rows.map((r) => r.t.id), scope.projectId)
+  return c.json({
+    items: rows.map((r) => taskView(r.t, r.u, byTask.get(r.t.id))),
+    count: rows.length,
+  })
 })
 
 bridgeRoute.get('/tasks/:id', async (c) => {
@@ -630,7 +682,8 @@ bridgeRoute.get('/tasks/:id', async (c) => {
     .where(and(eq(tasks.id, c.req.param('id')), eq(tasks.projectId, scope.projectId), isNull(tasks.deletedAt)))
     .limit(1)
   if (!row.length) return c.json({ error: 'Not found' }, 404)
-  return c.json(taskView(row[0]!.t, row[0]!.u))
+  const attached = await attachmentsFor(files.taskId, [row[0]!.t.id], scope.projectId)
+  return c.json(taskView(row[0]!.t, row[0]!.u, attached.get(row[0]!.t.id)))
 })
 
 bridgeRoute.post('/tasks', async (c) => {
@@ -776,8 +829,16 @@ bridgeRoute.get('/tasks/:id/comments', async (c) => {
     .leftJoin(users, eq(users.id, taskComments.authorId))
     .where(eq(taskComments.taskId, c.req.param('id')))
     .orderBy(taskComments.createdAt)
+  // Файлы комментария привязаны к нему через commentId
+  const byComment = await attachmentsFor(files.commentId, rows.map((r) => r.c.id), scope.projectId)
   return c.json({
-    items: rows.map((r) => ({ id: r.c.id, text: r.c.body, author: r.u?.name ?? null, createdAt: r.c.createdAt })),
+    items: rows.map((r) => ({
+      id: r.c.id,
+      text: r.c.body,
+      author: r.u?.name ?? null,
+      attachments: byComment.get(r.c.id) ?? [],
+      createdAt: r.c.createdAt,
+    })),
   })
 })
 
@@ -1450,11 +1511,16 @@ bridgeRoute.get('/messages', async (c) => {
     .where(and(...conds))
     .orderBy(desc(messages.createdAt))
     .limit(limit)
+  // Вложения сообщений: скриншот бага, присланный в чат, ассистент раньше
+  // просто не видел — в ответе был только текст.
+  const ordered = rows.reverse()
+  const byMessage = await attachmentsFor(files.messageId, ordered.map((r) => r.m.id), scope.projectId)
   return c.json({
-    items: rows.reverse().map((r) => ({
+    items: ordered.map((r) => ({
       id: r.m.id,
       text: r.m.text,
       author: r.u ? { id: r.u.id, name: r.u.name } : { id: 'ai', name: 'AI' },
+      attachments: byMessage.get(r.m.id) ?? [],
       createdAt: r.m.createdAt,
     })),
   })
