@@ -7,6 +7,24 @@ refuses to run otherwise, so a release can never ship without a description.
 
 Written in English only: this file is published on the website.
 
+## 0.2.3 — 2026-07-28
+
+### Fixed
+
+- The tray panel only ever offered projects from your first company, so an
+  assistant could not be connected to a project in a company you had been
+  invited to — those projects were simply missing from the list.
+
+### Changed
+
+- Choosing where to grant an assistant access is now searchable, in the tray and
+  on the web alike. With a dozen projects across two companies the list ran past
+  the bottom of the panel and the Allow button had to be hunted for by scrolling.
+  Projects are labelled with their company, since the same project name in two
+  companies is not unusual.
+- Granting access to a whole company is now possible on the web too; it had only
+  ever been available in the tray.
+
 ## 0.2.2 — 2026-07-28
 
 ### Fixed
