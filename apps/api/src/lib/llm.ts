@@ -83,10 +83,14 @@ export async function projectLlm(projectId: string, feature?: string): Promise<L
   const project = await db.query.projects.findFirst({ where: eq(projects.id, projectId) })
   if (!project) return null
   const ai = await db.query.projectAi.findFirst({ where: eq(projectAi.projectId, projectId) })
-  // Умолчание — пробный: у нового проекта ключа компании ещё нет, и выбирать
-  // его за человека значит обещать то, чего нет. Ключ компании — осознанный
-  // выбор, который делают, когда ключ появился.
-  const source = ai?.source ?? 'trial'
+  // Умолчание зависит от того, есть ли у компании ключ.
+  //
+  // Есть — работаем на нём: он настроен осознанно, и подменять его пробным
+  // значит жечь пробный бюджет вместо оплаченного ключа.
+  // Нет — пробный: иначе новый проект упирается в «ИИ не подключён», хотя
+  // пробный доступ готов. Раньше умолчанием всегда было 'company', и такой
+  // проект просто молчал.
+  const source = ai?.source ?? ((await companyLlm(project.companyId)) ? 'company' : 'trial')
 
   if (source === 'trial' && env.AI_TRIAL_KEY && !(await trialBudgetExceeded(projectId))) {
     const provider = (env.AI_TRIAL_PROVIDER as LlmProvider) in LLM_PROVIDERS ? (env.AI_TRIAL_PROVIDER as LlmProvider) : 'deepseek'
