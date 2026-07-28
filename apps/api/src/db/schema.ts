@@ -583,8 +583,11 @@ export const credentials = pgTable(
   {
     id: id(),
     projectId: text('project_id').notNull().references(() => projects.id, { onDelete: 'cascade' }),
-    name: text('name').notNull(), // «Прод сервер SSH», «Дизайн в Figma»
+    // Имя необязательно: ресурс — это чаще всего ссылка, а название ей
+    // придумывают редко. Пусто — подставим домен.
+    name: text('name').notNull().default(''), // «Прод сервер SSH», «Дизайн в Figma»
     url: text('url'), // опциональная ссылка
+    icon: text('icon'), // og:image или favicon как data-URI — узнавать ссылку глазами
     description: text('description').notNull().default(''),
     // legacy single-value (миграция старых кредов в первый секрет); новые — в resource_secrets
     valueEncrypted: text('value_encrypted'),

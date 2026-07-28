@@ -30,6 +30,8 @@ type ResourceRow = {
   id: string
   name: string
   url: string | null
+  /** og:image или favicon сайта — ссылку в списке узнают по значку. */
+  icon: string | null
   description: string
   source: 'manual' | 'chat'
   messageId: string | null
@@ -132,8 +134,21 @@ export function ResourcesTab({ projectId, isAdmin }: { projectId: string; isAdmi
           >
             <div className="flex items-center gap-3">
               <DragHandle className="-ms-1" />
-              <span className="grid size-9 shrink-0 place-items-center rounded-md bg-secondary">
-                {r.url ? <LinkIcon className="size-4" /> : <KeyRound className="size-4" />}
+              {/* Значок сайта: в длинном списке ссылку находят глазами по
+                  картинке, а не читая адреса. Нет иконки — прежний символ. */}
+              <span className="grid size-9 shrink-0 place-items-center overflow-hidden rounded-md bg-secondary">
+                {r.icon ? (
+                  <img
+                    src={r.icon}
+                    alt=""
+                    className="no-zoom size-full object-contain"
+                    onError={(e) => (e.currentTarget.style.display = 'none')}
+                  />
+                ) : r.url ? (
+                  <LinkIcon className="size-4" />
+                ) : (
+                  <KeyRound className="size-4" />
+                )}
               </span>
               <span className="min-w-0 flex-1">
                 <span className="flex items-center gap-1.5 truncate text-sm font-medium">
@@ -203,6 +218,56 @@ function ResourceForm({ projectId, editing, onClose }: { projectId: string; edit
   const [description, setDescription] = useState(editing?.description ?? '')
   // новые секреты для добавления
   const [newSecrets, setNewSecrets] = useState<{ label: string; value: string }[]>([])
+  // Имя правят редко — прячем поле, пока не попросят.
+  const [renaming, setRenaming] = useState(Boolean(editing?.name))
+
+  // Ссылку набирают «figma.com», а не «https://figma.com» — дописываем схему
+  // молча: требовать её от человека значит спорить с ним о синтаксисе.
+  const normalized = (() => {
+    const raw = url.trim()
+    if (!raw) return ''
+    return /^[a-z][a-z0-9+.-]*:\/\//i.test(raw) ? raw : `https://${raw}`
+  })()
+
+  const host = (() => {
+    try {
+      return new URL(normalized).hostname.replace(/^www\./, '')
+    } catch {
+      return ''
+    }
+  })()
+
+  // То, как ресурс назовётся, если своё имя не вводить. Показываем сразу:
+  // человек видит результат и не гадает, обязательно ли поле.
+  const derived = (() => {
+    if (!host) return ''
+    const path = new URL(normalized).pathname.replace(/\/+$/, '').split('/').filter(Boolean).pop()
+    return path && path.length <= 40 ? `${host}/${decodeURIComponent(path)}` : host
+  })()
+
+  const finalName = name.trim() || derived
+  const hasSecret = newSecrets.some((s) => s.value.trim())
+  // Пустой ресурс сохранять нечего, но хватает чего-то одного.
+  const canSave = Boolean(finalName || normalized || hasSecret)
+
+  // Значок для предпросмотра. С задержкой: пока адрес набирают, ходить в сеть
+  // на каждую букву незачем. Через свой сервер — чтобы набранные адреса не
+  // уходили постороннему сервису иконок.
+  const [debouncedUrl, setDebouncedUrl] = useState('')
+  useEffect(() => {
+    const id = setTimeout(() => setDebouncedUrl(host ? normalized : ''), 600)
+    return () => clearTimeout(id)
+  }, [normalized, host])
+
+  const iconQ = useQuery({
+    queryKey: ['resource-icon', debouncedUrl],
+    enabled: Boolean(debouncedUrl),
+    staleTime: 10 * 60 * 1000,
+    retry: false,
+    queryFn: () =>
+      api<{ icon: string | null }>(`/api/v1/resources/icon-preview?url=${encodeURIComponent(debouncedUrl)}`, {}, 'project').then((r) => r.icon),
+  })
+  const previewIcon = iconQ.data ?? editing?.icon ?? null
 
   // детали (существующие секреты) при редактировании
   const detail = useQuery({
@@ -214,12 +279,12 @@ function ResourceForm({ projectId, editing, onClose }: { projectId: string; edit
   const save = useMutation({
     mutationFn: async () => {
       if (editing) {
-        await api(`/api/v1/resources/${editing.id}`, { method: 'PATCH', body: JSON.stringify({ name, url: url || null, description }) }, 'project')
+        await api(`/api/v1/resources/${editing.id}`, { method: 'PATCH', body: JSON.stringify({ name, url: normalized || null, description }) }, 'project')
         for (const s of newSecrets.filter((s) => s.value)) {
           await api(`/api/v1/resources/${editing.id}/secrets`, { method: 'POST', body: JSON.stringify(s) }, 'project')
         }
       } else {
-        await api('/api/v1/resources', { method: 'POST', body: JSON.stringify({ name, url: url || null, description, secrets: newSecrets.filter((s) => s.value) }) }, 'project')
+        await api('/api/v1/resources', { method: 'POST', body: JSON.stringify({ name, url: normalized || null, description, secrets: newSecrets.filter((s) => s.value) }) }, 'project')
       }
     },
     onSuccess: () => {
@@ -241,14 +306,76 @@ function ResourceForm({ projectId, editing, onClose }: { projectId: string; edit
   })
 
   return (
-    <div className="mt-4 rounded-xl border bg-card p-4">
-      <div className="mb-3 flex items-center justify-between">
-        <h3 className="text-sm font-bold">{editing ? t('resources.editTitle') : t('resources.addTitle')}</h3>
-        <Button variant="ghost" size="icon" onClick={onClose}><X className="size-4" /></Button>
+    <div className="mt-4 overflow-hidden rounded-xl border bg-card">
+      {/* Шапка с подложкой: форма перестаёт быть россыпью полей и читается
+          как одна карточка. */}
+      <div className="flex items-center justify-between border-b bg-muted/30 px-4 py-2.5">
+        <h3 className="flex items-center gap-2 text-sm font-bold">
+          <LinkIcon className="size-4 text-muted-foreground" />
+          {editing ? t('resources.editTitle') : t('resources.addTitle')}
+        </h3>
+        <Button variant="ghost" size="icon" className="size-7" onClick={onClose}><X className="size-4" /></Button>
       </div>
-      <div className="space-y-3">
-        <Input value={name} onChange={(e) => setName(e.target.value)} placeholder={t('resources.namePlaceholder')} />
-        <Input value={url} onChange={(e) => setUrl(e.target.value)} placeholder={t('resources.urlPlaceholder')} />
+
+      <div className="space-y-3 p-4">
+        {/* Ссылка первой и крупно: ресурс — это в первую очередь она, а имя
+            и описание дописывают по желанию. */}
+        <div>
+          <Input
+            autoFocus={!editing}
+            value={url}
+            onChange={(e) => setUrl(e.target.value)}
+            placeholder={t('resources.urlPlaceholder')}
+            className="h-11 text-base"
+            inputMode="url"
+            autoComplete="off"
+            spellCheck={false}
+          />
+
+          {/* Как ресурс будет выглядеть в списке. Показываем сразу, чтобы имя
+              не приходилось воображать. */}
+          {(host || finalName) && (
+            <div className="mt-2 flex items-center gap-2.5 rounded-lg border bg-muted/20 px-3 py-2">
+              <span className="grid size-8 shrink-0 place-items-center overflow-hidden rounded-md border bg-background">
+                {previewIcon ? (
+                  <img src={previewIcon} alt="" className="no-zoom size-full object-contain" />
+                ) : host ? (
+                  <LinkIcon className={cn('size-4 text-muted-foreground', iconQ.isFetching && 'animate-pulse')} />
+                ) : (
+                  <KeyRound className="size-4 text-muted-foreground" />
+                )}
+              </span>
+              <span className="min-w-0 flex-1">
+                <span className="block truncate text-sm font-medium">{finalName || t('resources.untitled')}</span>
+                {host && <span className="block truncate text-xs text-muted-foreground">{normalized}</span>}
+              </span>
+              {!renaming && (
+                <Button variant="ghost" size="sm" className="h-7 shrink-0 text-xs" onClick={() => setRenaming(true)}>
+                  <Pencil className="size-3" />
+                  {t('resources.rename')}
+                </Button>
+              )}
+            </div>
+          )}
+        </div>
+
+        {/* Имя — по запросу: его придумывают редко, а поле в форме создаёт
+            ощущение обязательного. */}
+        {renaming && (
+          <Input
+            autoFocus={!editing}
+            value={name}
+            onChange={(e) => setName(e.target.value)}
+            placeholder={derived ? t('resources.namePlaceholderAuto', { name: derived }) : t('resources.namePlaceholder')}
+          />
+        )}
+        {!renaming && !host && (
+          <Button variant="ghost" size="sm" className="text-xs text-muted-foreground" onClick={() => setRenaming(true)}>
+            <Pencil className="size-3" />
+            {t('resources.nameManually')}
+          </Button>
+        )}
+
         <textarea
           value={description}
           onChange={(e) => setDescription(e.target.value)}
@@ -258,8 +385,11 @@ function ResourceForm({ projectId, editing, onClose }: { projectId: string; edit
         />
 
         {/* Секреты */}
-        <div>
-          <p className="mb-1.5 text-xs font-medium text-muted-foreground">{t('resources.secrets')}</p>
+        <div className="rounded-lg border border-dashed p-3">
+          <p className="mb-1.5 flex items-center gap-1.5 text-xs font-medium text-muted-foreground">
+            <KeyRound className="size-3.5" />
+            {t('resources.secrets')}
+          </p>
           <ul className="space-y-1.5">
             {detail.data?.secrets.map((s) => (
               <ExistingSecret key={s.id} label={s.label} onReveal={() => revealSecret(s.id)} onDelete={async () => {
@@ -279,8 +409,11 @@ function ResourceForm({ projectId, editing, onClose }: { projectId: string; edit
           </Button>
         </div>
 
-        <div className="flex justify-end">
-          <Button variant="brand" size="sm" disabled={!name.trim() || save.isPending} onClick={() => save.mutate()}>
+        <div className="flex items-center justify-end gap-2 border-t pt-3">
+          <Button variant="ghost" size="sm" onClick={onClose}>
+            {t('common.cancel')}
+          </Button>
+          <Button variant="brand" size="sm" disabled={!canSave || save.isPending} onClick={() => save.mutate()}>
             {t('projectForm.save')}
           </Button>
         </div>

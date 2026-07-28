@@ -8,6 +8,7 @@ import { requireProject, type ProjectEnv } from '../auth.js'
 import { encrypt, decrypt } from '../lib/crypto.js'
 import { hasPermission } from './projects.js'
 import { logActivity } from '../lib/audit.js'
+import { fetchSiteIcon, nameFromUrl } from '../lib/site-icon.js'
 
 // Ресурсы (SPEC §8.1): ссылка + описание + опциональные секреты.
 // Секреты — самая чувствительная часть: значения только AES-256-GCM,
@@ -21,6 +22,24 @@ const VALUE_MAX = 10_000
 async function audit(projectId: string, userId: string, action: 'reveal' | 'create' | 'update' | 'delete', resourceId: string | null, name: string) {
   await db.insert(credentialAccessLog).values({ projectId, userId, action, credentialId: resourceId, credentialName: name })
 }
+
+/**
+ * Значок сайта для предпросмотра в форме.
+ *
+ * Свой сервер, а не публичный сервис иконок: иначе каждый набранный адрес —
+ * включая внутренние панели и адреса заказчиков — утекал бы третьей стороне
+ * ещё до сохранения.
+ */
+resourcesRoute.get('/icon-preview', async (c) => {
+  const { projectId, sub } = c.get('auth')
+  if (!(await hasPermission(projectId, sub, 'credentials.manage'))) return c.json({ error: 'Forbidden' }, 403)
+  const url = c.req.query('url') ?? ''
+  if (!url || url.length > 2000) return c.json({ icon: null })
+  const icon = await fetchSiteIcon(url).catch(() => null)
+  // Кэш у клиента: одна и та же ссылка при правке не должна ходить в сеть заново.
+  if (icon) c.header('Cache-Control', 'private, max-age=600')
+  return c.json({ icon })
+})
 
 // Список — метаданные ресурсов + счётчик секретов (без значений)
 resourcesRoute.get('/', async (c) => {
@@ -44,6 +63,7 @@ resourcesRoute.get('/', async (c) => {
       id: r.r.id,
       name: r.r.name,
       url: r.r.url,
+      icon: r.r.icon,
       description: r.r.description,
       source: r.r.source,
       messageId: r.r.messageId,
@@ -66,6 +86,7 @@ resourcesRoute.get('/:id', async (c) => {
     id: r.id,
     name: r.name,
     url: r.url,
+    icon: r.icon,
     description: r.description,
     source: r.source,
     messageId: r.messageId,
@@ -73,13 +94,26 @@ resourcesRoute.get('/:id', async (c) => {
   })
 })
 
-// Создать ресурс (name обязателен; url/description/секреты опциональны)
+/**
+ * Подтянуть иконку сайта и записать её в ресурс.
+ *
+ * Отдельно от ответа: сеть чужая и может думать секундами, а создание
+ * ресурса ждать этого не должно. Не получилось — ресурс просто без значка.
+ */
+function grabIcon(resourceId: string, url: string) {
+  void fetchSiteIcon(url)
+    .then((icon) => (icon ? db.update(credentials).set({ icon }).where(eq(credentials.id, resourceId)) : null))
+    .catch(() => {})
+}
+
+// Создать ресурс. Имя и ссылка по отдельности необязательны, но пустым
+// ресурс быть не может — проверка ниже.
 resourcesRoute.post(
   '/',
   zValidator(
     'json',
     z.object({
-      name: z.string().min(1).max(200),
+      name: z.string().max(200).default(''),
       url: z.string().max(2000).nullable().optional(),
       description: z.string().max(5000).default(''),
       secrets: z.array(z.object({ label: z.string().max(120).default(''), value: z.string().min(1).max(VALUE_MAX) })).max(20).default([]),
@@ -93,14 +127,24 @@ resourcesRoute.post(
     if (!(await hasPermission(projectId, sub, 'credentials.manage'))) return c.json({ error: 'Forbidden' }, 403)
     const { name, url, description, secrets, source, messageId } = c.req.valid('json')
 
+    const link = url?.trim() || null
+    // Имя из домена, если своего не дали: «figma.com/board» понятнее пустой
+    // строки, а придумывать название ради галочки никто не станет.
+    const title = name.trim() || (link ? nameFromUrl(link) : '')
+    // Ресурс без имени, без ссылки и без секретов — пустая карточка.
+    if (!title && !link && !secrets.length) {
+      return c.json({ error: 'Provide a link, a name or a secret' }, 400)
+    }
+
     const [row] = await db
       .insert(credentials)
-      .values({ projectId, name, url: url ?? null, description, source, messageId: messageId ?? null, createdById: sub })
+      .values({ projectId, name: title, url: link, description, source, messageId: messageId ?? null, createdById: sub })
       .returning()
     if (secrets.length) {
       await db.insert(resourceSecrets).values(secrets.map((s) => ({ resourceId: row!.id, label: s.label, valueEncrypted: encrypt(s.value) })))
     }
-    await audit(projectId, sub, 'create', row!.id, name)
+    if (link) grabIcon(row!.id, link)
+    await audit(projectId, sub, 'create', row!.id, title)
     return c.json({ id: row!.id, name: row!.name }, 201)
   },
 )
@@ -108,7 +152,7 @@ resourcesRoute.post(
 // Обновить метаданные ресурса
 resourcesRoute.patch(
   '/:id',
-  zValidator('json', z.object({ name: z.string().min(1).max(200).optional(), url: z.string().max(2000).nullable().optional(), description: z.string().max(5000).optional() })),
+  zValidator('json', z.object({ name: z.string().max(200).optional(), url: z.string().max(2000).nullable().optional(), description: z.string().max(5000).optional() })),
   async (c) => {
     const { projectId, sub } = c.get('auth')
     if (!(await hasPermission(projectId, sub, 'credentials.manage'))) return c.json({ error: 'Forbidden' }, 403)
@@ -117,11 +161,26 @@ resourcesRoute.patch(
     if (!r) return c.json({ error: 'Not found' }, 404)
     const { name, url, description } = c.req.valid('json')
     const patch: Record<string, unknown> = {}
-    if (name !== undefined) patch.name = name
-    if (url !== undefined) patch.url = url
+    const link = url === undefined ? r.url : url?.trim() || null
+
+    if (name !== undefined) patch.name = name.trim()
+    if (url !== undefined) patch.url = link
     if (description !== undefined) patch.description = description
+
+    // Имя стёрли или его и не было — берём из ссылки.
+    const nextName = (patch.name as string | undefined) ?? r.name
+    if (!nextName && link) patch.name = nameFromUrl(link)
+
+    if (!(patch.name ?? r.name) && !link) return c.json({ error: 'Provide a link or a name' }, 400)
+
+    // Ссылка сменилась — прежний значок теперь не про этот ресурс.
+    if (url !== undefined && link !== r.url) {
+      patch.icon = null
+      if (link) grabIcon(id, link)
+    }
+
     await db.update(credentials).set(patch).where(eq(credentials.id, id))
-    await audit(projectId, sub, 'update', id, name ?? r.name)
+    await audit(projectId, sub, 'update', id, (patch.name as string) ?? r.name)
     return c.json({ ok: true })
   },
 )
