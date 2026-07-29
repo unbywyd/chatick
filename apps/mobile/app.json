@@ -1,0 +1,47 @@
+{
+  "expo": {
+    "name": "Chatick",
+    "slug": "chatick",
+    "version": "0.1.0",
+    "orientation": "portrait",
+    "icon": "./assets/icon.png",
+    "userInterfaceStyle": "dark",
+    "scheme": "chatick",
+    "backgroundColor": "#141611",
+    "splash": {
+      "image": "./assets/splash-icon.png",
+      "resizeMode": "contain",
+      "backgroundColor": "#141611"
+    },
+    "ios": {
+      "supportsTablet": false,
+      "bundleIdentifier": "com.chatick.app",
+      "infoPlist": {
+        "NSMicrophoneUsageDescription": "Chatick uses the microphone to turn what you say into a chat message.",
+        "NSSpeechRecognitionUsageDescription": "Speech is recognised on your device to type your message for you."
+      }
+    },
+    "android": {
+      "package": "com.chatick.app",
+      "adaptiveIcon": {
+        "backgroundColor": "#141611",
+        "foregroundImage": "./assets/android-icon-foreground.png",
+        "monochromeImage": "./assets/android-icon-monochrome.png"
+      },
+      "permissions": ["RECORD_AUDIO"],
+      "predictiveBackGestureEnabled": false
+    },
+    "plugins": [
+      [
+        "expo-speech-recognition",
+        {
+          "microphonePermission": "Chatick uses the microphone to turn what you say into a chat message.",
+          "speechRecognitionPermission": "Speech is recognised on your device to type your message for you."
+        }
+      ]
+    ],
+    "extra": {
+      "apiUrl": "https://api.chatick.com"
+    }
+  }
+}
