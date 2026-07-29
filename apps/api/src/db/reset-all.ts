@@ -21,13 +21,22 @@ import { resolveStorage, deleteObject } from '../lib/s3.js'
 
 const CONFIRMED = process.argv.includes('--yes')
 
-/** Порядок важен: сначала зависимые таблицы, потом те, на кого они ссылаются. */
+/**
+ * Что чистим. Имена сверены с реальной схемой — выдуманное имя молча
+ * пропускалось бы, и таблица осталась бы с данными.
+ *
+ * Не трогаем `platform_settings` (настройки самой площадки, не данные людей)
+ * и `__drizzle_migrations` — снеся журнал миграций, мы заставили бы их
+ * накатываться заново поверх существующих таблиц.
+ */
 const TABLES = [
   'resource_secrets',
   'credential_access_log',
   'credentials',
   'task_checklist',
   'task_comments',
+  'task_notes',
+  'task_reminders',
   'time_entries',
   'tasks',
   'task_groups',
@@ -38,14 +47,18 @@ const TABLES = [
   'sandbox_messages',
   'files',
   'messages',
+  'notification_log',
+  'notification_opt_outs',
+  'user_notification_prefs',
   'notifications',
-  'inbox_items',
   'activity_log',
-  'ai_usage',
+  'ai_usage_log',
   'shares',
   'reviews',
+  'feedback',
+  'api_tokens',
   'bridge_sessions',
-  'bridge_device_codes',
+  'bridge_auth_codes',
   'project_storage',
   'project_ai',
   'project_members',
@@ -53,7 +66,6 @@ const TABLES = [
   'company_invites',
   'company_members',
   'companies',
-  'sessions',
   'users',
 ]
 
