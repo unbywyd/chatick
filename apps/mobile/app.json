@@ -28,7 +28,9 @@
         "foregroundImage": "./assets/android-icon-foreground.png",
         "monochromeImage": "./assets/android-icon-monochrome.png"
       },
-      "permissions": ["RECORD_AUDIO"],
+      "permissions": [
+        "RECORD_AUDIO"
+      ],
       "predictiveBackGestureEnabled": false
     },
     "plugins": [
@@ -38,7 +40,9 @@
           "microphonePermission": "Chatick uses the microphone to turn what you say into a chat message.",
           "speechRecognitionPermission": "Speech is recognised on your device to type your message for you."
         }
-      ]
+      ],
+      "expo-secure-store",
+      "expo-web-browser"
     ],
     "extra": {
       "apiUrl": "https://api.chatick.com"

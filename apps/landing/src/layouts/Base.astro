@@ -10,6 +10,13 @@ interface Props {
 const { locale, title, description } = Astro.props
 const current = LOCALES.find((l) => l.code === locale)!
 const canonical = new URL(current.path, Astro.site)
+
+// Мессенджеры и поисковики не умеют относительные адреса — только полный URL.
+const ogImage = new URL('/og.png', Astro.site).toString()
+
+// Формат, который ждёт Open Graph: язык_СТРАНА.
+const OG_LOCALE: Record<string, string> = { en: 'en_US', ru: 'ru_RU', he: 'he_IL' }
+const ogLocale = OG_LOCALE[locale] ?? 'en_US'
 ---
 
 <!doctype html>
@@ -24,10 +31,43 @@ const canonical = new URL(current.path, Astro.site)
     <link rel="alternate" hreflang="x-default" href={new URL('/', Astro.site)} />
     <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
     <meta name="theme-color" content="#141611" />
+    <meta name="robots" content="index, follow, max-image-preview:large" />
+
+    {/* Карточка ссылки. Без og:image мессенджеры показывают голый текст, и
+        ссылка выглядит подозрительно — по ней просто не переходят.
+        Адрес абсолютный: относительный Telegram и Slack не разворачивают. */}
+    <meta property="og:site_name" content="Chatick" />
     <meta property="og:title" content={title} />
     <meta property="og:description" content={description} />
     <meta property="og:type" content="website" />
     <meta property="og:url" content={canonical} />
+    <meta property="og:locale" content={ogLocale} />
+    {LOCALES.filter((l) => l.code !== locale).map((l) => <meta property="og:locale:alternate" content={OG_LOCALE[l.code]} />)}
+    <meta property="og:image" content={ogImage} />
+    <meta property="og:image:width" content="1200" />
+    <meta property="og:image:height" content="630" />
+    <meta property="og:image:alt" content={title} />
+
+    <meta name="twitter:card" content="summary_large_image" />
+    <meta name="twitter:title" content={title} />
+    <meta name="twitter:description" content={description} />
+    <meta name="twitter:image" content={ogImage} />
+
+    {/* Что это за штука — словами, понятными поисковику */}
+    <script
+      type="application/ld+json"
+      set:html={JSON.stringify({
+        '@context': 'https://schema.org',
+        '@type': 'SoftwareApplication',
+        name: 'Chatick',
+        applicationCategory: 'BusinessApplication',
+        operatingSystem: 'Web, Windows, macOS',
+        description,
+        url: new URL('/', Astro.site).toString(),
+        image: ogImage,
+        offers: { '@type': 'Offer', price: '0', priceCurrency: 'USD' },
+      })}
+    />
     <script>
       // Автодетект языка: только на первом заходе на корень, уважаем явный выбор (localStorage)
       const KEY = 'chatick_lang'
