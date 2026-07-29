@@ -51,3 +51,7 @@ pnpm --filter @chatick/desktop dist   # electron-builder -> release/
 
 Цели: NSIS (Windows), DMG (macOS), AppImage (Linux). Иконки — `assets/`,
 генерируются из `apps/app/public/logo-small.png`.
+
+Собирать можно только на целевой системе: DMG требует утилит Apple, NSIS —
+Windows. Подробно про мак — [BUILD-MAC.md](BUILD-MAC.md): что поставить,
+как собрать обе архитектуры и что с подписью.
