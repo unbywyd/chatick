@@ -169,6 +169,10 @@ Example — handle everything waiting for me:
   do. Ticking is manual and reversible: answering and considering it done are
   separate decisions, and nothing happens automatically when all are ticked.
 
+  A checklist is NOT a field of the task: create the task first, then POST its
+  items to the sub-resource above. Sending "checklist" inside POST /x/tasks is
+  rejected with 400.
+
   GET    /x/tasks/<id>/comments
   POST   /x/tasks/<id>/comments   {"text"}
   GET    /x/sprints
@@ -483,6 +487,16 @@ Everything below behaves exactly as in a single-project connection, but takes
   PATCH  /x/tasks/<taskId>?project=<id>
   DELETE /x/tasks/<taskId>?project=<id>
   GET / POST  /x/tasks/<taskId>/comments?project=<id>
+  GET    /x/tasks/<taskId>/checklist?project=<id>            items, done/total
+  POST   /x/tasks/<taskId>/checklist?project=<id>            {"items":["...","..."]} or {"text":"...","note":"..."}
+  PATCH  /x/tasks/<taskId>/checklist/<itemId>?project=<id>   {"done"?, "note"?, "text"?}
+
+  A checklist is the task broken into steps, or questions waiting for an
+  answer. Send several at once via items. The note under an item is optional.
+  Ticking is manual and reversible, and nothing happens automatically when all
+  are ticked. A checklist is NOT a field of the task: create the task first,
+  then POST its items to the sub-resource above.
+
   GET / POST  /x/sprints?project=<id>
   GET / POST / PATCH / DELETE  /x/documents...?project=<id>
   POST   /x/documents/<id>/append?project=<id>

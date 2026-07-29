@@ -655,6 +655,46 @@ async function resolveAssignee(id: BridgeIdentity, projectId: string, value: unk
 }
 
 /** ISO или «tomorrow» / «in 3 days» / «next monday». */
+/**
+ * Ругаться на неизвестные поля в теле.
+ *
+ * Молча проглоченное поле — худший исход для ассистента: запрос успешен, а
+ * работа не сделана, и узнать об этом можно только перечитав объект. Так и
+ * случилось с checklist: агент отправил его внутри задачи, получил 201 и
+ * доложил о созданных пунктах, которых не было.
+ *
+ * Подсказываем, куда идти, если поле — это отдельный подресурс.
+ */
+const SUBRESOURCE_HINT: Record<string, string> = {
+  checklist: 'POST /x/tasks/<id>/checklist — a checklist is a sub-resource, not a task field',
+  comments: 'POST /x/tasks/<id>/comments',
+  comment: 'POST /x/tasks/<id>/comments',
+  secrets: 'POST /x/resources/<id>/secrets',
+  attachments: 'POST /x/files, then pass attachmentIds',
+}
+
+const TASK_FIELDS = [
+  'title',
+  'description',
+  'assignee',
+  'status',
+  'priority',
+  'dueDate',
+  'estimateMinutes',
+  'sprintId',
+  // project передают в query, но в теле он безобиден и приходит по привычке
+  'project',
+] as const
+
+function unknownFields(body: Record<string, unknown>, allowed: readonly string[]): string | null {
+  const extra = Object.keys(body).filter((k) => !allowed.includes(k))
+  if (!extra.length) return null
+  const hints = extra.filter((k) => SUBRESOURCE_HINT[k]).map((k) => `${k}: use ${SUBRESOURCE_HINT[k]}`)
+  return `Unknown field${extra.length > 1 ? 's' : ''}: ${extra.join(', ')}. Allowed: ${allowed.join(', ')}.${
+    hints.length ? ` ${hints.join('; ')}.` : ''
+  }`
+}
+
 function parseDue(value: unknown): Date | null | undefined {
   if (value === null) return null
   if (typeof value !== 'string' || !value.trim()) return undefined
@@ -898,6 +938,9 @@ bridgeRoute.post('/tasks', async (c) => {
   if (denied) return c.json(denied, 403)
 
   const b = (await c.req.json().catch(() => ({}))) as Record<string, unknown>
+  const bad = unknownFields(b, TASK_FIELDS)
+  if (bad) return c.json({ error: bad }, 400)
+
   const title = typeof b.title === 'string' ? b.title.trim() : ''
   if (!title) return c.json({ error: 'title is required' }, 400)
 
@@ -958,6 +1001,9 @@ bridgeRoute.patch('/tasks/:id', async (c) => {
   if (!existing) return c.json({ error: 'Not found' }, 404)
 
   const b = (await c.req.json().catch(() => ({}))) as Record<string, unknown>
+  const bad = unknownFields(b, TASK_FIELDS)
+  if (bad) return c.json({ error: bad }, 400)
+
   const patch: Record<string, unknown> = {}
   if (typeof b.title === 'string') patch.title = b.title.slice(0, 300)
   if (typeof b.description === 'string') patch.description = b.description
