@@ -284,7 +284,14 @@ export function useSystemNotifications() {
       ws.onmessage = (e) => {
         try {
           const { event } = JSON.parse(e.data as string) as { event?: string }
-          if (event === 'notification') qc.invalidateQueries({ queryKey: ['inbox-system'] })
+          if (event === 'notification') {
+            qc.invalidateQueries({ queryKey: ['inbox-system'] })
+            // ['inbox'] — то, из чего собирается панель в трее и бейдж. Без
+            // него уведомление всплывало системным окном, а в панели не
+            // появлялось до следующего опроса (минута) — и то лишь после
+            // переоткрытия. Задачи так и работают, см. tasks_changed ниже.
+            qc.invalidateQueries({ queryKey: ['inbox'] })
+          }
           // Часы человека — его собственные, и панель в трее живёт вне
           // проекта: без личного события она узнавала об остановке только
           // из опроса, показывая до полуминуты уже остановленный таймер.
