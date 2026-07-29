@@ -10,7 +10,8 @@
     "desktopWaiting": "ממתינים לסיום ההתחברות בדפדפן…",
     "desktopExpired": "ההתחברות ארכה זמן רב מדי. נסו שוב.",
     "desktopDone": "התחברתם",
-    "desktopDoneHint": "אפשר לסגור את הלשונית ולחזור לאפליקציית Chatick."
+    "desktopDoneHint": "אפשר לסגור את הלשונית ולחזור לאפליקציית Chatick.",
+    "googleRetry": "לנסות שוב"
   },
   "start": {
     "logout": "התנתקות",

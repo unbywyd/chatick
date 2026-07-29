@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { useNavigate, useSearchParams } from 'react-router-dom'
 import { useTranslation } from 'react-i18next'
 import { toast } from 'sonner'
@@ -42,12 +42,18 @@ export function LoginScreen() {
   // --- вход из десктопа ------------------------------------------------------
   const shell = desktop()
   const [waiting, setWaiting] = useState(false)
+  // Номер попытки: по нему устаревший опрос понимает, что он больше не нужен.
+  const attemptRef = useRef(0)
 
   /**
    * Открываем вход в браузере и ждём. Опрос — единственный способ узнать
    * результат: браузер о нашем существовании не знает.
    */
   async function signInFromDesktop() {
+    // Повторное нажатие = начать заново. Прошлая попытка перестаёт слушать:
+    // в браузере могла случиться ошибка, и человек вправе попробовать ещё
+    // раз, не дожидаясь десяти минут и не перезапуская приложение.
+    const attempt = ++attemptRef.current
     setWaiting(true)
     try {
       const { code, url } = await api<{ code: string; url: string }>('/api/v1/auth/desktop', { method: 'POST' })
@@ -64,6 +70,8 @@ export function LoginScreen() {
       const deadline = Date.now() + 10 * 60 * 1000
       while (Date.now() < deadline) {
         await new Promise((r) => setTimeout(r, 2000))
+        // Начали заново или отменили — эта попытка больше не решает.
+        if (attemptRef.current !== attempt) return
         const r = await api<{ status: string; token?: string }>(`/api/v1/auth/desktop/poll?code=${code}`)
         if (r.status === 'approved' && r.token) {
           setSessionToken(r.token)
@@ -72,11 +80,11 @@ export function LoginScreen() {
         }
         if (r.status === 'expired') break
       }
-      toast.error(t('login.desktopExpired'))
+      if (attemptRef.current === attempt) toast.error(t('login.desktopExpired'))
     } catch {
-      toast.error(t('login.failed'))
+      if (attemptRef.current === attempt) toast.error(t('login.failed'))
     } finally {
-      setWaiting(false)
+      if (attemptRef.current === attempt) setWaiting(false)
     }
   }
 
@@ -96,15 +104,31 @@ export function LoginScreen() {
         </div>
         {shell ? (
           <div className="flex flex-col items-center gap-3">
+            {/* Кнопка не блокируется: нажать повторно — законный способ
+                начать заново, если в браузере что-то пошло не так. Ждать
+                десять минут или перезапускать приложение человек не должен. */}
             <button
               onClick={signInFromDesktop}
-              disabled={waiting}
-              className="flex items-center gap-3 rounded-full border bg-card px-6 py-3 text-sm font-medium transition-colors hover:bg-accent disabled:opacity-60"
+              className="flex items-center gap-3 rounded-full border bg-card px-6 py-3 text-sm font-medium transition-colors hover:bg-accent"
             >
               <GoogleIcon />
-              {t('login.google')}
+              {waiting ? t('login.googleRetry') : t('login.google')}
             </button>
-            {waiting && <p className="text-sm text-muted-foreground">{t('login.desktopWaiting')}</p>}
+            {waiting && (
+              <div className="flex flex-col items-center gap-1">
+                <p className="text-sm text-muted-foreground">{t('login.desktopWaiting')}</p>
+                <button
+                  onClick={() => {
+                    // Опрос прекращается сам, увидев чужой номер попытки.
+                    attemptRef.current++
+                    setWaiting(false)
+                  }}
+                  className="text-xs text-muted-foreground underline-offset-2 hover:text-foreground hover:underline"
+                >
+                  {t('common.cancel')}
+                </button>
+              </div>
+            )}
           </div>
         ) : (
           <a

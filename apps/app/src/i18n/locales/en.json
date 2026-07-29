@@ -10,7 +10,8 @@
     "desktopWaiting": "Waiting for sign-in in your browser…",
     "desktopExpired": "Sign-in took too long. Please try again.",
     "desktopDone": "You are signed in",
-    "desktopDoneHint": "You can close this tab and go back to the Chatick app."
+    "desktopDoneHint": "You can close this tab and go back to the Chatick app.",
+    "googleRetry": "Try again"
   },
   "start": {
     "logout": "Sign out",
