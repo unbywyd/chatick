@@ -7,6 +7,74 @@ import { expandPermissions } from '../routes/projects.js'
 
 const base = () => (process.env.API_PUBLIC_URL || 'https://api.chatick.com').replace(/\/$/, '')
 
+/**
+ * Каталог ручек — ОДИН на оба гайда.
+ *
+ * Раньше проектное и компанейское подключения имели каждое свой список, и
+ * фича, добавленная в один, для половины подключений просто не существовала —
+ * молча. Так и вышло с чек-листом: ассистент читал компанейский гайд, раздела
+ * не находил и делал вывод, что фичи нет.
+ *
+ * Поэтому список здесь один, а различие сведено к одному параметру: у
+ * компанейского туннеля к пути дописывается ?project=<id>. Забыть обновить
+ * второй документ теперь нельзя — второго документа нет.
+ *
+ * @param q суффикс проекта: '' для проектного туннеля, '?project=<id>' для компанейского
+ */
+function endpointCatalog(q: string): string {
+  // Первый параметр в строке запроса: у компанейского уже занят ?project=
+  const amp = q ? '&' : '?'
+  return `  GET    /x/tasks${q}${amp}assignee=me&status=todo&q=text&sprint=<sprintId>&limit=50
+         status: todo | in_progress | review | done
+  GET    /x/tasks/<id>${q}
+  POST   /x/tasks${q}              {"title","description?","assignee?","status?","priority?","dueDate?","estimateMinutes?","sprintId?"}
+  PATCH  /x/tasks/<id>${q}         any subset of the same fields
+  DELETE /x/tasks/<id>${q}
+
+  Unknown fields in a body are rejected with 400 naming the field — a request
+  that returns 2xx did exactly what you asked, so there is no need to re-read
+  the object afterwards to check.
+
+  GET    /x/activity${q}${amp}entityType=task&action=delete&actor=me&q=text&from=&to=&limit=50
+         Project history: who changed what and when. Read-only.
+         entityType: task | file | document | note | resource | member | project
+         Use it before asking the human "what happened here" — and to find
+         things that no longer exist: a deleted file still has its entry.
+
+  GET    /x/tasks/<id>/checklist${q}          items, done/total
+  POST   /x/tasks/<id>/checklist${q}          {"items":["...","..."]} or {"text":"...","note":"..."}
+  PATCH  /x/tasks/<id>/checklist/<itemId>${q} {"done"?, "note"?, "text"?}
+
+  A checklist is the task broken into steps, or questions waiting for an
+  answer. Send several at once via items. The note under an item is optional —
+  most items are just things to do. Ticking is manual and reversible: answering
+  and considering it done are separate decisions, and nothing happens
+  automatically when all are ticked.
+
+  A checklist is NOT a field of the task: create the task first, then POST its
+  items to the sub-resource above. Sending "checklist" inside POST /x/tasks is
+  rejected with 400.
+
+  GET    /x/tasks/<id>/comments${q}
+  POST   /x/tasks/<id>/comments${q}   {"text"}
+  GET    /x/sprints${q}
+  POST   /x/sprints${q}            {"name","startsAt?","endsAt?"}
+
+  Changing only the status (plus sprint or ordering) needs tasks.changeStatus,
+  which every member has — moving a card across the board is not the same as
+  rewriting the task. Touching anything else needs tasks.edit.
+
+  assignee accepts "me", a user id, a name or an email.
+  dueDate accepts ISO date or "tomorrow", "in 3 days", "next monday".
+
+  POST   /x/shares/<type>/<id>${q}    publish a link; type: file | note | resource | message | task
+  DELETE /x/shares/<type>/<id>${q}    revoke it
+
+  Publishing puts the thing on the public internet, so only project owners and
+  admins can do it (403 otherwise) — and ask the human first even when allowed.
+  The response carries both links: one for the team, one public.`
+}
+
 /** Инструкция для НЕавторизованного: как подключиться. Отдаётся по голой ссылке. */
 export function connectDoc(): string {
   const b = base()
@@ -154,42 +222,7 @@ Example — handle everything waiting for me:
 
 ## Tasks
 
-  GET    /x/tasks?assignee=me&status=todo&q=text&sprint=<id>&limit=50
-         status: todo | in_progress | review | done
-  GET    /x/tasks/<id>
-  POST   /x/tasks              {"title","description?","assignee?","status?","priority?","dueDate?","estimateMinutes?","sprintId?"}
-  PATCH  /x/tasks/<id>         any subset of the same fields
-  DELETE /x/tasks/<id>
-  GET    /x/activity?entityType=task&action=delete&actor=me&q=text&from=&to=&limit=50
-         Project history: who changed what and when. Read-only.
-         entityType: task | file | document | note | resource | member | project
-         Use it before asking the human "what happened here" — and to find
-         things that no longer exist: a deleted file still has its entry.
-
-  GET    /x/tasks/<id>/checklist          items, done/total
-  POST   /x/tasks/<id>/checklist          {"items":["...","..."]} or {"text":"...","note":"..."}
-  PATCH  /x/tasks/<id>/checklist/<itemId> {"done"?, "note"?, "text"?}
-
-  A checklist is the task broken into steps, or questions waiting for an
-  answer. The note under an item is optional — most items are just things to
-  do. Ticking is manual and reversible: answering and considering it done are
-  separate decisions, and nothing happens automatically when all are ticked.
-
-  A checklist is NOT a field of the task: create the task first, then POST its
-  items to the sub-resource above. Sending "checklist" inside POST /x/tasks is
-  rejected with 400.
-
-  GET    /x/tasks/<id>/comments
-  POST   /x/tasks/<id>/comments   {"text"}
-  GET    /x/sprints
-  POST   /x/sprints            {"name","startsAt?","endsAt?"}
-
-  Changing only the status (plus sprint or ordering) needs tasks.changeStatus,
-  which every member has — moving a card across the board is not the same as
-  rewriting the task. Touching anything else needs tasks.edit.
-
-  assignee accepts "me", a user id, a name or an email.
-  dueDate accepts ISO date or "tomorrow", "in 3 days", "next monday".
+${endpointCatalog('')}
 
   Example — what is on my plate:
     curl -s '${b}/x/tasks?assignee=me&status=todo' -H 'authorization: Bearer <token>'
@@ -487,26 +520,9 @@ Everything below behaves exactly as in a single-project connection, but takes
 
   GET    /x/projects                    list projects + your permissions in each
   GET    /x/context?project=<id>        description, rules, members, task counts
-  GET    /x/tasks?project=<id>&assignee=me&status=todo
-  GET    /x/tasks/<taskId>?project=<id>
-  POST   /x/tasks?project=<id>          {"title","assignee?","status?",...}
-  PATCH  /x/tasks/<taskId>?project=<id>
-  DELETE /x/tasks/<taskId>?project=<id>
-  GET / POST  /x/tasks/<taskId>/comments?project=<id>
-  GET    /x/activity?project=<id>&entityType=task&actor=me&limit=50
-         Project history: who changed what and when. Read-only.
 
-  GET    /x/tasks/<taskId>/checklist?project=<id>            items, done/total
-  POST   /x/tasks/<taskId>/checklist?project=<id>            {"items":["...","..."]} or {"text":"...","note":"..."}
-  PATCH  /x/tasks/<taskId>/checklist/<itemId>?project=<id>   {"done"?, "note"?, "text"?}
+${endpointCatalog('?project=<id>')}
 
-  A checklist is the task broken into steps, or questions waiting for an
-  answer. Send several at once via items. The note under an item is optional.
-  Ticking is manual and reversible, and nothing happens automatically when all
-  are ticked. A checklist is NOT a field of the task: create the task first,
-  then POST its items to the sub-resource above.
-
-  GET / POST  /x/sprints?project=<id>
   GET / POST / PATCH / DELETE  /x/documents...?project=<id>
   POST   /x/documents/<id>/append?project=<id>
   GET / POST  /x/messages?project=<id>   POST takes {"text","replyToId?","attachmentIds?"}
