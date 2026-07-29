@@ -75,6 +75,9 @@ export const companies = pgTable('companies', {
   maxProjects: text('max_projects').notNull().default('0'), // 0 = без лимита
   maxMembers: text('max_members').notNull().default('0'),
   plan: text('plan').notNull().default('free'), // ярлык тарифа (для будущего биллинга)
+  // Демо-компания: заводится сидом, сносится одной командой. Явный признак,
+  // а не имя — переименованную компанию скрипт очистки уже не нашёл бы.
+  isDemo: boolean('is_demo').notNull().default(false),
   createdAt: createdAt(),
   updatedAt: updatedAt(),
 })
