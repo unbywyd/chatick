@@ -7,6 +7,20 @@ refuses to run otherwise, so a release can never ship without a description.
 
 Written in English only: this file is published on the website.
 
+## 0.3.8 — 2026-07-29
+
+### Fixed
+
+- Notifications now reach the tray while the app is minimised. The main window
+  holds the socket and builds the tray state, but Electron throttles hidden
+  windows — so a notification only arrived once you restored the app, which is
+  exactly when it is no longer useful.
+- Signing in from the desktop can be retried without waiting: the button no
+  longer locks for ten minutes, and there is a Cancel next to it.
+- Signing out no longer leaves the previous company in the navigation history.
+  Signing in with another account landed on "Company unavailable" — a company
+  the new person was never part of.
+
 ## 0.3.7 — 2026-07-28
 
 ### Fixed
