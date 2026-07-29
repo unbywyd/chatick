@@ -597,6 +597,7 @@ export function useDesktopSync() {
       // в полминуты. Перезапрашиваем то, что панель показывает.
       qc.invalidateQueries({ queryKey: ['desktop-running'] })
       qc.invalidateQueries({ queryKey: ['inbox'] })
+      qc.invalidateQueries({ queryKey: ['desktop-tasks'] })
       setStateNonce((n) => n + 1)
     })
 

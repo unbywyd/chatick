@@ -277,9 +277,23 @@ export function useSystemNotifications() {
 
     const connect = () => {
       if (closed) return
+      // Прежняя попытка могла ещё висеть в ожидании — иначе, зовя connect()
+      // из фокуса, мы плодили бы по сокету на каждое переключение окна.
+      if (retry) {
+        window.clearTimeout(retry)
+        retry = undefined
+      }
+      if (ws && (ws.readyState === WebSocket.OPEN || ws.readyState === WebSocket.CONNECTING)) return
+
       ws = new WebSocket(`${API_URL.replace(/^http/, 'ws')}/ws?token=${encodeURIComponent(token)}`)
       ws.onopen = () => {
         attempt = 0
+        // Пока связи не было, могли прийти уведомления и задачи — сокет о них
+        // уже не расскажет, событие ушло в никуда. Перечитываем то, что
+        // показывает трей и колокольчик.
+        qc.invalidateQueries({ queryKey: ['inbox'] })
+        qc.invalidateQueries({ queryKey: ['inbox-system'] })
+        qc.invalidateQueries({ queryKey: ['desktop-tasks'] })
       }
       ws.onmessage = (e) => {
         try {
@@ -317,8 +331,26 @@ export function useSystemNotifications() {
     }
     connect()
 
+    // Человек вернулся к приложению — связь нужна сейчас, а не через
+    // пятнадцать секунд нарастающей паузы. Именно так это и выглядело:
+    // сидишь в панели, а «ничего не происходит» — сокет ещё ждал своей
+    // очереди после разрыва.
+    const wake = () => {
+      if (closed) return
+      if (!ws || ws.readyState === WebSocket.CLOSED || ws.readyState === WebSocket.CLOSING) {
+        attempt = 0
+        connect()
+      }
+    }
+    window.addEventListener('focus', wake)
+    window.addEventListener('online', wake)
+    document.addEventListener('visibilitychange', wake)
+
     return () => {
       closed = true
+      window.removeEventListener('focus', wake)
+      window.removeEventListener('online', wake)
+      document.removeEventListener('visibilitychange', wake)
       if (retry) window.clearTimeout(retry)
       ws?.close()
     }
