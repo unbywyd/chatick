@@ -102,7 +102,15 @@ export function ProfileMenu({
     if (!(await confirm({ title: t('profile.logoutConfirm'), confirmLabel: t('profile.logout'), destructive: true }))) return
     setProjectToken(null)
     setSessionToken(null)
-    navigate('/login')
+    // Кэш чистим целиком: в нём лежат компании, проекты и профиль ушедшего
+    // человека. Следующий увидел бы их до первого ответа сервера.
+    qc.clear()
+    // replace, а не push: иначе адрес компании остаётся в истории, и после
+    // входа под другим аккаунтом приложение возвращается на неё — а у нового
+    // человека такой компании нет. Он видит «Компания недоступна», хотя сам
+    // никуда не переходил: в десктопе адресной строки не видно, и понять,
+    // откуда взялся чужой маршрут, невозможно.
+    navigate('/login', { replace: true })
   }
 
   return (
