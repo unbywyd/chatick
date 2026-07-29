@@ -1,8 +1,9 @@
 import { Hono } from 'hono'
-import { and, asc, desc, eq, gt, ilike, inArray, isNull, lt, or, sql } from 'drizzle-orm'
+import { and, asc, desc, eq, gt, gte, ilike, inArray, isNull, lt, lte, or, sql } from 'drizzle-orm'
 import { db } from '../db/client.js'
 import {
   activityLog,
+  chatSummaries,
   companies,
   companyInvites,
   companyMembers,
@@ -2235,6 +2236,120 @@ bridgeRoute.get('/messages', async (c) => {
       attachments: byMessage.get(r.m.id) ?? [],
       createdAt: r.m.createdAt,
     })),
+  })
+})
+
+// --- сжатая история чата ----------------------------------------------------
+//
+// Переписка живёт вечно и целиком, но читать её подряд бессмысленно: тысячи
+// строк не влезут в контекст, а нужное в них не найти. Поэтому дни свёрнуты
+// в саммари, и ассистент идёт по ним сверху вниз: список → нужный период →
+// сырые сообщения этого периода.
+//
+// Связь через ДАТЫ, а не через список id: границы уже записаны в саммари,
+// работают на всей старой истории и не ломаются, если сообщения дописали
+// задним числом. Ничего при этом не удаляется — саммари лишь надстройка.
+
+bridgeRoute.get('/chat/summaries', async (c) => {
+  const scope = await resolveProject(c as never)
+  if ('error' in scope) return c.json({ error: scope.error }, scope.status)
+
+  const q = c.req.query()
+  const limit = Math.min(100, Math.max(1, Number(q.limit) || 30))
+  const conds = [eq(chatSummaries.projectId, scope.projectId)]
+  if (q.q?.trim()) {
+    conds.push(or(ilike(chatSummaries.name, `%${q.q.trim()}%`), ilike(chatSummaries.content, `%${q.q.trim()}%`))!)
+  }
+  if (q.from && !isNaN(Date.parse(q.from))) conds.push(gte(chatSummaries.toAt, new Date(q.from)))
+  if (q.to && !isNaN(Date.parse(q.to))) conds.push(lte(chatSummaries.fromAt, new Date(q.to + 'T23:59:59')))
+
+  const rows = await db
+    .select()
+    .from(chatSummaries)
+    .where(and(...conds))
+    .orderBy(desc(chatSummaries.toAt))
+    .limit(limit)
+
+  // full=1 — сразу с текстом: при поиске ассистенту нужен не список заголовков,
+  // а понимание, тот ли это период.
+  const full = q.full === '1' || q.full === 'true'
+  return c.json({
+    items: rows.map((s) => ({
+      id: s.id,
+      name: s.name,
+      from: s.fromAt,
+      to: s.toAt,
+      messageCount: Number(s.messageCount),
+      content: full ? s.content : s.content.slice(0, 300),
+      // Готовый вызов за сырыми сообщениями этого периода: чтобы не собирать
+      // его вручную и не промахнуться мимо границ.
+      messagesUrl: `/x/chat/messages?from=${s.fromAt.toISOString()}&to=${s.toAt.toISOString()}`,
+    })),
+    count: rows.length,
+  })
+})
+
+bridgeRoute.get('/chat/summaries/:id', async (c) => {
+  const scope = await resolveProject(c as never)
+  if ('error' in scope) return c.json({ error: scope.error }, scope.status)
+  const s = await db.query.chatSummaries.findFirst({
+    where: and(eq(chatSummaries.id, c.req.param('id')), eq(chatSummaries.projectId, scope.projectId)),
+  })
+  if (!s) return c.json({ error: 'Summary not found' }, 404)
+  return c.json({
+    id: s.id,
+    name: s.name,
+    from: s.fromAt,
+    to: s.toAt,
+    messageCount: Number(s.messageCount),
+    content: s.content,
+    messagesUrl: `/x/chat/messages?from=${s.fromAt.toISOString()}&to=${s.toAt.toISOString()}`,
+  })
+})
+
+// Сырые сообщения за период — то, ради чего и нужна выжимка: прочитал саммари,
+// понял «это оно», забрал точные слова и процитировал.
+bridgeRoute.get('/chat/messages', async (c) => {
+  const scope = await resolveProject(c as never)
+  if ('error' in scope) return c.json({ error: scope.error }, scope.status)
+
+  const q = c.req.query()
+  const from = q.from && !isNaN(Date.parse(q.from)) ? new Date(q.from) : null
+  const to = q.to && !isNaN(Date.parse(q.to)) ? new Date(q.to.length <= 10 ? q.to + 'T23:59:59' : q.to) : null
+  if (!from && !to) return c.json({ error: 'Pass from and/or to (ISO date). Get them from /x/chat/summaries.' }, 400)
+
+  const limit = Math.min(500, Math.max(1, Number(q.limit) || 200))
+  const conds = [
+    eq(messages.projectId, scope.projectId),
+    eq(messages.mode, 'group' as const),
+    eq(messages.status, 'delivered' as const),
+  ]
+  if (from) conds.push(gte(messages.createdAt, from))
+  if (to) conds.push(lte(messages.createdAt, to))
+  if (q.q?.trim()) conds.push(ilike(messages.text, `%${q.q.trim()}%`))
+
+  const rows = await db
+    .select({ m: messages, u: users })
+    .from(messages)
+    .leftJoin(users, eq(users.id, messages.authorId))
+    .where(and(...conds))
+    // По возрастанию: разговор читают сверху вниз, а не с конца.
+    .orderBy(asc(messages.createdAt))
+    .limit(limit + 1)
+
+  const hasMore = rows.length > limit
+  const items = rows.slice(0, limit)
+  return c.json({
+    items: items.map((r) => ({
+      id: r.m.id,
+      text: r.m.text,
+      author: r.u ? r.u.name || r.u.email : 'AI',
+      at: r.m.createdAt,
+    })),
+    count: items.length,
+    // Молча обрезать нельзя: ассистент решит, что прочитал весь период.
+    hasMore,
+    ...(hasMore ? { hint: 'Truncated. Narrow the range or raise limit (max 500).' } : {}),
   })
 })
 

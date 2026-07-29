@@ -67,6 +67,18 @@ function endpointCatalog(q: string): string {
   assignee accepts "me", a user id, a name or an email.
   dueDate accepts ISO date or "tomorrow", "in 3 days", "next monday".
 
+  GET    /x/chat/summaries${q}${amp}q=text&from=&to=&full=1&limit=30
+         The chat compressed into per-day summaries — how to know what was
+         discussed months ago without reading thousands of lines.
+  GET    /x/chat/summaries/<id>${q}          one summary in full
+  GET    /x/chat/messages${q}${amp}from=&to=&q=text&limit=200
+         The RAW messages of a period, oldest first.
+
+  How to recall something old: search the summaries, find the period, then
+  fetch its raw messages and quote the exact words. Every summary carries
+  from/to and a ready-made messagesUrl for exactly that. Nothing is ever
+  deleted — summaries sit on top of the full history, they do not replace it.
+
   POST   /x/shares/<type>/<id>${q}    publish a link; type: file | note | resource | message | task
   DELETE /x/shares/<type>/<id>${q}    revoke it
 

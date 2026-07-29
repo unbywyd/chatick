@@ -1527,16 +1527,39 @@ async function summarizeChunk(
 }
 
 /**
+ * Догнать сжатие: обрабатывает завершённые дни подряд, пока они не кончатся.
+ *
+ * Раньше за вызов сжимался ровно один день, а вызов происходит только при
+ * новом сообщении. В проекте с месячным перерывом это значило, что тридцать
+ * дней истории ждут тридцати новых сообщений, и очередь не рассасывалась
+ * никогда: сообщения копились, а выжимки для них не появлялись.
+ *
+ * Потолок на проход — чтобы отправка одного сообщения не превращалась в сотню
+ * запросов к модели. Остаток догонит следующий вызов.
+ */
+const MAX_DAYS_PER_RUN = 10
+
+export async function maybeCompress(projectId: string): Promise<void> {
+  for (let day = 0; day < MAX_DAYS_PER_RUN; day++) {
+    const did = await compressOneDay(projectId)
+    if (!did) return
+  }
+  console.log(`[memory] ${projectId}: hit the ${MAX_DAYS_PER_RUN}-day cap, more will follow`)
+}
+
+/**
  * Сжать сообщения в саммари ПО ДНЯМ. За вызов обрабатывает один самый старый
  * ПОЛНОСТЬЮ ЗАВЕРШЁННЫЙ день (сегодняшний не трогаем — он ещё дописывается).
  * Крупный день дробится на несколько саммари по токен-бюджету. Fail-safe.
+ *
+ * @returns true, если день сжат и, возможно, есть ещё
  */
-export async function maybeCompress(projectId: string): Promise<void> {
+async function compressOneDay(projectId: string): Promise<boolean> {
   try {
     const project = await db.query.projects.findFirst({ where: eq(projects.id, projectId) })
-    if (!project) return
+    if (!project) return false
     const cfg = await projectLlm(projectId, 'summary')
-    if (!cfg) return
+    if (!cfg) return false
     const aiConfig = JSON.parse(project.aiConfig || '{}') as { language?: string }
     const langName = LANG_NAMES[aiConfig.language ?? 'en'] ?? 'English'
 
@@ -1557,12 +1580,12 @@ export async function maybeCompress(projectId: string): Promise<void> {
       .orderBy(asc(messages.createdAt))
       .limit(1000)
 
-    if (rows.length === 0) return
+    if (rows.length === 0) return false
 
     const today = UTC_DAY(new Date())
     const oldestDay = UTC_DAY(rows[0]!.msg.createdAt)
     // если весь несжатый остаток — это сегодня, ждём (день не завершён)
-    if (oldestDay === today) return
+    if (oldestDay === today) return false
 
     const dayRows = rows.filter((r) => UTC_DAY(r.msg.createdAt) === oldestDay)
 
@@ -1589,7 +1612,11 @@ export async function maybeCompress(projectId: string): Promise<void> {
     const lastTs = dayRows[dayRows.length - 1]!.msg.createdAt
     await db.update(projects).set({ lastSummarizedAt: lastTs }).where(eq(projects.id, projectId))
     console.log(`[memory] summarized day ${oldestDay} of ${projectId}: ${dayRows.length} msgs → ${chunks.length} summary(ies)`)
+    return true
   } catch (e) {
+    // Курсор не двигаем: день пересжимается при следующей попытке. Но и цикл
+    // останавливаем — иначе сбой модели прокрутит все дни впустую.
     console.error('[memory] compress failed:', e)
+    return false
   }
 }
