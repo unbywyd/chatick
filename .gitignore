@@ -20,3 +20,13 @@ release/
 apps/api/_ytest.ts
 app.chatick.com.har
 apps/landing/public/presentation.png
+
+# Мобильная сборка: ключи подписи и конфиг Firebase.
+# Keystore — это подпись приложения: утёк он, и чужую сборку невозможно
+# отличить от нашей. В открытом репозитории им не место.
+google-services.json
+GoogleService-Info.plist
+*.keystore
+*.jks
+apps/mobile/android/app/release/
+apps/mobile/ios/
