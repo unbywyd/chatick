@@ -57,6 +57,9 @@ type Dict = {
     windows: string
     mac: string
     linux: string
+    /** Маки бывают двух архитектур, и файл нужен разный */
+    macArm: string
+    macIntel: string
     soon: string
     web: string
     mobileSoon: string
@@ -245,6 +248,8 @@ export const dict: Record<LocaleCode, Dict> = {
       windows: 'Download for Windows',
       mac: 'Download for macOS',
       linux: 'Download for Linux',
+      macArm: 'Apple Silicon',
+      macIntel: 'Intel',
       soon: 'Coming soon',
       web: 'Open in browser',
       mobileSoon: 'Mobile apps are on the roadmap.',
@@ -422,6 +427,8 @@ export const dict: Record<LocaleCode, Dict> = {
       windows: 'Скачать для Windows',
       mac: 'Скачать для macOS',
       linux: 'Скачать для Linux',
+      macArm: 'Apple Silicon',
+      macIntel: 'Intel',
       soon: 'Скоро',
       web: 'Открыть в браузере',
       mobileSoon: 'Мобильные приложения — в планах.',
@@ -599,6 +606,8 @@ export const dict: Record<LocaleCode, Dict> = {
       windows: 'הורדה ל-Windows',
       mac: 'הורדה ל-macOS',
       linux: 'הורדה ל-Linux',
+      macArm: 'Apple Silicon',
+      macIntel: 'Intel',
       soon: 'בקרוב',
       web: 'פתחו בדפדפן',
       mobileSoon: 'אפליקציות לנייד בתוכניות.',

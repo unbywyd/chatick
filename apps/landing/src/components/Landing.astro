@@ -1,5 +1,6 @@
 ---
 import { LOCALES, dict, type LocaleCode } from '../i18n'
+import desktopPkg from '../../../desktop/package.json'
 
 interface Props {
   locale: LocaleCode
@@ -18,10 +19,27 @@ const WIN_ICON =
   '<svg viewBox="0 0 24 24" width="18" height="18" fill="currentColor" aria-hidden="true"><path d="M3 5.6l7.2-1v6.9H3V5.6zm0 12.8l7.2 1v-6.8H3v5.8zM11.1 19.6L21 21v-8.3h-9.9v6.9zM11.1 3v7.5H21V2l-9.9 1z"/></svg>'
 const APPLE_ICON =
   '<svg viewBox="0 0 24 24" width="18" height="18" fill="currentColor" aria-hidden="true"><path d="M16.4 12.7c0-2.4 2-3.6 2.1-3.6-1.1-1.7-2.9-1.9-3.6-1.9-1.5-.2-3 .9-3.7.9-.8 0-2-.9-3.2-.8-1.7 0-3.2 1-4 2.5-1.7 3-.4 7.4 1.2 9.8.8 1.2 1.8 2.5 3 2.4 1.2 0 1.7-.8 3.1-.8 1.4 0 1.8.8 3.1.8 1.3 0 2.1-1.2 2.9-2.3.9-1.3 1.3-2.6 1.3-2.7-.1 0-2.5-1-2.5-3.8zM14 5.2c.7-.8 1.1-2 1-3.2-1 0-2.2.7-2.9 1.5-.6.7-1.2 1.9-1 3 1.1.1 2.2-.6 2.9-1.3z"/></svg>'
-const VERSION = '0.2.3'
+// Версия берётся из десктопного package.json — того же, что electron-builder
+// пишет в latest.yml. Раньше она стояла здесь числом и разошлась с релизом на
+// три версии: кнопка вела на сборку, которой на сервере уже не было.
+const VERSION = desktopPkg.version
+// Мак собирается двумя файлами: у arm64 и Intel разные сборки Electron, одной
+// универсальной нет. Кто не знает свою архитектуру — жмёт Apple Silicon: такие
+// маки выпускают с 2020 года, и их подавляющее большинство.
 const DOWNLOADS = [
   { key: 'windows' as const, href: `/releases/Chatick-Setup-${VERSION}.exe`, icon: 'windows' },
-  { key: 'mac' as const, href: '', icon: 'apple' },
+  {
+    key: 'mac' as const,
+    href: `/releases/Chatick-${VERSION}-arm64.dmg`,
+    icon: 'apple',
+    arch: t.download.macArm,
+  },
+  {
+    key: 'mac' as const,
+    href: `/releases/Chatick-${VERSION}-x64.dmg`,
+    icon: 'apple',
+    arch: t.download.macIntel,
+  },
 ]
 
 // Цифры для графиков — то, что видно на овервью в самом продукте.
@@ -286,6 +304,7 @@ const CHART_STATUSES = [
                 <span class="dl-ic" set:html={d.icon === 'windows' ? WIN_ICON : APPLE_ICON} />
                 <span class="dl-os">{t.download[d.key]}</span>
                 {!d.href && <span class="dl-badge">{t.download.soon}</span>}
+                {d.arch && <span class="dl-arch">{d.arch}</span>}
               </a>
             ))
           }
@@ -1426,6 +1445,12 @@ const CHART_STATUSES = [
     border: 1px solid var(--border);
     border-radius: 999px;
     padding: 2px 8px;
+  }
+  /* Архитектура мака: подпись при названии ОС, а не отдельный ярлык — она
+     уточняет кнопку, а не сообщает о её состоянии, как «скоро». */
+  .dl-arch {
+    font-size: 0.78rem;
+    color: var(--fg-muted);
   }
   .dl-web {
     background: var(--lime);
