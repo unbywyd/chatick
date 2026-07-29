@@ -312,8 +312,27 @@ function trayImage() {
     : light ? 'tray-light.png' : 'tray.png'
 
   const base = loadIcon(name)
-  if (!state.unread || base.isEmpty()) return base
-  return withDot(base)
+  const img = !state.unread || base.isEmpty() ? base : withDot(base)
+  return forMenuBar(img)
+}
+
+/**
+ * macOS: строка меню высотой 22 точки, а значок у нас 32 пикселя. Без scale
+ * factor система считает пиксели точками — и значок вылезает на всю панель.
+ * Помечаем как @2x: 32 пикселя становятся 16 точками, как и задумано, а на
+ * Retina остаётся полное разрешение.
+ *
+ * Windows и Linux меряют трей в пикселях — там 32 и нужно, поэтому не трогаем.
+ */
+function forMenuBar(img) {
+  if (process.platform !== 'darwin' || img.isEmpty()) return img
+
+  const scaled = nativeImage.createFromBuffer(img.toPNG(), { scaleFactor: 2 })
+  // Template image: macOS сама красит значок под тему панели и подсвечивает
+  // его при клике — точнее, чем угадывать цвет по nativeTheme. Но с точкой
+  // непрочитанных так нельзя: система схлопнет её цвет в монохром.
+  scaled.setTemplateImage(!state.unread)
+  return scaled
 }
 
 /**
