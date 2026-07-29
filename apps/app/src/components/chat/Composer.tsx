@@ -109,6 +109,11 @@ export function Composer({
     }
   }
 
+  // Живой список участников для подсказки @. Редактор читает его через ref:
+  // сам он создаётся один раз, а участники приезжают запросом позже.
+  const mentionsRef = useRef(mentions)
+  mentionsRef.current = mentions
+
   const editor = useEditor({
     editable: !disabled,
     extensions: [
@@ -120,9 +125,13 @@ export function Composer({
           items: ({ query }) => {
             const q = query.toLowerCase()
             const ai: MentionItem = { id: AI_MENTION_ID, label: 'AI', isAi: true }
-            const people = mentions.filter((m) => m.label.toLowerCase().includes(q))
+            // Через ref, а не напрямую: редактор создаётся один раз и навсегда
+            // запоминает то, что видел при монтировании. Участники приезжают
+            // запросом позже, поэтому в замыкании оставался пустой список — в
+            // подсказке был только @AI, будто в проекте никого нет.
+            const people = mentionsRef.current.filter((m) => m.label.toLowerCase().includes(q))
             // @AI всегда первым — прямое обращение к диспетчеру
-            return [ai, ...people].filter((m) => m.label.toLowerCase().includes(q) || m.isAi).slice(0, 8)
+            return [ai, ...people].slice(0, 8)
           },
           render: () => {
             let component: ReactRenderer<MentionListRef> | null = null

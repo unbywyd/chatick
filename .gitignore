@@ -30,3 +30,6 @@ GoogleService-Info.plist
 *.jks
 apps/mobile/android/app/release/
 apps/mobile/ios/
+*.apk
+*.aab
+apps/mobile/android/
