@@ -91,12 +91,25 @@ const home = LOCALES.find((l) => l.code === locale)?.path ?? '/'
     padding: 0;
     box-sizing: border-box;
   }
+  /* Тот же ивритский сабсет, что на главной — см. Base.astro */
+  @font-face {
+    font-family: 'Heebo';
+    src: url('/fonts/heebo-hebrew.woff2') format('woff2');
+    font-weight: 100 900;
+    font-style: normal;
+    font-display: swap;
+    unicode-range: U+0307-0308, U+0590-05FF, U+200C-2010, U+20AA, U+25CC, U+FB1D-FB4F;
+  }
+  html {
+    overflow-x: hidden;
+  }
   body {
     background: var(--bg);
     color: var(--fg);
-    font-family: 'Segoe UI', system-ui, -apple-system, sans-serif;
+    font-family: 'Heebo', 'Segoe UI', system-ui, -apple-system, sans-serif;
     line-height: 1.7;
     -webkit-font-smoothing: antialiased;
+    overflow-x: hidden;
   }
   a {
     color: inherit;

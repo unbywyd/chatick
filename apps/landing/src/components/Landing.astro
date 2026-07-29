@@ -1625,11 +1625,17 @@ const CHART_STATUSES = [
   .err:empty {
     display: none;
   }
+  /* Ловушка для ботов: поле, которое человек не видит, а бот заполняет.
+     Пряталась через left: -9999px — в RTL раскладка зеркалится, и этот
+     же отступ уносил элемент за пределы страницы, растягивая её вбок на
+     те самые 9999px. Прячем без сдвига: размера нет, наружу не торчит. */
   .trap {
     position: absolute;
-    left: -9999px;
-    width: 0;
-    height: 0;
+    width: 1px;
+    height: 1px;
+    overflow: hidden;
+    clip-path: inset(50%);
+    white-space: nowrap;
     opacity: 0;
     pointer-events: none;
   }

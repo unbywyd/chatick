@@ -65,15 +65,34 @@ const canonical = new URL(current.path, Astro.site)
     padding: 0;
     box-sizing: border-box;
   }
+  /* Иврит системными шрифтами выглядит чужеродно: Segoe UI до него не
+     дотягивается, и подставляется что попало. Heebo — сабсет только с
+     ивритом (12 КБ) и переменными начертаниями, свой, а не с чужого CDN:
+     иначе IP каждого читателя уходил бы гуглу. */
+  @font-face {
+    font-family: 'Heebo';
+    src: url('/fonts/heebo-hebrew.woff2') format('woff2');
+    font-weight: 100 900;
+    font-style: normal;
+    font-display: swap;
+    unicode-range: U+0307-0308, U+0590-05FF, U+200C-2010, U+20AA, U+25CC, U+FB1D-FB4F;
+  }
   html {
     scroll-behavior: smooth;
+    /* Страховка от бокового скролла. Причину чинили отдельно (ловушка для
+       ботов уезжала в RTL), но одного заехавшего вбок блока хватает, чтобы
+       страница поехала целиком — а на иврите это видно сразу. */
+    overflow-x: hidden;
   }
   body {
     background: var(--bg);
     color: var(--fg);
-    font-family: 'Segoe UI', system-ui, -apple-system, sans-serif;
+    /* Heebo стоит первым: его unicode-range отдаёт ему только ивритские
+       буквы, латиница и кириллица достаются прежнему шрифту. */
+    font-family: 'Heebo', 'Segoe UI', system-ui, -apple-system, sans-serif;
     line-height: 1.6;
     -webkit-font-smoothing: antialiased;
+    overflow-x: hidden;
   }
   a {
     color: inherit;
