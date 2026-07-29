@@ -27,6 +27,8 @@ type Dict = {
   pain: { title: string; items: Feature[] }
   solution: { title: string; subtitle: string; items: Feature[] }
   workspace: { title: string; subtitle: string; items: Feature[] }
+  /** Секция с графиками: раньше повторяла заголовок workspace дважды на странице */
+  numbers: { title: string; subtitle: string }
   bridge: {
     tag: string
     title: string
@@ -127,18 +129,18 @@ const PROMPT = {
 export const dict: Record<LocaleCode, Dict> = {
   en: {
     meta: {
-      title: 'Chatick — the workspace your AI can actually run',
+      title: 'Chatick — the workspace your coding assistant can actually work in',
       description:
-        'Team chat with an AI dispatcher, tasks, collaborative documents, files and access — in one place. Connect Claude Code and let it work in your project as you.',
+        'Built for developers: connect Claude Code and let it run tasks, read the project history, answer in chat and see who did what. Plus files, collaborative docs, time tracking and backups.',
     },
     nav: { start: 'Get started' },
     beta: { badge: 'Beta', note: 'Chatick is in beta: it works, it is used daily, and things still change and occasionally break.', warn: 'Beta software. Expect rough edges, and please report anything broken — every report is read.' },
     hero: {
-      title1: 'Your project.',
-      titleAccent: ' One chat.',
-      title2: ' Zero chaos.',
+      title1: 'Where your',
+      titleAccent: ' coding assistant',
+      title2: ' joins the team',
       subtitle:
-        'Chat, tasks, documents and files in one workspace — with an AI dispatcher that keeps order, and an open bridge so your own AI assistant can work here too.',
+        'Built for developers. Connect Claude Code to your project and it works there as you: creates and closes tasks, reads the whole history, answers in chat, sees what everyone has been doing.',
       cta: 'Get started',
       ctaSecondary: 'Ask your AI about us',
       note: 'Free while in beta',
@@ -147,46 +149,53 @@ export const dict: Record<LocaleCode, Dict> = {
     pain: {
       title: 'Sound familiar?',
       items: [
-        { title: 'Two sources of truth', text: 'Tasks live in a tracker, real talk happens in WhatsApp. Nothing matches.' },
-        { title: 'Files vanish', text: 'Documents are sent to chats where nobody will ever find them again.' },
-        { title: 'Same questions, again', text: '“What’s the status?” — asked five times a day, answered five times a day.' },
-        { title: 'Language friction', text: 'The team writes in three languages and half the context gets lost.' },
+        { title: 'Your AI is blind to the project', text: 'It writes great code and knows nothing about the task, the thread where it was agreed, or who is waiting for it.' },
+        { title: 'You are the copy-paste layer', text: 'Pasting the task in, pasting the result back, restating the context every session.' },
+        { title: 'History dies at the scroll limit', text: 'The decision was made two months ago in a chat nobody can search anymore. So it gets made again, differently.' },
+        { title: 'Two sources of truth', text: 'Tasks live in a tracker, the real conversation happens in a messenger. Nothing matches.' },
       ],
     },
     solution: {
-      title: 'An AI dispatcher sits in the middle',
-      subtitle: 'Every message passes through the project AI before it reaches the team.',
+      title: 'Your assistant works inside the project',
+      subtitle: 'Not a chatbot bolted onto a tracker — a connection that gives your AI the same access you have.',
       items: [
-        { title: 'Live translation', text: 'Everyone writes in their language. Everyone reads in theirs.' },
-        { title: 'No repeated questions', text: 'If the answer already exists in the chat, tasks or files — the AI answers instead of pinging people.' },
-        { title: 'Statuses become tasks', text: '“Done with the login page” updates the task instead of flooding the chat.' },
-        { title: 'Your own model', text: 'Bring your own key — Anthropic, OpenAI, Google, DeepSeek — or use ours. Costs are visible per project.' },
+        { title: 'It runs the tasks', text: 'Creates, updates, closes, assigns, breaks a task into a checklist, comments — through the bridge, with your permissions, under your name.' },
+        { title: 'It reads the whole history', text: 'The chat is compressed into per-day summaries; your assistant searches them, finds the right period and pulls up the exact words. Nothing is ever deleted.' },
+        { title: 'It sees who did what', text: 'The project log is open to it: who changed which task, when a file was deleted, what happened while you were away.' },
+        { title: 'It answers in the chat', text: 'Replies to the team, attaches builds, posts what it finished — as a participant, not as a tool you narrate for.' },
       ],
     },
     workspace: {
-      title: 'A full workspace, not just a chat',
-      subtitle: 'Everything a project needs, next to the conversation that drives it.',
+      title: 'And a real workspace around it',
+      subtitle: 'Everything the project needs, next to the conversation that drives it — and all of it reachable by your assistant.',
       items: [
-        { title: 'Tasks', text: 'Sprints, priorities, estimates, comments, drag & drop, Excel import/export — and live updates for everyone.' },
-        { title: 'Documents', text: 'A rich editor with tables and images, real-time co-editing with cursors, version history and public share links.' },
-        { title: 'Files', text: 'Attach from chat, tasks or clipboard. Images optimised automatically. Your own S3/R2 if you want no limits.' },
-        { title: 'Access & secrets', text: 'Credentials encrypted at rest, revealed only on demand and always audited.' },
-        { title: 'History & restore', text: 'Who did what, searchable and kept. Deleted by mistake? Restore it within a week.' },
-        { title: 'Notifications', text: 'One bell across all projects, grouped and clickable. Email arrives once a day as a digest — never per event.' },
+        { title: 'Several companies at once', text: 'Work across companies and projects in parallel, in one window and one tray panel. Your assistant can hold them all or just one — you choose at connection time.' },
+        { title: 'Tasks & checklists', text: 'Sprints, priorities, estimates, comments, drag & drop, Excel import/export. A task splits into checklist items your AI can fill in and tick off.' },
+        { title: 'Documents, co-edited', text: 'Rich editor with tables and images, real-time editing with live cursors, version history and public links.' },
+        { title: 'File manager', text: 'Attach from chat, tasks or clipboard. Images optimised automatically; originals kept only when you ask. Your own S3/R2 if you want no limits.' },
+        { title: 'Resources & secrets', text: 'Links, panels and credentials in one place, encrypted at rest and revealed only on demand. The AI can save them, and can never read the values back.' },
+        { title: 'Notes for the team — and the AI', text: 'Decisions, solutions, contradictions and reminders as a searchable journal. Mark a solution company-wide and other projects find it before debugging it twice.' },
+        { title: 'Time tracking', text: 'Timers and after-the-fact entries, reports by person, task and day, with export. Your assistant can start, stop and report on them.' },
+        { title: 'Backups & export', text: 'Scheduled encrypted backups, seven days of undo, and full export whenever you want. Nothing here is held hostage.' },
       ],
     },
+    numbers: {
+      title: 'The numbers are already there',
+      subtitle: 'Hours, tasks and activity add up as you work — no separate reporting ritual, and your assistant can read them too.',
+    },
     bridge: {
-      tag: 'For developers',
-      title: 'Plug your AI assistant straight into the project',
+      tag: 'The bridge',
+      title: 'One line, and your assistant is part of the project',
       subtitle:
-        'Claude Code — or any assistant that can read docs and call HTTP — connects to Chatick and works inside your project: reads tasks, creates them, writes documents, uploads files.',
+        'Claude Code — or any assistant that can read docs and call HTTP — connects to Chatick and works there: tasks, checklists, chat, files, documents, notes, time, and the full compressed history.',
       points: [
-        'One line to paste. Your assistant reads the guide and connects itself.',
+        'One line to paste. Your assistant reads the guide and connects itself — no SDK, no integration to write.',
         'You approve access in the browser — no token ever goes through your chat.',
         'It acts as you, within your permissions, and every action lands in the project history under your name.',
+        'Connect to one project, a whole company, or everything you have access to.',
         'A connection is a tunnel: close it and the access is gone.',
       ],
-      security: 'No permanent tokens. Nothing to leak.',
+      security: 'No permanent tokens. Nothing to leak. It can never do more than you can.',
     },
     ask: {
       tag: 'The lazy way',
@@ -201,13 +210,13 @@ export const dict: Record<LocaleCode, Dict> = {
     how: {
       title: 'How it works',
       steps: [
-        { title: 'Create a project', text: 'A project is a group. Invite your team — the chat and workspace are ready.' },
-        { title: 'Talk as usual', text: 'The AI dispatcher quietly translates, deduplicates and turns talk into tasks.' },
-        { title: 'Bring your own AI', text: 'Connect Claude Code and let it do the work directly in the project.' },
+        { title: 'Create a project', text: 'A project is a group. Invite your team — chat, tasks, files and documents are ready.' },
+        { title: 'Connect your assistant', text: 'Paste one line into Claude Code. It reads the guide, you approve access in the browser, and it starts working in the project.' },
+        { title: 'Work as usual', text: 'You write code, it handles the project around it — tasks, answers, history. The chat AI meanwhile translates, deduplicates and turns talk into tasks.' },
       ],
     },
     cta: {
-      title: 'Make your project the single source of truth',
+      title: 'Give your assistant somewhere to work',
       subtitle: 'Web today. Desktop for Windows & macOS next.',
       button: 'Open Chatick',
     },
@@ -297,18 +306,18 @@ export const dict: Record<LocaleCode, Dict> = {
 
   ru: {
     meta: {
-      title: 'Chatick — рабочее пространство, в котором может работать ваш ИИ',
+      title: 'Chatick — рабочее пространство, в котором работает ваш ассистент',
       description:
-        'Чат команды с ИИ-диспетчером, задачи, совместные документы, файлы и доступы — в одном месте. Подключите Claude Code, и он будет работать в проекте от вашего имени.',
+        'Сделано для разработчиков: подключите Claude Code, и он ведёт задачи, читает всю историю проекта, отвечает в чате и видит, кто что делал. Плюс файлы, совместные документы, трекер времени и бэкапы.',
     },
     nav: { start: 'Начать' },
     beta: { badge: 'Бета', note: 'Chatick в бете: он работает и используется каждый день, но всё ещё меняется и иногда ломается.', warn: 'Бета-версия. Возможны шероховатости — пишите о поломках, каждое сообщение читают.' },
     hero: {
-      title1: 'Ваш проект.',
-      titleAccent: ' Один чат.',
-      title2: ' Ноль хаоса.',
+      title1: 'Место, где ваш',
+      titleAccent: ' ИИ-ассистент',
+      title2: ' работает в команде',
       subtitle:
-        'Чат, задачи, документы и файлы в одном пространстве — с ИИ-диспетчером, который наводит порядок, и открытым мостом, чтобы здесь мог работать и ваш собственный ИИ-ассистент.',
+        'Сделано для разработчиков. Подключите Claude Code к проекту — и он работает в нём от вашего имени: заводит и закрывает задачи, читает всю историю, отвечает в чате, видит, кто чем занимался.',
       cta: 'Начать',
       ctaSecondary: 'Спросите свой ИИ о нас',
       note: 'Бесплатно на время беты',
@@ -317,46 +326,53 @@ export const dict: Record<LocaleCode, Dict> = {
     pain: {
       title: 'Знакомо?',
       items: [
-        { title: 'Два источника правды', text: 'Задачи — в трекере, реальное общение — в WhatsApp. Ничего не сходится.' },
-        { title: 'Файлы теряются', text: 'Документы шлют в чат, где их больше никто никогда не найдёт.' },
-        { title: 'Одни и те же вопросы', text: '«Какой статус?» — спрашивают пять раз в день, отвечаешь пять раз в день.' },
-        { title: 'Языковой барьер', text: 'Команда пишет на трёх языках, половина контекста теряется.' },
+        { title: 'Ассистент не видит проект', text: 'Пишет отличный код и ничего не знает о задаче, о треде, где её обсудили, и о том, кто её ждёт.' },
+        { title: 'Вы работаете буфером обмена', text: 'Вставить задачу, вставить результат обратно, каждый раз заново пересказывать контекст.' },
+        { title: 'История кончается на скролле', text: 'Решение приняли два месяца назад в переписке, которую уже не найти. И его принимают заново — по-другому.' },
+        { title: 'Два источника правды', text: 'Задачи — в трекере, настоящий разговор — в мессенджере. Ничего не сходится.' },
       ],
     },
     solution: {
-      title: 'В середине стоит ИИ-диспетчер',
-      subtitle: 'Каждое сообщение проходит через ИИ проекта, прежде чем дойти до команды.',
+      title: 'Ассистент работает внутри проекта',
+      subtitle: 'Не чат-бот, приделанный к трекеру, а подключение, дающее вашему ИИ те же доступы, что есть у вас.',
       items: [
-        { title: 'Перевод на лету', text: 'Каждый пишет на своём языке. Каждый читает на своём.' },
-        { title: 'Без повторных вопросов', text: 'Если ответ уже есть в переписке, задачах или файлах — ИИ ответит сам, не дёргая людей.' },
-        { title: 'Статусы становятся задачами', text: '«Доделал страницу логина» обновляет задачу, а не флудит в чат.' },
-        { title: 'Своя модель', text: 'Подключите свой ключ — Anthropic, OpenAI, Google, DeepSeek — или используйте наш. Расходы видны по каждому проекту.' },
+        { title: 'Ведёт задачи', text: 'Создаёт, меняет, закрывает, назначает, разбивает задачу на чек-лист, комментирует — через мост, в границах ваших прав и под вашим именем.' },
+        { title: 'Читает всю историю', text: 'Переписка свёрнута в саммари по дням: ассистент ищет по ним, находит нужный период и поднимает точные слова. Ничего не удаляется.' },
+        { title: 'Видит, кто что делал', text: 'Журнал проекта открыт ему: кто менял задачу, когда удалили файл, что происходило, пока вас не было.' },
+        { title: 'Отвечает в чате', text: 'Пишет команде, прикладывает сборки, сообщает, что доделал — как участник, а не инструмент, за который вы пересказываете.' },
       ],
     },
     workspace: {
-      title: 'Это рабочее пространство, а не просто чат',
-      subtitle: 'Всё, что нужно проекту, рядом с разговором, который им движет.',
+      title: 'И полноценное пространство вокруг',
+      subtitle: 'Всё, что нужно проекту, рядом с разговором, который им движет, — и всё это доступно ассистенту.',
       items: [
-        { title: 'Задачи', text: 'Спринты, приоритеты, оценки, комментарии, перетаскивание, импорт и экспорт в Excel — и живые обновления у всех сразу.' },
-        { title: 'Документы', text: 'Богатый редактор с таблицами и картинками, совместное редактирование с курсорами, история версий и публичные ссылки.' },
-        { title: 'Файлы', text: 'Прикрепляйте из чата, задач или буфера обмена. Картинки оптимизируются сами. Своё S3/R2 — если не нужны лимиты.' },
-        { title: 'Доступы и секреты', text: 'Пароли шифруются, раскрываются только по запросу и всегда попадают в аудит.' },
-        { title: 'История и восстановление', text: 'Кто что делал — с поиском и навсегда. Удалили по ошибке? Вернёте в течение недели.' },
-        { title: 'Уведомления', text: 'Один колокольчик на все проекты, сгруппированный и кликабельный. Почта приходит раз в сутки сводкой, а не на каждый чих.' },
+        { title: 'Несколько компаний сразу', text: 'Работайте в нескольких компаниях и проектах параллельно — в одном окне и одной панели в трее. Ассистента можно подключить ко всему сразу или к одному проекту.' },
+        { title: 'Задачи и чек-листы', text: 'Спринты, приоритеты, оценки, комментарии, перетаскивание, импорт и экспорт в Excel. Задача разбивается на пункты, которые ИИ может заполнить и отметить.' },
+        { title: 'Документы вдвоём', text: 'Богатый редактор с таблицами и картинками, совместное редактирование с курсорами, история версий и публичные ссылки.' },
+        { title: 'Файловый менеджер', text: 'Прикрепляйте из чата, задач или буфера обмена. Картинки оптимизируются сами, оригиналы — только если попросите. Своё S3/R2, если не нужны лимиты.' },
+        { title: 'Ресурсы и секреты', text: 'Ссылки, панели и пароли в одном месте: шифруются и раскрываются только по запросу. ИИ может их сохранять и никогда не может прочитать значения.' },
+        { title: 'Заметки команде и ИИ', text: 'Решения, находки, противоречия и напоминания — журнал с поиском. Отметьте решение общим для компании, и другие проекты найдут его раньше, чем начнут отлаживать заново.' },
+        { title: 'Учёт времени', text: 'Таймеры и записи задним числом, отчёты по людям, задачам и дням, экспорт. Ассистент умеет запускать, останавливать и отчитываться.' },
+        { title: 'Бэкапы и экспорт', text: 'Резервные копии по расписанию и зашифрованные, неделя на отмену удаления и полный экспорт в любой момент. Ничего здесь не держат в заложниках.' },
       ],
     },
+    numbers: {
+      title: 'Цифры уже собраны',
+      subtitle: 'Часы, задачи и активность копятся по ходу работы — без отдельного ритуала отчётности. Ассистент их тоже читает.',
+    },
     bridge: {
-      tag: 'Для разработчиков',
-      title: 'Подключите своего ИИ-ассистента прямо к проекту',
+      tag: 'Мост',
+      title: 'Одна строка — и ассистент внутри проекта',
       subtitle:
-        'Claude Code — или любой ассистент, умеющий читать документацию и делать HTTP-запросы — подключается к Chatick и работает внутри вашего проекта: читает задачи, создаёт их, пишет документы, загружает файлы.',
+        'Claude Code — или любой ассистент, умеющий читать документацию и делать HTTP-запросы — подключается к Chatick и работает там: задачи, чек-листы, чат, файлы, документы, заметки, время и вся сжатая история.',
       points: [
-        'Одна строка, которую нужно вставить. Ассистент сам прочитает инструкцию и подключится.',
+        'Одна строка, которую нужно вставить. Ассистент сам прочитает инструкцию и подключится — без SDK и без интеграции, которую надо писать.',
         'Доступ вы подтверждаете в браузере — токен никогда не проходит через чат.',
         'Он действует от вашего имени, в границах ваших прав, и всё попадает в историю проекта под вашим именем.',
+        'Подключить можно к одному проекту, ко всей компании или ко всему, к чему у вас есть доступ.',
         'Подключение — это туннель: закрыли, и доступа больше нет.',
       ],
-      security: 'Никаких постоянных токенов. Утекать нечему.',
+      security: 'Никаких постоянных токенов. Утекать нечему. Больше вас он не может.',
     },
     ask: {
       tag: 'Ленивый способ',
@@ -467,18 +483,18 @@ export const dict: Record<LocaleCode, Dict> = {
 
   he: {
     meta: {
-      title: 'Chatick — סביבת העבודה שה-AI שלכם באמת יכול להפעיל',
+      title: 'Chatick — סביבת העבודה שבה עוזר הקוד שלכם באמת עובד',
       description:
-        'צ׳אט צוות עם מנהל AI, משימות, מסמכים משותפים, קבצים והרשאות — במקום אחד. חברו את Claude Code והוא יעבוד בפרויקט בשמכם.',
+        'נבנה למפתחים: חברו את Claude Code והוא מנהל משימות, קורא את כל היסטוריית הפרויקט, עונה בצ׳אט ורואה מי עשה מה. בנוסף קבצים, מסמכים משותפים, מעקב זמן וגיבויים.',
     },
     nav: { start: 'להתחיל' },
     beta: { badge: 'בטא', note: 'Chatick בגרסת בטא: הוא עובד ומשמש מדי יום, אך עדיין משתנה ולעיתים נשבר.', warn: 'גרסת בטא. ייתכנו תקלות — דווחו עליהן, כל דיווח נקרא.' },
     hero: {
-      title1: 'הפרויקט שלכם.',
-      titleAccent: ' צ׳אט אחד.',
-      title2: ' אפס בלגן.',
+      title1: 'המקום שבו',
+      titleAccent: ' עוזר ה-AI שלכם',
+      title2: ' עובד עם הצוות',
       subtitle:
-        'צ׳אט, משימות, מסמכים וקבצים בסביבה אחת — עם מנהל AI ששומר על הסדר, וגשר פתוח כדי שגם עוזר ה-AI שלכם יוכל לעבוד כאן.',
+        'נבנה למפתחים. חברו את Claude Code לפרויקט והוא עובד בו בשמכם: פותח וסוגר משימות, קורא את כל ההיסטוריה, עונה בצ׳אט ורואה במה כולם עסקו.',
       cta: 'להתחיל',
       ctaSecondary: 'שאלו את ה-AI שלכם עלינו',
       note: 'חינם בתקופת הבטא',
@@ -487,46 +503,53 @@ export const dict: Record<LocaleCode, Dict> = {
     pain: {
       title: 'נשמע מוכר?',
       items: [
-        { title: 'שני מקורות אמת', text: 'המשימות במערכת אחת, השיחות האמיתיות בוואטסאפ. שום דבר לא מסתנכרן.' },
-        { title: 'קבצים נעלמים', text: 'מסמכים נשלחים לצ׳אט ואף אחד לא ימצא אותם שוב.' },
-        { title: 'אותן שאלות שוב ושוב', text: '«מה הסטטוס?» — שואלים חמש פעמים ביום, עונים חמש פעמים ביום.' },
-        { title: 'מחסום שפה', text: 'הצוות כותב בשלוש שפות וחצי מההקשר הולך לאיבוד.' },
+        { title: 'ה-AI שלכם עיוור לפרויקט', text: 'כותב קוד מצוין ולא יודע דבר על המשימה, על השיחה שבה סוכמה, או על מי שמחכה לה.' },
+        { title: 'אתם שכבת ההעתק-הדבק', text: 'להדביק את המשימה פנימה, להדביק את התוצאה בחזרה, ולספר מחדש את ההקשר בכל שיחה.' },
+        { title: 'ההיסטוריה נגמרת בגלילה', text: 'ההחלטה התקבלה לפני חודשיים בצ׳אט שאי אפשר לחפש בו. אז מקבלים אותה שוב — אחרת.' },
+        { title: 'שני מקורות אמת', text: 'המשימות במערכת אחת, השיחה האמיתית במסנג׳ר. שום דבר לא מסתנכרן.' },
       ],
     },
     solution: {
-      title: 'מנהל AI יושב באמצע',
-      subtitle: 'כל הודעה עוברת דרך ה-AI של הפרויקט לפני שהיא מגיעה לצוות.',
+      title: 'העוזר שלכם עובד בתוך הפרויקט',
+      subtitle: 'לא צ׳אט-בוט שהודבק למערכת משימות, אלא חיבור שנותן ל-AI שלכם בדיוק את ההרשאות שיש לכם.',
       items: [
-        { title: 'תרגום בזמן אמת', text: 'כל אחד כותב בשפה שלו. כל אחד קורא בשפה שלו.' },
-        { title: 'בלי שאלות חוזרות', text: 'אם התשובה כבר קיימת בצ׳אט, במשימות או בקבצים — ה-AI עונה במקום להטריד אנשים.' },
-        { title: 'סטטוסים הופכים למשימות', text: '«סיימתי את דף ההתחברות» מעדכן את המשימה במקום להציף את הצ׳אט.' },
-        { title: 'המודל שלכם', text: 'חברו מפתח משלכם — Anthropic, OpenAI, Google, DeepSeek — או השתמשו בשלנו. העלויות גלויות לכל פרויקט.' },
+        { title: 'מנהל את המשימות', text: 'פותח, מעדכן, סוגר, מקצה, מפרק משימה לרשימת בדיקה ומגיב — דרך הגשר, בגבול ההרשאות שלכם ובשמכם.' },
+        { title: 'קורא את כל ההיסטוריה', text: 'הצ׳אט נדחס לסיכומים יומיים; העוזר מחפש בהם, מוצא את התקופה ומעלה את המילים המדויקות. שום דבר לא נמחק.' },
+        { title: 'רואה מי עשה מה', text: 'יומן הפרויקט פתוח לו: מי שינה איזו משימה, מתי נמחק קובץ, מה קרה בזמן שלא הייתם.' },
+        { title: 'עונה בצ׳אט', text: 'משיב לצוות, מצרף בילדים, מדווח מה סיים — כמשתתף, לא ככלי שאתם מתווכים עבורו.' },
       ],
     },
     workspace: {
-      title: 'סביבת עבודה מלאה, לא רק צ׳אט',
-      subtitle: 'כל מה שפרויקט צריך, ליד השיחה שמניעה אותו.',
+      title: 'ומסביב — סביבת עבודה אמיתית',
+      subtitle: 'כל מה שפרויקט צריך, ליד השיחה שמניעה אותו — והכול נגיש גם לעוזר שלכם.',
       items: [
-        { title: 'משימות', text: 'ספרינטים, עדיפויות, הערכות זמן, תגובות, גרירה, ייבוא וייצוא לאקסל — ועדכונים חיים לכולם.' },
-        { title: 'מסמכים', text: 'עורך עשיר עם טבלאות ותמונות, עריכה משותפת עם סמנים, היסטוריית גרסאות וקישורים ציבוריים.' },
-        { title: 'קבצים', text: 'צרפו מהצ׳אט, מהמשימות או מהלוח. תמונות עוברות אופטימיזציה אוטומטית. S3/R2 משלכם — ללא מגבלות.' },
-        { title: 'הרשאות וסודות', text: 'סיסמאות מוצפנות, נחשפות רק לפי בקשה ותמיד נרשמות ביומן.' },
-        { title: 'היסטוריה ושחזור', text: 'מי עשה מה — עם חיפוש ולתמיד. מחקתם בטעות? אפשר לשחזר תוך שבוע.' },
-        { title: 'התראות', text: 'פעמון אחד לכל הפרויקטים, מקובץ וניתן ללחיצה. מייל מגיע פעם ביום כסיכום, לא על כל אירוע.' },
+        { title: 'כמה חברות במקביל', text: 'עבדו בכמה חברות ופרויקטים בו-זמנית, בחלון אחד ובפאנל אחד במגש. את העוזר אפשר לחבר לכולם או לפרויקט אחד — אתם בוחרים בזמן החיבור.' },
+        { title: 'משימות ורשימות בדיקה', text: 'ספרינטים, עדיפויות, הערכות זמן, תגובות, גרירה, ייבוא וייצוא לאקסל. משימה מתפרקת לפריטים שה-AI יכול למלא ולסמן.' },
+        { title: 'מסמכים בעריכה משותפת', text: 'עורך עשיר עם טבלאות ותמונות, עריכה בזמן אמת עם סמנים חיים, היסטוריית גרסאות וקישורים ציבוריים.' },
+        { title: 'מנהל קבצים', text: 'צרפו מהצ׳אט, מהמשימות או מהלוח. תמונות עוברות אופטימיזציה אוטומטית, מקור נשמר רק אם ביקשתם. S3/R2 משלכם — ללא מגבלות.' },
+        { title: 'משאבים וסודות', text: 'קישורים, פאנלים וסיסמאות במקום אחד: מוצפנים ונחשפים רק לפי בקשה. ה-AI יכול לשמור אותם ולעולם לא לקרוא את הערכים.' },
+        { title: 'הערות לצוות ול-AI', text: 'החלטות, פתרונות, סתירות ותזכורות כיומן עם חיפוש. סמנו פתרון כמשותף לחברה, ופרויקטים אחרים ימצאו אותו לפני שיאתרו את אותו באג מחדש.' },
+        { title: 'מעקב זמן', text: 'טיימרים ורישום בדיעבד, דוחות לפי אנשים, משימות וימים, עם ייצוא. העוזר יודע להפעיל, לעצור ולדווח.' },
+        { title: 'גיבויים וייצוא', text: 'גיבויים מתוזמנים ומוצפנים, שבוע לביטול מחיקה וייצוא מלא בכל רגע. שום דבר כאן לא מוחזק כבן ערובה.' },
       ],
     },
+    numbers: {
+      title: 'המספרים כבר כאן',
+      subtitle: 'שעות, משימות ופעילות מצטברים תוך כדי עבודה — בלי טקס דיווח נפרד, והעוזר שלכם קורא אותם גם.',
+    },
     bridge: {
-      tag: 'למפתחים',
-      title: 'חברו את עוזר ה-AI שלכם ישירות לפרויקט',
+      tag: 'הגשר',
+      title: 'שורה אחת — והעוזר שלכם בתוך הפרויקט',
       subtitle:
-        'Claude Code — או כל עוזר שיודע לקרוא תיעוד ולבצע בקשות HTTP — מתחבר ל-Chatick ועובד בתוך הפרויקט שלכם: קורא משימות, יוצר אותן, כותב מסמכים, מעלה קבצים.',
+        'Claude Code — או כל עוזר שיודע לקרוא תיעוד ולבצע בקשות HTTP — מתחבר ל-Chatick ועובד שם: משימות, רשימות בדיקה, צ׳אט, קבצים, מסמכים, הערות, זמן וכל ההיסטוריה הדחוסה.',
       points: [
-        'שורה אחת להדביק. העוזר יקרא את ההוראות ויתחבר בעצמו.',
+        'שורה אחת להדביק. העוזר יקרא את ההוראות ויתחבר בעצמו — בלי SDK ובלי אינטגרציה שצריך לכתוב.',
         'אתם מאשרים את הגישה בדפדפן — הטוקן לעולם לא עובר בצ׳אט.',
         'הוא פועל בשמכם, בגבולות ההרשאות שלכם, והכול נרשם בהיסטוריית הפרויקט תחת שמכם.',
+        'אפשר לחבר לפרויקט אחד, לחברה שלמה או לכל מה שיש לכם גישה אליו.',
         'חיבור הוא מנהרה: סוגרים אותה — והגישה נעלמת.',
       ],
-      security: 'בלי טוקנים קבועים. אין מה לדלוף.',
+      security: 'בלי טוקנים קבועים. אין מה לדלוף. הוא לעולם לא יכול יותר מכם.',
     },
     ask: {
       tag: 'הדרך העצלה',
@@ -541,13 +564,13 @@ export const dict: Record<LocaleCode, Dict> = {
     how: {
       title: 'איך זה עובד',
       steps: [
-        { title: 'צרו פרויקט', text: 'פרויקט הוא קבוצה. הזמינו את הצוות — הצ׳אט וסביבת העבודה מוכנים.' },
-        { title: 'דברו כרגיל', text: 'מנהל ה-AI מתרגם, מסנן כפילויות והופך שיחה למשימות — בשקט.' },
-        { title: 'חברו AI משלכם', text: 'חברו את Claude Code והוא יבצע את העבודה ישירות בפרויקט.' },
+        { title: 'צרו פרויקט', text: 'פרויקט הוא קבוצה. הזמינו את הצוות — צ׳אט, משימות, קבצים ומסמכים מוכנים.' },
+        { title: 'חברו את העוזר', text: 'הדביקו שורה אחת ב-Claude Code. הוא קורא את ההוראות, אתם מאשרים בדפדפן, והוא מתחיל לעבוד בפרויקט.' },
+        { title: 'עבדו כרגיל', text: 'אתם כותבים קוד, הוא מטפל בפרויקט סביבו — משימות, תשובות, היסטוריה. ובינתיים ה-AI של הצ׳אט מתרגם, מסנן כפילויות והופך שיחה למשימות.' },
       ],
     },
     cta: {
-      title: 'הפכו את הפרויקט למקור אמת אחד',
+      title: 'תנו לעוזר שלכם מקום לעבוד בו',
       subtitle: 'זמין בדפדפן היום. גרסת דסקטופ ל-Windows ו-macOS בקרוב.',
       button: 'לפתוח את Chatick',
     },

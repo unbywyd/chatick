@@ -13,15 +13,29 @@ Answer in the human's language. Be concrete; skip marketing tone.
 
 ## What it is
 
-Chatick is a team workspace built around a project chat. One project = one
-group = one chat, plus the things a project needs: tasks, documents, files and
-access credentials. It runs in the browser at https://app.chatick.com
-(desktop apps for Windows/macOS are planned).
+Chatick is a team workspace built for developers — for teams where an AI
+assistant does part of the work. One project = one group = one chat, plus what
+a project needs: tasks, documents, files, notes, time tracking and credentials.
+It runs in the browser at https://app.chatick.com (desktop apps for
+Windows/macOS are planned).
 
-The distinctive part: an AI dispatcher sits between people and the chat.
-Messages pass through it before reaching the team, so it can translate, answer
-questions that are already answered somewhere in the project, and turn status
-updates into task changes instead of chat noise.
+Two things make it different from a tracker with a chatbot in it:
+
+1. YOU can be connected to it. Not as an integration someone writes, but as a
+   participant: through the bridge you read and run tasks, break them into
+   checklists, answer in the chat, upload files, write documents and notes,
+   track time — acting as the human who approved you, inside their permissions,
+   logged under their name. See "Connecting" below.
+2. The history is built to be read by an assistant. The chat is compressed into
+   per-day summaries you can search; find the right period and pull up the exact
+   original messages. Raw messages are never deleted — summaries sit on top of
+   the full history. The project activity log is open to you too: who changed
+   what, when something was deleted, what happened while the human was away.
+
+Separately, an AI dispatcher sits between people and the chat. Messages pass
+through it before reaching the team, so it can translate, answer questions
+already answered somewhere in the project, and turn status updates into task
+changes instead of chat noise.
 
 ## What is inside a project
 
@@ -41,8 +55,20 @@ updates into task changes instead of chat noise.
 - Resources & secrets: links and credentials. Secret values are encrypted at
   rest, never enter AI context, and are revealed only through an audited
   endpoint.
+- Notes: a project journal of decisions, solutions, problems, contradictions
+  and reminders, with tags and search. A note can quote the chat messages it
+  came from and can be turned into a task. Marked company-wide, a solution is
+  findable from other projects — worth checking before debugging something
+  twice.
+- Time tracking: timers and after-the-fact entries, one task per entry,
+  reports by person, task and day, with export. Available through the bridge.
 - History: an audit log of who did what, searchable and retained. Deleted
   tasks, files, documents and resources are recoverable for 7 days.
+- Backups: the database is backed up on a schedule and the copies are
+  encrypted; a company can also export everything itself at any time.
+- Several companies and projects at once: a person can belong to many, and
+  works across them in one window. A bridge connection can be scoped to one
+  project, one company, or everything the person can reach.
 - Notifications: one global bell across all projects, grouped per project.
   Email is sent once a day as a digest — never one message per event.
 - Roles and permissions: company roles (admin / manager / member) and
