@@ -142,6 +142,23 @@ const CHART_STATUSES = [
           {t.hero.trust[2]}
         </li>
       </ul>
+
+      {/* Снимок продукта сразу под кнопками: обещания на словах проверяются
+          глазами за секунду, и человеку не нужно скроллить, чтобы понять,
+          на что он смотрит. Ширина больше контейнера — окна по краям уходят
+          под обрез, как будто рабочий стол продолжается за экраном. */}
+      <figure class="hero-shot">
+        <picture>
+          <source media="(max-width: 700px)" srcset="/presentation-sm.webp" />
+          <img
+            src="/presentation.webp"
+            alt={t.hero.shotAlt}
+            width="1600"
+            height="1009"
+            decoding="async"
+          />
+        </picture>
+      </figure>
     </div>
   </section>
 
@@ -1798,6 +1815,35 @@ const CHART_STATUSES = [
   }
 
   /* --- Шапка: полоса «никакой привязки» ------------------------------------ */
+  /* Снимок продукта под кнопками в шапке. Шире контейнера: края уходят
+     под обрез, и рабочий стол читается как продолжающийся за экраном.
+     Маска снизу гасит нижнюю кромку, чтобы картинка не обрывалась линейкой,
+     а растворялась в фоне следующей секции. */
+  .hero-shot {
+    margin: 56px auto 0;
+    max-width: 1240px;
+    width: min(112%, 1240px);
+    margin-inline: calc(50% - min(56%, 620px));
+    line-height: 0;
+    -webkit-mask-image: linear-gradient(to bottom, #000 72%, transparent 100%);
+    mask-image: linear-gradient(to bottom, #000 72%, transparent 100%);
+  }
+  .hero-shot img {
+    width: 100%;
+    height: auto;
+    border-radius: 14px 14px 0 0;
+    border: 1px solid rgba(255, 255, 255, 0.08);
+    border-bottom: none;
+    box-shadow: 0 40px 80px -30px rgba(0, 0, 0, 0.75);
+  }
+  @media (max-width: 700px) {
+    .hero-shot {
+      margin-top: 36px;
+      width: 100%;
+      margin-inline: 0;
+    }
+  }
+
   .hero-trust {
     list-style: none;
     margin: 24px 0 0;

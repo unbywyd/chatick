@@ -21,6 +21,8 @@ type Dict = {
     cta: string
     ctaSecondary: string
     note: string
+    /** Подпись к снимку продукта в шапке — для читалок и когда картинка не загрузилась */
+    shotAlt: string
     /** Полоса под кнопками: экспорт, открытый код, бэкапы */
     trust: string[]
   }
@@ -147,6 +149,8 @@ export const dict: Record<LocaleCode, Dict> = {
       cta: 'Get started',
       ctaSecondary: 'Ask your AI about us',
       note: 'Free while in beta',
+      shotAlt:
+        'Chatick on a desktop: project chat, tasks with sprints, the tray panel with notifications, team notes and time reports',
       trust: ['Open source', 'Free', 'Reliable: backups, export & import'],
     },
     pain: {
@@ -326,6 +330,8 @@ export const dict: Record<LocaleCode, Dict> = {
       cta: 'Начать',
       ctaSecondary: 'Спросите свой ИИ о нас',
       note: 'Бесплатно на время беты',
+      shotAlt:
+        'Chatick на рабочем столе: чат проекта, задачи со спринтами, панель в трее с уведомлениями, заметки команды и отчёты по времени',
       trust: ['Открытый код', 'Бесплатно', 'Надёжно: бэкапы, экспорт и импорт'],
     },
     pain: {
@@ -505,6 +511,8 @@ export const dict: Record<LocaleCode, Dict> = {
       cta: 'להתחיל',
       ctaSecondary: 'שאלו את ה-AI שלכם עלינו',
       note: 'חינם בתקופת הבטא',
+      shotAlt:
+        'Chatick על שולחן העבודה: צ׳אט הפרויקט, משימות עם ספרינטים, פאנל המגש עם התראות, הערות הצוות ודוחות זמן',
       trust: ['קוד פתוח', 'חינם', 'אמין: גיבויים, ייצוא ויבוא'],
     },
     pain: {
