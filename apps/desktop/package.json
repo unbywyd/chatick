@@ -38,9 +38,18 @@
       "icon": "assets/icon.png"
     },
     "mac": {
-      "target": "dmg",
+      "target": [
+        {
+          "target": "dmg",
+          "arch": [
+            "arm64",
+            "x64"
+          ]
+        }
+      ],
       "category": "public.app-category.productivity",
-      "icon": "assets/icon.png"
+      "icon": "assets/icon.png",
+      "identity": null
     },
     "linux": {
       "target": "AppImage",
