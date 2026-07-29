@@ -1817,24 +1817,18 @@ const CHART_STATUSES = [
   /* --- Шапка: полоса «никакой привязки» ------------------------------------ */
   /* Снимок продукта под кнопками в шапке. Шире контейнера: края уходят
      под обрез, и рабочий стол читается как продолжающийся за экраном.
-     Маска снизу гасит нижнюю кромку, чтобы картинка не обрывалась линейкой,
-     а растворялась в фоне следующей секции. */
+     Без рамки и подложки — на снимке уже нарисованы окна со своими
+     границами, вторая рамка вокруг них только спорит с ними. */
   .hero-shot {
     margin: 56px auto 0;
     max-width: 1240px;
     width: min(112%, 1240px);
     margin-inline: calc(50% - min(56%, 620px));
     line-height: 0;
-    -webkit-mask-image: linear-gradient(to bottom, #000 72%, transparent 100%);
-    mask-image: linear-gradient(to bottom, #000 72%, transparent 100%);
   }
   .hero-shot img {
     width: 100%;
     height: auto;
-    border-radius: 14px 14px 0 0;
-    border: 1px solid rgba(255, 255, 255, 0.08);
-    border-bottom: none;
-    box-shadow: 0 40px 80px -30px rgba(0, 0, 0, 0.75);
   }
   @media (max-width: 700px) {
     .hero-shot {
