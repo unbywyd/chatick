@@ -301,6 +301,10 @@ async function main() {
       for (let i = 0; i < rnd(2, 7); i++) {
         const at = new Date(day)
         at.setHours(rnd(9, 18), rnd(0, 59))
+        // Сегодняшний день ещё не кончился: случайный час до 18:00 легко
+        // попадает в будущее. Такое сообщение встаёт ниже настоящих — человек
+        // пишет в чат, а его реплика оказывается «раньше» выдуманной.
+        if (at > new Date()) continue
         await db.insert(messages).values({
           projectId: project!.id,
           authorId: pick(members).id,
