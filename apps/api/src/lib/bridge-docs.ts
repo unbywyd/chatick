@@ -160,6 +160,12 @@ Example — handle everything waiting for me:
   POST   /x/tasks              {"title","description?","assignee?","status?","priority?","dueDate?","estimateMinutes?","sprintId?"}
   PATCH  /x/tasks/<id>         any subset of the same fields
   DELETE /x/tasks/<id>
+  GET    /x/activity?entityType=task&action=delete&actor=me&q=text&from=&to=&limit=50
+         Project history: who changed what and when. Read-only.
+         entityType: task | file | document | note | resource | member | project
+         Use it before asking the human "what happened here" — and to find
+         things that no longer exist: a deleted file still has its entry.
+
   GET    /x/tasks/<id>/checklist          items, done/total
   POST   /x/tasks/<id>/checklist          {"items":["...","..."]} or {"text":"...","note":"..."}
   PATCH  /x/tasks/<id>/checklist/<itemId> {"done"?, "note"?, "text"?}
@@ -487,6 +493,9 @@ Everything below behaves exactly as in a single-project connection, but takes
   PATCH  /x/tasks/<taskId>?project=<id>
   DELETE /x/tasks/<taskId>?project=<id>
   GET / POST  /x/tasks/<taskId>/comments?project=<id>
+  GET    /x/activity?project=<id>&entityType=task&actor=me&limit=50
+         Project history: who changed what and when. Read-only.
+
   GET    /x/tasks/<taskId>/checklist?project=<id>            items, done/total
   POST   /x/tasks/<taskId>/checklist?project=<id>            {"items":["...","..."]} or {"text":"...","note":"..."}
   PATCH  /x/tasks/<taskId>/checklist/<itemId>?project=<id>   {"done"?, "note"?, "text"?}

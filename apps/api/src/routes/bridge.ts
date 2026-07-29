@@ -2,6 +2,7 @@ import { Hono } from 'hono'
 import { and, asc, desc, eq, gt, ilike, inArray, isNull, lt, or, sql } from 'drizzle-orm'
 import { db } from '../db/client.js'
 import {
+  activityLog,
   companies,
   companyInvites,
   companyMembers,
@@ -453,6 +454,58 @@ function appPathOf(type: string, projectId: string, id: string): string {
 }
 
 // --- Контекст проекта -------------------------------------------------------
+
+// --- журнал проекта ---------------------------------------------------------
+//
+// «Что тут происходило» — вопрос, с которого начинается почти любое
+// подключение к чужому проекту: кто трогал задачу, когда удалили файл,
+// что менялось на прошлой неделе. Без этого ассистент реконструирует
+// историю по текущему состоянию и ошибается.
+//
+// Только чтение: журнал — свидетельство, и править его нельзя ни людям,
+// ни ассистенту.
+bridgeRoute.get('/activity', async (c) => {
+  const scope = await resolveProject(c as never)
+  if ('error' in scope) return c.json({ error: scope.error }, scope.status)
+
+  const q = c.req.query()
+  const limit = Math.min(Math.max(Number(q.limit) || 50, 1), 200)
+  const conds = [eq(activityLog.projectId, scope.projectId)]
+
+  if (q.entityType) conds.push(eq(activityLog.entityType, q.entityType))
+  if (q.action) conds.push(eq(activityLog.action, q.action as 'create'))
+  if (q.entityId) conds.push(eq(activityLog.entityId, q.entityId))
+  if (q.q?.trim()) conds.push(ilike(activityLog.entityLabel, `%${q.q.trim()}%`))
+  if (q.from && !isNaN(Date.parse(q.from))) conds.push(sql`${activityLog.createdAt} >= ${new Date(q.from)}`)
+  if (q.to && !isNaN(Date.parse(q.to))) conds.push(sql`${activityLog.createdAt} <= ${new Date(q.to + 'T23:59:59')}`)
+
+  // actor=me — «что делал я»: чаще всего спрашивают именно про себя.
+  if (q.actor) {
+    const who = q.actor === 'me' ? auth(c as never).userId : q.actor
+    conds.push(eq(activityLog.actorId, who))
+  }
+
+  const rows = await db
+    .select({ a: activityLog, actor: users })
+    .from(activityLog)
+    .leftJoin(users, eq(users.id, activityLog.actorId))
+    .where(and(...conds))
+    .orderBy(desc(activityLog.createdAt))
+    .limit(limit)
+
+  return c.json({
+    items: rows.map((r) => ({
+      action: r.a.action,
+      entityType: r.a.entityType,
+      entityId: r.a.entityId,
+      entityLabel: r.a.entityLabel,
+      // Пустой actor — это система или ИИ, а не «неизвестно кто».
+      actor: r.actor ? r.actor.name || r.actor.email : 'system',
+      at: r.a.createdAt,
+    })),
+    count: rows.length,
+  })
+})
 
 bridgeRoute.get('/context', async (c) => {
   const id = auth(c as never)
