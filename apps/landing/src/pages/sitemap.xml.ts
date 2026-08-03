@@ -13,9 +13,18 @@ const SITE = 'https://chatick.com'
 // Страницы вне локалей: одни и те же для всех языков.
 const PAGES = ['/changelog', '/privacy', '/terms']
 
+// Страница интеграции есть на всех языках — как и главная.
+const LOCALIZED = ['/integration']
+
 export const GET: APIRoute = () => {
   const entries = [
     ...LOCALES.map((l) => ({ url: `${SITE}${l.path}`, priority: l.code === 'en' ? '1.0' : '0.9' })),
+    ...LOCALES.flatMap((l) =>
+      LOCALIZED.map((page) => ({
+        url: `${SITE}${l.code === 'en' ? '' : `/${l.code}`}${page}`,
+        priority: '0.8',
+      })),
+    ),
     ...PAGES.map((p) => ({ url: `${SITE}${p}`, priority: '0.4' })),
   ]
 

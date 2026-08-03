@@ -1,0 +1,134 @@
+---
+import Doc from '../layouts/Doc.astro'
+import { dict, type LocaleCode } from '../i18n'
+
+interface Props {
+  locale: LocaleCode
+}
+
+const { locale } = Astro.props
+const t = dict[locale].integrate
+const p = t.page
+
+// Страница про мастер-интеграцию — для человека, который решает, подходит ли
+// это его компании. Машиночитаемая версия лежит рядом, на /integration.txt:
+// её отдают своему ассистенту вместо чтения.
+//
+// Переводы обязательны: решение принимает не разработчик, а руководитель,
+// и на чужом языке такой текст просто не читают.
+---
+
+<Doc
+  title={`${t.title} — Chatick`}
+  description={t.subtitle}
+  path={locale === 'en' ? '/integration' : `/${locale}/integration`}
+  locale={locale}
+>
+  <h1>{t.title}</h1>
+  <p class="lead">{p.lead}</p>
+
+  {/* Кнопка для ИИ — вверху, до всего текста: тому, кто хочет спросить
+      ассистента, незачем сначала читать страницу целиком. */}
+  <div class="ai-box">
+    <p class="ai-title">{p.askAi}</p>
+    <p class="ai-hint">{p.askAiHint}</p>
+    <a class="ai-btn" href="/integration.txt" target="_blank" rel="noopener">
+      chatick.com/integration.txt
+    </a>
+  </div>
+
+  <h2>{p.whoTitle}</h2>
+  <div class="split">
+    <div class="side">
+      <p class="side-h">{locale === 'ru' ? 'У вас' : locale === 'he' ? 'אצלכם' : 'Yours'}</p>
+      <p>{p.whoTheirs}</p>
+    </div>
+    <div class="side side-ours">
+      <p class="side-h">Chatick</p>
+      <p>{p.whoOurs}</p>
+    </div>
+  </div>
+
+  <h2>{p.keysTitle}</h2>
+  <p>{p.keysBody}</p>
+  <p>{p.keysScopes}</p>
+
+  <h2>{p.stepsTitle}</h2>
+  <ol>
+    {p.steps.map((s) => <li>{s}</li>)}
+  </ol>
+
+  <h2>{p.linksTitle}</h2>
+  <p>{p.linksBody}</p>
+
+  <h2>{p.hooksTitle}</h2>
+  <p>{p.hooksBody}</p>
+
+  <h2>{p.signinTitle}</h2>
+  <p>{p.signinBody}</p>
+</Doc>
+
+<style>
+  .lead {
+    font-size: 17px;
+    line-height: 1.7;
+  }
+  /* Блок «спросите ИИ» — заметный, но не кричащий: это ярлык, а не реклама */
+  .ai-box {
+    margin: 28px 0 36px;
+    padding: 18px 20px;
+    border: 1px solid rgba(212, 242, 40, 0.35);
+    border-radius: 14px;
+    background: rgba(212, 242, 40, 0.05);
+  }
+  .ai-title {
+    margin: 0;
+    font-weight: 700;
+  }
+  .ai-hint {
+    margin: 6px 0 14px;
+    font-size: 14px;
+    opacity: 0.75;
+  }
+  .ai-btn {
+    display: inline-block;
+    padding: 10px 18px;
+    border-radius: 999px;
+    background: #d4f228;
+    color: #141611;
+    font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+    font-size: 14px;
+    font-weight: 700;
+    text-decoration: none;
+  }
+  .split {
+    display: grid;
+    gap: 14px;
+    margin: 16px 0 8px;
+  }
+  @media (min-width: 640px) {
+    .split {
+      grid-template-columns: 1fr 1fr;
+    }
+  }
+  .side {
+    padding: 16px 18px;
+    border: 1px solid rgba(255, 255, 255, 0.1);
+    border-radius: 12px;
+  }
+  .side p:last-child {
+    margin-bottom: 0;
+  }
+  .side-h {
+    margin: 0 0 6px;
+    font-size: 13px;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+    opacity: 0.6;
+  }
+  /* Наша половина подсвечена — видно, что именно переезжает */
+  .side-ours {
+    border-color: rgba(212, 242, 40, 0.35);
+  }
+</style>

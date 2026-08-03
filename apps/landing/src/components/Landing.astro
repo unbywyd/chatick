@@ -257,6 +257,40 @@ const CHART_STATUSES = [
     </div>
   </section>
 
+  <!-- ДЛЯ КОМПАНИЙ СО СВОЕЙ СИСТЕМОЙ: мастер-интеграция -->
+  <section class="section section-soft" id="integrate">
+    <div class="container">
+      <p class="tag">{t.integrate.tag}</p>
+      <h2>{t.integrate.title}</h2>
+      <p class="section-sub">{t.integrate.subtitle}</p>
+
+      <ul class="integrate-list">
+        {
+          t.integrate.points.map((point) => (
+            <li>
+              <svg viewBox="0 0 24 24" width="16" height="16" fill="none" aria-hidden="true">
+                <path d="m5 13 4 4L19 7" stroke="#d4f228" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" />
+              </svg>
+              {point}
+            </li>
+          ))
+        }
+      </ul>
+
+      {/* Две кнопки: человеку — страница, его ассистенту — машинный текст.
+          Вторая ведёт прямо на /integration.txt, чтобы не заставлять искать
+          её внутри страницы. */}
+      <div class="integrate-cta">
+        <a class="btn btn-brand" href={locale === 'en' ? '/integration' : `/${locale}/integration`}>
+          {t.integrate.cta}
+        </a>
+        <a class="btn btn-ghost" href="/integration.txt" target="_blank" rel="noopener">
+          {t.integrate.ctaAi}
+        </a>
+      </div>
+    </div>
+  </section>
+
   <!-- ASK YOUR AI: копируемый промпт -->
   <section class="section ask" id="ask">
     <div class="container">
@@ -1815,6 +1849,35 @@ const CHART_STATUSES = [
   }
 
   /* --- Шапка: полоса «никакой привязки» ------------------------------------ */
+  .integrate-list {
+    list-style: none;
+    margin: 26px auto 0;
+    padding: 0;
+    max-width: 720px;
+    display: grid;
+    gap: 12px;
+    text-align: start;
+  }
+  .integrate-list li {
+    display: flex;
+    align-items: start;
+    gap: 10px;
+    font-size: 15px;
+    line-height: 1.6;
+    color: var(--fg-dim);
+  }
+  .integrate-list svg {
+    flex: none;
+    margin-top: 4px;
+  }
+  .integrate-cta {
+    margin-top: 28px;
+    display: flex;
+    flex-wrap: wrap;
+    justify-content: center;
+    gap: 12px;
+  }
+
   /* Снимок продукта под кнопками в шапке. Без рамки и подложки — на снимке
      уже нарисованы окна со своими границами, вторая рамка с ними спорит.
      Маска снизу гасит кромку: картинка растворяется в фоне следующей
