@@ -10,6 +10,7 @@ import { companyMembers, users } from '../db/schema.js'
 import { signSessionToken, requireSession, type SessionEnv } from '../auth.js'
 import { env } from '../env.js'
 import { s3Client, s3Bucket, getObjectStream, S3_KEY_PREFIX } from '../lib/s3.js'
+import { notifySignup } from '../lib/admin-alert.js'
 
 export const auth = new Hono<SessionEnv>()
 
@@ -122,6 +123,10 @@ auth.get('/google/callback', async (c) => {
         .values({ email, name: info.name ?? '', googleId: info.sub })
         .returning()
       user = created!
+      // Кто-то зарегистрировался — сообщаем владельцу площадки.
+      // Через void: письмо не должно задерживать вход, а сбой почты —
+      // ломать регистрацию.
+      void notifySignup(created!.email, created!.name)
     }
 
     // Своя картинка (avatarKey) — неприкосновенна. Забираем гугловскую только

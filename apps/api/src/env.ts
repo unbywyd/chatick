@@ -47,6 +47,9 @@ const envSchema = z.object({
   SMTP_USER: z.string().optional(),
   SMTP_PASSWORD: z.string().optional(),
   SMTP_FROM_EMAIL: z.string().optional(),
+  // Куда писать о событиях площадки — пока только о регистрациях.
+  // Не задан — писем нет: на локальной машине они только мешают.
+  ADMIN_EMAIL: z.string().optional(),
   SMTP_FROM_NAME: z.string().optional(), // отображаемое имя отправителя
   SMTP_REPLY_TO: z.string().optional(), // куда уходят ответы (не на noreply)
 
