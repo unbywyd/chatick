@@ -7,6 +7,7 @@ import { companies, companyMembers, projectMembers, projects, users } from '../d
 import { checkKey, logCall, type KeyScope } from '../lib/company-key.js'
 import { defaultPermissions } from './projects.js'
 import { sendAddedToProjectMail } from '../lib/mail-added.js'
+import { localeFor } from '../lib/locale.js'
 
 // Внешний API для систем-заказчиков (SPEC-INTEGRATION).
 //
@@ -342,13 +343,17 @@ async function upsertUser(companyId: string, companyName: string, u: IncomingUse
     if (u.notify) {
       // В фоне: письмо не должно задерживать ответ внешней системе, а сбой
       // почты — отменять уже выданный доступ.
-      void sendAddedToProjectMail({
-        to: user.email,
-        companyName,
-        projectName: project.name,
-        projectId: project.id,
-        locale: user.locale,
-      })
+      // Язык: свой у человека, иначе язык проекта или компании. У заведённого
+      // через API своих настроек ещё нет — он их не открывал.
+      void localeFor({ userId: user.id, projectId: project.id }).then((locale) =>
+        sendAddedToProjectMail({
+          to: user!.email,
+          companyName,
+          projectName: project.name,
+          projectId: project.id,
+          locale,
+        }),
+      )
     }
   }
 

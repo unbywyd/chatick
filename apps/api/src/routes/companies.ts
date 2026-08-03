@@ -9,6 +9,7 @@ import { db } from '../db/client.js'
 import { companies, companyMembers, companyInvites, files, messages, projectMembers, projects, tasks, timeEntries, users } from '../db/schema.js'
 import { requireSession, type SessionEnv } from '../auth.js'
 import { sendInviteMail } from '../lib/mail-invite.js'
+import { projectLocale } from '../lib/locale.js'
 import { encrypt } from '../lib/crypto.js'
 import { LLM_PROVIDERS, testLlm, type LlmProvider } from '../lib/llm.js'
 import { env } from '../env.js'
@@ -521,13 +522,15 @@ companiesRoute.post(
       .returning()
 
     const company = await db.query.companies.findFirst({ where: eq(companies.id, companyId) })
-    const inviter = await db.query.users.findFirst({ where: eq(users.id, sub) })
+    // Язык компании, а не приглашающего: русский админ израильской фирмы
+    // приглашал израильтянина, и письмо уходило по-русски. Своих настроек у
+    // приглашённого ещё нет — он в системе не существует.
     await sendInviteMail({
       to: email,
       companyName: company?.name ?? '',
       role,
       token,
-      inviterLocale: inviter?.locale,
+      inviterLocale: inviteProjectId ? await projectLocale(inviteProjectId) : company?.locale,
     })
 
     return c.json(invite, 201)

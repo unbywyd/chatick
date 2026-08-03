@@ -121,6 +121,9 @@ export const companies = pgTable('companies', {
   // Демо-компания: заводится сидом, сносится одной командой. Явный признак,
   // а не имя — переименованную компанию скрипт очистки уже не нашёл бы.
   isDemo: boolean('is_demo').notNull().default(false),
+  // Язык компании: на нём пишутся письма тем, у кого своих настроек ещё нет —
+  // например, человеку, которого только что завели через API.
+  locale: text('locale').notNull().default('en'),
   // --- связь с внешней системой (SPEC-INTEGRATION) ---
   // Название и шаблон ссылки — настройки, а не код: так интеграция остаётся
   // универсальной, без следов конкретного заказчика.
@@ -202,6 +205,9 @@ export const projects = pgTable(
     // с нашим: он зовёт проект по клиенту, мы — по сути работы.
     externalId: text('external_id'),
     externalName: text('external_name'),
+    // NULL = наследовать от компании. Отдельное значение от 'en': иначе не
+    // отличить «выбрали английский» от «не выбирали».
+    locale: text('locale'),
     // --- конфиг ИИ-диспетчера (SPEC.md §4.1) ---
     // структурированные флаги/проценты храним одним JSON-полем — состав будет расти
     aiConfig: text('ai_config').notNull().default('{}'), // JSON: { strictness, allowFlood, allowJokes, allowQuestions, allowOfftopic, filters: {...} }
