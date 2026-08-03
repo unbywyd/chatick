@@ -113,6 +113,8 @@ export type Company = {
   name: string
   logoUrl: string | null
   myRole: 'admin' | 'manager' | 'member'
+  /** Язык писем тем, у кого своих настроек ещё нет: приглашённым и заведённым через API. */
+  locale?: string
   /** сколько проектов внутри — по нему решается, вести ли визардом первого входа */
   projectsCount?: number
 }

@@ -482,6 +482,9 @@ projectsRoute.patch(
         .partial()
         .optional(),
       storageLimit: z.number().int().min(0).nullable().optional(), // байты; null = наследовать компанию, 0 = без override (безлимит в рамках компании)
+      // Язык проекта для писем. null = наследовать компанию: команда одного
+      // проекта может говорить не на языке всей фирмы.
+      locale: z.enum(['en', 'ru', 'he']).nullable().optional(),
     }),
   ),
   async (c) => {
@@ -495,12 +498,14 @@ projectsRoute.patch(
     const allowed = membership?.role === 'owner' || membership?.role === 'admin' || companyRole === 'admin'
     if (!allowed) return c.json({ error: 'Forbidden' }, 403)
 
-    const { name, about, aiConfig, chatRules, color, timeConfig, storageLimit } = c.req.valid('json')
+    const { name, about, aiConfig, chatRules, color, timeConfig, storageLimit, locale } = c.req.valid('json')
     const patch: Record<string, unknown> = {}
     if (name !== undefined) patch.name = name
     if (about !== undefined) patch.about = about
     if (chatRules !== undefined) patch.chatRules = chatRules
     if (color !== undefined) patch.color = color
+    // null — осознанный выбор «как в компании», а не «не трогать».
+    if (locale !== undefined) patch.locale = locale
     if (timeConfig !== undefined) {
       const current = JSON.parse(project.timeConfig || '{}')
       patch.timeConfig = JSON.stringify({ ...current, ...timeConfig })

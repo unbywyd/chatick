@@ -1294,5 +1294,11 @@
     "copy": "Copy question and answer",
     "dragHint": "Drag into chat to ask about it",
     "doneBy": "Checked by {{name}}"
+  },
+  "companyLocale": {
+    "title": "Company language",
+    "subtitle": "Used for emails to people who have no settings yet: invitees and accounts created through the API. Everyone picks their own interface language.",
+    "saved": "Company language saved",
+    "adminOnly": "Only a company admin can change this."
   }
 }

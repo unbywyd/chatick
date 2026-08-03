@@ -279,6 +279,39 @@ companiesRoute.get('/:companyId/llm', async (c) => {
   })
 })
 
+/**
+ * Настройки компании: имя и язык (SPEC §8.39).
+ *
+ * Язык нужен не для интерфейса — его каждый выбирает себе сам, — а для писем
+ * тем, у кого своих настроек ещё нет: приглашённому и заведённому через API.
+ */
+companiesRoute.patch(
+  '/:companyId',
+  zValidator(
+    'json',
+    z.object({
+      name: z.string().min(1).max(120).optional(),
+      locale: z.enum(['en', 'ru', 'he']).optional(),
+    }),
+  ),
+  async (c) => {
+    const { sub } = c.get('session')
+    const companyId = c.req.param('companyId')
+    // Настройки компании меняет только админ: язык влияет на письма всем.
+    if ((await memberRoleIn(companyId, sub)) !== 'admin') return c.json({ error: 'Forbidden' }, 403)
+
+    const { name, locale } = c.req.valid('json')
+    const patch: Record<string, unknown> = {}
+    if (name !== undefined) patch.name = name.trim()
+    if (locale !== undefined) patch.locale = locale
+    if (!Object.keys(patch).length) return c.json({ error: 'Nothing to change. Supported: name, locale.' }, 400)
+
+    const [updated] = await db.update(companies).set(patch).where(eq(companies.id, companyId)).returning()
+    if (!updated) return c.json({ error: 'Not found' }, 404)
+    return c.json({ id: updated.id, name: updated.name, locale: updated.locale })
+  },
+)
+
 companiesRoute.put(
   '/:companyId/llm',
   zValidator(

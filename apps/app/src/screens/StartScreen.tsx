@@ -37,6 +37,7 @@ import { OnboardingWizard } from '@/components/OnboardingWizard'
 import { CompanyTimeTab } from '@/components/company/CompanyTimeTab'
 import { OverviewTab } from '@/components/company/OverviewTab'
 import { LlmSettings } from '@/components/company/LlmSettings'
+import { CompanyLocale } from '@/components/company/CompanyLocale'
 import { CompanyConnectTab } from '@/components/company/CompanyConnectTab'
 import { BackupTab } from '@/components/company/BackupTab'
 import {
@@ -472,6 +473,8 @@ function CompanyHome({
         <BackupTab company={company} />
       ) : (
         <>
+          <CompanyLocale companyId={company.id} current={company.locale ?? 'en'} isAdmin={isAdmin} />
+
           <LlmSettings companyId={company.id} isAdmin={company.myRole === 'admin'} />
 
           {/* Необратимое — отдельно и внизу: рядом с обычными настройками до
