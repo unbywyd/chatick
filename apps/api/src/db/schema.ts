@@ -27,6 +27,9 @@ export const users = pgTable(
     avatarUrl: text('avatar_url'),
     avatarKey: text('avatar_key'), // S3-ключ загруженного аватара (раздаётся через /auth/avatar/:id)
     isAdmin: boolean('is_admin').notNull().default(false),
+    // Идентификатор человека во внешней системе. По нему узнаём его при
+    // повторном вызове API и не заводим дубль.
+    externalId: text('external_id'),
     createdAt: createdAt(),
     updatedAt: updatedAt(),
   },
@@ -46,6 +49,46 @@ export const apiTokens = pgTable(
     createdAt: createdAt(),
   },
   (t) => [index('api_tokens_user_idx').on(t.userId)],
+)
+
+/**
+ * Ключи API уровня КОМПАНИИ (SPEC-INTEGRATION §2).
+ *
+ * apiTokens выше привязаны к человеку и умирают вместе с его увольнением.
+ * Интеграция принадлежит компании, а не сотруднику, который её настроил.
+ */
+export const companyApiKeys = pgTable(
+  'company_api_keys',
+  {
+    id: id(),
+    companyId: text('company_id').notNull().references(() => companies.id, { onDelete: 'cascade' }),
+    name: text('name').notNull(), // «Atlas, продакшн» — чтобы понимать, что отзываешь
+    keyHash: text('key_hash').notNull(), // сам ключ не хранится
+    prefix: text('prefix').notNull(), // первые знаки — показать в списке
+    scopes: text('scopes').notNull().default('[]'), // users:write, projects:write, read:all
+    allowedIps: text('allowed_ips').notNull().default('[]'), // пусто = отовсюду
+    createdById: text('created_by_id').references(() => users.id, { onDelete: 'set null' }),
+    lastUsedAt: timestamp('last_used_at', { withTimezone: true }),
+    revokedAt: timestamp('revoked_at', { withTimezone: true }), // отзыв мгновенный
+    createdAt: createdAt(),
+  },
+  (t) => [index('company_api_keys_company_idx').on(t.companyId), uniqueIndex('company_api_keys_hash_idx').on(t.keyHash)],
+)
+
+/** Журнал вызовов извне: ключ компании даёт много, поэтому видно, кто и что делал. */
+export const companyApiLog = pgTable(
+  'company_api_log',
+  {
+    id: id(),
+    companyId: text('company_id').notNull().references(() => companies.id, { onDelete: 'cascade' }),
+    keyId: text('key_id').references(() => companyApiKeys.id, { onDelete: 'set null' }),
+    method: text('method').notNull(),
+    path: text('path').notNull(),
+    status: integer('status').notNull(),
+    ip: text('ip').notNull().default(''),
+    createdAt: createdAt(),
+  },
+  (t) => [index('company_api_log_company_idx').on(t.companyId, t.createdAt)],
 )
 
 // ---------------------------------------------------------------------------
@@ -78,6 +121,13 @@ export const companies = pgTable('companies', {
   // Демо-компания: заводится сидом, сносится одной командой. Явный признак,
   // а не имя — переименованную компанию скрипт очистки уже не нашёл бы.
   isDemo: boolean('is_demo').notNull().default(false),
+  // --- связь с внешней системой (SPEC-INTEGRATION) ---
+  // Название и шаблон ссылки — настройки, а не код: так интеграция остаётся
+  // универсальной, без следов конкретного заказчика.
+  externalSystemName: text('external_system_name'),
+  externalProjectUrl: text('external_project_url'), // https://…/projects/{externalId}
+  // Проекты приходят только через API — кнопка создания в интерфейсе исчезает.
+  projectsViaApiOnly: boolean('projects_via_api_only').notNull().default(false),
   createdAt: createdAt(),
   updatedAt: updatedAt(),
 })
@@ -148,6 +198,10 @@ export const projects = pgTable(
     timeConfig: text('time_config').notNull().default('{}'),
     logoUrl: text('logo_url'),
     logoKey: text('logo_key'),
+    // Идентификатор и имя проекта в системе заказчика. Имя показывается рядом
+    // с нашим: он зовёт проект по клиенту, мы — по сути работы.
+    externalId: text('external_id'),
+    externalName: text('external_name'),
     // --- конфиг ИИ-диспетчера (SPEC.md §4.1) ---
     // структурированные флаги/проценты храним одним JSON-полем — состав будет расти
     aiConfig: text('ai_config').notNull().default('{}'), // JSON: { strictness, allowFlood, allowJokes, allowQuestions, allowOfftopic, filters: {...} }
