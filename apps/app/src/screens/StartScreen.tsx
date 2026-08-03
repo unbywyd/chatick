@@ -138,8 +138,16 @@ export function StartScreen() {
           {/* Уведомления адресованы человеку, а не проекту: до входа в проект
               они приходили молча, и увидеть их было негде. */}
           <NotificationBell />
-          {/* профиль (фото, имя, выход) доступен и до входа в проект — SPEC §8.19 */}
-          <ProfileMenu me={me.data} />
+          {/* профиль (фото, имя, выход) доступен и до входа в проект — SPEC §8.19.
+              companyId передаём, чтобы в меню был вход в настройки компании:
+              без него пункт скрывался ровно там, где он нужнее всего — на
+              стартовом экране, куда попадает компания с внешней системой.
+              Если компания в адресе не выбрана, берём первую свою. */}
+          <ProfileMenu
+            me={me.data}
+            companyId={company?.id ?? companiesQ.data?.companies[0]?.id}
+            isAdmin={(company ?? companiesQ.data?.companies[0])?.myRole === 'admin'}
+          />
         </div>
       </header>
 
@@ -403,7 +411,11 @@ function CompanyHome({
   // не показав приглашения. Признак «проектов нет» верно отвечает на вопрос
   // «нужен ли визард», но перестаёт отвечать на «идёт ли он прямо сейчас».
   const noProjects = (company.projectsCount ?? 0) === 0
-  const inWizard = !wizardDone && (noProjects || Boolean(wizardProject))
+  // Явный переход в настройки сильнее визарда: компания с внешней системой
+  // идёт туда за ключами, и проектов у неё не будет вовсе — визард встречал
+  // бы её на каждом заходе, не давая пройти дальше.
+  const wantsSettings = tab === 'settings'
+  const inWizard = !wizardDone && !wantsSettings && (noProjects || Boolean(wizardProject))
 
   if (canManage && inWizard) {
     return (
