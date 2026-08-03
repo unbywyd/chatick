@@ -2,7 +2,7 @@ import { useCallback, useEffect, useRef, useState } from 'react'
 import { NavLink, Outlet, useLocation, useNavigate, useOutletContext, useParams, useSearchParams } from 'react-router-dom'
 import { useQuery } from '@tanstack/react-query'
 import { useTranslation } from 'react-i18next'
-import { ArrowLeft, MessagesSquare, X, FolderX } from 'lucide-react'
+import { ArrowLeft, ExternalLink, MessagesSquare, X, FolderX } from 'lucide-react'
 import { api, getSessionToken, type Me } from '@/lib/api'
 import { cn } from '@/lib/utils'
 import { useProjectToken } from '@/hooks/useProjectToken'
@@ -45,6 +45,10 @@ export type ProjectDetails = {
   chatRules: string
   aiConfig: Record<string, unknown>
   myRole: 'owner' | 'admin' | 'member' | null
+  /** Имя проекта во внешней системе — показывается рядом с нашим. */
+  externalName?: string | null
+  /** Готовая ссылка «туда». null, если интеграция не настроена. */
+  externalLink?: { name: string; url: string } | null
 }
 
 export type ProjectOutletCtx = { project?: ProjectDetails; meId?: string }
@@ -246,6 +250,22 @@ export function ProjectLayout() {
             ))}
           </div>
 
+          {/* Переход во внешнюю систему — только когда он настроен. Кнопка,
+              ведущая в никуда, хуже её отсутствия: человек нажимает и упирается
+              в ошибку чужого сайта. Сервер отдаёт externalLink лишь если у
+              компании задан шаблон И у проекта есть внешний идентификатор. */}
+          {project.data?.externalLink && (
+            <a
+              href={project.data.externalLink.url}
+              target="_blank"
+              rel="noopener noreferrer"
+              title={project.data.externalLink.name}
+              className="ms-auto flex shrink-0 items-center gap-1.5 rounded-md px-2.5 py-1.5 text-xs text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
+            >
+              <ExternalLink className="size-3.5" />
+              <span className="hidden sm:inline">{project.data.externalLink.name}</span>
+            </a>
+          )}
         </nav>
 
         {/* Что меня касается в ЭТОМ проекте — над работой, а не в колокольчике:

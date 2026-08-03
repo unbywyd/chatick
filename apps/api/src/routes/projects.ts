@@ -449,11 +449,25 @@ projectsRoute.get('/:projectId', async (c) => {
   const companyRole = await companyRoleOf(project.companyId, sub)
   if (!membership && !canCreateProjects(companyRole)) return c.json({ error: 'Forbidden' }, 403)
 
+  // Обратная ссылка «во внешнюю систему» — собираем здесь, а не на клиенте:
+  // шаблон живёт у компании, и тянуть её ради этого отдельным запросом было бы
+  // лишним. Ссылки нет, если интеграция не настроена или у проекта нет
+  // внешнего идентификатора — вести в никуда хуже, чем не показывать кнопку.
+  const company = await db.query.companies.findFirst({ where: eq(companies.id, project.companyId) })
+  const externalLink =
+    company?.externalProjectUrl && project.externalId
+      ? {
+          name: company.externalSystemName || 'External system',
+          url: company.externalProjectUrl.replace('{externalId}', encodeURIComponent(project.externalId)),
+        }
+      : null
+
   return c.json({
     ...project,
     aiConfig: JSON.parse(project.aiConfig || '{}'),
     myRole: membership?.role ?? null,
     rulesAccepted: Boolean(membership?.rulesAcceptedAt),
+    externalLink,
   })
 })
 
