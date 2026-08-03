@@ -1327,5 +1327,16 @@
     "lastUsed": "used {{when}}",
     "neverUsed": "never used",
     "adminOnly": "Only a company admin manages keys."
+  },
+  "integration": {
+    "title": "External system",
+    "subtitle": "The system your projects and people come from. Fill this in only if such an integration is set up.",
+    "systemName": "System name",
+    "systemNamePlaceholder": "For example, Atlas",
+    "systemNameHint": "This labels the link button in the project header.",
+    "urlTemplate": "Project URL there",
+    "urlTemplateHint": "Must contain {externalId} — the project identifier goes there. Without it every project would link to the same page.",
+    "apiOnly": "Projects are created through the API only",
+    "apiOnlyHint": "The “New project” button disappears for everyone, including the owner. Otherwise projects appear that the external system does not know about, and the lists drift apart."
   }
 }

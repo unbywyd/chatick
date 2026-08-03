@@ -383,6 +383,20 @@ projectsRoute.post(
     const { sub } = c.get('session')
     const { companyId, name, about, chatRules, aiConfig } = c.req.valid('json')
     if (!canCreateProjects(await companyRoleOf(companyId, sub))) return c.json({ error: 'Forbidden' }, 403)
+
+    // Компания решила, что проекты приходят только из внешней системы.
+    // Проверяем на сервере, а не прячем кнопку: иначе проект всё равно можно
+    // создать запросом, и списки разъедутся молча.
+    const company = await db.query.companies.findFirst({ where: eq(companies.id, companyId) })
+    if (company?.projectsViaApiOnly) {
+      return c.json(
+        {
+          error: 'Projects are created in the external system',
+          hint: `Create it in ${company.externalSystemName || 'your system'} — it will appear here automatically.`,
+        },
+        403,
+      )
+    }
     if (await projectNameTaken(companyId, name)) {
       return c.json({ error: 'A project with this name already exists in this company', field: 'name' }, 409)
     }

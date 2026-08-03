@@ -39,6 +39,7 @@ import { OverviewTab } from '@/components/company/OverviewTab'
 import { LlmSettings } from '@/components/company/LlmSettings'
 import { CompanyLocale } from '@/components/company/CompanyLocale'
 import { ApiKeysTab } from '@/components/company/ApiKeysTab'
+import { IntegrationSettings } from '@/components/company/IntegrationSettings'
 import { CompanyConnectTab } from '@/components/company/CompanyConnectTab'
 import { BackupTab } from '@/components/company/BackupTab'
 import {
@@ -481,9 +482,12 @@ function CompanyHome({
           {/* Интеграция: ключи для внешней системы. Только админу — ключ даёт
               доступ ко всей компании. */}
           {isAdmin && (
-            <div className="rounded-xl border bg-card p-4">
-              <ApiKeysTab companyId={company.id} isAdmin={isAdmin} />
-            </div>
+            <>
+              <IntegrationSettings companyId={company.id} isAdmin={isAdmin} current={company} />
+              <div className="rounded-xl border bg-card p-4">
+                <ApiKeysTab companyId={company.id} isAdmin={isAdmin} />
+              </div>
+            </>
           )}
 
           {/* Необратимое — отдельно и внизу: рядом с обычными настройками до
@@ -665,7 +669,10 @@ function ProjectsTab({
           <Search className="pointer-events-none absolute start-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
           <Input value={q} onChange={(e) => setQ(e.target.value)} placeholder={t('start.searchProjects')} className="ps-9" />
         </div>
-        {canManage && !creating && (
+        {/* Компания решила, что проекты приходят из внешней системы — кнопки
+            быть не должно. Сервер такой запрос всё равно отклонит, но человеку
+            незачем это выяснять нажатием. */}
+        {canManage && !creating && !company.projectsViaApiOnly && (
           <Button variant="brand" onClick={() => setCreating(true)}>
             <Plus className="size-4" />
             {t('start.createProject')}

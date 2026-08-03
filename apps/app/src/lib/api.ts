@@ -115,6 +115,11 @@ export type Company = {
   myRole: 'admin' | 'manager' | 'member'
   /** Язык писем тем, у кого своих настроек ещё нет: приглашённым и заведённым через API. */
   locale?: string
+  /** Связь с внешней системой: как её звать и по какому адресу открывать проект. */
+  externalSystemName?: string | null
+  externalProjectUrl?: string | null
+  /** Проекты приходят только через API — кнопку создания прячем. */
+  projectsViaApiOnly?: boolean
   /** сколько проектов внутри — по нему решается, вести ли визардом первого входа */
   projectsCount?: number
 }
