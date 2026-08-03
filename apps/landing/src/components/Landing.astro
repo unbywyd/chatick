@@ -9,6 +9,11 @@ interface Props {
 const { locale } = Astro.props
 const t = dict[locale]
 const APP_URL = 'https://app.chatick.com'
+
+// Язык в ссылке на приложение. chatick.com и app.chatick.com — разные origin,
+// и localStorage у них свой: выбранный на лендинге язык туда не доедет сам.
+// Приложение читает ?lng= первым делом, поэтому передаём его явно.
+const appUrl = `${APP_URL}/?lng=${locale}`
 const API_URL = 'https://api.chatick.com'
 const SUPPORT = 'support@chatick.com'
 const GITHUB = 'https://github.com/unbywyd/chatick'
@@ -85,7 +90,7 @@ const CHART_STATUSES = [
           ))
         }
       </nav>
-      <a class="btn btn-sm" href={APP_URL}>{t.nav.start}</a>
+      <a class="btn btn-sm" href={appUrl}>{t.nav.start}</a>
     </div>
   </div>
 </header>
@@ -104,7 +109,7 @@ const CHART_STATUSES = [
       </h1>
       <p class="subtitle">{t.hero.subtitle}</p>
       <div class="hero-cta">
-        <a class="btn" href={APP_URL}>
+        <a class="btn" href={appUrl}>
           {t.hero.cta}
           <svg viewBox="0 0 24 24" width="18" height="18" fill="none" class="arrow" aria-hidden="true">
             <path d="M5 12h14m-6-6 6 6-6 6" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"></path>
@@ -321,7 +326,7 @@ const CHART_STATUSES = [
           единственный крупной кнопкой. Сборки без подписи предлагать наравне
           нечестно: человек упрётся в окно SmartScreen, не понимая почему. */}
       <div class="downloads">
-        <a class="dl dl-web" href={APP_URL}>
+        <a class="dl dl-web" href={appUrl}>
           <span class="dl-os">{t.download.web}</span>
         </a>
       </div>
@@ -595,7 +600,7 @@ const CHART_STATUSES = [
     <div class="container">
       <h2>{t.cta.title}</h2>
       <p class="section-sub">{t.cta.subtitle}</p>
-      <a class="btn" href={APP_URL}>{t.cta.button}</a>
+      <a class="btn" href={appUrl}>{t.cta.button}</a>
     </div>
   </section>
 </main>
