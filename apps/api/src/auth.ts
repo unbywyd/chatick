@@ -2,7 +2,7 @@ import { SignJWT, jwtVerify } from 'jose'
 import { createMiddleware } from 'hono/factory'
 import { and, eq } from 'drizzle-orm'
 import { db } from './db/client.js'
-import { projectMembers } from './db/schema.js'
+import { projectMembers, users } from './db/schema.js'
 import { env } from './env.js'
 
 const secret = new TextEncoder().encode(env.JWT_SECRET)
@@ -75,6 +75,17 @@ export const requireSession = createMiddleware<SessionEnv>(async (c, next) => {
   const token = bearer(c.req.header('Authorization'))
   const payload = token ? await verifyToken(token) : null
   if (!payload) return c.json({ error: 'Unauthorized' }, 401)
+
+  // Подписи мало: токен живёт месяц, а человека за это время могли удалить.
+  // Раньше такой токен считался валидным до истечения срока, и приложение
+  // работало от имени того, кого уже нет, — выбрасывало лишь случайно, когда
+  // очередь доходила до ручки, которая сама лезет в базу за пользователем.
+  const alive = await db.query.users.findFirst({
+    where: eq(users.id, payload.sub),
+    columns: { id: true },
+  })
+  if (!alive) return c.json({ error: 'Unauthorized' }, 401)
+
   c.set('session', payload)
   await next()
 })
