@@ -6,11 +6,12 @@ import { nanoid } from 'nanoid'
 import { deleteObject, resolveStorage } from '../lib/s3.js'
 import { sendDeletedMail } from '../lib/mails.js'
 import { db } from '../db/client.js'
-import { companies, companyMembers, companyInvites, files, messages, projectMembers, projects, tasks, timeEntries, users } from '../db/schema.js'
+import { companies, companyMembers, companyInvites, companyWebhooks, files, messages, projectMembers, projects, tasks, timeEntries, users } from '../db/schema.js'
 import { requireSession, type SessionEnv } from '../auth.js'
 import { sendInviteMail } from '../lib/mail-invite.js'
 import { projectLocale } from '../lib/locale.js'
 import { issueKey, listKeys, revokeKey } from '../lib/company-key.js'
+import { newSecret } from '../lib/webhooks.js'
 import { encrypt } from '../lib/crypto.js'
 import { LLM_PROVIDERS, testLlm, type LlmProvider } from '../lib/llm.js'
 import { env } from '../env.js'
@@ -357,6 +358,70 @@ companiesRoute.delete('/:companyId/api-keys/:keyId', async (c) => {
 
   const ok = await revokeKey(companyId, c.req.param('keyId'))
   if (!ok) return c.json({ error: 'Not found' }, 404)
+  return c.json({ ok: true })
+})
+
+// --- вебхуки (SPEC-INTEGRATION §7) --------------------------------------------
+
+companiesRoute.get('/:companyId/webhooks', async (c) => {
+  const { sub } = c.get('session')
+  const companyId = c.req.param('companyId')
+  if ((await memberRoleIn(companyId, sub)) !== 'admin') return c.json({ error: 'Forbidden' }, 403)
+
+  const rows = await db.query.companyWebhooks.findMany({ where: eq(companyWebhooks.companyId, companyId) })
+  return c.json({
+    // Секрет не отдаём: он показывается один раз при создании, как ключ API.
+    items: rows.map((w) => ({
+      id: w.id,
+      url: w.url,
+      events: JSON.parse(w.events || '[]') as string[],
+      active: w.active,
+      lastOkAt: w.lastOkAt,
+      lastFailAt: w.lastFailAt,
+      lastError: w.lastError,
+    })),
+  })
+})
+
+companiesRoute.post(
+  '/:companyId/webhooks',
+  zValidator(
+    'json',
+    z.object({
+      url: z.string().url().max(500),
+      events: z.array(z.string().max(60)).max(20).optional(),
+    }),
+  ),
+  async (c) => {
+    const { sub } = c.get('session')
+    const companyId = c.req.param('companyId')
+    if ((await memberRoleIn(companyId, sub)) !== 'admin') return c.json({ error: 'Forbidden' }, 403)
+
+    const { url, events } = c.req.valid('json')
+    if (!/^https:\/\//i.test(url)) {
+      // Только https: по http подпись и содержимое читает любой посредник.
+      return c.json({ error: 'Webhook URL must use https' }, 400)
+    }
+
+    const secret = newSecret()
+    const [row] = await db
+      .insert(companyWebhooks)
+      .values({ companyId, url, secret, events: JSON.stringify(events ?? []) })
+      .returning()
+
+    // Секрет — единственный раз: дальше его негде взять, как и ключ API.
+    return c.json({ id: row!.id, url: row!.url, secret }, 201)
+  },
+)
+
+companiesRoute.delete('/:companyId/webhooks/:webhookId', async (c) => {
+  const { sub } = c.get('session')
+  const companyId = c.req.param('companyId')
+  if ((await memberRoleIn(companyId, sub)) !== 'admin') return c.json({ error: 'Forbidden' }, 403)
+
+  await db
+    .delete(companyWebhooks)
+    .where(and(eq(companyWebhooks.id, c.req.param('webhookId')), eq(companyWebhooks.companyId, companyId)))
   return c.json({ ok: true })
 })
 

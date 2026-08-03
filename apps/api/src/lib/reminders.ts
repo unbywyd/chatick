@@ -1,5 +1,6 @@
 import { and, eq, inArray, isNotNull, isNull, lte } from 'drizzle-orm'
 import { db } from '../db/client.js'
+import { flush as flushWebhooks, sweepDeliveries } from './webhooks.js'
 import { notes, taskReminders, tasks, projects, projectMembers, timeEntries, users } from '../db/schema.js'
 import { sendTaskReminderMail } from './mails.js'
 import { env } from '../env.js'
@@ -234,6 +235,10 @@ export function startReminderScheduler() {
       void sendDailyDigests() // суточный email-дайджест непрочитанных (SPEC §8.22)
       void sweepNoteReminders() // напоминания в заметках (SPEC §8.31)
       void sweepRunningTimers() // забытые таймеры (SPEC §8.32)
+      // Вебхуки внешним системам: очередь разбирается здесь, а не в момент
+      // события — чужой сервер может лежать, и ждать его никто не должен.
+      void flushWebhooks().catch(() => {})
+      void sweepDeliveries().catch(() => {})
     }, TICK_MS)
   }, 60_000)
   console.log('⏰ task-reminder scheduler started')

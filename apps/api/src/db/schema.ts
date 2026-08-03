@@ -75,6 +75,51 @@ export const companyApiKeys = pgTable(
   (t) => [index('company_api_keys_company_idx').on(t.companyId), uniqueIndex('company_api_keys_hash_idx').on(t.keyHash)],
 )
 
+/**
+ * Вебхуки во внешнюю систему (SPEC-INTEGRATION §7).
+ *
+ * Без них их статистика узнаёт о наших изменениях только опросом: либо она
+ * дёргает нас впустую каждую минуту, либо цифры отстают на эту минуту.
+ */
+export const companyWebhooks = pgTable(
+  'company_webhooks',
+  {
+    id: id(),
+    companyId: text('company_id').notNull().references(() => companies.id, { onDelete: 'cascade' }),
+    url: text('url').notNull(),
+    // Им подписывается каждый запрос: принимающая сторона должна отличать нас
+    // от любого, кто узнал адрес.
+    secret: text('secret').notNull(),
+    events: text('events').notNull().default('[]'), // пусто = все
+    active: boolean('active').notNull().default(true),
+    lastOkAt: timestamp('last_ok_at', { withTimezone: true }),
+    lastFailAt: timestamp('last_fail_at', { withTimezone: true }),
+    lastError: text('last_error'),
+    createdAt: createdAt(),
+  },
+  (t) => [index('company_webhooks_company_idx').on(t.companyId)],
+)
+
+/** Очередь доставки: их сервер может лежать, а наш ответ человеку — не ждать. */
+export const webhookDeliveries = pgTable(
+  'webhook_deliveries',
+  {
+    id: id(),
+    webhookId: text('webhook_id').notNull().references(() => companyWebhooks.id, { onDelete: 'cascade' }),
+    event: text('event').notNull(),
+    payload: text('payload').notNull(),
+    attempts: integer('attempts').notNull().default(0),
+    // Растёт с каждой неудачей: долбить лежащий сервер каждую секунду — верный
+    // способ добить его и попасть в чёрный список.
+    nextTryAt: timestamp('next_try_at', { withTimezone: true }).notNull().defaultNow(),
+    deliveredAt: timestamp('delivered_at', { withTimezone: true }),
+    lastStatus: integer('last_status'),
+    lastError: text('last_error'),
+    createdAt: createdAt(),
+  },
+  (t) => [index('webhook_deliveries_pending_idx').on(t.nextTryAt)],
+)
+
 /** Журнал вызовов извне: ключ компании даёт много, поэтому видно, кто и что делал. */
 export const companyApiLog = pgTable(
   'company_api_log',
