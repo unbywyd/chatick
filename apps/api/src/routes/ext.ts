@@ -6,6 +6,7 @@ import { db } from '../db/client.js'
 import { companies, companyMembers, projectMembers, projects, users } from '../db/schema.js'
 import { checkKey, logCall, type KeyScope } from '../lib/company-key.js'
 import { defaultPermissions } from './projects.js'
+import { sendAddedToProjectMail } from '../lib/mail-added.js'
 
 // Внешний API для систем-заказчиков (SPEC-INTEGRATION).
 //
@@ -234,6 +235,221 @@ extRoute.delete('/projects/:externalId/members/:externalUserId', guard('users:wr
   await db
     .delete(projectMembers)
     .where(and(eq(projectMembers.projectId, project.id), eq(projectMembers.userId, user.id)))
+
+  return c.json({ ok: true })
+})
+
+// --- пользователи ------------------------------------------------------------
+
+type IncomingUser = {
+  externalId: string
+  email: string
+  name: string
+  companyRole: 'admin' | 'manager' | 'member'
+  projects: { externalProjectId: string; role: 'owner' | 'admin' | 'member' }[]
+  notify: boolean
+}
+
+/** Разобрать одного человека из тела. Возвращает причину, а не просто null. */
+function parseUser(raw: unknown): { user: IncomingUser } | { error: string } {
+  const b = (raw ?? {}) as Record<string, unknown>
+  const externalId = typeof b.externalId === 'string' ? b.externalId.trim() : ''
+  const email = typeof b.email === 'string' ? b.email.trim().toLowerCase() : ''
+
+  if (!externalId) return { error: 'externalId is required' }
+  if (!email || !email.includes('@')) return { error: `invalid email for ${externalId}` }
+
+  const roles = ['admin', 'manager', 'member'] as const
+  const projects = Array.isArray(b.projects)
+    ? b.projects
+        .map((p) => p as Record<string, unknown>)
+        .filter((p) => typeof p.externalProjectId === 'string' && p.externalProjectId)
+        .map((p) => ({
+          externalProjectId: p.externalProjectId as string,
+          role: (['owner', 'admin', 'member'] as const).includes(p.role as never)
+            ? (p.role as 'member')
+            : ('member' as const),
+        }))
+    : []
+
+  return {
+    user: {
+      externalId,
+      email,
+      name: typeof b.name === 'string' ? b.name.trim().slice(0, 200) : '',
+      companyRole: roles.includes(b.companyRole as never) ? (b.companyRole as 'member') : 'member',
+      projects,
+      // Молчать по умолчанию нельзя: человек должен узнать, что у него
+      // появился доступ. Отключить можно явно — например, при первичном
+      // переносе всей команды, когда сотня писем разом никому не нужна.
+      notify: b.notify !== false,
+    },
+  }
+}
+
+type UpsertOutcome = { externalId: string; created: boolean; userId: string; projects: number }
+
+/**
+ * Завести или обновить человека и раздать ему проекты.
+ *
+ * Ключ поиска — externalId, затем email: человек мог зарегистрироваться сам
+ * через Google раньше, чем его завела внешняя система, и заводить второго
+ * с той же почтой нельзя — почта уникальна, и вставка просто упадёт.
+ */
+async function upsertUser(companyId: string, companyName: string, u: IncomingUser): Promise<UpsertOutcome> {
+  let user =
+    (await db.query.users.findFirst({ where: eq(users.externalId, u.externalId) })) ??
+    (await db.query.users.findFirst({ where: eq(users.email, u.email) }))
+
+  let created = false
+  if (!user) {
+    const [row] = await db.insert(users).values({ email: u.email, name: u.name, externalId: u.externalId }).returning()
+    user = row!
+    created = true
+  } else if (!user.externalId) {
+    // Человек уже был у нас, но без связи — привязываем к их системе, иначе
+    // при следующем вызове мы снова будем искать его по почте.
+    const [row] = await db.update(users).set({ externalId: u.externalId }).where(eq(users.id, user.id)).returning()
+    user = row!
+  }
+
+  await db
+    .insert(companyMembers)
+    .values({ companyId, userId: user.id, role: u.companyRole })
+    .onConflictDoNothing()
+
+  let addedTo = 0
+  for (const p of u.projects) {
+    const project = await db.query.projects.findFirst({
+      where: and(eq(projects.companyId, companyId), eq(projects.externalId, p.externalProjectId)),
+    })
+    if (!project) continue
+
+    const already = await db.query.projectMembers.findFirst({
+      where: and(eq(projectMembers.projectId, project.id), eq(projectMembers.userId, user.id)),
+    })
+    if (already) continue
+
+    await db.insert(projectMembers).values({
+      projectId: project.id,
+      userId: user.id,
+      role: p.role,
+      permissions: JSON.stringify(defaultPermissions(p.role)),
+      rulesAcceptedAt: new Date(),
+    })
+    addedTo++
+
+    if (u.notify) {
+      // В фоне: письмо не должно задерживать ответ внешней системе, а сбой
+      // почты — отменять уже выданный доступ.
+      void sendAddedToProjectMail({
+        to: user.email,
+        companyName,
+        projectName: project.name,
+        projectId: project.id,
+        locale: user.locale,
+      })
+    }
+  }
+
+  return { externalId: u.externalId, created, userId: user.id, projects: addedTo }
+}
+
+extRoute.post('/users', guard('users:write'), async (c) => {
+  const companyId = c.get('companyId')
+  const parsed = parseUser(await c.req.json().catch(() => ({})))
+  if ('error' in parsed) return c.json({ error: parsed.error }, 400)
+
+  const company = await db.query.companies.findFirst({ where: eq(companies.id, companyId) })
+  const out = await upsertUser(companyId, company?.name ?? '', parsed.user)
+  return c.json(out, out.created ? 201 : 200)
+})
+
+/**
+ * Пачкой. Первичный перенос команды — это сотни людей, и по одному запросу на
+ * каждого превращается в час ожидания и половину списка при обрыве связи.
+ */
+extRoute.post('/users/batch', guard('users:write'), async (c) => {
+  const companyId = c.get('companyId')
+  const b = (await c.req.json().catch(() => ({}))) as { users?: unknown }
+  const incoming = Array.isArray(b.users) ? b.users : []
+
+  if (!incoming.length) return c.json({ error: 'users: [...] is required' }, 400)
+  if (incoming.length > 500) {
+    return c.json({ error: `Too many users: ${incoming.length}. Maximum per call is 500.` }, 400)
+  }
+
+  const company = await db.query.companies.findFirst({ where: eq(companies.id, companyId) })
+  const companyName = company?.name ?? ''
+
+  const results: UpsertOutcome[] = []
+  const failed: { externalId: string; error: string }[] = []
+
+  for (const raw of incoming) {
+    const parsed = parseUser(raw)
+    if ('error' in parsed) {
+      const id = (raw as Record<string, unknown>)?.externalId
+      failed.push({ externalId: typeof id === 'string' ? id : '(no externalId)', error: parsed.error })
+      continue
+    }
+    try {
+      results.push(await upsertUser(companyId, companyName, parsed.user))
+    } catch (e) {
+      // Один сбойный не должен уносить остальных: половина команды в системе
+      // лучше, чем ничего, — а по списку failed видно, что доделать.
+      failed.push({ externalId: parsed.user.externalId, error: e instanceof Error ? e.message : String(e) })
+    }
+  }
+
+  return c.json({
+    processed: results.length,
+    created: results.filter((r) => r.created).length,
+    updated: results.filter((r) => !r.created).length,
+    failed,
+    items: results,
+  })
+})
+
+extRoute.get('/users', guard('read:all'), async (c) => {
+  const rows = await db
+    .select({ user: users, role: companyMembers.role })
+    .from(companyMembers)
+    .innerJoin(users, eq(users.id, companyMembers.userId))
+    .where(eq(companyMembers.companyId, c.get('companyId')))
+
+  return c.json({
+    items: rows.map((r) => ({
+      externalId: r.user.externalId,
+      email: r.user.email,
+      name: r.user.name,
+      companyRole: r.role,
+    })),
+    count: rows.length,
+  })
+})
+
+/** Убрать из компании: доступ пропадает, задачи и сообщения остаются. */
+extRoute.delete('/users/:externalId', guard('users:write'), async (c) => {
+  const companyId = c.get('companyId')
+  const user = await db.query.users.findFirst({ where: eq(users.externalId, c.req.param('externalId')) })
+  if (!user) return c.json({ error: 'User not found' }, 404)
+
+  const companyProjects = await db
+    .select({ id: projects.id })
+    .from(projects)
+    .where(eq(projects.companyId, companyId))
+
+  if (companyProjects.length) {
+    await db.delete(projectMembers).where(
+      and(
+        eq(projectMembers.userId, user.id),
+        inArray(projectMembers.projectId, companyProjects.map((p) => p.id)),
+      ),
+    )
+  }
+  await db
+    .delete(companyMembers)
+    .where(and(eq(companyMembers.companyId, companyId), eq(companyMembers.userId, user.id)))
 
   return c.json({ ok: true })
 })
