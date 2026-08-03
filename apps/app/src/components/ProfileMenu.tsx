@@ -175,6 +175,17 @@ export function ProfileMenu({
 
         <DropdownMenuSeparator />
 
+        {/* Настройки компании: язык, ключи API, вебхуки, связь с внешней
+            системой. Раньше попасть туда можно было только через список
+            проектов — а компании, у которой проекты приходят снаружи, идти
+            в этот список незачем и не за чем. */}
+        {companyId && (
+          <DropdownMenuItem onSelect={() => navigate(`/start/${companyId}/settings`)}>
+            <Building2 className="size-4" />
+            {t('profile.companySettings')}
+          </DropdownMenuItem>
+        )}
+
         {/* Настройки проекта и состав команды — сюда, вкладками они не были
             нужны: в настройки заходят изредка, а команду смотрят из профиля. */}
         {projectId && isAdmin && (

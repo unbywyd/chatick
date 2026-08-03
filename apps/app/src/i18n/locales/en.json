@@ -777,7 +777,8 @@
     "logout": "Sign out",
     "logoutConfirm": "Sign out of your account?",
     "projectSettings": "Project settings",
-    "projectTeam": "Project team"
+    "projectTeam": "Project team",
+    "companySettings": "Company settings"
   },
   "projSwitch": {
     "search": "Search projects…",
@@ -1259,7 +1260,8 @@
       "cta": "Send invitations",
       "add": "Add",
       "foot": "People appear in the project as soon as they accept. You can change their roles, or invite more, in the team settings."
-    }
+    },
+    "skipProject": "Our projects come from our own system"
   },
   "bug": {
     "title": "Report a problem",

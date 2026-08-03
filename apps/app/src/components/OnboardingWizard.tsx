@@ -237,14 +237,17 @@ export function OnboardingWizard({
             </kbd>
           </Button>
 
-          {/* Пропустить можно только команду: без проекта внутри пусто */}
-          {step === 'team' && (
+          {/* Пропустить можно и проект, и команду.
+              Раньше проект был обязателен — «без него внутри пусто». Но у
+              компании, чьи проекты приходят из внешней системы, это заставляло
+              заводить фиктивный проект только чтобы дойти до настроек и ключей. */}
+          {step !== 'company' && (
             <button
               type="button"
               onClick={() => onDone({ companyId: companyId!, projectId })}
               className="cursor-pointer text-sm text-muted-foreground underline-offset-4 hover:text-foreground hover:underline"
             >
-              {t('wizard.skip')}
+              {step === 'project' ? t('wizard.skipProject') : t('wizard.skip')}
             </button>
           )}
         </div>
