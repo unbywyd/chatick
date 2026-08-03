@@ -1,9 +1,9 @@
 import { Hono } from 'hono'
 import { createMiddleware } from 'hono/factory'
-import { and, eq, inArray } from 'drizzle-orm'
+import { and, desc, eq, gte, inArray, isNull, lte, sql } from 'drizzle-orm'
 import { nanoid } from 'nanoid'
 import { db } from '../db/client.js'
-import { companies, companyMembers, projectMembers, projects, users } from '../db/schema.js'
+import { companies, companyMembers, projectMembers, projects, tasks, timeEntries, users } from '../db/schema.js'
 import { checkKey, logCall, type KeyScope } from '../lib/company-key.js'
 import { defaultPermissions } from './projects.js'
 import { sendAddedToProjectMail } from '../lib/mail-added.js'
@@ -457,6 +457,206 @@ extRoute.delete('/users/:externalId', guard('users:write'), async (c) => {
     .where(and(eq(companyMembers.companyId, companyId), eq(companyMembers.userId, user.id)))
 
   return c.json({ ok: true })
+})
+
+// --- чтение для внешней статистики -------------------------------------------
+//
+// Ради этого раздела заказчик и переезжает: задачи и часы живут у нас, а его
+// отчётность остаётся у него. Отдаём то, что относится к его компании.
+//
+// Чего здесь нет намеренно: содержимое чата — это переписка людей, а не
+// отчётность; значения секретов — никогда и никому; личные диалоги с ИИ.
+
+/** Проект компании по внешнему идентификатору — или отказ. */
+async function projectByExternal(companyId: string, externalId: string) {
+  return db.query.projects.findFirst({
+    where: and(eq(projects.companyId, companyId), eq(projects.externalId, externalId)),
+  })
+}
+
+/** Границы периода из строки запроса. Без них выгрузка тянет всю историю. */
+function periodOf(c: { req: { query: (k: string) => string | undefined } }) {
+  const from = c.req.query('from')
+  const to = c.req.query('to')
+  return {
+    from: from && !isNaN(Date.parse(from)) ? new Date(from) : null,
+    // «по 5 марта» включает весь день, иначе фильтр всегда теряет последний.
+    to: to && !isNaN(Date.parse(to)) ? new Date(to.length <= 10 ? `${to}T23:59:59` : to) : null,
+  }
+}
+
+extRoute.get('/projects/:externalId/tasks', guard('read:all'), async (c) => {
+  const project = await projectByExternal(c.get('companyId'), c.req.param('externalId'))
+  if (!project) return c.json({ error: 'Project not found' }, 404)
+
+  const { from, to } = periodOf(c)
+  const limit = Math.min(Math.max(Number(c.req.query('limit')) || 200, 1), 500)
+  const conds = [eq(tasks.projectId, project.id), isNull(tasks.deletedAt)]
+  if (from) conds.push(gte(tasks.createdAt, from))
+  if (to) conds.push(lte(tasks.createdAt, to))
+
+  const rows = await db
+    .select({ task: tasks, assignee: users })
+    .from(tasks)
+    .leftJoin(users, eq(users.id, tasks.assigneeId))
+    .where(and(...conds))
+    .orderBy(desc(tasks.createdAt))
+    .limit(limit + 1)
+
+  const hasMore = rows.length > limit
+  return c.json({
+    items: rows.slice(0, limit).map((r) => ({
+      number: r.task.number,
+      title: r.task.title,
+      status: r.task.status,
+      priority: r.task.priority,
+      estimateMinutes: r.task.estimateMinutes ? Number(r.task.estimateMinutes) : null,
+      dueDate: r.task.dueDate,
+      // Их система знает людей по своему идентификатору — им и отвечаем.
+      assignee: r.assignee ? { externalId: r.assignee.externalId, email: r.assignee.email, name: r.assignee.name } : null,
+      createdAt: r.task.createdAt,
+      updatedAt: r.task.updatedAt,
+    })),
+    hasMore,
+    ...(hasMore ? { hint: 'Truncated. Narrow the period or raise limit (max 500).' } : {}),
+  })
+})
+
+extRoute.get('/projects/:externalId/time', guard('read:all'), async (c) => {
+  const project = await projectByExternal(c.get('companyId'), c.req.param('externalId'))
+  if (!project) return c.json({ error: 'Project not found' }, 404)
+
+  const { from, to } = periodOf(c)
+  const limit = Math.min(Math.max(Number(c.req.query('limit')) || 200, 1), 500)
+  const conds = [eq(timeEntries.projectId, project.id), sql`${timeEntries.endedAt} is not null`]
+  if (from) conds.push(gte(timeEntries.startedAt, from))
+  if (to) conds.push(lte(timeEntries.startedAt, to))
+
+  const rows = await db
+    .select({ entry: timeEntries, user: users, task: tasks })
+    .from(timeEntries)
+    .innerJoin(users, eq(users.id, timeEntries.userId))
+    .leftJoin(tasks, eq(tasks.id, timeEntries.taskId))
+    .where(and(...conds))
+    .orderBy(desc(timeEntries.startedAt))
+    .limit(limit + 1)
+
+  const hasMore = rows.length > limit
+  const items = rows.slice(0, limit).map((r) => ({
+    user: { externalId: r.user.externalId, email: r.user.email, name: r.user.name },
+    taskNumber: r.task?.number ?? null,
+    description: r.entry.description,
+    startedAt: r.entry.startedAt,
+    endedAt: r.entry.endedAt,
+    // Минуты считаем здесь: в базе их нет, они выводятся из времён, и пусть
+    // это делает одна сторона, а не каждый потребитель по-своему.
+    minutes: r.entry.endedAt
+      ? Math.round((new Date(r.entry.endedAt).getTime() - new Date(r.entry.startedAt).getTime()) / 60_000)
+      : 0,
+  }))
+
+  return c.json({
+    items,
+    totalMinutes: items.reduce((sum, x) => sum + x.minutes, 0),
+    hasMore,
+    ...(hasMore ? { hint: 'Truncated. Narrow the period or raise limit (max 500).' } : {}),
+  })
+})
+
+/**
+ * Сводка по компании — то, что их дашборд показывает без обхода всех проектов.
+ */
+extRoute.get('/stats/summary', guard('read:all'), async (c) => {
+  const companyId = c.get('companyId')
+  const { from, to } = periodOf(c)
+
+  const companyProjects = await db.select().from(projects).where(eq(projects.companyId, companyId))
+  if (!companyProjects.length) return c.json({ projects: [], totals: { projects: 0, tasks: 0, done: 0, minutes: 0 } })
+
+  const ids = companyProjects.map((p) => p.id)
+
+  const taskStats = await db
+    .select({
+      projectId: tasks.projectId,
+      total: sql<number>`count(*)::int`,
+      done: sql<number>`count(*) filter (where ${tasks.status} = 'done')::int`,
+      overdue: sql<number>`count(*) filter (where ${tasks.status} <> 'done' and ${tasks.dueDate} < now())::int`,
+    })
+    .from(tasks)
+    .where(and(inArray(tasks.projectId, ids), isNull(tasks.deletedAt)))
+    .groupBy(tasks.projectId)
+
+  const timeConds = [inArray(timeEntries.projectId, ids), sql`${timeEntries.endedAt} is not null`]
+  if (from) timeConds.push(gte(timeEntries.startedAt, from))
+  if (to) timeConds.push(lte(timeEntries.startedAt, to))
+
+  const timeStats = await db
+    .select({
+      projectId: timeEntries.projectId,
+      minutes: sql<number>`coalesce(sum(extract(epoch from (${timeEntries.endedAt} - ${timeEntries.startedAt})) / 60), 0)::int`,
+    })
+    .from(timeEntries)
+    .where(and(...timeConds))
+    .groupBy(timeEntries.projectId)
+
+  const byTasks = new Map(taskStats.map((r) => [r.projectId, r]))
+  const byTime = new Map(timeStats.map((r) => [r.projectId, r.minutes]))
+
+  const items = companyProjects.map((p) => ({
+    externalId: p.externalId,
+    name: p.name,
+    externalName: p.externalName,
+    tasks: byTasks.get(p.id)?.total ?? 0,
+    done: byTasks.get(p.id)?.done ?? 0,
+    overdue: byTasks.get(p.id)?.overdue ?? 0,
+    minutes: byTime.get(p.id) ?? 0,
+  }))
+
+  return c.json({
+    projects: items,
+    totals: {
+      projects: items.length,
+      tasks: items.reduce((s, x) => s + x.tasks, 0),
+      done: items.reduce((s, x) => s + x.done, 0),
+      minutes: items.reduce((s, x) => s + x.minutes, 0),
+    },
+  })
+})
+
+/** Часы одного человека по всем проектам компании — «сколько он отработал». */
+extRoute.get('/users/:externalId/time', guard('read:all'), async (c) => {
+  const companyId = c.get('companyId')
+  const user = await db.query.users.findFirst({ where: eq(users.externalId, c.req.param('externalId')) })
+  if (!user) return c.json({ error: 'User not found' }, 404)
+
+  const companyProjects = await db.select({ id: projects.id, externalId: projects.externalId, name: projects.name }).from(projects).where(eq(projects.companyId, companyId))
+  if (!companyProjects.length) return c.json({ items: [], totalMinutes: 0 })
+
+  const { from, to } = periodOf(c)
+  const conds = [
+    eq(timeEntries.userId, user.id),
+    inArray(timeEntries.projectId, companyProjects.map((p) => p.id)),
+    sql`${timeEntries.endedAt} is not null`,
+  ]
+  if (from) conds.push(gte(timeEntries.startedAt, from))
+  if (to) conds.push(lte(timeEntries.startedAt, to))
+
+  const rows = await db
+    .select({
+      projectId: timeEntries.projectId,
+      minutes: sql<number>`coalesce(sum(extract(epoch from (${timeEntries.endedAt} - ${timeEntries.startedAt})) / 60), 0)::int`,
+    })
+    .from(timeEntries)
+    .where(and(...conds))
+    .groupBy(timeEntries.projectId)
+
+  const byId = new Map(companyProjects.map((p) => [p.id, p]))
+  const items = rows.map((r) => ({
+    project: { externalId: byId.get(r.projectId)?.externalId ?? null, name: byId.get(r.projectId)?.name ?? '' },
+    minutes: r.minutes,
+  }))
+
+  return c.json({ items, totalMinutes: items.reduce((s, x) => s + x.minutes, 0) })
 })
 
 // --- о компании --------------------------------------------------------------
