@@ -3,9 +3,9 @@ import { LOCALES, type LocaleCode } from '../i18n'
 
 // Обёртка для текстовых страниц: условия, приватность, журнал версий.
 //
-// Они только на английском — это юридические и технические тексты, и перевод,
-// который разойдётся с оригиналом, хуже его отсутствия. Поэтому язык здесь
-// не переключается, а есть только возврат на сайт.
+// Условия и приватность — только на английском: юридический перевод, который
+// разойдётся с оригиналом, хуже его отсутствия. А страница интеграции
+// переведена, поэтому макет принимает locale и разворачивает вёрстку в RTL.
 
 interface Props {
   title: string
@@ -17,10 +17,24 @@ interface Props {
 const { title, description, path, locale = 'en' } = Astro.props
 const canonical = new URL(path, Astro.site)
 const home = LOCALES.find((l) => l.code === locale)?.path ?? '/'
+
+// Юридические страницы только на английском, а страница интеграции переведена —
+// значит и ссылка «назад» должна говорить на языке страницы. Стрелку разворачиваем
+// в RTL: в иврите «назад» — это вправо.
+// Направление письма: страница интеграции переведена, и на иврите она должна
+// читаться справа налево. Раньше здесь было жёстко ltr — годилось, пока все
+// страницы были английскими.
+const dir = LOCALES.find((l) => l.code === locale)?.dir ?? 'ltr'
+
+const BACK: Record<string, string> = {
+  en: '← Back to site',
+  ru: '← На сайт',
+  he: 'חזרה לאתר →',
+}
 ---
 
 <!doctype html>
-<html lang="en" dir="ltr">
+<html lang={locale} dir={dir}>
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
@@ -53,7 +67,7 @@ const home = LOCALES.find((l) => l.code === locale)?.path ?? '/'
           </svg>
           <span>Chatick</span>
         </a>
-        <a class="doc-back" href={home}>← Back to site</a>
+        <a class="doc-back" href={home}>{BACK[locale]}</a>
       </div>
     </header>
 
