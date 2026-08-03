@@ -108,6 +108,14 @@ export function WebhooksSettings({ companyId, isAdmin }: { companyId: string; is
         </div>
       )}
 
+      {/* Пустой список без объяснения читается как поломка: человек не
+          понимает, вебхуков нет или они не загрузились. */}
+      {hooks.data && !hooks.data.items.length && (
+        <p className="mt-3 rounded-lg border border-dashed px-3 py-4 text-center text-xs text-muted-foreground">
+          {t('webhooks.empty')}
+        </p>
+      )}
+
       <ul className="mt-3 space-y-2">
         {(hooks.data?.items ?? []).map((w) => (
           <li key={w.id} className="flex items-center gap-3 rounded-lg border px-3 py-2">

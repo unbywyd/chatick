@@ -6,6 +6,7 @@ import { Link2, Lock } from 'lucide-react'
 import { api } from '@/lib/api'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
+import { Switch } from '@/components/ui/switch'
 
 // Связь с внешней системой (SPEC-INTEGRATION §5).
 //
@@ -75,14 +76,10 @@ export function IntegrationSettings({
           <p className="mt-1 text-xs text-muted-foreground">{t('integration.urlTemplateHint')}</p>
         </div>
 
-        <label className="flex items-start gap-2.5 rounded-lg border border-dashed p-3">
-          <input
-            type="checkbox"
-            checked={apiOnly}
-            disabled={!isAdmin}
-            onChange={(e) => setApiOnly(e.target.checked)}
-            className="mt-0.5 size-4 accent-[var(--brand)]"
-          />
+        {/* Переключатель, а не нативный чекбокс: во всём приложении такие
+            настройки выглядят одинаково, и один выбивающийся элемент читается
+            как недоделка. */}
+        <label className="flex cursor-pointer items-start justify-between gap-3 rounded-lg border border-dashed p-3">
           <span className="min-w-0">
             <span className="flex items-center gap-1.5 text-sm font-medium">
               <Lock className="size-3.5 text-muted-foreground" />
@@ -90,6 +87,7 @@ export function IntegrationSettings({
             </span>
             <span className="mt-0.5 block text-xs text-muted-foreground">{t('integration.apiOnlyHint')}</span>
           </span>
+          <Switch checked={apiOnly} onCheckedChange={setApiOnly} disabled={!isAdmin} className="mt-0.5 shrink-0" />
         </label>
 
         {isAdmin && (

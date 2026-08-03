@@ -1348,6 +1348,7 @@
     "allEvents": "all events",
     "secretOnce": "Copy the secret now",
     "secretHint": "Every request is signed with it — the receiving side verifies the signature. Shown once.",
-    "deleteConfirm": "Delete this webhook?"
+    "deleteConfirm": "Delete this webhook?",
+    "empty": "No webhooks yet — the external system learns about changes only by polling."
   }
 }
