@@ -17,6 +17,30 @@ import { companyLlm } from '../lib/llm.js'
 import { stripMentions } from '../lib/notify.js'
 import { s3Client, s3Bucket, getObjectStream, deleteObject, isCustomStorage, resolveStorage, S3_KEY_PREFIX } from '../lib/s3.js'
 
+/**
+ * Логотипы проектов — публично, ДО проверки сессии: <img> не умеет слать
+ * заголовок авторизации, и под общей проверкой картинка отдавала 401.
+ * Так же решены аватары и логотипы компаний.
+ */
+export const projectLogoRoute = new Hono()
+
+projectLogoRoute.get('/:projectId/logo', async (c) => {
+  const project = await db.query.projects.findFirst({ where: eq(projects.id, c.req.param('projectId')) })
+  if (!project?.logoKey) return c.json({ error: 'Not found' }, 404)
+  try {
+    const { body, contentType } = await getObjectStream(
+      { client: s3Client(), bucket: s3Bucket(), keyPrefix: S3_KEY_PREFIX, isCustom: false, publicUrl: null },
+      project.logoKey,
+    )
+    c.header('Content-Type', contentType || 'image/webp')
+    c.header('Cache-Control', 'public, max-age=86400')
+    const { Readable } = await import('node:stream')
+    return c.body(Readable.toWeb(body) as ReadableStream)
+  } catch {
+    return c.json({ error: 'Not found' }, 404)
+  }
+})
+
 export const projectsRoute = new Hono<SessionEnv>()
 projectsRoute.use('*', requireSession)
 
@@ -601,22 +625,6 @@ projectsRoute.post('/:projectId/logo', async (c) => {
 
 // Отдача логотипа. Публично по id: логотип не секрет, а требовать токен —
 // значит не показать его в <img> без ухищрений.
-projectsRoute.get('/:projectId/logo', async (c) => {
-  const project = await db.query.projects.findFirst({ where: eq(projects.id, c.req.param('projectId')) })
-  if (!project?.logoKey) return c.json({ error: 'Not found' }, 404)
-  try {
-    const { body, contentType } = await getObjectStream(
-      { client: s3Client(), bucket: s3Bucket(), keyPrefix: S3_KEY_PREFIX, isCustom: false, publicUrl: null },
-      project.logoKey,
-    )
-    c.header('Content-Type', contentType || 'image/webp')
-    c.header('Cache-Control', 'public, max-age=86400')
-    const { Readable } = await import('node:stream')
-    return c.body(Readable.toWeb(body) as ReadableStream)
-  } catch {
-    return c.json({ error: 'Not found' }, 404)
-  }
-})
 
 projectsRoute.delete('/:projectId/logo', async (c) => {
   const { sub } = c.get('session')

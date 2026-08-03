@@ -5,8 +5,8 @@ import { logger } from 'hono/logger'
 import { env, isProd } from './env.js'
 import { health } from './routes/health.js'
 import { auth } from './routes/auth.js'
-import { companiesRoute } from './routes/companies.js'
-import { projectsRoute } from './routes/projects.js'
+import { companiesRoute, companyLogoRoute } from './routes/companies.js'
+import { projectsRoute, projectLogoRoute } from './routes/projects.js'
 import { filesRoute, filesPublicRoute } from './routes/files.js'
 import { resourcesRoute } from './routes/resources.js'
 import { tasksRoute } from './routes/tasks.js'
@@ -34,7 +34,10 @@ app.route('/health', health)
 // Внешний API для систем-заказчиков: только ключ компании, сессий тут нет.
 app.route('/api/v1/ext', extRoute)
 app.route('/api/v1/auth', auth)
+// Логотип — до общей проверки: <img> не шлёт заголовок авторизации.
+app.route('/api/v1/companies', companyLogoRoute)
 app.route('/api/v1/companies', companiesRoute)
+app.route('/api/v1/projects', projectLogoRoute)
 app.route('/api/v1/projects', projectsRoute)
 app.route('/api/v1/files', filesRoute)
 app.route('/files', filesPublicRoute) // публичная прокси-отдача по file-токену (iframe/img/Google)

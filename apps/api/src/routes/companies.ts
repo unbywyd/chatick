@@ -18,6 +18,34 @@ import { encrypt } from '../lib/crypto.js'
 import { LLM_PROVIDERS, testLlm, type LlmProvider } from '../lib/llm.js'
 import { env } from '../env.js'
 
+/**
+ * Логотипы компаний — публично, ДО проверки сессии.
+ *
+ * <img> не умеет слать заголовок авторизации: под общей проверкой картинка
+ * отдавала 401 и в интерфейсе висела «битой». Так же решены аватары.
+ *
+ * Утечки здесь нет: ключ объекта непредсказуем, а логотип компании и так
+ * виден всем её участникам и в приглашениях.
+ */
+export const companyLogoRoute = new Hono()
+
+companyLogoRoute.get('/:companyId/logo', async (c) => {
+  const company = await db.query.companies.findFirst({ where: eq(companies.id, c.req.param('companyId')) })
+  if (!company?.logoKey) return c.json({ error: 'Not found' }, 404)
+  try {
+    const { body, contentType } = await getObjectStream(
+      { client: s3Client(), bucket: s3Bucket(), keyPrefix: S3_KEY_PREFIX, isCustom: false, publicUrl: null },
+      company.logoKey,
+    )
+    c.header('Content-Type', contentType || 'image/webp')
+    c.header('Cache-Control', 'public, max-age=86400')
+    const { Readable } = await import('node:stream')
+    return c.body(Readable.toWeb(body) as ReadableStream)
+  } catch {
+    return c.json({ error: 'Not found' }, 404)
+  }
+})
+
 export const companiesRoute = new Hono<SessionEnv>()
 companiesRoute.use('*', requireSession)
 
@@ -346,23 +374,6 @@ companiesRoute.post('/:companyId/logo', async (c) => {
   } catch (e) {
     console.error('[company logo] upload failed:', e)
     return c.json({ error: 'Failed to process image' }, 500)
-  }
-})
-
-companiesRoute.get('/:companyId/logo', async (c) => {
-  const company = await db.query.companies.findFirst({ where: eq(companies.id, c.req.param('companyId')) })
-  if (!company?.logoKey) return c.json({ error: 'Not found' }, 404)
-  try {
-    const { body, contentType } = await getObjectStream(
-      { client: s3Client(), bucket: s3Bucket(), keyPrefix: S3_KEY_PREFIX, isCustom: false, publicUrl: null },
-      company.logoKey,
-    )
-    c.header('Content-Type', contentType || 'image/webp')
-    c.header('Cache-Control', 'public, max-age=86400')
-    const { Readable } = await import('node:stream')
-    return c.body(Readable.toWeb(body) as ReadableStream)
-  } catch {
-    return c.json({ error: 'Not found' }, 404)
   }
 })
 
