@@ -11,7 +11,18 @@
     "desktopExpired": "ההתחברות ארכה זמן רב מדי. נסו שוב.",
     "desktopDone": "התחברתם",
     "desktopDoneHint": "אפשר לסגור את הלשונית ולחזור לאפליקציית Chatick.",
-    "googleRetry": "לנסות שוב"
+    "googleRetry": "לנסות שוב",
+    "byCode": "כניסה עם קוד למייל",
+    "backToGoogle": "כניסה עם Google",
+    "otpEmail": "המייל שלך",
+    "otpSend": "שליחת קוד",
+    "otpCode": "הקוד מהמייל",
+    "otpEnter": "כניסה",
+    "otpSent": "הקוד נשלח — בדקו את המייל",
+    "otpWrong": "הקוד שגוי או שפג תוקפו",
+    "otpTooSoon": "קוד כבר נשלח. המתינו דקה.",
+    "otpBadEmail": "בדקו את כתובת המייל",
+    "otpAnotherEmail": "מייל אחר"
   },
   "start": {
     "logout": "התנתקות",

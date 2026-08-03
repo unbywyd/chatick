@@ -11,6 +11,7 @@ import { signSessionToken, requireSession, type SessionEnv } from '../auth.js'
 import { env } from '../env.js'
 import { s3Client, s3Bucket, getObjectStream, S3_KEY_PREFIX } from '../lib/s3.js'
 import { notifySignup } from '../lib/admin-alert.js'
+import { sendLoginCode, verifyLoginCode } from '../lib/otp.js'
 
 export const auth = new Hono<SessionEnv>()
 
@@ -181,6 +182,51 @@ function sweepDesktopLogins() {
   const now = Date.now()
   for (const [code, entry] of desktopLogins) if (entry.expiresAt < now) desktopLogins.delete(code)
 }
+
+// --- вход по коду на почту (SPEC §8.38) --------------------------------------
+//
+// Второй способ входа рядом с Google: у корпоративной почты часто нет
+// Google-аккаунта, а заводить пароли ради этого не хочется — их пришлось бы
+// хранить, восстанавливать и однажды потерять.
+//
+// Аккаунт при этом НЕ создаётся: код уходит только тому, кто уже есть в
+// системе. Регистрация — через Google или через API компании.
+
+auth.post('/otp/request', async (c) => {
+  const body = (await c.req.json().catch(() => ({}))) as { email?: unknown }
+  const email = typeof body.email === 'string' ? body.email.trim().toLowerCase() : ''
+  if (!email || !email.includes('@')) return c.json({ error: 'Email required' }, 400)
+
+  const user = await db.query.users.findFirst({ where: eq(users.email, email) })
+
+  // Отвечаем одинаково и когда человек есть, и когда его нет. Иначе форма
+  // входа превращается в способ проверять, зарегистрирован ли адрес.
+  const answer = { sent: true, expiresInSec: 600 }
+  if (!user) return c.json(answer)
+
+  const res = await sendLoginCode(email, user.locale)
+  if (!res.ok) return c.json({ error: 'Too soon', retryInSec: res.retryInSec }, 429)
+  return c.json(answer)
+})
+
+auth.post('/otp/verify', async (c) => {
+  const body = (await c.req.json().catch(() => ({}))) as { email?: unknown; code?: unknown }
+  const email = typeof body.email === 'string' ? body.email.trim().toLowerCase() : ''
+  const code = typeof body.code === 'string' ? body.code : ''
+  if (!email || !code) return c.json({ error: 'Email and code required' }, 400)
+
+  const result = verifyLoginCode(email, code)
+  if (result === 'too-many') return c.json({ error: 'Too many attempts. Request a new code.' }, 429)
+  if (result !== 'ok') return c.json({ error: 'Wrong or expired code' }, 401)
+
+  const user = await db.query.users.findFirst({ where: eq(users.email, email) })
+  // Код верен, а человека нет — такое бывает, если его удалили, пока письмо
+  // шло. Пускать некого.
+  if (!user) return c.json({ error: 'Wrong or expired code' }, 401)
+
+  const token = await signSessionToken({ sub: user.id, email: user.email })
+  return c.json({ token, user: { id: user.id, name: user.name, email: user.email } })
+})
 
 // POST /api/v1/auth/desktop — приложение берёт код перед открытием браузера
 auth.post('/desktop', (c) => {

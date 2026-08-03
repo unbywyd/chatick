@@ -11,7 +11,18 @@
     "desktopExpired": "Sign-in took too long. Please try again.",
     "desktopDone": "You are signed in",
     "desktopDoneHint": "You can close this tab and go back to the Chatick app.",
-    "googleRetry": "Try again"
+    "googleRetry": "Try again",
+    "byCode": "Sign in with an email code",
+    "backToGoogle": "Sign in with Google",
+    "otpEmail": "Your email",
+    "otpSend": "Send the code",
+    "otpCode": "Code from the email",
+    "otpEnter": "Sign in",
+    "otpSent": "Code sent — check your inbox",
+    "otpWrong": "Wrong or expired code",
+    "otpTooSoon": "A code was just sent. Wait a minute.",
+    "otpBadEmail": "Check the email address",
+    "otpAnotherEmail": "Use another email"
   },
   "start": {
     "logout": "Sign out",

@@ -2,11 +2,12 @@ import { useEffect, useRef, useState } from 'react'
 import { useNavigate, useSearchParams } from 'react-router-dom'
 import { useTranslation } from 'react-i18next'
 import { toast } from 'sonner'
-import { API_URL, api, consumePendingInvite, getSessionToken, setSessionToken } from '@/lib/api'
+import { API_URL, ApiError, api, consumePendingInvite, getSessionToken, setSessionToken } from '@/lib/api'
 import { Logo } from '@/components/Logo'
 import { ThemeToggle } from '@/components/ThemeToggle'
 import { LanguageSelect } from '@/components/LanguageSelect'
 import { desktop } from '@/hooks/useDesktop'
+import { Button } from '@/components/ui/button'
 
 /**
  * Вход из десктопа (SPEC §8.33). Google запрещает свой экран согласия внутри
@@ -44,6 +45,50 @@ export function LoginScreen() {
   const [waiting, setWaiting] = useState(false)
   // Номер попытки: по нему устаревший опрос понимает, что он больше не нужен.
   const attemptRef = useRef(0)
+
+  // --- вход по коду на почту (SPEC §8.38) ------------------------------------
+  // Второй способ рядом с Google: у корпоративной почты его часто нет, а
+  // пароли мы не заводим — их пришлось бы хранить, восстанавливать и однажды
+  // потерять. Владение почтой доказывает личность не хуже пароля.
+  const [byCode, setByCode] = useState(false)
+  const [otpEmail, setOtpEmail] = useState('')
+  const [otpCode, setOtpCode] = useState('')
+  const [otpSent, setOtpSent] = useState(false)
+  const [otpBusy, setOtpBusy] = useState(false)
+
+  async function requestCode() {
+    if (!otpEmail.includes('@')) return toast.error(t('login.otpBadEmail'))
+    setOtpBusy(true)
+    try {
+      await api('/api/v1/auth/otp/request', { method: 'POST', body: JSON.stringify({ email: otpEmail.trim() }) })
+      setOtpSent(true)
+      toast.success(t('login.otpSent'))
+    } catch (e) {
+      const tooSoon = e instanceof ApiError && e.status === 429
+      toast.error(tooSoon ? t('login.otpTooSoon') : t('login.failed'))
+    } finally {
+      setOtpBusy(false)
+    }
+  }
+
+  async function submitCode() {
+    setOtpBusy(true)
+    try {
+      const { token } = await api<{ token: string }>('/api/v1/auth/otp/verify', {
+        method: 'POST',
+        body: JSON.stringify({ email: otpEmail.trim(), code: otpCode.trim() }),
+      })
+      setSessionToken(token)
+      // Вход мог начинаться из десктопа — тогда идём туда же, куда увёл бы
+      // Google: подтвердить код приложению.
+      if (desktopCode) navigate(`/auth?desktop=${desktopCode}`, { replace: true })
+      else navigate('/start', { replace: true })
+    } catch {
+      toast.error(t('login.otpWrong'))
+    } finally {
+      setOtpBusy(false)
+    }
+  }
 
   /**
    * Открываем вход в браузере и ждём. Опрос — единственный способ узнать
@@ -130,16 +175,81 @@ export function LoginScreen() {
               </div>
             )}
           </div>
+        ) : byCode ? (
+          // Форма кода: сначала почта, после отправки — поле для шести цифр.
+          <div className="flex w-full max-w-xs flex-col gap-3">
+            <input
+              type="email"
+              autoFocus
+              value={otpEmail}
+              onChange={(e) => setOtpEmail(e.target.value)}
+              onKeyDown={(e) => e.key === 'Enter' && !otpSent && void requestCode()}
+              placeholder={t('login.otpEmail')}
+              disabled={otpSent}
+              className="w-full rounded-full border bg-card px-5 py-3 text-sm outline-none focus:ring-2 focus:ring-ring disabled:opacity-60"
+            />
+
+            {otpSent ? (
+              <>
+                <input
+                  autoFocus
+                  inputMode="numeric"
+                  maxLength={6}
+                  value={otpCode}
+                  onChange={(e) => setOtpCode(e.target.value.replace(/\D/g, ''))}
+                  onKeyDown={(e) => e.key === 'Enter' && otpCode.length === 6 && void submitCode()}
+                  placeholder={t('login.otpCode')}
+                  className="w-full rounded-full border bg-card px-5 py-3 text-center text-lg tracking-[0.4em] outline-none focus:ring-2 focus:ring-ring"
+                />
+                <Button variant="brand" disabled={otpCode.length !== 6 || otpBusy} onClick={() => void submitCode()}>
+                  {t('login.otpEnter')}
+                </Button>
+                <button
+                  onClick={() => {
+                    setOtpSent(false)
+                    setOtpCode('')
+                  }}
+                  className="text-xs text-muted-foreground underline-offset-2 hover:text-foreground hover:underline"
+                >
+                  {t('login.otpAnotherEmail')}
+                </button>
+              </>
+            ) : (
+              <Button variant="brand" disabled={otpBusy} onClick={() => void requestCode()}>
+                {t('login.otpSend')}
+              </Button>
+            )}
+
+            <button
+              onClick={() => {
+                setByCode(false)
+                setOtpSent(false)
+                setOtpCode('')
+              }}
+              className="text-xs text-muted-foreground underline-offset-2 hover:text-foreground hover:underline"
+            >
+              {t('login.backToGoogle')}
+            </button>
+          </div>
         ) : (
-          <a
-            // код десктопа едет через OAuth state: он вернётся с колбэка даже
-            // если браузер откроет его в новой вкладке
-            href={`${API_URL}/api/v1/auth/google${desktopCode ? `?desktop=${encodeURIComponent(desktopCode)}` : ''}`}
-            className="flex items-center gap-3 rounded-full border bg-card px-6 py-3 text-sm font-medium transition-colors hover:bg-accent"
-          >
-            <GoogleIcon />
-            {t('login.google')}
-          </a>
+          <div className="flex flex-col items-center gap-4">
+            <a
+              // код десктопа едет через OAuth state: он вернётся с колбэка даже
+              // если браузер откроет его в новой вкладке
+              href={`${API_URL}/api/v1/auth/google${desktopCode ? `?desktop=${encodeURIComponent(desktopCode)}` : ''}`}
+              className="flex items-center gap-3 rounded-full border bg-card px-6 py-3 text-sm font-medium transition-colors hover:bg-accent"
+            >
+              <GoogleIcon />
+              {t('login.google')}
+            </a>
+            {/* Мелким: основной путь — Google, код нужен тем, у кого его нет */}
+            <button
+              onClick={() => setByCode(true)}
+              className="text-xs text-muted-foreground underline-offset-2 hover:text-foreground hover:underline"
+            >
+              {t('login.byCode')}
+            </button>
+          </div>
         )}
       </main>
     </div>
