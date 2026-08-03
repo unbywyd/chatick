@@ -1200,7 +1200,12 @@ const CHART_STATUSES = [
     font-size: 0.9rem;
   }
   /* имитация терминала: показывает, как выглядит подключение */
+  /* Терминал всегда читается слева направо, даже на иврите: это команды и
+     адреса, а не текст. В RTL строки зеркалились — «you ▸» уезжало вправо,
+     а точки-кнопки окна оказывались не с той стороны. */
   .term {
+    direction: ltr;
+    text-align: start;
     background: #0d0f0a;
     border: 1px solid var(--border);
     border-radius: var(--radius);
