@@ -1338,5 +1338,16 @@
     "urlTemplateHint": "Must contain {externalId} — the project identifier goes there. Without it every project would link to the same page.",
     "apiOnly": "Projects are created through the API only",
     "apiOnlyHint": "The “New project” button disappears for everyone, including the owner. Otherwise projects appear that the external system does not know about, and the lists drift apart."
+  },
+  "webhooks": {
+    "title": "Webhooks",
+    "subtitle": "We tell the external system about changes right away, so its statistics do not wait for polling.",
+    "add": "Add a webhook",
+    "events": "Events",
+    "eventsHint": "Nothing selected — we send everything. Every request is signed; the URL must be https.",
+    "allEvents": "all events",
+    "secretOnce": "Copy the secret now",
+    "secretHint": "Every request is signed with it — the receiving side verifies the signature. Shown once.",
+    "deleteConfirm": "Delete this webhook?"
   }
 }

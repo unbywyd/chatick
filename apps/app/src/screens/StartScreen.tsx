@@ -40,6 +40,7 @@ import { LlmSettings } from '@/components/company/LlmSettings'
 import { CompanyLocale } from '@/components/company/CompanyLocale'
 import { ApiKeysTab } from '@/components/company/ApiKeysTab'
 import { IntegrationSettings } from '@/components/company/IntegrationSettings'
+import { WebhooksSettings } from '@/components/company/WebhooksSettings'
 import { CompanyConnectTab } from '@/components/company/CompanyConnectTab'
 import { BackupTab } from '@/components/company/BackupTab'
 import {
@@ -484,6 +485,7 @@ function CompanyHome({
           {isAdmin && (
             <>
               <IntegrationSettings companyId={company.id} isAdmin={isAdmin} current={company} />
+              <WebhooksSettings companyId={company.id} isAdmin={isAdmin} />
               <div className="rounded-xl border bg-card p-4">
                 <ApiKeysTab companyId={company.id} isAdmin={isAdmin} />
               </div>
