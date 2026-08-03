@@ -4,7 +4,7 @@ import { useMediaQuery } from '@/hooks/useMediaQuery'
 import { useNavigate, useParams } from 'react-router-dom'
 import { useQuery } from '@tanstack/react-query'
 import { useTranslation } from 'react-i18next'
-import { Building2, PanelLeftClose, PanelLeftOpen, Plus, Search } from 'lucide-react'
+import { PanelLeftClose, PanelLeftOpen, Plus, Search } from 'lucide-react'
 import { api, type Company, type Me, type ProjectListItem } from '@/lib/api'
 import { cn } from '@/lib/utils'
 import { ProfileMenu } from '@/components/ProfileMenu'
@@ -12,7 +12,7 @@ import { NotificationBell } from '@/components/NotificationBell'
 import { TimerControl } from '@/components/time/TimerControl'
 import { ProjectBadge } from '@/components/ui/project-badge'
 import { Input } from '@/components/ui/input'
-import { Logo } from '@/components/Logo'
+import { CompanyBrand } from '@/components/CompanyBrand'
 
 // Постоянный список проектов = список чатов (SPEC §8.29).
 // Не отдельная страница, а колонка: клик меняет правую часть, список остаётся.
@@ -158,16 +158,16 @@ export function ProjectSidebar({
 
   return (
     <div className="flex h-full min-h-0 flex-col bg-card/40">
-      {/* Шапка: компания — вход в её настройки, команду, бэкап */}
+      {/* Шапка: логотип и название компании — они же вход в её настройки.
+          Раньше здесь стоял наш логотип, а имя компании дублировалось справа:
+          человек внутри своей компании видел чужой бренд и своё имя дважды. */}
       <div className="flex items-center gap-2 border-b px-3 py-2.5">
-        <Logo className="shrink-0" />
         <button
           onClick={() => navigate(`/start/${company?.id ?? ''}`)}
-          className="ms-auto flex min-w-0 items-center gap-1.5 rounded-md px-2 py-1 text-xs text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
+          className="flex min-w-0 flex-1 items-center rounded-md px-1 py-1 transition-colors hover:bg-accent"
           title={t('sidebar.companySettings')}
         >
-          <Building2 className="size-3.5 shrink-0" />
-          <span className="truncate">{company?.name ?? '…'}</span>
+          <CompanyBrand name={company?.name} logoUrl={company?.logoUrl} />
         </button>
         <button
           onClick={toggleCollapsed}
