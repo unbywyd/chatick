@@ -12,6 +12,7 @@ import { resourcesRoute } from './routes/resources.js'
 import { tasksRoute } from './routes/tasks.js'
 import { messagesRoute } from './routes/messages.js'
 import { notificationsRoute } from './routes/notifications.js'
+import { extRoute } from './routes/ext.js'
 import { aiRoute } from './routes/ai.js'
 import { activityRoute } from './routes/activity.js'
 import { inboxRoute } from './routes/inbox.js'
@@ -30,6 +31,8 @@ app.use('*', cors({ origin: env.CORS_ORIGIN === '*' ? '*' : env.CORS_ORIGIN.spli
 if (!isProd) app.use('*', logger())
 
 app.route('/health', health)
+// Внешний API для систем-заказчиков: только ключ компании, сессий тут нет.
+app.route('/api/v1/ext', extRoute)
 app.route('/api/v1/auth', auth)
 app.route('/api/v1/companies', companiesRoute)
 app.route('/api/v1/projects', projectsRoute)
