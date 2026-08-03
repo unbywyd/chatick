@@ -19,7 +19,7 @@ import { inboxRoute } from './routes/inbox.js'
 import { reviewsRoute } from './routes/reviews.js'
 import { documentsRoute, documentsPublicRoute } from './routes/documents.js'
 import { notesRoute } from './routes/notes.js'
-import { timeRoute, timeMineRoute } from './routes/time.js'
+import { timeRoute, timeMineRoute, timeCompanyRoute } from './routes/time.js'
 import { bridgeRoute } from './routes/bridge.js'
 import { backupRoute } from './routes/backup.js'
 import { sharesRoute, publicShareRoute } from './routes/shares.js'
@@ -52,6 +52,8 @@ app.route('/api/v1/inbox', inboxRoute)
 app.route('/api/v1/reviews', reviewsRoute)
 app.route('/api/v1/documents', documentsRoute)
 app.route('/api/v1/notes', notesRoute)
+// Сводка по компании — по сессии: проектного токена на этом экране нет.
+app.route('/api/v1/time', timeCompanyRoute)
 app.route('/api/v1/time', timeRoute)
 app.route('/api/v1/my/time', timeMineRoute) // свой таймер без привязки к проекту — для трея
 app.route('/d', documentsPublicRoute) // публичный доступ к документу по слагу

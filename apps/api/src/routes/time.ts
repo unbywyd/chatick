@@ -16,6 +16,139 @@ import { translateTimeEntry } from '../lib/llm.js'
 export const timeRoute = new Hono<ProjectEnv>()
 timeRoute.use('*', requireProject)
 
+/**
+ * Сводка по компании живёт отдельно: она про компанию, а не про проект.
+ *
+ * Под общим requireProject экран часов компании падал в 401 — проектного
+ * токена там нет и быть не должно, а у компании без проектов не будет вовсе.
+ * React Query повторял запрос, и вкладка бесконечно мигала многоточием.
+ *
+ * Доступ не ослаб: обработчик и раньше проверял роль admin/manager В КОМПАНИИ,
+ * проектный токен ничего к этому не добавлял.
+ */
+export const timeCompanyRoute = new Hono<SessionEnv>()
+timeCompanyRoute.use('*', requireSession)
+
+timeCompanyRoute.get(
+  '/company/:companyId',
+  zValidator('query', z.object({ from: z.string().optional(), to: z.string().optional(), userId: z.string().optional() })),
+  async (c) => {
+    const { sub } = c.get('session')
+    const companyId = c.req.param('companyId')
+    const role = await companyRoleOf(companyId, sub)
+    if (role !== 'admin' && role !== 'manager') return c.json({ error: 'Forbidden' }, 403)
+
+    const f = c.req.valid('query')
+    const periodFrom = f.from ? new Date(f.from) : null
+    const periodTo = f.to ? new Date(f.to) : null
+    if (periodTo && !f.to!.includes('T')) periodTo.setHours(23, 59, 59, 999)
+
+    const conds = [eq(projects.companyId, companyId), sql`${timeEntries.endedAt} is not null`]
+    if (f.userId) conds.push(eq(timeEntries.userId, f.userId))
+    // берём пересекающиеся записи, а лишнее отрежем — иначе смена через полночь
+    // на границе месяца попадёт в отчёт целиком
+    if (periodFrom) conds.push(sql`${timeEntries.endedAt} >= ${periodFrom.toISOString()}::timestamptz`)
+    if (periodTo) conds.push(lte(timeEntries.startedAt, periodTo))
+
+    const clipEnd = periodTo ? sql`${periodTo.toISOString()}::timestamptz` : sql`${timeEntries.endedAt}`
+    const clipStart = periodFrom ? sql`${periodFrom.toISOString()}::timestamptz` : sql`${timeEntries.startedAt}`
+    const minutes = sql<number>`coalesce(sum(greatest(extract(epoch from (
+      least(${timeEntries.endedAt}, ${clipEnd}) - greatest(${timeEntries.startedAt}, ${clipStart})
+    )) / 60, 0)), 0)::int`
+
+    const rows = await db
+      .select({
+        userId: timeEntries.userId,
+        userName: users.name,
+        avatarUrl: users.avatarUrl,
+        projectId: projects.id,
+        projectName: projects.name,
+        minutes,
+        entries: sql<number>`count(*)::int`,
+      })
+      .from(timeEntries)
+      .innerJoin(projects, eq(projects.id, timeEntries.projectId))
+      .innerJoin(users, eq(users.id, timeEntries.userId))
+      .where(and(...conds))
+      .groupBy(timeEntries.userId, users.name, users.avatarUrl, projects.id, projects.name)
+      // проекты с нулём внутри периода не показываем: запись могла задеть
+      // границу краем, а строка «0ч 0м» в платёжном отчёте только мешает
+      .having(sql`${minutes} > 0`)
+
+    // Дни, в которые человек работал, и часы в каждом. Для расчётов это нужно
+    // не меньше суммы: по ним сверяют табель и считают среднюю выработку.
+    const dayRows = await db.execute(sql`
+      with bounds as (
+        select ${timeEntries.userId} as uid, ${timeEntries.startedAt} as s, ${timeEntries.endedAt} as e
+        from ${timeEntries}
+        inner join ${projects} on ${projects.id} = ${timeEntries.projectId}
+        where ${and(...conds)}
+      ),
+      spread as (
+        select b.uid,
+          generate_series(
+            date_trunc('day', b.s at time zone 'UTC'),
+            date_trunc('day', b.e at time zone 'UTC'),
+            interval '1 day'
+          ) as day_local,
+          b.s, b.e
+        from bounds b
+      )
+      select uid,
+        to_char(day_local, 'YYYY-MM-DD') as day,
+        coalesce(sum(greatest(extract(epoch from (
+          least(e, (day_local + interval '1 day') at time zone 'UTC')
+          - greatest(s, day_local at time zone 'UTC')
+        )) / 60, 0)), 0)::int as minutes
+      from spread
+      group by uid, day_local
+      having coalesce(sum(greatest(extract(epoch from (
+        least(e, (day_local + interval '1 day') at time zone 'UTC')
+        - greatest(s, day_local at time zone 'UTC')
+      )) / 60, 0)), 0) > 0
+      order by day_local
+    `)
+
+    const daysByUser = new Map<string, { day: string; minutes: number }[]>()
+    for (const r of dayRows as unknown as { uid: string; day: string; minutes: number }[]) {
+      const list = daysByUser.get(r.uid) ?? []
+      list.push({ day: String(r.day), minutes: Number(r.minutes) })
+      daysByUser.set(r.uid, list)
+    }
+
+    // сворачиваем в людей с разбивкой по проектам: так читают отчёт
+    const byUser = new Map<string, { userId: string; name: string; avatarUrl: string | null; minutes: number; projects: { id: string; name: string; minutes: number }[] }>()
+    for (const r of rows) {
+      const entry = byUser.get(r.userId) ?? { userId: r.userId, name: r.userName, avatarUrl: r.avatarUrl, minutes: 0, projects: [] }
+      entry.minutes += r.minutes
+      entry.projects.push({ id: r.projectId, name: r.projectName, minutes: r.minutes })
+      byUser.set(r.userId, entry)
+    }
+
+    const people = [...byUser.values()]
+      .map((u) => {
+        const days = daysByUser.get(u.userId) ?? []
+        return {
+          ...u,
+          projects: u.projects.sort((a, b) => b.minutes - a.minutes),
+          days,
+          // средняя выработка считается по РАБОЧИМ дням, а не по календарным:
+          // делить месячную сумму на 30 бессмысленно, если человек работал 12 дней
+          daysWorked: days.length,
+          avgPerDay: days.length ? Math.round(u.minutes / days.length) : 0,
+        }
+      })
+      .filter((u) => u.minutes > 0)
+      .sort((a, b) => b.minutes - a.minutes)
+
+    return c.json({
+      people,
+      totalMinutes: people.reduce((sum, u) => sum + u.minutes, 0),
+    })
+  },
+)
+
+
 export type TimeConfig = {
   maxTimers: number
   idleAction: 'remind' | 'stop'
@@ -475,124 +608,6 @@ timeRoute.delete('/:id', async (c) => {
  * Строки — «человек × проект»: именно так их и сводят, когда считают, кому
  * сколько заплатить и на какой проект списать.
  */
-timeRoute.get(
-  '/company/:companyId',
-  zValidator('query', z.object({ from: z.string().optional(), to: z.string().optional(), userId: z.string().optional() })),
-  async (c) => {
-    const { sub } = c.get('auth')
-    const companyId = c.req.param('companyId')
-    const role = await companyRoleOf(companyId, sub)
-    if (role !== 'admin' && role !== 'manager') return c.json({ error: 'Forbidden' }, 403)
-
-    const f = c.req.valid('query')
-    const periodFrom = f.from ? new Date(f.from) : null
-    const periodTo = f.to ? new Date(f.to) : null
-    if (periodTo && !f.to!.includes('T')) periodTo.setHours(23, 59, 59, 999)
-
-    const conds = [eq(projects.companyId, companyId), sql`${timeEntries.endedAt} is not null`]
-    if (f.userId) conds.push(eq(timeEntries.userId, f.userId))
-    // берём пересекающиеся записи, а лишнее отрежем — иначе смена через полночь
-    // на границе месяца попадёт в отчёт целиком
-    if (periodFrom) conds.push(sql`${timeEntries.endedAt} >= ${periodFrom.toISOString()}::timestamptz`)
-    if (periodTo) conds.push(lte(timeEntries.startedAt, periodTo))
-
-    const clipEnd = periodTo ? sql`${periodTo.toISOString()}::timestamptz` : sql`${timeEntries.endedAt}`
-    const clipStart = periodFrom ? sql`${periodFrom.toISOString()}::timestamptz` : sql`${timeEntries.startedAt}`
-    const minutes = sql<number>`coalesce(sum(greatest(extract(epoch from (
-      least(${timeEntries.endedAt}, ${clipEnd}) - greatest(${timeEntries.startedAt}, ${clipStart})
-    )) / 60, 0)), 0)::int`
-
-    const rows = await db
-      .select({
-        userId: timeEntries.userId,
-        userName: users.name,
-        avatarUrl: users.avatarUrl,
-        projectId: projects.id,
-        projectName: projects.name,
-        minutes,
-        entries: sql<number>`count(*)::int`,
-      })
-      .from(timeEntries)
-      .innerJoin(projects, eq(projects.id, timeEntries.projectId))
-      .innerJoin(users, eq(users.id, timeEntries.userId))
-      .where(and(...conds))
-      .groupBy(timeEntries.userId, users.name, users.avatarUrl, projects.id, projects.name)
-      // проекты с нулём внутри периода не показываем: запись могла задеть
-      // границу краем, а строка «0ч 0м» в платёжном отчёте только мешает
-      .having(sql`${minutes} > 0`)
-
-    // Дни, в которые человек работал, и часы в каждом. Для расчётов это нужно
-    // не меньше суммы: по ним сверяют табель и считают среднюю выработку.
-    const dayRows = await db.execute(sql`
-      with bounds as (
-        select ${timeEntries.userId} as uid, ${timeEntries.startedAt} as s, ${timeEntries.endedAt} as e
-        from ${timeEntries}
-        inner join ${projects} on ${projects.id} = ${timeEntries.projectId}
-        where ${and(...conds)}
-      ),
-      spread as (
-        select b.uid,
-          generate_series(
-            date_trunc('day', b.s at time zone 'UTC'),
-            date_trunc('day', b.e at time zone 'UTC'),
-            interval '1 day'
-          ) as day_local,
-          b.s, b.e
-        from bounds b
-      )
-      select uid,
-        to_char(day_local, 'YYYY-MM-DD') as day,
-        coalesce(sum(greatest(extract(epoch from (
-          least(e, (day_local + interval '1 day') at time zone 'UTC')
-          - greatest(s, day_local at time zone 'UTC')
-        )) / 60, 0)), 0)::int as minutes
-      from spread
-      group by uid, day_local
-      having coalesce(sum(greatest(extract(epoch from (
-        least(e, (day_local + interval '1 day') at time zone 'UTC')
-        - greatest(s, day_local at time zone 'UTC')
-      )) / 60, 0)), 0) > 0
-      order by day_local
-    `)
-
-    const daysByUser = new Map<string, { day: string; minutes: number }[]>()
-    for (const r of dayRows as unknown as { uid: string; day: string; minutes: number }[]) {
-      const list = daysByUser.get(r.uid) ?? []
-      list.push({ day: String(r.day), minutes: Number(r.minutes) })
-      daysByUser.set(r.uid, list)
-    }
-
-    // сворачиваем в людей с разбивкой по проектам: так читают отчёт
-    const byUser = new Map<string, { userId: string; name: string; avatarUrl: string | null; minutes: number; projects: { id: string; name: string; minutes: number }[] }>()
-    for (const r of rows) {
-      const entry = byUser.get(r.userId) ?? { userId: r.userId, name: r.userName, avatarUrl: r.avatarUrl, minutes: 0, projects: [] }
-      entry.minutes += r.minutes
-      entry.projects.push({ id: r.projectId, name: r.projectName, minutes: r.minutes })
-      byUser.set(r.userId, entry)
-    }
-
-    const people = [...byUser.values()]
-      .map((u) => {
-        const days = daysByUser.get(u.userId) ?? []
-        return {
-          ...u,
-          projects: u.projects.sort((a, b) => b.minutes - a.minutes),
-          days,
-          // средняя выработка считается по РАБОЧИМ дням, а не по календарным:
-          // делить месячную сумму на 30 бессмысленно, если человек работал 12 дней
-          daysWorked: days.length,
-          avgPerDay: days.length ? Math.round(u.minutes / days.length) : 0,
-        }
-      })
-      .filter((u) => u.minutes > 0)
-      .sort((a, b) => b.minutes - a.minutes)
-
-    return c.json({
-      people,
-      totalMinutes: people.reduce((sum, u) => sum + u.minutes, 0),
-    })
-  },
-)
 
 // --- Сводка -----------------------------------------------------------------
 

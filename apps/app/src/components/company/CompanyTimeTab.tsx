@@ -75,7 +75,12 @@ export function CompanyTimeTab({ companyId }: { companyId: string }) {
 
   const report = useQuery({
     queryKey: ['company-time', companyId, query],
-    queryFn: () => api<Report>(`/api/v1/time/company/${companyId}?${query}`, {}, 'project'),
+    // Сессионный токен, а не проектный: это экран компании, проекта здесь
+    // может не быть вовсе — запрос падал в 401 и повторялся бесконечно.
+    queryFn: () => api<Report>(`/api/v1/time/company/${companyId}?${query}`),
+    // Прежние данные видны, пока грузятся новые: при смене периода вкладка
+    // схлопывалась в многоточие вместо того, чтобы просто обновить числа.
+    placeholderData: (prev) => prev,
   })
 
   const all = report.data?.people ?? []
