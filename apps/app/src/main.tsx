@@ -12,6 +12,7 @@ import { NotifyPermissionPrompt } from './components/NotifyPermissionPrompt'
 import { ThemeProvider } from './providers/theme'
 import { ConfirmProvider } from './components/ui/confirm'
 import { ProjectLayout, useProjectCtx } from './screens/ProjectScreen'
+import { EnterScreen } from './screens/EnterScreen'
 import { LoginScreen, AuthCallback } from './screens/LoginScreen'
 import { PublicShareScreen } from './screens/PublicShareScreen'
 import { InviteScreen } from './screens/InviteScreen'
@@ -120,6 +121,7 @@ createRoot(document.getElementById('root')!).render(
             <NotifyPermissionPrompt />
             <Routes>
               <Route path="/" element={<LoginScreen />} />
+              <Route path="/enter" element={<EnterScreen />} />
               <Route path="/login" element={<LoginScreen />} />
               <Route path="/auth" element={<AuthCallback />} />
               {/* приём приглашения по ссылке из письма */}

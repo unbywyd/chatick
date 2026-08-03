@@ -1300,5 +1300,10 @@
     "subtitle": "Used for emails to people who have no settings yet: invitees and accounts created through the API. Everyone picks their own interface language.",
     "saved": "Company language saved",
     "adminOnly": "Only a company admin can change this."
+  },
+  "enter": {
+    "working": "Signing you in…",
+    "failed": "This link has expired or was already used",
+    "toLogin": "Sign in normally"
   }
 }

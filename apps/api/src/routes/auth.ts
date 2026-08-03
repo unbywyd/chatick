@@ -12,6 +12,7 @@ import { env } from '../env.js'
 import { s3Client, s3Bucket, getObjectStream, S3_KEY_PREFIX } from '../lib/s3.js'
 import { notifySignup } from '../lib/admin-alert.js'
 import { sendLoginCode, verifyLoginCode } from '../lib/otp.js'
+import { consumeEnterToken } from '../lib/enter-link.js'
 
 export const auth = new Hono<SessionEnv>()
 
@@ -182,6 +183,32 @@ function sweepDesktopLogins() {
   const now = Date.now()
   for (const [code, entry] of desktopLogins) if (entry.expiresAt < now) desktopLogins.delete(code)
 }
+
+// POST /api/v1/auth/enter — обмен одноразового токена на сессию.
+//
+// Токен выдала внешняя система через свой ключ компании: человек уже вошёл у
+// неё, и подтверждать личность второй раз незачем. Сама ссылка одноразовая и
+// живёт пять минут — см. lib/enter-link.ts.
+auth.post('/enter', async (c) => {
+  const body = (await c.req.json().catch(() => ({}))) as { token?: unknown }
+  const token = typeof body.token === 'string' ? body.token : ''
+  if (!token) return c.json({ error: 'Token required' }, 400)
+
+  const res = consumeEnterToken(token)
+  // Одна причина на все случаи: истёк, использован, подделан — снаружи это
+  // одно и то же, а разница подсказывала бы подбирающему, куда двигаться.
+  if (!res.ok) return c.json({ error: 'Link expired or already used' }, 401)
+
+  const user = await db.query.users.findFirst({ where: eq(users.id, res.userId) })
+  if (!user) return c.json({ error: 'Link expired or already used' }, 401)
+
+  const sessionToken = await signSessionToken({ sub: user.id, email: user.email })
+  return c.json({
+    token: sessionToken,
+    to: res.to,
+    user: { id: user.id, name: user.name, email: user.email },
+  })
+})
 
 // --- вход по коду на почту (SPEC §8.38) --------------------------------------
 //

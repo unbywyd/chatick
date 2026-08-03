@@ -8,6 +8,8 @@ import { checkKey, logCall, type KeyScope } from '../lib/company-key.js'
 import { defaultPermissions } from './projects.js'
 import { sendAddedToProjectMail } from '../lib/mail-added.js'
 import { localeFor } from '../lib/locale.js'
+import { issueEnterToken } from '../lib/enter-link.js'
+import { env } from '../env.js'
 
 // Внешний API для систем-заказчиков (SPEC-INTEGRATION).
 //
@@ -657,6 +659,43 @@ extRoute.get('/users/:externalId/time', guard('read:all'), async (c) => {
   }))
 
   return c.json({ items, totalMinutes: items.reduce((s, x) => s + x.minutes, 0) })
+})
+
+// --- переход из их системы к нам ---------------------------------------------
+
+/**
+ * Ссылка, которая проводит человека внутрь без повторного входа.
+ *
+ * Их система уже знает, кто он: он вошёл у них. Просить его войти второй раз —
+ * лишний шаг, из-за которого переходом просто не будут пользоваться.
+ *
+ * Ссылку собирать вручную нельзя: она содержит одноразовый токен, который
+ * выдаём мы. Отсюда и ручка — вместо описания формата в документации.
+ */
+extRoute.post('/users/:externalId/login-link', guard('users:write'), async (c) => {
+  const companyId = c.get('companyId')
+  const user = await db.query.users.findFirst({ where: eq(users.externalId, c.req.param('externalId')) })
+  if (!user) return c.json({ error: 'User not found' }, 404)
+
+  // Ключ компании выдаёт ссылку только СВОЕМУ участнику: иначе одна компания
+  // могла бы войти под человеком из другой.
+  const member = await db.query.companyMembers.findFirst({
+    where: and(eq(companyMembers.companyId, companyId), eq(companyMembers.userId, user.id)),
+  })
+  if (!member) return c.json({ error: 'User is not a member of this company' }, 403)
+
+  const b = (await c.req.json().catch(() => ({}))) as { to?: unknown; externalProjectId?: unknown }
+
+  // Удобство: можно указать не путь, а свой идентификатор проекта — их
+  // система наших идентификаторов не знает и знать не должна.
+  let to = typeof b.to === 'string' ? b.to : null
+  if (!to && typeof b.externalProjectId === 'string') {
+    const project = await projectByExternal(companyId, b.externalProjectId)
+    if (project) to = `/p/${project.id}`
+  }
+
+  const { token, expiresInSec } = issueEnterToken(user.id, companyId, to)
+  return c.json({ url: `${env.APP_URL}/#/enter?token=${encodeURIComponent(token)}`, expiresInSec })
 })
 
 // --- о компании --------------------------------------------------------------
