@@ -379,6 +379,13 @@
       "when": 1785066500112,
       "tag": "0053_webhooks",
       "breakpoints": true
+    },
+    {
+      "idx": 54,
+      "version": "7",
+      "when": 1785066501112,
+      "tag": "0054_company_logo_key",
+      "breakpoints": true
     }
   ]
 }

@@ -3,7 +3,9 @@ import { zValidator } from '@hono/zod-validator'
 import { z } from 'zod'
 import { and, eq, inArray, isNull, sql } from 'drizzle-orm'
 import { nanoid } from 'nanoid'
-import { deleteObject, resolveStorage } from '../lib/s3.js'
+import sharp from 'sharp'
+import { PutObjectCommand } from '@aws-sdk/client-s3'
+import { deleteObject, getObjectStream, resolveStorage, s3Bucket, s3Client, S3_KEY_PREFIX } from '../lib/s3.js'
 import { sendDeletedMail } from '../lib/mails.js'
 import { db } from '../db/client.js'
 import { companies, companyMembers, companyInvites, companyWebhooks, files, messages, projectMembers, projects, tasks, timeEntries, users } from '../db/schema.js'
@@ -313,6 +315,70 @@ companiesRoute.patch(
     return c.json({ id: updated.id, name: updated.name, locale: updated.locale })
   },
 )
+
+// --- логотип компании ---------------------------------------------------------
+//
+// Показывается в шапке вместо нашего, поэтому загрузка нужна прямо здесь:
+// просить «разместите картинку где-нибудь и пришлите ссылку» — не решение.
+
+companiesRoute.post('/:companyId/logo', async (c) => {
+  const { sub } = c.get('session')
+  const companyId = c.req.param('companyId')
+  if ((await memberRoleIn(companyId, sub)) !== 'admin') return c.json({ error: 'Forbidden' }, 403)
+
+  const body = await c.req.parseBody()
+  const file = body['file']
+  if (!(file instanceof File)) return c.json({ error: 'file field is required' }, 400)
+  if (file.size > 5 * 1024 * 1024) return c.json({ error: 'File too large (max 5MB)' }, 413)
+
+  try {
+    const buffer = await sharp(Buffer.from(await file.arrayBuffer()), { failOn: 'none' })
+      .rotate()
+      .resize(256, 256, { fit: 'cover' })
+      .webp({ quality: 85 })
+      .toBuffer()
+    const key = `${S3_KEY_PREFIX}/company-logos/${companyId}-${nanoid(6)}.webp`
+    await s3Client().send(new PutObjectCommand({ Bucket: s3Bucket(), Key: key, Body: buffer, ContentType: 'image/webp' }))
+    // Версия в адресе: без неё браузер отдаёт старый логотип после замены.
+    const url = `${process.env.API_PUBLIC_URL || 'https://api.chatick.com'}/api/v1/companies/${companyId}/logo?v=${Date.now()}`
+    await db.update(companies).set({ logoUrl: url, logoKey: key }).where(eq(companies.id, companyId))
+    return c.json({ logoUrl: url })
+  } catch (e) {
+    console.error('[company logo] upload failed:', e)
+    return c.json({ error: 'Failed to process image' }, 500)
+  }
+})
+
+companiesRoute.get('/:companyId/logo', async (c) => {
+  const company = await db.query.companies.findFirst({ where: eq(companies.id, c.req.param('companyId')) })
+  if (!company?.logoKey) return c.json({ error: 'Not found' }, 404)
+  try {
+    const { body, contentType } = await getObjectStream(
+      { client: s3Client(), bucket: s3Bucket(), keyPrefix: S3_KEY_PREFIX, isCustom: false, publicUrl: null },
+      company.logoKey,
+    )
+    c.header('Content-Type', contentType || 'image/webp')
+    c.header('Cache-Control', 'public, max-age=86400')
+    const { Readable } = await import('node:stream')
+    return c.body(Readable.toWeb(body) as ReadableStream)
+  } catch {
+    return c.json({ error: 'Not found' }, 404)
+  }
+})
+
+companiesRoute.delete('/:companyId/logo', async (c) => {
+  const { sub } = c.get('session')
+  const companyId = c.req.param('companyId')
+  if ((await memberRoleIn(companyId, sub)) !== 'admin') return c.json({ error: 'Forbidden' }, 403)
+
+  const company = await db.query.companies.findFirst({ where: eq(companies.id, companyId) })
+  if (company?.logoKey) {
+    // Файл из хранилища тоже убираем: иначе он копится и оплачивается впустую.
+    await deleteObject({ client: s3Client(), bucket: s3Bucket(), keyPrefix: S3_KEY_PREFIX, isCustom: false, publicUrl: null }, company.logoKey).catch(() => {})
+  }
+  await db.update(companies).set({ logoUrl: null, logoKey: null }).where(eq(companies.id, companyId))
+  return c.json({ ok: true })
+})
 
 // --- ключи API компании (SPEC-INTEGRATION §2) --------------------------------
 //

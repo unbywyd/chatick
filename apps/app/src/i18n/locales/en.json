@@ -1352,5 +1352,15 @@
     "secretHint": "Every request is signed with it — the receiving side verifies the signature. Shown once.",
     "deleteConfirm": "Delete this webhook?",
     "empty": "No webhooks yet — the external system learns about changes only by polling."
+  },
+  "companyProfile": {
+    "title": "Company",
+    "subtitle": "The whole team sees this name and logo — they appear in the header in place of ours.",
+    "name": "Name",
+    "nameHint": "This is how members see the company.",
+    "changeLogo": "Change the logo",
+    "removeLogo": "Remove the logo",
+    "logoUpdated": "Logo updated",
+    "logoRemoved": "Logo removed"
   }
 }

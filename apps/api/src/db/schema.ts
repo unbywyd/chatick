@@ -154,6 +154,7 @@ export const companies = pgTable('companies', {
   id: id(),
   name: text('name').notNull(),
   logoUrl: text('logo_url'),
+  logoKey: text('logo_key'), // S3-ключ загруженного логотипа (раздаётся своей ручкой)
   // BYO-LLM: компания подключает своего провайдера; ключ — AES-256-GCM, наружу не отдаётся
   llmProvider: text('llm_provider'), // anthropic | openai | google | deepseek | groq
   llmModel: text('llm_model'),

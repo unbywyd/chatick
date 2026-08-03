@@ -38,6 +38,7 @@ import { CompanyTimeTab } from '@/components/company/CompanyTimeTab'
 import { OverviewTab } from '@/components/company/OverviewTab'
 import { LlmSettings } from '@/components/company/LlmSettings'
 import { CompanyLocale } from '@/components/company/CompanyLocale'
+import { CompanyProfile } from '@/components/company/CompanyProfile'
 import { ApiKeysTab } from '@/components/company/ApiKeysTab'
 import { IntegrationSettings } from '@/components/company/IntegrationSettings'
 import { WebhooksSettings } from '@/components/company/WebhooksSettings'
@@ -476,6 +477,13 @@ function CompanyHome({
         <BackupTab company={company} />
       ) : (
         <>
+          <CompanyProfile
+            companyId={company.id}
+            name={company.name}
+            logoUrl={company.logoUrl}
+            isAdmin={isAdmin}
+          />
+
           <CompanyLocale companyId={company.id} current={company.locale ?? 'en'} isAdmin={isAdmin} />
 
           <LlmSettings companyId={company.id} isAdmin={company.myRole === 'admin'} />
