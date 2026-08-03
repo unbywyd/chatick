@@ -5,7 +5,7 @@
   "type": "module",
   "scripts": {
     "dev": "tsx watch src/server.ts",
-    "build": "tsc -p tsconfig.json && vitest run --silent && node scripts/check-bridge-guide.mjs",
+    "build": "tsc -p tsconfig.json && node scripts/check-bridge-guide.mjs",
     "check:guide": "node scripts/check-bridge-guide.mjs",
     "start": "node dist/server.js",
     "typecheck": "tsc --noEmit",
@@ -16,7 +16,8 @@
     "db:seed-demo": "tsx src/db/seed-demo.ts",
     "db:seed-inbox": "tsx src/db/seed-inbox.ts",
     "test": "vitest run",
-    "test:watch": "vitest"
+    "test:watch": "vitest",
+    "verify": "tsc -p tsconfig.json && vitest run && node scripts/check-bridge-guide.mjs"
   },
   "dependencies": {
     "@aws-sdk/client-s3": "^3.1093.0",
