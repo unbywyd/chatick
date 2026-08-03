@@ -1305,5 +1305,27 @@
     "working": "Signing you in…",
     "failed": "This link has expired or was already used",
     "toLogin": "Sign in normally"
+  },
+  "apiKeys": {
+    "title": "API keys",
+    "subtitle": "An external system uses these to create projects and people and to read statistics. A key equals access to the whole company — revoke the ones you do not need.",
+    "new": "Create a key",
+    "create": "Create",
+    "namePlaceholder": "Name, e.g. “Atlas, production”",
+    "scopes": "Scopes",
+    "scopesHint": "The key can do only what is ticked. read:all is enough for reading statistics.",
+    "onceTitle": "Copy the key now",
+    "onceHint": "It is shown once. Only its fingerprint is stored — not even we can recover it.",
+    "copy": "Copy",
+    "copied": "Copied",
+    "hide": "I copied it",
+    "empty": "No keys yet",
+    "revoke": "Revoke",
+    "revokeConfirm": "Revoke the key «{{name}}»?",
+    "revokeHint": "Revoking is immediate: any integration using it stops working at once.",
+    "revoked": "Key revoked",
+    "lastUsed": "used {{when}}",
+    "neverUsed": "never used",
+    "adminOnly": "Only a company admin manages keys."
   }
 }

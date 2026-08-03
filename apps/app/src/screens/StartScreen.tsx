@@ -38,6 +38,7 @@ import { CompanyTimeTab } from '@/components/company/CompanyTimeTab'
 import { OverviewTab } from '@/components/company/OverviewTab'
 import { LlmSettings } from '@/components/company/LlmSettings'
 import { CompanyLocale } from '@/components/company/CompanyLocale'
+import { ApiKeysTab } from '@/components/company/ApiKeysTab'
 import { CompanyConnectTab } from '@/components/company/CompanyConnectTab'
 import { BackupTab } from '@/components/company/BackupTab'
 import {
@@ -476,6 +477,14 @@ function CompanyHome({
           <CompanyLocale companyId={company.id} current={company.locale ?? 'en'} isAdmin={isAdmin} />
 
           <LlmSettings companyId={company.id} isAdmin={company.myRole === 'admin'} />
+
+          {/* Интеграция: ключи для внешней системы. Только админу — ключ даёт
+              доступ ко всей компании. */}
+          {isAdmin && (
+            <div className="rounded-xl border bg-card p-4">
+              <ApiKeysTab companyId={company.id} isAdmin={isAdmin} />
+            </div>
+          )}
 
           {/* Необратимое — отдельно и внизу: рядом с обычными настройками до
               него дотягиваются случайно. */}

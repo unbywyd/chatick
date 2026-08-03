@@ -10,6 +10,7 @@ import { companies, companyMembers, companyInvites, files, messages, projectMemb
 import { requireSession, type SessionEnv } from '../auth.js'
 import { sendInviteMail } from '../lib/mail-invite.js'
 import { projectLocale } from '../lib/locale.js'
+import { issueKey, listKeys, revokeKey } from '../lib/company-key.js'
 import { encrypt } from '../lib/crypto.js'
 import { LLM_PROVIDERS, testLlm, type LlmProvider } from '../lib/llm.js'
 import { env } from '../env.js'
@@ -309,6 +310,96 @@ companiesRoute.patch(
     const [updated] = await db.update(companies).set(patch).where(eq(companies.id, companyId)).returning()
     if (!updated) return c.json({ error: 'Not found' }, 404)
     return c.json({ id: updated.id, name: updated.name, locale: updated.locale })
+  },
+)
+
+// --- ключи API компании (SPEC-INTEGRATION §2) --------------------------------
+//
+// Ключ позволяет заводить людей и проекты без чьего-либо подтверждения — то
+// есть это ключ от всей компании. Поэтому только админ, и каждое действие
+// оставляет след.
+
+companiesRoute.get('/:companyId/api-keys', async (c) => {
+  const { sub } = c.get('session')
+  const companyId = c.req.param('companyId')
+  if ((await memberRoleIn(companyId, sub)) !== 'admin') return c.json({ error: 'Forbidden' }, 403)
+  return c.json({ items: await listKeys(companyId) })
+})
+
+companiesRoute.post(
+  '/:companyId/api-keys',
+  zValidator(
+    'json',
+    z.object({
+      name: z.string().min(1).max(120),
+      scopes: z.array(z.enum(['users:write', 'projects:write', 'read:all'])).min(1),
+      allowedIps: z.array(z.string().max(64)).max(20).optional(),
+    }),
+  ),
+  async (c) => {
+    const { sub } = c.get('session')
+    const companyId = c.req.param('companyId')
+    if ((await memberRoleIn(companyId, sub)) !== 'admin') return c.json({ error: 'Forbidden' }, 403)
+
+    const { name, scopes, allowedIps } = c.req.valid('json')
+    const issued = await issueKey({ companyId, name, scopes, allowedIps, createdById: sub })
+
+    // Единственный раз, когда ключ вообще существует снаружи хранилища:
+    // дальше в базе только его хеш, и показать его снова невозможно.
+    return c.json({ id: issued.id, key: issued.key, prefix: issued.prefix }, 201)
+  },
+)
+
+companiesRoute.delete('/:companyId/api-keys/:keyId', async (c) => {
+  const { sub } = c.get('session')
+  const companyId = c.req.param('companyId')
+  if ((await memberRoleIn(companyId, sub)) !== 'admin') return c.json({ error: 'Forbidden' }, 403)
+
+  const ok = await revokeKey(companyId, c.req.param('keyId'))
+  if (!ok) return c.json({ error: 'Not found' }, 404)
+  return c.json({ ok: true })
+})
+
+/** Настройки внешней системы: название и шаблон ссылки «туда». */
+companiesRoute.patch(
+  '/:companyId/integration',
+  zValidator(
+    'json',
+    z.object({
+      externalSystemName: z.string().max(120).nullable().optional(),
+      externalProjectUrl: z.string().max(500).nullable().optional(),
+      projectsViaApiOnly: z.boolean().optional(),
+    }),
+  ),
+  async (c) => {
+    const { sub } = c.get('session')
+    const companyId = c.req.param('companyId')
+    if ((await memberRoleIn(companyId, sub)) !== 'admin') return c.json({ error: 'Forbidden' }, 403)
+
+    const b = c.req.valid('json')
+    const patch: Record<string, unknown> = {}
+    if (b.externalSystemName !== undefined) patch.externalSystemName = b.externalSystemName?.trim() || null
+    if (b.externalProjectUrl !== undefined) {
+      const url = b.externalProjectUrl?.trim() || null
+      // Без {externalId} ссылка вела бы всех в одно место — это не переход к
+      // проекту, а ошибка настройки, которую лучше поймать здесь.
+      if (url && !url.includes('{externalId}')) {
+        return c.json({ error: 'URL template must contain {externalId}' }, 400)
+      }
+      if (url && !/^https?:\/\//i.test(url)) {
+        return c.json({ error: 'URL must start with http:// or https://' }, 400)
+      }
+      patch.externalProjectUrl = url
+    }
+    if (b.projectsViaApiOnly !== undefined) patch.projectsViaApiOnly = b.projectsViaApiOnly
+    if (!Object.keys(patch).length) return c.json({ error: 'Nothing to change' }, 400)
+
+    const [updated] = await db.update(companies).set(patch).where(eq(companies.id, companyId)).returning()
+    return c.json({
+      externalSystemName: updated!.externalSystemName,
+      externalProjectUrl: updated!.externalProjectUrl,
+      projectsViaApiOnly: updated!.projectsViaApiOnly,
+    })
   },
 )
 
