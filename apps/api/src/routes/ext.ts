@@ -256,11 +256,18 @@ extRoute.post('/projects/:externalId/members', guard('users:write'), async (c) =
       role: (['owner', 'admin', 'member'] as const).includes(x.role as never) ? (x.role as 'member') : 'member',
     }))
 
+  // Молчать по умолчанию нельзя: человек должен узнать, что у него появился
+  // доступ. Отключается явно — как в /users/batch.
+  const notify = (b as { notify?: unknown }).notify !== false
+
   const found = await db
     .select()
     .from(users)
     .where(inArray(users.externalId, wanted.map((w) => w.externalUserId)))
   const byExternal = new Map(found.map((u) => [u.externalId!, u]))
+  const company = notify
+    ? await db.query.companies.findFirst({ where: eq(companies.id, companyId), columns: { name: true } })
+    : null
 
   const added: string[] = []
   const unknown: string[] = []
@@ -296,6 +303,25 @@ extRoute.post('/projects/:externalId/members', guard('users:write'), async (c) =
       rulesAcceptedAt: new Date(),
     })
     added.push(w.externalUserId)
+
+    // Письмо о доступе. Раньше эта ручка молчала — в отличие от /users/batch,
+    // — и человек узнавал о проекте, только если случайно туда заходил.
+    //
+    // Отключается на весь вызов через notify: false: при первичном переносе
+    // команды сотня писем разом никому не нужна.
+    if (notify) {
+      // В фоне: письмо не должно задерживать ответ внешней системе, а сбой
+      // почты — отменять уже выданный доступ.
+      void localeFor({ userId: user.id, projectId: project.id }).then((locale) =>
+        sendAddedToProjectMail({
+          to: user!.email,
+          companyName: company?.name ?? '',
+          projectName: project.name,
+          projectId: project.id,
+          locale,
+        }),
+      )
+    }
   }
 
   return c.json({ added: added.length, addedIds: added, unknownUsers: unknown })

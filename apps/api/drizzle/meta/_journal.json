@@ -407,6 +407,13 @@
       "when": 1785066501115,
       "tag": "0057_members_via_api_only",
       "breakpoints": true
+    },
+    {
+      "idx": 58,
+      "version": "7",
+      "when": 1785066501116,
+      "tag": "0058_user_locale_explicit",
+      "breakpoints": true
     }
   ]
 }

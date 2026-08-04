@@ -22,6 +22,10 @@ export const users = pgTable(
     name: text('name').notNull().default(''),
     phone: text('phone'), // для deep link «личное → WhatsApp»
     locale: text('locale').notNull().default('en'), // язык, на который ИИ переводит для юзера
+    // Выбирал ли человек язык сам. Колонка выше NOT NULL, поэтому у всех есть
+    // 'en' — и у тех, кто его не выбирал: заведённых через API компании.
+    // Без этого признака письма им уходили по-английски мимо языка компании.
+    localeSetByUser: boolean('locale_set_by_user').notNull().default(false),
     passwordHash: text('password_hash'),
     googleId: text('google_id'),
     avatarUrl: text('avatar_url'),

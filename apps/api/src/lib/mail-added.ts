@@ -62,6 +62,9 @@ export async function sendAddedToProjectMail(params: {
 
     await sendMail({
       to: params.to,
+      // С домена компании, а не с нашего: письмо про их работу «от Chatick»
+      // читается как фишинг.
+      projectId: params.projectId,
       subject: `${s.title}: ${params.projectName}`,
       text: renderMailText(content),
       html: renderMail(content),

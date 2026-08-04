@@ -53,6 +53,8 @@ export async function sendInviteMail(params: {
   token: string
   /** локаль приглашающего — получателя в системе ещё нет */
   inviterLocale?: string | null
+  /** Письмо уходит с домена компании, если он у неё настроен. */
+  companyId?: string | null
 }) {
   const lang = mailLang(params.inviterLocale)
   const s = STR[lang]
@@ -69,6 +71,7 @@ export async function sendInviteMail(params: {
 
   await sendMail({
     to: params.to,
+    companyId: params.companyId,
     subject: fmt(s.subject, vars),
     text: renderMailText(content),
     html: renderMail(content),

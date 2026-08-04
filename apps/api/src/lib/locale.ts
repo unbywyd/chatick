@@ -43,10 +43,11 @@ export async function localeFor(opts: {
 }): Promise<MailLang> {
   if (opts.userId) {
     const user = await db.query.users.findFirst({ where: eq(users.id, opts.userId) })
-    // Пустая строка и 'en' по умолчанию — не одно и то же с осознанным
-    // выбором, но различить их в текущей схеме нельзя: колонка не пустая.
-    // Поэтому личный язык считаем выбором, если он вообще задан.
-    if (user?.locale) return mailLang(user.locale)
+    // Только осознанный выбор. Колонка locale — NOT NULL DEFAULT 'en', и у
+    // человека, заведённого через API компании, там стоит 'en' просто потому,
+    // что она не пустая. Раньше это принималось за выбор, и сотрудники
+    // израильской фирмы получали английские письма мимо языка компании.
+    if (user?.locale && user.localeSetByUser) return mailLang(user.locale)
   }
   if (opts.projectId) return projectLocale(opts.projectId)
   if (opts.companyId) return companyLocale(opts.companyId)

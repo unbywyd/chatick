@@ -977,6 +977,7 @@ companiesRoute.post(
     // приглашённого ещё нет — он в системе не существует.
     await sendInviteMail({
       to: email,
+      companyId,
       companyName: company?.name ?? '',
       role,
       token,
