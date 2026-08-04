@@ -99,6 +99,11 @@ function endpointCatalog(q: string): string {
   from/to and a ready-made messagesUrl for exactly that. Nothing is ever
   deleted — summaries sit on top of the full history, they do not replace it.
 
+  When you only have a word and no idea when it was said, pass q on its own:
+  /x/chat/messages?q=migration searches the whole history and returns the most
+  recent matches. Add from/to to walk back through an older period. The reply
+  says hasMore when more matched than fit — it is never silently cut.
+
   POST   /x/shares/<type>/<id>${q}    publish a link; type: file | note | resource | message | task
   DELETE /x/shares/<type>/<id>${q}    revoke it
 
@@ -418,10 +423,37 @@ carry the answer.
 ## Chat
 
   GET    /x/messages?limit=50&before=<iso>
+  GET    /x/messages/<id>/context?around=10
   POST   /x/messages           {"text","replyToId?":"<messageId>","attachmentIds?":["<fileId>"]}
          Posts as the human, bypassing the AI dispatcher.
          To attach files: upload them with POST /x/files first (without taskId),
          then pass the returned ids here. Text may be empty if there are files.
+
+  Reading. /x/messages is the recent feed, newest last; page back with
+  "before". Every message carries id, text, author, attachments, createdAt —
+  and "replyTo" when it answers an earlier one, so you can follow a thread
+  instead of reading the room as a flat list. /x/messages/<id>/context opens
+  the conversation around one message when a notification or a note points
+  at it.
+
+  You see exactly what the human sees, and no more. A message being written
+  under the dispatcher's clarifying question, or one that turned into an
+  action and never reached the chat, is not in the feed unless it is theirs.
+  Do not treat gaps in ids as messages you were denied — the chat is simply
+  not a continuous log.
+
+  Replying. Pass "replyTo"'s id as "replyToId" to answer a specific message.
+  Do it whenever you answer something said a while ago: without it nobody can
+  tell what you are responding to.
+
+  To address someone, write @[Their Name](<userId>) — ids come from
+  GET /x/members. That exact markup notifies them; a plain "@name" is text.
+
+  Length. Up to 20000 characters, the same as the composer. Longer is refused
+  with 400 rather than trimmed — a truncated message that returns 201 would
+  read as delivered in full.
+
+  Editing and deleting messages is not available through the bridge.
 
 ## Resources
 
@@ -559,6 +591,10 @@ ${endpointCatalog('?project=<id>')}
   POST   /x/documents/<id>/append?project=<id>
   GET / POST  /x/messages?project=<id>   POST takes {"text","replyToId?","attachmentIds?"}
   GET    /x/messages/<messageId>/context?project=<id>   conversation around a message
+         Messages carry "replyTo" — pass it back as "replyToId" to answer one.
+         Mention with @[Their Name](<userId>); max 20000 characters, refused
+         rather than trimmed. You see only what the human sees: drafts still
+         under the dispatcher's question are not in the feed.
 
   GET / POST  /x/time/start | /x/time/stop | /x/time...?project=<id>
          Timers and after-the-fact entries; GET /x/time/report for hours.

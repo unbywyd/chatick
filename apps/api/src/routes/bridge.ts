@@ -634,6 +634,20 @@ bridgeRoute.post('/inbox/read', async (c) => {
   return c.json({ ok: true })
 })
 
+/**
+ * Что из группового чата человек вправе видеть — тем же правилом, что и живой
+ * интерфейс (canSee в messages.ts).
+ *
+ * В чате лежат не только доставленные сообщения. `held` — черновик, на который
+ * диспетчер задал уточняющий вопрос АВТОРУ: команде он ещё не показан. `routed`
+ * превращено в действие и в чат не пошло вовсе, `pending` ещё не обработано.
+ * Мост работает от имени человека и не должен видеть больше него: без этого
+ * условия ассистент читал чужие неподтверждённые черновики.
+ */
+function visibleInChat(userId: string) {
+  return or(eq(messages.status, 'delivered' as const), eq(messages.authorId, userId))!
+}
+
 /** Окно переписки вокруг сообщения: без него агент не поймёт, о чём просят. */
 bridgeRoute.get('/messages/:id/context', async (c) => {
   const id = auth(c as never)
@@ -644,6 +658,9 @@ bridgeRoute.get('/messages/:id/context', async (c) => {
     where: and(eq(messages.id, c.req.param('id')), eq(messages.projectId, scope.projectId)),
   })
   if (!target) return c.json({ error: 'Message not found' }, 404)
+  // Само сообщение — по тому же правилу: чужой черновик не открывается и по
+  // прямой ссылке.
+  if (target.status !== 'delivered' && target.authorId !== id.userId) return c.json({ error: 'Message not found' }, 404)
 
   const around = Math.min(30, Math.max(1, Number(c.req.query('around')) || 10))
   const [before, after] = await Promise.all([
@@ -655,6 +672,7 @@ bridgeRoute.get('/messages/:id/context', async (c) => {
         and(
           eq(messages.projectId, scope.projectId),
           eq(messages.mode, 'group' as const),
+          visibleInChat(id.userId),
           lt(messages.createdAt, target.createdAt),
         ),
       )
@@ -668,6 +686,7 @@ bridgeRoute.get('/messages/:id/context', async (c) => {
         and(
           eq(messages.projectId, scope.projectId),
           eq(messages.mode, 'group' as const),
+          visibleInChat(id.userId),
           gt(messages.createdAt, target.createdAt),
         ),
       )
@@ -679,6 +698,7 @@ bridgeRoute.get('/messages/:id/context', async (c) => {
     id: r.m.id,
     text: r.m.text,
     author: r.u ? { id: r.u.id, name: r.u.name } : { id: 'ai', name: 'AI' },
+    replyTo: r.m.replyToId || undefined,
     isYou: r.m.authorId === id.userId,
     createdAt: r.m.createdAt,
   })
@@ -2303,7 +2323,7 @@ bridgeRoute.get('/messages', async (c) => {
   if ('error' in scope) return c.json({ error: scope.error }, scope.status)
   const limit = Math.min(200, Math.max(1, Number(c.req.query('limit')) || 50))
   const before = c.req.query('before')
-  const conds = [eq(messages.projectId, scope.projectId), eq(messages.mode, 'group' as const)]
+  const conds = [eq(messages.projectId, scope.projectId), eq(messages.mode, 'group' as const), visibleInChat(id.userId)]
   if (before && !isNaN(Date.parse(before))) conds.push(lt(messages.createdAt, new Date(before)))
   const rows = await db
     .select({ m: messages, u: users })
@@ -2326,6 +2346,9 @@ bridgeRoute.get('/messages', async (c) => {
       id: r.m.id,
       text: r.m.text,
       author: r.u ? { id: r.u.id, name: r.u.name } : { id: 'ai', name: 'AI' },
+      // Без этого ветка не видна: ответить мост умеет, а понять, кому
+      // отвечали до него, — нет.
+      replyTo: r.m.replyToId || undefined,
       attachments: byMessage.get(r.m.id) ?? [],
       createdAt: r.m.createdAt,
     })),
@@ -2409,7 +2432,11 @@ bridgeRoute.get('/chat/messages', async (c) => {
   const q = c.req.query()
   const from = q.from && !isNaN(Date.parse(q.from)) ? new Date(q.from) : null
   const to = q.to && !isNaN(Date.parse(q.to)) ? new Date(q.to.length <= 10 ? q.to + 'T23:59:59' : q.to) : null
-  if (!from && !to) return c.json({ error: 'Pass from and/or to (ISO date). Get them from /x/chat/summaries.' }, 400)
+  // Слова достаточно без дат: «где мы обсуждали X» — обычный вопрос, а когда
+  // это было, спрашивающий как раз и не знает. Раньше поиск требовал period,
+  // и ассистенту приходилось идти через саммари даже за одним словом.
+  if (!from && !to && !q.q?.trim())
+    return c.json({ error: 'Pass q (word to find) and/or from/to (ISO dates). Get dates from /x/chat/summaries.' }, 400)
 
   const limit = Math.min(500, Math.max(1, Number(q.limit) || 200))
   const conds = [
@@ -2421,28 +2448,40 @@ bridgeRoute.get('/chat/messages', async (c) => {
   if (to) conds.push(lte(messages.createdAt, to))
   if (q.q?.trim()) conds.push(ilike(messages.text, `%${q.q.trim()}%`))
 
+  // Период читают сверху вниз — по возрастанию. Но поиск без периода идёт по
+  // всей истории, и первые 200 совпадений оказались бы самыми древними: на
+  // вопрос «где мы это обсуждали» ответом стал бы позапрошлый год. Поэтому
+  // берём свежие, а отдаём всё равно по возрастанию.
+  const newestFirst = !from && !to
   const rows = await db
     .select({ m: messages, u: users })
     .from(messages)
     .leftJoin(users, eq(users.id, messages.authorId))
     .where(and(...conds))
-    // По возрастанию: разговор читают сверху вниз, а не с конца.
-    .orderBy(asc(messages.createdAt))
+    .orderBy(newestFirst ? desc(messages.createdAt) : asc(messages.createdAt))
     .limit(limit + 1)
 
   const hasMore = rows.length > limit
   const items = rows.slice(0, limit)
+  if (newestFirst) items.reverse()
   return c.json({
     items: items.map((r) => ({
       id: r.m.id,
       text: r.m.text,
       author: r.u ? r.u.name || r.u.email : 'AI',
+      replyTo: r.m.replyToId || undefined,
       at: r.m.createdAt,
     })),
     count: items.length,
     // Молча обрезать нельзя: ассистент решит, что прочитал весь период.
     hasMore,
-    ...(hasMore ? { hint: 'Truncated. Narrow the range or raise limit (max 500).' } : {}),
+    ...(hasMore
+      ? {
+          hint: newestFirst
+            ? 'Truncated — these are the most recent matches. Add from/to to search an older period, or raise limit (max 500).'
+            : 'Truncated. Narrow the range or raise limit (max 500).',
+        }
+      : {}),
   })
 })
 
@@ -2461,11 +2500,20 @@ bridgeRoute.post('/messages', async (c) => {
   if (!text && !attachmentIds.length) {
     return c.json({ error: 'text or attachmentIds is required' }, 400)
   }
+  // Раньше длинный текст молча резался до 4000 знаков: ассистент отправлял
+  // разбор, получал 201 и был уверен, что команда прочла целиком. Лучше
+  // отказать — и предел тот же, что у композера.
+  if (text.length > 20_000) {
+    return c.json({ error: `text is too long: ${text.length} characters, max 20000. Split it into several messages.` }, 400)
+  }
   if (replyToId) {
     const parent = await db.query.messages.findFirst({
       where: and(eq(messages.id, replyToId), eq(messages.projectId, scope.projectId)),
     })
     if (!parent) return c.json({ error: 'replyToId: message not found in this project' }, 404)
+    // Отвечать на чужой неподтверждённый черновик нельзя — его ещё нет в чате.
+    if (parent.status !== 'delivered' && parent.authorId !== id.userId)
+      return c.json({ error: 'replyToId: message not found in this project' }, 404)
   }
 
   const [row] = await db
@@ -2476,7 +2524,7 @@ bridgeRoute.post('/messages', async (c) => {
       mode: 'group',
       status: 'delivered',
       rawSend: true, // минуя диспетчер: это уже осмысленное сообщение
-      text: (text || '📎').slice(0, 4000),
+      text: text || '📎',
       replyToId,
     })
     .returning()
