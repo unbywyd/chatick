@@ -25,7 +25,7 @@ export function ShareDialog({
   type,
   id,
   title,
-  /** внутренний адрес: /p/<projectId>/files/<id> и подобные */
+  /** внутренний адрес: /c/<companyId>/p/<projectId>/files/<id> и подобные */
   appPath,
   canPublish,
   onClose,

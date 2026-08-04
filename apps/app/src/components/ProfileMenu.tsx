@@ -195,20 +195,20 @@ export function ProfileMenu({
           </DropdownMenuItem>
         )}
         {projectId && (
-          <DropdownMenuItem onSelect={() => navigate(`/p/${projectId}/team`)}>
+          <DropdownMenuItem onSelect={() => navigate(`/c/${companyId}/p/${projectId}/team`)}>
             <Users className="size-4" />
             {t('profile.projectTeam')}
           </DropdownMenuItem>
         )}
 
         {projectId && (
-          <DropdownMenuItem onSelect={() => navigate(`/p/${projectId}/notifications`)}>
+          <DropdownMenuItem onSelect={() => navigate(`/c/${companyId}/p/${projectId}/notifications`)}>
             <Bell className="size-4" />
             {t('tabs.notifications')}
           </DropdownMenuItem>
         )}
         {projectId && isAdmin && (
-          <DropdownMenuItem onSelect={() => navigate(`/p/${projectId}/ai`)}>
+          <DropdownMenuItem onSelect={() => navigate(`/c/${companyId}/p/${projectId}/ai`)}>
             <Bot className="size-4" />
             {t('tabs.ai')}
           </DropdownMenuItem>
@@ -222,7 +222,7 @@ export function ProfileMenu({
         </DropdownMenuItem>
 
         {projectId && (
-          <DropdownMenuItem onSelect={() => navigate(`/p/${projectId}/shortcuts`)}>
+          <DropdownMenuItem onSelect={() => navigate(`/c/${companyId}/p/${projectId}/shortcuts`)}>
             <Keyboard className="size-4" />
             {t('shortcuts.title')}
           </DropdownMenuItem>

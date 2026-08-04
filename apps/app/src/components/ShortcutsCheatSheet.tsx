@@ -11,7 +11,7 @@ import { Button } from '@/components/ui/button'
 export function ShortcutsCheatSheet({ onClose }: { onClose: () => void }) {
   const { t } = useTranslation()
   const navigate = useNavigate()
-  const { id: projectId } = useParams()
+  const { id: projectId, companyId } = useParams()
   const bindings = useBindings()
 
   const groups = ['create', 'navigate', 'chat'] as const
@@ -50,7 +50,7 @@ export function ShortcutsCheatSheet({ onClose }: { onClose: () => void }) {
             size="sm"
             onClick={() => {
               onClose()
-              navigate(`/p/${projectId}/shortcuts`)
+              navigate(`/c/${companyId}/p/${projectId}/shortcuts`)
             }}
           >
             <Settings2 className="size-3.5" />

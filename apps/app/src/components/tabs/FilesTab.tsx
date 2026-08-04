@@ -91,10 +91,10 @@ export function FilesTab({ projectId, isAdmin = false }: { projectId: string; is
   const [uploading, setUploading] = useState<string[]>([])
   // Открытый файл живёт в адресе: ссылкой на файл делятся, и она должна
   // открывать именно его, а не список, в котором его ещё надо найти.
-  const { fileId: openFileId } = useParams()
+  const { fileId: openFileId, companyId } = useParams()
   const [sharing, setSharing] = useState<ViewerFile | null>(null)
   const openFile = (id: string | null) =>
-    navigate(id ? `/p/${projectId}/files/${id}` : `/p/${projectId}/files`)
+    navigate(id ? `/c/${companyId}/p/${projectId}/files/${id}` : `/c/${companyId}/p/${projectId}/files`)
 
   // Прямая ссылка может вести на файл, которого нет в загруженной странице —
   // тогда тянем его отдельно, иначе ссылка «не открывается» без причины.
@@ -410,7 +410,7 @@ export function FilesTab({ projectId, isAdmin = false }: { projectId: string; is
           type="file"
           id={sharing.id}
           title={sharing.name}
-          appPath={`/p/${projectId}/files/${sharing.id}`}
+          appPath={`/c/${companyId}/p/${projectId}/files/${sharing.id}`}
           canPublish={isAdmin}
           onClose={() => setSharing(null)}
         />

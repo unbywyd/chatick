@@ -159,7 +159,8 @@ describe('GET /projects/:externalId/status', () => {
     // Идентификаторы ВНЕШНЕЙ системы: виджет сверяет со своим списком и не
     // должен ничего знать про наши id.
     expect(body.memberExternalIds).toEqual(['atlas-448'])
-    expect(body.url).toBe('https://app.chatick.com/#/p/p-internal')
+    // Компания в адресе: без неё приложение подставляло первую из списка.
+    expect(body.url).toBe('https://app.chatick.com/#/c/c1/p/p-internal')
   })
 
   // Ключ компании А не должен видеть проекты компании Б — даже зная externalId,

@@ -143,7 +143,10 @@ createRoot(document.getElementById('root')!).render(
               <Route path="/start" element={<StartScreen />} />
               <Route path="/start/:companyId" element={<StartScreen />} />
               <Route path="/start/:companyId/:companyTab" element={<StartScreen />} />
-              <Route path="/p/:id" element={<ProjectLayout />}>
+              {/* Компания в адресе: контекст известен до загрузки проекта.
+                  Пока он грузился, шапка подставляла первую компанию из
+                  списка — человек видел чужое название над своим проектом. */}
+              <Route path="/c/:companyId/p/:id" element={<ProjectLayout />}>
                 {/* чат — такая же вкладка проекта, с собственным URL */}
                 <Route index element={<Navigate to="chat" replace />} />
                 {/* /chat — режим «только чат» для узкого экрана; на широком

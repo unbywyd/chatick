@@ -39,15 +39,20 @@ export function TasksTab({ projectId, meId }: { projectId: string; meId?: string
   const [priorityFilter, setPriorityFilter] = useState<Priority | null>(null)
   const [showDone, setShowDone] = useState(false)
   const [newTitle, setNewTitle] = useState('')
-  // drawer открывается по URL: /p/:id/tasks/:taskId — прямые ссылки на задачу работают
+  // drawer открывается по URL: /c/:companyId/p/:id/tasks/:taskId — прямые
+  // ссылки на задачу работают
   const navigate = useNavigate()
-  const { taskId: openTaskId } = useParams()
+  const { taskId: openTaskId, companyId } = useParams()
   const [searchParams, setSearchParams] = useSearchParams()
   // ?new=1 помечает только что созданную задачу — она открывается сразу в
   // режиме правки, иначе человек попадает на пустую карточку и должен
   // отдельно нажать «Изменить», чтобы указать исполнителя и срок.
   const setOpenTaskId = (taskId: string | null, justCreated = false) =>
-    navigate(taskId ? `/p/${projectId}/tasks/${taskId}${justCreated ? '?new=1' : ''}` : `/p/${projectId}/tasks`)
+    navigate(
+      taskId
+        ? `/c/${companyId}/p/${projectId}/tasks/${taskId}${justCreated ? '?new=1' : ''}`
+        : `/c/${companyId}/p/${projectId}/tasks`,
+    )
   const [dragId, setDragId] = useState<string | null>(null)
   const [dropHint, setDropHint] = useState<{ status: Status; beforeId: string | null } | null>(null)
   const [view, setView] = useState<'list' | 'table'>(() => (localStorage.getItem('tasksView') as 'list' | 'table') || 'list')

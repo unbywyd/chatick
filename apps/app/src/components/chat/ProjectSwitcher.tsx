@@ -14,22 +14,15 @@ import {
 } from '@/components/ui/dropdown-menu'
 
 // Переключатель проекта в шапке: имя текущего проекта = дропдаун со списком проектов компании.
-type ProjectDetails = { id: string; companyId: string; name: string }
 type ProjectListItem = { id: string; name: string; isMember: boolean }
 
 export function ProjectSwitcher({ projectName }: { projectName?: string }) {
   const { t } = useTranslation()
   const navigate = useNavigate()
-  const { id: projectId } = useParams()
+  // Компания из адреса: список соседних проектов собирается сразу, не дожидаясь
+  // ответа по самому проекту.
+  const { id: projectId, companyId } = useParams()
   const [q, setQ] = useState('')
-
-  // companyId берём из уже закэшированного детального запроса проекта
-  const project = useQuery({
-    queryKey: ['project', projectId],
-    queryFn: () => api<ProjectDetails>(`/api/v1/projects/${projectId}`),
-    enabled: Boolean(projectId),
-  })
-  const companyId = project.data?.companyId
 
   const projects = useQuery({
     queryKey: ['company-projects', companyId],
@@ -46,7 +39,8 @@ export function ProjectSwitcher({ projectName }: { projectName?: string }) {
     onSuccess: (r) => {
       setProjectToken(r.token)
       // жёсткая навигация: смена project-токена → перезагрузить контекст проекта
-      window.location.hash = `#/p/${r.project.id}`
+      // тот же список — значит та же компания, что и у открытого проекта
+      window.location.hash = `#/c/${companyId}/p/${r.project.id}`
       window.location.reload()
     },
     onError: (e: unknown, pid) => {

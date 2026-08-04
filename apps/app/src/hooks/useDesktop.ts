@@ -170,7 +170,13 @@ export function useDesktopSync() {
   // эффект пересоздаётся при смене проекта, и между переходом и приходом
   // новых данных нажатие читало устаревшее замыкание — «плей» отвечал
   // «таймер уже идёт», а «стоп» промахивался мимо записи.
-  const liveRef = useRef<{ timer?: Running['items'][0]; projectId?: string; tasks?: TaskLite[] }>({})
+  const liveRef = useRef<{
+    timer?: Running['items'][0]
+    projectId?: string
+    tasks?: TaskLite[]
+    /** проекты с их компаниями: адрес перехода из панели без компании не собрать */
+    projects?: ProjectLite[]
+  }>({})
   useEffect(() => {
     const check = () => setAuthed(Boolean(getSessionToken()))
     const timer = window.setInterval(check, 2000)
@@ -183,8 +189,8 @@ export function useDesktopSync() {
     }
   }, [])
 
-  // Активный проект — из адреса: /p/<id>/...
-  const activeProjectId = location.pathname.match(/^\/p\/([^/]+)/)?.[1]
+  // Активный проект — из адреса: /c/<companyId>/p/<id>/...
+  const activeProjectId = location.pathname.match(/^\/c\/[^/]+\/p\/([^/]+)/)?.[1]
 
   // Кто вошёл — для аватарки в шапке панели. Ключ общий с приложением.
   const me = useQuery({
@@ -284,8 +290,11 @@ export function useDesktopSync() {
     const projectList = authed ? (projects.data ?? lastProjects.current).filter((p) => p.isMember) : []
     if (projects.data) lastProjects.current = projects.data
     const nameOf = (id: string) => projectList.find((p) => p.id === id)?.name
+    // Компания проставлена при загрузке списков (см. запрос tray-projects):
+    // адрес проекта без неё не собрать.
+    const companyOf = (id: string) => projectList.find((p) => p.id === id)?.companyId
     const timer = authed ? running.data?.items[0] : undefined
-    liveRef.current = { timer, projectId: activeProjectId, tasks: tasks.data?.items }
+    liveRef.current = { timer, projectId: activeProjectId, tasks: tasks.data?.items, projects: projectList }
 
     bridge.setState({
       authed,
@@ -317,7 +326,7 @@ export function useDesktopSync() {
         number: t.number,
         title: t.title,
         status: t.status,
-        link: `/p/${t.project.id}/tasks/${t.id}`,
+        link: `/c/${companyOf(t.project.id) ?? ''}/p/${t.project.id}/tasks/${t.id}`,
         projectId: t.project.id,
         projectName: t.project.name,
         due: t.dueDate ? new Date(t.dueDate).toLocaleDateString() : undefined,
@@ -573,7 +582,11 @@ export function useDesktopSync() {
     // Проект выбрали из панели: переходим в него, но окно не поднимаем —
     // человек остался в панели намеренно.
     const offSetProject = bridge.onSetProject((id) => {
-      if (id) navigate(`/p/${id}/chat`)
+      if (!id) return
+      // Компания — из того же списка, что панель показывает; из ref, потому что
+      // подписка живёт дольше данных, на которых её создали.
+      const cid = liveRef.current.projects?.find((p) => p.id === id)?.companyId ?? ''
+      navigate(`/c/${cid}/p/${id}/chat`)
     })
 
     // «О проекте» из трея: окно уже поднято главным процессом, здесь только

@@ -1,4 +1,5 @@
 import { useTranslation } from 'react-i18next'
+import { useParams } from 'react-router-dom'
 import { toast } from 'sonner'
 import { CheckCircle, Copy, Flag, Play, Trash2, UserCheck } from 'lucide-react'
 import {
@@ -36,10 +37,12 @@ export function TaskContextMenu({
 }) {
   const { t } = useTranslation()
   const confirm = useConfirm()
+  // Из параметров маршрута, а не разбором хеша: адрес вырос на два сегмента,
+  // и счёт по позициям ломался бы при каждом таком изменении.
+  const { id: projectId, companyId } = useParams()
 
   const copyLink = async () => {
-    const pid = window.location.hash.split('/')[2]
-    const url = `${window.location.origin}${window.location.pathname}#/p/${pid}/tasks/${task.id}`
+    const url = `${window.location.origin}${window.location.pathname}#/c/${companyId}/p/${projectId}/tasks/${task.id}`
     try {
       await navigator.clipboard.writeText(url)
       toast.success(t('tasks.linkCopied'))

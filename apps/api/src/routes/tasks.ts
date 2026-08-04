@@ -2,6 +2,7 @@ import { Hono } from 'hono'
 import { zValidator } from '@hono/zod-validator'
 import { z } from 'zod'
 import { and, asc, desc, eq, isNull, sql } from 'drizzle-orm'
+import { companyOf, projectPath } from '../lib/links.js'
 import { db } from '../db/client.js'
 import { files, projects, taskChecklist, taskComments, taskGroups, taskNotes, tasks, users } from '../db/schema.js'
 import { requireProject, type ProjectEnv } from '../auth.js'
@@ -41,7 +42,7 @@ async function notifyTask(
 ) {
   const actor = await db.query.users.findFirst({ where: eq(users.id, actorId) })
   const actorName = actor?.name || 'Someone'
-  const link = `/p/${projectId}/tasks/${task.id}`
+  const link = projectPath((await companyOf(projectId)) ?? '', projectId, `/tasks/${task.id}`)
 
   if (opts.assigneeChanged && task.assigneeId) {
     await notify({
@@ -617,7 +618,7 @@ tasksRoute.post(
 
     const author = await db.query.users.findFirst({ where: eq(users.id, sub) })
     const actorName = author?.name || 'Someone'
-    const link = `/p/${projectId}/tasks/${taskId}`
+    const link = projectPath((await companyOf(projectId)) ?? '', projectId, `/tasks/${taskId}`)
 
     // уведомления: упоминания в комментарии + автору/ассайни задачи о новом комментарии
     const mentioned = extractMentions(body)

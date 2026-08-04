@@ -70,7 +70,7 @@ export type ShortcutHandlers = {
 export function useShortcuts(handlers: ShortcutHandlers, opts: { enabled?: boolean } = {}) {
   const { enabled = true } = opts
   const navigate = useNavigate()
-  const { id: projectId } = useParams()
+  const { id: projectId, companyId } = useParams()
   const bindings = useBindings()
   const handlersRef = useRef(handlers)
   handlersRef.current = handlers
@@ -80,7 +80,7 @@ export function useShortcuts(handlers: ShortcutHandlers, opts: { enabled?: boole
   const run = useCallback(
     (action: ActionId) => {
       if (!projectId) return
-      const p = `/p/${projectId}`
+      const p = `/c/${companyId}/p/${projectId}`
       switch (action) {
         // Создание: вкладка может быть не смонтирована, поэтому просим её
         // через адрес, а не дёргаем её состояние снаружи.
@@ -102,7 +102,7 @@ export function useShortcuts(handlers: ShortcutHandlers, opts: { enabled?: boole
           return handlersRef.current.focusAi?.()
       }
     },
-    [navigate, projectId],
+    [navigate, projectId, companyId],
   )
 
   // Карта «сочетание → действие»: искать по ней дешевле, чем перебирать список

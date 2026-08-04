@@ -49,7 +49,7 @@ export function ResourcesTab({ projectId, isAdmin }: { projectId: string; isAdmi
   const confirm = useConfirm()
   const [q, setQ] = useState('')
   const [editing, setEditing] = useState<ResourceRow | 'new' | null>(null)
-  const { resourceId } = useParams()
+  const { resourceId, companyId } = useParams()
   // ?create=1 — просьба открыть форму сразу: так сюда приходит горячая клавиша,
   // которой всё равно, смонтирована ли вкладка.
   const [params, setParams] = useSearchParams()
@@ -200,7 +200,7 @@ export function ResourcesTab({ projectId, isAdmin }: { projectId: string; isAdmi
           type="resource"
           id={sharing.id}
           title={sharing.name}
-          appPath={`/p/${projectId}/resources/${sharing.id}`}
+          appPath={`/c/${companyId}/p/${projectId}/resources/${sharing.id}`}
           canPublish={isAdmin}
           onClose={() => setSharing(null)}
         />

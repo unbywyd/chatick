@@ -11,6 +11,7 @@ import { notify } from './notify.js'
 import { readTimeConfig } from '../routes/time.js'
 import { broadcast } from '../ws.js'
 import { htmlToText } from './sanitize-html.js'
+import { companyOf, projectPath, projectUrl } from './links.js'
 
 // Планировщик напоминаний об открытых задачах (SPEC §8.9).
 // Тик раз в 5 минут: для каждого включённого конфига проверяем, наступил ли срок,
@@ -95,7 +96,9 @@ async function runReminder(r: typeof taskReminders.$inferSelect) {
   }
 
   const recipients = await db.query.users.findMany({ where: inArray(users.id, recipientIds) })
-  const url = `${env.APP_URL.replace(/\/$/, '')}/#/p/${r.projectId}`
+  // Компания — часть адреса проекта (SPEC §8.45).
+  const companyId = (await companyOf(r.projectId)) ?? ''
+  const url = projectUrl(env.APP_URL, companyId, r.projectId)
 
   for (const user of recipients) {
     const lang = langOf(user.locale)
@@ -155,7 +158,7 @@ async function sweepNoteReminders() {
           actorId: n.authorId ?? null,
           actorName: author?.name || 'Someone',
           dedupeKey: `note_reminder:${n.id}`,
-          link: `/p/${n.projectId}/notes?note=${n.id}`,
+          link: projectPath((await companyOf(n.projectId)) ?? '', n.projectId, `/notes?note=${n.id}`),
           preview: n.title || htmlToText(n.body).slice(0, 200),
           entityType: 'note',
           entityId: n.id,
@@ -206,7 +209,7 @@ async function sweepRunningTimers() {
           actorName: user?.name || '',
           // ключ включает номер напоминания, иначе дедуп проглотит повторы
           dedupeKey: `timer_running:${e.id}:${cfg.idleAction === 'stop' ? 'auto' : due}`,
-          link: `/p/${e.projectId}/time`,
+          link: projectPath((await companyOf(e.projectId)) ?? '', e.projectId, '/time'),
           preview: e.description || '',
           vars: { hours: String(Math.floor(hours)) },
           entityType: 'time',

@@ -2,6 +2,7 @@ import { Hono } from 'hono'
 import { zValidator } from '@hono/zod-validator'
 import { z } from 'zod'
 import { and, asc, desc, eq, gt, ilike, inArray, lt, lte, sql } from 'drizzle-orm'
+import { companyOf, projectPath } from '../lib/links.js'
 import { db } from '../db/client.js'
 import { chatSummaries, credentials, documents, files, messages, notes, sandboxMessages, tasks, users } from '../db/schema.js'
 import { requireProject, type ProjectEnv } from '../auth.js'
@@ -39,7 +40,7 @@ export async function notifyChatMentions(
     actorId: author?.id ?? null,
     actorName: author?.name || 'Someone',
     dedupeKey: `chat_mention:${messageId}`,
-    link: `/p/${projectId}/chat?msg=${messageId}`,
+    link: projectPath((await companyOf(projectId)) ?? '', projectId, `/chat?msg=${messageId}`),
     preview: text,
     entityType: 'message',
     entityId: messageId,

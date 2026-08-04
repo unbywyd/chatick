@@ -276,7 +276,7 @@ export function TaskDrawer({
   const [sharing, setSharing] = useState(false)
   // Проект берём из адреса: сама задача его не хранит, а ссылка без проекта
   // никуда не ведёт.
-  const { id: routeProjectId } = useParams()
+  const { id: routeProjectId, companyId } = useParams()
 
   const editForm = (
     <>
@@ -723,7 +723,7 @@ export function TaskDrawer({
           type="task"
           id={task.id}
           title={`${task.number} ${task.title}`}
-          appPath={`/p/${routeProjectId}/tasks/${task.id}`}
+          appPath={`/c/${companyId}/p/${routeProjectId}/tasks/${task.id}`}
           canPublish={canEdit}
           onClose={() => setSharing(false)}
         />
@@ -815,7 +815,12 @@ export function TaskDrawer({
                       variant="ghost"
                       size="sm"
                       className="gap-1.5"
-                      onClick={() => navigate({ pathname: `/p/${window.location.hash.split("/")[2]}/tasks`, search: `?msg=${a.messageId}` })}
+                      onClick={() =>
+                        navigate({
+                          pathname: `/c/${companyId}/p/${routeProjectId}/tasks`,
+                          search: `?msg=${a.messageId}`,
+                        })
+                      }
                     >
                       <ExternalLink className="size-3.5" />
                       {t('files.jumpToChat')}

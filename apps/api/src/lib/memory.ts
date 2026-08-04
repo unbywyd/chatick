@@ -1,4 +1,5 @@
 import { and, asc, desc, eq, gt, gte, ilike, inArray, isNull, lte, or, sql } from 'drizzle-orm'
+import { companyOf, projectPath } from './links.js'
 import { db } from '../db/client.js'
 import { chatSummaries, credentials, documents, files, messages, notes, projectMembers, projects, resourceSecrets, taskComments, taskGroups, tasks, timeEntries, users } from '../db/schema.js'
 import { hasPermission } from '../routes/projects.js'
@@ -662,7 +663,7 @@ export function memoryTools(projectId: string, actorUserId: string): { tools: To
   ) {
     const actor = await db.query.users.findFirst({ where: eq(users.id, actorId) })
     const actorName = actor?.name || 'Someone'
-    const link = `/p/${pid}/tasks/${task.id}`
+    const link = projectPath((await companyOf(pid)) ?? '', pid, `/tasks/${task.id}`)
     if (opts.assigned && task.assigneeId)
       void notify({ projectId: pid, event: 'task_assigned', recipientIds: [task.assigneeId], actorId, actorName, dedupeKey: `task_assigned:${task.id}:${task.assigneeId}`, link, preview: task.title, entityType: 'task', entityId: task.id })
     if (opts.statusChanged && task.assigneeId)
@@ -1081,7 +1082,7 @@ export function memoryTools(projectId: string, actorUserId: string): { tools: To
       const [row] = await db.insert(taskComments).values({ taskId: t.id, projectId, authorId: actorUserId, body }).returning()
       // уведомления о упоминаниях/комментарии
       const actor = await db.query.users.findFirst({ where: eq(users.id, actorUserId) })
-      const link = `/p/${projectId}/tasks/${t.id}`
+      const link = projectPath((await companyOf(projectId)) ?? '', projectId, `/tasks/${t.id}`)
       const mentioned = extractMentions(body)
       if (mentioned.length)
         void notify({ projectId, event: 'comment_mention', recipientIds: mentioned, actorId: actorUserId, actorName: actor?.name || 'Someone', dedupeKey: `comment_mention:${row!.id}`, link, preview: body, entityType: 'task', entityId: t.id })

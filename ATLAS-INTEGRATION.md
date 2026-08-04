@@ -253,7 +253,7 @@ Connected:
   "project": { "id": "...", "name": "...", "slug": "..." },
   "memberCount": 7,
   "memberExternalIds": ["atlas-448", "atlas-71"],
-  "url": "https://app.chatick.com/#/p/<id>"
+  "url": "https://app.chatick.com/#/c/<companyId>/p/<id>"
 }
 ```
 

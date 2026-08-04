@@ -1,10 +1,13 @@
-import { useNavigate } from 'react-router-dom'
+import { useNavigate, useParams } from 'react-router-dom'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { useTranslation } from 'react-i18next'
 import { Check, X } from 'lucide-react'
 import { api } from '@/lib/api'
 import { Avatar } from '@/components/ui/avatar'
 import { Button } from '@/components/ui/button'
+// Формат адреса один на всё приложение: своя копия здесь уже расходилась
+// с общей — она не знала про вкладку /chat в ссылках старого вида.
+import { normalizeLink } from '@/hooks/useOpenNotification'
 
 // Полоса «что меня касается» внутри проекта (SPEC §8.22).
 //
@@ -27,16 +30,11 @@ type Notification = {
 }
 type Inbox = { unreadTotal: number; items: Notification[] }
 
-/** Уведомления старого формата ссылаются на /p/<id> — там теряется query. */
-function normalizeLink(link: string, projectId: string): string {
-  if (!link) return `/p/${projectId}/tasks`
-  const m = link.match(/^\/p\/([^/?]+)(\?.*)?$/)
-  return m ? `/p/${m[1]}/chat${m[2] ?? ''}` : link
-}
-
 export function ProjectInbox({ projectId }: { projectId: string }) {
   const { t } = useTranslation()
   const navigate = useNavigate()
+  // Полоса живёт внутри проекта — компания известна из адреса.
+  const { companyId } = useParams()
   const qc = useQueryClient()
 
   const inbox = useQuery({
@@ -64,7 +62,7 @@ export function ProjectInbox({ projectId }: { projectId: string }) {
   // Сначала переход, потом пометка: карточка не должна исчезать раньше, чем
   // человек окажется на месте — иначе клик выглядит как «просто пропало».
   const open = (n: Notification) => {
-    navigate(normalizeLink(n.link, n.projectId))
+    navigate(normalizeLink(n.link, n.projectId, companyId))
     markRead.mutate({ ids: [n.id] })
   }
 

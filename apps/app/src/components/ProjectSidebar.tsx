@@ -61,8 +61,12 @@ export function ProjectSidebar({
   // человек видел в шапке своё название компании и свои проекты в списке —
   // при том, что открыт был чужой. Пока приглашений не было, разницы никто
   // не замечал.
+  //
+  // Отката на первую компанию нет и когда companyId не нашёлся: чужая компания
+  // в шапке — это ложь о том, где человек находится, а пустая шапка честно
+  // говорит, что компания ещё не известна.
   const myCompanies = companies.data?.companies ?? []
-  const company = (companyId && myCompanies.find((c) => c.id === companyId)) || myCompanies[0]
+  const company = companyId ? myCompanies.find((c) => c.id === companyId) : myCompanies[0]
   const projects = useQuery({
     queryKey: ['sidebar-projects', company?.id],
     enabled: Boolean(company?.id),
@@ -86,8 +90,10 @@ export function ProjectSidebar({
     })
   }, [projects.data, q])
 
+  // Список загружен по company.id — значит компания открываемого проекта
+  // известна и подставляется в адрес без похода за самим проектом.
   const open = (projectId: string) => {
-    navigate(`/p/${projectId}/chat`)
+    navigate(`/c/${company?.id ?? ''}/p/${projectId}/chat`)
     onPick?.()
   }
 

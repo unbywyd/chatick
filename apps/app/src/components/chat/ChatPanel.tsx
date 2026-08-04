@@ -54,7 +54,7 @@ export function ChatPanel({
 }) {
   const { t, i18n } = useTranslation()
   const navigate = useNavigate()
-  const { id: projectId } = useParams()
+  const { id: projectId, companyId } = useParams()
   const [searchParams, setSearchParams] = useSearchParams()
   const qc = useQueryClient()
   // «ИИ» — не отдельный таб, а оверлей поверх группового чата (единый паттерн с sandbox)
@@ -599,7 +599,7 @@ export function ChatPanel({
           type="message"
           id={sharing.id}
           title={sharing.text.slice(0, 80)}
-          appPath={`/p/${projectId}/chat?msg=${sharing.id}`}
+          appPath={`/c/${companyId}/p/${projectId}/chat?msg=${sharing.id}`}
           canPublish={myRole === 'owner' || myRole === 'admin'}
           onClose={() => setSharing(null)}
         />
@@ -911,7 +911,7 @@ function MessageRow({
 /** Приложенные к сообщению сущности: задача, заметка, документ, ресурс. */
 function MessageTaskPins({ pins }: { pins: NonNullable<ChatMessage['taskPins']> }) {
   const navigate = useNavigate()
-  const { id: projectId } = useParams()
+  const { id: projectId, companyId } = useParams()
 
   // Вкладка и иконка зависят от типа: у старых записей типа нет — это задачи.
   const tabOf = (kind?: string) =>
@@ -922,7 +922,7 @@ function MessageTaskPins({ pins }: { pins: NonNullable<ChatMessage['taskPins']> 
       {pins.map((p) => (
         <button
           key={`${p.kind ?? 'task'}:${p.id}`}
-          onClick={() => navigate(`/p/${projectId}/${tabOf(p.kind)}/${p.id}`)}
+          onClick={() => navigate(`/c/${companyId}/p/${projectId}/${tabOf(p.kind)}/${p.id}`)}
           className="inline-flex max-w-64 items-center gap-1.5 rounded-md border border-brand/40 bg-accent px-2 py-1 text-xs transition-colors hover:bg-accent/70"
           title={p.title}
         >
@@ -991,7 +991,7 @@ function MessageAttachments({
   const [viewing, setViewing] = useState<ViewerFile | null>(null)
   /** файл, которым делятся прямо из просмотра */
   const [sharingFile, setSharingFile] = useState<ViewerFile | null>(null)
-  const { id: projectId } = useParams()
+  const { id: projectId, companyId } = useParams()
 
   // inline-превью картинок (через прокси-URL)
   const previews = useQuery({
@@ -1067,7 +1067,7 @@ function MessageAttachments({
           type="file"
           id={sharingFile.id}
           title={sharingFile.name}
-          appPath={`/p/${projectId}/files/${sharingFile.id}`}
+          appPath={`/c/${companyId}/p/${projectId}/files/${sharingFile.id}`}
           canPublish={canPublish}
           onClose={() => setSharingFile(null)}
         />

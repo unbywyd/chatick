@@ -58,16 +58,18 @@ export type ProjectOutletCtx = { project?: ProjectDetails; meId?: string }
 export function ProjectLayout() {
   const { t } = useTranslation()
   const navigate = useNavigate()
-  const { id } = useParams()
+  const { id, companyId } = useParams()
   const { pathname } = useLocation()
+  /** Основание всех адресов проекта — чтобы компания не терялась при переходах. */
+  const base = `/c/${companyId}/p/${id}`
   const [sidebarOpen, setSidebarOpen] = useState(false)
   // ширина колонки чата: было 38% — на широком мониторе это заметно много
   const chat = useResizable('chatick_chat_width', 380, 300, 720)
   const [collapsed] = useSidebarCollapsed()
 
-  // Текущая вкладка из URL (/p/:id/chat, /p/:id/tasks, ...). Берём из pathname:
-  // маршрут не splat, поэтому useParams('*') здесь пустой.
-  const tab = pathname.split('/')[3] || 'chat'
+  // Текущая вкладка из URL (/c/:companyId/p/:id/chat, .../tasks, ...). Берём из
+  // pathname: маршрут не splat, поэтому useParams('*') здесь пустой.
+  const tab = pathname.split('/')[5] || 'chat'
   const isChatTab = tab === 'chat'
 
   // На широком экране чат — отдельная колонка, а в рабочей зоне рисуются
@@ -84,7 +86,7 @@ export function ProjectLayout() {
   const chatRef = useRef<ChatPanelHandle>(null)
   const focusChatColumn = useCallback(
     (fn: (h: ChatPanelHandle) => void) => {
-      if (!wide && id) navigate(`/p/${id}/chat`)
+      if (!wide && id) navigate(`${base}/chat`)
       // Кадром позже: на узком экране колонка появляется только после перехода.
       window.setTimeout(() => chatRef.current && fn(chatRef.current), 0)
     },
@@ -99,8 +101,8 @@ export function ProjectLayout() {
     // Переписав адрес, мы потеряли бы параметр вместе с самим переходом:
     // чат остаётся колонкой рядом, подсветка отработает там.
     if (search.get('msg')) return
-    if (wide && isChatTab && id) navigate(`/p/${id}/tasks`, { replace: true })
-  }, [wide, isChatTab, id, navigate, search])
+    if (wide && isChatTab && id) navigate(`${base}/tasks`, { replace: true })
+  }, [wide, isChatTab, id, base, navigate, search])
 
   useEffect(() => {
     if (!getSessionToken()) navigate('/login', { replace: true })
@@ -154,11 +156,9 @@ export function ProjectLayout() {
           sidebarOpen ? 'translate-x-0' : '-translate-x-full rtl:translate-x-full',
         )}
       >
-        <ProjectSidebar
-          me={me.data}
-          companyId={project.data?.companyId}
-          onPick={() => setSidebarOpen(false)}
-        />
+        {/* Компания из адреса, а не из загруженного проекта: пока запрос идёт,
+            companyId уже известен, и шапка не мигает чужой компанией. */}
+        <ProjectSidebar me={me.data} companyId={companyId} onPick={() => setSidebarOpen(false)} />
       </aside>
       {sidebarOpen && (
         <div className="fixed inset-0 z-30 bg-black/50 md:hidden" onClick={() => setSidebarOpen(false)} />
@@ -195,8 +195,8 @@ export function ProjectLayout() {
           {token.status === 'gone' ? null : <ChatPanel
             ref={chatRef}
             onOpenSidebar={() => setSidebarOpen(true)}
-            onOpenWork={() => navigate(`/p/${id}/tasks`)}
-            onOpenTeam={() => navigate(`/p/${id}/team`)}
+            onOpenWork={() => navigate(`${base}/tasks`)}
+            onOpenTeam={() => navigate(`${base}/team`)}
             aiMode={(project.data?.aiConfig as { mode?: 'observer' | 'assistant' | 'moderator' })?.mode ?? 'assistant'}
             myRole={project.data?.myRole}
             meId={me.data?.id}
@@ -210,7 +210,7 @@ export function ProjectLayout() {
           {/* назад в чат — когда чат не помещается рядом */}
           {!isChatTab && (
             <button
-              onClick={() => navigate(`/p/${id}/chat`)}
+              onClick={() => navigate(`${base}/chat`)}
               className="shrink-0 rounded-md p-2 text-muted-foreground hover:bg-accent hover:text-foreground xl:hidden"
               title={t('tabs.chat')}
             >
@@ -221,7 +221,7 @@ export function ProjectLayout() {
           <div className="scrollbar-none -mx-1 flex min-w-0 flex-1 gap-1 overflow-x-auto px-1">
             {/* «Чат» — обычная вкладка, пока он не помещается отдельной колонкой */}
             <NavLink
-              to={`/p/${id}/chat`}
+              to={`${base}/chat`}
               className={({ isActive }) =>
                 cn(
                   'flex shrink-0 items-center gap-1.5 rounded-md px-3 py-1.5 text-sm transition-colors xl:hidden',
@@ -237,7 +237,7 @@ export function ProjectLayout() {
             {WORK_TABS.map((key) => (
               <NavLink
                 key={key}
-                to={`/p/${id}/${key}`}
+                to={`${base}/${key}`}
                 className={({ isActive }) =>
                   cn(
                     'shrink-0 rounded-md px-3 py-1.5 text-sm transition-colors',

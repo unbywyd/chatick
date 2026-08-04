@@ -100,7 +100,7 @@ the status code:
      "project": {...},
      "memberCount": 7,
      "memberExternalIds": ["your-448", "your-71"],
-     "url": "https://app.chatick.com/#/p/<id>"}
+     "url": "https://app.chatick.com/#/c/<companyId>/p/<id>"}
 
 Built for a panel you render on your own pages: it answers "already connected
 or not" in one call, without pulling every project in the company and

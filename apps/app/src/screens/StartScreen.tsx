@@ -168,7 +168,7 @@ export function StartScreen() {
           <CompanyHome
             company={company}
             meId={me.data?.id}
-            onEntered={(id) => navigate(`/p/${id}`)}
+            onEntered={(id) => navigate(`/c/${company.id}/p/${id}`)}
             onDeleteCompany={setDeletingCompany}
           />
         ) : companiesQ.isLoading ? (

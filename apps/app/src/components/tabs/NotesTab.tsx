@@ -154,14 +154,14 @@ export function NotesTab({ projectId }: { projectId: string }) {
     onError: onErr,
   })
 
-  // Прямая ссылка на заметку: /p/<id>/notes/<noteId>. Старый вид ?note=<id>
-  // продолжает работать — он разошёлся в уведомлениях и письмах.
-  const { noteId } = useParams()
+  // Прямая ссылка на заметку: /c/<companyId>/p/<id>/notes/<noteId>. Старый вид
+  // ?note=<id> продолжает работать — он разошёлся в уведомлениях и письмах.
+  const { noteId, companyId } = useParams()
   const [sharing, setSharing] = useState<Note | null>(null)
   const focusId = noteId ?? params.get('note')
   const clearFocus = () => {
     if (noteId) {
-      navigate(`/p/${projectId}/notes`, { replace: true })
+      navigate(`/c/${companyId}/p/${projectId}/notes`, { replace: true })
       return
     }
     const next = new URLSearchParams(params)
@@ -183,7 +183,7 @@ export function NotesTab({ projectId }: { projectId: string }) {
       type="note"
       id={sharing.id}
       title={sharing.title || t('journal.untitled')}
-      appPath={`/p/${projectId}/notes/${sharing.id}`}
+      appPath={`/c/${companyId}/p/${projectId}/notes/${sharing.id}`}
       canPublish={isAdmin}
       onClose={() => setSharing(null)}
     />
@@ -448,7 +448,7 @@ export function NotesTab({ projectId }: { projectId: string }) {
                         <button
                           onClick={(e) => {
                             e.stopPropagation()
-                            navigate(`/p/${projectId}/tasks/${n.task!.id}`)
+                            navigate(`/c/${companyId}/p/${projectId}/tasks/${n.task!.id}`)
                           }}
                           title={t('journal.openTask', { number: n.task.number })}
                           className="inline-flex max-w-[22rem] items-center gap-1 rounded bg-brand/10 px-1.5 py-0.5 text-brand hover:bg-brand/20"
@@ -490,7 +490,9 @@ export function NotesTab({ projectId }: { projectId: string }) {
                             className="size-7"
                             title={n.task ? t('journal.openTask', { number: n.task.number }) : t('journal.toTask')}
                             disabled={toTask.isPending}
-                            onClick={() => (n.task ? navigate(`/p/${projectId}/tasks/${n.task.id}`) : toTask.mutate(n.id))}
+                            onClick={() =>
+                              n.task ? navigate(`/c/${companyId}/p/${projectId}/tasks/${n.task.id}`) : toTask.mutate(n.id)
+                            }
                           >
                             <CheckSquare className={cn('size-3.5', n.task && 'text-brand')} />
                           </Button>

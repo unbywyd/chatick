@@ -43,10 +43,10 @@ export function DocumentsTab({ projectId, meId }: { projectId: string; meId?: st
   // Открытый документ живёт в адресе: ссылкой на документ делятся, и она
   // должна открывать его сразу — раньше это был локальный оверлей, из
   // которого нельзя было ни сослаться, ни вернуться кнопкой «назад».
-  const { documentId: openId } = useParams()
+  const { documentId: openId, companyId } = useParams()
   const navigate = useNavigate()
   const setOpenId = (id: string | null) =>
-    navigate(id ? `/p/${projectId}/documents/${id}` : `/p/${projectId}/documents`)
+    navigate(id ? `/c/${companyId}/p/${projectId}/documents/${id}` : `/c/${companyId}/p/${projectId}/documents`)
   const [q, setQ] = useState('')
   const onErr = (e: unknown) => toast.error(e instanceof Error ? e.message : String(e))
 

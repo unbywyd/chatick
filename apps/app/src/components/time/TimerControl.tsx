@@ -12,7 +12,7 @@ import { ProjectBadge } from '@/components/ui/project-badge'
 import { useProjectSocket } from '@/hooks/useProjectSocket'
 
 // Быстрый контроль таймера в сайдбаре (SPEC §8.32): запустить, остановить,
-// поправить время начала. Всё остальное — на странице /p/:id/time.
+// поправить время начала. Всё остальное — на странице /c/:companyId/p/:id/time.
 
 type ProjectLite = { id: string; name: string; color?: string; logoUrl?: string | null; isMember: boolean }
 
@@ -39,7 +39,7 @@ function useElapsed(startedAt?: string): number {
 
 export function TimerControl({ collapsed }: { collapsed: boolean }) {
   const { t } = useTranslation()
-  const { id: projectId } = useParams()
+  const { id: projectId, companyId } = useParams()
   const navigate = useNavigate()
   const qc = useQueryClient()
 
@@ -76,12 +76,9 @@ export function TimerControl({ collapsed }: { collapsed: boolean }) {
 
   const [draft, setDraft] = useState('')
 
-  // проекты нужны, чтобы показать, к какому привязан таймер, и дать перенести
-  const companies = useQuery({
-    queryKey: ['companies'],
-    queryFn: () => api<{ companies: { id: string }[] }>('/api/v1/companies'),
-  })
-  const companyId = companies.data?.companies[0]?.id
+  // проекты нужны, чтобы показать, к какому привязан таймер, и дать перенести.
+  // Компания — из адреса, а не первая своя: у открытого чужого проекта список
+  // переноса был из другой компании, и перенести таймер было некуда.
   const projectsQ = useQuery({
     queryKey: ['sidebar-projects', companyId],
     enabled: Boolean(companyId),
@@ -136,6 +133,13 @@ export function TimerControl({ collapsed }: { collapsed: boolean }) {
   // в другом проекте не перестаёт идти оттого, что он переключил вкладку.
   const elsewhere = first?.projectName ?? null
 
+  // Страница часов чужого проекта: компания та же, только если проект есть в
+  // списке этой компании. Иначе ведём на текущий — врать в адресе хуже.
+  const timePath = (target: string) =>
+    myProjects.some((p) => p.id === target)
+      ? `/c/${companyId}/p/${target}/time`
+      : `/c/${companyId}/p/${projectId}/time`
+
   if (collapsed) {
     return (
       <div className="flex flex-col items-center gap-1">
@@ -156,7 +160,7 @@ export function TimerControl({ collapsed }: { collapsed: boolean }) {
         {first && (
           <>
             <button
-              onClick={() => navigate(`/p/${first.projectId}/time`)}
+              onClick={() => navigate(timePath(first.projectId))}
               className={cn('font-mono text-[10px] tabular-nums', elsewhere ? 'text-amber-500' : 'text-brand')}
               title={elsewhere ? t('time.runningIn', { project: elsewhere }) : t('time.openPage')}
             >
@@ -230,7 +234,7 @@ export function TimerControl({ collapsed }: { collapsed: boolean }) {
       )}
 
       <button
-        onClick={() => navigate(`/p/${projectId}/time`)}
+        onClick={() => navigate(`/c/${companyId}/p/${projectId}/time`)}
         title={t('time.openPage')}
         className="grid size-7 shrink-0 place-items-center rounded-md text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
       >

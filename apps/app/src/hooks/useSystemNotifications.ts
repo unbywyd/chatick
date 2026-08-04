@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { useQuery, useQueryClient, type QueryClient } from '@tanstack/react-query'
 import { useNavigate } from 'react-router-dom'
-import { api, API_URL, getSessionToken } from '@/lib/api'
+import { api, API_URL, getSessionToken, type Company, type ProjectListItem } from '@/lib/api'
 import { loadNotifySettings, type NotifySettings } from '@/lib/notify-settings'
 import type { InboxNotification } from '@/hooks/useOpenNotification'
 import { normalizeLink } from '@/hooks/useOpenNotification'
@@ -146,6 +146,35 @@ export function useSystemNotifications() {
     refetchInterval: 60_000,
   })
 
+  // Адрес перехода требует компанию, а уведомление её не несёт: собираем
+  // «проект → компания» из списков проектов своих компаний. Всплывашка ведёт
+  // в любой проект, поэтому одной текущей компанией здесь не обойтись.
+  const companies = useQuery({
+    queryKey: ['companies'],
+    enabled: authed,
+    queryFn: () => api<{ companies: Company[] }>('/api/v1/companies'),
+  })
+  const companyIds = (companies.data?.companies ?? []).map((c) => c.id)
+  const projectCompany = useQuery({
+    queryKey: ['project-company', companyIds.join(',')],
+    enabled: authed && companyIds.length > 0,
+    queryFn: async () => {
+      const lists = await Promise.all(
+        companyIds.map((id) =>
+          api<ProjectListItem[]>(`/api/v1/projects?companyId=${id}`)
+            .then((list) => list.map((p) => [p.id, id] as const))
+            .catch(() => [] as (readonly [string, string])[]),
+        ),
+      )
+      return new Map(lists.flat())
+    },
+    staleTime: 5 * 60_000,
+  })
+  // В ref: show() вызывается из обработчика сокета, который пересоздавать
+  // на каждое обновление карты незачем.
+  const companyOfRef = useRef<Map<string, string> | undefined>(undefined)
+  companyOfRef.current = projectCompany.data
+
   // Настройки в ref: показ вызывается из обработчика сокета, и пересоздавать
   // подписку на каждое изменение галочки незачем.
   const settingsRef = useRef(settings)
@@ -181,7 +210,7 @@ export function useSystemNotifications() {
       // summary — фраза ИИ о том, чего от человека хотят; она полезнее заголовка
       const title = n.summary || n.title
       const body = n.summary ? n.title : n.body
-      const link = normalizeLink(n.link, n.projectId)
+      const link = normalizeLink(n.link, n.projectId, companyOfRef.current?.get(n.projectId))
 
       if (bridge) {
         bridge.notify({ title, body, link, silent: !s.sound, notificationId: n.id })

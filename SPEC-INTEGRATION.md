@@ -137,7 +137,7 @@ DELETE /api/v1/ext/projects/:externalProjectId    только архивиро�
 
 ```json
 { "integrated": true, "project": {…}, "memberCount": 7,
-  "memberExternalIds": ["atlas-448"], "url": "https://app.chatick.com/#/p/…" }
+  "memberExternalIds": ["atlas-448"], "url": "https://app.chatick.com/#/c/…/p/…" }
 ```
 
 Сделано для панели, которую внешняя система рисует у себя на странице

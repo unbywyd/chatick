@@ -1,4 +1,5 @@
 import { sendMail } from './mail.js'
+import { companyOf, projectUrl } from './links.js'
 import { mailLang, renderMail, renderMailText } from './mail-template.js'
 import { env } from '../env.js'
 
@@ -52,11 +53,14 @@ export async function sendAddedToProjectMail(params: {
     const lang = mailLang(params.locale)
     const s = STR[lang]
 
+    // Адрес проекта включает компанию (SPEC §8.45): без неё приложение не
+    // знает, какая компания открыта, пока проект не загрузился.
+    const companyId = (await companyOf(params.projectId)) ?? ''
     const content = {
       lang,
       title: s.title,
       paragraphs: [s.p1(params.companyName, params.projectName), s.p2],
-      action: { label: s.action, url: `${env.APP_URL}/#/p/${params.projectId}` },
+      action: { label: s.action, url: projectUrl(env.APP_URL, companyId, params.projectId) },
       note: s.note,
     }
 

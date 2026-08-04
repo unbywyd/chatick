@@ -3,6 +3,7 @@ import { createMiddleware } from 'hono/factory'
 import { and, desc, eq, gte, inArray, isNull, lte, sql } from 'drizzle-orm'
 import { nanoid } from 'nanoid'
 import { db } from '../db/client.js'
+import { projectPath, projectUrl } from '../lib/links.js'
 import { companies, companyMembers, projectMembers, projects, tasks, timeEntries, users } from '../db/schema.js'
 import { checkKey, logCall, type KeyScope } from '../lib/company-key.js'
 import { defaultPermissions } from './projects.js'
@@ -192,7 +193,7 @@ extRoute.get('/projects/:externalId/status', guard('read:all'), async (c) => {
     // Идентификаторы внешней системы, а не наши: так виджет сверяет состав со
     // своим списком, ничего не зная про наши id.
     memberExternalIds: members.map((m) => m.externalId).filter(Boolean),
-    url: `${env.APP_URL}/#/p/${project.id}`,
+    url: projectUrl(env.APP_URL, companyId, project.id),
   })
 })
 
@@ -794,7 +795,7 @@ extRoute.post('/users/:externalId/login-link', guard('users:write'), async (c) =
   let to = typeof b.to === 'string' ? b.to : null
   if (!to && typeof b.externalProjectId === 'string') {
     const project = await projectByExternal(companyId, b.externalProjectId)
-    if (project) to = `/p/${project.id}`
+    if (project) to = projectPath(companyId, project.id)
   }
 
   const { token, expiresInSec } = issueEnterToken(user.id, companyId, to)

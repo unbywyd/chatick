@@ -2,6 +2,7 @@ import { Hono } from 'hono'
 import { zValidator } from '@hono/zod-validator'
 import { z } from 'zod'
 import { and, desc, eq, gte, inArray, lte, or, sql } from 'drizzle-orm'
+import { companyOf, projectPath } from '../lib/links.js'
 import { db } from '../db/client.js'
 import { messages, notes, projects, tasks, users } from '../db/schema.js'
 import { requireProject, type ProjectEnv } from '../auth.js'
@@ -282,7 +283,7 @@ export async function createNote(
       actorId: authorId,
       actorName: author?.name || 'Someone',
       dedupeKey: `note_mention:${row!.id}`,
-      link: `/p/${projectId}/notes?note=${row!.id}`,
+      link: projectPath((await companyOf(projectId)) ?? '', projectId, `/notes?note=${row!.id}`),
       preview: row!.title || htmlToText(row!.body).slice(0, 200),
       entityType: 'note',
       entityId: row!.id,
