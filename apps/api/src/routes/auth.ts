@@ -13,6 +13,7 @@ import { s3Client, s3Bucket, getObjectStream, S3_KEY_PREFIX } from '../lib/s3.js
 import { notifySignup } from '../lib/admin-alert.js'
 import { sendLoginCode, verifyLoginCode, parseSupportLogin } from '../lib/otp.js'
 import { consumeEnterToken } from '../lib/enter-link.js'
+import { adoptAvatar } from '../lib/avatar.js'
 
 export const auth = new Hono<SessionEnv>()
 
@@ -30,31 +31,6 @@ const GOOGLE_USERINFO_URL = 'https://www.googleapis.com/oauth2/v3/userinfo'
  *
  * Fail-open: не смогли скачать — вход не должен из-за этого падать.
  */
-async function adoptGoogleAvatar(userId: string, pictureUrl: string): Promise<{ url: string; key: string } | null> {
-  try {
-    const res = await fetch(pictureUrl, { signal: AbortSignal.timeout(7000) })
-    if (!res.ok) return null
-    const raw = Buffer.from(await res.arrayBuffer())
-    if (!raw.length || raw.length > 5 * 1024 * 1024) return null
-
-    const buffer = await sharp(raw, { failOn: 'none' })
-      .rotate()
-      .resize(256, 256, { fit: 'cover' })
-      .webp({ quality: 85 })
-      .toBuffer()
-
-    const key = `${S3_KEY_PREFIX}/avatars/${userId}-${nanoid(6)}.webp`
-    await s3Client().send(
-      new PutObjectCommand({ Bucket: s3Bucket(), Key: key, Body: buffer, ContentType: 'image/webp' }),
-    )
-    const url = `${process.env.API_PUBLIC_URL || 'https://api.chatick.com'}/api/v1/auth/avatar/${userId}?v=${Date.now()}`
-    return { url, key }
-  } catch (e) {
-    console.error('[avatar] не удалось забрать аватарку из Google:', e)
-    return null
-  }
-}
-
 // GET /api/v1/auth/google — редирект на Google consent screen
 auth.get('/google', (c) => {
   const params = new URLSearchParams({
@@ -134,7 +110,7 @@ auth.get('/google/callback', async (c) => {
     // Своя картинка (avatarKey) — неприкосновенна. Забираем гугловскую только
     // когда её нет вовсе: один раз, при первом входе.
     if (info.picture && !user.avatarKey) {
-      const moved = await adoptGoogleAvatar(user.id, info.picture)
+      const moved = await adoptAvatar(user.id, info.picture)
       if (moved) {
         const [withAvatar] = await db
           .update(users)

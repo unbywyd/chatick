@@ -136,12 +136,20 @@ One at a time:
         "externalId": "your-user-4821",
         "email": "dev@company.com",
         "name": "Ido Winegarten",
+        "avatarUrl": "https://your-system/avatars/4821.jpg",
         "companyRole": "member",
         "projects": [
           { "externalProjectId": "your-project-77", "role": "member" }
         ],
         "notify": true
       }'
+
+avatarUrl is optional. We download the picture and keep our own copy rather
+than storing your link: the link would tie the avatar to your server staying
+up, and every view of it would tell your server who is looking at whom.
+
+We only take it when the person has no picture in Chatick yet. If they uploaded
+one themselves, their choice wins — a re-sync will not overwrite it.
 
 In bulk — up to 500 per call:
 

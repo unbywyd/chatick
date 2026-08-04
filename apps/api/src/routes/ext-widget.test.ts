@@ -315,3 +315,23 @@ describe('POST /projects/:externalId/members — роль', () => {
     expect(state.projectMembers[0]!.role).toBe('member')
   })
 })
+
+// Аватары из внешней системы (SPEC §8.50).
+//
+// Две вещи, на которых это ломается тихо: ссылка на чужой приватный бакет
+// отдаёт битую картинку вместо аватара, а повторный пуш затирает картинку,
+// которую человек загрузил у нас сам.
+describe('adoptAvatar', () => {
+  it('чужой адрес во внутреннюю сеть не скачивается', async () => {
+    const { adoptAvatar } = await import('../lib/avatar.js')
+    // SSRF: внешняя система не должна заставить нас читать localhost.
+    for (const url of ['http://127.0.0.1/a.png', 'http://169.254.169.254/meta', 'http://10.0.0.5/x.png']) {
+      expect(await adoptAvatar('u1', url)).toBeNull()
+    }
+  })
+
+  it('не-адрес не роняет создание человека', async () => {
+    const { adoptAvatar } = await import('../lib/avatar.js')
+    expect(await adoptAvatar('u1', 'не ссылка')).toBeNull()
+  })
+})

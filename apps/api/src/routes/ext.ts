@@ -11,6 +11,7 @@ import { defaultPermissions } from './projects.js'
 import { sendAddedToProjectMail } from '../lib/mail-added.js'
 import { localeFor } from '../lib/locale.js'
 import { issueEnterToken } from '../lib/enter-link.js'
+import { adoptAvatar } from '../lib/avatar.js'
 import { env } from '../env.js'
 
 // Внешний API для систем-заказчиков (SPEC-INTEGRATION).
@@ -425,6 +426,8 @@ type IncomingUser = {
   email: string
   name: string
   companyRole: 'admin' | 'manager' | 'member'
+  /** Ссылка на аватар в их системе — мы скачаем картинку к себе. */
+  avatarUrl: string | null
   projects: { externalProjectId: string; role: 'owner' | 'admin' | 'member' }[]
   notify: boolean
 }
@@ -456,6 +459,7 @@ function parseUser(raw: unknown): { user: IncomingUser } | { error: string } {
       externalId,
       email,
       name: typeof b.name === 'string' ? b.name.trim().slice(0, 200) : '',
+      avatarUrl: typeof b.avatarUrl === 'string' && b.avatarUrl.trim() ? b.avatarUrl.trim().slice(0, 1000) : null,
       companyRole: roles.includes(b.companyRole as never) ? (b.companyRole as 'member') : 'member',
       projects,
       // Молчать по умолчанию нельзя: человек должен узнать, что у него
@@ -495,6 +499,25 @@ async function upsertUser(companyId: string, companyName: string, u: IncomingUse
     // убирают префикс.
     const [row] = await db.update(users).set({ externalId: u.externalId }).where(eq(users.id, user.id)).returning()
     user = row!
+  }
+
+  // Аватар переносим к себе: ссылка на их сервер отдала бы битую картинку —
+  // у внешних систем аватары обычно лежат в приватном бакете.
+  //
+  // Ставим, только если у нас пусто. Человек мог загрузить свою картинку в
+  // Chatick, и затирать её при каждом пуше нельзя: свой выбор важнее того, что
+  // числится во внешней системе. Кому нужно обновить — сначала снимет её у
+  // себя в профиле.
+  if (u.avatarUrl && !user.avatarUrl) {
+    const moved = await adoptAvatar(user.id, u.avatarUrl)
+    if (moved) {
+      const [withAvatar] = await db
+        .update(users)
+        .set({ avatarUrl: moved.url, avatarKey: moved.key })
+        .where(eq(users.id, user.id))
+        .returning()
+      user = withAvatar!
+    }
   }
 
   // Роль обновляем, а не пропускаем при повторе: внешняя система — источник
