@@ -106,6 +106,23 @@ const CHART_STATUSES = [
           ))
         }
       </nav>
+      <!-- Копирование инструкций — здесь, а не отдельной секцией на экран.
+           Разработчик вставляет их своему ассистенту, и ради этого не нужен
+           разворот с заголовком и подзаголовком: нужны две кнопки. -->
+      <button class="doc-copy" data-copy="/ai.txt" data-copied={t.ask.copied} title={t.ask.copyAi}>
+        <svg viewBox="0 0 24 24" width="15" height="15" fill="none" aria-hidden="true">
+          <rect x="9" y="9" width="12" height="12" rx="2.5" stroke="currentColor" stroke-width="2"></rect>
+          <path d="M5 15V5.5A2.5 2.5 0 0 1 7.5 3H15" stroke="currentColor" stroke-width="2" stroke-linecap="round"></path>
+        </svg>
+        <span>{t.ask.copyAi}</span>
+      </button>
+      <button class="doc-copy" data-copy="/integration.txt" data-copied={t.ask.copied} title={t.ask.copyApi}>
+        <svg viewBox="0 0 24 24" width="15" height="15" fill="none" aria-hidden="true">
+          <rect x="9" y="9" width="12" height="12" rx="2.5" stroke="currentColor" stroke-width="2"></rect>
+          <path d="M5 15V5.5A2.5 2.5 0 0 1 7.5 3H15" stroke="currentColor" stroke-width="2" stroke-linecap="round"></path>
+        </svg>
+        <span>{t.ask.copyApi}</span>
+      </button>
       <a class="btn btn-sm" href={appUrl}>{t.nav.start}</a>
     </div>
   </div>
@@ -114,7 +131,8 @@ const CHART_STATUSES = [
 <main>
   <!-- HERO -->
   <section class="hero">
-    <div class="container">
+    <div class="container hero-grid">
+      <div class="hero-copy">
       <!-- Честно и сразу: человек должен понимать, что ставит -->
       <div class="beta-line">
         <span class="beta-badge">{t.beta.badge}</span>
@@ -131,7 +149,7 @@ const CHART_STATUSES = [
             <path d="M5 12h14m-6-6 6 6-6 6" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"></path>
           </svg>
         </a>
-        <a class="btn btn-ghost" href="#ask">{t.hero.ctaSecondary}</a>
+        <a class="btn btn-ghost" href="/ai.txt">{t.hero.ctaSecondary}</a>
       </div>
       <p class="note hero-note">{t.hero.note}</p>
 
@@ -170,6 +188,8 @@ const CHART_STATUSES = [
           и сроком. Три секунды вместо абзаца текста.
           Разметка честная и в статике: без JS и при reduced-motion виден
           готовый результат, а не пустая рамка. */}
+      </div>
+
       <figure class="hero-demo">
         <figcaption class="sr-only">{t.hero.demo.alt}</figcaption>
         <div class="demo-frame" aria-hidden="true">
@@ -347,26 +367,6 @@ const CHART_STATUSES = [
     </div>
   </section>
 
-  <!-- ASK YOUR AI: копируемый промпт -->
-  <section class="section section-soft ask" id="ask">
-    <div class="container">
-      <span class="tag">{t.ask.tag}</span>
-      <h2>{t.ask.title}</h2>
-      <p class="section-sub">{t.ask.subtitle}</p>
-
-      <div class="prompt-box">
-        <p class="prompt-text" id="prompt-text">{t.ask.prompt}</p>
-        <button class="btn copy-btn" id="copy-prompt" data-copied={t.ask.copied}>
-          <svg viewBox="0 0 24 24" width="17" height="17" fill="none" aria-hidden="true">
-            <rect x="9" y="9" width="12" height="12" rx="2.5" stroke="currentColor" stroke-width="2"></rect>
-            <path d="M5 15V5.5A2.5 2.5 0 0 1 7.5 3H15" stroke="currentColor" stroke-width="2" stroke-linecap="round"></path>
-          </svg>
-          <span class="copy-label">{t.ask.copy}</span>
-        </button>
-      </div>
-      <p class="note ask-hint">{t.ask.hint}</p>
-    </div>
-  </section>
 
   <!-- HOW -->
   <section class="section" id="download">
@@ -376,11 +376,37 @@ const CHART_STATUSES = [
       {/* Браузер — путь без единого предупреждения, поэтому он первый и
           единственный крупной кнопкой. Сборки без подписи предлагать наравне
           нечестно: человек упрётся в окно SmartScreen, не понимая почему. */}
-      <div class="downloads">
-        <a class="dl dl-web" href={appUrl}>
-          <span class="dl-os">{t.download.web}</span>
+      {/* Четыре плитки в ряд: веб и три сборки. Раньше веб стоял отдельно, а
+          десктоп прятался внутри блока про отсутствие подписи — читателю было
+          не разобрать, что вообще есть. Плитки без теней и рамок, разделены
+          только линиями: так они читаются как один выбор, а не четыре виджета. */}
+      <div class="dl-grid">
+        <a class="dl-tile dl-tile-web" href={appUrl}>
+          <span class="dl-tile-ic">
+            <svg viewBox="0 0 24 24" width="22" height="22" fill="none" aria-hidden="true">
+              <circle cx="12" cy="12" r="9" stroke="currentColor" stroke-width="1.8" />
+              <path d="M3 12h18M12 3c2.5 2.6 2.5 15.4 0 18M12 3c-2.5 2.6-2.5 15.4 0 18" stroke="currentColor" stroke-width="1.8" />
+            </svg>
+          </span>
+          <span class="dl-tile-name">{t.download.web}</span>
+          <span class="dl-tile-note">{t.download.webNote}</span>
         </a>
+        {
+          DOWNLOADS.map((d) => (
+            <a
+              class:list={['dl-tile', { 'dl-tile-soon': !d.href }]}
+              href={d.href || '#download'}
+              aria-disabled={!d.href}
+              download={d.href ? true : undefined}
+            >
+              <span class="dl-tile-ic" set:html={d.icon === 'windows' ? WIN_ICON : APPLE_ICON} />
+              <span class="dl-tile-name">{t.download[d.key]}</span>
+              <span class="dl-tile-note">{d.arch || t.download.desktopNote}</span>
+            </a>
+          ))
+        }
       </div>
+
       <p class="dl-warn">
         <svg viewBox="0 0 24 24" width="16" height="16" fill="none" aria-hidden="true">
           <path d="M12 9v4.5m0 3.2v.1M10.3 3.9 2.6 17.2A2 2 0 0 0 4.3 20h15.4a2 2 0 0 0 1.7-2.8L13.7 3.9a2 2 0 0 0-3.4 0Z" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" />
@@ -400,21 +426,6 @@ const CHART_STATUSES = [
         </div>
         <p class="unsigned-text">{t.download.unsignedText}</p>
         <div class="unsigned-actions">
-          {
-            DOWNLOADS.map((d) => (
-              <a
-                class:list={['dl dl-small', { 'dl-soon': !d.href }]}
-                href={d.href || '#download'}
-                aria-disabled={!d.href}
-                download={d.href ? true : undefined}
-              >
-                <span class="dl-ic" set:html={d.icon === 'windows' ? WIN_ICON : APPLE_ICON} />
-                <span class="dl-os">{t.download[d.key]}</span>
-                {!d.href && <span class="dl-badge">{t.download.soon}</span>}
-                {d.arch && <span class="dl-arch">{d.arch}</span>}
-              </a>
-            ))
-          }
           <button class="how-btn" id="howBtn" type="button" aria-expanded="false">
             <span class="how-mark">?</span>
             {t.download.howTo}
@@ -585,7 +596,7 @@ const CHART_STATUSES = [
             <p class="behind-text">{t.behind.dev.text}</p>
             <p class="behind-links">
               <a href="https://unbywyd.com" target="_blank" rel="noopener">unbywyd.com</a>
-              <a href="https://webtopro.com" target="_blank" rel="noopener">webtopro.com</a>
+              <a href="https://webto.pro" target="_blank" rel="noopener">webto.pro</a>
             </p>
           </article>
 
@@ -686,10 +697,14 @@ const CHART_STATUSES = [
       <span>© {new Date().getFullYear()} Chatick. {t.footer.rights}</span>
       <span class="footer-by">
         {t.footer.madeBy}
-        <a href="https://webtopro.com" target="_blank" rel="noopener">webtopro.com</a>
+        <a href="https://webto.pro" target="_blank" rel="noopener">webto.pro</a>
       </span>
     </div>
     <nav class="footer-links">
+      <!-- Инструкции для ИИ — обычными ссылками в ряду остальных: их читают
+           один раз при подключении, разворот на экран им не нужен. -->
+      <a class="footer-link" href="/ai.txt">ai.txt</a>
+      <a class="footer-link" href="/integration.txt">integration.txt</a>
       <a class="footer-link" href="/terms">{t.footer.terms}</a>
       <a class="footer-link" href="/privacy">{t.footer.privacy}</a>
       <a class="footer-link" href="/changelog">{t.footer.changelog}</a>
@@ -876,31 +891,28 @@ const CHART_STATUSES = [
     }
   }
 
-  // Копирование промпта «спросите свой ИИ»
-  const copyBtn = document.getElementById('copy-prompt')
-  const promptEl = document.getElementById('prompt-text')
-  if (copyBtn && promptEl) {
-    const label = copyBtn.querySelector('.copy-label')!
-    const original = label.textContent!
-    copyBtn.addEventListener('click', async () => {
+  // Копирование инструкций для ИИ. Файл тянем по клику, а не заранее:
+  // большинство читателей этими кнопками не воспользуется, и грузить ради них
+  // сотню килобайт текста на каждом открытии страницы незачем.
+  document.querySelectorAll<HTMLButtonElement>('.doc-copy').forEach((btn) => {
+    const label = btn.querySelector('span')
+    const original = label?.textContent ?? ''
+    btn.addEventListener('click', async () => {
       try {
-        await navigator.clipboard.writeText(promptEl.textContent!.trim())
+        const text = await fetch(btn.dataset.copy!).then((r) => r.text())
+        await navigator.clipboard.writeText(text)
+        if (label) label.textContent = btn.dataset.copied!
+        btn.classList.add('done')
+        setTimeout(() => {
+          if (label) label.textContent = original
+          btn.classList.remove('done')
+        }, 2400)
       } catch {
-        // старые браузеры и http: выделяем текст, чтобы скопировать вручную
-        const range = document.createRange()
-        range.selectNodeContents(promptEl)
-        const sel = window.getSelection()
-        sel?.removeAllRanges()
-        sel?.addRange(range)
+        // Не вышло — открываем файл: скопировать вручную всегда можно.
+        window.open(btn.dataset.copy!, '_blank', 'noopener')
       }
-      label.textContent = copyBtn.dataset.copied!
-      copyBtn.classList.add('is-copied')
-      setTimeout(() => {
-        label.textContent = original
-        copyBtn.classList.remove('is-copied')
-      }, 2400)
     })
-  }
+  })
 </script>
 
 <style>
@@ -964,20 +976,143 @@ const CHART_STATUSES = [
     padding: 8px 18px;
     font-size: 0.85rem;
   }
+  /* Копирование инструкций в шапке: тихие кнопки, не соперничающие с
+     «Начать» — это вспомогательное действие для тех, кто уже понял, зачем. */
+  .doc-copy {
+    display: inline-flex;
+    align-items: center;
+    gap: 7px;
+    min-height: 36px;
+    padding: 7px 13px;
+    border: 1px solid var(--border);
+    border-radius: 999px;
+    background: transparent;
+    color: var(--fg-muted);
+    font: inherit;
+    font-size: 0.82rem;
+    cursor: pointer;
+    transition: color 0.15s, border-color 0.15s;
+  }
+  .doc-copy:hover {
+    color: var(--fg);
+    border-color: rgba(255, 255, 255, 0.22);
+  }
+  /* Плитки скачивания: без теней и скруглений, разделены линиями — четыре
+     равных варианта одного действия, а не четыре карточки-виджета. */
+  .dl-grid {
+    margin-top: 34px;
+    display: grid;
+    grid-template-columns: repeat(4, 1fr);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    overflow: hidden;
+  }
+  .dl-tile {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 9px;
+    padding: 30px 16px 26px;
+    text-decoration: none;
+    color: var(--fg);
+    border-inline-start: 1px solid var(--border);
+    transition: background 0.15s;
+  }
+  .dl-tile:first-child {
+    border-inline-start: 0;
+  }
+  .dl-tile:hover {
+    background: rgba(255, 255, 255, 0.03);
+  }
+  /* Веб — то, что работает прямо сейчас, без установки: единственная плитка
+     с брендовым цветом, остальные приглушены. */
+  .dl-tile-web {
+    background: rgba(212, 242, 40, 0.07);
+  }
+  .dl-tile-web .dl-tile-ic,
+  .dl-tile-web .dl-tile-name {
+    color: var(--lime);
+  }
+  .dl-tile-web:hover {
+    background: rgba(212, 242, 40, 0.12);
+  }
+  .dl-tile-ic {
+    display: grid;
+    place-items: center;
+    color: var(--fg-muted);
+  }
+  .dl-tile-ic :global(svg) {
+    width: 22px;
+    height: 22px;
+  }
+  .dl-tile-name {
+    font-size: 0.95rem;
+    font-weight: 600;
+  }
+  .dl-tile-note {
+    font-size: 0.76rem;
+    color: var(--fg-muted);
+  }
+  .dl-tile-soon {
+    opacity: 0.5;
+    pointer-events: none;
+  }
+  @media (max-width: 720px) {
+    .dl-grid {
+      grid-template-columns: repeat(2, 1fr);
+    }
+    /* На двух колонках линия сверху нужна второму ряду. */
+    .dl-tile:nth-child(3),
+    .dl-tile:nth-child(4) {
+      border-block-start: 1px solid var(--border);
+    }
+    .dl-tile:nth-child(3) {
+      border-inline-start: 0;
+    }
+  }
+
+  .doc-copy.done {
+    color: var(--lime);
+    border-color: rgba(212, 242, 40, 0.4);
+  }
+  /* На узком экране остаются иконки: подписи съедали всю шапку. */
+  @media (max-width: 980px) {
+    .doc-copy span {
+      display: none;
+    }
+    .doc-copy {
+      padding: 7px 9px;
+    }
+  }
 
   .hero {
-    padding: 110px 0 90px;
-    text-align: center;
+    padding: 88px 0 80px;
   }
-  /* Моноширинный шире гротеска на том же кегле — потолок ниже прежних 4rem,
-     иначе заголовок в три слова разъезжается на четыре строки. */
+  /* Две колонки: сцена «сообщение → задача» — главный довод страницы, и она
+     должна попадать в первый экран, а не уезжать под сгиб. Ширина шире общей
+     сетки: в 1060px на большом мониторе всё сбивалось в узкий столбец, и
+     страница выглядела беднее, чем есть. */
+  .hero-grid {
+    max-width: 1280px;
+    display: grid;
+    grid-template-columns: minmax(0, 1.05fr) minmax(0, 1fr);
+    gap: 56px;
+    align-items: center;
+  }
+  /* Текст по краю, а не по центру: с левой выключкой глаз находит начало
+     строки сам, и колонка держится рядом со сценой. */
+  .hero-copy {
+    text-align: start;
+  }
+  /* Моноширинный шире гротеска на том же кегле. Ограничение по символам, а
+     не по пикселям: иначе на широком экране строка растягивается, а на узком
+     заголовок рвётся посреди слова. */
   .hero h1 {
-    font-size: clamp(2rem, 5vw, 3.3rem);
-    line-height: 1.15;
-    letter-spacing: -0.02em;
+    font-size: clamp(1.9rem, 3.6vw, 3.1rem);
+    line-height: 1.12;
+    letter-spacing: -0.03em;
     font-weight: 700;
-    max-width: 22ch;
-    margin-inline: auto;
+    max-width: 17ch;
     text-wrap: balance;
   }
   /* Ключевое слово — единственное, что подсвечено в заголовке. Не цветом:
@@ -987,17 +1122,17 @@ const CHART_STATUSES = [
     box-shadow: inset 0 -0.14em 0 rgba(212, 242, 40, 0.45);
   }
   .subtitle {
-    max-width: 620px;
-    margin: 26px auto 0;
+    max-width: 46ch;
+    margin: 24px 0 0;
     color: var(--fg-muted);
     font-size: 1.06rem;
     text-wrap: pretty;
   }
   .hero-cta {
-    margin-top: 40px;
+    margin-top: 32px;
     display: flex;
     flex-wrap: wrap;
-    justify-content: center;
+    justify-content: flex-start;
     align-items: center;
     gap: 12px;
   }

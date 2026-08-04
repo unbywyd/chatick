@@ -86,6 +86,8 @@ type Dict = {
     subtitle: string
     prompt: string
     copy: string
+    copyAi: string
+    copyApi: string
     copied: string
     hint: string
   }
@@ -115,6 +117,8 @@ type Dict = {
     macIntel: string
     soon: string
     web: string
+    webNote: string
+    desktopNote: string
     mobileSoon: string
     /** короткая подпись для кнопки в шапке */
     heroWin: string
@@ -300,6 +304,8 @@ export const dict: Record<LocaleCode, Dict> = {
         'Copy this and paste it into Claude, ChatGPT or whatever you use. It will read our page for machines and explain Chatick in your own terms.',
       prompt: PROMPT.en,
       copy: 'Copy prompt',
+      copyAi: 'For AI',
+      copyApi: 'For integration',
       copied: 'Copied — now paste it into your AI',
       hint: 'The link goes to a plain-text page written for AI, not for humans.',
     },
@@ -339,8 +345,8 @@ export const dict: Record<LocaleCode, Dict> = {
         text: 'StartPlan is an Israeli startup consultancy with more than ten years behind it. Its founders have helped raise hundreds of millions of shekels for the companies they backed. Chatick is built for them, and paid for by them.',
       },
       anyapp: {
-        role: 'Their development studio',
-        text: 'AnyApp is StartPlan’s subsidiary: an Israeli studio building mobile apps for Android and iOS and web systems, the whole way from spec to launch. Dozens of products shipped, and founders who have made the Forbes 30 Under 30 Israel list.',
+        role: 'Development studio',
+        text: 'A major Israeli studio building mobile apps for Android and iOS and web systems — the whole way from spec to launch. Dozens of products shipped.',
       },
       dev: {
         role: 'Development',
@@ -361,6 +367,8 @@ export const dict: Record<LocaleCode, Dict> = {
       macIntel: 'Intel',
       soon: 'Coming soon',
       web: 'Open in browser',
+      webNote: 'Nothing to install',
+      desktopNote: 'Desktop app',
       mobileSoon: 'Mobile apps are on the roadmap.',
       heroWin: 'Download for Windows',
       unsignedTitle: 'The desktop builds are not signed yet',
@@ -536,6 +544,8 @@ export const dict: Record<LocaleCode, Dict> = {
         'Скопируйте и вставьте в Claude, ChatGPT или что вы используете. Он прочитает нашу страницу для машин и объяснит, что такое Chatick, вашими словами.',
       prompt: PROMPT.ru,
       copy: 'Скопировать промпт',
+      copyAi: 'Для ИИ',
+      copyApi: 'Для интеграции',
       copied: 'Скопировано — вставьте в свой ИИ',
       hint: 'Ссылка ведёт на текстовую страницу, написанную для ИИ, а не для людей.',
     },
@@ -575,8 +585,8 @@ export const dict: Record<LocaleCode, Dict> = {
         text: 'StartPlan — израильская консалтинговая компания для стартапов, за плечами больше десяти лет. Её основатели помогли привлечь сотни миллионов шекелей компаниям, которые поддерживали. Chatick делается для них и на их деньги.',
       },
       anyapp: {
-        role: 'Их студия разработки',
-        text: 'AnyApp — дочерняя компания StartPlan: израильская студия, которая делает мобильные приложения для Android и iOS и веб-системы — полный цикл от спецификации до запуска. Десятки выпущенных продуктов, а основатели попадали в список Forbes «30 Under 30 Israel».',
+        role: 'Студия разработки',
+        text: 'Крупная израильская студия: мобильные приложения для Android и iOS и веб-системы — полный цикл от спецификации до запуска. Десятки выпущенных продуктов.',
       },
       dev: {
         role: 'Разработка',
@@ -597,6 +607,8 @@ export const dict: Record<LocaleCode, Dict> = {
       macIntel: 'Intel',
       soon: 'Скоро',
       web: 'Открыть в браузере',
+      webNote: 'Ничего не нужно ставить',
+      desktopNote: 'Приложение',
       mobileSoon: 'Мобильные приложения — в планах.',
       heroWin: 'Скачать для Windows',
       unsignedTitle: 'Сборки для рабочего стола пока без подписи',
@@ -772,6 +784,8 @@ export const dict: Record<LocaleCode, Dict> = {
         'העתיקו והדביקו ב-Claude, ב-ChatGPT או במה שאתם משתמשים. הוא יקרא את הדף שלנו למכונות ויסביר מה זה Chatick במילים שלכם.',
       prompt: PROMPT.he,
       copy: 'העתקת הפרומפט',
+      copyAi: 'ל-AI',
+      copyApi: 'לאינטגרציה',
       copied: 'הועתק — הדביקו ב-AI שלכם',
       hint: 'הקישור מוביל לדף טקסט שנכתב עבור AI, לא עבור בני אדם.',
     },
@@ -811,8 +825,8 @@ export const dict: Record<LocaleCode, Dict> = {
         text: 'StartPlan היא חברת ייעוץ ישראלית לסטארטאפים עם יותר מעשר שנות ניסיון. מייסדיה סייעו לגייס מאות מיליוני שקלים עבור החברות שליוו. Chatick נבנה עבורם ובמימונם.',
       },
       anyapp: {
-        role: 'סטודיו הפיתוח שלהם',
-        text: 'AnyApp היא חברת הבת של StartPlan: סטודיו ישראלי שמפתח אפליקציות מובייל ל-Android ול-iOS ומערכות ווב — מהאפיון ועד ההשקה. עשרות מוצרים שיצאו לאוויר, ומייסדים שנכנסו לרשימת Forbes «30 Under 30 Israel».',
+        role: 'סטודיו פיתוח',
+        text: 'סטודיו ישראלי גדול: אפליקציות מובייל ל-Android ול-iOS ומערכות ווב — מהאפיון ועד ההשקה. עשרות מוצרים שיצאו לאוויר.',
       },
       dev: {
         role: 'פיתוח',
@@ -833,6 +847,8 @@ export const dict: Record<LocaleCode, Dict> = {
       macIntel: 'Intel',
       soon: 'בקרוב',
       web: 'פתחו בדפדפן',
+      webNote: 'בלי להתקין כלום',
+      desktopNote: 'אפליקציה',
       mobileSoon: 'אפליקציות לנייד בתוכניות.',
       heroWin: 'הורדה ל-Windows',
       unsignedTitle: 'גרסאות שולחן העבודה עדיין ללא חתימה',
