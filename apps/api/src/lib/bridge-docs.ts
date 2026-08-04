@@ -56,7 +56,27 @@ function endpointCatalog(q: string): string {
   rejected with 400.
 
   GET    /x/tasks/<id>/comments${q}
-  POST   /x/tasks/<id>/comments${q}   {"text"}
+  POST   /x/tasks/<id>/comments${q}   {"text", "replyTo?"}
+
+  Comments are the discussion on a task, and you take part in it like anyone
+  else. Read the thread before you act on a task: the description says what was
+  asked, the comments say what was decided since.
+
+  Each comment comes back with id, text, author, authorId, createdAt,
+  attachments — and replyTo when it answers an earlier one. Pass that id as
+  "replyTo" to answer a specific comment instead of dropping a remark at the
+  end of the thread; without it the thread reads as a flat list and nobody can
+  tell what you were responding to.
+
+  To address someone, write @[Their Name](<userId>) — take the id from
+  GET /x/members. Only that exact markup notifies them; a plain "@name" is
+  just text. The task's author and assignee, and the person you replied to,
+  are told about a new comment anyway, so do not mention them for that alone.
+
+  Commenting needs tasks.read: anyone who can see tasks can comment. Editing
+  and deleting comments — including your own — is not available through the
+  bridge; words already read by the team are not yours to take back.
+
   GET    /x/sprints${q}
   POST   /x/sprints${q}            {"name","startsAt?","endsAt?"}
 

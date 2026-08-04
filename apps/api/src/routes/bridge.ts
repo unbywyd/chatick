@@ -46,6 +46,8 @@ import { readTimeConfig } from './time.js'
 import { readPresence } from './auth.js'
 import { createShare, revokeShare, type ShareEntityType } from './shares.js'
 import { notifyChatMentions } from './messages.js'
+import { notify, extractMentions } from '../lib/notify.js'
+import { projectPath, companyOf } from '../lib/links.js'
 import { htmlToText, sanitizeHtml } from '../lib/sanitize-html.js'
 import { membersLockedForProject, MEMBERS_LOCKED } from '../lib/members-locked.js'
 import { broadcast, sendToUserAnywhere, tasksChanged } from '../ws.js'
@@ -1266,6 +1268,11 @@ bridgeRoute.patch('/tasks/:id/checklist/:itemId', async (c) => {
   return c.json({ id: row!.id, text: row!.text, note: row!.note || undefined, done: row!.done })
 })
 
+// Комментарии задачи — обсуждение, в котором ассистент участвует наравне со
+// всеми: читает ветку, отвечает на конкретную реплику, пишет свою.
+// Право то же, что в интерфейсе: комментировать может каждый, кто видит
+// задачи (tasks.read). Правка и удаление чужих слов мосту не даются.
+
 bridgeRoute.get('/tasks/:id/comments', async (c) => {
   const id = auth(c as never)
   const scope = await resolveProject(c as never)
@@ -1275,8 +1282,11 @@ bridgeRoute.get('/tasks/:id/comments', async (c) => {
   const rows = await db
     .select({ c: taskComments, u: users })
     .from(taskComments)
+    // Ограничение по проекту обязательно: id задачи угадывать не нужно, его
+    // видно в любой ссылке, и без этого условия туннель в один проект читал
+    // бы обсуждения соседнего.
+    .where(and(eq(taskComments.taskId, c.req.param('id')), eq(taskComments.projectId, scope.projectId)))
     .leftJoin(users, eq(users.id, taskComments.authorId))
-    .where(eq(taskComments.taskId, c.req.param('id')))
     .orderBy(taskComments.createdAt)
   // Файлы комментария привязаны к нему через commentId
   const byComment = await attachmentsFor(
@@ -1290,11 +1300,17 @@ bridgeRoute.get('/tasks/:id/comments', async (c) => {
       id: r.c.id,
       text: r.c.body,
       author: r.u?.name ?? null,
+      authorId: r.c.authorId,
+      // Без этого ветка читается как плоский список и ассистент не видит,
+      // кому что отвечали.
+      replyTo: r.c.replyToId || undefined,
       attachments: byComment.get(r.c.id) ?? [],
       createdAt: r.c.createdAt,
     })),
   })
 })
+
+const COMMENT_FIELDS = ['text', 'replyTo'] as const
 
 bridgeRoute.post('/tasks/:id/comments', async (c) => {
   const id = auth(c as never)
@@ -1303,8 +1319,11 @@ bridgeRoute.post('/tasks/:id/comments', async (c) => {
   const denied = await require(c as never, 'tasks.read', scope.projectId)
   if (denied) return c.json(denied, 403)
   const b = (await c.req.json().catch(() => ({}))) as Record<string, unknown>
+  const bad = unknownFields(b, COMMENT_FIELDS)
+  if (bad) return c.json({ error: bad }, 400)
   const text = typeof b.text === 'string' ? b.text.trim() : ''
   if (!text) return c.json({ error: 'text is required' }, 400)
+  if (text.length > 10_000) return c.json({ error: 'text is too long (max 10000 characters)' }, 400)
 
   const taskId = c.req.param('id')
   const task = await db.query.tasks.findFirst({
@@ -1312,9 +1331,63 @@ bridgeRoute.post('/tasks/:id/comments', async (c) => {
   })
   if (!task) return c.json({ error: 'Not found' }, 404)
 
-  const [row] = await db.insert(taskComments).values({ taskId, projectId: scope.projectId, authorId: id.userId, body: text }).returning()
+  // Отвечать можно только на реплику из этой же задачи: иначе ветка укажет
+  // в чужое обсуждение, и в интерфейсе цитата не найдётся.
+  let replyToId: string | null = null
+  if (b.replyTo !== undefined && b.replyTo !== null) {
+    if (typeof b.replyTo !== 'string') return c.json({ error: 'replyTo must be a comment id' }, 400)
+    const parent = await db.query.taskComments.findFirst({
+      where: and(eq(taskComments.id, b.replyTo), eq(taskComments.taskId, taskId), eq(taskComments.projectId, scope.projectId)),
+    })
+    if (!parent) return c.json({ error: 'replyTo: no such comment in this task' }, 400)
+    replyToId = parent.id
+  }
+
+  const [row] = await db
+    .insert(taskComments)
+    .values({ taskId, projectId: scope.projectId, authorId: id.userId, body: text, replyToId })
+    .returning()
+
+  // Люди должны узнать, что ассистент написал в их задаче — ровно как если бы
+  // это написал человек из интерфейса. Без этого комментарий появлялся молча.
+  const author = await db.query.users.findFirst({ where: eq(users.id, id.userId) })
+  const actorName = author?.name || 'Someone'
+  const link = projectPath((await companyOf(scope.projectId)) ?? '', scope.projectId, `/tasks/${taskId}`)
+  const mentioned = extractMentions(text)
+  if (mentioned.length)
+    void notify({
+      projectId: scope.projectId,
+      event: 'comment_mention',
+      recipientIds: mentioned,
+      actorId: id.userId,
+      actorName,
+      dedupeKey: `comment_mention:${row!.id}`,
+      link,
+      preview: text,
+      entityType: 'task',
+      entityId: task.id,
+    })
+  // Автор задачи, исполнитель и тот, кому отвечают. Себя не уведомляем.
+  const watchers = [task.assigneeId, task.createdById, replyToId ? (await db.query.taskComments.findFirst({ where: eq(taskComments.id, replyToId) }))?.authorId : null].filter(
+    (x): x is string => Boolean(x) && x !== id.userId && !mentioned.includes(x!),
+  )
+  if (watchers.length)
+    void notify({
+      projectId: scope.projectId,
+      event: 'task_comment',
+      recipientIds: [...new Set(watchers)],
+      actorId: id.userId,
+      actorName,
+      dedupeKey: `task_comment:${row!.id}`,
+      link,
+      preview: text,
+      vars: { ref: task.number },
+      entityType: 'task',
+      entityId: task.id,
+    })
+
   broadcast(scope.projectId, 'task_comments_changed', { taskId })
-  return c.json({ id: row!.id, createdAt: row!.createdAt }, 201)
+  return c.json({ id: row!.id, replyTo: row!.replyToId || undefined, createdAt: row!.createdAt }, 201)
 })
 
 // --- Спринты ----------------------------------------------------------------
