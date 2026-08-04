@@ -32,6 +32,7 @@ export function SandboxOverlay({
   onStreamReset,
   onSent,
   onDiscard,
+  onClose,
 }: {
   messageId: string
   aiMode: 'observer' | 'assistant' | 'moderator'
@@ -39,6 +40,8 @@ export function SandboxOverlay({
   onStreamReset?: () => void
   onSent: () => void
   onDiscard: () => void
+  /** Свернуть панель, не трогая черновик: к нему можно вернуться. */
+  onClose: () => void
 }) {
   const { t } = useTranslation()
   const qc = useQueryClient()
@@ -103,6 +106,10 @@ export function SandboxOverlay({
           {peek ? <EyeOff className="size-3.5" /> : <Eye className="size-3.5" />}
           {peek ? t('sandbox.back') : t('sandbox.peek')}
         </Button>
+        {/* Корзина выбрасывает черновик, крестик просто закрывает панель.
+            Раньше крестика не было вовсе, и корзина работала за обоих: рядом с
+            панелью ИИ, где корзина чистит историю, это читалось как одно и то
+            же действие. */}
         <Button
           variant="destructive"
           size="icon"
@@ -113,6 +120,9 @@ export function SandboxOverlay({
           }}
         >
           <Trash2 className="size-4" />
+        </Button>
+        <Button variant="ghost" size="icon" title={t('sandbox.close')} onClick={onClose}>
+          <X className="size-4" />
         </Button>
       </header>
 

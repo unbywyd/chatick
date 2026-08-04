@@ -623,6 +623,12 @@ export function ChatPanel({
             setMyPending(null)
             qc.invalidateQueries({ queryKey: ['messages', projectId] })
           }}
+          // Закрытие черновик не трогает: сообщение остаётся в работе, к нему
+          // можно вернуться. Удаляет только корзина.
+          onClose={() => {
+            setSandboxId(null)
+            setSandboxStream('')
+          }}
         />
       )}
 

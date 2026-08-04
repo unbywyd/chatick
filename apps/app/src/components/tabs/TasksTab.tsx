@@ -243,6 +243,8 @@ export function TasksTab({ projectId, meId }: { projectId: string; meId?: string
   const createdRef = useRef<string | null>(null)
   /** Задача, из карточки которой только что вышли — к ней возвращаем скролл. */
   const justClosed = useRef<string | null>(null)
+  /** Задача, к которой вернулись: подсвечена пару секунд. */
+  const [highlight, setHighlight] = useState<string | null>(null)
   if (searchParams.get('new') === '1' && openTaskId) createdRef.current = openTaskId
   const isNewTask = Boolean(openTaskId) && createdRef.current === openTaskId
 
@@ -284,20 +286,33 @@ export function TasksTab({ projectId, meId }: { projectId: string; meId?: string
   }
 
   // страница конкретной задачи открывается ВМЕСТО таблицы (по /tasks/:id, ссылкой можно делиться)
-  // Прокрутка к задаче, из которой только что вышли.
+  // Возврат из карточки: прокрутка к задаче и подсветка.
+  //
+  // Карточка заменяет список целиком, поэтому он монтируется заново и
+  // выбрасывает человека в начало. Одного requestAnimationFrame мало: строки
+  // появляются после того, как приедут данные, и узла в этот момент может ещё
+  // не быть. Поэтому ждём его появления, но не бесконечно.
   useEffect(() => {
     const id = justClosed.current
     if (openTaskId || !id) return
     justClosed.current = null
-    // Ждём кадр: список только что смонтировался, узла ещё нет.
-    requestAnimationFrame(() => {
+
+    let tries = 0
+    const find = () => {
       const el = document.querySelector<HTMLElement>(`[data-task-id="${id}"]`)
-      if (!el) return
+      if (!el) {
+        // ~1 секунда: дальше задачи, скорее всего, просто нет в этом фильтре.
+        if (tries++ < 60) requestAnimationFrame(find)
+        return
+      }
       el.scrollIntoView({ block: 'center', behavior: 'smooth' })
-      // Фокус — чтобы задача была видна и с клавиатуры: сразу после возврата
-      // работают стрелки и Enter, не приходится снова целиться мышью.
       el.focus({ preventScroll: true })
-    })
+      // Подсветка: фокуса в тёмной теме почти не видно, а глазами задачу
+      // после возврата всё равно ищут.
+      setHighlight(id)
+      window.setTimeout(() => setHighlight((v) => (v === id ? null : v)), 2000)
+    }
+    requestAnimationFrame(find)
   }, [openTaskId])
 
   if (openTask) {
@@ -611,6 +626,7 @@ export function TasksTab({ projectId, meId }: { projectId: string; meId?: string
                         task={task}
                         lang={i18n.language}
                         active={openTaskId === task.id}
+                        highlighted={highlight === task.id}
                         canEdit={canEditTask(task)}
                         meId={meId}
                         dragging={dragId === task.id}
@@ -677,6 +693,7 @@ function TaskRow({
   task,
   lang,
   active,
+  highlighted,
   canEdit,
   meId,
   dragging,
@@ -694,6 +711,8 @@ function TaskRow({
   task: Task
   lang: string
   active: boolean
+  /** Только что вернулись из этой задачи — подсвечиваем на пару секунд. */
+  highlighted?: boolean
   canEdit: boolean
   meId?: string
   dragging: boolean
@@ -742,6 +761,8 @@ function TaskRow({
       className={cn(
         'group flex cursor-pointer items-center gap-2.5 rounded-lg border bg-card px-3 py-2 transition-colors hover:bg-accent/60',
         active && 'border-brand bg-accent',
+        // Подсветка после возврата: гаснет сама, поэтому переход плавный.
+        highlighted && 'border-brand bg-brand/10 transition-colors duration-500',
         dragging && 'opacity-40',
         dropBefore && 'border-t-2 border-t-brand',
       )}
