@@ -556,14 +556,13 @@
     "suggestion": "הצעת ה-AI",
     "approvedSuggestion": "מאושר — מוכן לשליחה",
     "choose": "לבחור",
-    "discard": "לבטל",
+    "discard": "ביטול העריכה",
     "discardConfirm": "לבטל את ההודעה לגמרי?",
     "aiThinking": "ה-AI חושב…",
     "placeholder": "להשיב ל-AI…",
     "forceSend": "לשלוח בכל זאת",
     "forceConfirm": "לשלוח למרות עיכוב ה-AI?",
-    "forceNote": "ההודעה תופיע בצ׳אט עם תווית «לא נבדק».",
-    "close": "סגירה"
+    "forceNote": "ההודעה תופיע בצ׳אט עם תווית «לא נבדק»."
   },
   "tabs": {
     "about": "אודות",

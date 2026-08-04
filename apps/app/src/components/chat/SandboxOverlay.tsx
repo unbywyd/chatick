@@ -3,7 +3,7 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { useTranslation } from 'react-i18next'
 import ReactMarkdown from 'react-markdown'
 import { toast } from 'sonner'
-import { Bot, Check, Eye, EyeOff, FileText, Image as ImageIcon, Loader2, SendHorizontal, Trash2, X } from 'lucide-react'
+import { Bot, Check, Eye, EyeOff, FileText, Image as ImageIcon, Loader2, SendHorizontal, X } from 'lucide-react'
 import { api } from '@/lib/api'
 import { cn } from '@/lib/utils'
 import { Button } from '@/components/ui/button'
@@ -32,7 +32,6 @@ export function SandboxOverlay({
   onStreamReset,
   onSent,
   onDiscard,
-  onClose,
 }: {
   messageId: string
   aiMode: 'observer' | 'assistant' | 'moderator'
@@ -40,8 +39,6 @@ export function SandboxOverlay({
   onStreamReset?: () => void
   onSent: () => void
   onDiscard: () => void
-  /** Свернуть панель, не трогая черновик: к нему можно вернуться. */
-  onClose: () => void
 }) {
   const { t } = useTranslation()
   const qc = useQueryClient()
@@ -106,12 +103,11 @@ export function SandboxOverlay({
           {peek ? <EyeOff className="size-3.5" /> : <Eye className="size-3.5" />}
           {peek ? t('sandbox.back') : t('sandbox.peek')}
         </Button>
-        {/* Корзина выбрасывает черновик, крестик просто закрывает панель.
-            Раньше крестика не было вовсе, и корзина работала за обоих: рядом с
-            панелью ИИ, где корзина чистит историю, это читалось как одно и то
-            же действие. */}
+        {/* Крестик, а не корзина: рядом панель ИИ, где корзина чистит историю
+            переписки, и одна иконка на двух соседних экранах читалась как одно
+            и то же действие. Здесь она закрывает правку. */}
         <Button
-          variant="destructive"
+          variant="ghost"
           size="icon"
           title={t('sandbox.discard')}
           onClick={async () => {
@@ -119,9 +115,6 @@ export function SandboxOverlay({
               discard.mutate()
           }}
         >
-          <Trash2 className="size-4" />
-        </Button>
-        <Button variant="ghost" size="icon" title={t('sandbox.close')} onClick={onClose}>
           <X className="size-4" />
         </Button>
       </header>

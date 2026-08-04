@@ -556,14 +556,13 @@
     "suggestion": "AI suggestion",
     "approvedSuggestion": "Approved — ready to send",
     "choose": "Choose",
-    "discard": "Discard",
+    "discard": "Cancel editing",
     "discardConfirm": "Discard this message entirely?",
     "aiThinking": "AI is thinking…",
     "placeholder": "Reply to the AI…",
     "forceSend": "Send anyway",
     "forceConfirm": "Send despite the AI's hold?",
-    "forceNote": "The message will appear in the chat with an “unverified” badge.",
-    "close": "Close"
+    "forceNote": "The message will appear in the chat with an “unverified” badge."
   },
   "tabs": {
     "about": "About",
