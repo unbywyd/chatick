@@ -782,7 +782,8 @@ function ProjectsTab({
                           {/* Удаления здесь нет: оно живёт в опасной зоне
                               настроек, куда просто так не заходят. */}
                           <DropdownMenuContent align="end" onClick={(e) => e.stopPropagation()}>
-                            <DropdownMenuItem onSelect={() => setSettingsFor({ id: p.id, name: p.name, owner: p.myRole === 'owner' })}>
+                            <DropdownMenuItem onSelect={() => // Админ компании удаляет любой её проект — так же, как решает сервер.
+                              setSettingsFor({ id: p.id, name: p.name, owner: p.myRole === 'owner' || canManage })}>
                               <Settings className="size-4" />
                               {t('tabs.settings')}
                             </DropdownMenuItem>

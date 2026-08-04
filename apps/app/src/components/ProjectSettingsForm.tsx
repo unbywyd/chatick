@@ -408,7 +408,11 @@ export function ProjectSettingsForm({
               onAction={onDelete}
             />
           ) : (
-            !externalLinked && <p className="text-sm text-muted-foreground">{t('project.dangerEmpty')}</p>
+            !externalLinked && (
+              // В рамке DangerZone у элементов свои отступы — голый текст из
+              // неё вылезал.
+              <p className="px-4 py-3 text-sm text-muted-foreground">{t('project.dangerEmpty')}</p>
+            )
           )}
         </DangerZone>
       )}

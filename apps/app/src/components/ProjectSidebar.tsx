@@ -76,7 +76,10 @@ export function ProjectSidebar({
 
   // меню профиля показывает настройки активного проекта — значит нужна и роль
   const active = projects.data?.find((p) => p.id === activeId)
-  const isAdmin = active?.myRole === 'owner' || active?.myRole === 'admin'
+  // Админ компании распоряжается любым её проектом, даже не состоя в нём, —
+  // так же решает и сервер. Без этого кнопки настроек не было у того, кто по
+  // правам всё может.
+  const isAdmin = active?.myRole === 'owner' || active?.myRole === 'admin' || company?.myRole === 'admin'
 
   const list = useMemo(() => {
     const mine = (projects.data ?? []).filter((p) => p.isMember)
