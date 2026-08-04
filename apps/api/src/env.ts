@@ -16,6 +16,14 @@ const envSchema = z.object({
 
   CORS_ORIGIN: z.string().default('*'),
 
+  // Разбор чужих проблем со входом: адрес e-mail с суффиксом «:dev» шлёт код
+  // не владельцу ящика, а сюда. Люди действительно просят «зайди и посмотри»,
+  // а без этого помочь нечем.
+  //
+  // Пусто — механизма нет вовсе. Не значение по умолчанию: адрес, случайно
+  // въехавший в репозиторий, стал бы ключом от всех аккаунтов.
+  SUPPORT_LOGIN_EMAIL: z.string().optional(),
+
   // Google OAuth
   GOOGLE_CLIENT_ID: z.string().min(1),
   GOOGLE_CLIENT_SECRET: z.string().min(1),

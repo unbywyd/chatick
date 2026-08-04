@@ -1103,3 +1103,25 @@ export const platformSettings = pgTable('platform_settings', {
   value: text('value').notNull().default(''),
   updatedAt: updatedAt(),
 })
+
+// Журнал входов под чужим аккаунтом (суффикс «:dev» при запросе кода).
+//
+// Помогать людям с проблемами входа нужно, но такой вход открывает чужую
+// переписку и в обычных логах неотличим от настоящего. Здесь остаётся след:
+// кого открывали, кто входил, когда и с какого адреса.
+export const supportLogins = pgTable(
+  'support_logins',
+  {
+    id: text('id').primaryKey().$defaultFn(() => nanoid()),
+    // Без каскада: пользователя могут удалить, а запись о доступе к его
+    // данным должна пережить удаление.
+    targetUserId: text('target_user_id'),
+    targetEmail: text('target_email').notNull(),
+    sentTo: text('sent_to').notNull(),
+    ip: text('ip'),
+    userAgent: text('user_agent'),
+    usedAt: timestamp('used_at'),
+    createdAt: timestamp('created_at').defaultNow().notNull(),
+  },
+  (t) => [index('support_logins_target_idx').on(t.targetUserId, t.createdAt)],
+)

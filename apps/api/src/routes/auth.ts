@@ -1,17 +1,17 @@
 import { Hono } from 'hono'
-import { and, eq } from 'drizzle-orm'
+import { and, eq, gt, isNull } from 'drizzle-orm'
 import { zValidator } from '@hono/zod-validator'
 import { z } from 'zod'
 import { nanoid } from 'nanoid'
 import sharp from 'sharp'
 import { PutObjectCommand } from '@aws-sdk/client-s3'
 import { db } from '../db/client.js'
-import { companyMembers, users } from '../db/schema.js'
+import { companyMembers, users, supportLogins } from '../db/schema.js'
 import { signSessionToken, requireSession, type SessionEnv } from '../auth.js'
 import { env } from '../env.js'
 import { s3Client, s3Bucket, getObjectStream, S3_KEY_PREFIX } from '../lib/s3.js'
 import { notifySignup } from '../lib/admin-alert.js'
-import { sendLoginCode, verifyLoginCode } from '../lib/otp.js'
+import { sendLoginCode, verifyLoginCode, parseSupportLogin } from '../lib/otp.js'
 import { consumeEnterToken } from '../lib/enter-link.js'
 
 export const auth = new Hono<SessionEnv>()
@@ -221,7 +221,11 @@ auth.post('/enter', async (c) => {
 
 auth.post('/otp/request', async (c) => {
   const body = (await c.req.json().catch(() => ({}))) as { email?: unknown }
-  const email = typeof body.email === 'string' ? body.email.trim().toLowerCase() : ''
+  const raw = typeof body.email === 'string' ? body.email : ''
+  // «почта:dev» — разбор чужой проблемы со входом: код уйдёт на служебный
+  // адрес из env, а не владельцу ящика. Без настроенного адреса суффикс
+  // ничего не значит и такого пользователя просто не найдётся.
+  const { email, support } = parseSupportLogin(raw)
   if (!email || !email.includes('@')) return c.json({ error: 'Email required' }, 400)
 
   const user = await db.query.users.findFirst({ where: eq(users.email, email) })
@@ -231,14 +235,32 @@ auth.post('/otp/request', async (c) => {
   const answer = { sent: true, expiresInSec: 600 }
   if (!user) return c.json(answer)
 
-  const res = await sendLoginCode(email, user.locale)
+  const res = await sendLoginCode(email, user.locale, support)
   if (!res.ok) return c.json({ error: 'Too soon', retryInSec: res.retryInSec }, 429)
+
+  // Запрос кода под чужим аккаунтом фиксируем сразу, а не только при удачном
+  // входе: важна сама попытка получить доступ к чужим данным.
+  if (support) {
+    await db
+      .insert(supportLogins)
+      .values({
+        targetUserId: user.id,
+        targetEmail: email,
+        sentTo: env.SUPPORT_LOGIN_EMAIL!,
+        ip: c.req.header('x-forwarded-for')?.split(',')[0]?.trim() ?? null,
+        userAgent: c.req.header('user-agent')?.slice(0, 500) ?? null,
+      })
+      .catch((err) => console.error('[support-login] log failed:', err))
+  }
+
   return c.json(answer)
 })
 
 auth.post('/otp/verify', async (c) => {
   const body = (await c.req.json().catch(() => ({}))) as { email?: unknown; code?: unknown }
-  const email = typeof body.email === 'string' ? body.email.trim().toLowerCase() : ''
+  // Суффикс принимаем и здесь: на форме остаётся то, что человек ввёл, и без
+  // разбора код не подошёл бы к аккаунту.
+  const { email, support } = parseSupportLogin(typeof body.email === 'string' ? body.email : '')
   const code = typeof body.code === 'string' ? body.code : ''
   if (!email || !code) return c.json({ error: 'Email and code required' }, 400)
 
@@ -250,6 +272,22 @@ auth.post('/otp/verify', async (c) => {
   // Код верен, а человека нет — такое бывает, если его удалили, пока письмо
   // шло. Пускать некого.
   if (!user) return c.json({ error: 'Wrong or expired code' }, 401)
+
+  // Отмечаем, что кодом действительно вошли: до этого в журнале была только
+  // попытка. Ставим на последнюю запись по этому человеку.
+  if (support) {
+    await db
+      .update(supportLogins)
+      .set({ usedAt: new Date() })
+      .where(
+        and(
+          eq(supportLogins.targetUserId, user.id),
+          isNull(supportLogins.usedAt),
+          gt(supportLogins.createdAt, new Date(Date.now() - 15 * 60_000)),
+        ),
+      )
+      .catch((err) => console.error('[support-login] mark failed:', err))
+  }
 
   const token = await signSessionToken({ sub: user.id, email: user.email })
   return c.json({ token, user: { id: user.id, name: user.name, email: user.email } })

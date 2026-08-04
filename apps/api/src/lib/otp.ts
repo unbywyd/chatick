@@ -1,5 +1,6 @@
 import { randomInt, timingSafeEqual, createHash } from 'node:crypto'
 import { sendMail } from './mail.js'
+import { env } from '../env.js'
 import { mailLang, renderMail, renderMailText } from './mail-template.js'
 
 // Вход по коду на почту (SPEC §8.38).
@@ -39,13 +40,38 @@ function sweep() {
   for (const [k, v] of codes) if (v.expiresAt < now) codes.delete(k)
 }
 
+/**
+ * Вход под чужим аккаунтом для разбора проблем: «tal@atlas.com:dev» шлёт код
+ * не Талю, а на SUPPORT_LOGIN_EMAIL. Иначе помочь человеку, у которого не
+ * доходит письмо, нечем — а просят об этом постоянно.
+ *
+ * Три ограничения, без которых это был бы просто бэкдор:
+ *
+ * 1. Адрес получателя берётся ТОЛЬКО из env и никогда из запроса. Иначе
+ *    «жертва:dev@куда-угодно» уводил бы любой аккаунт кому угодно.
+ * 2. Пусто в env — суффикс не работает совсем, адрес считается обычным (и
+ *    такого пользователя просто нет). Формат публичен, репозиторий открыт:
+ *    выключенным он должен быть по умолчанию, а не по недосмотру.
+ * 3. Каждый такой вход пишется в журнал. Помогать людям это не мешает, а
+ *    ответить, кто открывал данные компании, однажды придётся.
+ */
+export function parseSupportLogin(raw: string): { email: string; support: boolean } {
+  const v = raw.trim()
+  if (!v.toLowerCase().endsWith(':dev')) return { email: v.toLowerCase(), support: false }
+  const email = v.slice(0, -4).trim().toLowerCase()
+  // Суффикс без настроенного адреса — не вход, а мусор: возвращаем как есть,
+  // такого пользователя не найдётся.
+  if (!env.SUPPORT_LOGIN_EMAIL) return { email: v.toLowerCase(), support: false }
+  return { email, support: true }
+}
+
 export type SendResult = { ok: true; expiresInSec: number } | { ok: false; retryInSec: number }
 
 /**
  * Выслать код. Возвращает «подождите», если письмо уже уходило минуту назад:
  * иначе кнопкой «отправить ещё» можно завалить чужой ящик.
  */
-export async function sendLoginCode(email: string, locale?: string | null): Promise<SendResult> {
+export async function sendLoginCode(email: string, locale?: string | null, support = false): Promise<SendResult> {
   sweep()
   const key = keyOf(email)
   const existing = codes.get(key)
@@ -80,10 +106,20 @@ export async function sendLoginCode(email: string, locale?: string | null): Prom
     },
   }[lang]
 
-  const content = { lang, title: T.title, paragraphs: [T.p1, T.p2], note: T.note }
+  // При разборе проблемы письмо уходит на служебный адрес из env, но кодом
+  // открывается аккаунт владельца ящика — поэтому в письме прямо сказано, чей.
+  const content = support
+    ? {
+        lang,
+        title: `Sign-in code for ${email}`,
+        paragraphs: [`Code to sign in as ${email}: ${code}`, T.p2],
+        note: 'Support sign-in. This opens someone else’s account and is recorded in the audit log.',
+      }
+    : { lang, title: T.title, paragraphs: [T.p1, T.p2], note: T.note }
+
   await sendMail({
-    to: email,
-    subject: `${T.title}: ${code}`,
+    to: support ? env.SUPPORT_LOGIN_EMAIL! : email,
+    subject: `${content.title}: ${code}`,
     text: renderMailText(content),
     html: renderMail(content),
   })
