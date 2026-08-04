@@ -235,6 +235,9 @@ const ogLocale = OG_LOCALE[locale] ?? 'en_US'
     touch-action: manipulation;
   }
   /* min-height 44px — палец попадает по кнопке с первого раза */
+  /* Класс висит и на ссылках, и на кнопках. Без сброса рамки и шрифта
+     <button> получал браузерные умолчания — системную рамку и чужой шрифт
+     посреди страницы. */
   .btn {
     display: inline-flex;
     align-items: center;
@@ -243,9 +246,12 @@ const ogLocale = OG_LOCALE[locale] ?? 'en_US'
     min-height: 44px;
     background: var(--lime);
     color: var(--lime-dark);
+    font: inherit;
     font-weight: 700;
     padding: 12px 28px;
+    border: 0;
     border-radius: 999px;
+    cursor: pointer;
     transition: transform 0.15s ease, box-shadow 0.15s ease;
   }
   .btn:hover {

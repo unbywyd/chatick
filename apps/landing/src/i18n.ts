@@ -407,9 +407,9 @@ export const dict: Record<LocaleCode, Dict> = {
     faq: {
       title: 'Common questions',
       items: [
-        { q: 'Is it really free?', a: 'Yes, while Chatick is in beta. No card, no trial timer. When paid plans appear, everything you have created stays yours and exportable.' },
+        { q: 'Is it really free?', a: 'The source is open — take it and do what you want with it. Or use our server while you are getting a feel for it: free during the beta, no card, no trial timer.' },
         { q: 'Where does my data live?', a: 'On our servers by default. Connect your own S3 or R2 bucket and files never touch our infrastructure — backups included.' },
-        { q: 'Do you read our chats?', a: 'No. Message contents are never exposed through the API, not even to the company that owns the workspace. Resource secrets are encrypted and never returned.' },
+        { q: 'Who can technically see our data?', a: 'On our server, we can — the same as with any hosted service, and we will not pretend otherwise. If that is not acceptable, run Chatick on your own machine: the source is open. Either way, resource secrets are encrypted and files can live in your own S3 or R2.' },
         { q: 'What does the AI actually do?', a: 'It reads the project history, creates and closes tasks, answers in chat, and works through your own Claude Code or Cursor — the code stays on your machine.' },
         { q: 'Can we leave and take everything?', a: 'One JSON file with the whole company: projects, tasks, chat, documents. Open format, readable without Chatick.' },
       ],
@@ -661,9 +661,9 @@ export const dict: Record<LocaleCode, Dict> = {
     faq: {
       title: 'Частые вопросы',
       items: [
-        { q: 'Это правда бесплатно?', a: 'Да, пока Chatick в бете. Без карты и обратного отсчёта. Когда появятся платные тарифы, всё созданное останется вашим и выгружаемым.' },
+        { q: 'Это правда бесплатно?', a: 'Исходный код открыт — берите и делайте что хотите. Или пользуйтесь нашим сервером, пока присматриваетесь: бесплатно на время беты, без карты и обратного отсчёта.' },
         { q: 'Где лежат мои данные?', a: 'По умолчанию на наших серверах. Подключите своё хранилище S3 или R2 — и файлы вообще не попадают к нам, включая бэкапы.' },
-        { q: 'Вы читаете нашу переписку?', a: 'Нет. Содержимое сообщений не отдаётся через API даже той компании, которой принадлежит пространство. Секреты ресурсов зашифрованы и не возвращаются никогда.' },
+        { q: 'Кто технически видит наши данные?', a: 'На нашем сервере — мы, как и на любом чужом хостинге, и делать вид, что это не так, не станем. Если это не подходит — поднимите Chatick у себя, код открыт. В любом случае секреты ресурсов зашифрованы, а файлы можно держать в своём S3 или R2.' },
         { q: 'Что именно делает ИИ?', a: 'Читает историю проекта, заводит и закрывает задачи, отвечает в чате и работает через ваш Claude Code или Cursor — код остаётся на вашей машине.' },
         { q: 'Можно уйти и забрать всё?', a: 'Один JSON со всей компанией: проекты, задачи, переписка, документы. Открытый формат, читается и без Chatick.' },
       ],
@@ -915,9 +915,9 @@ export const dict: Record<LocaleCode, Dict> = {
     faq: {
       title: 'שאלות נפוצות',
       items: [
-        { q: 'זה באמת בחינם?', a: 'כן, כל עוד Chatick בבטא. בלי כרטיס אשראי ובלי ספירה לאחור. כשיהיו מסלולים בתשלום, כל מה שיצרתם יישאר שלכם וניתן לייצוא.' },
+        { q: 'זה באמת בחינם?', a: 'הקוד פתוח — קחו ועשו בו מה שתרצו. או השתמשו בשרת שלנו בינתיים: בחינם בתקופת הבטא, בלי כרטיס אשראי ובלי ספירה לאחור.' },
         { q: 'איפה נשמרים הנתונים?', a: 'כברירת מחדל בשרתים שלנו. חברו אחסון S3 או R2 משלכם — והקבצים לא מגיעים אלינו בכלל, כולל הגיבויים.' },
-        { q: 'אתם קוראים את ההתכתבות?', a: 'לא. תוכן ההודעות לא נחשף דרך ה-API אפילו לחברה שהמרחב שייך לה. סודות המשאבים מוצפנים ולא מוחזרים לעולם.' },
+        { q: 'מי טכנית רואה את הנתונים שלנו?', a: 'בשרת שלנו — אנחנו, כמו בכל שירות מתארח, ולא נעמיד פנים אחרת. אם זה לא מתאים — הריצו את Chatick אצלכם, הקוד פתוח. בכל מקרה סודות המשאבים מוצפנים, והקבצים יכולים לשבת ב-S3 או R2 שלכם.' },
         { q: 'מה ה-AI עושה בפועל?', a: 'קורא את היסטוריית הפרויקט, פותח וסוגר משימות, עונה בצ׳אט ועובד דרך ה-Claude Code או Cursor שלכם — הקוד נשאר על המחשב שלכם.' },
         { q: 'אפשר לעזוב ולקחת הכול?', a: 'קובץ JSON אחד עם כל החברה: פרויקטים, משימות, התכתבות, מסמכים. פורמט פתוח שנקרא גם בלי Chatick.' },
       ],
