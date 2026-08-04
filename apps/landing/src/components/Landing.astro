@@ -257,87 +257,41 @@ const CHART_STATUSES = [
     </div>
   </section>
 
-  <section class="section" id="download">
+  <section class="section" id="integrate">
     <div class="container">
-      <h2>{t.download.title}</h2>
-      <p class="section-sub">{t.download.subtitle}</p>
-      {/* Браузер — путь без единого предупреждения, поэтому он первый и
-          единственный крупной кнопкой. Сборки без подписи предлагать наравне
-          нечестно: человек упрётся в окно SmartScreen, не понимая почему. */}
-      {/* Четыре плитки в ряд: веб и три сборки. Раньше веб стоял отдельно, а
-          десктоп прятался внутри блока про отсутствие подписи — читателю было
-          не разобрать, что вообще есть. Плитки без теней и рамок, разделены
-          только линиями: так они читаются как один выбор, а не четыре виджета. */}
-      <div class="dl-grid">
-        <a class="dl-tile dl-tile-web" href={appUrl}>
-          <span class="dl-tile-ic">
-            <svg viewBox="0 0 24 24" width="22" height="22" fill="none" aria-hidden="true">
-              <circle cx="12" cy="12" r="9" stroke="currentColor" stroke-width="1.8" />
-              <path d="M3 12h18M12 3c2.5 2.6 2.5 15.4 0 18M12 3c-2.5 2.6-2.5 15.4 0 18" stroke="currentColor" stroke-width="1.8" />
-            </svg>
-          </span>
-          <span class="dl-tile-name">{t.download.web}</span>
-          <span class="dl-tile-note">{t.download.webNote}</span>
-        </a>
+      <p class="tag">{t.integrate.tag}</p>
+      <h2>{t.integrate.title}</h2>
+      <p class="section-sub">{t.integrate.subtitle}</p>
+
+      <ul class="integrate-list">
         {
-          DOWNLOADS.map((d) => (
-            <a
-              class:list={['dl-tile', { 'dl-tile-soon': !d.href }]}
-              href={d.href || '#download'}
-              aria-disabled={!d.href}
-              download={d.href ? true : undefined}
-            >
-              <span class="dl-tile-ic" set:html={d.icon === 'windows' ? WIN_ICON : APPLE_ICON} />
-              <span class="dl-tile-name">{t.download[d.key]}</span>
-              <span class="dl-tile-note">{d.arch || t.download.desktopNote}</span>
-            </a>
+          t.integrate.points.map((point) => (
+            <li>
+              <svg viewBox="0 0 24 24" width="16" height="16" fill="none" aria-hidden="true">
+                <path d="m5 13 4 4L19 7" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" />
+              </svg>
+              {point}
+            </li>
           ))
         }
-      </div>
+      </ul>
 
-      <p class="dl-warn">
-        <svg viewBox="0 0 24 24" width="16" height="16" fill="none" aria-hidden="true">
-          <path d="M12 9v4.5m0 3.2v.1M10.3 3.9 2.6 17.2A2 2 0 0 0 4.3 20h15.4a2 2 0 0 0 1.7-2.8L13.7 3.9a2 2 0 0 0-3.4 0Z" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" />
-        </svg>
-        {t.beta.warn}
-      </p>
-
-      {/* Десктоп — отдельно и с оговоркой. Сказать про отсутствие подписи
-          самим, до установки, лучше, чем позволить Windows сказать это за нас
-          на языке «неизвестный издатель». */}
-      <div class="unsigned">
-        <div class="unsigned-head">
-          <svg viewBox="0 0 24 24" width="17" height="17" fill="none" aria-hidden="true">
-            <path d="M12 9v4.5m0 3.2v.1M10.3 3.9 2.6 17.2A2 2 0 0 0 4.3 20h15.4a2 2 0 0 0 1.7-2.8L13.7 3.9a2 2 0 0 0-3.4 0Z" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" />
-          </svg>
-          <span>{t.download.unsignedTitle}</span>
-        </div>
-        <p class="unsigned-text">{t.download.unsignedText}</p>
-        <div class="unsigned-actions">
-          <button class="how-btn" id="howBtn" type="button" aria-expanded="false">
-            <span class="how-mark">?</span>
-            {t.download.howTo}
-          </button>
-        </div>
-        <div class="how-pop" id="howPop" hidden>
-          <ol class="how-steps">
-            <li>{t.download.step1}</li>
-            <li>{t.download.step2}</li>
-            <li>{t.download.step3}</li>
-          </ol>
-          <p class="how-source">
-            {t.download.sourceHint}{' '}
-            <a href="https://github.com/unbywyd/chatick" target="_blank" rel="noopener">github.com/unbywyd/chatick</a>
-          </p>
-          <button class="how-close" id="howClose" type="button">{t.download.howToClose}</button>
-        </div>
+      {/* Две кнопки: человеку — страница, его ассистенту — машинный текст.
+          Вторая ведёт прямо на /integration.txt, чтобы не заставлять искать
+          её внутри страницы. */}
+      <div class="integrate-cta">
+        <a class="btn btn-brand" href={locale === 'en' ? '/integration' : `/${locale}/integration`}>
+          {t.integrate.cta}
+        </a>
+        <a class="btn btn-ghost" href="/integration.txt" target="_blank" rel="noopener">
+          {t.integrate.ctaAi}
+        </a>
       </div>
-      <p class="note">{t.download.mobileSoon}</p>
     </div>
   </section>
 
-  <!-- КАК ЭТО РАБОТАЕТ -->
-  <!-- PAIN -->
+
+  <!-- HOW -->
   <section class="section">
     <div class="container">
       <h2>{t.pain.title}</h2>
@@ -435,41 +389,6 @@ const CHART_STATUSES = [
   {/* Тёмные и светлые полосы чередуются: две подряд сливались в одну,
       и граница между «мостом» и интеграцией пропадала. */}
   <!-- ДЛЯ КОМПАНИЙ СО СВОЕЙ СИСТЕМОЙ: мастер-интеграция -->
-  <section class="section" id="integrate">
-    <div class="container">
-      <p class="tag">{t.integrate.tag}</p>
-      <h2>{t.integrate.title}</h2>
-      <p class="section-sub">{t.integrate.subtitle}</p>
-
-      <ul class="integrate-list">
-        {
-          t.integrate.points.map((point) => (
-            <li>
-              <svg viewBox="0 0 24 24" width="16" height="16" fill="none" aria-hidden="true">
-                <path d="m5 13 4 4L19 7" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" />
-              </svg>
-              {point}
-            </li>
-          ))
-        }
-      </ul>
-
-      {/* Две кнопки: человеку — страница, его ассистенту — машинный текст.
-          Вторая ведёт прямо на /integration.txt, чтобы не заставлять искать
-          её внутри страницы. */}
-      <div class="integrate-cta">
-        <a class="btn btn-brand" href={locale === 'en' ? '/integration' : `/${locale}/integration`}>
-          {t.integrate.cta}
-        </a>
-        <a class="btn btn-ghost" href="/integration.txt" target="_blank" rel="noopener">
-          {t.integrate.ctaAi}
-        </a>
-      </div>
-    </div>
-  </section>
-
-
-  <!-- HOW -->
   <section class="section section-soft">
     <div class="container">
       <h2>{t.how.title}</h2>
@@ -635,6 +554,86 @@ const CHART_STATUSES = [
   </section>
 
   <!-- КОНТАКТЫ -->
+  <section class="section" id="download">
+    <div class="container">
+      <h2>{t.download.title}</h2>
+      <p class="section-sub">{t.download.subtitle}</p>
+      {/* Браузер — путь без единого предупреждения, поэтому он первый и
+          единственный крупной кнопкой. Сборки без подписи предлагать наравне
+          нечестно: человек упрётся в окно SmartScreen, не понимая почему. */}
+      {/* Четыре плитки в ряд: веб и три сборки. Раньше веб стоял отдельно, а
+          десктоп прятался внутри блока про отсутствие подписи — читателю было
+          не разобрать, что вообще есть. Плитки без теней и рамок, разделены
+          только линиями: так они читаются как один выбор, а не четыре виджета. */}
+      <div class="dl-grid">
+        <a class="dl-tile dl-tile-web" href={appUrl}>
+          <span class="dl-tile-ic">
+            <svg viewBox="0 0 24 24" width="22" height="22" fill="none" aria-hidden="true">
+              <circle cx="12" cy="12" r="9" stroke="currentColor" stroke-width="1.8" />
+              <path d="M3 12h18M12 3c2.5 2.6 2.5 15.4 0 18M12 3c-2.5 2.6-2.5 15.4 0 18" stroke="currentColor" stroke-width="1.8" />
+            </svg>
+          </span>
+          <span class="dl-tile-name">{t.download.web}</span>
+          <span class="dl-tile-note">{t.download.webNote}</span>
+        </a>
+        {
+          DOWNLOADS.map((d) => (
+            <a
+              class:list={['dl-tile', { 'dl-tile-soon': !d.href }]}
+              href={d.href || '#download'}
+              aria-disabled={!d.href}
+              download={d.href ? true : undefined}
+            >
+              <span class="dl-tile-ic" set:html={d.icon === 'windows' ? WIN_ICON : APPLE_ICON} />
+              <span class="dl-tile-name">{t.download[d.key]}</span>
+              <span class="dl-tile-note">{d.arch || t.download.desktopNote}</span>
+            </a>
+          ))
+        }
+      </div>
+
+      <p class="dl-warn">
+        <svg viewBox="0 0 24 24" width="16" height="16" fill="none" aria-hidden="true">
+          <path d="M12 9v4.5m0 3.2v.1M10.3 3.9 2.6 17.2A2 2 0 0 0 4.3 20h15.4a2 2 0 0 0 1.7-2.8L13.7 3.9a2 2 0 0 0-3.4 0Z" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" />
+        </svg>
+        {t.beta.warn}
+      </p>
+
+      {/* Десктоп — отдельно и с оговоркой. Сказать про отсутствие подписи
+          самим, до установки, лучше, чем позволить Windows сказать это за нас
+          на языке «неизвестный издатель». */}
+      <div class="unsigned">
+        <div class="unsigned-head">
+          <svg viewBox="0 0 24 24" width="17" height="17" fill="none" aria-hidden="true">
+            <path d="M12 9v4.5m0 3.2v.1M10.3 3.9 2.6 17.2A2 2 0 0 0 4.3 20h15.4a2 2 0 0 0 1.7-2.8L13.7 3.9a2 2 0 0 0-3.4 0Z" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" />
+          </svg>
+          <span>{t.download.unsignedTitle}</span>
+        </div>
+        <p class="unsigned-text">{t.download.unsignedText}</p>
+        <div class="unsigned-actions">
+          <button class="how-btn" id="howBtn" type="button" aria-expanded="false">
+            <span class="how-mark">?</span>
+            {t.download.howTo}
+          </button>
+        </div>
+        <div class="how-pop" id="howPop" hidden>
+          <ol class="how-steps">
+            <li>{t.download.step1}</li>
+            <li>{t.download.step2}</li>
+            <li>{t.download.step3}</li>
+          </ol>
+          <p class="how-source">
+            {t.download.sourceHint}{' '}
+            <a href="https://github.com/unbywyd/chatick" target="_blank" rel="noopener">github.com/unbywyd/chatick</a>
+          </p>
+          <button class="how-close" id="howClose" type="button">{t.download.howToClose}</button>
+        </div>
+      </div>
+      <p class="note">{t.download.mobileSoon}</p>
+    </div>
+  </section>
+
+  <!-- КАК ЭТО РАБОТАЕТ -->
   <section class="section" id="contact">
     <div class="container">
       <h2>{t.contact.title}</h2>
