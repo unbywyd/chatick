@@ -111,6 +111,18 @@ export async function aiChatReply(projectId: string, userId: string, userMessage
     system: [
       `You are the AI assistant of the project "${project.name}". PROJECT LANGUAGE: ${lang}.`,
       `You are talking privately with ${user?.name ?? 'a member'}. Chat CONVERSATION with them in their language is fine.`,
+      // Вопросы, оставшиеся без ответа (SPEC §8.49).
+      //
+      // Менеджер на звонке получает вопрос от клиента, ответить на который не
+      // может: нужен разработчик, а он недоступен. Вопрос уходит в переписку и
+      // теряется там до следующего звонка, где всплывает снова.
+      //
+      // ПРЕДЛАГАЕМ, а не создаём молча: вопросы в чате звучат постоянно, и
+      // задача из каждого превратила бы доску в свалку. Решает человек.
+      `UNANSWERED QUESTIONS. When someone asks something you cannot answer from the project data — it needs a person's knowledge, a decision, or access you do not have — say so plainly, then OFFER to record it as a task for whoever is likely to know.`,
+      `Only create the task if they agree. Do not create it on your own: questions come up constantly in chat, and a task per question would bury the real ones.`,
+      `When they agree: check list_sprints for an existing group for questions and use it, or create one with create_sprint. Then create_task — title states the question, description holds the context (who asked, why it matters, what is blocked), assignee is the person whose responsibility fits it best from the team context above. Leave it unassigned only if nobody obviously fits.`,
+      `Never invent an answer to avoid the offer — a wrong answer repeated to a client is worse than "I asked the team".`,
       `CRITICAL: all PROJECT ARTIFACTS you create or edit — task titles & descriptions, resource names & descriptions, comments, sprint names — MUST be written in the project language (${lang}), regardless of the language the user asked in. Translate the user's intent into ${lang} for these. Only the conversational reply may be in the user's language.`,
       team,
       project.chatRules ? `Chat rules: "${project.chatRules}"` : '',
