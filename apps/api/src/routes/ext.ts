@@ -318,6 +318,7 @@ extRoute.post('/projects/:externalId/members', guard('users:write'), async (c) =
   // Молчать по умолчанию нельзя: человек должен узнать, что у него появился
   // доступ. Отключается явно — как в /users/batch.
   const notify = (b as { notify?: unknown }).notify !== false
+  console.log(`[ext] add-members to ${c.req.param('externalId')}: notify=${notify}, count=${wanted.length}`)
 
   const found = await db
     .select()
@@ -350,7 +351,10 @@ extRoute.post('/projects/:externalId/members', guard('users:write'), async (c) =
     const already = await db.query.projectMembers.findFirst({
       where: and(eq(projectMembers.projectId, project.id), eq(projectMembers.userId, user.id)),
     })
-    if (already) continue
+    if (already) {
+      console.log(`[ext] ${w.externalUserId} already in project — no mail`)
+      continue
+    }
 
     await db.insert(projectMembers).values({
       projectId: project.id,
@@ -368,18 +372,22 @@ extRoute.post('/projects/:externalId/members', guard('users:write'), async (c) =
     //
     // Отключается на весь вызов через notify: false: при первичном переносе
     // команды сотня писем разом никому не нужна.
+    if (!notify) console.log(`[ext] notify=false — no mail for ${w.externalUserId}`)
     if (notify) {
+      console.log(`[ext] sending added-to-project mail → ${user.email}`)
       // В фоне: письмо не должно задерживать ответ внешней системе, а сбой
       // почты — отменять уже выданный доступ.
-      void localeFor({ userId: user.id, projectId: project.id }).then((locale) =>
-        sendAddedToProjectMail({
-          to: user!.email,
-          companyName: company?.name ?? '',
-          projectName: project.name,
-          projectId: project.id,
-          locale,
-        }),
-      )
+      void localeFor({ userId: user.id, projectId: project.id })
+        .then((locale) =>
+          sendAddedToProjectMail({
+            to: user!.email,
+            companyName: company?.name ?? '',
+            projectName: project.name,
+            projectId: project.id,
+            locale,
+          }),
+        )
+        .catch((err) => console.error('[ext] added-to-project mail failed:', err))
     }
   }
 
@@ -466,6 +474,8 @@ async function upsertUser(companyId: string, companyName: string, u: IncomingUse
     (await db.query.users.findFirst({ where: eq(users.externalId, u.externalId) })) ??
     (await db.query.users.findFirst({ where: eq(users.email, u.email) }))
 
+  console.log(`[ext] upsert ${u.externalId} <${u.email}> notify=${u.notify} projects=${u.projects.length}`)
+
   let created = false
   if (!user) {
     const [row] = await db.insert(users).values({ email: u.email, name: u.name, externalId: u.externalId }).returning()
@@ -493,12 +503,18 @@ async function upsertUser(companyId: string, companyName: string, u: IncomingUse
     const project = await db.query.projects.findFirst({
       where: and(eq(projects.companyId, companyId), eq(projects.externalId, p.externalProjectId)),
     })
-    if (!project) continue
+    if (!project) {
+      console.log(`[ext] project ${p.externalProjectId} not found — skipping`)
+      continue
+    }
 
     const already = await db.query.projectMembers.findFirst({
       where: and(eq(projectMembers.projectId, project.id), eq(projectMembers.userId, user.id)),
     })
-    if (already) continue
+    if (already) {
+      console.log(`[ext] ${u.externalId} already in ${p.externalProjectId} — no mail`)
+      continue
+    }
 
     await db.insert(projectMembers).values({
       projectId: project.id,
@@ -509,20 +525,27 @@ async function upsertUser(companyId: string, companyName: string, u: IncomingUse
     })
     addedTo++
 
+    if (!u.notify) console.log(`[ext] notify=false — no mail for ${u.externalId}`)
     if (u.notify) {
+      console.log(`[ext] sending added-to-project mail → ${user.email}`)
       // В фоне: письмо не должно задерживать ответ внешней системе, а сбой
       // почты — отменять уже выданный доступ.
       // Язык: свой у человека, иначе язык проекта или компании. У заведённого
       // через API своих настроек ещё нет — он их не открывал.
-      void localeFor({ userId: user.id, projectId: project.id }).then((locale) =>
-        sendAddedToProjectMail({
-          to: user!.email,
-          companyName,
-          projectName: project.name,
-          projectId: project.id,
-          locale,
-        }),
-      )
+      void localeFor({ userId: user.id, projectId: project.id })
+        .then((locale) =>
+          sendAddedToProjectMail({
+            to: user!.email,
+            companyName,
+            projectName: project.name,
+            projectId: project.id,
+            locale,
+          }),
+        )
+        // Без catch любая ошибка внутри становилась необработанным отказом
+        // промиса: письма нет, в логе тоже пусто, и понять, почему оно не
+        // пришло, нельзя ничем.
+        .catch((err) => console.error('[ext] added-to-project mail failed:', err))
     }
   }
 
