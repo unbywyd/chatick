@@ -160,6 +160,83 @@ extRoute.patch('/projects/:externalId', guard('projects:write'), async (c) => {
  * системе, и спрашивать у человека «согласны ли вы» второй раз незачем.
  * Письмо о добавлении уходит постфактум, отдельно.
  */
+/**
+ * Состояние интеграции по одному проекту (SPEC §8.43).
+ *
+ * Виджет во внешней системе рисуется на каждой странице задач, и ему нужен
+ * ответ на один вопрос: этот проект уже в Chatick или ещё нет. Через общий
+ * список это значило бы тянуть все проекты компании и искать среди них —
+ * на каждый рендер.
+ *
+ * 404 здесь не ошибка, а валидный ответ «не интегрирован»: до первого
+ * POST /projects проекта у нас действительно нет. Чтобы виджету не пришлось
+ * трактовать код ответа как данные, отвечаем 200 с integrated: false.
+ */
+extRoute.get('/projects/:externalId/status', guard('read:all'), async (c) => {
+  const companyId = c.get('companyId')
+  const project = await db.query.projects.findFirst({
+    where: and(eq(projects.companyId, companyId), eq(projects.externalId, c.req.param('externalId'))),
+  })
+  if (!project) return c.json({ integrated: false, externalId: c.req.param('externalId') })
+
+  const members = await db
+    .select({ externalId: users.externalId, userId: users.id })
+    .from(projectMembers)
+    .innerJoin(users, eq(users.id, projectMembers.userId))
+    .where(eq(projectMembers.projectId, project.id))
+
+  return c.json({
+    integrated: true,
+    project: serializeProject(project),
+    memberCount: members.length,
+    // Идентификаторы внешней системы, а не наши: так виджет сверяет состав со
+    // своим списком, ничего не зная про наши id.
+    memberExternalIds: members.map((m) => m.externalId).filter(Boolean),
+    url: `${env.APP_URL}/#/p/${project.id}`,
+  })
+})
+
+/**
+ * Состав проекта — с кем сверять свой список.
+ *
+ * Отдаём и тех, кто в проекте, и остальных людей компании: виджету нужно
+ * показать «этих добавить», не делая второй запрос и не пересекая списки
+ * самостоятельно.
+ */
+extRoute.get('/projects/:externalId/members', guard('read:all'), async (c) => {
+  const companyId = c.get('companyId')
+  const project = await db.query.projects.findFirst({
+    where: and(eq(projects.companyId, companyId), eq(projects.externalId, c.req.param('externalId'))),
+  })
+  if (!project) return c.json({ error: 'Project not found' }, 404)
+
+  const inProject = await db
+    .select({ user: users, role: projectMembers.role })
+    .from(projectMembers)
+    .innerJoin(users, eq(users.id, projectMembers.userId))
+    .where(eq(projectMembers.projectId, project.id))
+
+  const inCompany = await db
+    .select({ user: users })
+    .from(companyMembers)
+    .innerJoin(users, eq(users.id, companyMembers.userId))
+    .where(eq(companyMembers.companyId, companyId))
+
+  const memberIds = new Set(inProject.map((r) => r.user.id))
+  const person = (u: typeof users.$inferSelect) => ({
+    externalId: u.externalId,
+    email: u.email,
+    name: u.name,
+    avatarUrl: u.avatarUrl,
+  })
+
+  return c.json({
+    members: inProject.map((r) => ({ ...person(r.user), role: r.role })),
+    // Люди компании, которых в этом проекте ещё нет, — кандидаты на добавление.
+    available: inCompany.filter((r) => !memberIds.has(r.user.id)).map((r) => person(r.user)),
+  })
+})
+
 extRoute.post('/projects/:externalId/members', guard('users:write'), async (c) => {
   const companyId = c.get('companyId')
   const project = await db.query.projects.findFirst({
