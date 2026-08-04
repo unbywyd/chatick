@@ -1371,9 +1371,6 @@ bridgeRoute.get('/members/available', async (c) => {
     return c.json({ error: 'Forbidden: only project owners/admins manage the team' }, 403)
   }
 
-  // Состав команды ведётся во внешней системе (SPEC §8.42). Мост ИИ — та же
-  // дверь: без этой проверки ИИ добавлял бы людей, которых там нет.
-  if (await membersLockedForProject(scope.projectId)) return c.json(MEMBERS_LOCKED, 403)
   const project = await db.query.projects.findFirst({ where: eq(projects.id, scope.projectId) })
   if (!project) return c.json({ error: 'Project not found' }, 404)
 
@@ -1526,9 +1523,6 @@ bridgeRoute.patch('/members/:userId', async (c) => {
     return c.json({ error: 'Forbidden: only project owners/admins manage the team' }, 403)
   }
 
-  // Состав команды ведётся во внешней системе (SPEC §8.42). Мост ИИ — та же
-  // дверь: без этой проверки ИИ добавлял бы людей, которых там нет.
-  if (await membersLockedForProject(scope.projectId)) return c.json(MEMBERS_LOCKED, 403)
   const userId = c.req.param('userId')
   const target = await projectRoleOf(scope.projectId, userId)
   if (!target) return c.json({ error: 'Not a project member' }, 404)

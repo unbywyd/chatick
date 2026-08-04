@@ -395,7 +395,7 @@
     "remove": "Remove from company",
     "removeConfirm": "Remove {{name}} from the company?",
     "memberRemoved": "Member removed",
-    "managedExternally": "People are managed in {{system}}. You can see the team here, but add and remove them there — otherwise the two lists drift apart.",
+    "managedExternally": "People are added and removed in {{system}}. You can still change roles and permissions here — that part is ours.",
     "yourSystem": "your system"
   },
   "rules": {

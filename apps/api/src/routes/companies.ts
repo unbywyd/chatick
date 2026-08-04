@@ -774,9 +774,6 @@ companiesRoute.patch(
     const { companyId, userId } = c.req.param()
     if ((await memberRoleIn(companyId, sub)) !== 'admin') return c.json({ error: 'Forbidden' }, 403)
 
-    // Состав команды ведётся во внешней системе (SPEC §8.42).
-    if (await membersLockedForCompany(companyId)) return c.json(MEMBERS_LOCKED, 403)
-
     const { role } = c.req.valid('json')
     if (userId === sub && role !== 'admin') {
       const admins = await db.query.companyMembers.findMany({

@@ -770,9 +770,6 @@ projectsRoute.patch(
     const companyRole = await companyRoleOf(project.companyId, sub)
     if (!(me?.role === 'owner' || me?.role === 'admin' || companyRole === 'admin')) return c.json({ error: 'Forbidden' }, 403)
 
-    // Состав команды ведётся во внешней системе (SPEC §8.42): смотреть можно,
-    // менять — только там, иначе два списка разъедутся.
-    if (project.companyId && (await membersLockedForCompany(project.companyId))) return c.json(MEMBERS_LOCKED, 403)
     const target = await projectRoleOf(projectId, userId)
     if (!target) return c.json({ error: 'Not a project member' }, 404)
     const b = c.req.valid('json')
@@ -803,9 +800,6 @@ projectsRoute.patch(
       return c.json({ error: 'Forbidden' }, 403)
     }
 
-    // Состав команды ведётся во внешней системе (SPEC §8.42): смотреть можно,
-    // менять — только там, иначе два списка разъедутся.
-    if (project.companyId && (await membersLockedForCompany(project.companyId))) return c.json(MEMBERS_LOCKED, 403)
 
     const target = await projectRoleOf(projectId, userId)
     if (!target) return c.json({ error: 'Not a project member' }, 404)
@@ -853,9 +847,6 @@ projectsRoute.patch(
     const allowed = me?.role === 'owner' || me?.role === 'admin' || companyRole === 'admin'
     if (!allowed) return c.json({ error: 'Forbidden' }, 403)
 
-    // Состав команды ведётся во внешней системе (SPEC §8.42): смотреть можно,
-    // менять — только там, иначе два списка разъедутся.
-    if (project.companyId && (await membersLockedForCompany(project.companyId))) return c.json(MEMBERS_LOCKED, 403)
 
     const target = await projectRoleOf(projectId, userId)
     if (!target) return c.json({ error: 'Not a project member' }, 404)

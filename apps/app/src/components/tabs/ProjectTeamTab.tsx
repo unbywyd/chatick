@@ -39,10 +39,16 @@ export function ProjectTeamTab({
 }: {
   projectId: string
   companyId?: string
+  /** Может настраивать роли, права и профили участников. */
   canEdit: boolean
-  /** Состав ведётся во внешней системе: объясняем отсутствие кнопок. */
+  /**
+   * Состав ведётся во внешней системе: добавить и убрать человека нельзя, но
+   * роли и права остаются нашими — их внешняя система не знает (SPEC §8.42).
+   */
   managedExternally?: boolean
 }) {
+  // Правка состава — отдельно от правки ролей: запрет касается только первого.
+  const canChangeMembers = canEdit && !managedExternally
   const { t } = useTranslation()
   const qc = useQueryClient()
   const confirm = useConfirm()
@@ -119,7 +125,7 @@ export function ProjectTeamTab({
             </p>
           )}
         </div>
-        {canEdit && (
+        {canChangeMembers && (
           <Button variant="brand" onClick={() => setAdding(true)}>
             <UserPlus className="size-4" />
             {t('projTeam.add')}
@@ -204,7 +210,9 @@ export function ProjectTeamTab({
                       {t('projTeam.permissions')}
                       <ChevronDown className={cn('size-3.5 transition-transform', isExpanded && 'rotate-180')} />
                     </Button>
-                    {!isOwner && (
+                    {/* Убрать из проекта — только когда составом распоряжаемся
+                        мы: настройка ролей рядом остаётся доступной. */}
+                    {canChangeMembers && !isOwner && (
                       <Button
                         variant="destructive"
                         size="icon"

@@ -35,10 +35,14 @@ export function TeamTab({ company, meId }: { company: Company; meId?: string }) 
   const [email, setEmail] = useState('')
   const [inviteRole, setInviteRole] = useState<Role>('member')
 
-  // Состав ведётся во внешней системе: смотреть можно всем, у кого и раньше,
-  // а править нельзя никому — сервер всё равно откажет (SPEC §8.42).
+  // Состав ведётся во внешней системе (SPEC §8.42): добавить и убрать человека
+  // нельзя — этим распоряжается она.
+  //
+  // А роли остаются нашими: внешняя система не знает, кто у нас админ проекта,
+  // и решать за неё некому. Поэтому два разных флага, а не один.
   const locked = Boolean(company.membersViaApiOnly)
-  const isAdmin = company.myRole === 'admin' && !locked
+  const isAdmin = company.myRole === 'admin'
+  const canChangeMembers = isAdmin && !locked
   const base = `/api/v1/companies/${company.id}`
 
   const members = useQuery({ queryKey: ['company-members', company.id], queryFn: () => api<MemberRow[]>(`${base}/members`) })
@@ -207,7 +211,7 @@ export function TeamTab({ company, meId }: { company: Company; meId?: string }) 
                 )}
 
                 {/* Действия */}
-                {isAdmin && !isSelf && (
+                {canChangeMembers && !isSelf && (
                   <DropdownMenu>
                     <DropdownMenuTrigger asChild>
                       <Button variant="ghost" size="icon">

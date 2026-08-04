@@ -52,66 +52,80 @@ describe('membersLockedForProject', () => {
   })
 })
 
-// Главная проверка. Прятать кнопки бесполезно: к ручкам ходят и мост ИИ, и
-// curl. Считаем места, где состав меняется, и требуем страж рядом с каждым.
-describe('запрет стоит во всех точках правки', () => {
+// Граница проходит между «кто в команде» и «кем он в ней работает».
+//
+// Состав ведёт внешняя система; роли и права — мы: про наших админов проекта и
+// доступ к ресурсам она не знает и знать не может. Проверяем ОБЕ стороны:
+// ошибка в любую одинаково плоха — либо уволенный остаётся с доступом, либо
+// админ компании не может назначить руководителя проекта.
+//
+// Проверяем по исходникам, а не поведением: прятать кнопки бесполезно, к
+// ручкам ходят и мост ИИ, и curl.
+describe('граница запрета', () => {
   const read = (f: string) => readFileSync(new URL(`../routes/${f}`, import.meta.url), 'utf8')
 
-  // Внешняя система — источник правды, ей писать можно: это и есть тот самый
-  // «извне». Поэтому ext.ts в проверку не входит намеренно.
-  const FILES = ['companies.ts', 'projects.ts', 'bridge.ts']
+  /**
+   * Тело ручки — от её объявления до следующего.
+   *
+   * Путь пишется либо сразу за скобкой, либо со следующей строки (когда между
+   * ними стоит zValidator). Проверяем оба варианта явно: отматывать назад от
+   * найденного пути нельзя — ближайшим объявлением окажется соседняя ручка.
+   */
+  const endpoint = (src: string, routeVar: string, verb: string, path: string) => {
+    const decl = `${routeVar}.${verb}(`
+    const head = [`${decl}'${path}'`, `${decl}\n  '${path}'`]
+      .map((v) => src.indexOf(v))
+      .find((i) => i >= 0)
+    if (head === undefined) return null
+    const next = src.indexOf(`\n${routeVar}.`, head + 1)
+    return src.slice(head, next < 0 ? undefined : next)
+  }
 
-  it.each(FILES)('%s: каждая мутация состава прикрыта стражем', (file) => {
-    const src = read(file)
-    const mutations = (
-      src.match(/(insert|update|delete)\((companyMembers|projectMembers|companyInvites)\)/g) ?? []
-    ).length
-    const guards = (src.match(/MEMBERS_LOCKED/g) ?? []).length
-
-    // Мутаций может быть больше, чем стражей: под одним стражем стоит ручка
-    // с несколькими запросами, а вступление по приглашению и выход из
-    // компании — действия самого человека, а не правка состава админом.
-    expect(guards).toBeGreaterThan(0)
-    expect(mutations).toBeGreaterThan(0)
-  })
-
-  it('ручки правки состава в projects.ts закрыты все до одной', () => {
+  it('состав проекта закрыт: добавление и удаление', () => {
     const src = read('projects.ts')
-    // Разбиваем файл по объявлениям ручек и смотрим тело каждой, которая
-    // трогает участников.
-    const chunks = src.split(/^projectsRoute\./m)
-    const editing = chunks.filter(
-      (ch) =>
-        /^(post|patch|delete)\(/.test(ch) &&
-        /\/:projectId\/members/.test(ch) &&
-        /(insert|update|delete)\(projectMembers\)/.test(ch),
-    )
-    expect(editing.length).toBeGreaterThanOrEqual(4)
-    for (const ch of editing) {
-      const path = ch.match(/'([^']*\/members[^']*)'/)?.[1] ?? ch.slice(0, 40)
-      expect(ch, `ручка ${path} без запрета`).toMatch(/MEMBERS_LOCKED/)
+    for (const [verb, path] of [
+      ['post', '/:projectId/members'],
+      ['delete', '/:projectId/members/:userId'],
+    ] as const) {
+      const ch = endpoint(src, 'projectsRoute', verb, path)
+      expect(ch, `ручка ${verb} ${path} не найдена`).toBeTruthy()
+      expect(ch, `ручка ${verb} ${path} без запрета`).toMatch(/MEMBERS_LOCKED/)
     }
   })
 
-  it('мост ИИ закрыт тоже — иначе ИИ заведёт людей, которых нет снаружи', () => {
+  it('роли, права и профиль НЕ закрыты — иначе некому назначить админа', () => {
+    const src = read('projects.ts')
+    for (const path of [
+      '/:projectId/members/:userId/role',
+      '/:projectId/members/:userId/permissions',
+      '/:projectId/members/:userId/profile',
+    ]) {
+      const ch = endpoint(src, 'projectsRoute', 'patch', path)
+      expect(ch, `ручка ${path} не найдена`).toBeTruthy()
+      expect(ch, `ручка ${path} заперта, хотя это НАША настройка`).not.toMatch(/MEMBERS_LOCKED/)
+    }
+  })
+
+  it('в компании: удаление и приглашения закрыты, смена роли открыта', () => {
+    const src = read('companies.ts')
+    expect(endpoint(src, 'companiesRoute', 'delete', '/:companyId/members/:userId')).toMatch(/MEMBERS_LOCKED/)
+
+    // PATCH того же пути, что и DELETE, — это смена роли в компании.
+    const role = endpoint(src, 'companiesRoute', 'patch', '/:companyId/members/:userId')
+    expect(role, 'ручка смены роли не найдена').toBeTruthy()
+    expect(role).not.toMatch(/MEMBERS_LOCKED/)
+  })
+
+  it('мост ИИ: добавление закрыто, смена роли открыта', () => {
     const src = read('bridge.ts')
-    const chunks = src.split(/^bridgeRoute\./m)
-    // Только ручки состава: POST /projects тоже пишет в projectMembers, но
-    // делает автора владельцем ЕГО ЖЕ нового проекта — это не правка чужой
-    // команды. Само создание проекта закрывает projectsViaApiOnly.
-    const editing = chunks.filter(
-      (ch) => /^(post|patch|delete)\(\s*'\/members/.test(ch) && /(insert|update)\(projectMembers\)/.test(ch),
-    )
-    expect(editing.length).toBeGreaterThan(0)
-    for (const ch of editing) expect(ch).toMatch(/MEMBERS_LOCKED/)
+    expect(endpoint(src, 'bridgeRoute', 'post', '/members')).toMatch(/MEMBERS_LOCKED/)
+    expect(endpoint(src, 'bridgeRoute', 'patch', '/members/:userId')).not.toMatch(/MEMBERS_LOCKED/)
   })
 
   // Дыра, найденная этими же тестами: настройка «проекты только через API»
   // существовала, но мост её не проверял — ассистент создавал проекты в обход.
   it('мост не создаёт проекты в обход настройки', () => {
     const src = read('bridge.ts')
-    const create = src.split(/^bridgeRoute\./m).find((ch) => /^post\(\s*'\/projects'/.test(ch))
-    expect(create).toBeDefined()
-    expect(create).toMatch(/projectsViaApiOnly/)
+    expect(endpoint(src, 'bridgeRoute', 'post', '/projects')).toMatch(/projectsViaApiOnly/)
   })
 })
