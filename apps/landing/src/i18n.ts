@@ -35,6 +35,9 @@ type Dict = {
       assignee: string
       due: string
       status: string
+      agentLabel: string
+      agentWork: string
+      agentDone: string
     }
     /** Полоса под кнопками: экспорт, открытый код, бэкапы */
     trust: string[]
@@ -199,6 +202,9 @@ export const dict: Record<LocaleCode, Dict> = {
         assignee: 'Dana',
         due: 'Friday',
         status: 'To do',
+        agentLabel: 'Claude Code · on the developer’s machine',
+        agentWork: 'picks up TASK-42, fixes the Safari login',
+        agentDone: 'Marked Done — the team sees it in the chat',
       },
       trust: ['Open source', 'Free', 'Reliable: backups, export & import'],
     },
@@ -338,11 +344,11 @@ export const dict: Record<LocaleCode, Dict> = {
     behind: {
       tag: 'Behind this project',
       title: 'Who is behind Chatick',
-      subtitle: 'A client who pays for it, a developer who writes it, and a product both of them use.',
+      subtitle: 'A partner who backs it, a developer who writes it, and a product both of them use.',
       sponsor: {
-        role: 'Client and sponsor',
+        role: 'Partner and sponsor',
         motto: 'Building people, creating entrepreneurs',
-        text: 'StartPlan is an Israeli startup consultancy with more than ten years behind it. Its founders have helped raise hundreds of millions of shekels for the companies they backed. Chatick is built for them, and paid for by them.',
+        text: 'An Israeli startup consultancy with more than ten years behind it. Its founders have helped raise hundreds of millions of shekels for the companies they backed. They back Chatick and use it in their own work.',
       },
       anyapp: {
         role: 'Development studio',
@@ -439,6 +445,9 @@ export const dict: Record<LocaleCode, Dict> = {
         assignee: 'Дана',
         due: 'Пятница',
         status: 'К выполнению',
+        agentLabel: 'Claude Code · на машине разработчика',
+        agentWork: 'берёт TASK-42, чинит вход в Safari',
+        agentDone: 'Отметил «Готово» — команда видит это в чате',
       },
       trust: ['Открытый код', 'Бесплатно', 'Надёжно: бэкапы, экспорт и импорт'],
     },
@@ -578,11 +587,11 @@ export const dict: Record<LocaleCode, Dict> = {
     behind: {
       tag: 'Кто за этим стоит',
       title: 'Кто стоит за Chatick',
-      subtitle: 'Заказчик, который его оплачивает, разработчик, который его пишет, и продукт, которым пользуются оба.',
+      subtitle: 'Партнёр, который его поддерживает, разработчик, который его пишет, и продукт, которым пользуются оба.',
       sponsor: {
-        role: 'Заказчик и спонсор',
+        role: 'Партнёр и спонсор',
         motto: 'Растим людей, создаём предпринимателей',
-        text: 'StartPlan — израильская консалтинговая компания для стартапов, за плечами больше десяти лет. Её основатели помогли привлечь сотни миллионов шекелей компаниям, которые поддерживали. Chatick делается для них и на их деньги.',
+        text: 'Израильская консалтинговая компания для стартапов, за плечами больше десяти лет. Её основатели помогли привлечь сотни миллионов шекелей компаниям, которые поддерживали. Поддерживают Chatick и работают в нём сами.',
       },
       anyapp: {
         role: 'Студия разработки',
@@ -679,6 +688,9 @@ export const dict: Record<LocaleCode, Dict> = {
         assignee: 'דנה',
         due: 'יום שישי',
         status: 'לביצוע',
+        agentLabel: 'Claude Code · על המחשב של המפתח',
+        agentWork: 'לוקח את TASK-42, מתקן את הכניסה ב-Safari',
+        agentDone: 'סימן «בוצע» — הצוות רואה את זה בצ׳אט',
       },
       trust: ['קוד פתוח', 'חינם', 'אמין: גיבויים, ייצוא ויבוא'],
     },
@@ -818,11 +830,11 @@ export const dict: Record<LocaleCode, Dict> = {
     behind: {
       tag: 'מי עומד מאחורי זה',
       title: 'מי עומד מאחורי Chatick',
-      subtitle: 'לקוח שמממן, מפתח שכותב, ומוצר ששניהם עובדים בו.',
+      subtitle: 'שותף שתומך, מפתח שכותב, ומוצר ששניהם עובדים בו.',
       sponsor: {
-        role: 'לקוח ונותן חסות',
+        role: 'שותף ונותן חסות',
         motto: 'בונים אנשים, יוצרים יזמים',
-        text: 'StartPlan היא חברת ייעוץ ישראלית לסטארטאפים עם יותר מעשר שנות ניסיון. מייסדיה סייעו לגייס מאות מיליוני שקלים עבור החברות שליוו. Chatick נבנה עבורם ובמימונם.',
+        text: 'חברת ייעוץ ישראלית לסטארטאפים עם יותר מעשר שנות ניסיון. מייסדיה סייעו לגייס מאות מיליוני שקלים עבור החברות שליוו. הם תומכים ב-Chatick ועובדים בו בעצמם.',
       },
       anyapp: {
         role: 'סטודיו פיתוח',

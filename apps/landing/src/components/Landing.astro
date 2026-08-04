@@ -231,11 +231,112 @@ const CHART_STATUSES = [
               <span class="demo-chip demo-chip-status">{t.hero.demo.status}</span>
             </div>
           </div>
+
+          {/* Третий шаг — то, ради чего всё и затевалось: ассистент у
+              разработчика видит задачу сам, делает работу и закрывает её. Без
+              него сцена показывала половину истории — «разговор стал задачей»,
+              — а задачи умеет заводить кто угодно. */}
+          <div class="demo-arrow demo-arrow-2">
+            <svg viewBox="0 0 24 24" width="18" height="18" fill="none" aria-hidden="true">
+              <path d="M12 4v16m0 0-6-6m6 6 6-6" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"></path>
+            </svg>
+          </div>
+
+          <div class="demo-agent">
+            <span class="demo-label">{t.hero.demo.agentLabel}</span>
+            <p class="demo-agent-line"><span class="demo-agent-cmd">▸</span> {t.hero.demo.agentWork}</p>
+            <p class="demo-agent-done">
+              <svg viewBox="0 0 24 24" width="15" height="15" fill="none" aria-hidden="true">
+                <path d="m4.5 12.5 5 5 10-11" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"></path>
+              </svg>
+              {t.hero.demo.agentDone}
+            </p>
+          </div>
         </div>
       </figure>
     </div>
   </section>
 
+  <section class="section" id="download">
+    <div class="container">
+      <h2>{t.download.title}</h2>
+      <p class="section-sub">{t.download.subtitle}</p>
+      {/* Браузер — путь без единого предупреждения, поэтому он первый и
+          единственный крупной кнопкой. Сборки без подписи предлагать наравне
+          нечестно: человек упрётся в окно SmartScreen, не понимая почему. */}
+      {/* Четыре плитки в ряд: веб и три сборки. Раньше веб стоял отдельно, а
+          десктоп прятался внутри блока про отсутствие подписи — читателю было
+          не разобрать, что вообще есть. Плитки без теней и рамок, разделены
+          только линиями: так они читаются как один выбор, а не четыре виджета. */}
+      <div class="dl-grid">
+        <a class="dl-tile dl-tile-web" href={appUrl}>
+          <span class="dl-tile-ic">
+            <svg viewBox="0 0 24 24" width="22" height="22" fill="none" aria-hidden="true">
+              <circle cx="12" cy="12" r="9" stroke="currentColor" stroke-width="1.8" />
+              <path d="M3 12h18M12 3c2.5 2.6 2.5 15.4 0 18M12 3c-2.5 2.6-2.5 15.4 0 18" stroke="currentColor" stroke-width="1.8" />
+            </svg>
+          </span>
+          <span class="dl-tile-name">{t.download.web}</span>
+          <span class="dl-tile-note">{t.download.webNote}</span>
+        </a>
+        {
+          DOWNLOADS.map((d) => (
+            <a
+              class:list={['dl-tile', { 'dl-tile-soon': !d.href }]}
+              href={d.href || '#download'}
+              aria-disabled={!d.href}
+              download={d.href ? true : undefined}
+            >
+              <span class="dl-tile-ic" set:html={d.icon === 'windows' ? WIN_ICON : APPLE_ICON} />
+              <span class="dl-tile-name">{t.download[d.key]}</span>
+              <span class="dl-tile-note">{d.arch || t.download.desktopNote}</span>
+            </a>
+          ))
+        }
+      </div>
+
+      <p class="dl-warn">
+        <svg viewBox="0 0 24 24" width="16" height="16" fill="none" aria-hidden="true">
+          <path d="M12 9v4.5m0 3.2v.1M10.3 3.9 2.6 17.2A2 2 0 0 0 4.3 20h15.4a2 2 0 0 0 1.7-2.8L13.7 3.9a2 2 0 0 0-3.4 0Z" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" />
+        </svg>
+        {t.beta.warn}
+      </p>
+
+      {/* Десктоп — отдельно и с оговоркой. Сказать про отсутствие подписи
+          самим, до установки, лучше, чем позволить Windows сказать это за нас
+          на языке «неизвестный издатель». */}
+      <div class="unsigned">
+        <div class="unsigned-head">
+          <svg viewBox="0 0 24 24" width="17" height="17" fill="none" aria-hidden="true">
+            <path d="M12 9v4.5m0 3.2v.1M10.3 3.9 2.6 17.2A2 2 0 0 0 4.3 20h15.4a2 2 0 0 0 1.7-2.8L13.7 3.9a2 2 0 0 0-3.4 0Z" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" />
+          </svg>
+          <span>{t.download.unsignedTitle}</span>
+        </div>
+        <p class="unsigned-text">{t.download.unsignedText}</p>
+        <div class="unsigned-actions">
+          <button class="how-btn" id="howBtn" type="button" aria-expanded="false">
+            <span class="how-mark">?</span>
+            {t.download.howTo}
+          </button>
+        </div>
+        <div class="how-pop" id="howPop" hidden>
+          <ol class="how-steps">
+            <li>{t.download.step1}</li>
+            <li>{t.download.step2}</li>
+            <li>{t.download.step3}</li>
+          </ol>
+          <p class="how-source">
+            {t.download.sourceHint}{' '}
+            <a href="https://github.com/unbywyd/chatick" target="_blank" rel="noopener">github.com/unbywyd/chatick</a>
+          </p>
+          <button class="how-close" id="howClose" type="button">{t.download.howToClose}</button>
+        </div>
+      </div>
+      <p class="note">{t.download.mobileSoon}</p>
+    </div>
+  </section>
+
+  <!-- КАК ЭТО РАБОТАЕТ -->
   <!-- PAIN -->
   <section class="section">
     <div class="container">
@@ -369,86 +470,6 @@ const CHART_STATUSES = [
 
 
   <!-- HOW -->
-  <section class="section" id="download">
-    <div class="container">
-      <h2>{t.download.title}</h2>
-      <p class="section-sub">{t.download.subtitle}</p>
-      {/* Браузер — путь без единого предупреждения, поэтому он первый и
-          единственный крупной кнопкой. Сборки без подписи предлагать наравне
-          нечестно: человек упрётся в окно SmartScreen, не понимая почему. */}
-      {/* Четыре плитки в ряд: веб и три сборки. Раньше веб стоял отдельно, а
-          десктоп прятался внутри блока про отсутствие подписи — читателю было
-          не разобрать, что вообще есть. Плитки без теней и рамок, разделены
-          только линиями: так они читаются как один выбор, а не четыре виджета. */}
-      <div class="dl-grid">
-        <a class="dl-tile dl-tile-web" href={appUrl}>
-          <span class="dl-tile-ic">
-            <svg viewBox="0 0 24 24" width="22" height="22" fill="none" aria-hidden="true">
-              <circle cx="12" cy="12" r="9" stroke="currentColor" stroke-width="1.8" />
-              <path d="M3 12h18M12 3c2.5 2.6 2.5 15.4 0 18M12 3c-2.5 2.6-2.5 15.4 0 18" stroke="currentColor" stroke-width="1.8" />
-            </svg>
-          </span>
-          <span class="dl-tile-name">{t.download.web}</span>
-          <span class="dl-tile-note">{t.download.webNote}</span>
-        </a>
-        {
-          DOWNLOADS.map((d) => (
-            <a
-              class:list={['dl-tile', { 'dl-tile-soon': !d.href }]}
-              href={d.href || '#download'}
-              aria-disabled={!d.href}
-              download={d.href ? true : undefined}
-            >
-              <span class="dl-tile-ic" set:html={d.icon === 'windows' ? WIN_ICON : APPLE_ICON} />
-              <span class="dl-tile-name">{t.download[d.key]}</span>
-              <span class="dl-tile-note">{d.arch || t.download.desktopNote}</span>
-            </a>
-          ))
-        }
-      </div>
-
-      <p class="dl-warn">
-        <svg viewBox="0 0 24 24" width="16" height="16" fill="none" aria-hidden="true">
-          <path d="M12 9v4.5m0 3.2v.1M10.3 3.9 2.6 17.2A2 2 0 0 0 4.3 20h15.4a2 2 0 0 0 1.7-2.8L13.7 3.9a2 2 0 0 0-3.4 0Z" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" />
-        </svg>
-        {t.beta.warn}
-      </p>
-
-      {/* Десктоп — отдельно и с оговоркой. Сказать про отсутствие подписи
-          самим, до установки, лучше, чем позволить Windows сказать это за нас
-          на языке «неизвестный издатель». */}
-      <div class="unsigned">
-        <div class="unsigned-head">
-          <svg viewBox="0 0 24 24" width="17" height="17" fill="none" aria-hidden="true">
-            <path d="M12 9v4.5m0 3.2v.1M10.3 3.9 2.6 17.2A2 2 0 0 0 4.3 20h15.4a2 2 0 0 0 1.7-2.8L13.7 3.9a2 2 0 0 0-3.4 0Z" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" />
-          </svg>
-          <span>{t.download.unsignedTitle}</span>
-        </div>
-        <p class="unsigned-text">{t.download.unsignedText}</p>
-        <div class="unsigned-actions">
-          <button class="how-btn" id="howBtn" type="button" aria-expanded="false">
-            <span class="how-mark">?</span>
-            {t.download.howTo}
-          </button>
-        </div>
-        <div class="how-pop" id="howPop" hidden>
-          <ol class="how-steps">
-            <li>{t.download.step1}</li>
-            <li>{t.download.step2}</li>
-            <li>{t.download.step3}</li>
-          </ol>
-          <p class="how-source">
-            {t.download.sourceHint}{' '}
-            <a href="https://github.com/unbywyd/chatick" target="_blank" rel="noopener">github.com/unbywyd/chatick</a>
-          </p>
-          <button class="how-close" id="howClose" type="button">{t.download.howToClose}</button>
-        </div>
-      </div>
-      <p class="note">{t.download.mobileSoon}</p>
-    </div>
-  </section>
-
-  <!-- КАК ЭТО РАБОТАЕТ -->
   <section class="section section-soft">
     <div class="container">
       <h2>{t.how.title}</h2>
@@ -999,6 +1020,33 @@ const CHART_STATUSES = [
   }
   /* Плитки скачивания: без теней и скруглений, разделены линиями — четыре
      равных варианта одного действия, а не четыре карточки-виджета. */
+  /* Шаг ассистента: терминальный вид — это и есть его среда, и читателю
+     сразу понятно, что работа идёт у него на машине, а не у нас. */
+  .demo-agent {
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    padding: 14px 16px;
+    background: rgba(0, 0, 0, 0.35);
+  }
+  .demo-agent-line {
+    margin-top: 8px;
+    font-family: var(--font-mono);
+    font-size: 0.82rem;
+    color: var(--fg-muted);
+  }
+  .demo-agent-cmd {
+    color: var(--lime);
+  }
+  /* «Готово» — единственное место в сцене, где лайм означает результат. */
+  .demo-agent-done {
+    margin-top: 10px;
+    display: flex;
+    align-items: center;
+    gap: 7px;
+    font-size: 0.84rem;
+    color: var(--lime);
+  }
+
   .dl-grid {
     margin-top: 34px;
     display: grid;
@@ -2153,6 +2201,8 @@ const CHART_STATUSES = [
   .hero-demo.is-live .demo-msg,
   .hero-demo.is-live .demo-arrow,
   .hero-demo.is-live .demo-task,
+  .hero-demo.is-live .demo-agent,
+  .hero-demo.is-live .demo-agent-done,
   .hero-demo.is-live .demo-meta .demo-chip {
     opacity: 0;
   }
@@ -2172,6 +2222,17 @@ const CHART_STATUSES = [
   }
   .hero-demo.is-live.is-playing .demo-meta .demo-chip:nth-child(2) {
     animation: demo-chip 0.34s ease-out 1.95s both;
+  }
+  /* Ассистент вступает последним — и «Готово» отдельно от него: это конец
+     истории, ради которого показаны первые два шага. */
+  .hero-demo.is-live.is-playing .demo-agent {
+    animation: demo-rise 0.5s cubic-bezier(0.2, 0.7, 0.3, 1) 2.5s both;
+  }
+  .hero-demo.is-live.is-playing .demo-agent-done {
+    animation: demo-chip 0.4s ease-out 3.2s both;
+  }
+  .hero-demo.is-live.is-playing .demo-arrow-2 {
+    animation: demo-in 0.4s ease-out 2.25s both;
   }
   .hero-demo.is-live.is-playing .demo-meta .demo-chip:nth-child(3) {
     animation: demo-chip 0.34s ease-out 2.15s both;
