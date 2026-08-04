@@ -1,8 +1,9 @@
 import { StrictMode } from 'react'
 import { createRoot } from 'react-dom/client'
 import { HashRouter, Routes, Route, Navigate, useParams } from 'react-router-dom'
-import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
+import { QueryClient, QueryClientProvider, useQuery } from '@tanstack/react-query'
 import { Toaster } from 'sonner'
+import { api } from '@/lib/api'
 import './index.css'
 import './i18n'
 import { useDesktopSync, usePresence } from './hooks/useDesktop'
@@ -63,14 +64,25 @@ function ResourcesPage() {
 }
 function TeamPage() {
   const { project } = useProjectCtx()
-  const { id } = useParams()
+  const { id, companyId } = useParams()
+
+  // Админ компании распоряжается любым её проектом, даже не состоя в нём —
+  // так решает и сервер. Без этого он видел список без единой кнопки, имея
+  // при этом все права.
+  const companies = useQuery({
+    queryKey: ['companies'],
+    queryFn: () => api<{ companies: { id: string; myRole: string }[] }>('/api/v1/companies'),
+  })
+  const isCompanyAdmin = companies.data?.companies.find((c) => c.id === companyId)?.myRole === 'admin'
+
   return id ? (
     <ProjectTeamTab
       projectId={id}
       companyId={project?.companyId}
       // Состав ведётся во внешней системе — правка закрыта всем (SPEC §8.42).
       canEdit={
-        (project?.myRole === 'owner' || project?.myRole === 'admin') && !project?.membersViaApiOnly
+        (project?.myRole === 'owner' || project?.myRole === 'admin' || isCompanyAdmin) &&
+        !project?.membersViaApiOnly
       }
       managedExternally={Boolean(project?.membersViaApiOnly)}
     />
