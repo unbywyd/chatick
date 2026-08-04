@@ -55,6 +55,7 @@ type Dict = {
     points: string[]
     cta: string
     ctaAi: string
+    ctaAiNote: string
     /** Тексты самой страницы /integration */
     page: {
       lead: string
@@ -260,6 +261,7 @@ export const dict: Record<LocaleCode, Dict> = {
       ],
       cta: 'How the integration works',
       ctaAi: 'Give this to your AI',
+      ctaAiNote: 'Copies the machine-readable guide. If the clipboard fails, it lives at ',
       page: {
         lead: 'This page is for a company that already has its own system and does not want to give it up. Below: what lives where, how master keys work, and how to connect the two.',
         whoTitle: 'Who owns what',
@@ -513,6 +515,7 @@ export const dict: Record<LocaleCode, Dict> = {
       ],
       cta: 'Как устроена интеграция',
       ctaAi: 'Отдайте это своему ИИ',
+      ctaAiNote: 'Скопирует машинную инструкцию. Если буфер не сработал — она лежит по адресу ',
       page: {
         lead: 'Эта страница — для компании, у которой уже есть своя система и которая не хочет от неё отказываться. Ниже: что где живёт, как работают мастер-ключи и как связать одно с другим.',
         whoTitle: 'Что где живёт',
@@ -766,6 +769,7 @@ export const dict: Record<LocaleCode, Dict> = {
       ],
       cta: 'איך האינטגרציה עובדת',
       ctaAi: 'תנו את זה ל-AI שלכם',
+      ctaAiNote: 'מעתיק את המדריך המכונה. אם ההעתקה לא עבדה — הוא נמצא בכתובת ',
       page: {
         lead: 'העמוד הזה מיועד לחברה שכבר יש לה מערכת משלה ולא רוצה לוותר עליה. כאן: מה חי איפה, איך עובדים מפתחות ראשיים, ואיך מחברים בין השתיים.',
         whoTitle: 'מה חי איפה',

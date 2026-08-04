@@ -192,71 +192,128 @@ const CHART_STATUSES = [
 
       <figure class="hero-demo">
         <figcaption class="sr-only">{t.hero.demo.alt}</figcaption>
-        <div class="demo-frame" aria-hidden="true">
-          <div class="demo-chat">
-            <span class="demo-label">{t.hero.demo.chatLabel}</span>
-            <div class="demo-msg">
-              <span class="demo-ava">{t.hero.demo.author.slice(0, 1)}</span>
-              <div class="demo-bubble">
-                <b>{t.hero.demo.author}</b>
-                <p>{t.hero.demo.message}</p>
-              </div>
-            </div>
-          </div>
-
-          {/* Стрелка между репликой и задачей — это и есть «превращается» */}
-          <div class="demo-arrow">
-            <svg viewBox="0 0 24 24" width="20" height="20" fill="none">
-              <path d="M12 4v16m0 0-6-6m6 6 6-6" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"></path>
-            </svg>
-          </div>
-
-          <div class="demo-task">
-            <span class="demo-label demo-label-task">{t.hero.demo.taskLabel}</span>
-            <p class="demo-task-title">{t.hero.demo.taskTitle}</p>
-            {/* Исполнитель и срок появляются последними: именно они превращают
-                разговор в работу, за которую кто-то отвечает */}
-            <div class="demo-meta">
-              <span class="demo-chip demo-chip-who">
-                <span class="demo-ava demo-ava-sm">{t.hero.demo.assignee.slice(0, 1)}</span>
-                {t.hero.demo.assignee}
-              </span>
-              <span class="demo-chip">
-                <svg viewBox="0 0 24 24" width="14" height="14" fill="none">
-                  <rect x="3.5" y="5" width="17" height="15.5" rx="2.5" stroke="currentColor" stroke-width="1.8"></rect>
-                  <path d="M3.5 9.5h17M8 3.5V6m8-2.5V6" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"></path>
-                </svg>
-                {t.hero.demo.due}
-              </span>
-              <span class="demo-chip demo-chip-status">{t.hero.demo.status}</span>
-            </div>
-          </div>
-
-          {/* Третий шаг — то, ради чего всё и затевалось: ассистент у
-              разработчика видит задачу сам, делает работу и закрывает её. Без
-              него сцена показывала половину истории — «разговор стал задачей»,
-              — а задачи умеет заводить кто угодно. */}
-          <div class="demo-arrow demo-arrow-2">
-            <svg viewBox="0 0 24 24" width="18" height="18" fill="none" aria-hidden="true">
-              <path d="M12 4v16m0 0-6-6m6 6 6-6" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"></path>
-            </svg>
-          </div>
-
-          <div class="demo-agent">
-            <span class="demo-label">{t.hero.demo.agentLabel}</span>
-            <p class="demo-agent-line"><span class="demo-agent-cmd">▸</span> {t.hero.demo.agentWork}</p>
-            <p class="demo-agent-done">
-              <svg viewBox="0 0 24 24" width="15" height="15" fill="none" aria-hidden="true">
-                <path d="m4.5 12.5 5 5 10-11" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"></path>
-              </svg>
-              {t.hero.demo.agentDone}
-            </p>
-          </div>
-        </div>
+        {/* Одним SVG с жёсткой системой координат: DOM-вёрстка этой сцены
+            разъезжалась на разных ширинах и локалях, а здесь геометрия задана
+            числами, и плыть ей некуда. */}
+        <svg class="demo-svg" viewBox="0 0 460 520" aria-hidden="true">
+          <g class="ds-1">
+            <rect x="1" y="1" width="458" height="112" rx="14" class="ds-card"></rect>
+            <text x="24" y="32" class="ds-label">{t.hero.demo.chatLabel}</text>
+            <circle cx="38" cy="72" r="14" class="ds-ava"></circle>
+            <text x="38" y="77" class="ds-ava-t" text-anchor="middle">{t.hero.demo.author.slice(0, 1)}</text>
+            <text x="64" y="64" class="ds-name">{t.hero.demo.author}</text>
+            <text x="64" y="86" class="ds-msg">{t.hero.demo.message}</text>
+          </g>
+          <g class="ds-arr ds-arr-1">
+            <path d="M230 126v26m0 0-7-8m7 8 7-8"></path>
+          </g>
+          <g class="ds-2">
+            <rect x="1" y="170" width="458" height="126" rx="14" class="ds-card"></rect>
+            <text x="24" y="201" class="ds-label ds-label-task">{t.hero.demo.taskLabel}</text>
+            <text x="24" y="234" class="ds-title">{t.hero.demo.taskTitle}</text>
+            <g class="ds-chips">
+              <circle cx="35" cy="266" r="11" class="ds-ava"></circle>
+              <text x="35" y="270" class="ds-ava-t" text-anchor="middle">{t.hero.demo.assignee.slice(0, 1)}</text>
+              <text x="54" y="271" class="ds-chip">{t.hero.demo.assignee}  ·  {t.hero.demo.due}  ·  {t.hero.demo.status}</text>
+            </g>
+          </g>
+          <g class="ds-arr ds-arr-2">
+            <path d="M230 310v26m0 0-7-8m7 8 7-8"></path>
+          </g>
+          <g class="ds-3">
+            <rect x="1" y="354" width="458" height="142" rx="14" class="ds-card ds-term"></rect>
+            <text x="24" y="386" class="ds-label">{t.hero.demo.agentLabel}</text>
+            <text x="24" y="420" class="ds-code"><tspan class="ds-cmd">▸ </tspan>{t.hero.demo.agentWork}</text>
+            <g class="ds-done">
+              <path d="m26 452 6 6 12-13" class="ds-check"></path>
+              <text x="54" y="461" class="ds-done-t">{t.hero.demo.agentDone}</text>
+            </g>
+          </g>
+        </svg>
       </figure>
     </div>
   </section>
 
+  <section class="section" id="download">
+    <div class="container">
+      <h2>{t.download.title}</h2>
+      <p class="section-sub">{t.download.subtitle}</p>
+      {/* Браузер — путь без единого предупреждения, поэтому он первый и
+          единственный крупной кнопкой. Сборки без подписи предлагать наравне
+          нечестно: человек упрётся в окно SmartScreen, не понимая почему. */}
+      {/* Четыре плитки в ряд: веб и три сборки. Раньше веб стоял отдельно, а
+          десктоп прятался внутри блока про отсутствие подписи — читателю было
+          не разобрать, что вообще есть. Плитки без теней и рамок, разделены
+          только линиями: так они читаются как один выбор, а не четыре виджета. */}
+      <div class="dl-grid">
+        <a class="dl-tile dl-tile-web" href={appUrl}>
+          <span class="dl-tile-ic">
+            <svg viewBox="0 0 24 24" width="22" height="22" fill="none" aria-hidden="true">
+              <circle cx="12" cy="12" r="9" stroke="currentColor" stroke-width="1.8" />
+              <path d="M3 12h18M12 3c2.5 2.6 2.5 15.4 0 18M12 3c-2.5 2.6-2.5 15.4 0 18" stroke="currentColor" stroke-width="1.8" />
+            </svg>
+          </span>
+          <span class="dl-tile-name">{t.download.web}</span>
+          <span class="dl-tile-note">{t.download.webNote}</span>
+        </a>
+        {
+          DOWNLOADS.map((d) => (
+            <a
+              class:list={['dl-tile', { 'dl-tile-soon': !d.href }]}
+              href={d.href || '#download'}
+              aria-disabled={!d.href}
+              download={d.href ? true : undefined}
+            >
+              <span class="dl-tile-ic" set:html={d.icon === 'windows' ? WIN_ICON : APPLE_ICON} />
+              <span class="dl-tile-name">{t.download[d.key]}</span>
+              <span class="dl-tile-note">{d.arch || t.download.desktopNote}</span>
+            </a>
+          ))
+        }
+      </div>
+
+      <p class="dl-warn">
+        <svg viewBox="0 0 24 24" width="16" height="16" fill="none" aria-hidden="true">
+          <path d="M12 9v4.5m0 3.2v.1M10.3 3.9 2.6 17.2A2 2 0 0 0 4.3 20h15.4a2 2 0 0 0 1.7-2.8L13.7 3.9a2 2 0 0 0-3.4 0Z" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" />
+        </svg>
+        {t.beta.warn}
+      </p>
+
+      {/* Десктоп — отдельно и с оговоркой. Сказать про отсутствие подписи
+          самим, до установки, лучше, чем позволить Windows сказать это за нас
+          на языке «неизвестный издатель». */}
+      <div class="unsigned">
+        <div class="unsigned-head">
+          <svg viewBox="0 0 24 24" width="17" height="17" fill="none" aria-hidden="true">
+            <path d="M12 9v4.5m0 3.2v.1M10.3 3.9 2.6 17.2A2 2 0 0 0 4.3 20h15.4a2 2 0 0 0 1.7-2.8L13.7 3.9a2 2 0 0 0-3.4 0Z" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" />
+          </svg>
+          <span>{t.download.unsignedTitle}</span>
+        </div>
+        <p class="unsigned-text">{t.download.unsignedText}</p>
+        <div class="unsigned-actions">
+          <button class="how-btn" id="howBtn" type="button" aria-expanded="false">
+            <span class="how-mark">?</span>
+            {t.download.howTo}
+          </button>
+        </div>
+        <div class="how-pop" id="howPop" hidden>
+          <ol class="how-steps">
+            <li>{t.download.step1}</li>
+            <li>{t.download.step2}</li>
+            <li>{t.download.step3}</li>
+          </ol>
+          <p class="how-source">
+            {t.download.sourceHint}{' '}
+            <a href="https://github.com/unbywyd/chatick" target="_blank" rel="noopener">github.com/unbywyd/chatick</a>
+          </p>
+          <button class="how-close" id="howClose" type="button">{t.download.howToClose}</button>
+        </div>
+      </div>
+      <p class="note">{t.download.mobileSoon}</p>
+    </div>
+  </section>
+
+  <!-- КАК ЭТО РАБОТАЕТ -->
   <section class="section" id="integrate">
     <div class="container">
       <p class="tag">{t.integrate.tag}</p>
@@ -283,10 +340,21 @@ const CHART_STATUSES = [
         <a class="btn btn-brand" href={locale === 'en' ? '/integration' : `/${locale}/integration`}>
           {t.integrate.cta}
         </a>
-        <a class="btn btn-ghost" href="/integration.txt" target="_blank" rel="noopener">
-          {t.integrate.ctaAi}
-        </a>
+        {/* Копирование, а не переход: текст предназначен для вставки в чужой
+            чат с ассистентом, и открывать его человеку незачем. Ссылка рядом,
+            в подписи, — страховка для тех, у кого буфер не сработал. */}
+        <button class="btn btn-ghost doc-copy-lg" data-copy="/integration.txt" data-copied={t.ask.copied}>
+          <svg viewBox="0 0 24 24" width="17" height="17" fill="none" aria-hidden="true">
+            <rect x="9" y="9" width="12" height="12" rx="2.5" stroke="currentColor" stroke-width="2"></rect>
+            <path d="M5 15V5.5A2.5 2.5 0 0 1 7.5 3H15" stroke="currentColor" stroke-width="2" stroke-linecap="round"></path>
+          </svg>
+          <span>{t.integrate.ctaAi}</span>
+        </button>
       </div>
+      <p class="note integrate-note">
+        {t.integrate.ctaAiNote}
+        <a class="u-link" href="/integration.txt" target="_blank" rel="noopener">chatick.com/integration.txt</a>
+      </p>
     </div>
   </section>
 
@@ -554,86 +622,6 @@ const CHART_STATUSES = [
   </section>
 
   <!-- КОНТАКТЫ -->
-  <section class="section" id="download">
-    <div class="container">
-      <h2>{t.download.title}</h2>
-      <p class="section-sub">{t.download.subtitle}</p>
-      {/* Браузер — путь без единого предупреждения, поэтому он первый и
-          единственный крупной кнопкой. Сборки без подписи предлагать наравне
-          нечестно: человек упрётся в окно SmartScreen, не понимая почему. */}
-      {/* Четыре плитки в ряд: веб и три сборки. Раньше веб стоял отдельно, а
-          десктоп прятался внутри блока про отсутствие подписи — читателю было
-          не разобрать, что вообще есть. Плитки без теней и рамок, разделены
-          только линиями: так они читаются как один выбор, а не четыре виджета. */}
-      <div class="dl-grid">
-        <a class="dl-tile dl-tile-web" href={appUrl}>
-          <span class="dl-tile-ic">
-            <svg viewBox="0 0 24 24" width="22" height="22" fill="none" aria-hidden="true">
-              <circle cx="12" cy="12" r="9" stroke="currentColor" stroke-width="1.8" />
-              <path d="M3 12h18M12 3c2.5 2.6 2.5 15.4 0 18M12 3c-2.5 2.6-2.5 15.4 0 18" stroke="currentColor" stroke-width="1.8" />
-            </svg>
-          </span>
-          <span class="dl-tile-name">{t.download.web}</span>
-          <span class="dl-tile-note">{t.download.webNote}</span>
-        </a>
-        {
-          DOWNLOADS.map((d) => (
-            <a
-              class:list={['dl-tile', { 'dl-tile-soon': !d.href }]}
-              href={d.href || '#download'}
-              aria-disabled={!d.href}
-              download={d.href ? true : undefined}
-            >
-              <span class="dl-tile-ic" set:html={d.icon === 'windows' ? WIN_ICON : APPLE_ICON} />
-              <span class="dl-tile-name">{t.download[d.key]}</span>
-              <span class="dl-tile-note">{d.arch || t.download.desktopNote}</span>
-            </a>
-          ))
-        }
-      </div>
-
-      <p class="dl-warn">
-        <svg viewBox="0 0 24 24" width="16" height="16" fill="none" aria-hidden="true">
-          <path d="M12 9v4.5m0 3.2v.1M10.3 3.9 2.6 17.2A2 2 0 0 0 4.3 20h15.4a2 2 0 0 0 1.7-2.8L13.7 3.9a2 2 0 0 0-3.4 0Z" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" />
-        </svg>
-        {t.beta.warn}
-      </p>
-
-      {/* Десктоп — отдельно и с оговоркой. Сказать про отсутствие подписи
-          самим, до установки, лучше, чем позволить Windows сказать это за нас
-          на языке «неизвестный издатель». */}
-      <div class="unsigned">
-        <div class="unsigned-head">
-          <svg viewBox="0 0 24 24" width="17" height="17" fill="none" aria-hidden="true">
-            <path d="M12 9v4.5m0 3.2v.1M10.3 3.9 2.6 17.2A2 2 0 0 0 4.3 20h15.4a2 2 0 0 0 1.7-2.8L13.7 3.9a2 2 0 0 0-3.4 0Z" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" />
-          </svg>
-          <span>{t.download.unsignedTitle}</span>
-        </div>
-        <p class="unsigned-text">{t.download.unsignedText}</p>
-        <div class="unsigned-actions">
-          <button class="how-btn" id="howBtn" type="button" aria-expanded="false">
-            <span class="how-mark">?</span>
-            {t.download.howTo}
-          </button>
-        </div>
-        <div class="how-pop" id="howPop" hidden>
-          <ol class="how-steps">
-            <li>{t.download.step1}</li>
-            <li>{t.download.step2}</li>
-            <li>{t.download.step3}</li>
-          </ol>
-          <p class="how-source">
-            {t.download.sourceHint}{' '}
-            <a href="https://github.com/unbywyd/chatick" target="_blank" rel="noopener">github.com/unbywyd/chatick</a>
-          </p>
-          <button class="how-close" id="howClose" type="button">{t.download.howToClose}</button>
-        </div>
-      </div>
-      <p class="note">{t.download.mobileSoon}</p>
-    </div>
-  </section>
-
-  <!-- КАК ЭТО РАБОТАЕТ -->
   <section class="section" id="contact">
     <div class="container">
       <h2>{t.contact.title}</h2>
@@ -901,38 +889,32 @@ const CHART_STATUSES = [
     a.addEventListener('click', () => localStorage.setItem('chatick_lang', a.dataset.lang!)),
   )
 
-  // --- Оживший момент в шапке ---------------------------------------------
-  // Разметка сама по себе показывает готовую задачу. Скрипт только «отматывает
-  // назад» и проигрывает превращение — и лишь если человек не просил систему
-  // не двигать картинку. Так при reduced-motion и без JS остаётся результат,
-  // а не пустая рамка.
-  const demo = document.querySelector<HTMLElement>('.hero-demo')
-  if (demo && !window.matchMedia('(prefers-reduced-motion: reduce)').matches) {
-    demo.classList.add('is-live')
-    // Ждём появления в кадре: анимация, проигравшаяся до того, как на неё
-    // посмотрели, — это просто пустая рамка при первом взгляде.
-    const play = () => demo.classList.add('is-playing')
-    if ('IntersectionObserver' in window) {
-      const io = new IntersectionObserver(
-        (entries) => {
-          for (const e of entries) {
-            if (!e.isIntersecting) continue
-            play()
-            io.disconnect()
-          }
-        },
-        { threshold: 0.4 },
-      )
-      io.observe(demo)
-    } else {
-      play()
-    }
+  }
+
+  // Появление секций при прокрутке. Класс вешает скрипт, поэтому без JS и
+  // при reduced-motion страница просто стоит целиком — движение здесь
+  // приправа, а не условие чтения.
+  if (!window.matchMedia('(prefers-reduced-motion: reduce)').matches) {
+    const io = new IntersectionObserver(
+      (entries) => {
+        for (const e of entries) {
+          if (!e.isIntersecting) continue
+          e.target.classList.add('in-view')
+          io.unobserve(e.target)
+        }
+      },
+      { threshold: 0.12 },
+    )
+    document.querySelectorAll('.section .container').forEach((el) => {
+      el.classList.add('will-reveal')
+      io.observe(el)
+    })
   }
 
   // Копирование инструкций для ИИ. Файл тянем по клику, а не заранее:
   // большинство читателей этими кнопками не воспользуется, и грузить ради них
   // сотню килобайт текста на каждом открытии страницы незачем.
-  document.querySelectorAll<HTMLButtonElement>('.doc-copy').forEach((btn) => {
+  document.querySelectorAll<HTMLButtonElement>('.doc-copy, .doc-copy-lg').forEach((btn) => {
     const label = btn.querySelector('span')
     const original = label?.textContent ?? ''
     btn.addEventListener('click', async () => {
@@ -2125,224 +2107,113 @@ const CHART_STATUSES = [
     gap: 12px;
   }
 
-  /* --- Оживший момент в шапке ---------------------------------------------- */
-  /* Реплика в чате становится задачей. Одна анимация на всю страницу, поэтому
-     ей можно позволить быть заметной — всё остальное вокруг молчит.
-     Базовое состояние — конечное: без JS, при reduced-motion и в поисковой
-     выдаче человек видит готовую задачу, а не пустую рамку. Класс is-live
-     скрипт вешает сам, и только тогда шаги проигрываются с нуля. */
+  /* --- Оживший момент в шапке: одним SVG ----------------------------------- */
+  /* Геометрия сцены задана числами во viewBox — разъезжаться нечему. Шрифты и
+     цвета наследуются из токенов страницы, поэтому сцена живёт в той же
+     палитре, что и всё вокруг. */
   .hero-demo {
-    margin: 56px auto 0;
-    max-width: 560px;
-    text-align: start;
+    margin: 0;
   }
-  .demo-frame {
-    display: grid;
-    gap: 12px;
-    padding: 22px;
-    background: var(--bg-soft);
-    border: 1px solid var(--border);
-    border-radius: 18px;
-  }
-  .demo-label {
+  .demo-svg {
     display: block;
+    width: 100%;
+    height: auto;
+  }
+  .ds-card {
+    fill: var(--bg-soft);
+    stroke: var(--border);
+  }
+  .ds-term {
+    fill: rgba(0, 0, 0, 0.4);
+  }
+  .ds-label {
     font-family: var(--font-mono);
-    font-size: 0.68rem;
-    letter-spacing: 0.12em;
-    text-transform: uppercase;
-    color: var(--fg-muted);
-    margin-bottom: 10px;
-  }
-  .demo-msg {
-    display: flex;
-    gap: 10px;
-    align-items: flex-start;
-  }
-  /* Аватар кружком с буквой: настоящих лиц у нас нет, а стоковые читаются
-     как враньё быстрее, чем что угодно другое на странице. */
-  .demo-ava {
-    flex: none;
-    width: 30px;
-    height: 30px;
-    display: grid;
-    place-items: center;
-    border-radius: 50%;
-    background: rgba(255, 255, 255, 0.08);
-    color: var(--fg);
-    font-size: 0.78rem;
-    font-weight: 700;
-  }
-  .demo-ava-sm {
-    width: 20px;
-    height: 20px;
-    font-size: 0.62rem;
-  }
-  .demo-bubble {
-    background: rgba(255, 255, 255, 0.04);
-    border: 1px solid var(--border);
-    border-radius: 4px 14px 14px 14px;
-    padding: 10px 14px;
-  }
-  /* Уголок пузыря смотрит на аватар — в RTL аватар справа, значит и уголок */
-  [dir='rtl'] .demo-bubble {
-    border-radius: 14px 4px 14px 14px;
-  }
-  .demo-bubble b {
-    display: block;
-    font-size: 0.78rem;
-    color: var(--fg-muted);
+    font-size: 10.5px;
     font-weight: 600;
-  }
-  .demo-bubble p {
-    font-size: 0.95rem;
-    line-height: 1.5;
-  }
-  .demo-arrow {
-    display: grid;
-    place-items: center;
-    color: var(--lime);
-  }
-  .demo-task {
-    padding: 16px 18px;
-    background: var(--bg);
-    border: 1px solid var(--border);
-    border-radius: 14px;
-  }
-  .demo-label-task {
-    color: var(--lime);
-  }
-  .demo-task-title {
-    font-family: var(--font-mono);
-    font-size: 1rem;
-    font-weight: 700;
-    line-height: 1.4;
-  }
-  [dir='rtl'] .demo-task-title {
-    font-family: inherit;
-  }
-  .demo-meta {
-    display: flex;
-    flex-wrap: wrap;
-    gap: 8px;
-    margin-top: 14px;
-  }
-  .demo-chip {
-    display: inline-flex;
-    align-items: center;
-    gap: 6px;
-    padding: 5px 11px;
-    border: 1px solid var(--border);
-    border-radius: 999px;
-    background: rgba(255, 255, 255, 0.03);
-    color: var(--fg-muted);
-    font-size: 0.8rem;
-  }
-  .demo-chip-who {
-    padding-inline-start: 5px;
-    color: var(--fg);
-  }
-  .demo-chip-status {
-    font-family: var(--font-mono);
-    font-size: 0.72rem;
-    letter-spacing: 0.06em;
+    letter-spacing: 0.09em;
     text-transform: uppercase;
+    fill: var(--fg-muted);
   }
-  [dir='rtl'] .demo-chip-status {
-    font-family: inherit;
-    text-transform: none;
+  .ds-label-task {
+    fill: var(--lime);
   }
-
-  /* Шаги проигрываются, только если скрипт включил анимацию: is-live ставится
-     после проверки prefers-reduced-motion. Без него всё видно сразу. */
-  .hero-demo.is-live .demo-msg,
-  .hero-demo.is-live .demo-arrow,
-  .hero-demo.is-live .demo-task,
-  .hero-demo.is-live .demo-agent,
-  .hero-demo.is-live .demo-agent-done,
-  .hero-demo.is-live .demo-meta .demo-chip {
+  .ds-ava {
+    fill: rgba(212, 242, 40, 0.16);
+    stroke: rgba(212, 242, 40, 0.35);
+  }
+  .ds-ava-t {
+    font-size: 12px;
+    font-weight: 700;
+    fill: var(--lime);
+  }
+  .ds-name {
+    font-size: 13px;
+    font-weight: 600;
+    fill: var(--fg-muted);
+  }
+  .ds-msg {
+    font-size: 15px;
+    fill: var(--fg);
+  }
+  .ds-title {
+    font-size: 16px;
+    font-weight: 650;
+    fill: var(--fg);
+  }
+  .ds-chip {
+    font-size: 13.5px;
+    fill: var(--fg-muted);
+  }
+  .ds-arr path {
+    fill: none;
+    stroke: var(--lime);
+    stroke-width: 2.2;
+    stroke-linecap: round;
+    stroke-linejoin: round;
+  }
+  .ds-code {
+    font-family: var(--font-mono);
+    font-size: 13px;
+    fill: var(--fg-muted);
+  }
+  .ds-cmd {
+    fill: var(--lime);
+  }
+  .ds-check {
+    fill: none;
+    stroke: var(--lime);
+    stroke-width: 2.6;
+    stroke-linecap: round;
+    stroke-linejoin: round;
+  }
+  .ds-done-t {
+    font-size: 13.5px;
+    fill: var(--lime);
+  }
+  /* История разворачивается по шагам; без анимации (reduced-motion) видна
+     сразу целиком — финал важнее спецэффекта. */
+  .ds-1, .ds-arr-1, .ds-2, .ds-chips, .ds-arr-2, .ds-3, .ds-done {
     opacity: 0;
+    animation: ds-in 0.5s ease-out both;
   }
-  .hero-demo.is-live.is-playing .demo-msg {
-    animation: demo-in 0.45s ease-out 0.1s both;
+  .ds-1 { animation-delay: 0.2s; }
+  .ds-arr-1 { animation-delay: 0.9s; }
+  .ds-2 { animation-delay: 1.15s; }
+  .ds-chips { animation-delay: 1.8s; }
+  .ds-arr-2 { animation-delay: 2.35s; }
+  .ds-3 { animation-delay: 2.6s; }
+  .ds-done { animation-delay: 3.35s; }
+  @keyframes ds-in {
+    from { opacity: 0; transform: translateY(8px); }
+    to { opacity: 1; transform: none; }
   }
-  .hero-demo.is-live.is-playing .demo-arrow {
-    animation: demo-in 0.4s ease-out 0.85s both;
-  }
-  .hero-demo.is-live.is-playing .demo-task {
-    animation: demo-rise 0.5s cubic-bezier(0.2, 0.7, 0.3, 1) 1.15s both;
-  }
-  /* Исполнитель и срок — последними и по очереди: это тот самый момент,
-     ради которого вся анимация и затевалась. */
-  .hero-demo.is-live.is-playing .demo-meta .demo-chip:nth-child(1) {
-    animation: demo-chip 0.34s ease-out 1.75s both;
-  }
-  .hero-demo.is-live.is-playing .demo-meta .demo-chip:nth-child(2) {
-    animation: demo-chip 0.34s ease-out 1.95s both;
-  }
-  /* Ассистент вступает последним — и «Готово» отдельно от него: это конец
-     истории, ради которого показаны первые два шага. */
-  .hero-demo.is-live.is-playing .demo-agent {
-    animation: demo-rise 0.5s cubic-bezier(0.2, 0.7, 0.3, 1) 2.5s both;
-  }
-  .hero-demo.is-live.is-playing .demo-agent-done {
-    animation: demo-chip 0.4s ease-out 3.2s both;
-  }
-  .hero-demo.is-live.is-playing .demo-arrow-2 {
-    animation: demo-in 0.4s ease-out 2.25s both;
-  }
-  .hero-demo.is-live.is-playing .demo-meta .demo-chip:nth-child(3) {
-    animation: demo-chip 0.34s ease-out 2.15s both;
-  }
-  @keyframes demo-in {
-    from {
-      opacity: 0;
-      transform: translateY(8px);
-    }
-    to {
+  @media (prefers-reduced-motion: reduce) {
+    .ds-1, .ds-arr-1, .ds-2, .ds-chips, .ds-arr-2, .ds-3, .ds-done {
+      animation: none;
       opacity: 1;
-      transform: none;
-    }
-  }
-  @keyframes demo-rise {
-    from {
-      opacity: 0;
-      transform: translateY(14px) scale(0.97);
-    }
-    to {
-      opacity: 1;
-      transform: none;
-    }
-  }
-  @keyframes demo-chip {
-    from {
-      opacity: 0;
-      transform: translateY(6px) scale(0.94);
-    }
-    to {
-      opacity: 1;
-      transform: none;
     }
   }
 
-  /* Текст только для читалок: анимация показывает смысл глазами, а тем, кто
-     страницу слушает, нужна та же мысль словами. */
-  .sr-only {
-    position: absolute;
-    width: 1px;
-    height: 1px;
-    overflow: hidden;
-    clip-path: inset(50%);
-    white-space: nowrap;
-  }
-
-  @media (max-width: 700px) {
-    .hero-demo {
-      margin-top: 36px;
-    }
-    .demo-frame {
-      padding: 16px;
-    }
-  }
 
   .hero-trust {
     list-style: none;
@@ -2350,7 +2221,9 @@ const CHART_STATUSES = [
     padding: 0;
     display: flex;
     flex-wrap: wrap;
-    justify-content: center;
+    /* Колонка героя выключена влево — центрирование здесь оставалось от
+       старой одностолбцовой шапки и вело себя как перекос. */
+    justify-content: flex-start;
     gap: 10px 24px;
   }
   /* Иконки в полосе доверия больше не лаймовые: три ярких значка рядом с
@@ -2406,13 +2279,43 @@ const CHART_STATUSES = [
   }
 
   /* --- Бейдж «бета» ---------------------------------------------------------- */
+  /* Секции всплывают один раз, каждая целиком: раздельные эффекты на каждой
+     карточке читались бы как мельтешение. */
+  .will-reveal {
+    opacity: 0;
+    transform: translateY(20px);
+    transition: opacity 0.55s ease-out, transform 0.55s cubic-bezier(0.2, 0.7, 0.3, 1);
+  }
+  .will-reveal.in-view {
+    opacity: 1;
+    transform: none;
+  }
+
+  .u-link {
+    color: inherit;
+    text-decoration: underline;
+    text-underline-offset: 3px;
+  }
+  .integrate-note {
+    margin-top: 12px;
+  }
+  .doc-copy-lg.done {
+    color: var(--lime);
+    border-color: rgba(212, 242, 40, 0.4);
+  }
+
   .beta-line {
     display: flex;
     flex-wrap: wrap;
     align-items: center;
-    justify-content: center;
+    justify-content: flex-start;
     gap: 12px;
     margin-bottom: 22px;
+  }
+  /* Примечание к бете длинное; без ограничения оно тянулось на всю колонку
+     и ломало ровный левый край шапки. */
+  .beta-note {
+    max-width: 48ch;
   }
   .beta-badge {
     background: var(--lime);
