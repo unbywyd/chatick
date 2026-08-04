@@ -439,17 +439,40 @@ const CHART_STATUSES = [
           </ul>
           <p class="bridge-security">{t.bridge.security}</p>
         </div>
-        <div class="bridge-demo" aria-hidden="true">
-          <div class="term">
-            <span class="term-dots"><i></i><i></i><i></i></span>
-            <pre><code><span class="c-dim">you ▸</span> connect to my Chatick project
-<span class="c-dim">ai  ▸</span> reading https://api.chatick.com/x
-<span class="c-dim">ai  ▸</span> open app.chatick.com/#/connect
-      and enter code <span class="c-accent">ABCD-2345</span>
-<span class="c-dim">ai  ▸</span> connected as Artyom · My Project
-<span class="c-dim">you ▸</span> what's on my plate?
-<span class="c-dim">ai  ▸</span> 3 open tasks, 1 in review
-</code></pre>
+        {/* Заголовок обещает «одну строку» — значит строка должна быть здесь,
+            видимой и копируемой. Раньше на её месте стоял терминал с выдуманным
+            диалогом: читатель видел картинку, но не понимал, что именно ему
+            делать. Теперь строка сверху — а терминал показывает, что будет
+            после того, как её вставят. */}
+        <div class="bridge-demo">
+          <div class="bridge-line">
+            <span class="bridge-line-label">{t.bridge.lineLabel}</span>
+            <p class="bridge-line-text">{t.bridge.line}</p>
+            <button class="btn btn-sm bridge-line-copy" data-copy-text={t.bridge.line} data-copied={t.bridge.lineCopied}>
+              <svg viewBox="0 0 24 24" width="16" height="16" fill="none" aria-hidden="true">
+                <rect x="9" y="9" width="11" height="11" rx="2" stroke="currentColor" stroke-width="2" />
+                <path d="M5 15V6a1 1 0 0 1 1-1h9" stroke="currentColor" stroke-width="2" stroke-linecap="round" />
+              </svg>
+              <span>{t.bridge.lineCopy}</span>
+            </button>
+          </div>
+          <div class="term" aria-hidden="true">
+            <span class="term-dots"><i></i><i></i><i></i><em>{t.bridge.demoLabel}</em></span>
+            {/* Строками, а не <pre>: в <pre> сохраняются переносы и отступы
+                самого шаблона, и вёрстка утекала в текст. */}
+            <div class="term-body">
+              {
+                t.bridge.demo.map((l) => (
+                  <p class="term-line">
+                    <span class="c-dim">{l.who === 'you' ? 'you' : 'ai'} ▸</span>
+                    <span>
+                      {l.text}
+                      {l.code && <span class="c-accent">{l.code}</span>}
+                    </span>
+                  </p>
+                ))
+              }
+            </div>
           </div>
         </div>
       </div>
@@ -941,12 +964,14 @@ const CHART_STATUSES = [
   // Копирование инструкций для ИИ. Файл тянем по клику, а не заранее:
   // большинство читателей этими кнопками не воспользуется, и грузить ради них
   // сотню килобайт текста на каждом открытии страницы незачем.
-  document.querySelectorAll<HTMLButtonElement>('.doc-copy, .doc-copy-lg').forEach((btn) => {
+  // data-copy-text — текст уже в разметке (короткая строка подключения),
+  // data-copy — файл, который надо сначала скачать.
+  document.querySelectorAll<HTMLButtonElement>('.doc-copy, .doc-copy-lg, [data-copy-text]').forEach((btn) => {
     const label = btn.querySelector('span')
     const original = label?.textContent ?? ''
     btn.addEventListener('click', async () => {
       try {
-        const text = await fetch(btn.dataset.copy!).then((r) => r.text())
+        const text = btn.dataset.copyText ?? (await fetch(btn.dataset.copy!).then((r) => r.text()))
         await navigator.clipboard.writeText(text)
         if (label) label.textContent = btn.dataset.copied!
         btn.classList.add('done')
@@ -955,8 +980,19 @@ const CHART_STATUSES = [
           btn.classList.remove('done')
         }, 2400)
       } catch {
-        // Не вышло — открываем файл: скопировать вручную всегда можно.
-        window.open(btn.dataset.copy!, '_blank', 'noopener')
+        // Буфер закрыт (нет https, отказ в правах) — оставляем способ забрать
+        // текст руками: файл открываем, а строку выделяем прямо на странице.
+        if (btn.dataset.copy) {
+          window.open(btn.dataset.copy, '_blank', 'noopener')
+          return
+        }
+        const line = btn.parentElement?.querySelector('.bridge-line-text')
+        if (!line) return
+        const range = document.createRange()
+        range.selectNodeContents(line)
+        const sel = getSelection()
+        sel?.removeAllRanges()
+        sel?.addRange(range)
       }
     })
   })
@@ -1505,7 +1541,41 @@ const CHART_STATUSES = [
     color: var(--lime);
     font-size: 0.9rem;
   }
-  /* имитация терминала: показывает, как выглядит подключение */
+  /* Строка, которую человек реально вставляет себе в ассистента. Единственный
+     акцентный блок в секции — на неё и должен упасть взгляд. */
+  .bridge-line {
+    background: var(--bg);
+    border: 1px solid color-mix(in srgb, var(--lime) 40%, var(--border));
+    border-radius: var(--radius);
+    padding: 16px;
+    display: grid;
+    gap: 12px;
+    justify-items: start;
+    margin-bottom: 12px;
+  }
+  .bridge-line-label {
+    font-size: 0.72rem;
+    font-weight: 700;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    color: var(--lime);
+  }
+  /* Направление наследуем от страницы: это фраза на языке читателя, а не код.
+     Принудительный ltr рассыпал ивритское предложение — слова вставали
+     задом наперёд. Адрес внутри разворачивается сам, по правилам bidi. */
+  .bridge-line-text {
+    font-family: var(--font-mono);
+    font-size: 0.84rem;
+    line-height: 1.7;
+    color: var(--fg);
+    word-break: break-word;
+  }
+  .bridge-line-copy.done {
+    background: #2b7a3d;
+    color: #f4f5f0;
+  }
+
+  /* имитация терминала: показывает, что происходит после вставки строки */
   /* Терминал всегда читается слева направо, даже на иврите: это команды и
      адреса, а не текст. В RTL строки зеркалились — «you ▸» уезжало вправо,
      а точки-кнопки окна оказывались не с той стороны. */
@@ -1519,6 +1589,7 @@ const CHART_STATUSES = [
   }
   .term-dots {
     display: flex;
+    align-items: center;
     gap: 6px;
     padding: 12px 14px;
     border-bottom: 1px solid var(--border);
@@ -1529,12 +1600,39 @@ const CHART_STATUSES = [
     border-radius: 50%;
     background: rgba(255, 255, 255, 0.16);
   }
-  .term pre {
+  /* Подпись в шапке окна: без неё диалог висел без объяснения, что это. */
+  .term-dots em {
+    margin-inline-start: 6px;
+    font-style: normal;
+    font-size: 0.74rem;
+    color: var(--fg-muted);
+  }
+  .term-body {
     padding: 16px;
-    overflow-x: auto;
-    font-size: 0.8rem;
-    line-height: 1.75;
+    display: grid;
+    gap: 5px;
     font-family: var(--font-mono);
+    font-size: 0.8rem;
+    line-height: 1.7;
+  }
+  /* Реплики переводятся, и в русском они длиннее английских — перенос идёт
+     по словам с отступом под метку, а не уводит читателя листать окно вбок. */
+  .term-line {
+    display: flex;
+    gap: 8px;
+    align-items: baseline;
+  }
+  /* Метка фиксированной ширины: «you» длиннее «ai», без неё стрелки в столбце
+     разъезжаются. */
+  .term-line > .c-dim {
+    flex: 0 0 auto;
+    min-width: 3.2em;
+    text-align: end;
+    white-space: nowrap;
+  }
+  .term-line > span:last-child {
+    min-width: 0;
+    overflow-wrap: anywhere;
   }
   .c-dim {
     color: #6c7160;
@@ -1542,6 +1640,8 @@ const CHART_STATUSES = [
   .c-accent {
     color: var(--lime);
     font-weight: 700;
+    /* Код вводят целиком — переносить его посередине нельзя */
+    white-space: nowrap;
   }
 
   /* --- Спросите свой ИИ --------------------------------------------------- */

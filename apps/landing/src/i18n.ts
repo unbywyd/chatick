@@ -81,6 +81,14 @@ type Dict = {
     tag: string
     title: string
     subtitle: string
+    /** Та самая «одна строка» из заголовка — её и копируют */
+    line: string
+    lineLabel: string
+    lineCopy: string
+    lineCopied: string
+    demoLabel: string
+    /** Что происходит после вставки строки. code — подсвеченный кусок в конце */
+    demo: { who: 'you' | 'ai'; text: string; code?: string }[]
     points: string[]
     security: string
   }
@@ -298,6 +306,18 @@ export const dict: Record<LocaleCode, Dict> = {
       title: 'One line, and your assistant is part of the project',
       subtitle:
         'Claude Code — or any assistant that can read docs and call HTTP — connects to Chatick and works there: tasks, checklists, chat, files, documents, notes, time, and the full compressed history.',
+      line: 'Connect to my Chatick project: read https://api.chatick.com/x and follow the instructions.',
+      lineLabel: 'Paste this into your assistant',
+      lineCopy: 'Copy the line',
+      lineCopied: 'Copied',
+      demoLabel: 'and it does the rest itself',
+      demo: [
+        { who: 'ai', text: 'reading https://api.chatick.com/x' },
+        { who: 'ai', text: 'open app.chatick.com/#/connect and enter code', code: 'ABCD-2345' },
+        { who: 'ai', text: 'connected as Artyom · My Project' },
+        { who: 'you', text: 'what’s on my plate?' },
+        { who: 'ai', text: '3 open tasks, 1 in review' },
+      ],
       points: [
         'One line to paste. Your assistant reads the guide and connects itself — no SDK, no integration to write.',
         'You approve access in the browser — no token ever goes through your chat.',
@@ -552,6 +572,18 @@ export const dict: Record<LocaleCode, Dict> = {
       title: 'Одна строка — и ассистент внутри проекта',
       subtitle:
         'Claude Code — или любой ассистент, умеющий читать документацию и делать HTTP-запросы — подключается к Chatick и работает там: задачи, чек-листы, чат, файлы, документы, заметки, время и вся сжатая история.',
+      line: 'Подключись к моему проекту в Chatick: прочитай https://api.chatick.com/x и следуй инструкции.',
+      lineLabel: 'Вставьте это своему ассистенту',
+      lineCopy: 'Скопировать строку',
+      lineCopied: 'Скопировано',
+      demoLabel: 'дальше он всё делает сам',
+      demo: [
+        { who: 'ai', text: 'читаю https://api.chatick.com/x' },
+        { who: 'ai', text: 'откройте app.chatick.com/#/connect и введите код', code: 'ABCD-2345' },
+        { who: 'ai', text: 'подключился как Артём · Мой проект' },
+        { who: 'you', text: 'что у меня по задачам?' },
+        { who: 'ai', text: '3 открытых, 1 на ревью' },
+      ],
       points: [
         'Одна строка, которую нужно вставить. Ассистент сам прочитает инструкцию и подключится — без SDK и без интеграции, которую надо писать.',
         'Доступ вы подтверждаете в браузере — токен никогда не проходит через чат.',
@@ -806,6 +838,18 @@ export const dict: Record<LocaleCode, Dict> = {
       title: 'שורה אחת — והעוזר שלכם בתוך הפרויקט',
       subtitle:
         'Claude Code — או כל עוזר שיודע לקרוא תיעוד ולבצע בקשות HTTP — מתחבר ל-Chatick ועובד שם: משימות, רשימות בדיקה, צ׳אט, קבצים, מסמכים, הערות, זמן וכל ההיסטוריה הדחוסה.',
+      line: 'התחבר לפרויקט שלי ב-Chatick: קרא את https://api.chatick.com/x ופעל לפי ההוראות.',
+      lineLabel: 'הדביקו את זה לעוזר שלכם',
+      lineCopy: 'העתקת השורה',
+      lineCopied: 'הועתק',
+      demoLabel: 'והוא עושה את השאר בעצמו',
+      demo: [
+        { who: 'ai', text: 'reading https://api.chatick.com/x' },
+        { who: 'ai', text: 'open app.chatick.com/#/connect and enter code', code: 'ABCD-2345' },
+        { who: 'ai', text: 'connected as Artyom · My Project' },
+        { who: 'you', text: 'what’s on my plate?' },
+        { who: 'ai', text: '3 open tasks, 1 in review' },
+      ],
       points: [
         'שורה אחת להדביק. העוזר יקרא את ההוראות ויתחבר בעצמו — בלי SDK ובלי אינטגרציה שצריך לכתוב.',
         'אתם מאשרים את הגישה בדפדפן — הטוקן לעולם לא עובר בצ׳אט.',
