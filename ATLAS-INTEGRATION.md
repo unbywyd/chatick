@@ -156,6 +156,31 @@ POST   /api/v1/ext/projects/:externalId/members
 DELETE /api/v1/ext/projects/:externalId/members/:externalUserId
 ```
 
+**Disconnecting a project.** Two modes on one endpoint, and the default is the
+safe one:
+
+```http
+DELETE /api/v1/ext/projects/:externalId
+
+{}                                            unlink — externalId is cleared,
+                                              the project stays in Chatick with
+                                              all its chat, tasks and files
+
+{"deleteProject": true, "confirm": "<name>"}  destroy it: chat, tasks,
+                                              documents and files in R2, for good
+```
+
+Deleting requires the project's **exact name** in `confirm`. This is not
+ceremony: your key lives on your server with no human to confirm, and a typo in
+a loop would otherwise wipe a team's history without a single question.
+
+**People are never touched** in either mode — they stay in the company and in
+its other projects. Removing someone from Chatick entirely is
+`DELETE /api/v1/ext/users/:externalId`, a separate decision.
+
+Unlink is what you want in almost every case. Use it when a project moves out of
+Atlas's control but its history should survive.
+
 ### Step 4 — Seamless login (this is the SSO piece)
 
 This is what the client meant by "log in through our system". There is no
@@ -430,9 +455,6 @@ Being explicit so nobody plans around something that does not exist:
 - **No inbound webhooks.** Chatick does not receive events *from* Atlas. Atlas
   pushes changes by calling the API. If they need event-driven sync in that
   direction, it has to be built.
-- ~~No way to disconnect a project.~~ Now `DELETE /projects/:externalId` —
-  unlink by default, full delete only with the exact project name in
-  `confirm`.
 - **No task write API.** Tasks are created and managed inside Chatick; the
   external API can only read them. If Atlas wants to create tasks from their
   side, that is new work.
