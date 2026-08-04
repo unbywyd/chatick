@@ -1,12 +1,12 @@
-import { useRef, useState } from 'react'
-import { useMutation, useQuery } from '@tanstack/react-query'
+import { useEffect, useRef, useState } from 'react'
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { useTranslation } from 'react-i18next'
 import { toast } from 'sonner'
 import { AlertTriangle, CloudUpload, Download, HardDriveDownload, Upload } from 'lucide-react'
-import { api, API_URL, getSessionToken, type Company, type ProjectListItem } from '@/lib/api'
+import { api, API_URL, getSessionToken, type Company } from '@/lib/api'
 import { Button } from '@/components/ui/button'
-import { Select, SelectTrigger, SelectValue, SelectContent, SelectItem } from '@/components/ui/select'
 import { Input } from '@/components/ui/input'
+import { Switch } from '@/components/ui/switch'
 import { useConfirm } from '@/components/ui/confirm'
 
 // Экспорт / импорт компании (SPEC §8.28).
@@ -35,17 +35,49 @@ export function BackupTab({ company }: { company: Company }) {
   const confirm = useConfirm()
   const [password, setPassword] = useState('')
   const [importPassword, setImportPassword] = useState('')
-  const [targetProject, setTargetProject] = useState('')
+  const qc = useQueryClient()
+  const [backupBucket, setBackupBucket] = useState('')
+
+  // Автобэкап и его бакет (SPEC §8.48) — состояние показываем всегда: молча
+  // сломавшийся бэкап хуже отсутствующего, на него рассчитывают.
+  const autoQ = useQuery({
+    queryKey: ['auto-backup', company.id],
+    queryFn: () =>
+      api<{ enabled: boolean; lastBackupAt: string | null; lastError: string | null; backupBucket: string }>(
+        `/api/v1/companies/${company.id}/auto-backup`,
+      ),
+  })
+  useEffect(() => {
+    if (autoQ.data) setBackupBucket(autoQ.data.backupBucket ?? '')
+  }, [autoQ.data])
+
+  const refreshAuto = () => qc.invalidateQueries({ queryKey: ['auto-backup', company.id] })
+
+  const toggleAuto = useMutation({
+    mutationFn: (enabled: boolean) =>
+      api(`/api/v1/companies/${company.id}/auto-backup`, { method: 'PATCH', body: JSON.stringify({ enabled }) }),
+    onSuccess: refreshAuto,
+    onError: (e) => toast.error(e instanceof Error ? e.message : String(e)),
+  })
+
+  const saveBucket = useMutation({
+    mutationFn: () =>
+      api(`/api/v1/companies/${company.id}/auto-backup`, {
+        method: 'PATCH',
+        body: JSON.stringify({ backupBucket }),
+      }),
+    onSuccess: () => {
+      toast.success(t('projectForm.saved'))
+      refreshAuto()
+    },
+    onError: (e) => toast.error(e instanceof Error ? e.message : String(e)),
+  })
   const [busy, setBusy] = useState(false)
   const fileRef = useRef<HTMLInputElement>(null)
 
   const summary = useQuery({
     queryKey: ['backup-summary', company.id],
     queryFn: () => api<Summary>(`/api/v1/backup/${company.id}/summary`),
-  })
-  const projects = useQuery({
-    queryKey: ['projects', company.id],
-    queryFn: () => api<ProjectListItem[]>(`/api/v1/projects?companyId=${company.id}`),
   })
 
   // скачивание идёт через fetch: нужен заголовок авторизации
@@ -76,7 +108,7 @@ export function BackupTab({ company }: { company: Company }) {
     mutationFn: () =>
       api<{ key: string; bytes: number }>(`/api/v1/backup/${company.id}/backup-to-storage`, {
         method: 'POST',
-        body: JSON.stringify({ projectId: targetProject, password: password || undefined }),
+        body: JSON.stringify({ password: password || undefined }),
       }),
     onSuccess: (r) => toast.success(t('backup.uploaded', { size: fmtBytes(r.bytes) })),
     onError: (e: unknown) => {
@@ -187,7 +219,9 @@ export function BackupTab({ company }: { company: Company }) {
         </Button>
       </section>
 
-      {/* В своё хранилище */}
+      {/* В своё хранилище: тумблер автобэкапа, бакет и разовая выгрузка —
+          всё здесь. Раньше это лежало в настройках компании, рядом с
+          хранилищем файлов, и человек шёл искать его на вкладку «Бэкап». */}
       <section className="rounded-xl border bg-card p-4">
         <h3 className="flex items-center gap-1.5 text-sm font-semibold">
           <CloudUpload className="size-4" />
@@ -196,21 +230,56 @@ export function BackupTab({ company }: { company: Company }) {
         {ownStorage ? (
           <>
             <p className="mt-1 text-xs text-muted-foreground">{t('backup.storageHint')}</p>
-            <div className="mt-3 flex flex-wrap items-center gap-2">
-              <Select value={targetProject || 'none'} onValueChange={(v) => setTargetProject(v === 'none' ? '' : v)}>
-                <SelectTrigger className="w-auto min-w-48">
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="none">{t('backup.pickProject')}</SelectItem>
-                  {(projects.data ?? []).map((p) => (
-                    <SelectItem key={p.id} value={p.id}>
-                      {p.name}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-              <Button variant="outline" disabled={!targetProject || toStorage.isPending} onClick={() => toStorage.mutate()}>
+
+            {/* Отдельный бакет под архивы: у них своя ротация и свой срок
+                хранения, мешать с рабочими вложениями неудобно. */}
+            <div className="mt-3 flex flex-wrap items-end gap-2">
+              <div className="min-w-56 flex-1">
+                <label className="mb-1.5 block text-xs font-medium">{t('backup.bucketLabel')}</label>
+                <Input
+                  value={backupBucket}
+                  onChange={(e) => setBackupBucket(e.target.value)}
+                  placeholder={t('backup.bucketPlaceholder')}
+                  dir="ltr"
+                />
+              </div>
+              <Button
+                variant="outline"
+                disabled={saveBucket.isPending || backupBucket === (autoQ.data?.backupBucket ?? '')}
+                onClick={() => saveBucket.mutate()}
+              >
+                {t('projectForm.save')}
+              </Button>
+            </div>
+            <p className="mt-1 text-xs text-muted-foreground">{t('backup.bucketHint')}</p>
+
+            {/* Автобэкап */}
+            <label className="mt-4 flex cursor-pointer items-start justify-between gap-3 rounded-lg border border-dashed p-3">
+              <span className="min-w-0">
+                <span className="block text-sm font-medium">{t('backup.autoTitle')}</span>
+                <span className="mt-0.5 block text-xs text-muted-foreground">{t('backup.autoHint')}</span>
+                {autoQ.data?.lastBackupAt && (
+                  <span className="mt-1 block text-xs text-muted-foreground">
+                    {t('backup.lastAt', { date: new Date(autoQ.data.lastBackupAt).toLocaleString() })}
+                  </span>
+                )}
+                {autoQ.data?.lastError && (
+                  <span className="mt-1 flex items-start gap-1.5 text-xs text-destructive">
+                    <AlertTriangle className="mt-0.5 size-3.5 shrink-0" />
+                    {autoQ.data.lastError}
+                  </span>
+                )}
+              </span>
+              <Switch
+                checked={Boolean(autoQ.data?.enabled)}
+                disabled={toggleAuto.isPending}
+                onCheckedChange={(v) => toggleAuto.mutate(v)}
+                className="mt-0.5 shrink-0"
+              />
+            </label>
+
+            <div className="mt-3">
+              <Button variant="outline" disabled={toStorage.isPending} onClick={() => toStorage.mutate()}>
                 <CloudUpload className="size-4" />
                 {t('backup.uploadAction')}
               </Button>

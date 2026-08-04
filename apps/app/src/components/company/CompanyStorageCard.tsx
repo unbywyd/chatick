@@ -1,9 +1,7 @@
 import { useState } from 'react'
-import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
+import { useQuery } from '@tanstack/react-query'
 import { useTranslation } from 'react-i18next'
-import { HardDrive, Check, ShieldAlert } from 'lucide-react'
-import { toast } from 'sonner'
-import { Switch } from '@/components/ui/switch'
+import { HardDrive, Check } from 'lucide-react'
 import { api } from '@/lib/api'
 import { Button } from '@/components/ui/button'
 import { StorageSettings } from '@/components/files/StorageSettings'
@@ -20,7 +18,6 @@ import { StorageSettings } from '@/components/files/StorageSettings'
 export function CompanyStorageCard({ companyId }: { companyId: string }) {
   const { t } = useTranslation()
   const [open, setOpen] = useState(false)
-  const qc = useQueryClient()
 
   const q = useQuery({
     queryKey: ['storage-config', companyId],
@@ -29,22 +26,7 @@ export function CompanyStorageCard({ companyId }: { companyId: string }) {
 
   const custom = q.data?.provider === 'custom'
 
-  // Автобэкап (SPEC §8.48): состояние показываем всегда — молча сломавшийся
-  // бэкап хуже отсутствующего, на него рассчитывают.
-  const auto = useQuery({
-    queryKey: ['auto-backup', companyId],
-    queryFn: () =>
-      api<{ enabled: boolean; lastBackupAt: string | null; lastError: string | null; storageReady: boolean }>(
-        `/api/v1/companies/${companyId}/auto-backup`,
-      ),
-  })
 
-  const toggle = useMutation({
-    mutationFn: (enabled: boolean) =>
-      api(`/api/v1/companies/${companyId}/auto-backup`, { method: 'PATCH', body: JSON.stringify({ enabled }) }),
-    onSuccess: () => qc.invalidateQueries({ queryKey: ['auto-backup', companyId] }),
-    onError: (e) => toast.error(e instanceof Error ? e.message : String(e)),
-  })
 
   return (
     <section className="rounded-xl border bg-card p-4">
@@ -71,32 +53,6 @@ export function CompanyStorageCard({ companyId }: { companyId: string }) {
           {custom ? t('companyStorage.change') : t('companyStorage.setup')}
         </Button>
       </div>
-
-      {/* Автобэкап — здесь же: он про то же хранилище, и разносить их по
-          разным местам значит спрятать от того, кто настраивает бакет. */}
-      <label className="mt-4 flex cursor-pointer items-start justify-between gap-3 border-t pt-4">
-        <span className="min-w-0">
-          <span className="block text-sm font-medium">{t('companyStorage.autoBackup')}</span>
-          <span className="mt-0.5 block text-xs text-muted-foreground">{t('companyStorage.autoBackupHint')}</span>
-          {auto.data?.lastBackupAt && (
-            <span className="mt-1 block text-xs text-muted-foreground">
-              {t('companyStorage.lastBackup', { date: new Date(auto.data.lastBackupAt).toLocaleString() })}
-            </span>
-          )}
-          {auto.data?.lastError && (
-            <span className="mt-1 flex items-start gap-1.5 text-xs text-destructive">
-              <ShieldAlert className="mt-0.5 size-3.5 shrink-0" />
-              {auto.data.lastError}
-            </span>
-          )}
-        </span>
-        <Switch
-          checked={Boolean(auto.data?.enabled)}
-          disabled={toggle.isPending || !custom}
-          onCheckedChange={(v) => toggle.mutate(v)}
-          className="mt-0.5 shrink-0"
-        />
-      </label>
 
       {open && <StorageSettings companyId={companyId} onClose={() => setOpen(false)} />}
     </section>

@@ -779,13 +779,27 @@ companiesRoute.put('/:companyId/storage', zValidator('json', companyStorageSchem
  */
 companiesRoute.patch(
   '/:companyId/auto-backup',
-  zValidator('json', z.object({ enabled: z.boolean() })),
+  zValidator('json', z.object({ enabled: z.boolean().optional(), backupBucket: z.string().max(200).optional() })),
   async (c) => {
     const { sub } = c.get('session')
     const companyId = c.req.param('companyId')
     if ((await memberRoleIn(companyId, sub)) !== 'admin') return c.json({ error: 'Forbidden' }, 403)
 
-    const { enabled } = c.req.valid('json')
+    const b = c.req.valid('json')
+
+    // Бакет для архивов живёт в настройке хранилища, но правится отсюда: он
+    // относится к бэкапу, и человек ищет его на вкладке «Бэкап».
+    if (b.backupBucket !== undefined) {
+      const existing = await db.query.companyStorage.findFirst({ where: eq(companyStorage.companyId, companyId) })
+      if (!existing) return c.json({ error: 'Connect your own storage first' }, 400)
+      await db
+        .update(companyStorage)
+        .set({ backupBucket: b.backupBucket.trim() || null })
+        .where(eq(companyStorage.companyId, companyId))
+    }
+
+    const enabled = b.enabled
+    if (enabled === undefined) return c.json({ ok: true })
     if (enabled && !(await companyStorageFor(companyId, 'backup'))) {
       return c.json(
         {
@@ -817,6 +831,7 @@ companiesRoute.get('/:companyId/auto-backup', async (c) => {
     enabled: Boolean(row?.autoBackup),
     lastBackupAt: row?.lastBackupAt ?? null,
     lastError: row?.lastBackupError ?? null,
+    backupBucket: (await db.query.companyStorage.findFirst({ where: eq(companyStorage.companyId, companyId) }))?.backupBucket ?? '',
     storageReady: Boolean(await companyStorageFor(companyId, 'backup')),
   })
 })

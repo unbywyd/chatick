@@ -118,16 +118,6 @@ export function StorageSettings({
             <div className="grid grid-cols-2 gap-3">
               <Field label={t('storage.region')} value={region} onChange={setRegion} placeholder="auto" />
               <Field label={t('storage.bucket')} value={bucket} onChange={setBucket} placeholder="my-bucket" />
-              {/* Отдельный бакет под архивы: у бэкапов своя ротация и свой срок
-                  хранения, мешать их с рабочими вложениями неудобно. */}
-              {companyId && (
-                <Field
-                  label={t('companyStorage.backupBucket')}
-                  value={backupBucket}
-                  onChange={setBackupBucket}
-                  placeholder={bucket || 'my-backups'}
-                />
-              )}
             </div>
             <Field label={t('storage.publicUrl')} value={publicUrl} onChange={setPublicUrl} placeholder="https://cdn.example.com (optional)" />
             <Field

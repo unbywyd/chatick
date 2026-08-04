@@ -3,11 +3,12 @@ import { and, eq } from 'drizzle-orm'
 import { PutObjectCommand } from '@aws-sdk/client-s3'
 import { gzipSync } from 'node:zlib'
 import { db } from '../db/client.js'
-import { companyMembers, projects } from '../db/schema.js'
+import { companies, companyMembers, projects } from '../db/schema.js'
 import { requireSession, type SessionEnv } from '../auth.js'
 import { exportCompany, exportSummary, importCompany, type BackupFile } from '../lib/backup.js'
 import { resolveStorage, isCustomStorage } from '../lib/s3.js'
 import { logActivity } from '../lib/audit.js'
+import { backupCompany } from '../lib/auto-backup.js'
 
 // Экспорт/импорт компании (SPEC §8.28). Только админ компании: архив содержит
 // данные всех проектов, включая переписку.
@@ -84,59 +85,26 @@ backupRoute.post('/:companyId/export', async (c) => {
  * Положить архив в СВОЁ хранилище компании (S3/R2 проекта).
  * Смысл именно в этом: бэкап оказывается там, куда мы доступа не имеем.
  */
+/**
+ * Разовый бэкап в хранилище компании — та же кнопка, что и у планировщика.
+ *
+ * Проект больше не выбирается: хранилище одно на компанию (SPEC §8.47), и
+ * вопрос «чей бакет использовать» перестал иметь смысл.
+ */
 backupRoute.post('/:companyId/backup-to-storage', async (c) => {
   const { sub } = c.get('session')
   const companyId = c.req.param('companyId')
   if (!(await requireCompanyAdmin(companyId, sub))) return c.json({ error: 'Forbidden' }, 403)
 
-  const body = (await c.req.json().catch(() => ({}))) as Record<string, unknown>
-  const password = typeof body.password === 'string' && body.password.length >= 8 ? body.password : undefined
-  const projectId = typeof body.projectId === 'string' ? body.projectId : ''
-
-  const project = projectId
-    ? await db.query.projects.findFirst({ where: and(eq(projects.id, projectId), eq(projects.companyId, companyId)) })
-    : null
-  if (!project) return c.json({ error: 'Pick a project whose storage the backup should go to' }, 400)
-
-  if (!(await isCustomStorage(project.id))) {
-    return c.json(
-      {
-        error: 'That project uses platform storage',
-        hint: 'Connect your own S3/R2 bucket in the project storage settings first — otherwise the backup would sit on our infrastructure, which defeats the purpose.',
-      },
-      400,
-    )
-  }
-
-  const backup = await exportCompany(companyId, password)
-  // gzip: архив компании со всей перепиской бывает крупным
-  const payload = gzipSync(Buffer.from(JSON.stringify(backup), 'utf8'))
-  const key = `chatick-backups/${companyId}/${new Date().toISOString().slice(0, 19).replace(/[:T]/g, '-')}.json.gz`
-
   try {
-    const store = await resolveStorage(project.id)
-    await store.client.send(
-      new PutObjectCommand({
-        Bucket: store.bucket,
-        Key: key,
-        Body: payload,
-        ContentType: 'application/gzip',
-      }),
-    )
+    const out = await backupCompany(companyId)
+    await db.update(companies).set({ lastBackupAt: new Date(), lastBackupError: null }).where(eq(companies.id, companyId))
+    return c.json({ ok: true, ...out })
   } catch (e) {
-    console.error('[backup] upload failed:', e)
-    return c.json({ error: 'Upload to your storage failed', detail: String(e instanceof Error ? e.message : e) }, 502)
+    const detail = e instanceof Error ? e.message : String(e)
+    console.error('[backup] upload failed:', detail)
+    return c.json({ error: 'Upload to your storage failed', detail }, 502)
   }
-
-  void logActivity({
-    projectId: project.id,
-    actorId: sub,
-    action: 'upload',
-    entityType: 'project',
-    entityId: companyId,
-    entityLabel: `backup → ${key}`,
-  })
-  return c.json({ ok: true, key, bytes: payload.length, secretsIncluded: Boolean(password) })
 })
 
 /** Восстановление: создаёт НОВУЮ компанию, ничего не перезаписывает. */

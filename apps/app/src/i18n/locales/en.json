@@ -956,7 +956,13 @@
     "importConfirmText": "A new company will be created alongside your existing ones. Nothing will be overwritten or deleted.",
     "imported": "Backup imported",
     "needPassword": "This archive contains secrets — enter the export password",
-    "notABackup": "That file is not a Chatick backup"
+    "notABackup": "That file is not a Chatick backup",
+    "autoTitle": "Daily backup",
+    "autoHint": "Once a day the whole company — all projects — is archived into your bucket. Seven copies are kept, older ones are removed.",
+    "lastAt": "Last backup: {{date}}",
+    "bucketLabel": "Bucket for backups",
+    "bucketPlaceholder": "same as files",
+    "bucketHint": "Optional. Leave empty to keep archives in the same bucket as files."
   },
   "sidebar": {
     "search": "Search projects",
@@ -1411,11 +1417,6 @@
     "platformHint": "Included in your plan, with a size limit.",
     "own": "Your own S3 / R2",
     "setup": "Set up own storage",
-    "change": "Change",
-    "autoBackup": "Daily backup",
-    "autoBackupHint": "Once a day the whole company — all projects — is archived into your bucket. Seven copies are kept, older ones are removed. Requires your own storage.",
-    "lastBackup": "Last backup: {{date}}",
-    "backupBucket": "Bucket for backups",
-    "backupBucketHint": "Optional. Leave empty to keep archives in the same bucket."
+    "change": "Change"
   }
 }
