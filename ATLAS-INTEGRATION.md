@@ -57,7 +57,7 @@ All of this is deployed and live. Nothing below is a plan.
 
 | Capability | Where it lives |
 | --- | --- |
-| External API (15 endpoints) | `apps/api/src/routes/ext.ts` |
+| External API (17 endpoints) | `apps/api/src/routes/ext.ts` |
 | API keys — issue, scope, revoke | `apps/api/src/lib/company-key.ts` |
 | Webhooks with HMAC signing and retry | `apps/api/src/lib/webhooks.ts` |
 | One-time login links (SSO entry) | `apps/api/src/lib/enter-link.ts` |
@@ -72,6 +72,7 @@ All of this is deployed and live. Nothing below is a plan.
 - **Auth header:** `Authorization: Bearer ck_live_...`
 - **Scopes:** `users:write`, `projects:write`, `read:all`
 - **Batch limit:** 500 users per call
+- **Widget status check:** `GET /projects/:externalId/status` — one call, answers "integrated or not"
 - **Webhook headers:** `x-chatick-event`, `x-chatick-timestamp`, `x-chatick-signature`
 - **Webhook events:** `task.created`, `task.status_changed`, `task.assigned`, `time.logged`, `project.updated`
 
@@ -222,6 +223,106 @@ gets retried.
 
 ---
 
+## 3b. Building the integration widget inside Atlas
+
+This is the concrete shape of what Atlas wants on its task page: an
+unobtrusive "switch to Chatick" panel that becomes a "this project runs on
+Chatick" panel once connected.
+
+Everything below runs off the Chatick API. **Atlas stores nothing** — no
+Chatick project ids, no user ids, no "is integrated" flag in its own database.
+State lives here and is asked for.
+
+### On page load — is this project connected?
+
+```http
+GET /api/v1/ext/projects/1178667/status
+```
+
+Not connected:
+
+```json
+{ "integrated": false, "externalId": "1178667" }
+```
+
+Connected:
+
+```json
+{
+  "integrated": true,
+  "project": { "id": "...", "name": "...", "slug": "..." },
+  "memberCount": 7,
+  "memberExternalIds": ["atlas-448", "atlas-71"],
+  "url": "https://app.chatick.com/#/p/<id>"
+}
+```
+
+Note it answers **200 in both cases**. A 404 would force the widget to read a
+status code as data; this way it is just `if (res.integrated)`.
+
+`memberExternalIds` are **Atlas's own identifiers**, so the widget can diff
+against its own member list without ever storing a Chatick id.
+
+### The wizard — two calls
+
+```http
+POST /api/v1/ext/projects
+{ "externalId": "1178667", "name": "Dev tasks", "about": "..." }
+
+POST /api/v1/ext/projects/1178667/members
+{ "members": [ { "externalUserId": "atlas-448", "role": "member" } ] }
+```
+
+After these, `status` returns `integrated: true`. That is the signal to hide
+the task list and render the connected panel.
+
+### The connected panel — managing the team
+
+```http
+GET /api/v1/ext/projects/1178667/members
+```
+
+```json
+{
+  "members":   [ { "externalId", "email", "name", "avatarUrl", "role" } ],
+  "available": [ { "externalId", "email", "name", "avatarUrl" } ]
+}
+```
+
+`available` is everyone in the company who is **not** on this project yet —
+exactly the "who could be added" list. Both come back in one request, so the
+widget does no set arithmetic.
+
+Add and remove with the same endpoints the wizard used:
+
+```http
+POST   /api/v1/ext/projects/1178667/members
+DELETE /api/v1/ext/projects/1178667/members/atlas-448
+```
+
+### The "Open in Chatick" button
+
+```http
+POST /api/v1/ext/users/atlas-448/login-link
+{ "externalProjectId": "1178667" }
+→ { "url": "https://app.chatick.com/#/enter?token=…", "expiresInSec": 300 }
+```
+
+With `externalProjectId` the person lands **directly in that project's chat**,
+already signed in. Without it, on the general screen.
+
+Call this from the Atlas **backend** at the moment of the click, and redirect.
+Never from the browser — that would put the company key in client code.
+
+### Does the members lock (§4) block this widget?
+
+**No, and this is worth being clear about.** The lock stops team edits *inside
+Chatick*. The widget talks through the external API using the company key — it
+*is* the external system. Turning the lock on is what makes Atlas the single
+place where team changes happen, and this widget is that place.
+
+---
+
 ## 4. The locks — read this before turning them on
 
 Two settings in **Company settings → Integration**. Both are **off by
@@ -332,6 +433,8 @@ Being explicit so nobody plans around something that does not exist:
 - **No task write API.** Tasks are created and managed inside Chatick; the
   external API can only read them. If Atlas wants to create tasks from their
   side, that is new work.
+- **No activity-log endpoint.** `GET /projects/:id/activity` appears in the
+  original spec but was never built.
 - **Webhook events are limited to the five listed.** Adding more is small work
   in `webhooks.ts`, but they do not exist today.
 - **No IP allowlist on API keys.** A leaked key works from anywhere until it is

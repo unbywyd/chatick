@@ -125,8 +125,28 @@ DELETE /api/v1/ext/users/:externalId/projects/:externalProjectId
 POST   /api/v1/ext/projects
 PATCH  /api/v1/ext/projects/:externalProjectId
 GET    /api/v1/ext/projects
-DELETE /api/v1/ext/projects/:externalProjectId    только архивирование
+GET    /api/v1/ext/projects/:externalId/status    интегрирован ли этот проект
+DELETE /api/v1/ext/projects/:externalProjectId    только архивирование — ЕЩЁ НЕ СДЕЛАНО
 ```
+
+`GET /status` отвечает `200` и в том случае, когда проекта у нас нет:
+
+```json
+{ "integrated": false, "externalId": "1178667" }
+```
+
+```json
+{ "integrated": true, "project": {…}, "memberCount": 7,
+  "memberExternalIds": ["atlas-448"], "url": "https://app.chatick.com/#/p/…" }
+```
+
+Сделано для панели, которую внешняя система рисует у себя на странице
+проекта: ей нужен ответ «уже подключено или нет» одним запросом, а не выборка
+из всего списка компании на каждый рендер. Код ответа при этом не несёт
+данных — `integrated` читается из тела.
+
+`memberExternalIds` — идентификаторы ВНЕШНЕЙ системы: так она сверяет состав
+со своим списком, не храня наши.
 
 ```json
 {
@@ -162,13 +182,22 @@ DELETE /api/v1/ext/projects/:externalProjectId    только архивиро�
 
 **Из их системы к нам.** Ссылку не собирают вручную — просят у API:
 
+Сделано не так, как задумывалось здесь: ссылку выдаёт ручка входа человека, а
+не проекта — иначе она не знала бы, КОГО пускать.
+
 ```
-POST /api/v1/ext/projects/:externalProjectId/link
-→ { "url": "https://app.chatick.com/#/go/eyJhbGci...", "expiresInSec": 300 }
+POST /api/v1/ext/users/:externalId/login-link
+     { "externalProjectId": "1178667" }        ← необязательно
+→ { "url": "https://app.chatick.com/#/enter?token=…", "expiresInSec": 300 }
 ```
 
 Одноразовая ссылка живёт пять минут: человек уже вошёл в их систему, мы
-доверяем ключу компании и пускаем его в проект без второго входа.
+доверяем ключу компании и пускаем его без второго входа. С
+`externalProjectId` он попадает сразу в нужный проект, без него — на общий
+экран.
+
+`POST /projects/:externalProjectId/link` из первоначального плана НЕ СДЕЛАН и
+не нужен.
 
 **От нас к ним.** В шапке проекта — кнопка с их логотипом, ведёт на
 `externalUrl`. Настраивается один раз на компанию:
@@ -189,7 +218,7 @@ POST /api/v1/ext/projects/:externalProjectId/link
 ```
 GET /api/v1/ext/projects/:id/tasks          задачи со статусами и оценками
 GET /api/v1/ext/projects/:id/time           часы: кто, когда, сколько, по какой задаче
-GET /api/v1/ext/projects/:id/activity       журнал изменений
+GET /api/v1/ext/projects/:id/activity       журнал изменений — ЕЩЁ НЕ СДЕЛАНО
 GET /api/v1/ext/stats/summary               сводка по компании
 GET /api/v1/ext/users/:externalId/time      часы одного человека
 ```

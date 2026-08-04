@@ -87,6 +87,28 @@ Update or list:
     PATCH ${API}/api/v1/ext/projects/<externalId>    {"name"?, "externalName"?, "about"?}
     GET   ${API}/api/v1/ext/projects
 
+Is this one project integrated yet?
+
+    GET ${API}/api/v1/ext/projects/<externalId>/status
+
+Answers 200 either way, so a widget can read the body instead of branching on
+the status code:
+
+    {"integrated": false, "externalId": "..."}
+
+    {"integrated": true,
+     "project": {...},
+     "memberCount": 7,
+     "memberExternalIds": ["your-448", "your-71"],
+     "url": "https://app.chatick.com/#/p/<id>"}
+
+Built for a panel you render on your own pages: it answers "already connected
+or not" in one call, without pulling every project in the company and
+searching through them on each render.
+
+memberExternalIds are YOUR identifiers, so you can diff against your own list
+without storing ours.
+
 ## Step 3. Send people
 
 One at a time:
@@ -130,6 +152,17 @@ Remove access (their messages and tasks stay):
 
     DELETE ${API}/api/v1/ext/users/<externalId>
     DELETE ${API}/api/v1/ext/projects/<externalId>/members/<externalUserId>
+
+Who is on a project, and who could still be added:
+
+    GET ${API}/api/v1/ext/projects/<externalId>/members
+
+    {"members":   [{"externalId", "email", "name", "avatarUrl", "role"}],
+     "available": [{"externalId", "email", "name", "avatarUrl"}]}
+
+available = people in the company who are NOT on this project yet. Both lists
+come back together so a "manage team" panel needs one request and no set
+arithmetic on your side.
 
 companyRole: admin | manager | member
 project role: owner | admin | member
