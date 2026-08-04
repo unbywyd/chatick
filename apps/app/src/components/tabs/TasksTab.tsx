@@ -241,6 +241,8 @@ export function TasksTab({ projectId, meId }: { projectId: string; meId?: string
   // чистится сразу после открытия, и флаг успел бы схлопнуться в false,
   // закрыв форму в тот же момент, когда она открылась.
   const createdRef = useRef<string | null>(null)
+  /** Задача, из карточки которой только что вышли — к ней возвращаем скролл. */
+  const justClosed = useRef<string | null>(null)
   if (searchParams.get('new') === '1' && openTaskId) createdRef.current = openTaskId
   const isNewTask = Boolean(openTaskId) && createdRef.current === openTaskId
 
@@ -282,6 +284,22 @@ export function TasksTab({ projectId, meId }: { projectId: string; meId?: string
   }
 
   // страница конкретной задачи открывается ВМЕСТО таблицы (по /tasks/:id, ссылкой можно делиться)
+  // Прокрутка к задаче, из которой только что вышли.
+  useEffect(() => {
+    const id = justClosed.current
+    if (openTaskId || !id) return
+    justClosed.current = null
+    // Ждём кадр: список только что смонтировался, узла ещё нет.
+    requestAnimationFrame(() => {
+      const el = document.querySelector<HTMLElement>(`[data-task-id="${id}"]`)
+      if (!el) return
+      el.scrollIntoView({ block: 'center', behavior: 'smooth' })
+      // Фокус — чтобы задача была видна и с клавиатуры: сразу после возврата
+      // работают стрелки и Enter, не приходится снова целиться мышью.
+      el.focus({ preventScroll: true })
+    })
+  }, [openTaskId])
+
   if (openTask) {
     return (
       <TaskDrawer
@@ -292,7 +310,12 @@ export function TasksTab({ projectId, meId }: { projectId: string; meId?: string
         canEdit={canEditTask(openTask)}
         onPatch={(body) => patch.mutate({ id: openTask.id, ...body })}
         onDelete={() => remove.mutate(openTask.id)}
-        onClose={() => setOpenTaskId(null)}
+        onClose={() => {
+          // Помним, откуда вышли: список рендерится заново и без этого
+          // возвращает человека в начало — искать свою задачу заново.
+          justClosed.current = openTask.id
+          setOpenTaskId(null)
+        }}
         startEditing={isNewTask}
       />
     )
@@ -699,6 +722,10 @@ function TaskRow({
       onStartTimer={onStartTimer}
     >
     <li
+      // Возврат из карточки прокручивает список к этой задаче и ставит на неё
+      // фокус — иначе человек попадает в начало длинного списка и ищет заново.
+      data-task-id={task.id}
+      tabIndex={-1}
       draggable
       onDragStart={(e) => {
         e.dataTransfer.effectAllowed = 'copyMove'

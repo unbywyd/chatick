@@ -18,6 +18,7 @@ import {
   Trash2,
   User,
   X,
+  Check,
 } from 'lucide-react'
 import { api, API_URL, getProjectToken } from '@/lib/api'
 import { cn } from '@/lib/utils'
@@ -166,6 +167,20 @@ export function TaskDrawer({
     setDescription(task.description)
     setEstimate(fmtEstimate(task.estimateMinutes))
     setEditing(false)
+    // Выходим к списку: правка закончена, задерживать человека в карточке
+    // незачем — он и так шёл сюда за одним изменением.
+    onClose()
+  }
+
+  /**
+   * Сохранить и выйти. Доступна всегда, даже без изменений: человек нажимает
+   * «Сохранить», ожидая, что карточка закроется, а не гадая, была ли правка
+   * достаточной, чтобы кнопка появилась.
+   */
+  async function saveAndClose() {
+    if (dirty) onPatch({ title: title.trim() || task.title, description })
+    setEditing(false)
+    onClose()
   }
   const refresh = () => {
     qc.invalidateQueries({ queryKey: ['task-files', task.id] })
@@ -502,22 +517,13 @@ export function TaskDrawer({
             </div>
           )}
 
-      <div className="flex items-center justify-between gap-2">
+      {/* Сохранение и отмена — в шапке, рядом с «Изменить»: внизу длинной
+          формы их не находили. Здесь остаётся только проверка ИИ. */}
+      <div className="flex">
         <Button variant="outline" size="sm" disabled={validate.isPending || !title.trim()} onClick={() => validate.mutate()}>
           {validate.isPending ? <Loader2 className="size-3.5 animate-spin" /> : <Sparkles className="size-3.5" />}
           {t('tasks.checkTask')}
         </Button>
-        <div className="flex items-center gap-2">
-          {/* Отмена рядом с сохранением, а не в углу: решают их вместе. */}
-          <Button variant="ghost" size="sm" onClick={() => void cancelEditing()}>
-            {t('files.cancel')}
-          </Button>
-          {dirty && (
-            <Button variant="brand" size="sm" onClick={() => onPatch({ title: title.trim() || task.title, description })}>
-              {t('projectForm.save')}
-            </Button>
-          )}
-        </div>
       </div>
     </>
   )
@@ -748,9 +754,27 @@ export function TaskDrawer({
             <Share2 className="size-4" />
             <span className="hidden sm:inline">{t('tasks.share')}</span>
           </Button>
-          {canEdit && (
+          {/* Отмена и сохранение — здесь, а не внизу правой колонки: там их
+              не находили, приходилось скроллить до конца формы. */}
+          {editing && (
+            <>
+              <Button variant="ghost" size="sm" onClick={() => void cancelEditing()}>
+                {t('files.cancel')}
+              </Button>
+              <Button
+                variant="brand"
+                size="sm"
+                onClick={() => void saveAndClose()}
+                className="gap-1.5"
+              >
+                <Check className="size-4" />
+                <span className="hidden sm:inline">{t('projectForm.save')}</span>
+              </Button>
+            </>
+          )}
+          {canEdit && !editing && (
             <Button
-              variant={editing ? 'brand' : 'outline'}
+              variant="outline"
               size="sm"
               disabled={Boolean(lockedBy)}
               title={lockedBy ? t('tasks.lockedByOther') : undefined}
