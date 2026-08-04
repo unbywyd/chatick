@@ -9,6 +9,7 @@ import { env } from '../env.js'
 import { companyTrialSpendUsd } from '../lib/ai-usage.js'
 import { companies, companyMembers, files, FREE_STORAGE_BYTES, messages, notifications, projects, projectMembers, projectStorage, tasks, users, projectAi } from '../db/schema.js'
 import { encrypt } from '../lib/crypto.js'
+import { membersLockedForCompany, membersLockedForProject, MEMBERS_LOCKED } from '../lib/members-locked.js'
 import { logActivity } from '../lib/audit.js'
 import { PutObjectCommand, DeleteObjectCommand, S3Client } from '@aws-sdk/client-s3'
 import { requireSession, requireProject, signProjectToken, type SessionEnv, type ProjectEnv } from '../auth.js'
@@ -505,6 +506,9 @@ projectsRoute.get('/:projectId', async (c) => {
     aiConfig: JSON.parse(project.aiConfig || '{}'),
     myRole: membership?.role ?? null,
     rulesAccepted: Boolean(membership?.rulesAcceptedAt),
+    // Состав ведётся снаружи — интерфейсу нужно знать, чтобы не показывать
+    // кнопки, на которые сервер всё равно ответит отказом (SPEC §8.42).
+    membersViaApiOnly: Boolean(company?.membersViaApiOnly),
     externalLink,
   })
 })
@@ -765,6 +769,10 @@ projectsRoute.patch(
     const me = await projectRoleOf(projectId, sub)
     const companyRole = await companyRoleOf(project.companyId, sub)
     if (!(me?.role === 'owner' || me?.role === 'admin' || companyRole === 'admin')) return c.json({ error: 'Forbidden' }, 403)
+
+    // Состав команды ведётся во внешней системе (SPEC §8.42): смотреть можно,
+    // менять — только там, иначе два списка разъедутся.
+    if (project.companyId && (await membersLockedForCompany(project.companyId))) return c.json(MEMBERS_LOCKED, 403)
     const target = await projectRoleOf(projectId, userId)
     if (!target) return c.json({ error: 'Not a project member' }, 404)
     const b = c.req.valid('json')
@@ -794,6 +802,10 @@ projectsRoute.patch(
     if (!(me?.role === 'owner' || me?.role === 'admin' || companyRole === 'admin')) {
       return c.json({ error: 'Forbidden' }, 403)
     }
+
+    // Состав команды ведётся во внешней системе (SPEC §8.42): смотреть можно,
+    // менять — только там, иначе два списка разъедутся.
+    if (project.companyId && (await membersLockedForCompany(project.companyId))) return c.json(MEMBERS_LOCKED, 403)
 
     const target = await projectRoleOf(projectId, userId)
     if (!target) return c.json({ error: 'Not a project member' }, 404)
@@ -841,6 +853,10 @@ projectsRoute.patch(
     const allowed = me?.role === 'owner' || me?.role === 'admin' || companyRole === 'admin'
     if (!allowed) return c.json({ error: 'Forbidden' }, 403)
 
+    // Состав команды ведётся во внешней системе (SPEC §8.42): смотреть можно,
+    // менять — только там, иначе два списка разъедутся.
+    if (project.companyId && (await membersLockedForCompany(project.companyId))) return c.json(MEMBERS_LOCKED, 403)
+
     const target = await projectRoleOf(projectId, userId)
     if (!target) return c.json({ error: 'Not a project member' }, 404)
     if (target.role === 'owner') return c.json({ error: 'Owner permissions are fixed' }, 400)
@@ -862,6 +878,8 @@ projectsRoute.post(
   async (c) => {
     const { sub } = c.get('session')
     const projectId = c.req.param('projectId')
+    // Состав команды ведётся во внешней системе — правка запрещена (SPEC §8.42).
+    if (await membersLockedForProject(projectId)) return c.json(MEMBERS_LOCKED, 403)
     const project = await db.query.projects.findFirst({ where: eq(projects.id, projectId) })
     if (!project) return c.json({ error: 'Not found' }, 404)
 
@@ -898,6 +916,9 @@ projectsRoute.delete('/:projectId/members/:userId', async (c) => {
   const { projectId, userId } = c.req.param()
   const project = await db.query.projects.findFirst({ where: eq(projects.id, projectId) })
   if (!project) return c.json({ error: 'Not found' }, 404)
+
+  // Состав команды ведётся во внешней системе (SPEC §8.42).
+  if (project.companyId && (await membersLockedForCompany(project.companyId))) return c.json(MEMBERS_LOCKED, 403)
 
   const me = await projectRoleOf(projectId, sub)
   const companyRole = await companyRoleOf(project.companyId, sub)

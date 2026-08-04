@@ -2,7 +2,7 @@ import { useMemo, useState } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { useTranslation } from 'react-i18next'
 import { toast } from 'sonner'
-import { ChevronDown, Plus, Search, Trash2, UserPlus, X } from 'lucide-react'
+import { ChevronDown, Lock, Plus, Search, Trash2, UserPlus, X } from 'lucide-react'
 import { api } from '@/lib/api'
 import { cn } from '@/lib/utils'
 import { Input } from '@/components/ui/input'
@@ -35,10 +35,13 @@ export function ProjectTeamTab({
   projectId,
   companyId,
   canEdit,
+  managedExternally,
 }: {
   projectId: string
   companyId?: string
   canEdit: boolean
+  /** Состав ведётся во внешней системе: объясняем отсутствие кнопок. */
+  managedExternally?: boolean
 }) {
   const { t } = useTranslation()
   const qc = useQueryClient()
@@ -108,6 +111,13 @@ export function ProjectTeamTab({
         <div>
           <h1 className="text-xl font-bold tracking-tight">{t('projTeam.title')}</h1>
           <p className="mt-1 text-sm text-muted-foreground">{t('projTeam.subtitle')}</p>
+          {/* Иначе пропавшая кнопка «Добавить» читается как поломка. */}
+          {managedExternally && (
+            <p className="mt-2 flex items-start gap-2 text-xs text-muted-foreground">
+              <Lock className="mt-0.5 size-3.5 shrink-0" />
+              {t('team.managedExternally', { system: t('team.yourSystem') })}
+            </p>
+          )}
         </div>
         {canEdit && (
           <Button variant="brand" onClick={() => setAdding(true)}>

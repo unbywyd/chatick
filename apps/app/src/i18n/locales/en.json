@@ -394,7 +394,9 @@
     "you": "you",
     "remove": "Remove from company",
     "removeConfirm": "Remove {{name}} from the company?",
-    "memberRemoved": "Member removed"
+    "memberRemoved": "Member removed",
+    "managedExternally": "People are managed in {{system}}. You can see the team here, but add and remove them there — otherwise the two lists drift apart.",
+    "yourSystem": "your system"
   },
   "rules": {
     "title": "Rules of “{{project}}”",
@@ -1340,7 +1342,9 @@
     "urlTemplate": "Project URL there",
     "urlTemplateHint": "Must contain {externalId} — the project identifier goes there. Without it every project would link to the same page.",
     "apiOnly": "Projects are created through the API only",
-    "apiOnlyHint": "The “New project” button disappears for everyone, including the owner. Otherwise projects appear that the external system does not know about, and the lists drift apart."
+    "apiOnlyHint": "The “New project” button disappears for everyone, including the owner. Otherwise projects appear that the external system does not know about, and the lists drift apart.",
+    "membersApiOnly": "People come from the external system",
+    "membersApiOnlyHint": "The team stays visible here, but is added and removed only in your system. Prevents someone who was let go from keeping access here."
   },
   "webhooks": {
     "title": "Webhooks",
@@ -1392,6 +1396,7 @@
     "disable": "Switch back to Chatick mail",
     "disableConfirm": "Switch back to Chatick mail?",
     "disableConfirmBody": "Your server settings and the saved password will be deleted. Letters will go out from our domain again.",
-    "disabled": "Back to Chatick mail"
+    "disabled": "Back to Chatick mail",
+    "fromEmailHint": "Only the address, no name."
   }
 }

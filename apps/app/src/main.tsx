@@ -68,7 +68,11 @@ function TeamPage() {
     <ProjectTeamTab
       projectId={id}
       companyId={project?.companyId}
-      canEdit={project?.myRole === 'owner' || project?.myRole === 'admin'}
+      // Состав ведётся во внешней системе — правка закрыта всем (SPEC §8.42).
+      canEdit={
+        (project?.myRole === 'owner' || project?.myRole === 'admin') && !project?.membersViaApiOnly
+      }
+      managedExternally={Boolean(project?.membersViaApiOnly)}
     />
   ) : null
 }

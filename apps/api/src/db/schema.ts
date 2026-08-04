@@ -195,6 +195,9 @@ export const companies = pgTable('companies', {
   externalProjectUrl: text('external_project_url'), // https://…/projects/{externalId}
   // Проекты приходят только через API — кнопка создания в интерфейсе исчезает.
   projectsViaApiOnly: boolean('projects_via_api_only').notNull().default(false),
+  // То же для людей: состав команды виден, но правится только снаружи. Иначе
+  // уволенный во внешней системе остаётся у нас и продолжает читать переписку.
+  membersViaApiOnly: boolean('members_via_api_only').notNull().default(false),
   createdAt: createdAt(),
   updatedAt: updatedAt(),
 })

@@ -120,6 +120,8 @@ export type Company = {
   externalProjectUrl?: string | null
   /** Проекты приходят только через API — кнопку создания прячем. */
   projectsViaApiOnly?: boolean
+  /** Состав команды ведётся во внешней системе: видно, но не правится. */
+  membersViaApiOnly?: boolean
   /** сколько проектов внутри — по нему решается, вести ли визардом первого входа */
   projectsCount?: number
 }

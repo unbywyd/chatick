@@ -47,6 +47,7 @@ import { readPresence } from './auth.js'
 import { createShare, revokeShare, type ShareEntityType } from './shares.js'
 import { notifyChatMentions } from './messages.js'
 import { htmlToText, sanitizeHtml } from '../lib/sanitize-html.js'
+import { membersLockedForProject, MEMBERS_LOCKED } from '../lib/members-locked.js'
 import { broadcast, sendToUserAnywhere, tasksChanged } from '../ws.js'
 import { env } from '../env.js'
 
@@ -308,6 +309,19 @@ bridgeRoute.post('/projects', async (c) => {
   }
   if (!canCreateProjects(await companyRoleOf(id.companyId, id.userId))) {
     return c.json({ error: 'Only company admins and managers can create projects' }, 403)
+  }
+  // Проекты приходят только из внешней системы — мост ИИ не исключение:
+  // настройка существовала, но здесь не проверялась, и ассистент заводил
+  // проекты в обход неё.
+  const cmp = await db.query.companies.findFirst({ where: eq(companies.id, id.companyId) })
+  if (cmp?.projectsViaApiOnly) {
+    return c.json(
+      {
+        error: 'Projects are created in the external system',
+        hint: `Create it in ${cmp.externalSystemName || 'the external system'} — it will appear here automatically.`,
+      },
+      403,
+    )
   }
 
   const body = (await c.req.json().catch(() => ({}))) as Record<string, unknown>
@@ -1356,6 +1370,10 @@ bridgeRoute.get('/members/available', async (c) => {
   if (!(await managesTeam(scope.projectId, id.userId))) {
     return c.json({ error: 'Forbidden: only project owners/admins manage the team' }, 403)
   }
+
+  // Состав команды ведётся во внешней системе (SPEC §8.42). Мост ИИ — та же
+  // дверь: без этой проверки ИИ добавлял бы людей, которых там нет.
+  if (await membersLockedForProject(scope.projectId)) return c.json(MEMBERS_LOCKED, 403)
   const project = await db.query.projects.findFirst({ where: eq(projects.id, scope.projectId) })
   if (!project) return c.json({ error: 'Project not found' }, 404)
 
@@ -1385,6 +1403,10 @@ bridgeRoute.post('/members', async (c) => {
   if (!(await managesTeam(scope.projectId, id.userId))) {
     return c.json({ error: 'Forbidden: only project owners/admins manage the team' }, 403)
   }
+
+  // Состав команды ведётся во внешней системе (SPEC §8.42). Мост ИИ — та же
+  // дверь: без этой проверки ИИ добавлял бы людей, которых там нет.
+  if (await membersLockedForProject(scope.projectId)) return c.json(MEMBERS_LOCKED, 403)
   const project = await db.query.projects.findFirst({ where: eq(projects.id, scope.projectId) })
   if (!project) return c.json({ error: 'Project not found' }, 404)
 
@@ -1503,6 +1525,10 @@ bridgeRoute.patch('/members/:userId', async (c) => {
   if (!(await managesTeam(scope.projectId, id.userId))) {
     return c.json({ error: 'Forbidden: only project owners/admins manage the team' }, 403)
   }
+
+  // Состав команды ведётся во внешней системе (SPEC §8.42). Мост ИИ — та же
+  // дверь: без этой проверки ИИ добавлял бы людей, которых там нет.
+  if (await membersLockedForProject(scope.projectId)) return c.json(MEMBERS_LOCKED, 403)
   const userId = c.req.param('userId')
   const target = await projectRoleOf(scope.projectId, userId)
   if (!target) return c.json({ error: 'Not a project member' }, 404)

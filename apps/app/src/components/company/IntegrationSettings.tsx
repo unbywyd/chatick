@@ -2,7 +2,7 @@ import { useState } from 'react'
 import { useMutation, useQueryClient } from '@tanstack/react-query'
 import { useTranslation } from 'react-i18next'
 import { toast } from 'sonner'
-import { Link2, Lock } from 'lucide-react'
+import { Link2, Lock, Users } from 'lucide-react'
 import { api } from '@/lib/api'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -23,7 +23,12 @@ export function IntegrationSettings({
 }: {
   companyId: string
   isAdmin: boolean
-  current: { externalSystemName?: string | null; externalProjectUrl?: string | null; projectsViaApiOnly?: boolean }
+  current: {
+    externalSystemName?: string | null
+    externalProjectUrl?: string | null
+    projectsViaApiOnly?: boolean
+    membersViaApiOnly?: boolean
+  }
 }) {
   const { t } = useTranslation()
   const qc = useQueryClient()
@@ -31,6 +36,7 @@ export function IntegrationSettings({
   const [name, setName] = useState(current.externalSystemName ?? '')
   const [url, setUrl] = useState(current.externalProjectUrl ?? '')
   const [apiOnly, setApiOnly] = useState(Boolean(current.projectsViaApiOnly))
+  const [membersApiOnly, setMembersApiOnly] = useState(Boolean(current.membersViaApiOnly))
 
   const save = useMutation({
     mutationFn: (patch: Record<string, unknown>) =>
@@ -90,6 +96,24 @@ export function IntegrationSettings({
           <Switch checked={apiOnly} onCheckedChange={setApiOnly} disabled={!isAdmin} className="mt-0.5 shrink-0" />
         </label>
 
+        {/* То же для людей. Отдельным переключателем: проекты снаружи бывают и
+            без внешнего кадрового учёта — обратное тоже. */}
+        <label className="flex cursor-pointer items-start justify-between gap-3 rounded-lg border border-dashed p-3">
+          <span className="min-w-0">
+            <span className="flex items-center gap-1.5 text-sm font-medium">
+              <Users className="size-3.5 text-muted-foreground" />
+              {t('integration.membersApiOnly')}
+            </span>
+            <span className="mt-0.5 block text-xs text-muted-foreground">{t('integration.membersApiOnlyHint')}</span>
+          </span>
+          <Switch
+            checked={membersApiOnly}
+            onCheckedChange={setMembersApiOnly}
+            disabled={!isAdmin}
+            className="mt-0.5 shrink-0"
+          />
+        </label>
+
         {isAdmin && (
           <div className="flex justify-end">
             <Button
@@ -101,6 +125,7 @@ export function IntegrationSettings({
                   externalSystemName: name.trim() || null,
                   externalProjectUrl: url.trim() || null,
                   projectsViaApiOnly: apiOnly,
+                  membersViaApiOnly: membersApiOnly,
                 })
               }
             >

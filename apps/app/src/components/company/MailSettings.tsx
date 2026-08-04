@@ -41,6 +41,19 @@ const PROVIDERS = [
   { id: 'sendgrid' as const, labelKey: 'mail.sendgrid' },
 ]
 
+/**
+ * «Tal Levi <tal@startplan.net>» → имя и адрес по отдельности.
+ *
+ * Люди копируют отправителя целиком — так он выглядит в почтовом клиенте — и
+ * вставляют в оба поля. Сервер такой адрес отклонит, а подсказать, что именно
+ * не так, форма не умела. Проще разобрать самим.
+ */
+function splitAddress(raw: string): { name: string; email: string } | null {
+  const m = raw.match(/^\s*(.*?)\s*<\s*([^<>\s]+@[^<>\s]+)\s*>\s*$/)
+  if (!m) return null
+  return { name: m[1]!.replace(/^["']|["']$/g, '').trim(), email: m[2]!.toLowerCase() }
+}
+
 export function MailSettings({ companyId, isAdmin }: { companyId: string; isAdmin: boolean }) {
   const { t } = useTranslation()
   const qc = useQueryClient()
@@ -179,17 +192,30 @@ export function MailSettings({ companyId, isAdmin }: { companyId: string; isAdmi
                   <Input
                     value={fromEmail}
                     disabled={!isAdmin}
-                    onChange={(e) => setFromEmail(e.target.value)}
+                    onChange={(e) => {
+                      const parts = splitAddress(e.target.value)
+                      if (!parts) return setFromEmail(e.target.value)
+                      // Вставили «Имя <адрес>» — раскладываем, а имя не
+                      // затираем, если человек его уже написал сам.
+                      setFromEmail(parts.email)
+                      if (parts.name && !fromName.trim()) setFromName(parts.name)
+                    }}
                     placeholder="noreply@company.com"
                     dir="ltr"
                   />
+                  <p className="mt-1 text-xs text-muted-foreground">{t('mail.fromEmailHint')}</p>
                 </div>
                 <div>
                   <label className="mb-1.5 block text-xs font-medium">{t('mail.fromName')}</label>
                   <Input
                     value={fromName}
                     disabled={!isAdmin}
-                    onChange={(e) => setFromName(e.target.value)}
+                    onChange={(e) => {
+                      const parts = splitAddress(e.target.value)
+                      if (!parts) return setFromName(e.target.value)
+                      setFromName(parts.name)
+                      if (!fromEmail.trim()) setFromEmail(parts.email)
+                    }}
                     placeholder={t('mail.fromNamePlaceholder')}
                   />
                 </div>

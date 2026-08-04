@@ -38,6 +38,8 @@ import { useShortcuts } from '@/hooks/useShortcuts'
 const WORK_TABS = ['tasks', 'files', 'documents', 'notes', 'resources', 'history'] as const
 
 export type ProjectDetails = {
+  /** Состав команды ведётся во внешней системе: видно, но не правится. */
+  membersViaApiOnly?: boolean
   id: string
   companyId: string
   name: string

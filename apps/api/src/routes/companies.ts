@@ -16,6 +16,7 @@ import { issueKey, listKeys, revokeKey } from '../lib/company-key.js'
 import { newSecret } from '../lib/webhooks.js'
 import { encrypt } from '../lib/crypto.js'
 import { companyMail, sendVia, dropTransport } from '../lib/company-mail.js'
+import { membersLockedForCompany, MEMBERS_LOCKED } from '../lib/members-locked.js'
 import { LLM_PROVIDERS, testLlm, type LlmProvider } from '../lib/llm.js'
 import { env } from '../env.js'
 
@@ -685,6 +686,7 @@ companiesRoute.patch(
       externalSystemName: z.string().max(120).nullable().optional(),
       externalProjectUrl: z.string().max(500).nullable().optional(),
       projectsViaApiOnly: z.boolean().optional(),
+      membersViaApiOnly: z.boolean().optional(),
     }),
   ),
   async (c) => {
@@ -708,6 +710,7 @@ companiesRoute.patch(
       patch.externalProjectUrl = url
     }
     if (b.projectsViaApiOnly !== undefined) patch.projectsViaApiOnly = b.projectsViaApiOnly
+    if (b.membersViaApiOnly !== undefined) patch.membersViaApiOnly = b.membersViaApiOnly
     if (!Object.keys(patch).length) return c.json({ error: 'Nothing to change' }, 400)
 
     const [updated] = await db.update(companies).set(patch).where(eq(companies.id, companyId)).returning()
@@ -715,6 +718,7 @@ companiesRoute.patch(
       externalSystemName: updated!.externalSystemName,
       externalProjectUrl: updated!.externalProjectUrl,
       projectsViaApiOnly: updated!.projectsViaApiOnly,
+      membersViaApiOnly: updated!.membersViaApiOnly,
     })
   },
 )
@@ -770,6 +774,9 @@ companiesRoute.patch(
     const { companyId, userId } = c.req.param()
     if ((await memberRoleIn(companyId, sub)) !== 'admin') return c.json({ error: 'Forbidden' }, 403)
 
+    // Состав команды ведётся во внешней системе (SPEC §8.42).
+    if (await membersLockedForCompany(companyId)) return c.json(MEMBERS_LOCKED, 403)
+
     const { role } = c.req.valid('json')
     if (userId === sub && role !== 'admin') {
       const admins = await db.query.companyMembers.findMany({
@@ -791,6 +798,9 @@ companiesRoute.delete('/:companyId/members/:userId', async (c) => {
   const { sub } = c.get('session')
   const { companyId, userId } = c.req.param()
   if ((await memberRoleIn(companyId, sub)) !== 'admin') return c.json({ error: 'Forbidden' }, 403)
+
+  // Состав команды ведётся во внешней системе (SPEC §8.42).
+  if (await membersLockedForCompany(companyId)) return c.json(MEMBERS_LOCKED, 403)
 
   if (userId === sub) {
     const admins = await db.query.companyMembers.findMany({
@@ -949,6 +959,9 @@ companiesRoute.post(
       const p = await db.query.projects.findFirst({ where: eq(projects.id, projectId) })
       if (p?.companyId === companyId) inviteProjectId = p.id
     }
+
+// Состав команды ведётся во внешней системе (SPEC §8.42).
+    if (await membersLockedForCompany(companyId)) return c.json(MEMBERS_LOCKED, 403)
 
     const existing = await db.query.companyInvites.findFirst({
       where: and(eq(companyInvites.companyId, companyId), eq(companyInvites.email, email), eq(companyInvites.status, 'pending')),

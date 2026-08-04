@@ -2,7 +2,7 @@ import { useMemo, useState } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { useTranslation } from 'react-i18next'
 import { toast } from 'sonner'
-import { ChevronDown, Mail, MoreHorizontal, RotateCw, Search, Trash2, UserPlus } from 'lucide-react'
+import { ChevronDown, Lock, Mail, MoreHorizontal, RotateCw, Search, Trash2, UserPlus } from 'lucide-react'
 import { api, type Company } from '@/lib/api'
 import { Input } from '@/components/ui/input'
 import { Button } from '@/components/ui/button'
@@ -35,7 +35,10 @@ export function TeamTab({ company, meId }: { company: Company; meId?: string }) 
   const [email, setEmail] = useState('')
   const [inviteRole, setInviteRole] = useState<Role>('member')
 
-  const isAdmin = company.myRole === 'admin'
+  // Состав ведётся во внешней системе: смотреть можно всем, у кого и раньше,
+  // а править нельзя никому — сервер всё равно откажет (SPEC §8.42).
+  const locked = Boolean(company.membersViaApiOnly)
+  const isAdmin = company.myRole === 'admin' && !locked
   const base = `/api/v1/companies/${company.id}`
 
   const members = useQuery({ queryKey: ['company-members', company.id], queryFn: () => api<MemberRow[]>(`${base}/members`) })
@@ -103,7 +106,17 @@ export function TeamTab({ company, meId }: { company: Company; meId?: string }) 
         <Input value={q} onChange={(e) => setQ(e.target.value)} placeholder={t('team.search')} className="ps-9" />
       </div>
 
+      {/* Состав приходит извне: объясняем, почему нет кнопок. Пустое место
+          без причины читается как поломка. */}
+      {locked && (
+        <p className="flex items-start gap-2 rounded-lg border border-dashed p-3 text-xs text-muted-foreground">
+          <Lock className="mt-0.5 size-3.5 shrink-0" />
+          {t('team.managedExternally', { system: company.externalSystemName || t('team.yourSystem') })}
+        </p>
+      )}
+
       {/* Приглашение */}
+      {!locked && (
       <form
         className="flex flex-wrap gap-2"
         onSubmit={(e) => {
@@ -124,6 +137,7 @@ export function TeamTab({ company, meId }: { company: Company; meId?: string }) 
           {t('team.send')}
         </Button>
       </form>
+      )}
 
       {/* Pending-инвайты */}
       {filteredInvites.length > 0 && (
