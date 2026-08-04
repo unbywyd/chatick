@@ -30,7 +30,13 @@ const ogLocale = OG_LOCALE[locale] ?? 'en_US'
     {LOCALES.map((l) => <link rel="alternate" hreflang={l.code} href={new URL(l.path, Astro.site)} />)}
     <link rel="alternate" hreflang="x-default" href={new URL('/', Astro.site)} />
     <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
-    <meta name="theme-color" content="#141611" />
+    {/* Заголовок первого экрана набран моноширинным. Без preload браузер
+        находит шрифт только после разбора CSS, и заголовок успевает мигнуть
+        подстановочным. Иврит грузит Heebo, а не этот сабсет. */}
+    {locale !== 'he' && (
+      <link rel="preload" href="/fonts/jetbrains-mono.woff2" as="font" type="font/woff2" crossorigin />
+    )}
+    <meta name="theme-color" content="#0e0f0c" />
     <meta name="robots" content="index, follow, max-image-preview:large" />
 
     {/* Карточка ссылки. Без og:image мессенджеры показывают голый текст, и
@@ -91,14 +97,29 @@ const ogLocale = OG_LOCALE[locale] ?? 'en_US'
 <style is:global>
   /* Chatick landing — black & lime, same design language as the app */
   :root {
+    /* Лайм — цвет бренда, но на странице он теперь только у действий. Как
+       только им красили ещё и иконки, галочки и цифры, кнопка переставала
+       быть заметной: глазу не за что зацепиться, когда акцент везде. */
     --lime: #d4f228;
     --lime-dark: #1c2003;
-    --bg: #141611;
-    --bg-soft: #1b1e17;
+    /* Фон глубже прежнего #141611: на нём карточки и текст наконец дают
+       настоящий контраст, а не разницу в полтона. */
+    --bg: #0e0f0c;
+    --bg-soft: #14160f;
     --fg: #f4f5f0;
-    --fg-muted: #a2a69a;
+    --fg-muted: #8a8f7e;
+    /* Синий StartPlan. Живёт ровно в одном блоке — «кто за этим стоит»;
+       второй акцентный цвет по всей странице спорил бы с лаймом. */
+    --sp-blue: #1b4dff;
     --border: rgba(255, 255, 255, 0.09);
     --radius: 14px;
+    /* Моноширинный — для заголовков и данных, гротеск — для чтения.
+       Heebo в стопке вторым: ивритских букв в сабсете нет, и без него они
+       доставались бы системному моноширинному, который рисует их вкривь. */
+    --font-mono: 'JetBrains Mono', 'Heebo', ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+    /* Стрелка «ссылка наружу». Маской, а не картинкой: цвет наследуется от
+       текста, и файл не запрашивается отдельно. */
+    --ic-external: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23000' stroke-width='2.4' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M14 4h6v6M20 4l-9 9M17 14v4a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V9a2 2 0 0 1 2-2h4'/%3E%3C/svg%3E");
   }
   * {
     margin: 0;
@@ -117,7 +138,28 @@ const ogLocale = OG_LOCALE[locale] ?? 'en_US'
     font-display: swap;
     unicode-range: U+0307-0308, U+0590-05FF, U+200C-2010, U+20AA, U+25CC, U+FB1D-FB4F;
   }
+  /* Страница написана для тех, кто целыми днями смотрит в редактор кода.
+     Моноширинный заголовок говорит это без единого слова объяснения.
+     JetBrains Mono под OFL (текст лицензии рядом с файлом), сабсет только
+     латиница + кириллица, переменная ось 100–800 — 46 КБ вместо пяти
+     отдельных начертаний. Свой, а не с CDN: как и Heebo, ради того, чтобы
+     IP читателя не уходил третьей стороне.
+     Иврита в сабсете нет намеренно — его берёт на себя Heebo ниже. */
+  @font-face {
+    font-family: 'JetBrains Mono';
+    src: url('/fonts/jetbrains-mono.woff2') format('woff2');
+    font-weight: 100 800;
+    font-style: normal;
+    font-display: swap;
+    unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC,
+      U+0304, U+0308, U+0329, U+0400-045F, U+0490-0491, U+04B0-04B1, U+2000-206F, U+2074,
+      U+20AC, U+2116, U+2122, U+2190-2193, U+2212, U+2215, U+2713, U+25B6, U+25B8, U+2022,
+      U+FEFF, U+FFFD;
+  }
   html {
+    /* Страница только тёмная: браузер должен рисовать скроллбары и рамки
+       полей в тон, а не светлыми по умолчанию. */
+    color-scheme: dark;
     scroll-behavior: smooth;
     /* Страховка от бокового скролла. Причину чинили отдельно (ловушка для
        ботов уезжала в RTL), но одного заехавшего вбок блока хватает, чтобы
@@ -134,28 +176,80 @@ const ogLocale = OG_LOCALE[locale] ?? 'en_US'
     -webkit-font-smoothing: antialiased;
     overflow-x: hidden;
   }
+  /* Заголовки моноширинным: это и есть та самая «терминальная» интонация.
+     Отрицательный трекинг здесь не нужен — у моноширинного шага и так
+     хватает, сжатие превращает его в кашу. */
+  h1,
+  h2,
+  h3 {
+    font-family: var(--font-mono);
+    font-weight: 700;
+    letter-spacing: -0.01em;
+  }
+  /* Иврит из моноширинного сабсета не берётся, а fallback-моноширинные
+     системные шрифты рисуют его коряво и вразнобой. На иврите заголовки
+     остаются на Heebo — читаемость важнее единого приёма. */
+  [dir='rtl'] h1,
+  [dir='rtl'] h2,
+  [dir='rtl'] h3 {
+    font-family: 'Heebo', 'Segoe UI', system-ui, sans-serif;
+    letter-spacing: normal;
+  }
   a {
     color: inherit;
     text-decoration: none;
+  }
+  /* Фокус виден всегда и одинаково: раньше его рисовал только браузер, а на
+     тёмном фоне его собственная тонкая рамка терялась. */
+  :where(a, button, input, textarea, [tabindex]):focus-visible {
+    outline: 2px solid var(--lime);
+    outline-offset: 2px;
+    border-radius: 6px;
   }
   .container {
     max-width: 1060px;
     margin: 0 auto;
     padding: 0 24px;
   }
+  /* Шапка липкая: без запаса якорь уводит заголовок секции ровно под неё */
+  section[id] {
+    scroll-margin-top: 78px;
+  }
+  /* Убирает 300-мс паузу перед нажатием на тач-экранах */
+  a,
+  button {
+    touch-action: manipulation;
+  }
+  /* min-height 44px — палец попадает по кнопке с первого раза */
   .btn {
     display: inline-flex;
     align-items: center;
+    justify-content: center;
     gap: 8px;
+    min-height: 44px;
     background: var(--lime);
     color: var(--lime-dark);
     font-weight: 700;
-    padding: 13px 28px;
+    padding: 12px 28px;
     border-radius: 999px;
     transition: transform 0.15s ease, box-shadow 0.15s ease;
   }
   .btn:hover {
     transform: translateY(-1px);
     box-shadow: 0 8px 30px rgba(212, 242, 40, 0.25);
+  }
+  /* Анимации на странице ровно одна (оживший хиро), но правило общее:
+     кто просил систему не двигать картинку, не должен ловить и hover-сдвиги. */
+  @media (prefers-reduced-motion: reduce) {
+    html {
+      scroll-behavior: auto;
+    }
+    *,
+    *::before,
+    *::after {
+      animation-duration: 0.01ms !important;
+      animation-iteration-count: 1 !important;
+      transition-duration: 0.01ms !important;
+    }
   }
 </style>

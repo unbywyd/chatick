@@ -1,4 +1,6 @@
 ---
+import { readFileSync } from 'node:fs'
+import { fileURLToPath } from 'node:url'
 import { LOCALES, dict, type LocaleCode } from '../i18n'
 import desktopPkg from '../../../desktop/package.json'
 
@@ -17,6 +19,9 @@ const appUrl = `${APP_URL}/?lng=${locale}`
 const API_URL = 'https://api.chatick.com'
 const SUPPORT = 'support@chatick.com'
 const GITHUB = 'https://github.com/unbywyd/chatick'
+// Сайты заказчика и его студии разработки — блок «кто за этим стоит»
+const SITE_STARTPLAN = 'https://startplan.co.uk/'
+const SITE_ANYAPP = 'https://any-app.com/'
 
 // Кнопки скачивания пока без файлов: сборки ещё не выкладываются, и вести
 // на пустоту хуже, чем честно сказать «скоро».
@@ -46,6 +51,17 @@ const DOWNLOADS = [
     arch: t.download.macIntel,
   },
 ]
+
+// Знаки, нарисованные через currentColor, читаем с диска и вставляем в
+// разметку: как <img> они не работают — картинка не знает про цвет текста
+// вокруг и осталась бы чёрной на чёрном фоне. Файлы те же, что в public/,
+// второй копии не заводим.
+const asset = (name: string) => readFileSync(fileURLToPath(new URL(`../../public/${name}`, import.meta.url)), 'utf8')
+const MARK_DEV = asset('unbywyd-mark.svg')
+const MARK_CHATICK = asset('logo.svg')
+// Знак AnyApp вставляем разметкой не ради currentColor, а чтобы дотянуться
+// до тёмного слова внутри и перекрасить его: на чёрном фоне оно не читается.
+const MARK_ANYAPP = asset('anyapp-logo-twotone-dark.svg')
 
 // Цифры для графиков — то, что видно на овервью в самом продукте.
 const CHART_HOURS = [
@@ -124,7 +140,7 @@ const CHART_STATUSES = [
         <li>
           <!-- «Открытый код» ведёт на код: обещание, которое можно проверить -->
           <a href={GITHUB} target="_blank" rel="noopener" title={t.footer.github}>
-            <svg viewBox="0 0 16 16" width="16" height="16" fill="#d4f228" aria-hidden="true">
+            <svg viewBox="0 0 16 16" width="16" height="16" fill="currentColor" aria-hidden="true">
               <path d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27s1.36.09 2 .27c1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.01 8.01 0 0 0 16 8c0-4.42-3.58-8-8-8Z" />
             </svg>
             {t.hero.trust[0]}
@@ -135,34 +151,67 @@ const CHART_STATUSES = [
         </li>
         <li>
           <svg viewBox="0 0 24 24" width="16" height="16" aria-hidden="true">
-            <path d="M12 3l1.9 5.6 5.6 1.4-5.6 1.9L12 17.5l-1.9-5.6L4.5 10l5.6-1.4L12 3z" fill="#d4f228" />
+            <path d="M12 3l1.9 5.6 5.6 1.4-5.6 1.9L12 17.5l-1.9-5.6L4.5 10l5.6-1.4L12 3z" fill="currentColor" />
           </svg>
           {t.hero.trust[1]}
         </li>
         <li>
           <svg viewBox="0 0 24 24" width="16" height="16" fill="none" aria-hidden="true">
-            <path d="M12 3l7 3v5.2c0 4.4-3 7.6-7 8.8-4-1.2-7-4.4-7-8.8V6l7-3z" stroke="#d4f228" stroke-width="2" stroke-linejoin="round" />
-            <path d="m9 11.6 2 2 4-4" stroke="#d4f228" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" />
+            <path d="M12 3l7 3v5.2c0 4.4-3 7.6-7 8.8-4-1.2-7-4.4-7-8.8V6l7-3z" stroke="currentColor" stroke-width="2" stroke-linejoin="round" />
+            <path d="m9 11.6 2 2 4-4" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" />
           </svg>
           {t.hero.trust[2]}
         </li>
       </ul>
 
-      {/* Снимок продукта сразу под кнопками: обещания на словах проверяются
-          глазами за секунду, и человеку не нужно скроллить, чтобы понять,
-          на что он смотрит. Ширина больше контейнера — окна по краям уходят
-          под обрез, как будто рабочий стол продолжается за экраном. */}
-      <figure class="hero-shot">
-        <picture>
-          <source media="(max-width: 700px)" srcset="/presentation-sm.webp" />
-          <img
-            src="/presentation.webp"
-            alt={t.hero.shotAlt}
-            width="1600"
-            height="1009"
-            decoding="async"
-          />
-        </picture>
+      {/* Единственная анимация на странице — и она же главный аргумент.
+          Скриншот показывал, что продукт существует; это показывает, что он
+          делает: реплика в чате на глазах становится задачей с исполнителем
+          и сроком. Три секунды вместо абзаца текста.
+          Разметка честная и в статике: без JS и при reduced-motion виден
+          готовый результат, а не пустая рамка. */}
+      <figure class="hero-demo">
+        <figcaption class="sr-only">{t.hero.demo.alt}</figcaption>
+        <div class="demo-frame" aria-hidden="true">
+          <div class="demo-chat">
+            <span class="demo-label">{t.hero.demo.chatLabel}</span>
+            <div class="demo-msg">
+              <span class="demo-ava">{t.hero.demo.author.slice(0, 1)}</span>
+              <div class="demo-bubble">
+                <b>{t.hero.demo.author}</b>
+                <p>{t.hero.demo.message}</p>
+              </div>
+            </div>
+          </div>
+
+          {/* Стрелка между репликой и задачей — это и есть «превращается» */}
+          <div class="demo-arrow">
+            <svg viewBox="0 0 24 24" width="20" height="20" fill="none">
+              <path d="M12 4v16m0 0-6-6m6 6 6-6" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"></path>
+            </svg>
+          </div>
+
+          <div class="demo-task">
+            <span class="demo-label demo-label-task">{t.hero.demo.taskLabel}</span>
+            <p class="demo-task-title">{t.hero.demo.taskTitle}</p>
+            {/* Исполнитель и срок появляются последними: именно они превращают
+                разговор в работу, за которую кто-то отвечает */}
+            <div class="demo-meta">
+              <span class="demo-chip demo-chip-who">
+                <span class="demo-ava demo-ava-sm">{t.hero.demo.assignee.slice(0, 1)}</span>
+                {t.hero.demo.assignee}
+              </span>
+              <span class="demo-chip">
+                <svg viewBox="0 0 24 24" width="14" height="14" fill="none">
+                  <rect x="3.5" y="5" width="17" height="15.5" rx="2.5" stroke="currentColor" stroke-width="1.8"></rect>
+                  <path d="M3.5 9.5h17M8 3.5V6m8-2.5V6" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"></path>
+                </svg>
+                {t.hero.demo.due}
+              </span>
+              <span class="demo-chip demo-chip-status">{t.hero.demo.status}</span>
+            </div>
+          </div>
+        </div>
       </figure>
     </div>
   </section>
@@ -194,7 +243,7 @@ const CHART_STATUSES = [
           t.solution.items.map((item) => (
             <div class="card card-solution">
               <svg viewBox="0 0 24 24" width="22" height="22" fill="none" aria-hidden="true">
-                <path d="m5 13 4 4L19 7" stroke="#d4f228" stroke-width="3" stroke-linecap="round" stroke-linejoin="round" />
+                <path d="m5 13 4 4L19 7" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round" />
               </svg>
               <h3>{item.title}</h3>
               <p>{item.text}</p>
@@ -236,7 +285,7 @@ const CHART_STATUSES = [
               t.bridge.points.map((p) => (
                 <li>
                   <svg viewBox="0 0 24 24" width="18" height="18" fill="none" aria-hidden="true">
-                    <path d="m5 13 4 4L19 7" stroke="#d4f228" stroke-width="3" stroke-linecap="round" stroke-linejoin="round" />
+                    <path d="m5 13 4 4L19 7" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round" />
                   </svg>
                   <span>{p}</span>
                 </li>
@@ -262,8 +311,10 @@ const CHART_STATUSES = [
     </div>
   </section>
 
+  {/* Тёмные и светлые полосы чередуются: две подряд сливались в одну,
+      и граница между «мостом» и интеграцией пропадала. */}
   <!-- ДЛЯ КОМПАНИЙ СО СВОЕЙ СИСТЕМОЙ: мастер-интеграция -->
-  <section class="section section-soft" id="integrate">
+  <section class="section" id="integrate">
     <div class="container">
       <p class="tag">{t.integrate.tag}</p>
       <h2>{t.integrate.title}</h2>
@@ -274,7 +325,7 @@ const CHART_STATUSES = [
           t.integrate.points.map((point) => (
             <li>
               <svg viewBox="0 0 24 24" width="16" height="16" fill="none" aria-hidden="true">
-                <path d="m5 13 4 4L19 7" stroke="#d4f228" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" />
+                <path d="m5 13 4 4L19 7" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" />
               </svg>
               {point}
             </li>
@@ -297,7 +348,7 @@ const CHART_STATUSES = [
   </section>
 
   <!-- ASK YOUR AI: копируемый промпт -->
-  <section class="section ask" id="ask">
+  <section class="section section-soft ask" id="ask">
     <div class="container">
       <span class="tag">{t.ask.tag}</span>
       <h2>{t.ask.title}</h2>
@@ -386,7 +437,7 @@ const CHART_STATUSES = [
     </div>
   </section>
 
-  <!-- АВТОР -->
+  <!-- КАК ЭТО РАБОТАЕТ -->
   <section class="section section-soft">
     <div class="container">
       <h2>{t.how.title}</h2>
@@ -405,7 +456,7 @@ const CHART_STATUSES = [
   </section>
 
   <!-- ЧИСЛА: что видно в самом продукте -->
-  <section class="section section-soft">
+  <section class="section">
     <div class="container">
       <h2>{t.numbers.title}</h2>
       <p class="section-sub">{t.numbers.subtitle}</p>
@@ -457,7 +508,7 @@ const CHART_STATUSES = [
   </section>
 
   <!-- ДОВЕРИЕ -->
-  <section class="section">
+  <section class="section section-soft">
     <div class="container">
       <h2>{t.trust.title}</h2>
       <p class="section-sub">{t.trust.subtitle}</p>
@@ -489,41 +540,64 @@ const CHART_STATUSES = [
     </div>
   </section>
 
-  <!-- СКАЧАТЬ -->
-  <section class="section">
+  <!-- КТО ЗА ЭТИМ СТОИТ -->
+  {/* Прежний блок «автор» говорил только про разработчика, и продукт выглядел
+      личным проектом одиночки. Здесь те же слова стоят рядом с заказчиком,
+      который за это платит, — а это уже совсем другой уровень доверия. */}
+  <section class="section" id="behind">
     <div class="container">
-      <div class="author">
-        <span class="tag">{t.author.tag}</span>
-        <h2>{t.author.title}</h2>
-        <p class="section-sub">{t.author.text}</p>
-        <p class="author-sites">
-          {t.author.sites}
-          <a href="https://webtopro.com" target="_blank" rel="noopener">webtopro.com</a>
-          <a href="https://unbywyd.com" target="_blank" rel="noopener">unbywyd.com</a>
-        </p>
-      </div>
-    </div>
-  </section>
+      <p class="tag">{t.behind.tag}</p>
+      <h2>{t.behind.title}</h2>
+      <p class="section-sub">{t.behind.subtitle}</p>
 
-  <!-- ОТЗЫВЫ -->
-  <section class="section section-soft" id="reviews">
-    <div class="container">
-      <h2>{t.reviews.title}</h2>
-      <p class="section-sub">{t.reviews.subtitle}</p>
+      <div class="behind">
+        {/* StartPlan — якорь доверия, поэтому карточка крупнее остальных и
+            единственная носит синий. Второго синего на странице нет.
+            AnyApp стоит внутри этой же карточки, а не четвёртой в ряду:
+            «дочерняя компания» — это отношение, и вложенность показывает его
+            сама, без слов. Отдельной карточкой рядом они читались бы как две
+            независимые фирмы. */}
+        <article class="behind-card behind-sponsor">
+          <a class="behind-logo-link" href={SITE_STARTPLAN} target="_blank" rel="noopener">
+            <img class="behind-logo" src="/new-logo-light.svg" alt="StartPlan" width="668" height="197" loading="lazy" decoding="async" />
+          </a>
+          <p class="behind-role">{t.behind.sponsor.role}</p>
+          <p class="behind-motto">{t.behind.sponsor.motto}</p>
+          <p class="behind-text">{t.behind.sponsor.text}</p>
 
-      <div class="reviews-grid" id="reviews-list" hidden></div>
+          <div class="behind-sub">
+            <a class="behind-logo-link behind-logo-link-sub" href={SITE_ANYAPP} target="_blank" rel="noopener">
+              <span class="behind-logo-sub" set:html={MARK_ANYAPP} />
+            </a>
+            <p class="behind-role">{t.behind.anyapp.role}</p>
+            <p class="behind-text">{t.behind.anyapp.text}</p>
+          </div>
+        </article>
 
-      <!-- Пустое состояние — приглашение, а не серая строка -->
-      <div class="reviews-empty" id="reviews-empty" hidden>
-        <div class="stars-hero" aria-hidden="true">★★★★★</div>
-        <p>{t.reviews.empty}</p>
-      </div>
+        <div class="behind-side">
+          <article class="behind-card">
+            {/* Знак разработчика и логотип Chatick нарисованы через
+                currentColor. Через <img> он не работает — картинка не знает
+                про цвет текста вокруг и вышла бы чёрной на чёрном, — поэтому
+                оба знака вставлены разметкой, а цвет им задаёт CSS. */}
+            <span class="behind-mark" aria-hidden="true" set:html={MARK_DEV} />
+            <p class="behind-role">{t.behind.dev.role}</p>
+            <p class="behind-text">{t.behind.dev.text}</p>
+            <p class="behind-links">
+              <a href="https://unbywyd.com" target="_blank" rel="noopener">unbywyd.com</a>
+              <a href="https://webtopro.com" target="_blank" rel="noopener">webtopro.com</a>
+            </p>
+          </article>
 
-      <div class="review-actions">
-        <button class="btn" id="review-open" type="button">
-          <svg viewBox="0 0 24 24" width="17" height="17" fill="none" aria-hidden="true"><path d="M12 3.3l2.7 5.4 6 .9-4.3 4.2 1 6-5.4-2.8-5.4 2.8 1-6L3.3 9.6l6-.9L12 3.3z" stroke="currentColor" stroke-width="2" stroke-linejoin="round"/></svg>
-          {t.reviews.leave}
-        </button>
+          <article class="behind-card">
+            <span class="behind-mark behind-mark-chatick" role="img" aria-label="Chatick" set:html={MARK_CHATICK} />
+            <p class="behind-role">{t.behind.product.role}</p>
+            <p class="behind-text">{t.behind.product.text}</p>
+            <p class="behind-links">
+              <a href={GITHUB} target="_blank" rel="noopener">{t.footer.github}</a>
+            </p>
+          </article>
+        </div>
       </div>
     </div>
   </section>
@@ -547,12 +621,13 @@ const CHART_STATUSES = [
             <label>
               <span>{t.contact.name}</span>
               <input name="name" maxlength="120" autocomplete="name" placeholder={t.contact.ph.name} />
-              <em class="err"></em>
+              <em class="err" aria-live="polite"></em>
             </label>
             <label>
               <span>{t.contact.email}</span>
-              <input name="email" type="email" required autocomplete="email" placeholder={t.contact.ph.email} />
-              <em class="err"></em>
+              {/* Почту подчёркивать красным незачем: адрес — не слово из словаря */}
+              <input name="email" type="email" required autocomplete="email" spellcheck="false" inputmode="email" placeholder={t.contact.ph.email} />
+              <em class="err" aria-live="polite"></em>
             </label>
           </div>
           <!-- Свой список: нативный select не стилизуется и выглядит чужим -->
@@ -575,7 +650,7 @@ const CHART_STATUSES = [
           <label>
             <span>{t.contact.message}</span>
             <textarea name="body" rows="4" required minlength="10" maxlength="5000" placeholder={t.contact.ph.message}></textarea>
-            <em class="err"></em>
+            <em class="err" aria-live="polite"></em>
           </label>
           <input class="trap" type="text" name="website" tabindex="-1" autocomplete="off" aria-hidden="true" />
           <div class="form-actions">
@@ -604,69 +679,6 @@ const CHART_STATUSES = [
     </div>
   </section>
 </main>
-
-<!-- Модалка отзыва: форма не мозолит глаза на странице, а приходит по кнопке -->
-<div class="cmodal" id="review-modal" hidden>
-  <div class="cmodal-backdrop" data-close></div>
-  <div class="cmodal-card" role="dialog" aria-modal="true" aria-labelledby="review-modal-title">
-    <button class="cmodal-x" type="button" data-close aria-label="Close">
-      <svg viewBox="0 0 24 24" width="18" height="18" fill="none" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"/></svg>
-    </button>
-    <h3 class="cmodal-title" id="review-modal-title">{t.reviews.leave}</h3>
-    <form
-      id="review-form"
-      novalidate
-      data-err-required={t.formErrors.required}
-      data-err-email={t.formErrors.email}
-      data-err-short={t.formErrors.short}
-    >
-      <div class="form-fields">
-        <div class="form-row">
-          <label>
-            <span>{t.reviews.name}</span>
-            <input name="name" required maxlength="80" autocomplete="name" placeholder={t.reviews.ph.name} />
-            <em class="err"></em>
-          </label>
-          <label>
-            <span>{t.reviews.role}</span>
-            <input name="role" maxlength="80" autocomplete="organization-title" placeholder={t.reviews.ph.role} />
-            <em class="err"></em>
-          </label>
-        </div>
-        <label>
-          <span>{t.reviews.email}</span>
-          <input name="email" type="email" required autocomplete="email" placeholder={t.reviews.ph.email} />
-          <em class="err"></em>
-        </label>
-        <div class="rate">
-          <span class="rate-label">{t.reviews.rating}</span>
-          <div class="starpick" id="starpick">
-              <button type="button" class="is-on" aria-label="1"><svg viewBox="0 0 24 24" width="26" height="26" aria-hidden="true"><path d="M12 2.6l2.9 5.9 6.5.9-4.7 4.6 1.1 6.5L12 17.4l-5.8 3.1 1.1-6.5L2.6 9.4l6.5-.9L12 2.6z" fill="currentColor"/></svg></button>
-              <button type="button" class="is-on" aria-label="2"><svg viewBox="0 0 24 24" width="26" height="26" aria-hidden="true"><path d="M12 2.6l2.9 5.9 6.5.9-4.7 4.6 1.1 6.5L12 17.4l-5.8 3.1 1.1-6.5L2.6 9.4l6.5-.9L12 2.6z" fill="currentColor"/></svg></button>
-              <button type="button" class="is-on" aria-label="3"><svg viewBox="0 0 24 24" width="26" height="26" aria-hidden="true"><path d="M12 2.6l2.9 5.9 6.5.9-4.7 4.6 1.1 6.5L12 17.4l-5.8 3.1 1.1-6.5L2.6 9.4l6.5-.9L12 2.6z" fill="currentColor"/></svg></button>
-              <button type="button" class="is-on" aria-label="4"><svg viewBox="0 0 24 24" width="26" height="26" aria-hidden="true"><path d="M12 2.6l2.9 5.9 6.5.9-4.7 4.6 1.1 6.5L12 17.4l-5.8 3.1 1.1-6.5L2.6 9.4l6.5-.9L12 2.6z" fill="currentColor"/></svg></button>
-              <button type="button" class="is-on" aria-label="5"><svg viewBox="0 0 24 24" width="26" height="26" aria-hidden="true"><path d="M12 2.6l2.9 5.9 6.5.9-4.7 4.6 1.1 6.5L12 17.4l-5.8 3.1 1.1-6.5L2.6 9.4l6.5-.9L12 2.6z" fill="currentColor"/></svg></button>
-          </div>
-          <input type="hidden" name="rating" value="5" />
-        </div>
-        <label>
-          <span>{t.reviews.text}</span>
-          <textarea name="body" rows="4" required minlength="20" maxlength="2000" placeholder={t.reviews.ph.body}></textarea>
-          <em class="err"></em>
-        </label>
-        <input class="trap" type="text" name="website" tabindex="-1" autocomplete="off" aria-hidden="true" />
-        <div class="form-actions">
-          <button class="btn" type="submit">{t.reviews.send}</button>
-          <span class="form-msg" data-failed={t.reviews.failed}></span>
-        </div>
-      </div>
-      <div class="form-done" aria-live="polite">
-        <span class="done-ic"><svg viewBox="0 0 24 24" width="26" height="26" fill="none" aria-hidden="true"><path d="m5 13 4 4L19 7" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"/></svg></span>
-        <p>{t.reviews.sent}</p>
-      </div>
-    </form>
-  </div>
-</div>
 
 <footer class="footer">
   <div class="container footer-inner">
@@ -712,77 +724,11 @@ const CHART_STATUSES = [
     })
   }
 
-  // --- Отзывы и контактная форма ------------------------------------------
-  // Лендинг статический, формы говорят с API напрямую. Валидация своя:
+  // --- Контактная форма ----------------------------------------------------
+  // Лендинг статический, форма говорит с API напрямую. Валидация своя:
   // браузерные пузыри выглядят чужеродно и не переводятся вместе со страницей.
   const API = 'https://api.chatick.com'
   const EMAIL_RE = /^[^@\s]+@[^@\s]+\.[^@\s]+$/
-
-  const esc = (v: string) => v.replace(/[<>&]/g, (c) => ({ '<': '&lt;', '>': '&gt;', '&': '&amp;' })[c]!)
-
-  // --- список отзывов или пустое состояние --------------------------------
-  const list = document.getElementById('reviews-list')
-  const emptyBox = document.getElementById('reviews-empty')
-  if (list && emptyBox) {
-    fetch(`${API}/api/v1/reviews`)
-      .then((r) => (r.ok ? r.json() : { items: [] }))
-      .catch(() => ({ items: [] }))
-      .then((d: { items?: { name: string; role: string; rating: number; body: string }[] }) => {
-        const items = d.items ?? []
-        if (!items.length) {
-          emptyBox.hidden = false
-          return
-        }
-        list.innerHTML = items
-          .map((x) => {
-            const n = Math.max(1, Math.min(5, x.rating))
-            const stars = '★'.repeat(n) + `<span class="off">${'★'.repeat(5 - n)}</span>`
-            return `<figure class="rcard">
-                <div class="rstars">${stars}</div>
-                <blockquote>${esc(x.body)}</blockquote>
-                <figcaption><b>${esc(x.name)}</b>${x.role ? ` · ${esc(x.role)}` : ''}</figcaption>
-              </figure>`
-          })
-          .join('')
-        list.hidden = false
-      })
-  }
-
-  // --- модалка -------------------------------------------------------------
-  const modal = document.getElementById('review-modal')
-  const openBtn = document.getElementById('review-open')
-  const reviewForm = document.getElementById('review-form') as HTMLFormElement | null
-
-  function openModal() {
-    if (!modal) return
-    modal.hidden = false
-    document.documentElement.style.overflow = 'hidden' // страница под модалкой не крутится
-    modal.querySelector<HTMLInputElement>('input[name=name]')?.focus()
-  }
-  function closeModal() {
-    if (!modal) return
-    modal.hidden = true
-    document.documentElement.style.overflow = ''
-  }
-  openBtn?.addEventListener('click', openModal)
-  modal?.querySelectorAll('[data-close]').forEach((el) => el.addEventListener('click', closeModal))
-  window.addEventListener('keydown', (e) => {
-    if (e.key === 'Escape' && modal && !modal.hidden) closeModal()
-  })
-
-  // --- звёзды: кликабельные, с живым предпросмотром ------------------------
-  const pick = document.getElementById('starpick')
-  const ratingInput = reviewForm?.querySelector<HTMLInputElement>('input[name=rating]') ?? null
-  const stars = pick ? Array.from(pick.querySelectorAll('button')) : []
-  const paint = (n: number) => stars.forEach((b, i) => b.classList.toggle('is-on', i < n))
-  stars.forEach((b, i) => {
-    b.addEventListener('click', () => {
-      if (ratingInput) ratingInput.value = String(i + 1)
-      paint(i + 1)
-    })
-    b.addEventListener('mouseenter', () => paint(i + 1))
-  })
-  pick?.addEventListener('mouseleave', () => paint(Number(ratingInput?.value ?? 5)))
 
   // --- свой выпадающий список ----------------------------------------------
   const topicSel = document.getElementById('topic-sel')
@@ -871,39 +817,6 @@ const CHART_STATUSES = [
     if (m) m.textContent = ''
   }
 
-  reviewForm?.addEventListener('submit', async (e) => {
-    e.preventDefault()
-    clearFail(reviewForm)
-    if (!validate(reviewForm)) return
-    const f = new FormData(reviewForm)
-    const btn = reviewForm.querySelector<HTMLButtonElement>('button[type=submit]')!
-    btn.disabled = true
-    try {
-      await post(`${API}/api/v1/reviews`, {
-        name: f.get('name'),
-        role: f.get('role'),
-        email: f.get('email'),
-        rating: Number(f.get('rating')),
-        body: f.get('body'),
-        website: f.get('website'), // приманка для ботов
-        lang: document.documentElement.lang,
-      })
-      reviewForm.classList.add('is-done')
-      // Показали «спасибо» — и через паузу тихо закрылись, вернув форму в ноль
-      setTimeout(() => {
-        closeModal()
-        reviewForm.classList.remove('is-done')
-        reviewForm.reset()
-        if (ratingInput) ratingInput.value = '5'
-        paint(5)
-      }, 2600)
-    } catch {
-      showFail(reviewForm)
-    } finally {
-      btn.disabled = false
-    }
-  })
-
   const contactForm = document.getElementById('contact-form') as HTMLFormElement | null
   contactForm?.addEventListener('submit', async (e) => {
     e.preventDefault()
@@ -934,6 +847,34 @@ const CHART_STATUSES = [
   document.querySelectorAll<HTMLAnchorElement>('.lang').forEach((a) =>
     a.addEventListener('click', () => localStorage.setItem('chatick_lang', a.dataset.lang!)),
   )
+
+  // --- Оживший момент в шапке ---------------------------------------------
+  // Разметка сама по себе показывает готовую задачу. Скрипт только «отматывает
+  // назад» и проигрывает превращение — и лишь если человек не просил систему
+  // не двигать картинку. Так при reduced-motion и без JS остаётся результат,
+  // а не пустая рамка.
+  const demo = document.querySelector<HTMLElement>('.hero-demo')
+  if (demo && !window.matchMedia('(prefers-reduced-motion: reduce)').matches) {
+    demo.classList.add('is-live')
+    // Ждём появления в кадре: анимация, проигравшаяся до того, как на неё
+    // посмотрели, — это просто пустая рамка при первом взгляде.
+    const play = () => demo.classList.add('is-playing')
+    if ('IntersectionObserver' in window) {
+      const io = new IntersectionObserver(
+        (entries) => {
+          for (const e of entries) {
+            if (!e.isIntersecting) continue
+            play()
+            io.disconnect()
+          }
+        },
+        { threshold: 0.4 },
+      )
+      io.observe(demo)
+    } else {
+      play()
+    }
+  }
 
   // Копирование промпта «спросите свой ИИ»
   const copyBtn = document.getElementById('copy-prompt')
@@ -967,7 +908,9 @@ const CHART_STATUSES = [
     position: sticky;
     top: 0;
     backdrop-filter: blur(12px);
-    background: rgba(20, 22, 17, 0.82);
+    /* Тон шапки повторяет фон страницы: прежний rgba остался от светлого
+       #141611 и после углубления фона висел светлой полосой поверх него. */
+    background: color-mix(in srgb, var(--bg) 82%, transparent);
     border-bottom: 1px solid var(--border);
     z-index: 10;
   }
@@ -981,8 +924,9 @@ const CHART_STATUSES = [
     display: inline-flex;
     align-items: center;
     gap: 9px;
-    font-weight: 800;
-    font-size: 1.15rem;
+    font-family: var(--font-mono);
+    font-weight: 700;
+    font-size: 1.1rem;
     letter-spacing: -0.02em;
   }
   .nav-actions {
@@ -994,11 +938,20 @@ const CHART_STATUSES = [
     display: flex;
     gap: 4px;
   }
+  /* Переключатель языка — три ссылки подряд: без запаса по высоте пальцем
+     попадаешь в соседний язык. */
   .lang {
-    font-size: 0.8rem;
+    display: inline-flex;
+    align-items: center;
+    min-height: 44px;
+    padding: 4px 10px;
+    font-family: var(--font-mono);
+    font-size: 0.78rem;
     color: var(--fg-muted);
-    padding: 4px 9px;
     border-radius: 8px;
+  }
+  [dir='rtl'] .lang {
+    font-family: inherit;
   }
   .lang:hover {
     color: var(--fg);
@@ -1016,20 +969,29 @@ const CHART_STATUSES = [
     padding: 110px 0 90px;
     text-align: center;
   }
+  /* Моноширинный шире гротеска на том же кегле — потолок ниже прежних 4rem,
+     иначе заголовок в три слова разъезжается на четыре строки. */
   .hero h1 {
-    font-size: clamp(2.3rem, 6vw, 4rem);
-    line-height: 1.1;
-    letter-spacing: -0.03em;
-    font-weight: 800;
+    font-size: clamp(2rem, 5vw, 3.3rem);
+    line-height: 1.15;
+    letter-spacing: -0.02em;
+    font-weight: 700;
+    max-width: 22ch;
+    margin-inline: auto;
+    text-wrap: balance;
   }
+  /* Ключевое слово — единственное, что подсвечено в заголовке. Не цветом:
+     лайм остался за кнопками. Подчёркиванием — так его читают и в терминале. */
   .accent {
-    color: var(--lime);
+    color: var(--fg);
+    box-shadow: inset 0 -0.14em 0 rgba(212, 242, 40, 0.45);
   }
   .subtitle {
-    max-width: 640px;
+    max-width: 620px;
     margin: 26px auto 0;
     color: var(--fg-muted);
-    font-size: 1.1rem;
+    font-size: 1.06rem;
+    text-wrap: pretty;
   }
   .hero-cta {
     margin-top: 40px;
@@ -1061,14 +1023,18 @@ const CHART_STATUSES = [
     border-block: 1px solid var(--border);
   }
   h2 {
-    font-size: clamp(1.6rem, 3.5vw, 2.2rem);
-    letter-spacing: -0.02em;
+    font-size: clamp(1.45rem, 3vw, 1.95rem);
+    line-height: 1.25;
+    letter-spacing: -0.015em;
     text-align: center;
+    text-wrap: balance;
   }
   .section-sub {
+    max-width: 660px;
+    margin: 12px auto 0;
     text-align: center;
     color: var(--fg-muted);
-    margin-top: 12px;
+    text-wrap: pretty;
   }
   .grid {
     display: grid;
@@ -1098,8 +1064,11 @@ const CHART_STATUSES = [
     color: var(--fg-muted);
     font-size: 0.92rem;
   }
+  /* Галочка над карточкой — знак «это уже работает», а не кнопка. Приглушена
+     до цвета текста: лайм на странице остался только у действий. */
   .card-solution svg {
     margin-bottom: 12px;
+    color: var(--fg-muted);
   }
   .card-step {
     position: relative;
@@ -1147,17 +1116,39 @@ const CHART_STATUSES = [
   }
 
   /* --- Ярлык секции ------------------------------------------------------ */
+  /* Ярлык секции больше не лаймовый: подпись — не действие, и красить её
+     цветом кнопок значило звать нажать на неё. Моноширинный с решёткой,
+     как заголовок раздела в README. */
   .tag {
-    display: inline-block;
+    display: block;
     margin-bottom: 12px;
-    padding: 4px 12px;
-    border-radius: 999px;
-    background: rgba(212, 242, 40, 0.12);
-    color: var(--lime);
-    font-size: 0.74rem;
-    font-weight: 700;
-    letter-spacing: 0.04em;
+    color: var(--fg-muted);
+    font-family: var(--font-mono);
+    font-size: 0.72rem;
+    font-weight: 500;
+    letter-spacing: 0.14em;
     text-transform: uppercase;
+  }
+  .tag::before {
+    content: '# ';
+    color: var(--lime);
+  }
+  /* На иврите решётка и разрядка не работают: диакритика едет, а знак
+     оказывается не с той стороны фразы. */
+  [dir='rtl'] .tag {
+    font-family: inherit;
+    letter-spacing: normal;
+    text-transform: none;
+  }
+  [dir='rtl'] .tag::before {
+    content: none;
+  }
+  /* Секции с заголовком по центру — ярлык там же. В «мосту» колонка
+     выровнена по началу строки, и ярлык остаётся с ней. */
+  #integrate .tag,
+  .ask .tag,
+  #behind .tag {
+    text-align: center;
   }
 
   /* --- Возможности рабочего пространства -------------------------------- */
@@ -1197,6 +1188,7 @@ const CHART_STATUSES = [
   .bridge-points svg {
     flex: 0 0 auto;
     margin-top: 3px;
+    color: var(--fg-muted);
   }
   .bridge-security {
     margin-top: 20px;
@@ -1211,7 +1203,7 @@ const CHART_STATUSES = [
   .term {
     direction: ltr;
     text-align: start;
-    background: #0d0f0a;
+    background: var(--bg);
     border: 1px solid var(--border);
     border-radius: var(--radius);
     overflow: hidden;
@@ -1233,7 +1225,7 @@ const CHART_STATUSES = [
     overflow-x: auto;
     font-size: 0.8rem;
     line-height: 1.75;
-    font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+    font-family: var(--font-mono);
   }
   .c-dim {
     color: #6c7160;
@@ -1247,11 +1239,13 @@ const CHART_STATUSES = [
   .ask {
     text-align: center;
   }
+  /* Секция «спросите свой ИИ» стала светлой полосой — коробка с промптом
+     на ней должна быть темнее, а не того же тона. */
   .prompt-box {
     max-width: 720px;
     margin: 26px auto 0;
     padding: 20px;
-    background: var(--bg-soft);
+    background: var(--bg);
     border: 1px solid var(--border);
     border-radius: var(--radius);
     display: flex;
@@ -1261,7 +1255,7 @@ const CHART_STATUSES = [
   }
   .prompt-text {
     color: var(--fg);
-    font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+    font-family: var(--font-mono);
     font-size: 0.86rem;
     line-height: 1.7;
     text-align: start;
@@ -1287,9 +1281,17 @@ const CHART_STATUSES = [
     justify-content: space-between;
     gap: 12px;
   }
+  /* Ссылки подвала стоят плотной строкой — высота отделяет их друг от друга */
   .footer-link {
+    display: inline-flex;
+    align-items: center;
+    min-height: 44px;
     color: var(--fg-muted);
-    border-bottom: 1px dotted var(--border);
+  }
+  .footer-link:not(.footer-gh) {
+    text-decoration: underline;
+    text-decoration-style: dotted;
+    text-underline-offset: 4px;
   }
   .footer-link:hover {
     color: var(--lime);
@@ -1314,11 +1316,16 @@ const CHART_STATUSES = [
     gap: 18px;
     margin-top: 30px;
   }
+  /* Карточка отделяется от полосы, на которой стоит: на светлой — тёмная,
+     на тёмной — светлая. Иначе на своём же фоне она пропадает. */
   .chart-card {
-    background: var(--bg);
+    background: var(--bg-soft);
     border: 1px solid var(--border);
     border-radius: var(--radius);
     padding: 20px;
+  }
+  .section-soft .chart-card {
+    background: var(--bg);
   }
   .chart-head {
     display: flex;
@@ -1431,9 +1438,10 @@ const CHART_STATUSES = [
   .dl-small { padding: 10px 16px; font-size: .92rem; }
   .how-btn {
     display: inline-flex; align-items: center; gap: 8px;
+    min-height: 44px;
     border: 0; background: none; cursor: pointer;
     color: var(--fg-muted); font: inherit; font-size: .9rem;
-    padding: 6px 4px;
+    padding: 6px 10px;
   }
   .how-btn:hover { color: var(--fg); }
   .how-mark {
@@ -1459,7 +1467,7 @@ const CHART_STATUSES = [
     margin-top: 14px;
     border: 1px solid var(--border); border-radius: 999px;
     background: none; color: var(--fg); cursor: pointer;
-    font: inherit; font-size: .88rem; padding: 6px 16px;
+    font: inherit; font-size: .88rem; padding: 10px 18px; min-height: 44px;
   }
   .how-close:hover { border-color: var(--lime); color: var(--lime); }
 
@@ -1519,29 +1527,144 @@ const CHART_STATUSES = [
     border-color: transparent;
   }
 
-  /* --- Автор -------------------------------------------------------------- */
-  /* Блок задавал только ширину: заголовок и подзаголовок центрировались
-     собственными стилями, а ссылки — flex-строка — оставались у левого края.
-     Получалось, что текст по центру, а «More work» уехало влево. */
-  .author {
-    max-width: 720px;
-    margin: 0 auto;
-    text-align: center;
+  /* --- Кто за этим стоит --------------------------------------------------- */
+  /* Карточка заказчика вдвое шире остальных: вес в сетке — это тоже
+     утверждение о том, кто здесь главный аргумент. */
+  .behind {
+    display: grid;
+    grid-template-columns: 1.15fr 1fr;
+    gap: 18px;
+    margin-top: 40px;
+    align-items: stretch;
+    text-align: start;
   }
-  .author-sites {
+  .behind-side {
+    display: grid;
+    gap: 18px;
+    align-content: stretch;
+  }
+  .behind-card {
+    background: var(--bg-soft);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    padding: 26px;
+  }
+  /* Синий живёт только здесь — на карточке заказчика. Сам #1b4dff слишком
+     тёмен для текста на чёрном (3.2:1), поэтому он идёт заливкой и рамкой,
+     а девиз набран его осветлённой версией. */
+  .behind-sponsor {
+    display: flex;
+    flex-direction: column;
+    border-color: color-mix(in srgb, var(--sp-blue) 40%, transparent);
+    background: linear-gradient(
+        160deg,
+        color-mix(in srgb, var(--sp-blue) 14%, transparent),
+        color-mix(in srgb, var(--sp-blue) 2%, transparent) 60%
+      ),
+      var(--bg-soft);
+  }
+  /* Логотип — ссылка на сайт компании. Обёртка отдельная, чтобы у цели была
+     высота: сама картинка ниже 44px, и пальцем в неё не попасть.
+     Стрелка после знака показывает, что уходим на чужой сайт, — иначе
+     логотип выглядит просто картинкой и никто по нему не жмёт. */
+  .behind-logo-link {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    min-height: 44px;
+    margin-bottom: 18px;
+    color: var(--fg-muted);
+    transition: opacity 0.15s ease, color 0.15s ease;
+  }
+  .behind-logo-link::after {
+    content: '';
+    flex: none;
+    width: 12px;
+    height: 12px;
+    background: currentColor;
+    /* Стрелка «наружу» маской: свой цвет и никакого лишнего запроса */
+    -webkit-mask: var(--ic-external) center / contain no-repeat;
+    mask: var(--ic-external) center / contain no-repeat;
+  }
+  /* В RTL стрелка «наружу» смотрит в другую сторону — иначе она указывает
+     обратно в текст, а не прочь от него. */
+  [dir='rtl'] .behind-logo-link::after {
+    transform: scaleX(-1);
+  }
+  .behind-logo-link:hover {
+    opacity: 0.8;
+    color: var(--fg);
+  }
+  .behind-logo {
+    width: min(210px, 100%);
+    height: auto;
+  }
+
+  /* Вложенный блок дочерней компании: отступ и линия слева говорят
+     «это внутри StartPlan» раньше, чем человек дочитает подпись.
+     Линия логическая — на иврите она сама уходит вправо. */
+  .behind-sub {
+    margin-top: 24px;
+    padding-top: 20px;
+    padding-inline-start: 18px;
+    border-top: 1px solid var(--border);
+    border-inline-start: 2px solid color-mix(in srgb, var(--sp-blue) 45%, transparent);
+  }
+  .behind-logo-link-sub {
+    min-height: 40px;
+    margin-bottom: 12px;
+  }
+  .behind-logo-sub {
+    display: block;
+    width: min(132px, 100%);
+  }
+  .behind-role {
+    font-family: var(--font-mono);
+    font-size: 0.7rem;
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
+    color: var(--fg-muted);
+    margin-bottom: 10px;
+  }
+  [dir='rtl'] .behind-role {
+    font-family: inherit;
+    letter-spacing: normal;
+  }
+  /* Девиз — голосом компании, поэтому крупнее текста и в цвете самой компании */
+  .behind-motto {
+    font-size: 1.15rem;
+    font-weight: 700;
+    line-height: 1.35;
+    color: #8fa9ff;
+    margin-bottom: 12px;
+  }
+  .behind-text {
+    color: var(--fg-muted);
+    font-size: 0.94rem;
+    line-height: 1.65;
+  }
+  .behind-mark {
+    display: block;
+    color: var(--fg);
+    margin-bottom: 20px;
+  }
+  .behind-links {
     display: flex;
     flex-wrap: wrap;
-    align-items: center;
-    justify-content: center;
     gap: 14px;
-    margin-top: 18px;
-    color: var(--fg-muted);
-    font-size: 0.92rem;
+    margin-top: 16px;
+    font-size: 0.9rem;
   }
-  .author-sites a {
+  .behind-links a {
     color: var(--lime);
     text-decoration: underline;
     text-underline-offset: 3px;
+  }
+
+  @media (max-width: 860px) {
+    .behind {
+      grid-template-columns: 1fr;
+    }
   }
 
   /* --- Подвал ------------------------------------------------------------- */
@@ -1561,7 +1684,8 @@ const CHART_STATUSES = [
     display: flex;
     flex-wrap: wrap;
     align-items: center;
-    gap: 18px;
+    justify-content: center;
+    gap: 0 18px;
   }
   .footer-gh {
     display: inline-flex;
@@ -1585,70 +1709,29 @@ const CHART_STATUSES = [
 </style>
 
 <style is:global>
-  /* --- Отзывы: карточки приходят из скрипта, стили должны быть глобальными -- */
-  .reviews-grid {
-    display: grid;
-    grid-template-columns: repeat(auto-fit, minmax(270px, 1fr));
-    gap: 18px;
-    margin-top: 34px;
+  /* --- Знаки в блоке «кто за этим стоит» ------------------------------------ */
+  /* Эти три знака вставлены через set:html, а такой разметке Astro не выдаёт
+     свой data-атрибут — значит, из scoped-стилей до вложенного <svg> не
+     дотянуться, и правила молча не срабатывали. Поэтому они здесь,
+     глобальными. */
+  .behind-mark svg {
+    display: block;
+    width: auto;
+    height: 34px;
   }
-  .rcard {
-    margin: 0;
-    background: var(--bg);
-    border: 1px solid var(--border);
-    border-radius: var(--radius);
-    padding: 22px;
-    display: flex;
-    flex-direction: column;
-    gap: 12px;
+  .behind-mark-chatick svg {
+    height: 22px;
   }
-  .rstars {
-    color: var(--lime);
-    letter-spacing: 3px;
-    font-size: 0.95rem;
+  .behind-logo-sub svg {
+    display: block;
+    width: 100%;
+    height: auto;
   }
-  .rstars .off {
-    color: rgba(255, 255, 255, 0.16);
-  }
-  .rcard blockquote {
-    margin: 0;
-    flex: 1;
-    color: #d7d9d0;
-    font-size: 0.95rem;
-    line-height: 1.65;
-  }
-  .rcard figcaption {
-    color: var(--fg-muted);
-    font-size: 0.85rem;
-  }
-  .rcard figcaption b {
-    color: var(--fg);
-    font-weight: 600;
-  }
-
-  /* Пустое состояние: приглашение со звёздами, а не строка мелким шрифтом */
-  .reviews-empty {
-    max-width: 520px;
-    margin: 36px auto 0;
-    padding: 42px 28px;
-    text-align: center;
-    background: var(--bg);
-    border: 1px dashed rgba(212, 242, 40, 0.3);
-    border-radius: 18px;
-  }
-  .stars-hero {
-    color: var(--lime);
-    font-size: 1.7rem;
-    letter-spacing: 9px;
-    text-shadow: 0 0 26px rgba(212, 242, 40, 0.45);
-    margin-bottom: 10px;
-  }
-  .reviews-empty p {
-    color: var(--fg-muted);
-  }
-  .review-actions {
-    text-align: center;
-    margin-top: 28px;
+  /* В знаке AnyApp слово набрано почти чёрным: на нашем фоне это 1.08:1,
+     то есть его просто нет. Перекрашиваем только слово — четыре цветных
+     треугольника фирменные и читаются как есть. */
+  .behind-logo-sub [fill='#141A3A'] {
+    fill: var(--fg);
   }
 
   /* --- Формы ---------------------------------------------------------------- */
@@ -1772,92 +1855,6 @@ const CHART_STATUSES = [
     text-underline-offset: 3px;
   }
 
-  /* --- Модалка --------------------------------------------------------------- */
-  .cmodal {
-    position: fixed;
-    inset: 0;
-    z-index: 60;
-    display: grid;
-    place-items: center;
-    padding: 20px;
-  }
-  .cmodal[hidden] {
-    display: none;
-  }
-  .cmodal-backdrop {
-    position: absolute;
-    inset: 0;
-    background: rgba(8, 9, 6, 0.72);
-    backdrop-filter: blur(6px);
-  }
-  .cmodal-card {
-    position: relative;
-    width: 100%;
-    max-width: 520px;
-    max-height: calc(100vh - 40px);
-    overflow-y: auto;
-    background: var(--bg-soft);
-    border: 1px solid var(--border);
-    border-radius: 18px;
-    padding: 26px;
-    box-shadow: 0 30px 80px rgba(0, 0, 0, 0.5);
-    animation: cmodal-pop 0.18s ease-out;
-  }
-  @keyframes cmodal-pop {
-    from {
-      transform: translateY(10px) scale(0.98);
-      opacity: 0;
-    }
-  }
-  .cmodal-x {
-    position: absolute;
-    top: 14px;
-    inset-inline-end: 14px;
-    background: none;
-    border: 0;
-    color: var(--fg-muted);
-    cursor: pointer;
-    padding: 6px;
-    border-radius: 8px;
-    line-height: 0;
-  }
-  .cmodal-x:hover {
-    color: var(--fg);
-    background: rgba(255, 255, 255, 0.06);
-  }
-  .cmodal-title {
-    font-size: 1.25rem;
-    letter-spacing: -0.01em;
-    margin-bottom: 18px;
-  }
-  .rate {
-    display: grid;
-    gap: 6px;
-  }
-  .rate-label {
-    font-size: 0.84rem;
-    color: var(--fg-muted);
-  }
-  .starpick {
-    display: flex;
-    gap: 2px;
-  }
-  .starpick button {
-    background: none;
-    border: 0;
-    padding: 2px;
-    cursor: pointer;
-    color: rgba(255, 255, 255, 0.16);
-    line-height: 0;
-    transition: color 0.1s ease, transform 0.1s ease;
-  }
-  .starpick button.is-on {
-    color: var(--lime);
-  }
-  .starpick button:hover {
-    transform: scale(1.15);
-  }
-
   /* --- Шапка: полоса «никакой привязки» ------------------------------------ */
   .integrate-list {
     list-style: none;
@@ -1874,11 +1871,12 @@ const CHART_STATUSES = [
     gap: 10px;
     font-size: 15px;
     line-height: 1.6;
-    color: var(--fg-dim);
+    color: var(--fg-muted);
   }
   .integrate-list svg {
     flex: none;
     margin-top: 4px;
+    color: var(--fg-muted);
   }
   .integrate-cta {
     margin-top: 28px;
@@ -1888,25 +1886,209 @@ const CHART_STATUSES = [
     gap: 12px;
   }
 
-  /* Снимок продукта под кнопками в шапке. Без рамки и подложки — на снимке
-     уже нарисованы окна со своими границами, вторая рамка с ними спорит.
-     Маска снизу гасит кромку: картинка растворяется в фоне следующей
-     секции, а не обрывается линейкой поперёк экрана. */
-  .hero-shot {
+  /* --- Оживший момент в шапке ---------------------------------------------- */
+  /* Реплика в чате становится задачей. Одна анимация на всю страницу, поэтому
+     ей можно позволить быть заметной — всё остальное вокруг молчит.
+     Базовое состояние — конечное: без JS, при reduced-motion и в поисковой
+     выдаче человек видит готовую задачу, а не пустую рамку. Класс is-live
+     скрипт вешает сам, и только тогда шаги проигрываются с нуля. */
+  .hero-demo {
     margin: 56px auto 0;
-    max-width: 1120px;
-    width: min(100%, 1120px);
-    line-height: 0;
-    -webkit-mask-image: linear-gradient(to bottom, #000 78%, transparent 100%);
-    mask-image: linear-gradient(to bottom, #000 78%, transparent 100%);
+    max-width: 560px;
+    text-align: start;
   }
-  .hero-shot img {
-    width: 100%;
-    height: auto;
+  .demo-frame {
+    display: grid;
+    gap: 12px;
+    padding: 22px;
+    background: var(--bg-soft);
+    border: 1px solid var(--border);
+    border-radius: 18px;
   }
+  .demo-label {
+    display: block;
+    font-family: var(--font-mono);
+    font-size: 0.68rem;
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
+    color: var(--fg-muted);
+    margin-bottom: 10px;
+  }
+  .demo-msg {
+    display: flex;
+    gap: 10px;
+    align-items: flex-start;
+  }
+  /* Аватар кружком с буквой: настоящих лиц у нас нет, а стоковые читаются
+     как враньё быстрее, чем что угодно другое на странице. */
+  .demo-ava {
+    flex: none;
+    width: 30px;
+    height: 30px;
+    display: grid;
+    place-items: center;
+    border-radius: 50%;
+    background: rgba(255, 255, 255, 0.08);
+    color: var(--fg);
+    font-size: 0.78rem;
+    font-weight: 700;
+  }
+  .demo-ava-sm {
+    width: 20px;
+    height: 20px;
+    font-size: 0.62rem;
+  }
+  .demo-bubble {
+    background: rgba(255, 255, 255, 0.04);
+    border: 1px solid var(--border);
+    border-radius: 4px 14px 14px 14px;
+    padding: 10px 14px;
+  }
+  /* Уголок пузыря смотрит на аватар — в RTL аватар справа, значит и уголок */
+  [dir='rtl'] .demo-bubble {
+    border-radius: 14px 4px 14px 14px;
+  }
+  .demo-bubble b {
+    display: block;
+    font-size: 0.78rem;
+    color: var(--fg-muted);
+    font-weight: 600;
+  }
+  .demo-bubble p {
+    font-size: 0.95rem;
+    line-height: 1.5;
+  }
+  .demo-arrow {
+    display: grid;
+    place-items: center;
+    color: var(--lime);
+  }
+  .demo-task {
+    padding: 16px 18px;
+    background: var(--bg);
+    border: 1px solid var(--border);
+    border-radius: 14px;
+  }
+  .demo-label-task {
+    color: var(--lime);
+  }
+  .demo-task-title {
+    font-family: var(--font-mono);
+    font-size: 1rem;
+    font-weight: 700;
+    line-height: 1.4;
+  }
+  [dir='rtl'] .demo-task-title {
+    font-family: inherit;
+  }
+  .demo-meta {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+    margin-top: 14px;
+  }
+  .demo-chip {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    padding: 5px 11px;
+    border: 1px solid var(--border);
+    border-radius: 999px;
+    background: rgba(255, 255, 255, 0.03);
+    color: var(--fg-muted);
+    font-size: 0.8rem;
+  }
+  .demo-chip-who {
+    padding-inline-start: 5px;
+    color: var(--fg);
+  }
+  .demo-chip-status {
+    font-family: var(--font-mono);
+    font-size: 0.72rem;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+  }
+  [dir='rtl'] .demo-chip-status {
+    font-family: inherit;
+    text-transform: none;
+  }
+
+  /* Шаги проигрываются, только если скрипт включил анимацию: is-live ставится
+     после проверки prefers-reduced-motion. Без него всё видно сразу. */
+  .hero-demo.is-live .demo-msg,
+  .hero-demo.is-live .demo-arrow,
+  .hero-demo.is-live .demo-task,
+  .hero-demo.is-live .demo-meta .demo-chip {
+    opacity: 0;
+  }
+  .hero-demo.is-live.is-playing .demo-msg {
+    animation: demo-in 0.45s ease-out 0.1s both;
+  }
+  .hero-demo.is-live.is-playing .demo-arrow {
+    animation: demo-in 0.4s ease-out 0.85s both;
+  }
+  .hero-demo.is-live.is-playing .demo-task {
+    animation: demo-rise 0.5s cubic-bezier(0.2, 0.7, 0.3, 1) 1.15s both;
+  }
+  /* Исполнитель и срок — последними и по очереди: это тот самый момент,
+     ради которого вся анимация и затевалась. */
+  .hero-demo.is-live.is-playing .demo-meta .demo-chip:nth-child(1) {
+    animation: demo-chip 0.34s ease-out 1.75s both;
+  }
+  .hero-demo.is-live.is-playing .demo-meta .demo-chip:nth-child(2) {
+    animation: demo-chip 0.34s ease-out 1.95s both;
+  }
+  .hero-demo.is-live.is-playing .demo-meta .demo-chip:nth-child(3) {
+    animation: demo-chip 0.34s ease-out 2.15s both;
+  }
+  @keyframes demo-in {
+    from {
+      opacity: 0;
+      transform: translateY(8px);
+    }
+    to {
+      opacity: 1;
+      transform: none;
+    }
+  }
+  @keyframes demo-rise {
+    from {
+      opacity: 0;
+      transform: translateY(14px) scale(0.97);
+    }
+    to {
+      opacity: 1;
+      transform: none;
+    }
+  }
+  @keyframes demo-chip {
+    from {
+      opacity: 0;
+      transform: translateY(6px) scale(0.94);
+    }
+    to {
+      opacity: 1;
+      transform: none;
+    }
+  }
+
+  /* Текст только для читалок: анимация показывает смысл глазами, а тем, кто
+     страницу слушает, нужна та же мысль словами. */
+  .sr-only {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    overflow: hidden;
+    clip-path: inset(50%);
+    white-space: nowrap;
+  }
+
   @media (max-width: 700px) {
-    .hero-shot {
+    .hero-demo {
       margin-top: 36px;
+    }
+    .demo-frame {
+      padding: 16px;
     }
   }
 
@@ -1919,23 +2101,35 @@ const CHART_STATUSES = [
     justify-content: center;
     gap: 10px 24px;
   }
+  /* Иконки в полосе доверия больше не лаймовые: три ярких значка рядом с
+     кнопкой перетягивали внимание с неё же. Приглушены до цвета текста. */
   .hero-trust li {
     display: inline-flex;
     align-items: center;
     gap: 8px;
+    min-height: 36px;
     padding: 8px 15px;
     border: 1px solid var(--border);
     border-radius: 999px;
     background: rgba(255, 255, 255, 0.03);
     color: var(--fg);
-    font-size: 0.88rem;
-    font-weight: 600;
+    font-size: 0.86rem;
+    font-weight: 500;
+  }
+  .hero-trust li > svg,
+  .hero-trust a > svg:first-child {
+    color: var(--fg-muted);
+    flex: none;
   }
 
+  /* Ссылка растянута на всю плашку: цель — сама плашка, а не текст внутри */
   .hero-trust a {
     display: inline-flex;
     align-items: center;
     gap: 8px;
+    margin: -8px -15px;
+    padding: 8px 15px;
+    min-height: 44px;
     color: inherit;
   }
   .hero-trust li:has(a):hover {
@@ -2148,8 +2342,7 @@ const CHART_STATUSES = [
     .trust-lock {
       flex-direction: column;
     }
-    .contact-card,
-    .cmodal-card {
+    .contact-card {
       padding: 20px;
     }
   }

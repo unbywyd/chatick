@@ -23,6 +23,19 @@ type Dict = {
     note: string
     /** Подпись к снимку продукта в шапке — для читалок и когда картинка не загрузилась */
     shotAlt: string
+    /** Оживший момент в шапке: реплика в чате становится задачей */
+    demo: {
+      /** Что происходит — одной фразой, для читалок и reduced-motion */
+      alt: string
+      chatLabel: string
+      author: string
+      message: string
+      taskLabel: string
+      taskTitle: string
+      assignee: string
+      due: string
+      status: string
+    }
     /** Полоса под кнопками: экспорт, открытый код, бэкапы */
     trust: string[]
   }
@@ -79,8 +92,17 @@ type Dict = {
   how: { title: string; steps: Feature[] }
   /** Доверие: безопасность, бэкапы, надёжность, бесплатность */
   trust: { title: string; subtitle: string; noLock: Feature; items: Feature[] }
-  /** Кто это сделал */
-  author: { tag: string; title: string; text: string; sites: string }
+  /** Кто стоит за проектом: заказчик-спонсор, разработчик, сам продукт */
+  behind: {
+    tag: string
+    title: string
+    subtitle: string
+    sponsor: { role: string; motto: string; text: string }
+    /** Дочерняя студия разработки StartPlan — стоит внутри карточки заказчика */
+    anyapp: { role: string; text: string }
+    dev: { role: string; text: string }
+    product: { role: string; text: string }
+  }
   /** Скачивание десктопных версий */
   download: {
     title: string
@@ -105,23 +127,6 @@ type Dict = {
     step2: string
     step3: string
     sourceHint: string
-  }
-  /** Отзывы */
-  reviews: {
-    title: string
-    subtitle: string
-    empty: string
-    leave: string
-    name: string
-    role: string
-    email: string
-    rating: string
-    text: string
-    send: string
-    sent: string
-    failed: string
-    cancel: string
-    ph: { name: string; role: string; email: string; body: string }
   }
   /** Контактная форма */
   contact: {
@@ -180,6 +185,17 @@ export const dict: Record<LocaleCode, Dict> = {
       note: 'Free while in beta',
       shotAlt:
         'Chatick on a desktop: project chat, tasks with sprints, the tray panel with notifications, team notes and time reports',
+      demo: {
+        alt: 'In the project chat someone writes “the login page breaks on Safari”. Chatick turns the message into a task: assigned to Dana, due Friday, status To do.',
+        chatLabel: 'Project chat',
+        author: 'Ilya',
+        message: 'the login page breaks on Safari',
+        taskLabel: 'Task created',
+        taskTitle: 'Fix login page on Safari',
+        assignee: 'Dana',
+        due: 'Friday',
+        status: 'To do',
+      },
       trust: ['Open source', 'Free', 'Reliable: backups, export & import'],
     },
     pain: {
@@ -313,11 +329,27 @@ export const dict: Record<LocaleCode, Dict> = {
         { title: 'Nothing hidden in the log', text: 'Every release is written down before it ships; the build refuses to run otherwise. What changed is always readable on the changelog page.' },
       ],
     },
-    author: {
-      tag: 'Who built this',
-      title: 'One developer who writes code all day, every day',
-      text: 'Fifteen years of building software, and hands-on familiarity with just about every tool teams are asked to live in. Chatick is what was left after removing everything those tools add and nobody uses.',
-      sites: 'More work:',
+    behind: {
+      tag: 'Behind this project',
+      title: 'Who is behind Chatick',
+      subtitle: 'A client who pays for it, a developer who writes it, and a product both of them use.',
+      sponsor: {
+        role: 'Client and sponsor',
+        motto: 'Building people, creating entrepreneurs',
+        text: 'StartPlan is an Israeli startup consultancy with more than ten years behind it. Its founders have helped raise hundreds of millions of shekels for the companies they backed. Chatick is built for them, and paid for by them.',
+      },
+      anyapp: {
+        role: 'Their development studio',
+        text: 'AnyApp is StartPlan’s subsidiary: an Israeli studio building mobile apps for Android and iOS and web systems, the whole way from spec to launch. Dozens of products shipped, and founders who have made the Forbes 30 Under 30 Israel list.',
+      },
+      dev: {
+        role: 'Development',
+        text: 'One developer, fifteen years of building software, writing Chatick daily and using it to run the work on Chatick itself.',
+      },
+      product: {
+        role: 'The product',
+        text: 'Open source and free while in beta. Everything on this page is running today — nothing here is a mockup of something planned.',
+      },
     },
     download: {
       title: 'Use it wherever you work',
@@ -339,22 +371,6 @@ export const dict: Record<LocaleCode, Dict> = {
       step2: 'Windows shows a blue SmartScreen window. Click “More info”, then “Run anyway”.',
       step3: 'After that it installs normally, and updates itself from then on.',
       sourceHint: 'Rather build it yourself? The full source is on GitHub.',
-    },
-    reviews: {
-      title: 'What people say',
-      subtitle: 'Reviews are read before they appear here.',
-      empty: 'No reviews published yet. Yours could be the first.',
-      leave: 'Leave a review',
-      name: 'Your name',
-      role: 'Role (optional)',
-      email: 'Email',
-      rating: 'Rating',
-      text: 'Your review',
-      send: 'Send review',
-      sent: 'Thank you — your review will appear here once it has been read.',
-      failed: 'Could not send. Please try again, or write to support@chatick.com.',
-      cancel: 'Cancel',
-      ph: { name: 'Jane Cooper', role: 'Team lead', email: 'you@company.com', body: 'What does Chatick change for your team?' },
     },
     contact: {
       title: 'Get in touch',
@@ -405,6 +421,17 @@ export const dict: Record<LocaleCode, Dict> = {
       note: 'Бесплатно на время беты',
       shotAlt:
         'Chatick на рабочем столе: чат проекта, задачи со спринтами, панель в трее с уведомлениями, заметки команды и отчёты по времени',
+      demo: {
+        alt: 'В чате проекта пишут «страница входа ломается в Safari». Chatick превращает реплику в задачу: исполнитель Дана, срок пятница, статус «К выполнению».',
+        chatLabel: 'Чат проекта',
+        author: 'Илья',
+        message: 'страница входа ломается в Safari',
+        taskLabel: 'Задача создана',
+        taskTitle: 'Починить вход в Safari',
+        assignee: 'Дана',
+        due: 'Пятница',
+        status: 'К выполнению',
+      },
       trust: ['Открытый код', 'Бесплатно', 'Надёжно: бэкапы, экспорт и импорт'],
     },
     pain: {
@@ -538,11 +565,27 @@ export const dict: Record<LocaleCode, Dict> = {
         { title: 'Ничего не прячется', text: 'Каждая версия описана до выпуска — иначе сборка просто не пройдёт. Что изменилось, всегда видно в журнале версий.' },
       ],
     },
-    author: {
-      tag: 'Кто это сделал',
-      title: 'Один разработчик, который пишет код целыми днями',
-      text: 'Пятнадцать лет в разработке и рабочее знакомство почти со всеми программами, в которых заставляют жить команды. Chatick — это то, что осталось после удаления всего, чем никто не пользуется.',
-      sites: 'Другие работы:',
+    behind: {
+      tag: 'Кто за этим стоит',
+      title: 'Кто стоит за Chatick',
+      subtitle: 'Заказчик, который его оплачивает, разработчик, который его пишет, и продукт, которым пользуются оба.',
+      sponsor: {
+        role: 'Заказчик и спонсор',
+        motto: 'Растим людей, создаём предпринимателей',
+        text: 'StartPlan — израильская консалтинговая компания для стартапов, за плечами больше десяти лет. Её основатели помогли привлечь сотни миллионов шекелей компаниям, которые поддерживали. Chatick делается для них и на их деньги.',
+      },
+      anyapp: {
+        role: 'Их студия разработки',
+        text: 'AnyApp — дочерняя компания StartPlan: израильская студия, которая делает мобильные приложения для Android и iOS и веб-системы — полный цикл от спецификации до запуска. Десятки выпущенных продуктов, а основатели попадали в список Forbes «30 Under 30 Israel».',
+      },
+      dev: {
+        role: 'Разработка',
+        text: 'Один разработчик, пятнадцать лет в профессии. Пишет Chatick каждый день и ведёт в нём же работу над самим Chatick.',
+      },
+      product: {
+        role: 'Продукт',
+        text: 'Открытый код, бесплатно на время беты. Всё, что на этой странице, работает уже сегодня — здесь нет макетов того, что только запланировано.',
+      },
     },
     download: {
       title: 'Работайте там, где удобно',
@@ -564,22 +607,6 @@ export const dict: Record<LocaleCode, Dict> = {
       step2: 'Windows покажет синее окно SmartScreen. Нажмите «Подробнее», затем «Выполнить в любом случае».',
       step3: 'Дальше установка обычная, а обновления приложение ставит само.',
       sourceHint: 'Хотите собрать сами? Исходники целиком лежат на GitHub.',
-    },
-    reviews: {
-      title: 'Что говорят',
-      subtitle: 'Отзывы читают перед публикацией.',
-      empty: 'Отзывов пока нет. Ваш может стать первым.',
-      leave: 'Оставить отзыв',
-      name: 'Ваше имя',
-      role: 'Должность (необязательно)',
-      email: 'Почта',
-      rating: 'Оценка',
-      text: 'Отзыв',
-      send: 'Отправить',
-      sent: 'Спасибо — отзыв появится здесь после прочтения.',
-      failed: 'Не отправилось. Попробуйте ещё раз или напишите на support@chatick.com.',
-      cancel: 'Отмена',
-      ph: { name: 'Анна Смирнова', role: 'Тимлид', email: 'you@company.com', body: 'Что Chatick изменил для вашей команды?' },
     },
     contact: {
       title: 'Связаться',
@@ -630,6 +657,17 @@ export const dict: Record<LocaleCode, Dict> = {
       note: 'חינם בתקופת הבטא',
       shotAlt:
         'Chatick על שולחן העבודה: צ׳אט הפרויקט, משימות עם ספרינטים, פאנל המגש עם התראות, הערות הצוות ודוחות זמן',
+      demo: {
+        alt: 'בצ׳אט הפרויקט כותבים «דף ההתחברות נשבר ב-Safari». Chatick הופך את ההודעה למשימה: אחראית דנה, יעד יום שישי, סטטוס «לביצוע».',
+        chatLabel: 'צ׳אט הפרויקט',
+        author: 'איליה',
+        message: 'דף ההתחברות נשבר ב-Safari',
+        taskLabel: 'נוצרה משימה',
+        taskTitle: 'לתקן את דף ההתחברות ב-Safari',
+        assignee: 'דנה',
+        due: 'יום שישי',
+        status: 'לביצוע',
+      },
       trust: ['קוד פתוח', 'חינם', 'אמין: גיבויים, ייצוא ויבוא'],
     },
     pain: {
@@ -763,11 +801,27 @@ export const dict: Record<LocaleCode, Dict> = {
         { title: 'שום דבר לא מוסתר', text: 'כל גרסה מתועדת לפני שהיא יוצאת — אחרת הבנייה פשוט נכשלת.' },
       ],
     },
-    author: {
-      tag: 'מי בנה את זה',
-      title: 'מפתח אחד שכותב קוד כל היום',
-      text: 'חמש עשרה שנות פיתוח והיכרות מעשית עם כמעט כל כלי שצוותים נדרשים לחיות בו. Chatick הוא מה שנשאר אחרי שמסירים את כל מה שאיש לא משתמש בו.',
-      sites: 'עבודות נוספות:',
+    behind: {
+      tag: 'מי עומד מאחורי זה',
+      title: 'מי עומד מאחורי Chatick',
+      subtitle: 'לקוח שמממן, מפתח שכותב, ומוצר ששניהם עובדים בו.',
+      sponsor: {
+        role: 'לקוח ונותן חסות',
+        motto: 'בונים אנשים, יוצרים יזמים',
+        text: 'StartPlan היא חברת ייעוץ ישראלית לסטארטאפים עם יותר מעשר שנות ניסיון. מייסדיה סייעו לגייס מאות מיליוני שקלים עבור החברות שליוו. Chatick נבנה עבורם ובמימונם.',
+      },
+      anyapp: {
+        role: 'סטודיו הפיתוח שלהם',
+        text: 'AnyApp היא חברת הבת של StartPlan: סטודיו ישראלי שמפתח אפליקציות מובייל ל-Android ול-iOS ומערכות ווב — מהאפיון ועד ההשקה. עשרות מוצרים שיצאו לאוויר, ומייסדים שנכנסו לרשימת Forbes «30 Under 30 Israel».',
+      },
+      dev: {
+        role: 'פיתוח',
+        text: 'מפתח אחד, חמש עשרה שנות פיתוח. כותב את Chatick מדי יום ומנהל בו את העבודה על Chatick עצמו.',
+      },
+      product: {
+        role: 'המוצר',
+        text: 'קוד פתוח, חינם בתקופת הבטא. כל מה שבעמוד הזה עובד היום — אין כאן הדמיות של דברים שרק מתוכננים.',
+      },
     },
     download: {
       title: 'עבדו איפה שנוח לכם',
@@ -789,22 +843,6 @@ export const dict: Record<LocaleCode, Dict> = {
       step2: 'Windows יציג חלון SmartScreen כחול. לחצו «מידע נוסף» ואז «הפעל בכל זאת».',
       step3: 'מכאן ההתקנה רגילה, והאפליקציה מתעדכנת מעצמה.',
       sourceHint: 'מעדיפים לבנות בעצמכם? הקוד המלא נמצא ב-GitHub.',
-    },
-    reviews: {
-      title: 'מה אומרים',
-      subtitle: 'חוות הדעת נקראות לפני פרסום.',
-      empty: 'עדיין אין חוות דעת. שלכם יכולה להיות הראשונה.',
-      leave: 'כתיבת חוות דעת',
-      name: 'השם שלכם',
-      role: 'תפקיד (רשות)',
-      email: 'אימייל',
-      rating: 'דירוג',
-      text: 'חוות הדעת',
-      send: 'שליחה',
-      sent: 'תודה — חוות הדעת תופיע כאן לאחר קריאה.',
-      failed: 'השליחה נכשלה. נסו שוב או כתבו ל-support@chatick.com.',
-      cancel: 'ביטול',
-      ph: { name: 'דנה לוי', role: 'ראש צוות', email: 'you@company.com', body: 'מה Chatick שינה עבור הצוות שלכם?' },
     },
     contact: {
       title: 'צרו קשר',
