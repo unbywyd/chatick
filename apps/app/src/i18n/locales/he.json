@@ -476,8 +476,11 @@
     "connecting": "מתחבר…",
     "today": "היום",
     "yesterday": "אתמול",
-    "modeGroup": "קבוצה",
-    "modeAi": "AI",
+    "modeGroup": "צ׳אט",
+    "modeAi": "עוזר",
+    "leaveAiConfirm": "לצאת מהשיחה עם העוזר?",
+    "leaveAiNote": "העוזר עדיין עונה. אם תצאו, לא תראו את התשובה.",
+    "leaveAiOk": "לצאת",
     "aiHint": "שיחה פרטית עם ה-AI של הפרויקט",
     "placeholderGroup": "כתיבה לקבוצה…",
     "placeholderAi": "לשאול את ה-AI…",
@@ -539,10 +542,8 @@
     "msgCount": "{{count}} הודעות"
   },
   "aiChannel": {
-    "title": "ערוץ AI",
     "subtitle": "שיחה פרטית עם ה-AI של הפרויקט — אחרים לא רואים",
-    "close": "לסגור ולחזור לצ׳אט",
-    "clear": "לנקות שיחה",
+    "clear": "לנקות את השיחה עם ה-AI",
     "clearConfirm": "לנקות את השיחה עם ה-AI?",
     "clearNote": "ההקשר של ה-AI יתחיל מחדש — צ׳אט הקבוצה לא מושפע."
   },

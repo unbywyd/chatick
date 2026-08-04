@@ -10,13 +10,14 @@ import { cn } from '@/lib/utils'
 import { DropdownMenu, DropdownMenuTrigger, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator } from '@/components/ui/dropdown-menu'
 import { ContextMenu, ContextMenuTrigger, ContextMenuContent, ContextMenuItem, ContextMenuSeparator } from '@/components/ui/context-menu'
 import { Button } from '@/components/ui/button'
+import { useConfirm } from '@/components/ui/confirm'
 import { useProjectSocket, type ChatMessage } from '@/hooks/useProjectSocket'
 import { Composer, AI_MENTION_ID } from './Composer'
 import { SandboxOverlay } from './SandboxOverlay'
 import { AvatarRow } from '@/components/ui/avatar-row'
 import { Avatar } from '@/components/ui/avatar'
 import { ShareDialog } from '@/components/ShareDialog'
-import { AiOverlay } from './AiOverlay'
+import { AiFeed } from './AiFeed'
 import { FileViewer, type ViewerFile } from '@/components/files/FileViewer'
 import { NOTE_META, NOTE_TYPES, type NoteType } from '@/components/tabs/NotesTab'
 import { DatePicker } from '@/components/ui/date-picker'
@@ -53,29 +54,23 @@ export function ChatPanel({
   ref?: React.Ref<ChatPanelHandle>
 }) {
   const { t, i18n } = useTranslation()
+  const confirm = useConfirm()
   const navigate = useNavigate()
   const { id: projectId, companyId } = useParams()
   const [searchParams, setSearchParams] = useSearchParams()
   const qc = useQueryClient()
-  // «ИИ» — не отдельный таб, а оверлей поверх группового чата (единый паттерн с sandbox)
-  const [aiOpen, setAiOpen] = useState(false)
-  const mode: ChatMode = 'group'
+  // Группа и ИИ — два разных чата под одним композером, а не лента с пометками:
+  // человек всегда видит ровно ту переписку, в которую пишет.
+  const [mode, setMode] = useState<ChatMode>('group')
+  const isAi = mode === 'ai'
   // Горячие клавиши «фокус в чат» и «фокус в ИИ»: переключают режим и ставят
   // курсор в поле — одним нажатием, без промежуточного клика по вкладке.
-  useImperativeHandle(
-    ref,
-    () => ({
-      focusChat: () => {
-        setAiOpen(false)
-        setFocusComposer((v) => v + 1)
-      },
-      focusAi: () => {
-        setAiOpen(true)
-        setFocusAiInput((v) => v + 1)
-      },
-    }),
-    [],
-  )
+  // Через тот же switchMode, что и табы: иначе горячая клавиша была бы
+  // единственным способом уйти от отвечающего ассистента без вопроса.
+  useImperativeHandle(ref, () => ({
+    focusChat: () => void switchMode('group'),
+    focusAi: () => void switchMode('ai'),
+  }))
   const [checkingUsers, setCheckingUsers] = useState<Map<string, string>>(new Map()) // userId -> name («пишет…»)
   // id сообщения, которое сейчас проверяется (null — ничего не ждём)
   const [myPending, setMyPending] = useState<string | null>(null)
@@ -86,8 +81,6 @@ export function ChatPanel({
   const [focusComposer, setFocusComposer] = useState(0)
   /** текст примера, подставляемый в поле по клику из пустого чата */
   const [prefill, setPrefill] = useState<string | null>(null)
-  /** то же для поля ИИ */
-  const [focusAiInput, setFocusAiInput] = useState(0)
   /** сообщение, которым делятся */
   const [sharing, setSharing] = useState<ChatMessage | null>(null)
   const [sandboxStream, setSandboxStream] = useState('') // постепенная печать ответа ИИ
@@ -297,6 +290,9 @@ export function ChatPanel({
     { markdown, mentionIds, attachmentIds, taskRefs, raw }: { markdown: string; mentionIds: string[]; attachmentIds: string[]; taskRefs?: string[]; raw?: boolean },
     sendMode: ChatMode = 'group',
   ) => {
+    // Страховка к запертому композеру: второй вопрос поверх неотвеченного
+    // сбил бы ассистенту нить.
+    if (sendMode === 'ai' && aiThinking) return
     try {
       // «проверяется…» до вердикта; id узнаем из ответа ниже
       const created = await api<ChatMessage & { redirectedToAi?: boolean }>(
@@ -321,8 +317,9 @@ export function ChatPanel({
       } else if (sendMode === 'group' && !raw) {
         setMyPending(created.id)
       }
-      // @AI в группе → тот же оверлей, что и перехват: беседа с ИИ поверх чата
-      if (created.redirectedToAi) setAiOpen(true)
+      // @AI в группе — вопрос ушёл в личный канал, поэтому туда же переводим и
+      // человека: иначе он ждёт ответа в ленте, где его не будет.
+      if (created.redirectedToAi) setMode('ai')
       if (sendMode === 'ai' || created.redirectedToAi) {
         setAiThinking(true)
         // страховка: если ответ так и не пришёл (сеть, перезапуск сервера),
@@ -332,6 +329,49 @@ export function ChatPanel({
       void mentionIds.includes(AI_MENTION_ID)
     } catch (e) {
       setMyPending(null)
+      toast.error(e instanceof Error ? e.message : String(e))
+    }
+  }
+
+  /**
+   * Уход из ИИ, пока он отвечает, бросает ответ на полпути: сокет доставит его
+   * в ленту, которую человек уже не смотрит. Поэтому спрашиваем — но только в
+   * эту сторону, возврат к ИИ ничего не рвёт.
+   */
+  const switchMode = async (next: ChatMode) => {
+    // Повторный вызов в том же режиме — это горячая клавиша «встань в поле»:
+    // переключать нечего, но фокус вернуть надо.
+    if (next === mode) {
+      setFocusComposer((v) => v + 1)
+      return
+    }
+    if (mode === 'ai' && aiThinking) {
+      const ok = await confirm({
+        title: t('chat.leaveAiConfirm'),
+        description: t('chat.leaveAiNote'),
+        confirmLabel: t('chat.leaveAiOk'),
+      })
+      if (!ok) return
+      setAiThinking(false)
+    }
+    setMode(next)
+    setReplyTo(null) // ответ живёт только в группе — в ИИ он бессмыслен
+    setFocusComposer((v) => v + 1)
+  }
+
+  const clearAi = async () => {
+    const ok = await confirm({
+      title: t('aiChannel.clearConfirm'),
+      description: t('aiChannel.clearNote'),
+      destructive: true,
+      confirmLabel: t('aiChannel.clear'),
+    })
+    if (!ok) return
+    try {
+      await api('/api/v1/messages/ai', { method: 'DELETE' }, 'project')
+      setLive((prev) => prev.filter((m) => m.mode !== 'ai'))
+      qc.invalidateQueries({ queryKey: ['messages', projectId] })
+    } catch (e) {
       toast.error(e instanceof Error ? e.message : String(e))
     }
   }
@@ -430,10 +470,22 @@ export function ChatPanel({
             <Search className="size-4" />
           </Button>
 
-          <div className="flex rounded-md border p-0.5">
-            <ModeButton active={!aiOpen} onClick={() => setAiOpen(false)} icon={<Users className="size-3.5" />} label={t('chat.modeGroup')} />
-            <ModeButton active={aiOpen} onClick={() => setAiOpen(true)} icon={<Bot className="size-3.5" />} label={t('chat.modeAi')} />
-          </div>
+          {/* Редкие действия над чатом целиком. Очистка истории ИИ жила
+              корзиной в шапке ИИ-канала — на виду у того, кто просто зашёл
+              поговорить, и в одном клике от необратимого. */}
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+              <Button variant="ghost" size="icon" title={t('chat.actions')}>
+                <MoreHorizontal className="size-4" />
+              </Button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="end">
+              <DropdownMenuItem onSelect={clearAi} className="text-destructive focus:text-destructive">
+                <Trash2 className="size-4" />
+                {t('aiChannel.clear')}
+              </DropdownMenuItem>
+            </DropdownMenuContent>
+          </DropdownMenu>
         </div>
       </header>
 
@@ -458,6 +510,8 @@ export function ChatPanel({
               {t('chat.noLlmCta')}
             </Button>
           </div>
+        ) : isAi ? (
+          <AiFeed messages={aiMessages} thinking={aiThinking} />
         ) : (
           <div>
             {/* Баннер режима истории */}
@@ -561,8 +615,9 @@ export function ChatPanel({
           </div>
         )}
 
-        {/* Кнопка «вниз» при новых сообщениях / когда не у низа */}
-        {!llmMissing && !atBottom && (
+        {/* Кнопка «вниз» при новых сообщениях / когда не у низа. В ИИ-канале
+            не нужна: он сам держится у последнего ответа. */}
+        {!llmMissing && !isAi && !atBottom && (
           <button
             onClick={scrollToBottom}
             className="sticky bottom-2 float-end me-1 flex items-center gap-1 rounded-full border bg-card px-2.5 py-1.5 text-xs shadow-md hover:bg-accent"
@@ -575,21 +630,6 @@ export function ChatPanel({
 
       {/* Поиск по чату */}
       {searchOpen && projectId && <ChatSearch projectId={projectId} lang={i18n.language} onJump={jumpTo} onClose={() => setSearchOpen(false)} />}
-
-      {/* Личный ИИ-канал — оверлей поверх чата (тот же паттерн, что sandbox) */}
-      {aiOpen && !sandboxId && (
-        <AiOverlay
-          messages={aiMessages}
-          thinking={aiThinking}
-          onSend={(text) => send({ markdown: text, mentionIds: [], attachmentIds: [] }, 'ai')}
-          onCleared={() => {
-            setLive((prev) => prev.filter((m) => m.mode !== 'ai'))
-            qc.invalidateQueries({ queryKey: ['messages', projectId] })
-          }}
-          onClose={() => setAiOpen(false)}
-          focusSignal={focusAiInput}
-        />
-      )}
 
       {/* Sandbox поверх чата (SPEC §5.5.3) */}
       {/* Ссылка на сообщение: «ты же говорил» перестаёт быть спором, когда
@@ -664,7 +704,7 @@ export function ChatPanel({
       <footer className="border-t p-3">
         {/* На что отвечаем — над полем ввода, как в мессенджерах: иначе, начав
             писать, человек уже не помнит, к чему это относится. */}
-        {replyTo && (
+        {replyTo && !isAi && (
           <div className="mb-1.5 flex items-start gap-2 rounded-md border-s-2 border-brand bg-muted/50 px-2 py-1.5">
             <Reply className="mt-0.5 size-3.5 shrink-0 text-brand" />
             <div className="min-w-0 flex-1">
@@ -681,15 +721,40 @@ export function ChatPanel({
           </div>
         )}
         <Composer
-          disabled={llmMissing}
-          placeholder={llmMissing ? t('chat.noLlmPlaceholder') : t('chat.placeholderGroup')}
-          mentions={mentionItems}
-          onSend={(p) => send(p, 'group')}
+          // Пока ассистент отвечает, поле заперто: композер очищает себя сразу
+          // после отправки, и отклонённый вопрос просто пропал бы вместе с
+          // набранным текстом.
+          disabled={llmMissing || (isAi && aiThinking)}
+          placeholder={llmMissing ? t('chat.noLlmPlaceholder') : isAi ? t('chat.placeholderAi') : t('chat.placeholderGroup')}
+          // Упоминания и отправка мимо проверки — свойства группового чата:
+          // в личном канале некого упоминать и нечего обходить.
+          mentions={isAi ? [] : mentionItems}
+          onSend={(p) => send(p, mode)}
           focusSignal={focusComposer}
           prefill={prefill}
           onPrefillUsed={() => setPrefill(null)}
-          canBypassAi={myRole === 'owner' || myRole === 'admin'}
+          canBypassAi={!isAi && (myRole === 'owner' || myRole === 'admin')}
         />
+
+        {/* Под полем, а не над ним: переключатель отвечает на вопрос «куда
+            уйдёт то, что я сейчас пишу», и стоит там же, где ответ нужен. */}
+        <div className="mt-2 flex items-center gap-1">
+          <ModeButton
+            active={!isAi}
+            onClick={() => switchMode('group')}
+            icon={<Users className="size-3.5" />}
+            label={t('chat.modeGroup')}
+          />
+          <ModeButton
+            active={isAi}
+            onClick={() => switchMode('ai')}
+            icon={<Bot className="size-3.5" />}
+            label={t('chat.modeAi')}
+          />
+          {/* Компактная подпись вместо шапки-панели: чем личный канал
+              отличается от общего, надо сказать, но не целой полосой. */}
+          {isAi && <span className="ms-1 truncate text-xs text-muted-foreground">{t('aiChannel.subtitle')}</span>}
+        </div>
       </footer>
     </div>
   )
@@ -1200,14 +1265,16 @@ function ChatSearch({ projectId, lang, onJump, onClose }: { projectId: string; l
   )
 }
 
+/** Таб «в какой чат пишем» — под композером. */
 function ModeButton({ active, onClick, icon, label }: { active: boolean; onClick: () => void; icon: React.ReactNode; label: string }) {
   return (
     <button
       type="button"
       onClick={onClick}
+      aria-pressed={active}
       className={cn(
-        'flex items-center gap-1.5 rounded px-2 py-1 text-xs transition-colors',
-        active ? 'bg-primary text-primary-foreground' : 'text-muted-foreground hover:text-foreground',
+        'flex cursor-pointer items-center gap-1.5 rounded-md px-2.5 py-1 text-xs font-medium transition-colors',
+        active ? 'bg-brand/15 text-brand' : 'text-muted-foreground hover:bg-accent hover:text-foreground',
       )}
     >
       {icon}

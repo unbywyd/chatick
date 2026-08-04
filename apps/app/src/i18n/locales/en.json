@@ -476,8 +476,11 @@
     "connecting": "connecting…",
     "today": "Today",
     "yesterday": "Yesterday",
-    "modeGroup": "Group",
-    "modeAi": "AI",
+    "modeGroup": "Chat",
+    "modeAi": "Assistant",
+    "leaveAiConfirm": "Leave the assistant chat?",
+    "leaveAiNote": "The assistant is still answering. If you leave, you won't see the reply.",
+    "leaveAiOk": "Leave",
     "aiHint": "Private conversation with the project AI",
     "placeholderGroup": "Message the group…",
     "placeholderAi": "Ask the AI…",
@@ -539,10 +542,8 @@
     "msgCount": "{{count}} messages"
   },
   "aiChannel": {
-    "title": "AI channel",
     "subtitle": "Private conversation with the project AI — others don't see it",
-    "close": "Close and return to chat",
-    "clear": "Clear conversation",
+    "clear": "Clear AI conversation",
     "clearConfirm": "Clear the AI conversation?",
     "clearNote": "The AI's context starts fresh — the group chat is not affected."
   },
