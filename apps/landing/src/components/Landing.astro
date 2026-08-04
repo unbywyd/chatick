@@ -58,7 +58,9 @@ const DOWNLOADS = [
 // второй копии не заводим.
 const asset = (name: string) => readFileSync(fileURLToPath(new URL(`../../public/${name}`, import.meta.url)), 'utf8')
 const MARK_DEV = asset('unbywyd-mark.svg')
-const MARK_CHATICK = asset('logo.svg')
+// Знак компании-разработчика (WebToPro), а не Chatick: у нашего логотипа
+// свой инлайновый знак в шапке.
+const MARK_WTP = asset('logo.svg')
 // Знак AnyApp вставляем разметкой не ради currentColor, а чтобы дотянуться
 // до тёмного слова внутри и перекрасить его: на чёрном фоне оно не читается.
 const MARK_ANYAPP = asset('anyapp-logo-twotone-dark.svg')
@@ -604,15 +606,22 @@ const CHART_STATUSES = [
             <p class="behind-text">{t.behind.dev.text}</p>
             <p class="behind-links">
               <a href="https://unbywyd.com" target="_blank" rel="noopener">unbywyd.com</a>
-              <a href="https://webto.pro" target="_blank" rel="noopener">webto.pro</a>
             </p>
           </article>
 
           <article class="behind-card">
-            <span class="behind-mark behind-mark-chatick" role="img" aria-label="Chatick" set:html={MARK_CHATICK} />
+            <a
+              class="behind-mark behind-mark-wtp"
+              href="https://webto.pro"
+              target="_blank"
+              rel="noopener"
+              aria-label="WebToPro"
+              set:html={MARK_WTP}
+            />
             <p class="behind-role">{t.behind.product.role}</p>
             <p class="behind-text">{t.behind.product.text}</p>
             <p class="behind-links">
+              <a href="https://webto.pro" target="_blank" rel="noopener">webto.pro</a>
               <a href={GITHUB} target="_blank" rel="noopener">{t.footer.github}</a>
             </p>
           </article>
@@ -724,7 +733,17 @@ const CHART_STATUSES = [
         когда человек долистал до конца. */}
     <div class="footer-top">
       <div class="footer-brand">
-        <span class="footer-mark" set:html={MARK_CHATICK} />
+        <a class="footer-mark" href="/" aria-label="Chatick">
+          <svg viewBox="0 0 48 48" width="30" height="30" fill="none" aria-hidden="true">
+            <path
+              d="M24 4C12.4 4 3 12.7 3 23.5c0 5.4 2.4 10.3 6.2 13.8L8 44l8.4-3.2c2.4.7 4.9 1.2 7.6 1.2 11.6 0 21-8.7 21-19.5S35.6 4 24 4Z"
+              stroke="currentColor"
+              stroke-width="4"
+              stroke-linejoin="round"></path>
+            <path d="M15 24.5 21 30l12-12" stroke="#d4f228" stroke-width="5.5" stroke-linecap="round" stroke-linejoin="round"></path>
+          </svg>
+          <b>Chatick</b>
+        </a>
         <p class="footer-tagline">{t.meta.description}</p>
       </div>
 
@@ -1348,8 +1367,16 @@ const CHART_STATUSES = [
   .footer-brand {
     max-width: 42ch;
   }
-  .footer-mark :global(svg) {
-    width: 116px;
+  /* Знак Chatick, а не логотип студии: подвал подписывает этот сайт. */
+  .footer-mark {
+    display: inline-flex;
+    align-items: center;
+    gap: 9px;
+    color: var(--fg);
+    font-size: 1.15rem;
+  }
+  .behind-mark-wtp :global(svg) {
+    width: 108px;
     height: auto;
     color: var(--fg);
   }
@@ -1996,7 +2023,7 @@ const CHART_STATUSES = [
     width: auto;
     height: 34px;
   }
-  .behind-mark-chatick svg {
+  .behind-mark-wtp svg {
     height: 22px;
   }
   .behind-logo-sub svg {

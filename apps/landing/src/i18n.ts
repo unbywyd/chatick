@@ -363,8 +363,8 @@ export const dict: Record<LocaleCode, Dict> = {
         text: 'One developer, fifteen years of building software, writing Chatick daily and using it to run the work on Chatick itself.',
       },
       product: {
-        role: 'The product',
-        text: 'Open source and free while in beta. Everything on this page is running today — nothing here is a mockup of something planned.',
+        role: 'Development company',
+        text: 'The studio behind the work. Chatick is open source and free while in beta — everything on this page is running today, none of it is a mockup of something planned.',
       },
     },
     download: {
@@ -617,8 +617,8 @@ export const dict: Record<LocaleCode, Dict> = {
         text: 'Один разработчик, пятнадцать лет в профессии. Пишет Chatick каждый день и ведёт в нём же работу над самим Chatick.',
       },
       product: {
-        role: 'Продукт',
-        text: 'Открытый код, бесплатно на время беты. Всё, что на этой странице, работает уже сегодня — здесь нет макетов того, что только запланировано.',
+        role: 'Компания-разработчик',
+        text: 'Студия, силами которой всё это делается. Код Chatick открыт, на время беты он бесплатен — и всё, что на этой странице, работает уже сегодня, здесь нет макетов запланированного.',
       },
     },
     download: {
@@ -871,8 +871,8 @@ export const dict: Record<LocaleCode, Dict> = {
         text: 'מפתח אחד, חמש עשרה שנות פיתוח. כותב את Chatick מדי יום ומנהל בו את העבודה על Chatick עצמו.',
       },
       product: {
-        role: 'המוצר',
-        text: 'קוד פתוח, חינם בתקופת הבטא. כל מה שבעמוד הזה עובד היום — אין כאן הדמיות של דברים שרק מתוכננים.',
+        role: 'חברת הפיתוח',
+        text: 'הסטודיו שעומד מאחורי העבודה. הקוד של Chatick פתוח והוא חינמי בתקופת הבטא — וכל מה שבעמוד הזה עובד היום, אין כאן הדמיות של דברים שרק מתוכננים.',
       },
     },
     download: {
