@@ -195,38 +195,38 @@ const CHART_STATUSES = [
         {/* Одним SVG с жёсткой системой координат: DOM-вёрстка этой сцены
             разъезжалась на разных ширинах и локалях, а здесь геометрия задана
             числами, и плыть ей некуда. */}
-        <svg class="demo-svg" viewBox="0 0 460 520" aria-hidden="true">
+        <svg class="demo-svg" viewBox="0 0 460 424" aria-hidden="true">
           <g class="ds-1">
-            <rect x="1" y="1" width="458" height="112" rx="14" class="ds-card"></rect>
-            <text x="24" y="32" class="ds-label">{t.hero.demo.chatLabel}</text>
-            <circle cx="38" cy="72" r="14" class="ds-ava"></circle>
-            <text x="38" y="77" class="ds-ava-t" text-anchor="middle">{t.hero.demo.author.slice(0, 1)}</text>
-            <text x="64" y="64" class="ds-name">{t.hero.demo.author}</text>
-            <text x="64" y="86" class="ds-msg">{t.hero.demo.message}</text>
+            <rect x="1" y="1" width="458" height="94" rx="13" class="ds-card"></rect>
+            <text x="22" y="28" class="ds-label">{t.hero.demo.chatLabel}</text>
+            <circle cx="36" cy="62" r="13" class="ds-ava"></circle>
+            <text x="36" y="67" class="ds-ava-t" text-anchor="middle">{t.hero.demo.author.slice(0, 1)}</text>
+            <text x="60" y="55" class="ds-name">{t.hero.demo.author}</text>
+            <text x="60" y="76" class="ds-msg">{t.hero.demo.message}</text>
           </g>
           <g class="ds-arr ds-arr-1">
-            <path d="M230 126v26m0 0-7-8m7 8 7-8"></path>
+            <path d="M230 106v20m0 0-6-7m6 7 6-7"></path>
           </g>
           <g class="ds-2">
-            <rect x="1" y="170" width="458" height="126" rx="14" class="ds-card"></rect>
-            <text x="24" y="201" class="ds-label ds-label-task">{t.hero.demo.taskLabel}</text>
-            <text x="24" y="234" class="ds-title">{t.hero.demo.taskTitle}</text>
+            <rect x="1" y="140" width="458" height="106" rx="13" class="ds-card"></rect>
+            <text x="22" y="167" class="ds-label ds-label-task">{t.hero.demo.taskLabel}</text>
+            <text x="22" y="196" class="ds-title">{t.hero.demo.taskTitle}</text>
             <g class="ds-chips">
-              <circle cx="35" cy="266" r="11" class="ds-ava"></circle>
-              <text x="35" y="270" class="ds-ava-t" text-anchor="middle">{t.hero.demo.assignee.slice(0, 1)}</text>
-              <text x="54" y="271" class="ds-chip">{t.hero.demo.assignee}  ·  {t.hero.demo.due}  ·  {t.hero.demo.status}</text>
+              <circle cx="33" cy="224" r="10" class="ds-ava"></circle>
+              <text x="33" y="228" class="ds-ava-t" text-anchor="middle">{t.hero.demo.assignee.slice(0, 1)}</text>
+              <text x="50" y="229" class="ds-chip">{t.hero.demo.assignee}  ·  {t.hero.demo.due}  ·  {t.hero.demo.status}</text>
             </g>
           </g>
           <g class="ds-arr ds-arr-2">
-            <path d="M230 310v26m0 0-7-8m7 8 7-8"></path>
+            <path d="M230 257v20m0 0-6-7m6 7 6-7"></path>
           </g>
           <g class="ds-3">
-            <rect x="1" y="354" width="458" height="142" rx="14" class="ds-card ds-term"></rect>
-            <text x="24" y="386" class="ds-label">{t.hero.demo.agentLabel}</text>
-            <text x="24" y="420" class="ds-code"><tspan class="ds-cmd">▸ </tspan>{t.hero.demo.agentWork}</text>
+            <rect x="1" y="291" width="458" height="120" rx="13" class="ds-card ds-term"></rect>
+            <text x="22" y="318" class="ds-label">{t.hero.demo.agentLabel}</text>
+            <text x="22" y="350" class="ds-code"><tspan class="ds-cmd">▸ </tspan>{t.hero.demo.agentWork}</text>
             <g class="ds-done">
-              <path d="m26 452 6 6 12-13" class="ds-check"></path>
-              <text x="54" y="461" class="ds-done-t">{t.hero.demo.agentDone}</text>
+              <path d="m24 379 5 5 11-12" class="ds-check"></path>
+              <text x="48" y="388" class="ds-done-t">{t.hero.demo.agentDone}</text>
             </g>
           </g>
         </svg>
@@ -623,7 +623,7 @@ const CHART_STATUSES = [
 
   <!-- КОНТАКТЫ -->
   <section class="section" id="contact">
-    <div class="container">
+    <div class="container contact-wide">
       <h2>{t.contact.title}</h2>
       <p class="section-sub">{t.contact.subtitle}</p>
 
@@ -1045,6 +1045,11 @@ const CHART_STATUSES = [
   }
 
   /* Форма и вопросы рядом: пока человек думает, писать ли, он читает ответы. */
+  /* Шире общей сетки: две колонки в 1060px жались, хотя на большом экране
+     места вдоволь. */
+  .contact-wide {
+    max-width: 1240px;
+  }
   .contact-split {
     margin-top: 34px;
     display: grid;
@@ -2150,11 +2155,11 @@ const CHART_STATUSES = [
     fill: var(--fg-muted);
   }
   .ds-msg {
-    font-size: 15px;
+    font-size: 14px;
     fill: var(--fg);
   }
   .ds-title {
-    font-size: 16px;
+    font-size: 15px;
     font-weight: 650;
     fill: var(--fg);
   }
@@ -2302,18 +2307,14 @@ const CHART_STATUSES = [
     border-color: rgba(212, 242, 40, 0.4);
   }
 
+  /* Бейдж строкой выше текста, а не рядом: в колонке героя они вставали в
+     ряд и переносились по слову — строка ломалась пополам. */
   .beta-line {
     display: flex;
-    flex-wrap: wrap;
-    align-items: center;
-    justify-content: flex-start;
-    gap: 12px;
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 10px;
     margin-bottom: 22px;
-  }
-  /* Примечание к бете длинное; без ограничения оно тянулось на всю колонку
-     и ломало ровный левый край шапки. */
-  .beta-note {
-    max-width: 48ch;
   }
   .beta-badge {
     background: var(--lime);
@@ -2329,8 +2330,9 @@ const CHART_STATUSES = [
   .beta-note {
     color: var(--fg-muted);
     font-size: 0.88rem;
-    max-width: 620px;
-    text-align: center;
+    max-width: 52ch;
+    text-align: start;
+    text-wrap: pretty;
   }
   .dl-warn {
     display: inline-flex;
