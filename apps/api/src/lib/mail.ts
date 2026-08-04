@@ -1,5 +1,6 @@
 import nodemailer from 'nodemailer'
 import { env } from '../env.js'
+import { companyMail, sendVia } from './company-mail.js'
 
 const transport =
   env.SMTP_HOST && env.SMTP_USER
@@ -21,12 +22,29 @@ export async function sendMail(opts: {
   text: string
   html?: string
   unsubscribeUrl?: string
+  /** Компания-отправитель: если у неё настроена своя почта, письмо уйдёт с
+   *  её домена. Не указана — общая почта, как раньше. */
+  companyId?: string | null
 }) {
+  // Своя почта компании (SPEC §8.41). При поломке — откат на общую: чужие
+  // настройки не должны отрезать людей от писем о входе и приглашениях.
+  if (opts.companyId) {
+    try {
+      const m = await companyMail(opts.companyId)
+      if (m) {
+        await sendVia(m, opts, opts.companyId)
+        return
+      }
+    } catch (err) {
+      console.error(`[mail] company ${opts.companyId} transport failed, falling back:`, err)
+    }
+  }
+
   if (!transport) {
     console.log(`[mail:noop] to=${opts.to} subject="${opts.subject}"\n${opts.text}`)
     return
   }
-  const { unsubscribeUrl, ...mail } = opts
+  const { unsubscribeUrl, companyId: _companyId, ...mail } = opts
   try {
     await transport.sendMail({
       from: { name: FROM_NAME, address: env.SMTP_FROM_EMAIL! },

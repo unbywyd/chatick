@@ -1015,7 +1015,8 @@
   "common": {
     "save": "שמירה",
     "cancel": "ביטול",
-    "dragToChat": "גררו לצ׳אט"
+    "dragToChat": "גררו לצ׳אט",
+    "loading": "טוען…"
   },
   "people": {
     "add": "הוספת אנשים…",
@@ -1361,5 +1362,35 @@
     "removeLogo": "הסרת הלוגו",
     "logoUpdated": "הלוגו עודכן",
     "logoRemoved": "הלוגו הוסר"
+  },
+  "mail": {
+    "title": "דואר החברה",
+    "subtitle": "המכתבים יוצאים מהדומיין שלכם ולא משלנו — הם נראים מוכרים לעובדים ועוברים טוב יותר את מסנני הספאם.",
+    "provider": "ספק",
+    "providerDefault": "דואר Chatick",
+    "providerDefaultHint": "המכתבים יוצאים מהדומיין שלנו. לרוב הצוותים זה מספיק.",
+    "smtp": "שרת SMTP משלכם",
+    "sendgrid": "SendGrid",
+    "fromEmail": "כתובת השולח",
+    "fromName": "שם השולח",
+    "fromNamePlaceholder": "החברה שלכם",
+    "replyTo": "כתובת לתשובות",
+    "replyToHint": "לאן יגיעו התשובות. ריק — לכתובת השולח.",
+    "host": "שרת SMTP",
+    "port": "פורט",
+    "user": "משתמש",
+    "password": "סיסמה",
+    "apiKey": "מפתח API",
+    "secretPlaceholder": "הזינו כדי לשמור",
+    "secretKeep": "נשמר — השאירו ריק",
+    "secretHint": "נשמר מוצפן ולא מוצג שוב — גם לא לכם.",
+    "saved": "הגדרות הדואר נשמרו",
+    "testSent": "מכתב בדיקה נשלח אל {{email}}",
+    "sendTest": "שליחת בדיקה",
+    "verifiedAt": "נבדק בשליחה אמיתית ב-{{date}}",
+    "disable": "חזרה לדואר Chatick",
+    "disableConfirm": "לחזור לדואר Chatick?",
+    "disableConfirmBody": "הגדרות השרת והסיסמה השמורה יימחקו. המכתבים יצאו שוב מהדומיין שלנו.",
+    "disabled": "חזרה לדואר Chatick"
   }
 }

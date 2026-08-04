@@ -170,6 +170,24 @@ export const companies = pgTable('companies', {
   // Язык компании: на нём пишутся письма тем, у кого своих настроек ещё нет —
   // например, человеку, которого только что завели через API.
   locale: text('locale').notNull().default('en'),
+  // --- своя почта компании (SPEC §8.41) ---
+  // Письма уходят с домена компании, а не с нашего: письмо «от Chatick» про
+  // внутренние задачи выглядит как фишинг, и SPF/DKIM нашего домена к их
+  // адресу отношения не имеют — почтовики понижают такие письма.
+  mailProvider: text('mail_provider'), // smtp | sendgrid; пусто — общая почта
+  mailFromEmail: text('mail_from_email'),
+  mailFromName: text('mail_from_name'),
+  mailReplyTo: text('mail_reply_to'),
+  mailHost: text('mail_host'),
+  mailPort: integer('mail_port'),
+  mailUser: text('mail_user'),
+  // Секреты — AES-256-GCM, как ключ LLM. Наружу не отдаются никогда: ими
+  // шлют почту от имени компании.
+  mailPasswordEnc: text('mail_password_enc'),
+  mailApiKeyEnc: text('mail_api_key_enc'),
+  // Когда настройки последний раз подтверждались живой отправкой.
+  mailVerifiedAt: timestamp('mail_verified_at'),
+
   // --- связь с внешней системой (SPEC-INTEGRATION) ---
   // Название и шаблон ссылки — настройки, а не код: так интеграция остаётся
   // универсальной, без следов конкретного заказчика.

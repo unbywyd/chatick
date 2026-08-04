@@ -15,6 +15,7 @@ import { projectLocale } from '../lib/locale.js'
 import { issueKey, listKeys, revokeKey } from '../lib/company-key.js'
 import { newSecret } from '../lib/webhooks.js'
 import { encrypt } from '../lib/crypto.js'
+import { companyMail, sendVia, dropTransport } from '../lib/company-mail.js'
 import { LLM_PROVIDERS, testLlm, type LlmProvider } from '../lib/llm.js'
 import { env } from '../env.js'
 
@@ -500,6 +501,179 @@ companiesRoute.delete('/:companyId/webhooks/:webhookId', async (c) => {
     .delete(companyWebhooks)
     .where(and(eq(companyWebhooks.id, c.req.param('webhookId')), eq(companyWebhooks.companyId, companyId)))
   return c.json({ ok: true })
+})
+
+// --- Своя почта компании (SPEC §8.41) ---
+//
+// Письма сотрудникам уходят с домена компании, а не с нашего: письмо «от
+// Chatick» про их внутренние задачи выглядит как фишинг и хуже проходит
+// спам-фильтры, потому что SPF/DKIM нашего домена к их адресу не относятся.
+//
+// Пароль SMTP и ключ SendGrid наружу не отдаются НИКОГДА — ни админу, ни в
+// API. Клиенту видно только, задан секрет или нет.
+
+/** Текущие настройки почты. Секреты заменены признаком «задано». */
+companiesRoute.get('/:companyId/mail', async (c) => {
+  const { sub } = c.get('session')
+  const companyId = c.req.param('companyId')
+  if ((await memberRoleIn(companyId, sub)) !== 'admin') return c.json({ error: 'Forbidden' }, 403)
+
+  const row = await db.query.companies.findFirst({
+    where: eq(companies.id, companyId),
+    columns: {
+      mailProvider: true,
+      mailFromEmail: true,
+      mailFromName: true,
+      mailReplyTo: true,
+      mailHost: true,
+      mailPort: true,
+      mailUser: true,
+      mailPasswordEnc: true,
+      mailApiKeyEnc: true,
+      mailVerifiedAt: true,
+    },
+  })
+  if (!row) return c.json({ error: 'Not found' }, 404)
+
+  const { mailPasswordEnc, mailApiKeyEnc, ...rest } = row
+  return c.json({
+    ...rest,
+    // Не сам секрет, а факт его наличия: иначе «показать пароль» в чужой
+    // вкладке — это выданный доступ к почте компании.
+    hasPassword: !!mailPasswordEnc,
+    hasApiKey: !!mailApiKeyEnc,
+  })
+})
+
+/** Сохранить настройки почты. Пустая строка секрета — «оставить прежний». */
+companiesRoute.patch(
+  '/:companyId/mail',
+  zValidator(
+    'json',
+    z.object({
+      provider: z.enum(['smtp', 'sendgrid']).nullable(),
+      fromEmail: z.string().max(200).optional(),
+      fromName: z.string().max(120).optional(),
+      replyTo: z.string().max(200).optional(),
+      host: z.string().max(200).optional(),
+      port: z.number().int().min(1).max(65535).optional(),
+      user: z.string().max(200).optional(),
+      password: z.string().max(500).optional(),
+      apiKey: z.string().max(500).optional(),
+    }),
+  ),
+  async (c) => {
+    const { sub } = c.get('session')
+    const companyId = c.req.param('companyId')
+    if ((await memberRoleIn(companyId, sub)) !== 'admin') return c.json({ error: 'Forbidden' }, 403)
+
+    const b = c.req.valid('json')
+
+    // Отключение — стираем всё, включая секреты: «выключил и забыл» не должно
+    // оставлять в базе рабочий пароль от чужой почты.
+    if (!b.provider) {
+      await db
+        .update(companies)
+        .set({
+          mailProvider: null,
+          mailFromEmail: null,
+          mailFromName: null,
+          mailReplyTo: null,
+          mailHost: null,
+          mailPort: null,
+          mailUser: null,
+          mailPasswordEnc: null,
+          mailApiKeyEnc: null,
+          mailVerifiedAt: null,
+        })
+        .where(eq(companies.id, companyId))
+      dropTransport(companyId)
+      return c.json({ ok: true, provider: null })
+    }
+
+    const from = (b.fromEmail ?? '').trim().toLowerCase()
+    if (!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(from)) return c.json({ error: 'Valid sender email required' }, 400)
+    const replyTo = (b.replyTo ?? '').trim().toLowerCase()
+    if (replyTo && !/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(replyTo)) {
+      return c.json({ error: 'Reply-to must be a valid email' }, 400)
+    }
+
+    const patch: Record<string, unknown> = {
+      mailProvider: b.provider,
+      mailFromEmail: from,
+      mailFromName: (b.fromName ?? '').trim() || null,
+      mailReplyTo: replyTo || null,
+      // Настройки изменились — прежняя проверка о них ничего не говорит.
+      mailVerifiedAt: null,
+    }
+
+    if (b.provider === 'smtp') {
+      const host = (b.host ?? '').trim()
+      if (!host) return c.json({ error: 'SMTP host required' }, 400)
+      patch.mailHost = host
+      patch.mailPort = b.port ?? 587
+      patch.mailUser = (b.user ?? '').trim() || null
+      // Пусто — значит «не меняли»: иначе форма, открытая ради смены порта,
+      // затирала бы пароль, которого она не показывает.
+      if (b.password) patch.mailPasswordEnc = encrypt(b.password)
+      patch.mailApiKeyEnc = null
+    } else {
+      if (b.apiKey) patch.mailApiKeyEnc = encrypt(b.apiKey)
+      patch.mailHost = null
+      patch.mailPort = null
+      patch.mailUser = null
+      patch.mailPasswordEnc = null
+    }
+
+    await db.update(companies).set(patch).where(eq(companies.id, companyId))
+    dropTransport(companyId)
+
+    // Секрет обязателен, но проверяем ПОСЛЕ сохранения остального: иначе
+    // человек теряет введённые host/port из-за забытого пароля.
+    const saved = await companyMail(companyId)
+    if (!saved) return c.json({ error: 'Secret required: enter the password or API key' }, 400)
+
+    return c.json({ ok: true, provider: b.provider })
+  },
+)
+
+/**
+ * Проверка живой отправкой — на почту самого админа.
+ *
+ * Без неё опечатку в пароле обнаруживают сотрудники, у которых молча
+ * перестали приходить письма.
+ */
+companiesRoute.post('/:companyId/mail/test', async (c) => {
+  const { sub } = c.get('session')
+  const companyId = c.req.param('companyId')
+  if ((await memberRoleIn(companyId, sub)) !== 'admin') return c.json({ error: 'Forbidden' }, 403)
+
+  const m = await companyMail(companyId)
+  if (!m) return c.json({ error: 'Mail is not configured' }, 400)
+
+  const me = await db.query.users.findFirst({ where: eq(users.id, sub), columns: { email: true } })
+  if (!me?.email) return c.json({ error: 'No email to send to' }, 400)
+
+  try {
+    await sendVia(
+      m,
+      {
+        to: me.email,
+        subject: 'Chatick: mail settings work',
+        text: 'This is a test message. Your company mail settings are working.',
+        html: '<p>This is a test message. Your company mail settings are working.</p>',
+      },
+      companyId,
+    )
+  } catch (err) {
+    // Причину показываем целиком: «не отправилось» не чинится, а «535
+    // authentication failed» — чинится сразу.
+    dropTransport(companyId)
+    return c.json({ error: err instanceof Error ? err.message : String(err) }, 400)
+  }
+
+  await db.update(companies).set({ mailVerifiedAt: new Date() }).where(eq(companies.id, companyId))
+  return c.json({ ok: true, sentTo: me.email })
 })
 
 /** Настройки внешней системы: название и шаблон ссылки «туда». */

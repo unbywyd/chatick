@@ -1015,7 +1015,8 @@
   "common": {
     "save": "Save",
     "cancel": "Cancel",
-    "dragToChat": "Drag into chat"
+    "dragToChat": "Drag into chat",
+    "loading": "Loading…"
   },
   "people": {
     "add": "Add people…",
@@ -1362,5 +1363,35 @@
     "removeLogo": "Remove the logo",
     "logoUpdated": "Logo updated",
     "logoRemoved": "Logo removed"
+  },
+  "mail": {
+    "title": "Company email",
+    "subtitle": "Send letters from your own domain instead of ours — they look right to your people and pass spam filters better.",
+    "provider": "Provider",
+    "providerDefault": "Chatick mail",
+    "providerDefaultHint": "Letters go out from our domain. Fine for most teams.",
+    "smtp": "Own SMTP server",
+    "sendgrid": "SendGrid",
+    "fromEmail": "Sender address",
+    "fromName": "Sender name",
+    "fromNamePlaceholder": "Your company",
+    "replyTo": "Reply-to address",
+    "replyToHint": "Where replies go. Leave empty to use the sender address.",
+    "host": "SMTP host",
+    "port": "Port",
+    "user": "Username",
+    "password": "Password",
+    "apiKey": "API key",
+    "secretPlaceholder": "Enter to save",
+    "secretKeep": "Saved — leave empty to keep",
+    "secretHint": "Stored encrypted and never shown again, not even to you.",
+    "saved": "Mail settings saved",
+    "testSent": "Test message sent to {{email}}",
+    "sendTest": "Send test",
+    "verifiedAt": "Checked by a real send on {{date}}",
+    "disable": "Switch back to Chatick mail",
+    "disableConfirm": "Switch back to Chatick mail?",
+    "disableConfirmBody": "Your server settings and the saved password will be deleted. Letters will go out from our domain again.",
+    "disabled": "Back to Chatick mail"
   }
 }
