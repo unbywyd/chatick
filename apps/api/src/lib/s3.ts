@@ -4,7 +4,7 @@ import { getSignedUrl } from '@aws-sdk/s3-request-presigner'
 import { eq } from 'drizzle-orm'
 import { env } from '../env.js'
 import { db } from '../db/client.js'
-import { companyStorage, projects, projectStorage } from '../db/schema.js'
+import { companyBackupStorage, companyStorage, projects, projectStorage } from '../db/schema.js'
 import { decrypt } from './crypto.js'
 
 // R2: ключи старого аккаунта, файлы chatick-next живут под префиксом chatick-next/
@@ -70,9 +70,36 @@ async function storageConfigFor(projectId: string) {
  */
 export async function companyStorageFor(
   companyId: string,
-  /** Для архивов: берём отдельный бакет, если компания его задала. */
+  /**
+   * Для архивов сперва смотрим ОТДЕЛЬНОЕ хранилище бэкапов: копия имеет смысл
+   * в другом аккаунте — лежащая в том же, она недоступна ровно тогда, когда
+   * нужна. Не настроено — откатываемся на файловое.
+   */
   purpose: 'files' | 'backup' = 'files',
 ): Promise<ResolvedStorage | null> {
+  if (purpose === 'backup') {
+    const b = await db.query.companyBackupStorage.findFirst({
+      where: eq(companyBackupStorage.companyId, companyId),
+    })
+    if (b?.endpoint && b.bucket && b.accessKeyEncrypted && b.secretKeyEncrypted) {
+      const accessKeyId = decrypt(b.accessKeyEncrypted)
+      const secretAccessKey = decrypt(b.secretKeyEncrypted)
+      const fp = `${b.endpoint}|${b.region}|${b.bucket}|${accessKeyId.slice(0, 6)}`
+      // Свой ключ кэша: у бэкапа другой клиент, чем у файлов той же компании.
+      const cacheKey = `backup:${companyId}`
+      let cached = customCache.get(cacheKey)
+      if (!cached || cached.fp !== fp) {
+        const client = new S3Client({
+          region: b.region || 'auto',
+          endpoint: b.endpoint,
+          credentials: { accessKeyId, secretAccessKey },
+        })
+        cached = { fp, client }
+        customCache.set(cacheKey, cached)
+      }
+      return { client: cached.client, bucket: b.bucket, keyPrefix: '', isCustom: true, publicUrl: null }
+    }
+  }
   const cfg = await db.query.companyStorage.findFirst({ where: eq(companyStorage.companyId, companyId) })
   if (!cfg || cfg.provider !== 'custom' || !cfg.endpoint || !cfg.bucket || !cfg.accessKeyEncrypted || !cfg.secretKeyEncrypted) {
     return null
@@ -86,8 +113,7 @@ export async function companyStorageFor(
     cached = { fp, client }
     customCache.set(companyId, cached)
   }
-  const bucket = purpose === 'backup' ? cfg.backupBucket || cfg.bucket : cfg.bucket
-  return { client: cached.client, bucket, keyPrefix: '', isCustom: true, publicUrl: cfg.publicUrl ?? null }
+  return { client: cached.client, bucket: cfg.bucket, keyPrefix: '', isCustom: true, publicUrl: cfg.publicUrl ?? null }
 }
 
 export async function resolveStorage(projectId: string): Promise<ResolvedStorage> {

@@ -960,9 +960,13 @@
     "autoTitle": "Daily backup",
     "autoHint": "Once a day the whole company — all projects — is archived into your bucket. Seven copies are kept, older ones are removed.",
     "lastAt": "Last backup: {{date}}",
-    "bucketLabel": "Bucket for backups",
-    "bucketPlaceholder": "same as files",
-    "bucketHint": "Optional. Leave empty to keep archives in the same bucket as files."
+    "storageSetupTitle": "Where backups are kept",
+    "separateStorage": "Separate storage for backups",
+    "separateStorageHint": "Its own account and keys, not just another bucket. A copy sitting in the same account is unavailable exactly when you need it — if that account is locked or compromised.",
+    "separateOn": "Separate storage: {{bucket}}",
+    "separateOff": "Same storage as files",
+    "configure": "Configure",
+    "testHint": "We write and delete a test file before saving, so a wrong key is caught here and not by the nightly backup."
   },
   "sidebar": {
     "search": "Search projects",

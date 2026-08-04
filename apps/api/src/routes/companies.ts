@@ -8,7 +8,7 @@ import { DeleteObjectCommand, PutObjectCommand, S3Client } from '@aws-sdk/client
 import { deleteObject, getObjectStream, resolveStorage, s3Bucket, s3Client, S3_KEY_PREFIX } from '../lib/s3.js'
 import { sendDeletedMail } from '../lib/mails.js'
 import { db } from '../db/client.js'
-import { companyStorage, companies, companyMembers, companyInvites, companyWebhooks, files, messages, projectMembers, projects, tasks, timeEntries, users } from '../db/schema.js'
+import { companyBackupStorage, companyStorage, companies, companyMembers, companyInvites, companyWebhooks, files, messages, projectMembers, projects, tasks, timeEntries, users } from '../db/schema.js'
 import { requireSession, type SessionEnv } from '../auth.js'
 import { sendInviteMail } from '../lib/mail-invite.js'
 import { projectLocale } from '../lib/locale.js'
@@ -697,7 +697,6 @@ companiesRoute.get('/:companyId/storage', async (c) => {
     endpoint: s?.endpoint ?? '',
     region: s?.region ?? 'auto',
     bucket: s?.bucket ?? '',
-    backupBucket: s?.backupBucket ?? '',
     publicUrl: s?.publicUrl ?? '',
     hasKeys: Boolean(s?.accessKeyEncrypted && s?.secretKeyEncrypted),
   })
@@ -708,8 +707,6 @@ const companyStorageSchema = z.object({
   endpoint: z.string().max(500).optional(),
   region: z.string().max(100).optional(),
   bucket: z.string().max(200).optional(),
-  /** Отдельный бакет под архивы; пусто — пишем в основной. */
-  backupBucket: z.string().max(200).optional(),
   publicUrl: z.string().max(500).optional(),
   accessKey: z.string().max(500).optional(), // только при смене
   secretKey: z.string().max(1000).optional(),
@@ -760,7 +757,6 @@ companiesRoute.put('/:companyId/storage', zValidator('json', companyStorageSchem
     region: b.region || 'auto',
     bucket: b.bucket,
     publicUrl: b.publicUrl || null,
-    backupBucket: b.backupBucket?.trim() || null,
     ...(accessKey ? { accessKeyEncrypted: encrypt(accessKey) } : {}),
     ...(secretKey ? { secretKeyEncrypted: encrypt(secretKey) } : {}),
     updatedAt: new Date(),
@@ -779,7 +775,7 @@ companiesRoute.put('/:companyId/storage', zValidator('json', companyStorageSchem
  */
 companiesRoute.patch(
   '/:companyId/auto-backup',
-  zValidator('json', z.object({ enabled: z.boolean().optional(), backupBucket: z.string().max(200).optional() })),
+  zValidator('json', z.object({ enabled: z.boolean() })),
   async (c) => {
     const { sub } = c.get('session')
     const companyId = c.req.param('companyId')
@@ -787,19 +783,8 @@ companiesRoute.patch(
 
     const b = c.req.valid('json')
 
-    // Бакет для архивов живёт в настройке хранилища, но правится отсюда: он
-    // относится к бэкапу, и человек ищет его на вкладке «Бэкап».
-    if (b.backupBucket !== undefined) {
-      const existing = await db.query.companyStorage.findFirst({ where: eq(companyStorage.companyId, companyId) })
-      if (!existing) return c.json({ error: 'Connect your own storage first' }, 400)
-      await db
-        .update(companyStorage)
-        .set({ backupBucket: b.backupBucket.trim() || null })
-        .where(eq(companyStorage.companyId, companyId))
-    }
 
     const enabled = b.enabled
-    if (enabled === undefined) return c.json({ ok: true })
     if (enabled && !(await companyStorageFor(companyId, 'backup'))) {
       return c.json(
         {
@@ -831,10 +816,102 @@ companiesRoute.get('/:companyId/auto-backup', async (c) => {
     enabled: Boolean(row?.autoBackup),
     lastBackupAt: row?.lastBackupAt ?? null,
     lastError: row?.lastBackupError ?? null,
-    backupBucket: (await db.query.companyStorage.findFirst({ where: eq(companyStorage.companyId, companyId) }))?.backupBucket ?? '',
     storageReady: Boolean(await companyStorageFor(companyId, 'backup')),
   })
 })
+
+// --- Хранилище для бэкапов (SPEC §8.48) ---
+//
+// Отдельное от файлового, со своими ключами: копию имеет смысл держать в другом
+// аккаунте, а лучше у другого провайдера. Лежащая в том же аккаунте, она
+// недоступна ровно тогда, когда нужна — при его блокировке или потере ключей.
+//
+// Не настроено — бэкап пишется в файловое хранилище компании.
+
+companiesRoute.get('/:companyId/backup-storage', async (c) => {
+  const { sub } = c.get('session')
+  const companyId = c.req.param('companyId')
+  if ((await memberRoleIn(companyId, sub)) !== 'admin') return c.json({ error: 'Forbidden' }, 403)
+
+  const s = await db.query.companyBackupStorage.findFirst({ where: eq(companyBackupStorage.companyId, companyId) })
+  return c.json({
+    separate: Boolean(s?.endpoint && s?.bucket),
+    endpoint: s?.endpoint ?? '',
+    region: s?.region ?? 'auto',
+    bucket: s?.bucket ?? '',
+    hasKeys: Boolean(s?.accessKeyEncrypted && s?.secretKeyEncrypted),
+  })
+})
+
+companiesRoute.put(
+  '/:companyId/backup-storage',
+  zValidator(
+    'json',
+    z.object({
+      separate: z.boolean(),
+      endpoint: z.string().max(500).optional(),
+      region: z.string().max(100).optional(),
+      bucket: z.string().max(200).optional(),
+      accessKey: z.string().max(500).optional(),
+      secretKey: z.string().max(1000).optional(),
+    }),
+  ),
+  async (c) => {
+    const { sub } = c.get('session')
+    const companyId = c.req.param('companyId')
+    if ((await memberRoleIn(companyId, sub)) !== 'admin') return c.json({ error: 'Forbidden' }, 403)
+
+    const b = c.req.valid('json')
+    const existing = await db.query.companyBackupStorage.findFirst({
+      where: eq(companyBackupStorage.companyId, companyId),
+    })
+
+    // Отказ от отдельного хранилища стирает и ключи: «выключил и забыл» не
+    // должно оставлять в базе рабочий доступ к чужому бакету.
+    if (!b.separate) {
+      if (existing) await db.delete(companyBackupStorage).where(eq(companyBackupStorage.companyId, companyId))
+      return c.json({ ok: true, separate: false })
+    }
+
+    if (!b.endpoint || !b.bucket) return c.json({ error: 'endpoint and bucket are required' }, 400)
+    const accessKey = b.accessKey || null
+    const secretKey = b.secretKey || null
+    const hasExistingKeys = Boolean(existing?.accessKeyEncrypted && existing?.secretKeyEncrypted)
+    if (!hasExistingKeys && (!accessKey || !secretKey)) {
+      return c.json({ error: 'access key and secret key are required' }, 400)
+    }
+
+    // Пробная запись и удаление: иначе опечатку в ключе обнаружит планировщик
+    // ночью, а человек — из письма о несостоявшемся бэкапе.
+    if (accessKey && secretKey) {
+      try {
+        const client = new S3Client({
+          region: b.region || 'auto',
+          endpoint: b.endpoint,
+          credentials: { accessKeyId: accessKey, secretAccessKey: secretKey },
+        })
+        const testKey = `chatick-connection-test/${companyId}.txt`
+        await client.send(new PutObjectCommand({ Bucket: b.bucket, Key: testKey, Body: 'ok' }))
+        await client.send(new DeleteObjectCommand({ Bucket: b.bucket, Key: testKey }))
+      } catch (err) {
+        return c.json({ error: `Connection test failed: ${err instanceof Error ? err.message : String(err)}` }, 400)
+      }
+    }
+
+    const values = {
+      endpoint: b.endpoint,
+      region: b.region || 'auto',
+      bucket: b.bucket,
+      ...(accessKey ? { accessKeyEncrypted: encrypt(accessKey) } : {}),
+      ...(secretKey ? { secretKeyEncrypted: encrypt(secretKey) } : {}),
+      updatedAt: new Date(),
+    }
+    if (existing) await db.update(companyBackupStorage).set(values).where(eq(companyBackupStorage.companyId, companyId))
+    else await db.insert(companyBackupStorage).values({ companyId, ...values })
+
+    return c.json({ ok: true, separate: true })
+  },
+)
 
 /** Настройки внешней системы: название и шаблон ссылки «туда». */
 companiesRoute.patch(

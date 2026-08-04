@@ -7,6 +7,7 @@ import { api, API_URL, getSessionToken, type Company } from '@/lib/api'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Switch } from '@/components/ui/switch'
+import { BackupStorageDialog } from '@/components/company/BackupStorageDialog'
 import { useConfirm } from '@/components/ui/confirm'
 
 // Экспорт / импорт компании (SPEC §8.28).
@@ -36,7 +37,12 @@ export function BackupTab({ company }: { company: Company }) {
   const [password, setPassword] = useState('')
   const [importPassword, setImportPassword] = useState('')
   const qc = useQueryClient()
-  const [backupBucket, setBackupBucket] = useState('')
+  const [storageOpen, setStorageOpen] = useState(false)
+
+  const storageQ = useQuery({
+    queryKey: ['backup-storage', company.id],
+    queryFn: () => api<{ separate: boolean; bucket: string }>(`/api/v1/companies/${company.id}/backup-storage`),
+  })
 
   // Автобэкап и его бакет (SPEC §8.48) — состояние показываем всегда: молча
   // сломавшийся бэкап хуже отсутствующего, на него рассчитывают.
@@ -47,9 +53,6 @@ export function BackupTab({ company }: { company: Company }) {
         `/api/v1/companies/${company.id}/auto-backup`,
       ),
   })
-  useEffect(() => {
-    if (autoQ.data) setBackupBucket(autoQ.data.backupBucket ?? '')
-  }, [autoQ.data])
 
   const refreshAuto = () => qc.invalidateQueries({ queryKey: ['auto-backup', company.id] })
 
@@ -60,18 +63,6 @@ export function BackupTab({ company }: { company: Company }) {
     onError: (e) => toast.error(e instanceof Error ? e.message : String(e)),
   })
 
-  const saveBucket = useMutation({
-    mutationFn: () =>
-      api(`/api/v1/companies/${company.id}/auto-backup`, {
-        method: 'PATCH',
-        body: JSON.stringify({ backupBucket }),
-      }),
-    onSuccess: () => {
-      toast.success(t('projectForm.saved'))
-      refreshAuto()
-    },
-    onError: (e) => toast.error(e instanceof Error ? e.message : String(e)),
-  })
   const [busy, setBusy] = useState(false)
   const fileRef = useRef<HTMLInputElement>(null)
 
@@ -231,27 +222,21 @@ export function BackupTab({ company }: { company: Company }) {
           <>
             <p className="mt-1 text-xs text-muted-foreground">{t('backup.storageHint')}</p>
 
-            {/* Отдельный бакет под архивы: у них своя ротация и свой срок
-                хранения, мешать с рабочими вложениями неудобно. */}
-            <div className="mt-3 flex flex-wrap items-end gap-2">
-              <div className="min-w-56 flex-1">
-                <label className="mb-1.5 block text-xs font-medium">{t('backup.bucketLabel')}</label>
-                <Input
-                  value={backupBucket}
-                  onChange={(e) => setBackupBucket(e.target.value)}
-                  placeholder={t('backup.bucketPlaceholder')}
-                  dir="ltr"
-                />
-              </div>
-              <Button
-                variant="outline"
-                disabled={saveBucket.isPending || backupBucket === (autoQ.data?.backupBucket ?? '')}
-                onClick={() => saveBucket.mutate()}
-              >
-                {t('projectForm.save')}
+
+            {/* Куда писать архивы: своё хранилище или файловое компании. */}
+            <div className="mt-3 flex flex-wrap items-center justify-between gap-2 rounded-lg border border-dashed p-3">
+              <span className="min-w-0">
+                <span className="block text-sm font-medium">{t('backup.storageSetupTitle')}</span>
+                <span className="mt-0.5 block text-xs text-muted-foreground">
+                  {storageQ.data?.separate
+                    ? t('backup.separateOn', { bucket: storageQ.data.bucket })
+                    : t('backup.separateOff')}
+                </span>
+              </span>
+              <Button variant="outline" size="sm" onClick={() => setStorageOpen(true)}>
+                {t('backup.configure')}
               </Button>
             </div>
-            <p className="mt-1 text-xs text-muted-foreground">{t('backup.bucketHint')}</p>
 
             {/* Автобэкап */}
             <label className="mt-4 flex cursor-pointer items-start justify-between gap-3 rounded-lg border border-dashed p-3">
@@ -323,6 +308,8 @@ export function BackupTab({ company }: { company: Company }) {
           {t('backup.importAction')}
         </Button>
       </section>
+
+      {storageOpen && <BackupStorageDialog companyId={company.id} onClose={() => setStorageOpen(false)} />}
     </div>
   )
 }

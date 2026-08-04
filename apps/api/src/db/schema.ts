@@ -316,13 +316,27 @@ export const companyStorage = pgTable('company_storage', {
   endpoint: text('endpoint'),
   region: text('region').notNull().default('auto'),
   bucket: text('bucket'),
-  // Отдельный бакет под архивы — необязательный. Пусто: пишем в основной.
-  // Бэкапы и рабочие вложения живут по разным правилам хранения, и мешать их
-  // в одном бакете неудобно уже на второй месяц.
-  backupBucket: text('backup_bucket'),
   accessKeyEncrypted: text('access_key_encrypted'),
   secretKeyEncrypted: text('secret_key_encrypted'),
   publicUrl: text('public_url'),
+  updatedAt: updatedAt(),
+})
+
+// Хранилище ДЛЯ БЭКАПОВ — отдельное от файлового (SPEC §8.48).
+//
+// Со своими ключами и endpoint, а не только именем бакета: копию имеет смысл
+// держать в другом аккаунте, а лучше у другого провайдера. Лежащая в том же
+// аккаунте, она недоступна ровно тогда, когда нужна — при его блокировке или
+// компрометации.
+//
+// Не задано — бэкап пишется в файловое хранилище компании.
+export const companyBackupStorage = pgTable('company_backup_storage', {
+  companyId: text('company_id').primaryKey().references(() => companies.id, { onDelete: 'cascade' }),
+  endpoint: text('endpoint'),
+  region: text('region').notNull().default('auto'),
+  bucket: text('bucket'),
+  accessKeyEncrypted: text('access_key_encrypted'),
+  secretKeyEncrypted: text('secret_key_encrypted'),
   updatedAt: updatedAt(),
 })
 
