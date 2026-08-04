@@ -56,7 +56,7 @@ function endpointCatalog(q: string): string {
   rejected with 400.
 
   GET    /x/tasks/<id>/comments${q}
-  POST   /x/tasks/<id>/comments${q}   {"text", "replyTo?"}
+  POST   /x/tasks/<id>/comments${q}   {"text", "replyTo?", "attachmentIds?"}
 
   Comments are the discussion on a task, and you take part in it like anyone
   else. Read the thread before you act on a task: the description says what was
@@ -72,6 +72,12 @@ function endpointCatalog(q: string): string {
   GET /x/members. Only that exact markup notifies them; a plain "@name" is
   just text. The task's author and assignee, and the person you replied to,
   are told about a new comment anyway, so do not mention them for that alone.
+
+  Attaching files. Upload with POST /x/files first, then pass the returned ids
+  as "attachmentIds" (up to 10). A screenshot of the failure often IS the
+  answer, and no amount of text replaces it. The file also lands in the task's
+  own file list, exactly as when a person attaches one. "text" may be empty
+  when there are files.
 
   Commenting needs tasks.read: anyone who can see tasks can comment. Editing
   and deleting comments — including your own — is not available through the

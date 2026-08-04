@@ -12,7 +12,8 @@ import { DatePicker } from '@/components/ui/date-picker'
 import { PeriodPicker, resolvePreset, type Period } from '@/components/ui/period-picker'
 import { Select, SelectTrigger, SelectValue, SelectContent, SelectItem } from '@/components/ui/select'
 import { useConfirm } from '@/components/ui/confirm'
-import { Bar, BarChart, CartesianGrid, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recharts'
+import { Bar, BarChart, CartesianGrid, Tooltip, XAxis, YAxis } from 'recharts'
+import { ChartBox } from '@/components/ui/chart-box'
 import { useProjectSocket } from '@/hooks/useProjectSocket'
 import { Popover, PopoverTrigger, PopoverContent } from '@/components/ui/popover'
 import {
@@ -306,7 +307,7 @@ function StatsView({ projectId, weekStart }: { projectId: string; weekStart: num
         {days.length === 0 ? (
           <p className="py-10 text-center text-sm text-muted-foreground">{t('time.noData')}</p>
         ) : (
-          <ResponsiveContainer width="100%" height={200}>
+          <ChartBox height={200}>
             <BarChart data={days} margin={{ top: 8, right: 8, bottom: 0, left: 0 }}>
               <CartesianGrid vertical={false} strokeDasharray="3 3" className="stroke-border" />
               <XAxis
@@ -349,7 +350,7 @@ function StatsView({ projectId, weekStart }: { projectId: string; weekStart: num
               />
               <Bar dataKey="minutes" fill="var(--brand)" radius={[4, 4, 0, 0]} maxBarSize={48} />
             </BarChart>
-          </ResponsiveContainer>
+          </ChartBox>
         )}
       </section>
 

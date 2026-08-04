@@ -1330,7 +1330,7 @@ bridgeRoute.get('/tasks/:id/comments', async (c) => {
   })
 })
 
-const COMMENT_FIELDS = ['text', 'replyTo'] as const
+const COMMENT_FIELDS = ['text', 'replyTo', 'attachmentIds'] as const
 
 bridgeRoute.post('/tasks/:id/comments', async (c) => {
   const id = auth(c as never)
@@ -1342,7 +1342,13 @@ bridgeRoute.post('/tasks/:id/comments', async (c) => {
   const bad = unknownFields(b, COMMENT_FIELDS)
   if (bad) return c.json({ error: bad }, 400)
   const text = typeof b.text === 'string' ? b.text.trim() : ''
-  if (!text) return c.json({ error: 'text is required' }, 400)
+  // Вложения — как в задачах и чате: сначала POST /x/files, потом id сюда.
+  // Скриншот к комментарию часто и есть весь ответ, одним текстом его не
+  // передать.
+  const attachmentIds = Array.isArray(b.attachmentIds)
+    ? (b.attachmentIds as unknown[]).filter((x): x is string => typeof x === 'string').slice(0, 10)
+    : []
+  if (!text && !attachmentIds.length) return c.json({ error: 'text or attachmentIds is required' }, 400)
   if (text.length > 10_000) return c.json({ error: 'text is too long (max 10000 characters)' }, 400)
 
   const taskId = c.req.param('id')
@@ -1365,8 +1371,21 @@ bridgeRoute.post('/tasks/:id/comments', async (c) => {
 
   const [row] = await db
     .insert(taskComments)
-    .values({ taskId, projectId: scope.projectId, authorId: id.userId, body: text, replyToId })
+    .values({ taskId, projectId: scope.projectId, authorId: id.userId, body: text || '📎', replyToId })
     .returning()
+
+  // Привязываем только свои файлы этого проекта и снимаем временный флаг.
+  // taskId проставляем заодно: как и в интерфейсе, файл из комментария виден
+  // в разделе файлов задачи, а не только внутри реплики.
+  let attachments: { id: string; name: string; mime: string; size: number }[] = []
+  if (attachmentIds.length) {
+    await db
+      .update(files)
+      .set({ commentId: row!.id, taskId, pendingUntil: null })
+      .where(and(inArray(files.id, attachmentIds), eq(files.projectId, scope.projectId), eq(files.uploadedById, id.userId)))
+    const rows = await db.select().from(files).where(eq(files.commentId, row!.id))
+    attachments = rows.map((f) => ({ id: f.id, name: f.name, mime: f.mime, size: Number(f.size) }))
+  }
 
   // Люди должны узнать, что ассистент написал в их задаче — ровно как если бы
   // это написал человек из интерфейса. Без этого комментарий появлялся молча.
@@ -1407,7 +1426,7 @@ bridgeRoute.post('/tasks/:id/comments', async (c) => {
     })
 
   broadcast(scope.projectId, 'task_comments_changed', { taskId })
-  return c.json({ id: row!.id, replyTo: row!.replyToId || undefined, createdAt: row!.createdAt }, 201)
+  return c.json({ id: row!.id, replyTo: row!.replyToId || undefined, attachments, createdAt: row!.createdAt }, 201)
 })
 
 // --- Спринты ----------------------------------------------------------------

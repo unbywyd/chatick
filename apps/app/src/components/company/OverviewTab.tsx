@@ -9,7 +9,6 @@ import {
   BarChart,
   CartesianGrid,
   Cell,
-  ResponsiveContainer,
   Tooltip,
   XAxis,
   YAxis,
@@ -19,6 +18,7 @@ import { cn } from '@/lib/utils'
 import { PeriodPicker, resolvePreset, type Period } from '@/components/ui/period-picker'
 import { Avatar } from '@/components/ui/avatar'
 import { ProjectBadge } from '@/components/ui/project-badge'
+import { ChartBox } from '@/components/ui/chart-box'
 import { formatDuration } from '@/lib/time-parse'
 
 // Обзор компании (SPEC §8.33): то, чего не видно в списке проектов —
@@ -125,7 +125,7 @@ export function OverviewTab({
         {d.weeks.length === 0 ? (
           <p className="py-8 text-center text-sm text-muted-foreground">{t('time.noData')}</p>
         ) : (
-          <ResponsiveContainer width="100%" height={180}>
+          <ChartBox height={180}>
             <AreaChart data={d.weeks} margin={{ top: 8, right: 8, bottom: 0, left: 0 }}>
               <defs>
                 <linearGradient id="rhythm" x1="0" y1="0" x2="0" y2="1">
@@ -167,7 +167,7 @@ export function OverviewTab({
               />
               <Area type="monotone" dataKey="minutes" stroke="var(--brand)" strokeWidth={2} fill="url(#rhythm)" />
             </AreaChart>
-          </ResponsiveContainer>
+          </ChartBox>
         )}
       </section>
 
@@ -175,7 +175,7 @@ export function OverviewTab({
         {/* Куда уходит время: столбики в цветах проектов — узнаются с одного взгляда */}
         <section className="rounded-lg border bg-card p-4">
           <h2 className="mb-3 text-sm font-semibold">{t('overview.byProject')}</h2>
-          <ResponsiveContainer width="100%" height={Math.max(160, d.projects.length * 44)}>
+          <ChartBox height={Math.max(160, d.projects.length * 44)}>
             <BarChart data={d.projects} layout="vertical" margin={{ top: 0, right: 8, bottom: 0, left: 0 }}>
               <CartesianGrid horizontal={false} strokeDasharray="3 3" className="stroke-border" />
               <XAxis
@@ -208,7 +208,7 @@ export function OverviewTab({
                 ))}
               </Bar>
             </BarChart>
-          </ResponsiveContainer>
+          </ChartBox>
         </section>
 
         {/* Кто тянет: распределение нагрузки между людьми */}

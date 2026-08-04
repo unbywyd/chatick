@@ -81,6 +81,20 @@ describe('POST /x/tasks/:id/comments', () => {
   it('ограничивает длину текста', () => {
     expect(body).toMatch(/text\.length > 10_000/)
   })
+
+  it('принимает вложения — скриншот часто и есть весь ответ', () => {
+    expect(body).toMatch(/attachmentIds/)
+    expect(body).toMatch(/set\(\{ commentId: row!\.id, taskId, pendingUntil: null \}\)/)
+  })
+
+  it('привязывает только свои файлы своего проекта', () => {
+    expect(body).toMatch(/eq\(files\.projectId, scope\.projectId\)/)
+    expect(body).toMatch(/eq\(files\.uploadedById, id\.userId\)/)
+  })
+
+  it('одних файлов достаточно — текст можно не писать', () => {
+    expect(body).toMatch(/!text && !attachmentIds\.length/)
+  })
 })
 
 describe('чего мосту не дают', () => {
@@ -100,5 +114,10 @@ describe('гайд для ассистента', () => {
 
   it('говорит, что удалять и править комментарии нельзя', () => {
     expect(docs).toMatch(/Editing\s+and deleting comments/)
+  })
+
+  it('описывает вложения', () => {
+    expect(docs).toMatch(/attachmentIds/)
+    expect(docs).toMatch(/Attaching files/)
   })
 })
