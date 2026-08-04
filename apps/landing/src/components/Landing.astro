@@ -640,6 +640,23 @@ const CHART_STATUSES = [
       <h2>{t.contact.title}</h2>
       <p class="section-sub">{t.contact.subtitle}</p>
 
+      {/* Вопросы рядом с формой, а не отдельной секцией: половина писем — про
+          одно и то же, и человек находит ответ до того, как начнёт печатать. */}
+      <div class="contact-split">
+        <div class="faq">
+          <h3 class="faq-title">{t.faq.title}</h3>
+          <dl class="faq-list">
+            {
+              t.faq.items.map((item) => (
+                <div class="faq-item">
+                  <dt>{item.q}</dt>
+                  <dd>{item.a}</dd>
+                </div>
+              ))
+            }
+          </dl>
+        </div>
+
       <form
         class="contact-card"
         id="contact-form"
@@ -695,6 +712,7 @@ const CHART_STATUSES = [
           <p>{t.contact.sent}</p>
         </div>
       </form>
+      </div>
 
       <p class="contact-mail">
         {t.contact.support} <a href={`mailto:${SUPPORT}`}>{SUPPORT}</a>
@@ -1045,6 +1063,45 @@ const CHART_STATUSES = [
     gap: 7px;
     font-size: 0.84rem;
     color: var(--lime);
+  }
+
+  /* Форма и вопросы рядом: пока человек думает, писать ли, он читает ответы. */
+  .contact-split {
+    margin-top: 34px;
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+    gap: 44px;
+    align-items: start;
+    text-align: start;
+  }
+  .faq-title {
+    font-size: 1.05rem;
+    margin-bottom: 18px;
+  }
+  .faq-item {
+    padding-block: 15px;
+    border-block-start: 1px solid var(--border);
+  }
+  .faq-item:first-child {
+    border-block-start: 0;
+    padding-block-start: 0;
+  }
+  .faq-item dt {
+    font-weight: 600;
+    font-size: 0.94rem;
+  }
+  .faq-item dd {
+    margin-top: 6px;
+    color: var(--fg-muted);
+    font-size: 0.9rem;
+    line-height: 1.55;
+    text-wrap: pretty;
+  }
+  @media (max-width: 900px) {
+    .contact-split {
+      grid-template-columns: 1fr;
+      gap: 32px;
+    }
   }
 
   .dl-grid {
