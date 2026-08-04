@@ -1,7 +1,8 @@
 import { useMemo, useRef, useState } from 'react'
-import { useQuery } from '@tanstack/react-query'
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { api } from '@/lib/api'
 import { useTranslation } from 'react-i18next'
+import { toast } from 'sonner'
 import { Eye, MessageCircleQuestion, ShieldCheck, ChevronDown, HardDrive } from 'lucide-react'
 import { DangerZone, DangerAction } from '@/components/company/DangerZone'
 import { Switch } from '@/components/ui/switch'
@@ -129,6 +130,27 @@ export function ProjectSettingsForm({
 }) {
   const { t } = useTranslation()
   const [tab, setTab] = useState<FormTab>('general')
+  const qc = useQueryClient()
+
+  // Связь с внешней системой: показываем отвязку, только если она есть.
+  const linked = useQuery({
+    queryKey: ['project-external', projectId],
+    enabled: Boolean(projectId),
+    queryFn: () =>
+      api<{ externalId: string | null; externalLink: { name: string } | null }>(`/api/v1/projects/${projectId}`),
+  })
+  const externalLinked = Boolean(linked.data?.externalId)
+  const externalSystem = linked.data?.externalLink?.name
+
+  const unlink = useMutation({
+    mutationFn: () => api(`/api/v1/projects/${projectId}/unlink-external`, { method: 'POST' }),
+    onSuccess: () => {
+      toast.success(t('project.unlinkDone'))
+      qc.invalidateQueries({ queryKey: ['project-external', projectId] })
+      qc.invalidateQueries({ queryKey: ['projects'] })
+    },
+    onError: (e) => toast.error(e instanceof Error ? e.message : String(e)),
+  })
 
   // Чьё хранилище у проекта: на своём лимит не применяется и не показывается.
   const storage = useQuery({
@@ -362,14 +384,32 @@ export function ProjectSettingsForm({
         </Field>
       )}
 
-      {tab === 'danger' && onDelete && (
+      {tab === 'danger' && (
         <DangerZone>
-          <DangerAction
-            title={t('project.deleteAction')}
-            description={t('danger.deleteProjectHint')}
-            actionLabel={t('project.deleteAction')}
-            onAction={onDelete}
-          />
+          {/* Отвязка от внешней системы: связь создавалась снаружи и снаружи же
+              только и рвалась. Если доступ к той системе потерян, проект
+              оставался помеченным навсегда. Содержимое не трогаем. */}
+          {externalLinked && projectId && (
+            <DangerAction
+              title={t('project.unlinkAction')}
+              description={t('project.unlinkHint', { system: externalSystem || t('team.yourSystem') })}
+              actionLabel={t('project.unlinkAction')}
+              onAction={() => unlink.mutate()}
+            />
+          )}
+
+          {/* Удаление — только тому, кому оно вообще доступно. Раньше при этом
+              пропадала и вся вкладка: человек видел пустой экран. */}
+          {onDelete ? (
+            <DangerAction
+              title={t('project.deleteAction')}
+              description={t('danger.deleteProjectHint')}
+              actionLabel={t('project.deleteAction')}
+              onAction={onDelete}
+            />
+          ) : (
+            !externalLinked && <p className="text-sm text-muted-foreground">{t('project.dangerEmpty')}</p>
+          )}
         </DangerZone>
       )}
 

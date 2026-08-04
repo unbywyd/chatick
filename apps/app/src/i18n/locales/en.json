@@ -433,7 +433,11 @@
     "deleteNotify": "Everyone involved will get an email about it.",
     "goneTitle": "This project no longer exists",
     "goneText": "It was deleted, or your access to it was removed. Anything you had here went with it.",
-    "goneCta": "Back to projects"
+    "goneCta": "Back to projects",
+    "unlinkAction": "Disconnect from external system",
+    "unlinkHint": "The project stops being managed by {{system}} and stays here with everything in it. Nothing is deleted.",
+    "unlinkDone": "Project disconnected",
+    "dangerEmpty": "Nothing here for you: deleting a project is up to its owner or a company admin."
   },
   "about": {
     "noDescription": "No description yet.",

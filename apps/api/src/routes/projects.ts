@@ -971,6 +971,38 @@ projectsRoute.get('/:projectId/llm-status', requireProject, async (c) => {
 
 // --- Хранилище проекта (SPEC §8.10) — только owner/admin проекта / company admin ---
 
+/**
+ * Разорвать связь с внешней системой изнутри Chatick (SPEC §8.46).
+ *
+ * Снаружи это умеет DELETE /ext/projects/:externalId, но у человека внутри
+ * такой возможности не было вовсе: связь создавалась снаружи и снаружи же
+ * только и рвалась. Если доступ к той системе потерян — например, интеграцию
+ * отключили, — проект оставался помеченным навсегда.
+ *
+ * Содержимое не трогаем: уходит только пометка о чужой системе.
+ */
+projectsRoute.post('/:projectId/unlink-external', async (c) => {
+  const { sub } = c.get('session')
+  const projectId = c.req.param('projectId')
+  if (!(await canManageProject(projectId, sub))) return c.json({ error: 'Forbidden' }, 403)
+
+  const project = await db.query.projects.findFirst({ where: eq(projects.id, projectId) })
+  if (!project) return c.json({ error: 'Not found' }, 404)
+  if (!project.externalId) return c.json({ error: 'This project is not linked to an external system' }, 400)
+
+  await db.update(projects).set({ externalId: null, externalName: null }).where(eq(projects.id, projectId))
+
+  void logActivity({
+    projectId,
+    actorId: sub,
+    action: 'update',
+    entityType: 'project',
+    entityId: projectId,
+    entityLabel: `unlinked from external system (${project.externalId})`,
+  })
+  return c.json({ ok: true })
+})
+
 async function canManageProject(projectId: string, userId: string): Promise<boolean> {
   const project = await db.query.projects.findFirst({ where: eq(projects.id, projectId) })
   if (!project) return false
