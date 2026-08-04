@@ -15,6 +15,23 @@ type AiConfig = {
 
 const LANG_NAMES: Record<string, string> = { en: 'English', ru: 'Russian', he: 'Hebrew' }
 
+/**
+ * Язык, на котором ИИ пишет задачи и документы проекта.
+ *
+ * aiConfig.language — отдельная настройка, и у проекта, созданного через API
+ * внешней системы, её нет. Раньше пустое значение молча превращалось в
+ * английский: израильская компания заводила проект, а ИИ в чате требовал
+ * писать по-английски.
+ *
+ * Поэтому пустое — не «английский», а «наследую»: язык проекта, затем язык
+ * компании. Тот же порядок, что у писем.
+ */
+async function aiLang(ai: AiConfig, projectId: string): Promise<string> {
+  if (ai.language) return LANG_NAMES[ai.language] ?? ai.language
+  const { localeFor } = await import('./locale.js')
+  return LANG_NAMES[await localeFor({ projectId })] ?? 'English'
+}
+
 function parseJson<T>(text: string | null): T | null {
   if (!text) return null
   const clean = text.trim().replace(/^```(?:json)?\s*|\s*```$/g, '')
@@ -66,7 +83,7 @@ export async function aiChatReply(projectId: string, userId: string, userMessage
   if (!cfg) return null
 
   const ai = JSON.parse(project.aiConfig || '{}') as AiConfig
-  const lang = LANG_NAMES[ai.language ?? 'en'] ?? 'English'
+  const lang = await aiLang(ai, projectId)
   const user = await db.query.users.findFirst({ where: eq(users.id, userId) })
   const team = await buildTeamContext(projectId) // кто за что отвечает (SPEC §8.12)
   const { tools, handlers } = memoryTools(projectId, userId)
@@ -132,8 +149,7 @@ async function recentContext(projectId: string, excludeId: string, limit = 15): 
     .join('\n')
 }
 
-function dispatcherSystem(project: { chatRules: string }, ai: AiConfig, authorName: string): string {
-  const lang = LANG_NAMES[ai.language ?? 'en'] ?? ai.language ?? 'English'
+function dispatcherSystem(project: { chatRules: string }, ai: AiConfig, authorName: string, lang: string): string {
   return [
     `You are the AI dispatcher of a team project chat. PROJECT LANGUAGE: ${lang} — the chat is conducted ONLY in it.`,
     `Author of the incoming message: ${authorName}.`,
@@ -178,9 +194,11 @@ export async function evaluateMessage(messageId: string): Promise<Verdict> {
   const author = msg.authorId ? await db.query.users.findFirst({ where: eq(users.id, msg.authorId) }) : null
   // трёхслойная память (SPEC §5.6): оглавление саммари + последнее саммари + живой хвост
   const context = await buildMemoryContext(msg.projectId)
+  // Язык проекта — с наследованием от компании, если у ИИ он не задан.
+  const dispatcherLang = await aiLang(ai, msg.projectId)
 
   const raw = await complete(cfg, {
-    system: dispatcherSystem(project, ai, author?.name ?? 'Unknown'),
+    system: dispatcherSystem(project, ai, author?.name ?? 'Unknown', dispatcherLang),
     user: `${context}\n\nINCOMING MESSAGE (judge only this):\n${msg.text}`,
     // Ответ содержит reason/questions/suggestion на языке автора. Кириллица и
     // иврит съедают в разы больше токенов, чем латиница, и при 500 JSON
@@ -246,7 +264,7 @@ export async function sandboxReply(
   if (!cfg) return null
 
   const ai = JSON.parse(project.aiConfig || '{}') as AiConfig
-  const lang = LANG_NAMES[ai.language ?? 'en'] ?? 'English'
+  const lang = await aiLang(ai, msg.projectId)
   const history = await db.query.sandboxMessages.findMany({
     where: eq(sandboxMessages.messageId, messageId),
     orderBy: (t, { asc }) => [asc(t.createdAt)],
