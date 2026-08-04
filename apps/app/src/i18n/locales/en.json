@@ -1411,6 +1411,11 @@
     "platformHint": "Included in your plan, with a size limit.",
     "own": "Your own S3 / R2",
     "setup": "Set up own storage",
-    "change": "Change"
+    "change": "Change",
+    "autoBackup": "Daily backup",
+    "autoBackupHint": "Once a day the whole company — all projects — is archived into your bucket. Seven copies are kept, older ones are removed. Requires your own storage.",
+    "lastBackup": "Last backup: {{date}}",
+    "backupBucket": "Bucket for backups",
+    "backupBucketHint": "Optional. Leave empty to keep archives in the same bucket."
   }
 }

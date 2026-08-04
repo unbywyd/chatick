@@ -12,6 +12,7 @@ import { readTimeConfig } from '../routes/time.js'
 import { broadcast } from '../ws.js'
 import { htmlToText } from './sanitize-html.js'
 import { companyOf, projectPath, projectUrl } from './links.js'
+import { runDueBackups } from './auto-backup.js'
 
 // Планировщик напоминаний об открытых задачах (SPEC §8.9).
 // Тик раз в 5 минут: для каждого включённого конфига проверяем, наступил ли срок,
@@ -238,6 +239,9 @@ export function startReminderScheduler() {
       void sendDailyDigests() // суточный email-дайджест непрочитанных (SPEC §8.22)
       void sweepNoteReminders() // напоминания в заметках (SPEC §8.31)
       void sweepRunningTimers() // забытые таймеры (SPEC §8.32)
+      // Суточный бэкап компаний в их же хранилище (SPEC §8.48). Сам решает,
+      // кому пора: тик частый, а бэкап раз в сутки.
+      void runDueBackups().catch(() => {})
       // Вебхуки внешним системам: очередь разбирается здесь, а не в момент
       // события — чужой сервер может лежать, и ждать его никто не должен.
       void flushWebhooks().catch(() => {})

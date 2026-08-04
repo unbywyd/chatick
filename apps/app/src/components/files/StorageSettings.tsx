@@ -13,6 +13,7 @@ type StorageConfig = {
   region: string
   bucket: string
   publicUrl: string
+  backupBucket?: string
   hasKeys: boolean
 }
 
@@ -48,6 +49,7 @@ export function StorageSettings({
   const [endpoint, setEndpoint] = useState('')
   const [region, setRegion] = useState('auto')
   const [bucket, setBucket] = useState('')
+  const [backupBucket, setBackupBucket] = useState('')
   const [publicUrl, setPublicUrl] = useState('')
   const [accessKey, setAccessKey] = useState('')
   const [secretKey, setSecretKey] = useState('')
@@ -58,6 +60,7 @@ export function StorageSettings({
     setEndpoint(q.data.endpoint)
     setRegion(q.data.region || 'auto')
     setBucket(q.data.bucket)
+    setBackupBucket(q.data.backupBucket ?? '')
     setPublicUrl(q.data.publicUrl)
   }, [q.data])
 
@@ -68,7 +71,7 @@ export function StorageSettings({
         body: JSON.stringify(
           provider === 'platform'
             ? { provider }
-            : { provider, endpoint, region, bucket, publicUrl, accessKey: accessKey || undefined, secretKey: secretKey || undefined },
+            : { provider, endpoint, region, bucket, backupBucket, publicUrl, accessKey: accessKey || undefined, secretKey: secretKey || undefined },
         ),
       }),
     onSuccess: () => {
@@ -115,6 +118,16 @@ export function StorageSettings({
             <div className="grid grid-cols-2 gap-3">
               <Field label={t('storage.region')} value={region} onChange={setRegion} placeholder="auto" />
               <Field label={t('storage.bucket')} value={bucket} onChange={setBucket} placeholder="my-bucket" />
+              {/* Отдельный бакет под архивы: у бэкапов своя ротация и свой срок
+                  хранения, мешать их с рабочими вложениями неудобно. */}
+              {companyId && (
+                <Field
+                  label={t('companyStorage.backupBucket')}
+                  value={backupBucket}
+                  onChange={setBackupBucket}
+                  placeholder={bucket || 'my-backups'}
+                />
+              )}
             </div>
             <Field label={t('storage.publicUrl')} value={publicUrl} onChange={setPublicUrl} placeholder="https://cdn.example.com (optional)" />
             <Field

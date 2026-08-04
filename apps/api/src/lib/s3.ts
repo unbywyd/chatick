@@ -44,19 +44,13 @@ export type ResolvedStorage = {
 const customCache = new Map<string, { fp: string; client: S3Client }>()
 
 /**
- * Настройка хранилища для проекта — своя или унаследованная от компании.
+ * Настройка хранилища для проекта — то есть настройка его компании.
  *
- * Порядок: своя настройка проекта, затем компании, затем платформа. Компания с
- * десятком проектов иначе вводила бы одни и те же ключи десять раз, а при
- * смене ключа — снова десять.
- *
- * Проект может и отказаться от наследования: явный provider 'platform' у него
- * означает «на платформе», а не «спроси у компании».
+ * Уровня проекта больше нет: два места с одинаковыми полями расходились, и
+ * файлы одной компании оказывались в разных бакетах. Компания одна на всех —
+ * и хранилище у неё одно.
  */
 async function storageConfigFor(projectId: string) {
-  const own = await db.query.projectStorage.findFirst({ where: eq(projectStorage.projectId, projectId) })
-  if (own) return { cfg: own, scope: own.projectId }
-
   const project = await db.query.projects.findFirst({
     where: eq(projects.id, projectId),
     columns: { companyId: true },
@@ -66,9 +60,34 @@ async function storageConfigFor(projectId: string) {
   const company = await db.query.companyStorage.findFirst({
     where: eq(companyStorage.companyId, project.companyId),
   })
-  // Ключ кэша — компания: один клиент S3 на всю компанию вместо одного на
-  // каждый её проект.
+  // Ключ кэша — компания: один клиент S3 на всю компанию, а не на каждый проект.
   return { cfg: company ?? null, scope: project.companyId }
+}
+
+/**
+ * Хранилище компании напрямую — для бэкапа, у которого нет проекта.
+ * null, если компания живёт на платформенном.
+ */
+export async function companyStorageFor(
+  companyId: string,
+  /** Для архивов: берём отдельный бакет, если компания его задала. */
+  purpose: 'files' | 'backup' = 'files',
+): Promise<ResolvedStorage | null> {
+  const cfg = await db.query.companyStorage.findFirst({ where: eq(companyStorage.companyId, companyId) })
+  if (!cfg || cfg.provider !== 'custom' || !cfg.endpoint || !cfg.bucket || !cfg.accessKeyEncrypted || !cfg.secretKeyEncrypted) {
+    return null
+  }
+  const accessKeyId = decrypt(cfg.accessKeyEncrypted)
+  const secretAccessKey = decrypt(cfg.secretKeyEncrypted)
+  const fp = `${cfg.endpoint}|${cfg.region}|${cfg.bucket}|${accessKeyId.slice(0, 6)}`
+  let cached = customCache.get(companyId)
+  if (!cached || cached.fp !== fp) {
+    const client = new S3Client({ region: cfg.region || 'auto', endpoint: cfg.endpoint, credentials: { accessKeyId, secretAccessKey } })
+    cached = { fp, client }
+    customCache.set(companyId, cached)
+  }
+  const bucket = purpose === 'backup' ? cfg.backupBucket || cfg.bucket : cfg.bucket
+  return { client: cached.client, bucket, keyPrefix: '', isCustom: true, publicUrl: cfg.publicUrl ?? null }
 }
 
 export async function resolveStorage(projectId: string): Promise<ResolvedStorage> {

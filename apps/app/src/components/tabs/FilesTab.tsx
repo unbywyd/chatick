@@ -30,7 +30,6 @@ import { Popover, PopoverTrigger, PopoverContent } from '@/components/ui/popover
 import { Calendar } from '@/components/ui/calendar'
 import { FileViewer, type ViewerFile } from '@/components/files/FileViewer'
 import { ShareDialog } from '@/components/ShareDialog'
-import { StorageSettings } from '@/components/files/StorageSettings'
 import { ClipboardBanner } from '@/components/ui/clipboard-banner'
 import { DragHandle } from '@/components/ui/drag-handle'
 import { usePasteFiles } from '@/hooks/usePasteFiles'
@@ -78,7 +77,6 @@ export function FilesTab({ projectId, isAdmin = false }: { projectId: string; is
   const { t, i18n } = useTranslation()
   const navigate = useNavigate()
   const qc = useQueryClient()
-  const [storageSettingsOpen, setStorageSettingsOpen] = useState(false)
   const confirm = useConfirm()
   const [q, setQ] = useState('')
   const [source, setSource] = useState<Source>('all')
@@ -229,8 +227,15 @@ export function FilesTab({ projectId, isAdmin = false }: { projectId: string; is
               {!storage.custom && storage.limit > 0 && (
                 <span className={cn('tabular-nums', usedPct > 90 && 'text-destructive')}>{usedPct.toFixed(0)}%</span>
               )}
-              {isAdmin && (
-                <button onClick={() => setStorageSettingsOpen(true)} className="text-muted-foreground hover:text-foreground" title={t('storage.title')}>
+              {/* Хранилище настраивается на компании (SPEC §8.47) — ведём туда,
+                  а не открываем вторую форму с теми же полями. Только админу
+                  компании: остальным та страница недоступна. */}
+              {isAdmin && companyId && (
+                <button
+                  onClick={() => navigate(`/start/${companyId}/settings`)}
+                  className="text-muted-foreground hover:text-foreground"
+                  title={t('storage.title')}
+                >
                   <Settings2 className="size-3.5" />
                 </button>
               )}
@@ -243,7 +248,6 @@ export function FilesTab({ projectId, isAdmin = false }: { projectId: string; is
           )}
         </div>
       )}
-      {storageSettingsOpen && <StorageSettings projectId={projectId} onClose={() => setStorageSettingsOpen(false)} />}
 
       {/* Табы-источник */}
       <div className="flex gap-1 border-b">

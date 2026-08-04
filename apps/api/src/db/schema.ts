@@ -174,6 +174,14 @@ export const companies = pgTable('companies', {
   // Язык компании: на нём пишутся письма тем, у кого своих настроек ещё нет —
   // например, человеку, которого только что завели через API.
   locale: text('locale').notNull().default('en'),
+  // --- автобэкап (SPEC §8.48) ---
+  // Раз в сутки архив компании уезжает в её же хранилище. Кнопку «сделать
+  // бэкап» никто не нажимает ежедневно, а вспоминают о ней в день потери.
+  autoBackup: boolean('auto_backup').notNull().default(false),
+  lastBackupAt: timestamp('last_backup_at', { withTimezone: true }),
+  lastBackupError: text('last_backup_error'),
+  backupErrorNotifiedAt: timestamp('backup_error_notified_at', { withTimezone: true }),
+
   // --- своя почта компании (SPEC §8.41) ---
   // Письма уходят с домена компании, а не с нашего: письмо «от Chatick» про
   // внутренние задачи выглядит как фишинг, и SPF/DKIM нашего домена к их
@@ -308,6 +316,10 @@ export const companyStorage = pgTable('company_storage', {
   endpoint: text('endpoint'),
   region: text('region').notNull().default('auto'),
   bucket: text('bucket'),
+  // Отдельный бакет под архивы — необязательный. Пусто: пишем в основной.
+  // Бэкапы и рабочие вложения живут по разным правилам хранения, и мешать их
+  // в одном бакете неудобно уже на второй месяц.
+  backupBucket: text('backup_bucket'),
   accessKeyEncrypted: text('access_key_encrypted'),
   secretKeyEncrypted: text('secret_key_encrypted'),
   publicUrl: text('public_url'),

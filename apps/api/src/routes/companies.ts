@@ -16,6 +16,7 @@ import { issueKey, listKeys, revokeKey } from '../lib/company-key.js'
 import { newSecret } from '../lib/webhooks.js'
 import { encrypt } from '../lib/crypto.js'
 import { companyMail, sendVia, dropTransport } from '../lib/company-mail.js'
+import { companyStorageFor } from '../lib/s3.js'
 import { membersLockedForCompany, MEMBERS_LOCKED } from '../lib/members-locked.js'
 import { LLM_PROVIDERS, testLlm, type LlmProvider } from '../lib/llm.js'
 import { env } from '../env.js'
@@ -696,6 +697,7 @@ companiesRoute.get('/:companyId/storage', async (c) => {
     endpoint: s?.endpoint ?? '',
     region: s?.region ?? 'auto',
     bucket: s?.bucket ?? '',
+    backupBucket: s?.backupBucket ?? '',
     publicUrl: s?.publicUrl ?? '',
     hasKeys: Boolean(s?.accessKeyEncrypted && s?.secretKeyEncrypted),
   })
@@ -706,6 +708,8 @@ const companyStorageSchema = z.object({
   endpoint: z.string().max(500).optional(),
   region: z.string().max(100).optional(),
   bucket: z.string().max(200).optional(),
+  /** Отдельный бакет под архивы; пусто — пишем в основной. */
+  backupBucket: z.string().max(200).optional(),
   publicUrl: z.string().max(500).optional(),
   accessKey: z.string().max(500).optional(), // только при смене
   secretKey: z.string().max(1000).optional(),
@@ -756,6 +760,7 @@ companiesRoute.put('/:companyId/storage', zValidator('json', companyStorageSchem
     region: b.region || 'auto',
     bucket: b.bucket,
     publicUrl: b.publicUrl || null,
+    backupBucket: b.backupBucket?.trim() || null,
     ...(accessKey ? { accessKeyEncrypted: encrypt(accessKey) } : {}),
     ...(secretKey ? { secretKeyEncrypted: encrypt(secretKey) } : {}),
     updatedAt: new Date(),
@@ -764,6 +769,56 @@ companiesRoute.put('/:companyId/storage', zValidator('json', companyStorageSchem
   else await db.insert(companyStorage).values({ companyId, ...values })
 
   return c.json({ ok: true, provider: 'custom' })
+})
+
+/**
+ * Автобэкап: включить, выключить, посмотреть состояние (SPEC §8.48).
+ *
+ * Состояние показываем всегда: молча сломавшийся бэкап хуже отсутствующего —
+ * на него рассчитывают, а его нет.
+ */
+companiesRoute.patch(
+  '/:companyId/auto-backup',
+  zValidator('json', z.object({ enabled: z.boolean() })),
+  async (c) => {
+    const { sub } = c.get('session')
+    const companyId = c.req.param('companyId')
+    if ((await memberRoleIn(companyId, sub)) !== 'admin') return c.json({ error: 'Forbidden' }, 403)
+
+    const { enabled } = c.req.valid('json')
+    if (enabled && !(await companyStorageFor(companyId, 'backup'))) {
+      return c.json(
+        {
+          error: 'Connect your own S3/R2 storage first',
+          hint: 'A backup kept on our own infrastructure would die together with the original — that is the whole point of it.',
+        },
+        400,
+      )
+    }
+
+    await db
+      .update(companies)
+      .set({ autoBackup: enabled, lastBackupError: null, backupErrorNotifiedAt: null })
+      .where(eq(companies.id, companyId))
+    return c.json({ ok: true, enabled })
+  },
+)
+
+companiesRoute.get('/:companyId/auto-backup', async (c) => {
+  const { sub } = c.get('session')
+  const companyId = c.req.param('companyId')
+  if ((await memberRoleIn(companyId, sub)) !== 'admin') return c.json({ error: 'Forbidden' }, 403)
+
+  const row = await db.query.companies.findFirst({
+    where: eq(companies.id, companyId),
+    columns: { autoBackup: true, lastBackupAt: true, lastBackupError: true },
+  })
+  return c.json({
+    enabled: Boolean(row?.autoBackup),
+    lastBackupAt: row?.lastBackupAt ?? null,
+    lastError: row?.lastBackupError ?? null,
+    storageReady: Boolean(await companyStorageFor(companyId, 'backup')),
+  })
 })
 
 /** Настройки внешней системы: название и шаблон ссылки «туда». */

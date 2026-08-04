@@ -980,81 +980,13 @@ async function canManageProject(projectId: string, userId: string): Promise<bool
 }
 
 // Конфиг хранилища — БЕЗ ключей (метаданные + флаг «ключи заданы»)
-projectsRoute.get('/:projectId/storage', async (c) => {
-  const { sub } = c.get('session')
-  const { projectId } = c.req.param()
-  if (!(await canManageProject(projectId, sub))) return c.json({ error: 'Forbidden' }, 403)
-  const s = await db.query.projectStorage.findFirst({ where: eq(projectStorage.projectId, projectId) })
-  return c.json({
-    provider: s?.provider ?? 'platform',
-    endpoint: s?.endpoint ?? '',
-    region: s?.region ?? 'auto',
-    bucket: s?.bucket ?? '',
-    publicUrl: s?.publicUrl ?? '',
-    hasKeys: Boolean(s?.accessKeyEncrypted && s?.secretKeyEncrypted),
-  })
-})
+// Хранилище настраивается на КОМПАНИИ (SPEC §8.47), а не на проекте.
+//
+// Уровень проекта убран намеренно: два места с одинаковыми полями и неочевидным
+// приоритетом расходились — часть проектов оказывалась в одном бакете, часть в
+// другом, и найти файл становилось нечем. Компания одна на всех, и настройка
+// у неё одна.
 
-const storageSchema = z.object({
-  provider: z.enum(['platform', 'custom']),
-  endpoint: z.string().max(500).optional(),
-  region: z.string().max(100).optional(),
-  bucket: z.string().max(200).optional(),
-  publicUrl: z.string().max(500).optional(),
-  accessKey: z.string().max(500).optional(), // передаётся только при смене
-  secretKey: z.string().max(1000).optional(),
-})
-
-projectsRoute.put('/:projectId/storage', zValidator('json', storageSchema), async (c) => {
-  const { sub } = c.get('session')
-  const { projectId } = c.req.param()
-  if (!(await canManageProject(projectId, sub))) return c.json({ error: 'Forbidden' }, 403)
-  const b = c.req.valid('json')
-  const existing = await db.query.projectStorage.findFirst({ where: eq(projectStorage.projectId, projectId) })
-
-  if (b.provider === 'platform') {
-    // вернуться на платформу: чистим кастомный конфиг
-    if (existing) await db.update(projectStorage).set({ provider: 'platform' }).where(eq(projectStorage.projectId, projectId))
-    else await db.insert(projectStorage).values({ projectId, provider: 'platform' })
-    return c.json({ ok: true, provider: 'platform' })
-  }
-
-  // custom: требуем endpoint+bucket, ключи — при первой настройке обязательны
-  if (!b.endpoint || !b.bucket) return c.json({ error: 'endpoint and bucket are required' }, 400)
-  const accessKey = b.accessKey || null
-  const secretKey = b.secretKey || null
-  const hasExistingKeys = Boolean(existing?.accessKeyEncrypted && existing?.secretKeyEncrypted)
-  if (!hasExistingKeys && (!accessKey || !secretKey)) return c.json({ error: 'access key and secret key are required' }, 400)
-
-  // проверка соединения новыми/текущими ключами: пробный put+delete
-  const testAccess = accessKey ?? (existing?.accessKeyEncrypted ? undefined : null)
-  if (accessKey && secretKey) {
-    try {
-      const client = new S3Client({ region: b.region || 'auto', endpoint: b.endpoint, credentials: { accessKeyId: accessKey, secretAccessKey: secretKey } })
-      const testKey = `chatick-connection-test/${projectId}.txt`
-      await client.send(new PutObjectCommand({ Bucket: b.bucket, Key: testKey, Body: 'ok' }))
-      await client.send(new DeleteObjectCommand({ Bucket: b.bucket, Key: testKey }))
-    } catch (err) {
-      return c.json({ error: `Connection test failed: ${err instanceof Error ? err.message : String(err)}` }, 400)
-    }
-  }
-  void testAccess
-
-  const values = {
-    provider: 'custom' as const,
-    endpoint: b.endpoint,
-    region: b.region || 'auto',
-    bucket: b.bucket,
-    publicUrl: b.publicUrl || null,
-    ...(accessKey ? { accessKeyEncrypted: encrypt(accessKey) } : {}),
-    ...(secretKey ? { secretKeyEncrypted: encrypt(secretKey) } : {}),
-  }
-  if (existing) await db.update(projectStorage).set(values).where(eq(projectStorage.projectId, projectId))
-  else await db.insert(projectStorage).values({ projectId, ...values })
-  return c.json({ ok: true, provider: 'custom' })
-})
-
-// Войти в проект: подтвердить правила (если ещё нет) → получить project-JWT (SPEC §5)
 projectsRoute.post(
   '/:projectId/enter',
   zValidator('json', z.object({ acceptRules: z.boolean().default(false) })),
