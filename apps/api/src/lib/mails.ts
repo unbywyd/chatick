@@ -1,4 +1,5 @@
 import { sendMail } from './mail.js'
+import { companyOf, projectUrl } from './links.js'
 import { renderMail, renderMailText, mailLang, type MailLang, type MailContent } from './mail-template.js'
 import { env } from '../env.js'
 
@@ -15,14 +16,25 @@ const FOOTER: Record<MailLang, string> = {
 }
 
 /** Отправка по готовому содержимому: и HTML, и text/plain. */
-async function send(to: string, subject: string, content: Omit<MailContent, 'footer'>, unsubscribeUrl?: string) {
+/**
+ * Общая отправка. Компанию или проект пробрасываем всегда, когда они известны:
+ * без них письмо уходит с нашего домена, хотя у компании настроена своя почта.
+ */
+async function send(
+  to: string,
+  subject: string,
+  content: Omit<MailContent, 'footer'>,
+  opts?: { unsubscribeUrl?: string; companyId?: string | null; projectId?: string | null },
+) {
   const full: MailContent = { ...content, footer: FOOTER[content.lang] }
   await sendMail({
     to,
     subject,
     text: renderMailText(full),
     html: renderMail(full),
-    unsubscribeUrl,
+    unsubscribeUrl: opts?.unsubscribeUrl,
+    companyId: opts?.companyId,
+    projectId: opts?.projectId,
   })
 }
 
@@ -134,15 +146,20 @@ export async function sendDeletedMail(p: {
   kind: 'project' | 'company'
   name: string
   actorName: string
+  /** Проекта уже нет — компанию узнать неоткуда, передаём снаружи. */
+  companyId?: string | null
 }) {
   const lang = mailLang(p.locale)
   const s = DELETED[lang]
   const v = { what: WHAT[lang][p.kind], name: p.name, actor: p.actorName }
-  await send(p.to, fmt(s.subject, v), {
-    lang,
-    title: fmt(s.title, v),
-    paragraphs: [fmt(s.body, v), fmt(s.gone, v), fmt(s.ask, v)],
-  })
+  await send(
+    p.to,
+    fmt(s.subject, v),
+    { lang, title: fmt(s.title, v), paragraphs: [fmt(s.body, v), fmt(s.gone, v), fmt(s.ask, v)] },
+    // Компания ещё жива, когда удаляют проект; при удалении самой компании
+    // её почта уже недоступна — письмо уйдёт с общей, и это верно.
+    { companyId: p.kind === 'project' ? p.companyId : null },
+  )
 }
 
 // --- Обращение из формы обратной связи --------------------------------------
@@ -269,12 +286,19 @@ export async function sendTaskReminderMail(p: {
   const list = p.tasks
     .map((t) => `<b>${t.number}</b> — ${t.title} <span style="color:#8a8a93">[${t.status}]</span>`)
     .join('<br>')
-  await send(p.to, fmt(s.subject, v), {
-    lang,
-    title: fmt(s.title, v),
-    paragraphs: [s.intro, list],
-    action: { label: s.cta, url: `${appUrl()}/#/p/${p.projectId}/tasks` },
-  })
+  const companyId = await companyOf(p.projectId)
+  await send(
+    p.to,
+    fmt(s.subject, v),
+    {
+      lang,
+      title: fmt(s.title, v),
+      paragraphs: [s.intro, list],
+      // Адрес проекта включает компанию (SPEC §8.45).
+      action: { label: s.cta, url: projectUrl(appUrl(), companyId ?? '', p.projectId, '/tasks') },
+    },
+    { projectId: p.projectId },
+  )
 }
 
 // --- Суточный дайджест ----------------------------------------------------
@@ -328,6 +352,6 @@ export async function sendDigestMail(p: {
       action: { label: s.cta, url: appUrl() },
       note: s.unsubscribe,
     },
-    unsubscribeUrl,
+    { unsubscribeUrl },
   )
 }

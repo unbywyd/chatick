@@ -13,6 +13,7 @@ import { broadcast } from '../ws.js'
 import { htmlToText } from './sanitize-html.js'
 import { companyOf, projectPath, projectUrl } from './links.js'
 import { runDueBackups } from './auto-backup.js'
+import { localeFor } from './locale.js'
 
 // Планировщик напоминаний об открытых задачах (SPEC §8.9).
 // Тик раз в 5 минут: для каждого включённого конфига проверяем, наступил ли срок,
@@ -109,7 +110,9 @@ async function runReminder(r: typeof taskReminders.$inferSelect) {
     if (!list.length) continue
     await sendTaskReminderMail({
       to: user.email,
-      locale: user.locale,
+      // Не user.locale: у заведённых через API там дефолтный 'en', который
+      // никто не выбирал. localeFor учитывает язык проекта и компании.
+      locale: await localeFor({ userId: user.id, projectId: r.projectId }),
       projectId: r.projectId,
       projectName: project.name,
       tasks: list.map((t) => ({ number: t.number, title: t.title, status: t.status })),

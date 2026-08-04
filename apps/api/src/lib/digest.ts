@@ -2,6 +2,7 @@ import { and, eq, isNull, sql } from 'drizzle-orm'
 import { db } from '../db/client.js'
 import { notifications, projects, users, userNotificationPrefs } from '../db/schema.js'
 import { sendDigestMail } from './mails.js'
+import { localeFor } from './locale.js'
 import { env } from '../env.js'
 
 // Суточный email-дайджест непрочитанных уведомлений (SPEC §8.22).
@@ -80,7 +81,9 @@ export async function sendDailyDigests(): Promise<void> {
 
       await sendDigestMail({
         to: user.email,
-        locale: user.locale,
+        // Дайджест охватывает несколько проектов, поэтому только личный язык
+        // и язык компании: user.locale сам по себе — дефолтный 'en'.
+        locale: await localeFor({ userId: user.id }),
         count: r.count,
         groups: [...byProject.values()].map((g) => ({
           name: g.name,
