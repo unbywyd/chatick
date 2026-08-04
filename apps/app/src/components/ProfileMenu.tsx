@@ -18,6 +18,7 @@ import { ConnectDialog } from '@/screens/ConnectScreen'
 import { AboutDialog } from '@/components/AboutDialog'
 import { BugReportDialog } from '@/components/BugReportDialog'
 import { ProjectSettingsDialog } from '@/components/ProjectSettingsDialog'
+import { DeleteProjectDialog } from '@/components/DeleteProjectDialog'
 import { LanguageSelect } from '@/components/LanguageSelect'
 import { ThemeToggle } from '@/components/ThemeToggle'
 
@@ -26,11 +27,14 @@ import { ThemeToggle } from '@/components/ThemeToggle'
 export function ProfileMenu({
   me,
   projectId,
+  projectName,
   companyId,
   isAdmin,
 }: {
   me?: Me
   projectId?: string
+  /** Нужно для подтверждения удаления: человек вводит имя проекта. */
+  projectName?: string
   companyId?: string
   isAdmin?: boolean
 }) {
@@ -50,6 +54,7 @@ export function ProfileMenu({
   }, [params.get('about')])
   const [settingsOpen, setSettingsOpen] = useState(false)
   const [bugOpen, setBugOpen] = useState(false)
+  const [deleting, setDeleting] = useState(false)
   const { t } = useTranslation()
   const navigate = useNavigate()
   const qc = useQueryClient()
@@ -281,7 +286,33 @@ export function ProfileMenu({
     {aboutOpen && <AboutDialog me={me} onClose={() => setAboutOpen(false)} />}
     {bugOpen && <BugReportDialog me={me} onClose={() => setBugOpen(false)} />}
     {settingsOpen && projectId && (
-      <ProjectSettingsDialog projectId={projectId} onClose={() => setSettingsOpen(false)} />
+      <ProjectSettingsDialog
+        projectId={projectId}
+        onClose={() => setSettingsOpen(false)}
+        // Раньше сюда onDelete не передавали, и в настройках, открытых изнутри
+        // проекта, удаления просто не было — в отличие от того же диалога из
+        // списка проектов. Человек искал кнопку там, где её быть и не могло.
+        onDelete={
+          isAdmin && projectName
+            ? () => {
+                setSettingsOpen(false)
+                setDeleting(true)
+              }
+            : undefined
+        }
+      />
+    )}
+    {deleting && projectId && projectName && (
+      <DeleteProjectDialog
+        projectId={projectId}
+        projectName={projectName}
+        onClose={() => setDeleting(false)}
+        onDeleted={() => {
+          setDeleting(false)
+          // Проекта больше нет — оставаться на его экране некуда.
+          navigate('/start', { replace: true })
+        }}
+      />
     )}
     </>
   )

@@ -156,7 +156,7 @@ export function ProjectSidebar({
           {/* колокольчик и профиль живут только здесь: в навбаре проекта они
               дублировались, а сайдбар виден на любой вкладке */}
           <NotificationBell currentProjectId={activeId} />
-          <ProfileMenu me={me} projectId={activeId} companyId={company?.id} isAdmin={isAdmin} />
+          <ProfileMenu me={me} projectId={activeId} projectName={active?.name} companyId={company?.id} isAdmin={isAdmin} />
         </div>
       </div>
     )
@@ -278,7 +278,7 @@ export function ProjectSidebar({
             профиля. Раньше отсюда уводило на /connect — разное поведение у
             одного и того же элемента. */}
         <NotificationBell currentProjectId={activeId} />
-        <ProfileMenu me={me} projectId={activeId} companyId={company?.id} isAdmin={isAdmin} />
+        <ProfileMenu me={me} projectId={activeId} projectName={active?.name} companyId={company?.id} isAdmin={isAdmin} />
       </div>
     </div>
   )

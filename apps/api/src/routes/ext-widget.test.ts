@@ -32,6 +32,14 @@ vi.mock('../lib/company-key.js', () => ({
   revokeKey: async () => true,
 }))
 
+const deleted: string[] = []
+vi.mock('../lib/delete-project.js', () => ({
+  deleteProjectCompletely: async (id: string) => {
+    deleted.push(id)
+    return { deletedFiles: 3, notified: 2 }
+  },
+}))
+
 vi.mock('../env.js', () => ({
   env: { APP_URL: 'https://app.chatick.com', ENCRYPTION_KEY: 'a'.repeat(64) },
   isProd: false,
@@ -114,6 +122,13 @@ vi.mock('../db/client.js', () => {
         companies: { findFirst: async () => ({ id: state.companyId, name: 'Atlas' }) },
       },
       select: () => chain(),
+      update: () => ({
+        set: (patch: Record<string, unknown>) => ({
+          where: async () => {
+            Object.assign(state.projects[0]!, patch)
+          },
+        }),
+      }),
     },
   }
 })
@@ -124,7 +139,8 @@ const call = (path: string, key = 'Bearer ck_live_ok') =>
   extRoute.request(path, { headers: { Authorization: key } })
 
 beforeEach(() => {
-  state.scopes = ['read:all']
+  deleted.length = 0
+  state.scopes = ['read:all', 'projects:write']
   state.companyId = 'c1'
   state.projects = [
     { id: 'p-internal', companyId: 'c1', externalId: '1178667', name: 'Dev tasks', slug: 'dev', externalName: null, about: '', color: '#fff', createdAt: new Date() },
@@ -194,5 +210,57 @@ describe('GET /projects/:externalId/members', () => {
 
   it('несуществующий проект — 404', async () => {
     expect((await call('/projects/нет-такого/members')).status).toBe(404)
+  })
+})
+
+// Отвязка и удаление проекта извне (SPEC §8.46).
+//
+// Ручка разрушительная: во втором режиме уносит переписку, задачи и файлы. И
+// вызывается она не человеком, а чужим сервером по ключу — подтвердить некому.
+// Поэтому проверяем прежде всего, что случайно снести проект нельзя.
+describe('DELETE /projects/:externalId', () => {
+  const del = (path: string, body: unknown) =>
+    extRoute.request(path, {
+      method: 'DELETE',
+      headers: { Authorization: 'Bearer ck_live_ok', 'Content-Type': 'application/json' },
+      body: JSON.stringify(body),
+    })
+
+  it('по умолчанию — отвязка: проект остаётся', async () => {
+    const res = await del('/projects/1178667', {})
+    expect(res.status).toBe(200)
+    const body = (await res.json()) as any
+    expect(body).toMatchObject({ unlinked: true, deleted: false })
+    expect(deleted).toHaveLength(0)
+    // Связь оборвана — по этому id проект больше не найти.
+    expect(state.projects[0]!.externalId).toBeNull()
+  })
+
+  // Главная защита: удаление без точного имени не проходит. Опечатка в цикле
+  // чужого скрипта иначе стирала бы переписку команды без единого вопроса.
+  it('удаление без подтверждения именем отклоняется', async () => {
+    const res = await del('/projects/1178667', { deleteProject: true })
+    expect(res.status).toBe(400)
+    expect(deleted).toHaveLength(0)
+    expect(state.projects[0]!.externalId).toBe('1178667')
+  })
+
+  it('удаление с чужим именем отклоняется', async () => {
+    const res = await del('/projects/1178667', { deleteProject: true, confirm: 'Другой проект' })
+    expect(res.status).toBe(400)
+    expect(deleted).toHaveLength(0)
+  })
+
+  it('удаление с точным именем срабатывает', async () => {
+    const res = await del('/projects/1178667', { deleteProject: true, confirm: 'Dev tasks' })
+    expect(res.status).toBe(200)
+    expect((await res.json()) as any).toMatchObject({ deleted: true, deletedFiles: 3 })
+    expect(deleted).toEqual(['p-internal'])
+  })
+
+  it('чужая компания не удалит и не отвяжет', async () => {
+    state.companyId = 'c2'
+    expect((await del('/projects/1178667', {})).status).toBe(404)
+    expect(deleted).toHaveLength(0)
   })
 })

@@ -4,6 +4,7 @@ import { and, desc, eq, gte, inArray, isNull, lte, sql } from 'drizzle-orm'
 import { nanoid } from 'nanoid'
 import { db } from '../db/client.js'
 import { projectPath, projectUrl } from '../lib/links.js'
+import { deleteProjectCompletely } from '../lib/delete-project.js'
 import { companies, companyMembers, projectMembers, projects, tasks, timeEntries, users } from '../db/schema.js'
 import { checkKey, logCall, type KeyScope } from '../lib/company-key.js'
 import { defaultPermissions } from './projects.js'
@@ -130,6 +131,63 @@ extRoute.post('/projects', guard('projects:write'), async (c) => {
     .returning()
 
   return c.json({ created: true, project: serializeProject(created!) }, 201)
+})
+
+/**
+ * Разорвать связь с внешней системой (SPEC §8.46).
+ *
+ * Два режима, и по умолчанию — безопасный:
+ *
+ *   {}                     → отвязать: externalId обнуляется, проект остаётся
+ *                            в Chatick со всей перепиской и задачами
+ *   {"deleteProject": true,
+ *    "confirm": "<имя>"}   → снести проект целиком, вместе с файлами в R2
+ *
+ * Второй режим необратим и требует точного имени проекта в confirm. Это не
+ * бюрократия: ключ компании лежит на чужом сервере, и опечатка в цикле их
+ * скрипта иначе стирала бы переписку команды без единого вопроса.
+ *
+ * Людей не трогаем ни в каком режиме — они остаются в компании и в других
+ * проектах. Внешняя система управляет составом, а не существованием людей.
+ */
+extRoute.delete('/projects/:externalId', guard('projects:write'), async (c) => {
+  const companyId = c.get('companyId')
+  const externalId = c.req.param('externalId')
+  const project = await db.query.projects.findFirst({
+    where: and(eq(projects.companyId, companyId), eq(projects.externalId, externalId)),
+  })
+  if (!project) return c.json({ error: 'Project not found' }, 404)
+
+  const b = (await c.req.json().catch(() => ({}))) as Record<string, unknown>
+
+  if (b.deleteProject !== true) {
+    // Отвязка: связь с внешней системой обрывается, проект живёт дальше.
+    await db.update(projects).set({ externalId: null, externalName: null }).where(eq(projects.id, project.id))
+    return c.json({ unlinked: true, deleted: false, project: serializeProject({ ...project, externalId: null }) })
+  }
+
+  if (typeof b.confirm !== 'string' || b.confirm.trim() !== project.name) {
+    return c.json(
+      {
+        error: 'To delete a project, send its exact name in "confirm". Everything in it is destroyed permanently.',
+        expected: project.name,
+      },
+      400,
+    )
+  }
+
+  // Актор — внешняя система, а не человек: письмо получают ВСЕ участники,
+  // никто из них кнопку не нажимал.
+  const company = await db.query.companies.findFirst({
+    where: eq(companies.id, companyId),
+    columns: { name: true, externalSystemName: true },
+  })
+  const out = await deleteProjectCompletely(
+    project.id,
+    company?.externalSystemName || company?.name || 'External system',
+  )
+
+  return c.json({ unlinked: true, deleted: true, ...out })
 })
 
 extRoute.patch('/projects/:externalId', guard('projects:write'), async (c) => {
@@ -413,9 +471,14 @@ async function upsertUser(companyId: string, companyName: string, u: IncomingUse
     const [row] = await db.insert(users).values({ email: u.email, name: u.name, externalId: u.externalId }).returning()
     user = row!
     created = true
-  } else if (!user.externalId) {
-    // Человек уже был у нас, но без связи — привязываем к их системе, иначе
-    // при следующем вызове мы снова будем искать его по почте.
+  } else if (user.externalId !== u.externalId) {
+    // Связь с их системой обновляем всегда, а не только когда её не было.
+    //
+    // Найти человека по почте и оставить ему СТАРЫЙ идентификатор — значит
+    // молча потерять над ним контроль: внешняя система шлёт новый id, мы
+    // отвечаем «ок», а все последующие обращения по этому id не находят
+    // никого. Так бывает, когда там меняют схему идентификаторов — например,
+    // убирают префикс.
     const [row] = await db.update(users).set({ externalId: u.externalId }).where(eq(users.id, user.id)).returning()
     user = row!
   }

@@ -87,6 +87,22 @@ Update or list:
     PATCH ${API}/api/v1/ext/projects/<externalId>    {"name"?, "externalName"?, "about"?}
     GET   ${API}/api/v1/ext/projects
 
+Disconnect a project — unlink by default, delete only on request:
+
+    DELETE ${API}/api/v1/ext/projects/<externalId>
+
+    {}                                          unlink: the project stays in
+                                                Chatick with all its history,
+                                                it just stops being yours
+
+    {"deleteProject": true, "confirm": "<name>"} destroy it: chat, tasks,
+                                                documents and files, for good
+
+The exact project name is required to delete. Your key sits on your server and
+a typo in a loop would otherwise wipe a team's history without a single
+question. People are never touched: they stay in the company and its other
+projects.
+
 Is this one project integrated yet?
 
     GET ${API}/api/v1/ext/projects/<externalId>/status

@@ -430,6 +430,9 @@ Being explicit so nobody plans around something that does not exist:
 - **No inbound webhooks.** Chatick does not receive events *from* Atlas. Atlas
   pushes changes by calling the API. If they need event-driven sync in that
   direction, it has to be built.
+- ~~No way to disconnect a project.~~ Now `DELETE /projects/:externalId` —
+  unlink by default, full delete only with the exact project name in
+  `confirm`.
 - **No task write API.** Tasks are created and managed inside Chatick; the
   external API can only read them. If Atlas wants to create tasks from their
   side, that is new work.
