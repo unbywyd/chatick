@@ -329,6 +329,8 @@ extRoute.post('/projects/:externalId/members', guard('users:write'), async (c) =
     : null
 
   const added: string[] = []
+  /** Кому сменили роль — внешней системе полезно знать, что вызов не был пустым. */
+  const updated: string[] = []
   const unknown: string[] = []
 
   for (const w of wanted) {
@@ -350,7 +352,17 @@ extRoute.post('/projects/:externalId/members', guard('users:write'), async (c) =
     const already = await db.query.projectMembers.findFirst({
       where: and(eq(projectMembers.projectId, project.id), eq(projectMembers.userId, user.id)),
     })
-    if (already) continue
+
+    // Как и в /users/batch: роль обновляем, права не трогаем, владельца не
+    // понижаем. Здесь роль пришла явно в запросе — тем более странно её
+    // игнорировать.
+    if (already) {
+      if (already.role !== w.role && already.role !== 'owner') {
+        await db.update(projectMembers).set({ role: w.role }).where(eq(projectMembers.id, already.id))
+        updated.push(w.externalUserId)
+      }
+      continue
+    }
 
     await db.insert(projectMembers).values({
       projectId: project.id,
@@ -385,7 +397,7 @@ extRoute.post('/projects/:externalId/members', guard('users:write'), async (c) =
     }
   }
 
-  return c.json({ added: added.length, addedIds: added, unknownUsers: unknown })
+  return c.json({ added: added.length, addedIds: added, updatedRoles: updated, unknownUsers: unknown })
 })
 
 extRoute.delete('/projects/:externalId/members/:externalUserId', guard('users:write'), async (c) => {
@@ -485,10 +497,17 @@ async function upsertUser(companyId: string, companyName: string, u: IncomingUse
     user = row!
   }
 
+  // Роль обновляем, а не пропускаем при повторе: внешняя система — источник
+  // правды по людям, и если она прислала другую роль, значит человека
+  // повысили или перевели. Прежний onConflictDoNothing отвечал «ок» и
+  // оставлял всё как было — Atlas считал, что управляет, а он не управлял.
   await db
     .insert(companyMembers)
     .values({ companyId, userId: user.id, role: u.companyRole })
-    .onConflictDoNothing()
+    .onConflictDoUpdate({
+      target: [companyMembers.companyId, companyMembers.userId],
+      set: { role: u.companyRole },
+    })
 
   let addedTo = 0
   for (const p of u.projects) {
@@ -500,7 +519,17 @@ async function upsertUser(companyId: string, companyName: string, u: IncomingUse
     const already = await db.query.projectMembers.findFirst({
       where: and(eq(projectMembers.projectId, project.id), eq(projectMembers.userId, user.id)),
     })
-    if (already) continue
+
+    // Уже в проекте — обновляем роль, если она изменилась. Права при этом не
+    // трогаем: их могли настроить у нас вручную, и затирать чужую работу
+    // из-за повторного пуша нельзя. Владельца не понижаем — проект остался бы
+    // без хозяина.
+    if (already) {
+      if (already.role !== p.role && already.role !== 'owner') {
+        await db.update(projectMembers).set({ role: p.role }).where(eq(projectMembers.id, already.id))
+      }
+      continue
+    }
 
     await db.insert(projectMembers).values({
       projectId: project.id,

@@ -120,14 +120,24 @@ vi.mock('../db/client.js', () => {
       query: {
         projects: { findFirst: async ({ where }: any) => state.projects.find((p) => matches(p, where)) ?? null },
         companies: { findFirst: async () => ({ id: state.companyId, name: 'Atlas' }) },
+        // Ручка добавления проверяет, состоит ли человек в проекте, и по этому
+        // решает: вставлять или менять роль.
+        projectMembers: {
+          findFirst: async () => state.projectMembers[0] ?? null,
+        },
       },
       select: () => chain(),
-      update: () => ({
+      update: (table: unknown) => ({
         set: (patch: Record<string, unknown>) => ({
           where: async () => {
-            Object.assign(state.projects[0]!, patch)
+            // Роль участника или поля проекта — по таблице, в которую пишем.
+            if (table === schemaRef.projectMembers) Object.assign(state.projectMembers[0]!, patch)
+            else Object.assign(state.projects[0]!, patch)
           },
         }),
+      }),
+      insert: () => ({
+        values: () => ({ onConflictDoNothing: async () => {}, onConflictDoUpdate: async () => {} }),
       }),
     },
   }
@@ -149,7 +159,7 @@ beforeEach(() => {
     { id: 'u1', externalId: 'atlas-448', email: 'tal@atlas.co.il', name: 'Tal', avatarUrl: null },
     { id: 'u2', externalId: 'atlas-71', email: 'dana@atlas.co.il', name: 'Dana', avatarUrl: null },
   ]
-  state.projectMembers = [{ projectId: 'p-internal', userId: 'u1', role: 'member' }]
+  state.projectMembers = [{ id: 'pm1', projectId: 'p-internal', userId: 'u1', role: 'member' }]
   state.companyMembers = [
     { companyId: 'c1', userId: 'u1', role: 'member' },
     { companyId: 'c1', userId: 'u2', role: 'member' },
@@ -262,5 +272,46 @@ describe('DELETE /projects/:externalId', () => {
     state.companyId = 'c2'
     expect((await del('/projects/1178667', {})).status).toBe(404)
     expect(deleted).toHaveLength(0)
+  })
+})
+
+// Смена роли при повторном пуше (SPEC §8.42).
+//
+// Ошибка здесь тихая вдвойне: внешняя система шлёт новую роль, получает 200 и
+// считает, что человека повысили. На деле роль остаётся прежней, и разойдётся
+// это молча — как раз то, ради чего внешняя система и объявлена источником
+// правды по людям.
+describe('POST /projects/:externalId/members — роль', () => {
+  const post = (body: unknown) =>
+    extRoute.request('/projects/1178667/members', {
+      method: 'POST',
+      headers: { Authorization: 'Bearer ck_live_ok', 'Content-Type': 'application/json' },
+      body: JSON.stringify(body),
+    })
+
+  beforeEach(() => {
+    state.scopes = ['read:all', 'users:write']
+  })
+
+  it('повторный вызов с другой ролью повышает участника', async () => {
+    expect(state.projectMembers[0]!.role).toBe('member')
+    const res = await post({ members: [{ externalUserId: 'atlas-448', role: 'admin' }] })
+    expect(res.status).toBe(200)
+    expect(((await res.json()) as any).updatedRoles).toEqual(['atlas-448'])
+    expect(state.projectMembers[0]!.role).toBe('admin')
+  })
+
+  // Владельца понижать нельзя: проект остался бы без хозяина, а внешняя
+  // система про наше понятие владельца ничего не знает.
+  it('владельца не понижает', async () => {
+    state.projectMembers[0]!.role = 'owner'
+    await post({ members: [{ externalUserId: 'atlas-448', role: 'member' }] })
+    expect(state.projectMembers[0]!.role).toBe('owner')
+  })
+
+  it('та же роль — ничего не меняет и не числится обновлением', async () => {
+    const res = await post({ members: [{ externalUserId: 'atlas-448', role: 'member' }] })
+    expect(((await res.json()) as any).updatedRoles).toEqual([])
+    expect(state.projectMembers[0]!.role).toBe('member')
   })
 })
