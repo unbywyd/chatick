@@ -2,7 +2,9 @@ import { useMemo, useRef, useState } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import { api } from '@/lib/api'
 import { useTranslation } from 'react-i18next'
-import { Eye, MessageCircleQuestion, ShieldCheck, ChevronDown } from 'lucide-react'
+import { Eye, MessageCircleQuestion, ShieldCheck, ChevronDown, HardDrive } from 'lucide-react'
+import { DangerZone, DangerAction } from '@/components/company/DangerZone'
+import { StorageSettings } from '@/components/files/StorageSettings'
 import { Switch } from '@/components/ui/switch'
 import { Input } from '@/components/ui/input'
 import { ProjectBadge } from '@/components/ui/project-badge'
@@ -98,7 +100,10 @@ const MODES: { key: AiMode; icon: typeof Eye }[] = [
   { key: 'moderator', icon: ShieldCheck },
 ]
 
-const FORM_TABS = ['general', 'ai', 'rules', 'time'] as const
+// Хранилище и опасная зона — отдельными вкладками. Удаление проекта висело
+// прямо под обычными полями «Основного», куда заходят менять имя и цвет: до
+// необратимой кнопки дотягивались мимоходом.
+const FORM_TABS = ['general', 'ai', 'rules', 'time', 'storage', 'danger'] as const
 type FormTab = (typeof FORM_TABS)[number]
 
 // Настройки проекта — поля растут, разбито табами: Основное / ИИ / Правила
@@ -109,6 +114,7 @@ export function ProjectSettingsForm({
   projectId,
   onLogoUpload,
   onLogoRemove,
+  onDelete,
 }: {
   value: ProjectSettings
   onChange: (v: ProjectSettings) => void
@@ -119,9 +125,12 @@ export function ProjectSettingsForm({
   // сразу, поэтому в форме создания эти обработчики не передаются
   onLogoUpload?: (file: File) => void
   onLogoRemove?: () => void
+  /** Удаление проекта — отдельной вкладкой, если человеку оно вообще доступно. */
+  onDelete?: () => void
 }) {
   const { t } = useTranslation()
   const [tab, setTab] = useState<FormTab>('general')
+  const [storageOpen, setStorageOpen] = useState(false)
 
   // Чьё хранилище у проекта: на своём лимит не применяется и не показывается.
   const storage = useQuery({
@@ -354,6 +363,31 @@ export function ProjectSettingsForm({
           />
         </Field>
       )}
+      {tab === 'storage' && (
+        <div className="space-y-3">
+          <div>
+            <p className="text-sm font-medium">{t('projectForm.storageTitle')}</p>
+            <p className="mt-1 text-xs text-muted-foreground">{t('projectForm.storageHint')}</p>
+          </div>
+          <Button variant="outline" size="sm" onClick={() => setStorageOpen(true)}>
+            <HardDrive className="size-3.5" />
+            {t('projectForm.storageSetup')}
+          </Button>
+          {storageOpen && projectId && <StorageSettings projectId={projectId} onClose={() => setStorageOpen(false)} />}
+        </div>
+      )}
+
+      {tab === 'danger' && onDelete && (
+        <DangerZone>
+          <DangerAction
+            title={t('project.deleteAction')}
+            description={t('danger.deleteProjectHint')}
+            actionLabel={t('project.deleteAction')}
+            onAction={onDelete}
+          />
+        </DangerZone>
+      )}
+
       {tab === 'time' && (
         <div className="space-y-5">
           {/* Регион задаётся одним выбором: пояс, первый день недели и язык

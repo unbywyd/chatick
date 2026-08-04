@@ -4,7 +4,7 @@ import { getSignedUrl } from '@aws-sdk/s3-request-presigner'
 import { eq } from 'drizzle-orm'
 import { env } from '../env.js'
 import { db } from '../db/client.js'
-import { projectStorage } from '../db/schema.js'
+import { companyStorage, projects, projectStorage } from '../db/schema.js'
 import { decrypt } from './crypto.js'
 
 // R2: ключи старого аккаунта, файлы chatick-next живут под префиксом chatick-next/
@@ -43,17 +43,45 @@ export type ResolvedStorage = {
 
 const customCache = new Map<string, { fp: string; client: S3Client }>()
 
+/**
+ * Настройка хранилища для проекта — своя или унаследованная от компании.
+ *
+ * Порядок: своя настройка проекта, затем компании, затем платформа. Компания с
+ * десятком проектов иначе вводила бы одни и те же ключи десять раз, а при
+ * смене ключа — снова десять.
+ *
+ * Проект может и отказаться от наследования: явный provider 'platform' у него
+ * означает «на платформе», а не «спроси у компании».
+ */
+async function storageConfigFor(projectId: string) {
+  const own = await db.query.projectStorage.findFirst({ where: eq(projectStorage.projectId, projectId) })
+  if (own) return { cfg: own, scope: own.projectId }
+
+  const project = await db.query.projects.findFirst({
+    where: eq(projects.id, projectId),
+    columns: { companyId: true },
+  })
+  if (!project?.companyId) return { cfg: null, scope: projectId }
+
+  const company = await db.query.companyStorage.findFirst({
+    where: eq(companyStorage.companyId, project.companyId),
+  })
+  // Ключ кэша — компания: один клиент S3 на всю компанию вместо одного на
+  // каждый её проект.
+  return { cfg: company ?? null, scope: project.companyId }
+}
+
 export async function resolveStorage(projectId: string): Promise<ResolvedStorage> {
-  const cfg = await db.query.projectStorage.findFirst({ where: eq(projectStorage.projectId, projectId) })
+  const { cfg, scope } = await storageConfigFor(projectId)
   if (cfg && cfg.provider === 'custom' && cfg.endpoint && cfg.bucket && cfg.accessKeyEncrypted && cfg.secretKeyEncrypted) {
     const accessKeyId = decrypt(cfg.accessKeyEncrypted)
     const secretAccessKey = decrypt(cfg.secretKeyEncrypted)
     const fp = `${cfg.endpoint}|${cfg.region}|${cfg.bucket}|${accessKeyId.slice(0, 6)}`
-    let cached = customCache.get(projectId)
+    let cached = customCache.get(scope)
     if (!cached || cached.fp !== fp) {
       const client = new S3Client({ region: cfg.region || 'auto', endpoint: cfg.endpoint, credentials: { accessKeyId, secretAccessKey } })
       cached = { fp, client }
-      customCache.set(projectId, cached)
+      customCache.set(scope, cached)
     }
     return { client: cached.client, bucket: cfg.bucket, keyPrefix: '', isCustom: true, publicUrl: cfg.publicUrl ?? null }
   }
@@ -63,7 +91,7 @@ export async function resolveStorage(projectId: string): Promise<ResolvedStorage
 
 /** Хранилище проекта использует НЕ платформу (свой лимит не считаем). */
 export async function isCustomStorage(projectId: string): Promise<boolean> {
-  const cfg = await db.query.projectStorage.findFirst({ where: eq(projectStorage.projectId, projectId) })
+  const { cfg } = await storageConfigFor(projectId)
   return Boolean(cfg && cfg.provider === 'custom' && cfg.bucket)
 }
 

@@ -16,14 +16,32 @@ type StorageConfig = {
   hasKeys: boolean
 }
 
-export function StorageSettings({ projectId, onClose }: { projectId: string; onClose: () => void }) {
+/**
+ * Настройка хранилища проекта ИЛИ компании.
+ *
+ * Одна форма на оба уровня: поля и проверка соединения совпадают, а вторая
+ * копия неминуемо разошлась бы с первой — например, забыла бы, что пустые
+ * ключи означают «оставить прежние».
+ */
+export function StorageSettings({
+  projectId,
+  companyId,
+  onClose,
+}: {
+  projectId?: string
+  companyId?: string
+  onClose: () => void
+}) {
+  // Компания — если задана: настройка проекта её переопределяет, а не наоборот.
+  const base = companyId ? `/api/v1/companies/${companyId}/storage` : `/api/v1/projects/${projectId}/storage`
+  const scopeKey = companyId ?? projectId ?? ''
   const { t } = useTranslation()
   const qc = useQueryClient()
   const onErr = (e: unknown) => toast.error(e instanceof Error ? e.message : String(e))
 
   const q = useQuery({
-    queryKey: ['storage-config', projectId],
-    queryFn: () => api<StorageConfig>(`/api/v1/projects/${projectId}/storage`),
+    queryKey: ['storage-config', scopeKey],
+    queryFn: () => api<StorageConfig>(base),
   })
 
   const [provider, setProvider] = useState<'platform' | 'custom'>('platform')
@@ -45,7 +63,7 @@ export function StorageSettings({ projectId, onClose }: { projectId: string; onC
 
   const save = useMutation({
     mutationFn: () =>
-      api(`/api/v1/projects/${projectId}/storage`, {
+      api(base, {
         method: 'PUT',
         body: JSON.stringify(
           provider === 'platform'
@@ -57,7 +75,7 @@ export function StorageSettings({ projectId, onClose }: { projectId: string; onC
       toast.success(t('storage.saved'))
       setAccessKey('')
       setSecretKey('')
-      qc.invalidateQueries({ queryKey: ['storage-config', projectId] })
+      qc.invalidateQueries({ queryKey: ['storage-config', scopeKey] })
       qc.invalidateQueries({ queryKey: ['files', projectId] })
       onClose()
     },

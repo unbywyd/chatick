@@ -4,11 +4,11 @@ import { z } from 'zod'
 import { and, eq, inArray, isNull, sql } from 'drizzle-orm'
 import { nanoid } from 'nanoid'
 import sharp from 'sharp'
-import { PutObjectCommand } from '@aws-sdk/client-s3'
+import { DeleteObjectCommand, PutObjectCommand, S3Client } from '@aws-sdk/client-s3'
 import { deleteObject, getObjectStream, resolveStorage, s3Bucket, s3Client, S3_KEY_PREFIX } from '../lib/s3.js'
 import { sendDeletedMail } from '../lib/mails.js'
 import { db } from '../db/client.js'
-import { companies, companyMembers, companyInvites, companyWebhooks, files, messages, projectMembers, projects, tasks, timeEntries, users } from '../db/schema.js'
+import { companyStorage, companies, companyMembers, companyInvites, companyWebhooks, files, messages, projectMembers, projects, tasks, timeEntries, users } from '../db/schema.js'
 import { requireSession, type SessionEnv } from '../auth.js'
 import { sendInviteMail } from '../lib/mail-invite.js'
 import { projectLocale } from '../lib/locale.js'
@@ -675,6 +675,95 @@ companiesRoute.post('/:companyId/mail/test', async (c) => {
 
   await db.update(companies).set({ mailVerifiedAt: new Date() }).where(eq(companies.id, companyId))
   return c.json({ ok: true, sentTo: me.email })
+})
+
+// --- Своё хранилище компании (SPEC §8.47) ---
+//
+// Настройка была только на проекте: компания с десятком проектов вводила одни
+// и те же ключи R2 десять раз, а при смене — снова десять. Проекты наследуют
+// эту настройку, если у них нет своей.
+//
+// Ключи шифруются и наружу не отдаются: клиенту видно лишь, заданы ли они.
+
+companiesRoute.get('/:companyId/storage', async (c) => {
+  const { sub } = c.get('session')
+  const companyId = c.req.param('companyId')
+  if ((await memberRoleIn(companyId, sub)) !== 'admin') return c.json({ error: 'Forbidden' }, 403)
+
+  const s = await db.query.companyStorage.findFirst({ where: eq(companyStorage.companyId, companyId) })
+  return c.json({
+    provider: s?.provider ?? 'platform',
+    endpoint: s?.endpoint ?? '',
+    region: s?.region ?? 'auto',
+    bucket: s?.bucket ?? '',
+    publicUrl: s?.publicUrl ?? '',
+    hasKeys: Boolean(s?.accessKeyEncrypted && s?.secretKeyEncrypted),
+  })
+})
+
+const companyStorageSchema = z.object({
+  provider: z.enum(['platform', 'custom']),
+  endpoint: z.string().max(500).optional(),
+  region: z.string().max(100).optional(),
+  bucket: z.string().max(200).optional(),
+  publicUrl: z.string().max(500).optional(),
+  accessKey: z.string().max(500).optional(), // только при смене
+  secretKey: z.string().max(1000).optional(),
+})
+
+companiesRoute.put('/:companyId/storage', zValidator('json', companyStorageSchema), async (c) => {
+  const { sub } = c.get('session')
+  const companyId = c.req.param('companyId')
+  if ((await memberRoleIn(companyId, sub)) !== 'admin') return c.json({ error: 'Forbidden' }, 403)
+
+  const b = c.req.valid('json')
+  const existing = await db.query.companyStorage.findFirst({ where: eq(companyStorage.companyId, companyId) })
+
+  if (b.provider === 'platform') {
+    if (existing) await db.update(companyStorage).set({ provider: 'platform' }).where(eq(companyStorage.companyId, companyId))
+    else await db.insert(companyStorage).values({ companyId, provider: 'platform' })
+    return c.json({ ok: true, provider: 'platform' })
+  }
+
+  if (!b.endpoint || !b.bucket) return c.json({ error: 'endpoint and bucket are required' }, 400)
+  const accessKey = b.accessKey || null
+  const secretKey = b.secretKey || null
+  const hasExistingKeys = Boolean(existing?.accessKeyEncrypted && existing?.secretKeyEncrypted)
+  if (!hasExistingKeys && (!accessKey || !secretKey)) {
+    return c.json({ error: 'access key and secret key are required' }, 400)
+  }
+
+  // Пробная запись и удаление: без неё опечатку в ключе обнаружит первый, кто
+  // попробует загрузить файл, — и это будет выглядеть как поломка Chatick.
+  if (accessKey && secretKey) {
+    try {
+      const client = new S3Client({
+        region: b.region || 'auto',
+        endpoint: b.endpoint,
+        credentials: { accessKeyId: accessKey, secretAccessKey: secretKey },
+      })
+      const testKey = `chatick-connection-test/${companyId}.txt`
+      await client.send(new PutObjectCommand({ Bucket: b.bucket, Key: testKey, Body: 'ok' }))
+      await client.send(new DeleteObjectCommand({ Bucket: b.bucket, Key: testKey }))
+    } catch (err) {
+      return c.json({ error: `Connection test failed: ${err instanceof Error ? err.message : String(err)}` }, 400)
+    }
+  }
+
+  const values = {
+    provider: 'custom' as const,
+    endpoint: b.endpoint,
+    region: b.region || 'auto',
+    bucket: b.bucket,
+    publicUrl: b.publicUrl || null,
+    ...(accessKey ? { accessKeyEncrypted: encrypt(accessKey) } : {}),
+    ...(secretKey ? { secretKeyEncrypted: encrypt(secretKey) } : {}),
+    updatedAt: new Date(),
+  }
+  if (existing) await db.update(companyStorage).set(values).where(eq(companyStorage.companyId, companyId))
+  else await db.insert(companyStorage).values({ companyId, ...values })
+
+  return c.json({ ok: true, provider: 'custom' })
 })
 
 /** Настройки внешней системы: название и шаблон ссылки «туда». */

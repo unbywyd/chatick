@@ -6,7 +6,6 @@ import { toast } from 'sonner'
 import { X } from 'lucide-react'
 import { api, API_URL, getSessionToken } from '@/lib/api'
 import { Button } from '@/components/ui/button'
-import { DangerZone, DangerAction } from '@/components/company/DangerZone'
 import {
   ProjectSettingsForm,
   DEFAULT_AI_CONFIG,
@@ -125,6 +124,7 @@ export function ProjectSettingsDialog({
         <div className="min-h-0 flex-1 overflow-y-auto p-5">
           {form ? (
             <ProjectSettingsForm
+              onDelete={onDelete}
               value={form}
               onChange={setForm}
               projectId={projectId}
@@ -133,19 +133,6 @@ export function ProjectSettingsDialog({
             />
           ) : (
             <p className="py-8 text-center text-sm text-muted-foreground">…</p>
-          )}
-
-          {/* Необратимое — отдельным блоком внизу, а не пунктом в меню
-              карточки, куда легко попасть мимоходом. */}
-          {form && onDelete && (
-            <DangerZone>
-              <DangerAction
-                title={t('project.deleteAction')}
-                description={t('danger.deleteProjectHint')}
-                actionLabel={t('project.deleteAction')}
-                onAction={onDelete}
-              />
-            </DangerZone>
           )}
         </div>
 

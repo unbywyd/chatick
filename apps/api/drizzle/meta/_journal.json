@@ -414,6 +414,13 @@
       "when": 1785066501116,
       "tag": "0058_user_locale_explicit",
       "breakpoints": true
+    },
+    {
+      "idx": 59,
+      "version": "7",
+      "when": 1785066501117,
+      "tag": "0059_company_storage",
+      "breakpoints": true
     }
   ]
 }

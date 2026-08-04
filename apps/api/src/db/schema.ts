@@ -299,6 +299,21 @@ export const projects = pgTable(
 // Ключи шифруются (AES-256-GCM), в ответах API — только метаданные.
 export const storageProvider = pgEnum('storage_provider', ['platform', 'custom'])
 
+// Своё хранилище компании (SPEC §8.47). Проекты наследуют его по умолчанию:
+// вводить одни и те же ключи R2 для каждого проекта, а потом менять их во всех
+// разом — работа, которой быть не должно.
+export const companyStorage = pgTable('company_storage', {
+  companyId: text('company_id').primaryKey().references(() => companies.id, { onDelete: 'cascade' }),
+  provider: storageProvider('provider').notNull().default('platform'),
+  endpoint: text('endpoint'),
+  region: text('region').notNull().default('auto'),
+  bucket: text('bucket'),
+  accessKeyEncrypted: text('access_key_encrypted'),
+  secretKeyEncrypted: text('secret_key_encrypted'),
+  publicUrl: text('public_url'),
+  updatedAt: updatedAt(),
+})
+
 export const projectStorage = pgTable(
   'project_storage',
   {

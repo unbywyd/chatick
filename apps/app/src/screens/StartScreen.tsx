@@ -38,6 +38,7 @@ import { CompanyTimeTab } from '@/components/company/CompanyTimeTab'
 import { OverviewTab } from '@/components/company/OverviewTab'
 import { LlmSettings } from '@/components/company/LlmSettings'
 import { MailSettings } from '@/components/company/MailSettings'
+import { CompanyStorageCard } from '@/components/company/CompanyStorageCard'
 import { CompanyLocale } from '@/components/company/CompanyLocale'
 import { CompanyProfile } from '@/components/company/CompanyProfile'
 import { ApiKeysTab } from '@/components/company/ApiKeysTab'
@@ -504,6 +505,9 @@ function CompanyHome({
           {/* Своя почта: письма сотрудникам уходят с домена компании. Только
               админу — это доступ к отправке от её имени. */}
           {isAdmin && <MailSettings companyId={company.id} isAdmin={isAdmin} />}
+
+          {/* Хранилище компании: проекты наследуют его, если не задали своё. */}
+          {isAdmin && <CompanyStorageCard companyId={company.id} />}
 
           {/* Интеграция: ключи для внешней системы. Только админу — ключ даёт
               доступ ко всей компании. */}

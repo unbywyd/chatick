@@ -111,7 +111,9 @@
       "general": "כללי",
       "ai": "AI",
       "rules": "כללים",
-      "time": "זמן"
+      "time": "זמן",
+      "storage": "אחסון",
+      "danger": "אזור מסוכן"
     },
     "improveTasks": "לשפר משימות עם AI",
     "improveTasksHint": "משימות חדשות מתורגמות לשפת הפרויקט ומלוטשות קלות — המשמעות לא משתנה",
@@ -146,7 +148,10 @@
     "logoReplace": "החלפת הלוגו",
     "logoRemove": "הסרה",
     "languageSearch": "חיפוש שפה…",
-    "languageNotFound": "אין שפה כזו"
+    "languageNotFound": "אין שפה כזו",
+    "storageTitle": "היכן הפרויקט שומר קבצים",
+    "storageHint": "כברירת מחדל — האחסון של החברה. שנו זאת אם הפרויקט צריך דלי משלו.",
+    "storageSetup": "הגדרת אחסון"
   },
   "aiMode": {
     "observer": {
@@ -1397,5 +1402,14 @@
     "disableConfirmBody": "הגדרות השרת והסיסמה השמורה יימחקו. המכתבים יצאו שוב מהדומיין שלנו.",
     "disabled": "חזרה לדואר Chatick",
     "fromEmailHint": "רק הכתובת, בלי שם."
+  },
+  "companyStorage": {
+    "title": "אחסון קבצים",
+    "subtitle": "היכן נשמרים הקבצים של כל הפרויקטים. הפרויקטים יורשים הגדרה זו אם לא הגדירו משלהם.",
+    "platform": "אחסון Chatick",
+    "platformHint": "כלול במסלול, עם מגבלת נפח.",
+    "own": "S3 / R2 משלכם",
+    "setup": "הגדרת אחסון משלכם",
+    "change": "שינוי"
   }
 }

@@ -111,7 +111,9 @@
       "general": "General",
       "ai": "AI",
       "rules": "Rules",
-      "time": "Time"
+      "time": "Time",
+      "storage": "Storage",
+      "danger": "Danger zone"
     },
     "improveTasks": "Improve tasks with AI",
     "improveTasksHint": "New tasks are translated into the project language and lightly polished — meaning unchanged",
@@ -146,7 +148,10 @@
     "logoReplace": "Replace the logo",
     "logoRemove": "Remove",
     "languageSearch": "Search language…",
-    "languageNotFound": "No such language"
+    "languageNotFound": "No such language",
+    "storageTitle": "Where this project keeps files",
+    "storageHint": "By default files go to the company storage. Override it here if this project needs its own bucket.",
+    "storageSetup": "Configure storage"
   },
   "aiMode": {
     "observer": {
@@ -1398,5 +1403,14 @@
     "disableConfirmBody": "Your server settings and the saved password will be deleted. Letters will go out from our domain again.",
     "disabled": "Back to Chatick mail",
     "fromEmailHint": "Only the address, no name."
+  },
+  "companyStorage": {
+    "title": "File storage",
+    "subtitle": "Where files from all projects are kept. Projects inherit this unless they set their own.",
+    "platform": "Chatick storage",
+    "platformHint": "Included in your plan, with a size limit.",
+    "own": "Your own S3 / R2",
+    "setup": "Set up own storage",
+    "change": "Change"
   }
 }
