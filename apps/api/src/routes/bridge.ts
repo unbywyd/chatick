@@ -9,12 +9,14 @@ import {
   companyMembers,
   credentials,
   documents,
+  documentVersions,
   files,
   messages,
   notes,
   notifications,
   projectMembers,
   projects,
+  shares,
   taskChecklist,
   taskComments,
   taskGroups,
@@ -449,6 +451,33 @@ bridgeRoute.post('/shares/:type/:id', async (c) => {
     publicUrl: `${app}/#/s/${share.slug}`,
     slug: share.slug,
   })
+})
+
+/**
+ * Опубликовано ли уже — и по какой ссылке.
+ *
+ * Проверить это было нечем: публикация выдаёт ссылку, но узнать, что вещь уже
+ * лежит в открытом доступе, ассистент не мог. А это первое, что надо знать,
+ * прежде чем говорить человеку «сейчас опубликую» — или прежде чем обсуждать
+ * содержимое как приватное.
+ */
+bridgeRoute.get('/shares/:type/:id', async (c) => {
+  const id = auth(c as never)
+  const scope = await resolveProject(c as never)
+  if ('error' in scope) return c.json({ error: scope.error }, scope.status)
+
+  const type = c.req.param('type')
+  if (!['file', 'note', 'resource', 'message', 'task'].includes(type)) {
+    return c.json({ error: 'Unsupported entity', hint: 'file | note | resource | message | task' }, 400)
+  }
+  const member = await projectRoleOf(scope.projectId, id.userId)
+  if (!member) return c.json({ error: 'Forbidden' }, 403)
+
+  const row = await db.query.shares.findFirst({
+    where: and(eq(shares.entityType, type as ShareEntityType), eq(shares.entityId, c.req.param('id')), isNull(shares.revokedAt)),
+  })
+  if (!row || row.projectId !== scope.projectId) return c.json({ shared: false })
+  return c.json({ shared: true, publicUrl: `${APP()}/#/s/${row.slug}`, slug: row.slug, since: row.createdAt })
 })
 
 bridgeRoute.delete('/shares/:type/:id', async (c) => {
@@ -1173,6 +1202,128 @@ bridgeRoute.delete('/tasks/:id', async (c) => {
   return c.json({ ok: true, restorableForDays: 7 })
 })
 
+// --- Корзина -----------------------------------------------------------------
+//
+// Мост умеет удалять задачи и файлы и честно отвечает «restorableForDays: 7».
+// Но заглянуть в корзину и вернуть удалённое он не мог — обещание было пустым:
+// ассистент, удаливший не то, отправлял человека чинить это руками. А через
+// семь дней запись стирает уборщик (lib/file-cleanup.ts), и чинить уже нечего.
+
+/** Сколько дней осталось на возврат: удалённое старше семи суток уже не спасти. */
+function daysLeft(deletedAt: Date | null): number {
+  if (!deletedAt) return 0
+  return Math.max(0, 7 - Math.floor((Date.now() - deletedAt.getTime()) / 86_400_000))
+}
+
+bridgeRoute.get('/trash', async (c) => {
+  const id = auth(c as never)
+  const scope = await resolveProject(c as never)
+  if ('error' in scope) return c.json({ error: scope.error }, scope.status)
+  const denied = await require(c as never, 'tasks.read', scope.projectId)
+  if (denied) return c.json(denied, 403)
+
+  const want = (c.req.query('type') ?? '').trim()
+  const [deletedTasks, deletedFiles] = await Promise.all([
+    want && want !== 'task'
+      ? []
+      : db
+          .select({ t: tasks, u: users })
+          .from(tasks)
+          .leftJoin(users, eq(users.id, tasks.deletedById))
+          .where(and(eq(tasks.projectId, scope.projectId), sql`${tasks.deletedAt} is not null`))
+          .orderBy(desc(tasks.deletedAt))
+          .limit(100),
+    want && want !== 'file'
+      ? []
+      : db
+          .select({ f: files, u: users })
+          .from(files)
+          .leftJoin(users, eq(users.id, files.deletedById))
+          .where(and(eq(files.projectId, scope.projectId), sql`${files.deletedAt} is not null`))
+          .orderBy(desc(files.deletedAt))
+          .limit(100),
+  ])
+
+  const items = [
+    ...deletedTasks.map((r) => ({
+      type: 'task' as const,
+      id: r.t.id,
+      label: `${r.t.number} ${r.t.title}`,
+      deletedAt: r.t.deletedAt,
+      deletedBy: r.u?.name ?? null,
+      daysLeft: daysLeft(r.t.deletedAt),
+      restore: `POST /x/tasks/${r.t.id}/restore`,
+    })),
+    ...deletedFiles.map((r) => ({
+      type: 'file' as const,
+      id: r.f.id,
+      label: r.f.name,
+      deletedAt: r.f.deletedAt,
+      deletedBy: r.u?.name ?? null,
+      daysLeft: daysLeft(r.f.deletedAt),
+      restore: `POST /x/files/${r.f.id}/restore`,
+    })),
+  ].sort((a, b) => (b.deletedAt?.getTime() ?? 0) - (a.deletedAt?.getTime() ?? 0))
+
+  return c.json({ items, hint: 'Deleted items are purged for good after 7 days — daysLeft says how long is left.' })
+})
+
+bridgeRoute.post('/tasks/:id/restore', async (c) => {
+  const id = auth(c as never)
+  const scope = await resolveProject(c as never)
+  if ('error' in scope) return c.json({ error: scope.error }, scope.status)
+  const denied = await require(c as never, 'tasks.delete', scope.projectId)
+  if (denied) return c.json(denied, 403)
+
+  const task = await db.query.tasks.findFirst({
+    where: and(eq(tasks.id, c.req.param('id')), eq(tasks.projectId, scope.projectId)),
+  })
+  if (!task) return c.json({ error: 'Not found' }, 404)
+  if (!task.deletedAt) return c.json({ error: 'That task is not in the trash' }, 400)
+
+  await db.update(tasks).set({ deletedAt: null, deletedById: null }).where(eq(tasks.id, task.id))
+  void logActivity({
+    projectId: scope.projectId,
+    actorId: id.userId,
+    action: 'restore',
+    entityType: 'task',
+    entityId: task.id,
+    entityLabel: `${task.number}: ${task.title}`,
+  })
+  tasksChanged(scope.projectId, [task.assigneeId, task.createdById])
+  return c.json({ ok: true, id: task.id, number: task.number, title: task.title })
+})
+
+bridgeRoute.post('/files/:id/restore', async (c) => {
+  const id = auth(c as never)
+  const scope = await resolveProject(c as never)
+  if ('error' in scope) return c.json({ error: scope.error }, scope.status)
+
+  const file = await db.query.files.findFirst({
+    where: and(eq(files.id, c.req.param('id')), eq(files.projectId, scope.projectId)),
+  })
+  if (!file) return c.json({ error: 'Not found' }, 404)
+  if (!file.deletedAt) return c.json({ error: 'That file is not in the trash' }, 400)
+
+  // Свой файл возвращает и тот, кто его загрузил, — как в интерфейсе.
+  const own = file.uploadedById === id.userId
+  if (!own) {
+    const denied = await require(c as never, 'files.delete', scope.projectId)
+    if (denied) return c.json(denied, 403)
+  }
+
+  await db.update(files).set({ deletedAt: null, deletedById: null }).where(eq(files.id, file.id))
+  void logActivity({
+    projectId: scope.projectId,
+    actorId: id.userId,
+    action: 'restore',
+    entityType: 'file',
+    entityId: file.id,
+    entityLabel: file.name,
+  })
+  return c.json({ ok: true, id: file.id, name: file.name })
+})
+
 // --- Комментарии к задаче ---------------------------------------------------
 
 // --- чек-лист задачи --------------------------------------------------------
@@ -1286,6 +1437,38 @@ bridgeRoute.patch('/tasks/:id/checklist/:itemId', async (c) => {
   const [row] = await db.update(taskChecklist).set(patch).where(eq(taskChecklist.id, existing.id)).returning()
   tasksChanged(scope.projectId, [task.assigneeId, task.createdById])
   return c.json({ id: row!.id, text: row!.text, note: row!.note || undefined, done: row!.done })
+})
+
+/**
+ * Убрать пункт чек-листа.
+ *
+ * Добавлять и править мост умел, убирать — нет: лишний пункт оставался
+ * навсегда. Здесь это безопасно — пункт живёт внутри задачи, ничего за собой
+ * не тянет, и задача с него не меняется.
+ */
+bridgeRoute.delete('/tasks/:id/checklist/:itemId', async (c) => {
+  const id = auth(c as never)
+  const scope = await resolveProject(c as never)
+  if ('error' in scope) return c.json({ error: scope.error }, scope.status)
+  const denied = await require(c as never, 'tasks.edit', scope.projectId)
+  if (denied) return c.json(denied, 403)
+
+  const task = await db.query.tasks.findFirst({
+    where: and(eq(tasks.id, c.req.param('id')), eq(tasks.projectId, scope.projectId), isNull(tasks.deletedAt)),
+  })
+  if (!task) return c.json({ error: 'Task not found' }, 404)
+  if (!(await ownsOrManages(scope.projectId, id.userId, [task.createdById, task.assigneeId]))) {
+    return c.json({ error: 'Forbidden: you can only edit tasks you created or that are assigned to you' }, 403)
+  }
+
+  const existing = await db.query.taskChecklist.findFirst({
+    where: and(eq(taskChecklist.id, c.req.param('itemId')), eq(taskChecklist.taskId, task.id)),
+  })
+  if (!existing) return c.json({ error: 'Checklist item not found' }, 404)
+
+  await db.delete(taskChecklist).where(eq(taskChecklist.id, existing.id))
+  tasksChanged(scope.projectId, [task.assigneeId, task.createdById])
+  return c.json({ ok: true, removed: existing.text })
 })
 
 // Комментарии задачи — обсуждение, в котором ассистент участвует наравне со
@@ -2704,6 +2887,82 @@ bridgeRoute.post('/documents/:id/append', async (c) => {
   return c.json({ ok: true, totalChars: next.length })
 })
 
+// --- версии документа --------------------------------------------------------
+//
+// Каждая правка документа снимает снимок предыдущего состояния — и мост эти
+// снимки создавал, но не показывал. Ассистент, переписавший документ не так,
+// откатить его не мог: оставалось звать человека в приложение. При том что
+// именно ассистент переписывает документы чаще всех.
+
+bridgeRoute.get('/documents/:id/versions', async (c) => {
+  const scope = await resolveProject(c as never)
+  if ('error' in scope) return c.json({ error: scope.error }, scope.status)
+  const denied = await require(c as never, 'documents.read', scope.projectId)
+  if (denied) return c.json(denied, 403)
+
+  const doc = await db.query.documents.findFirst({
+    where: and(eq(documents.id, c.req.param('id')), eq(documents.projectId, scope.projectId), isNull(documents.deletedAt)),
+  })
+  if (!doc) return c.json({ error: 'Not found' }, 404)
+
+  const rows = await db
+    .select({ v: documentVersions, u: users })
+    .from(documentVersions)
+    .leftJoin(users, eq(users.id, documentVersions.authorId))
+    .where(eq(documentVersions.documentId, doc.id))
+    .orderBy(desc(documentVersions.version))
+    .limit(50)
+
+  return c.json({
+    items: rows.map((r) => ({
+      id: r.v.id,
+      version: r.v.version,
+      title: r.v.title,
+      note: r.v.note || undefined,
+      author: r.u?.name ?? null,
+      chars: r.v.content.length,
+      createdAt: r.v.createdAt,
+    })),
+    hint: 'Read one with ?version=<id> on GET /x/documents/<id>, restore with POST /x/documents/<id>/versions/<versionId>/restore.',
+  })
+})
+
+bridgeRoute.post('/documents/:id/versions/:versionId/restore', async (c) => {
+  const id = auth(c as never)
+  const scope = await resolveProject(c as never)
+  if ('error' in scope) return c.json({ error: scope.error }, scope.status)
+  const denied = await require(c as never, 'documents.write', scope.projectId)
+  if (denied) return c.json(denied, 403)
+
+  const doc = await db.query.documents.findFirst({
+    where: and(eq(documents.id, c.req.param('id')), eq(documents.projectId, scope.projectId), isNull(documents.deletedAt)),
+  })
+  if (!doc) return c.json({ error: 'Not found' }, 404)
+  const v = await db.query.documentVersions.findFirst({
+    where: and(eq(documentVersions.id, c.req.param('versionId')), eq(documentVersions.documentId, doc.id)),
+  })
+  if (!v) return c.json({ error: 'No such version of this document' }, 404)
+
+  // Текущее состояние тоже в историю: откат должен быть обратим.
+  const { snapshot } = await import('./documents.js')
+  await snapshot(doc.id, doc.title, doc.content, id.userId, `before restore to v${v.version}`).catch(() => {})
+  const [row] = await db
+    .update(documents)
+    .set({ title: v.title, content: v.content, updatedById: id.userId })
+    .where(eq(documents.id, doc.id))
+    .returning()
+  void logActivity({
+    projectId: scope.projectId,
+    actorId: id.userId,
+    action: 'update',
+    entityType: 'document',
+    entityId: doc.id,
+    entityLabel: `${row!.title || '—'} → v${v.version}`,
+  })
+  broadcast(scope.projectId, 'documents_changed', { id: doc.id })
+  return c.json({ ok: true, id: row!.id, title: row!.title, restoredVersion: v.version, chars: row!.content.length })
+})
+
 bridgeRoute.delete('/documents/:id', async (c) => {
   const id = auth(c as never)
   const scope = await resolveProject(c as never)
@@ -3047,27 +3306,61 @@ bridgeRoute.post('/files', async (c) => {
     role: 'member',
   })
 
-  // тело пересылаем как есть; manager=1 — файл сразу постоянный, не временный
   const form = await c.req.formData()
-  if (!form.get('taskId')) form.set('manager', '1')
+  // Несколько file= в одном запросе — обычное дело: четыре скриншота одним
+  // вызовом. Раньше бралось только поле 'file' целиком, то есть ПОСЛЕДНЕЕ
+  // значение, и три файла терялись молча — с ответом 201 и без предупреждения.
+  // Теперь каждый уходит своим подзапросом, и в ответе видно судьбу каждого.
+  const parts = form.getAll('file').filter((f) => typeof f !== 'string')
+  if (!parts.length) return c.json({ error: 'file field is required' }, 400)
 
-  const res = await filesRoute.request('/', {
-    method: 'POST',
-    headers: { authorization: `Bearer ${token}` },
-    body: form,
-  })
-  const payload = (await res.json().catch(() => ({}))) as Record<string, unknown>
-  if (res.ok && payload.id) {
-    void logActivity({
-      projectId: scope.projectId,
-      actorId: id.userId,
-      action: 'create',
-      entityType: 'file',
-      entityId: String(payload.id),
-      entityLabel: String(payload.name ?? ''),
+  const upload = async (file: (typeof parts)[number]) => {
+    const one = new FormData()
+    // Остальные поля (taskId, keepOriginal) повторяем для каждого файла.
+    for (const [k, v] of form.entries()) if (k !== 'file') one.append(k, v)
+    one.set('file', file)
+    // manager=1 — файл сразу постоянный, не временный
+    if (!one.get('taskId')) one.set('manager', '1')
+
+    const res = await filesRoute.request('/', {
+      method: 'POST',
+      headers: { authorization: `Bearer ${token}` },
+      body: one,
     })
+    const payload = (await res.json().catch(() => ({}))) as Record<string, unknown>
+    if (res.ok && payload.id) {
+      void logActivity({
+        projectId: scope.projectId,
+        actorId: id.userId,
+        action: 'create',
+        entityType: 'file',
+        entityId: String(payload.id),
+        entityLabel: String(payload.name ?? ''),
+      })
+    }
+    return { res, payload }
   }
-  return c.json(payload, res.status as 200)
+
+  // Один файл — ответ ровно прежний: вызывающие разбирают объект, а не список.
+  if (parts.length === 1) {
+    const { res, payload } = await upload(parts[0]!)
+    return c.json(payload, res.status as 200)
+  }
+
+  // Несколько — по очереди, чтобы не выбрать лимит хранилища параллельными
+  // записями и чтобы отказ по одному файлу не ронял остальные.
+  const items: Record<string, unknown>[] = []
+  for (const file of parts) {
+    const { res, payload } = await upload(file)
+    items.push(res.ok ? payload : { name: file.name, error: payload.error ?? 'Upload failed', status: res.status })
+  }
+  const failed = items.filter((i) => i.error).length
+  return c.json({
+    items,
+    uploaded: items.length - failed,
+    failed,
+    ...(failed ? { hint: 'Some files did not upload — see error on each item.' } : {}),
+  })
 })
 
 bridgeRoute.get('/files/:id/content', async (c) => {

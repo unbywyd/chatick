@@ -275,8 +275,19 @@ filesRoute.post('/', async (c) => {
   const { projectId, sub } = c.get('auth')
   if (!(await hasPermission(projectId, sub, 'files.upload'))) return c.json({ error: 'Forbidden' }, 403)
 
-  const body = await c.req.parseBody()
-  const file = body['file']
+  // all: true — иначе повторяющееся поле file схлопывается в последнее
+  // значение, и лишние файлы пропадают молча: клиент шлёт четыре, получает
+  // 201 и уверен, что загрузились все. Ручка принимает один файл за запрос,
+  // так и скажем — мост, которому нужно несколько, шлёт их по одному.
+  const body = await c.req.parseBody({ all: true })
+  const sent = body['file']
+  if (Array.isArray(sent) && sent.length > 1) {
+    return c.json(
+      { error: `One file per request — got ${sent.length}. Upload them one at a time.`, received: sent.length },
+      400,
+    )
+  }
+  const file = Array.isArray(sent) ? sent[0] : sent
   const taskId = typeof body['taskId'] === 'string' && body['taskId'] ? body['taskId'] : null
   const keepOriginal = body['keepOriginal'] === '1'
   // ЕДИНОЕ правило (SPEC §8.17): файл временный по умолчанию и чистится кроном,

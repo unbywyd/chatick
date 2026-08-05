@@ -30,6 +30,14 @@ function endpointCatalog(q: string): string {
   POST   /x/tasks${q}              {"title","description?","assignee?","status?","priority?","dueDate?","estimateMinutes?","sprintId?"}
   PATCH  /x/tasks/<id>${q}         any subset of the same fields
   DELETE /x/tasks/<id>${q}
+  POST   /x/tasks/<id>/restore${q}
+  GET    /x/trash${q}${amp}type=task|file
+
+  Deleting is soft and undoable — and now undoable BY YOU. /x/trash lists what
+  was deleted in this project with daysLeft on each; restore puts it back.
+  After seven days a cleaner removes it for good and nothing can be recovered,
+  so if you deleted the wrong thing, fix it in the same conversation rather
+  than telling the human to go and do it.
 
   Unknown fields in a body are rejected with 400 naming the field — a request
   that returns 2xx did exactly what you asked, so there is no need to re-read
@@ -44,6 +52,7 @@ function endpointCatalog(q: string): string {
   GET    /x/tasks/<id>/checklist${q}          items, done/total
   POST   /x/tasks/<id>/checklist${q}          {"items":["...","..."]} or {"text":"...","note":"..."}
   PATCH  /x/tasks/<id>/checklist/<itemId>${q} {"done"?, "note"?, "text"?}
+  DELETE /x/tasks/<id>/checklist/<itemId>${q} remove an item added by mistake
 
   A checklist is the task broken into steps, or questions waiting for an
   answer. Send several at once via items. The note under an item is optional —
@@ -120,8 +129,12 @@ function endpointCatalog(q: string): string {
   recent matches. Add from/to to walk back through an older period. The reply
   says hasMore when more matched than fit — it is never silently cut.
 
+  GET    /x/shares/<type>/<id>${q}    is it already public? -> {"shared":false} or the link
   POST   /x/shares/<type>/<id>${q}    publish a link; type: file | note | resource | message | task
   DELETE /x/shares/<type>/<id>${q}    revoke it
+
+  Check with GET before saying anything about privacy: a thing may already be
+  on the public internet, and that changes what you should advise.
 
   Publishing puts the thing on the public internet, so only project owners and
   admins can do it (403 otherwise) — and ask the human first even when allowed.
@@ -295,8 +308,14 @@ ${endpointCatalog('')}
 
   GET    /x/files?type=image&q=name&taskId=<id>&limit=50
   GET    /x/files/<id>/content        -> raw bytes (redirects to storage)
+  POST   /x/files/<id>/restore        bring one back from the trash
   POST   /x/files                     multipart: file=@path, taskId=<id> (optional)
   DELETE /x/files/<id>
+
+  Several files in one call are allowed: repeat -F 'file=@...' and the reply is
+  {"items":[...],"uploaded":N,"failed":N} instead of a single object, with a
+  per-file error where one did not go through. Sending one file keeps the old
+  single-object reply.
 
   Example — attach a file to a task:
     curl -s -X POST ${b}/x/files -H 'authorization: Bearer <token>' \\
@@ -344,6 +363,13 @@ ${endpointCatalog('')}
   PATCH  /x/documents/<id>     {"title?","content?"}
   POST   /x/documents/<id>/append  {"content"}       safe for long docs
   DELETE /x/documents/<id>
+  GET    /x/documents/<id>/versions                    who changed it and when
+  POST   /x/documents/<id>/versions/<versionId>/restore
+
+  Every edit snapshots the previous state, so a rewrite that went wrong is
+  undoable — restore also snapshots the current text first, so the undo itself
+  is undoable. You rewrite documents more often than anyone here; check the
+  versions before assuming something was lost.
 
 ## Time tracking
 
