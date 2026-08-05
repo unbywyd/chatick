@@ -83,8 +83,18 @@ function endpointCatalog(q: string): string {
   and deleting comments — including your own — is not available through the
   bridge; words already read by the team are not yours to take back.
 
-  GET    /x/sprints${q}
+  GET    /x/sprints${q}                    id, name, color, taskCount
   POST   /x/sprints${q}            {"name","startsAt?","endsAt?"}
+  PATCH  /x/sprints/<id>${q}       {"name?","color?"}
+  DELETE /x/sprints/<id>${q}${amp}force=1
+
+  Renaming exists so a typo — or a name mangled by the shell's encoding — can
+  be fixed without sending the human into the app.
+
+  Deleting a sprint deletes NO tasks: they simply end up without one. A sprint
+  that still holds tasks refuses with 409 and says how many; repeat with
+  ?force=1 when losing the grouping is genuinely intended. Ask the human first
+  — a sprint you did not create is someone's plan.
 
   Changing only the status (plus sprint or ordering) needs tasks.changeStatus,
   which every member has — moving a card across the board is not the same as
@@ -221,16 +231,22 @@ ${denied.length ? `\n  NOT ALLOWED: ${denied.join(', ')}\n  Do not attempt these
 - Destructive actions (delete, bulk status changes) need explicit human
   confirmation first. Ask, then act.
 - Write content in the project's language, not the language of the request.
-- NON-ASCII BODIES: never put non-ASCII text (Cyrillic, Hebrew, emoji, typographic
-  dashes) inline in \`curl -d '...'\` — on Windows the shell re-encodes the argument
-  and the server receives corrupted bytes. The ASCII part survives, which hides the
-  problem. Write the body to a file and send it with --data-binary:
+- NON-ASCII BODIES — read this before your first write. Never put non-ASCII text
+  (Cyrillic, Hebrew, emoji, typographic dashes) inline in \`curl -d '...'\`. On
+  Windows the shell re-encodes the argument and the server stores \`?????\`. The
+  request SUCCEEDS and returns 201, so nothing warns you; the ASCII part survives,
+  which hides the problem further. Send the body through stdin instead:
 
-    cat > /tmp/body.json <<'JSON'
+    curl -sS -X POST ${b}/x/messages -H "authorization: Bearer $TOKEN" \\
+      -H 'content-type: application/json; charset=utf-8' --data-binary @- <<'JSON'
     {"text":"Тестовое сообщение"}
     JSON
-    curl -sS -X POST ${b}/x/messages -H "authorization: Bearer $TOKEN" \\
-      -H 'content-type: application/json; charset=utf-8' --data-binary @/tmp/body.json
+
+  A file works too (\`--data-binary @/tmp/body.json\`). This applies to EVERY write —
+  tasks, comments, messages, notes, documents, sprints, time entries. Most projects
+  here are not in English, so treat stdin as the default way to send a body, not
+  the exception. After creating something with a non-ASCII name, read it back once
+  and check the characters survived.
 
   Applies to every endpoint with a body: messages, tasks, documents, comments.
   Corrupted text CANNOT be fixed through this bridge — there is no edit/delete for
@@ -609,6 +625,19 @@ Without ?project= a call returns 400 telling you the same thing.
 - Destructive actions (delete, bulk status changes) need explicit human
   confirmation first. Ask, then act.
 - Write content in each project's own language (GET /x/context tells you).
+- NON-ASCII BODIES — read this before your first write. Never put non-ASCII text
+  (Cyrillic, Hebrew, emoji, typographic dashes) inline in \`curl -d '...'\`. On
+  Windows the shell re-encodes the argument and the server stores \`?????\`. The
+  request SUCCEEDS and returns 201, so nothing warns you. Send the body through
+  stdin instead:
+
+    curl -sS -X POST '${b}/x/messages?project=<id>' -H "authorization: Bearer $TOKEN" \\
+      -H 'content-type: application/json; charset=utf-8' --data-binary @- <<'JSON'
+    {"text":"Тестовое сообщение"}
+    JSON
+
+  This applies to EVERY write. Projects here are rarely in English, so treat
+  stdin as the default way to send a body, not the exception.
 - On 401 the tunnel is closed — re-run the device flow (GET ${b}/x).
 
 ## Endpoints

@@ -1704,7 +1704,18 @@ bridgeRoute.get('/sprints', async (c) => {
   const rows = await db.query.taskGroups.findMany({
     where: and(eq(taskGroups.projectId, scope.projectId), isNull(taskGroups.deletedAt)),
   })
-  return c.json({ items: rows.map((s) => ({ id: s.id, name: s.name })) })
+  // Сколько задач внутри — чтобы было видно, что удаление расформирует, а что
+  // пройдёт бесследно.
+  const counts = new Map<string, number>()
+  if (rows.length) {
+    const grouped = await db
+      .select({ groupId: tasks.groupId, n: sql<number>`count(*)::int` })
+      .from(tasks)
+      .where(and(eq(tasks.projectId, scope.projectId), isNull(tasks.deletedAt)))
+      .groupBy(tasks.groupId)
+    for (const g of grouped) if (g.groupId) counts.set(g.groupId, g.n)
+  }
+  return c.json({ items: rows.map((s) => ({ id: s.id, name: s.name, color: s.color, taskCount: counts.get(s.id) ?? 0 })) })
 })
 
 bridgeRoute.post('/sprints', async (c) => {
@@ -1722,6 +1733,96 @@ bridgeRoute.post('/sprints', async (c) => {
     .returning()
   broadcast(scope.projectId, 'tasks_changed', {})
   return c.json({ id: row!.id, name: row!.name }, 201)
+})
+
+/**
+ * Переименовать спринт.
+ *
+ * Была только запись: опечатка в названии — и исправить её через мост нельзя,
+ * оставалось идти в приложение руками. Особенно больно с не-ASCII названиями:
+ * имя, побитое кодировкой при создании, чинилось только человеком.
+ */
+bridgeRoute.patch('/sprints/:id', async (c) => {
+  const id = auth(c as never)
+  const scope = await resolveProject(c as never)
+  if ('error' in scope) return c.json({ error: scope.error }, scope.status)
+  const denied = await require(c as never, 'tasks.edit', scope.projectId)
+  if (denied) return c.json(denied, 403)
+
+  const group = await db.query.taskGroups.findFirst({
+    where: and(eq(taskGroups.id, c.req.param('id')), eq(taskGroups.projectId, scope.projectId), isNull(taskGroups.deletedAt)),
+  })
+  if (!group) return c.json({ error: 'Not found' }, 404)
+
+  const b = (await c.req.json().catch(() => ({}))) as Record<string, unknown>
+  const bad = unknownFields(b, ['name', 'color'])
+  if (bad) return c.json({ error: bad }, 400)
+
+  const patch: Partial<typeof taskGroups.$inferInsert> = {}
+  if (b.name !== undefined) {
+    const name = typeof b.name === 'string' ? b.name.trim() : ''
+    if (!name) return c.json({ error: 'name cannot be empty' }, 400)
+    patch.name = name.slice(0, 120)
+  }
+  if (b.color !== undefined) {
+    if (typeof b.color !== 'string' || !/^#[0-9a-fA-F]{6}$/.test(b.color))
+      return c.json({ error: 'color must be a hex like #64748b' }, 400)
+    patch.color = b.color
+  }
+  if (!Object.keys(patch).length) return c.json({ error: 'Nothing to change. Allowed: name, color.' }, 400)
+
+  const [row] = await db.update(taskGroups).set(patch).where(eq(taskGroups.id, group.id)).returning()
+  broadcast(scope.projectId, 'tasks_changed', {})
+  return c.json({ id: row!.id, name: row!.name, color: row!.color })
+})
+
+/**
+ * Удалить спринт. Задачи остаются: у них просто пропадает группа.
+ *
+ * Поэтому удаление тут допустимо — в отличие от задач и проектов, стирать
+ * нечего. Но непустой спринт молча не расформировываем: ассистент,
+ * убирающий опечатку, обычно не подозревает, что внутри лежит работа
+ * половины команды. Нужен ?force=1, и в отказе сказано, сколько задач
+ * останется без группы.
+ */
+bridgeRoute.delete('/sprints/:id', async (c) => {
+  const id = auth(c as never)
+  const scope = await resolveProject(c as never)
+  if ('error' in scope) return c.json({ error: scope.error }, scope.status)
+  const denied = await require(c as never, 'tasks.edit', scope.projectId)
+  if (denied) return c.json(denied, 403)
+
+  const group = await db.query.taskGroups.findFirst({
+    where: and(eq(taskGroups.id, c.req.param('id')), eq(taskGroups.projectId, scope.projectId), isNull(taskGroups.deletedAt)),
+  })
+  if (!group) return c.json({ error: 'Not found' }, 404)
+
+  const [{ n }] = (await db
+    .select({ n: sql<number>`count(*)::int` })
+    .from(tasks)
+    .where(and(eq(tasks.groupId, group.id), isNull(tasks.deletedAt)))) as [{ n: number }]
+  if (n > 0 && c.req.query('force') !== '1') {
+    return c.json(
+      {
+        error: `"${group.name}" holds ${n} task(s). Deleting the sprint leaves them without one — nothing is deleted, but the grouping is gone. Repeat with ?force=1 if that is what you want.`,
+        taskCount: n,
+      },
+      409,
+    )
+  }
+
+  // Жёсткое удаление: внешний ключ сам обнулит groupId у задач.
+  await db.delete(taskGroups).where(eq(taskGroups.id, group.id))
+  void logActivity({
+    projectId: scope.projectId,
+    actorId: id.userId,
+    action: 'delete',
+    entityType: 'task',
+    entityId: group.id,
+    entityLabel: `sprint ${group.name}`,
+  })
+  broadcast(scope.projectId, 'tasks_changed', {})
+  return c.json({ ok: true, ungroupedTasks: n })
 })
 
 // --- Трекинг времени (SPEC §8.32) -------------------------------------------
