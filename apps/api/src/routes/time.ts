@@ -236,7 +236,7 @@ async function hydrate(rows: (typeof timeEntries.$inferSelect)[]) {
  * Переводит описание записи на язык проекта, если это включено. Делается
  * ФОНОМ после сохранения: человек не должен ждать модель, чтобы продолжить.
  */
-async function maybeTranslate(projectId: string, entryId: string, text: string): Promise<void> {
+export async function maybeTranslate(projectId: string, entryId: string, text: string): Promise<void> {
   if (!text.trim()) return
   const project = await db.query.projects.findFirst({ where: eq(projects.id, projectId) })
   if (!project || !readTimeConfig(project.timeConfig).translate) return

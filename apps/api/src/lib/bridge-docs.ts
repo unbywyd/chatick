@@ -334,11 +334,14 @@ ${endpointCatalog('')}
 You know when work started and stopped — so record it, instead of the human
 poking at timers.
 
-  GET  /x/time/running          what is running now + the project's timer limit
-  POST /x/time/start            {"task?":"TASK-12","description?":"...","startedAt?":"<ISO>"}
-  POST /x/time/stop             {"id?":"<entryId>"}  — id needed only if several run
-  POST /x/time                  {"startedAt","endedAt","task?","description?"} — after the fact
-  GET  /x/time/report?from=YYYY-MM-DD&to=YYYY-MM-DD
+  GET   /x/time/running          what is running now + the project's timer limit
+  POST  /x/time/start            {"task?":"TASK-12","description?":"...","startedAt?":"<ISO>"}
+  POST  /x/time/stop             {"id?":"<entryId>"}  — id needed only if several run
+  POST  /x/time/resume           {"id?":"<entryId>"}  — carry on after a break
+  POST  /x/time                  {"startedAt","endedAt","task?","description?"} — after the fact
+  GET   /x/time?from=&to=&task=TASK-12&q=text&mine=1&limit=100
+  PATCH /x/time/<entryId>        {"description?","task?","startedAt?","endedAt?","project?"}
+  GET   /x/time/report?from=YYYY-MM-DD&to=YYYY-MM-DD
 
   ONE entry links to at most ONE task. Two things at once means two timers —
   the project caps how many may run (1 unless changed).
@@ -346,12 +349,37 @@ poking at timers.
   normal case.
   In /x/time, an end earlier than the start is read as the next day.
 
-Example — a working session:
+  Pause and resume. There is no pause field, on purpose: a break must not end
+  up in the hours. Pausing IS stopping — POST /x/time/stop. Carrying on is
+  POST /x/time/resume, which opens a fresh entry with the same description and
+  task as the one you finished last, so nothing is retyped and nothing is lost.
+  Pass an id to continue a specific earlier entry instead of the latest.
+
+  The limit counts the PERSON, not the project. A timer running in another
+  project blocks a new one here, and the 409 names that project — say which one
+  rather than reporting a mysterious refusal. /x/time/running lists every
+  timer of theirs, each flagged "here": a timer forgotten in a neighbouring
+  project is exactly what needs saying out loud. Stopping works on those too.
+
+  Fixing an entry. /x/time lists individual entries — that is where the ids
+  come from; /x/time/report only adds hours up. PATCH corrects what is wrong:
+  the description, the task, the times, or "project" to move the hours where
+  they belong (moving clears the task, since it lived in the old project).
+  Setting "endedAt": null makes the entry run again. Own entries always; other
+  people's only with tasks.edit, and only inside this project.
+
+  Deleting entries is not available through the bridge. Correct a wrong entry;
+  erasing someone's recorded hours is not yours to do.
+
+Example — a working session with a break:
 
     curl -sS -X POST ${b}/x/time/start -H "authorization: Bearer $TOKEN" \\
       -H 'content-type: application/json' -d '{"task":"TASK-12","description":"login redirect"}'
     # ... work ...
     curl -sS -X POST ${b}/x/time/stop -H "authorization: Bearer $TOKEN" \\
+      -H 'content-type: application/json' -d '{}'
+    # ... break ...
+    curl -sS -X POST ${b}/x/time/resume -H "authorization: Bearer $TOKEN" \\
       -H 'content-type: application/json' -d '{}'
 
 ## Notes — the project journal
@@ -602,8 +630,17 @@ ${endpointCatalog('?project=<id>')}
          rather than trimmed. You see only what the human sees: drafts still
          under the dispatcher's question are not in the feed.
 
-  GET / POST  /x/time/start | /x/time/stop | /x/time...?project=<id>
-         Timers and after-the-fact entries; GET /x/time/report for hours.
+  GET / POST  /x/time/start | /x/time/stop | /x/time/resume | /x/time...?project=<id>
+  PATCH  /x/time/<entryId>?project=<id>  {"description?","task?","startedAt?","endedAt?","project?"}
+         Timers and after-the-fact entries; GET /x/time lists them one by one,
+         GET /x/time/report adds the hours up.
+         Pausing IS stopping — there is no pause field, a break must not land
+         in the hours; /x/time/resume carries on with the same description and
+         task. The parallel-timer limit counts the PERSON across all projects,
+         so /x/time/running shows timers from every project of theirs and a
+         forgotten one elsewhere blocks a new start here — name that project.
+         "project" in PATCH moves the hours to another project (clears the
+         task). Deleting entries is not available.
 
   GET / POST / PATCH / DELETE  /x/notes...?project=<id>
          Project journal: solutions, decisions, contradictions, reminders.

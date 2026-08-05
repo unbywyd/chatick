@@ -42,7 +42,7 @@ import { logActivity } from '../lib/audit.js'
 import { sendAddedToProjectMail } from '../lib/mails.js'
 import { sendInviteMail } from '../lib/mail-invite.js'
 import { createNote, noteToTask, NOTE_TYPES, type NoteType } from './notes.js'
-import { readTimeConfig } from './time.js'
+import { readTimeConfig, maybeTranslate } from './time.js'
 import { readPresence } from './auth.js'
 import { createShare, revokeShare, type ShareEntityType } from './shares.js'
 import { notifyChatMentions } from './messages.js'
@@ -1728,6 +1728,28 @@ bridgeRoute.post('/sprints', async (c) => {
 // Ради того, чтобы не тыкать таймеры руками: агент в редакторе знает, когда
 // работа началась и кончилась, — пусть он и записывает.
 
+/**
+ * Отметка времени из тела запроса.
+ *
+ * undefined — прислали мусор (вызывающий отвечает 400), null — не прислали
+ * ничего. Без этого разбора `new Date('вчера')` давал Invalid Date, и запись
+ * падала на вставке пятисоткой вместо внятной ошибки.
+ */
+function parseStamp(v: unknown): Date | null | undefined {
+  if (v === undefined || v === null || v === '') return null
+  if (typeof v !== 'string') return undefined
+  const d = new Date(v)
+  return Number.isNaN(d.getTime()) ? undefined : d
+}
+
+/**
+ * Мои идущие таймеры — ВО ВСЕХ проектах, а не только в открытом.
+ *
+ * Человек один: уйдя в другой проект, он не перестаёт работать. Пока выборка
+ * была ограничена текущим проектом, ассистент отвечал «таймер не запущен», а
+ * часы в соседнем проекте продолжали капать — и человек узнавал об этом на
+ * следующий день. Так же устроен и живой интерфейс.
+ */
 bridgeRoute.get('/time/running', async (c) => {
   const id = auth(c as never)
   const scope = await resolveProject(c as never)
@@ -1736,21 +1758,27 @@ bridgeRoute.get('/time/running', async (c) => {
   const project = await db.query.projects.findFirst({ where: eq(projects.id, scope.projectId) })
   const cfg = readTimeConfig(project?.timeConfig)
   const rows = await db
-    .select()
+    .select({ e: timeEntries, p: projects })
     .from(timeEntries)
-    .where(and(eq(timeEntries.projectId, scope.projectId), eq(timeEntries.userId, id.userId), isNull(timeEntries.endedAt)))
+    .leftJoin(projects, eq(projects.id, timeEntries.projectId))
+    .where(and(eq(timeEntries.userId, id.userId), isNull(timeEntries.endedAt)))
 
   const now = Date.now()
   return c.json({
     items: rows.map((r) => ({
-      id: r.id,
-      description: r.description,
-      taskId: r.taskId,
-      startedAt: r.startedAt,
-      elapsedMinutes: Math.round((now - r.startedAt.getTime()) / 60_000),
+      id: r.e.id,
+      description: r.e.description,
+      taskId: r.e.taskId,
+      projectId: r.e.projectId,
+      project: r.p?.name ?? null,
+      // Чужой проект помечаем прямо: иначе ассистент решит, что это часы
+      // здесь, и предложит остановить не то.
+      here: r.e.projectId === scope.projectId,
+      startedAt: r.e.startedAt,
+      elapsedMinutes: Math.round((now - r.e.startedAt.getTime()) / 60_000),
     })),
     maxTimers: cfg.maxTimers,
-    hint: 'One entry links to ONE task at most. Two things at once means two timers, up to maxTimers.',
+    hint: 'One entry links to ONE task at most. Two things at once means two timers, up to maxTimers. The limit counts the person, across all projects.',
   })
 })
 
@@ -1763,15 +1791,28 @@ bridgeRoute.post('/time/start', async (c) => {
   const project = await db.query.projects.findFirst({ where: eq(projects.id, scope.projectId) })
   const cfg = readTimeConfig(project?.timeConfig)
 
+  // Лимит считает ЧЕЛОВЕКА, а не проект. Пока условие включало projectId,
+  // при лимите 1 можно было завести по таймеру в каждом проекте и «работать»
+  // в пяти местах разом — ровно то, от чего лимит и защищает.
   const running = await db
-    .select()
+    .select({ e: timeEntries, p: projects })
     .from(timeEntries)
-    .where(and(eq(timeEntries.projectId, scope.projectId), eq(timeEntries.userId, id.userId), isNull(timeEntries.endedAt)))
+    .leftJoin(projects, eq(projects.id, timeEntries.projectId))
+    .where(and(eq(timeEntries.userId, id.userId), isNull(timeEntries.endedAt)))
   if (running.length >= cfg.maxTimers) {
+    const elsewhere = running.find((r) => r.e.projectId !== scope.projectId)
     return c.json(
       {
-        error: `${running.length} timer(s) already running; this project allows ${cfg.maxTimers} at once. Stop one first.`,
-        running: running.map((r) => ({ id: r.id, startedAt: r.startedAt, description: r.description })),
+        error: elsewhere
+          ? `A timer is already running in "${elsewhere.p?.name ?? 'another project'}". Stop it first, or raise the parallel-timer limit.`
+          : `${running.length} timer(s) already running; the limit is ${cfg.maxTimers}. Stop one first.`,
+        running: running.map((r) => ({
+          id: r.e.id,
+          startedAt: r.e.startedAt,
+          description: r.e.description,
+          project: r.p?.name ?? null,
+          here: r.e.projectId === scope.projectId,
+        })),
       },
       409,
     )
@@ -1786,6 +1827,13 @@ bridgeRoute.post('/time/start', async (c) => {
     taskId = found.id
   }
 
+  // Дата приходит строкой снаружи. Непонятную строку new Date превращает в
+  // Invalid Date, и запись падала на вставке пятисоткой вместо внятного 400.
+  const startedAt = parseStamp(b.startedAt)
+  if (startedAt === undefined) return c.json({ error: 'startedAt must be an ISO timestamp' }, 400)
+  if (startedAt && startedAt.getTime() > Date.now() + 60_000)
+    return c.json({ error: 'startedAt is in the future' }, 400)
+
   const [row] = await db
     .insert(timeEntries)
     .values({
@@ -1793,11 +1841,15 @@ bridgeRoute.post('/time/start', async (c) => {
       userId: id.userId,
       taskId,
       description: String(b.description ?? '').slice(0, 500),
-      startedAt: typeof b.startedAt === 'string' ? new Date(b.startedAt) : new Date(),
+      startedAt: startedAt ?? new Date(),
       createdVia: 'bridge',
     })
     .returning()
   broadcast(scope.projectId, 'time', { action: 'start', id: row!.id, userId: id.userId })
+  // Трей живёт вне проекта, а часы — собственные: без этого панель у человека
+  // до полуминуты показывала, что таймер не идёт.
+  sendToUserAnywhere(id.userId, 'time', { action: 'start', id: row!.id })
+  void maybeTranslate(scope.projectId, row!.id, row!.description).catch(() => {})
   return c.json({ id: row!.id, startedAt: row!.startedAt }, 201)
 })
 
@@ -1807,17 +1859,28 @@ bridgeRoute.post('/time/stop', async (c) => {
   if ('error' in scope) return c.json({ error: scope.error }, scope.status)
 
   const b = (await c.req.json().catch(() => ({}))) as Record<string, unknown>
+  // Свой таймер ищем во всех проектах: забытый в соседнем проекте иначе не
+  // остановить — ассистент получал «таймер не запущен», а часы шли.
   const running = await db
-    .select()
+    .select({ e: timeEntries, p: projects })
     .from(timeEntries)
-    .where(and(eq(timeEntries.projectId, scope.projectId), eq(timeEntries.userId, id.userId), isNull(timeEntries.endedAt)))
+    .leftJoin(projects, eq(projects.id, timeEntries.projectId))
+    .where(and(eq(timeEntries.userId, id.userId), isNull(timeEntries.endedAt)))
   if (!running.length) return c.json({ error: 'No timer is running' }, 404)
 
-  const entry = typeof b.id === 'string' ? running.find((r) => r.id === b.id) : running[0]
+  const entry = typeof b.id === 'string' ? running.find((r) => r.e.id === b.id)?.e : running[0]!.e
   if (!entry) return c.json({ error: 'That timer is not running' }, 404)
   if (running.length > 1 && typeof b.id !== 'string') {
     return c.json(
-      { error: 'Several timers are running — pass the id', running: running.map((r) => ({ id: r.id, description: r.description })) },
+      {
+        error: 'Several timers are running — pass the id',
+        running: running.map((r) => ({
+          id: r.e.id,
+          description: r.e.description,
+          project: r.p?.name ?? null,
+          here: r.e.projectId === scope.projectId,
+        })),
+      },
       400,
     )
   }
@@ -1826,12 +1889,19 @@ bridgeRoute.post('/time/stop', async (c) => {
   // меньше секунды — двойной клик, а не работа
   if (endedAt.getTime() - entry.startedAt.getTime() < 1_000) {
     await db.delete(timeEntries).where(eq(timeEntries.id, entry.id))
-    broadcast(scope.projectId, 'time', { action: 'delete', id: entry.id, userId: id.userId })
+    broadcast(entry.projectId, 'time', { action: 'delete', id: entry.id, userId: id.userId })
+    sendToUserAnywhere(id.userId, 'time', { action: 'delete', id: entry.id })
     return c.json({ discarded: true, reason: 'Stopped within a second — nothing recorded.' })
   }
   await db.update(timeEntries).set({ endedAt, updatedAt: endedAt }).where(eq(timeEntries.id, entry.id))
-  broadcast(scope.projectId, 'time', { action: 'stop', id: entry.id, userId: id.userId })
-  return c.json({ id: entry.id, minutes: Math.round((endedAt.getTime() - entry.startedAt.getTime()) / 60_000) })
+  // Оповещаем проект, где таймер шёл, а не тот, откуда пришёл запрос.
+  broadcast(entry.projectId, 'time', { action: 'stop', id: entry.id, userId: id.userId })
+  sendToUserAnywhere(id.userId, 'time', { action: 'stop', id: entry.id })
+  return c.json({
+    id: entry.id,
+    minutes: Math.round((endedAt.getTime() - entry.startedAt.getTime()) / 60_000),
+    ...(entry.projectId === scope.projectId ? {} : { stoppedInAnotherProject: true }),
+  })
 })
 
 bridgeRoute.post('/time', async (c) => {
@@ -1870,7 +1940,230 @@ bridgeRoute.post('/time', async (c) => {
     })
     .returning()
   broadcast(scope.projectId, 'time', { action: 'create', id: row!.id, userId: id.userId })
+  sendToUserAnywhere(id.userId, 'time', { action: 'create', id: row!.id })
+  void maybeTranslate(scope.projectId, row!.id, row!.description).catch(() => {})
   return c.json({ id: row!.id, minutes: Math.round((ended.getTime() - started.getTime()) / 60_000) }, 201)
+})
+
+/**
+ * Отдельные записи, а не сводка.
+ *
+ * Отчёт складывает часы по людям и задачам — по нему нельзя ни увидеть, что
+ * записано за вчера построчно, ни взять id записи, чтобы её поправить. Из-за
+ * этого через мост нельзя было исправить ошибочную запись вообще.
+ */
+bridgeRoute.get('/time', async (c) => {
+  const id = auth(c as never)
+  const scope = await resolveProject(c as never)
+  if ('error' in scope) return c.json({ error: scope.error }, scope.status)
+
+  // Чужие часы — только руководству проекта, как и в отчёте.
+  const privileged = await hasPermission(scope.projectId, id.userId, 'tasks.edit')
+  const q = c.req.query()
+  const conds = [eq(timeEntries.projectId, scope.projectId)]
+  if (!privileged || q.mine === '1') conds.push(eq(timeEntries.userId, id.userId))
+  const from = parseStamp(q.from)
+  const to = parseStamp(q.to)
+  if (from === undefined || to === undefined) return c.json({ error: 'from/to must be ISO dates' }, 400)
+  if (from) conds.push(gte(timeEntries.startedAt, from))
+  if (to) {
+    const end = new Date(to)
+    if (!q.to!.includes('T')) end.setHours(23, 59, 59, 999)
+    conds.push(lte(timeEntries.startedAt, end))
+  }
+  if (q.task?.trim()) {
+    const found = await db.query.tasks.findFirst({
+      where: and(eq(tasks.projectId, scope.projectId), eq(tasks.number, q.task.trim().toUpperCase())),
+    })
+    if (!found) return c.json({ error: `Task ${q.task} not found in this project` }, 404)
+    conds.push(eq(timeEntries.taskId, found.id))
+  }
+  if (q.q?.trim()) conds.push(ilike(timeEntries.description, `%${q.q.trim()}%`))
+
+  const limit = Math.min(500, Math.max(1, Number(q.limit) || 100))
+  const rows = await db
+    .select({ e: timeEntries, u: users, t: tasks })
+    .from(timeEntries)
+    .leftJoin(users, eq(users.id, timeEntries.userId))
+    .leftJoin(tasks, eq(tasks.id, timeEntries.taskId))
+    .where(and(...conds))
+    .orderBy(desc(timeEntries.startedAt))
+    .limit(limit + 1)
+
+  const hasMore = rows.length > limit
+  const items = rows.slice(0, limit)
+  const now = Date.now()
+  return c.json({
+    items: items.map((r) => ({
+      id: r.e.id,
+      description: r.e.description,
+      task: r.t ? { number: r.t.number, title: r.t.title } : null,
+      author: r.u?.name ?? null,
+      mine: r.e.userId === id.userId,
+      startedAt: r.e.startedAt,
+      endedAt: r.e.endedAt,
+      running: !r.e.endedAt,
+      minutes: Math.round(((r.e.endedAt?.getTime() ?? now) - r.e.startedAt.getTime()) / 60_000),
+    })),
+    scope: privileged && q.mine !== '1' ? 'everyone' : 'you only',
+    hasMore,
+    ...(hasMore ? { hint: 'Truncated — narrow from/to or raise limit (max 500).' } : {}),
+  })
+})
+
+const TIME_PATCH_FIELDS = ['description', 'startedAt', 'endedAt', 'task', 'project'] as const
+
+/**
+ * Поправить запись: не тот текст, не та задача, забыли включить таймер вовремя.
+ *
+ * Свою — всегда, чужую — только руководству проекта и только в этом проекте.
+ * Удаления через мост нет: стереть чужие часы куда хуже, чем поправить их.
+ */
+bridgeRoute.patch('/time/:id', async (c) => {
+  const id = auth(c as never)
+  const scope = await resolveProject(c as never)
+  if ('error' in scope) return c.json({ error: scope.error }, scope.status)
+
+  const entry = await db.query.timeEntries.findFirst({
+    where: and(eq(timeEntries.id, c.req.param('id')), eq(timeEntries.projectId, scope.projectId)),
+  })
+  if (!entry) return c.json({ error: 'Not found' }, 404)
+  if (entry.userId !== id.userId && !(await hasPermission(scope.projectId, id.userId, 'tasks.edit')))
+    return c.json({ error: 'That entry belongs to someone else' }, 403)
+
+  const b = (await c.req.json().catch(() => ({}))) as Record<string, unknown>
+  const bad = unknownFields(b, TIME_PATCH_FIELDS)
+  if (bad) return c.json({ error: bad }, 400)
+
+  const patch: Partial<typeof timeEntries.$inferInsert> = { updatedAt: new Date() }
+
+  if (b.description !== undefined) {
+    if (typeof b.description !== 'string') return c.json({ error: 'description must be a string' }, 400)
+    patch.description = b.description.slice(0, 500)
+  }
+
+  // Перенос в другой проект — часы уехали не туда, обычное дело. Переносить
+  // можно только туда, где человек действительно состоит, иначе через мост
+  // получилось бы завести часы в чужом проекте.
+  let targetProject = entry.projectId
+  if (b.project !== undefined) {
+    if (typeof b.project !== 'string' || !b.project) return c.json({ error: 'project must be a project id' }, 400)
+    if (b.project !== entry.projectId) {
+      const membership = await projectRoleOf(b.project, id.userId)
+      if (!membership) return c.json({ error: 'You are not a member of that project' }, 403)
+      patch.projectId = b.project
+      targetProject = b.project
+      // Задача осталась в прежнем проекте — связь рвём, иначе запись ссылалась
+      // бы на задачу, которой в новом проекте нет.
+      patch.taskId = null
+    }
+  }
+
+  if (b.task !== undefined) {
+    if (b.task === null || b.task === '') patch.taskId = null
+    else if (typeof b.task !== 'string') return c.json({ error: 'task must be a task number or null' }, 400)
+    else {
+      const found = await db.query.tasks.findFirst({
+        where: and(eq(tasks.projectId, targetProject), eq(tasks.number, b.task.toUpperCase())),
+      })
+      if (!found) return c.json({ error: `Task ${b.task} not found in that project` }, 404)
+      patch.taskId = found.id
+    }
+  }
+
+  const startedAt = parseStamp(b.startedAt)
+  const endedAt = parseStamp(b.endedAt)
+  if (startedAt === undefined && b.startedAt !== undefined) return c.json({ error: 'startedAt must be an ISO timestamp' }, 400)
+  if (endedAt === undefined && b.endedAt !== undefined) return c.json({ error: 'endedAt must be an ISO timestamp' }, 400)
+  if (startedAt) patch.startedAt = startedAt
+  // endedAt: null явно означает «снова идёт», это не то же самое, что «не трогай».
+  if (b.endedAt !== undefined) patch.endedAt = endedAt
+
+  const from = patch.startedAt ?? entry.startedAt
+  const till = b.endedAt !== undefined ? endedAt : entry.endedAt
+  if (till && till.getTime() <= from.getTime())
+    return c.json({ error: 'endedAt must be later than startedAt' }, 400)
+
+  if (Object.keys(patch).length === 1) return c.json({ error: `Nothing to change. Allowed: ${TIME_PATCH_FIELDS.join(', ')}.` }, 400)
+
+  const [row] = await db.update(timeEntries).set(patch).where(eq(timeEntries.id, entry.id)).returning()
+  // Оба проекта: часы исчезли из одного и появились в другом, и обе страницы
+  // должны это увидеть.
+  broadcast(scope.projectId, 'time', { action: 'update', id: row!.id, userId: entry.userId })
+  if (targetProject !== entry.projectId) broadcast(targetProject, 'time', { action: 'update', id: row!.id, userId: entry.userId })
+  sendToUserAnywhere(entry.userId, 'time', { action: 'update', id: row!.id })
+  if (b.description !== undefined) void maybeTranslate(targetProject, row!.id, row!.description).catch(() => {})
+  return c.json({
+    id: row!.id,
+    description: row!.description,
+    projectId: row!.projectId,
+    startedAt: row!.startedAt,
+    endedAt: row!.endedAt,
+    running: !row!.endedAt,
+    minutes: row!.endedAt ? Math.round((row!.endedAt.getTime() - row!.startedAt.getTime()) / 60_000) : null,
+  })
+})
+
+/**
+ * Продолжить работу: пауза — это остановка, а возобновление — новая запись.
+ *
+ * Отдельных полей «пауза» у записи нет: перерыв не должен попадать в часы.
+ * Поэтому «поставил на паузу» = POST /x/time/stop, «продолжил» = сюда. Без
+ * этой ручки ассистенту пришлось бы вручную вычитывать прошлую запись, чтобы
+ * не потерять описание и задачу, — и он бы их терял.
+ */
+bridgeRoute.post('/time/resume', async (c) => {
+  const id = auth(c as never)
+  const scope = await resolveProject(c as never)
+  if ('error' in scope) return c.json({ error: scope.error }, scope.status)
+
+  const b = (await c.req.json().catch(() => ({}))) as Record<string, unknown>
+  const project = await db.query.projects.findFirst({ where: eq(projects.id, scope.projectId) })
+  const cfg = readTimeConfig(project?.timeConfig)
+
+  const running = await db
+    .select({ e: timeEntries, p: projects })
+    .from(timeEntries)
+    .leftJoin(projects, eq(projects.id, timeEntries.projectId))
+    .where(and(eq(timeEntries.userId, id.userId), isNull(timeEntries.endedAt)))
+  if (running.length >= cfg.maxTimers) {
+    const elsewhere = running.find((r) => r.e.projectId !== scope.projectId)
+    return c.json(
+      {
+        error: elsewhere
+          ? `A timer is already running in "${elsewhere.p?.name ?? 'another project'}". Stop it first.`
+          : 'A timer is already running. Stop it first.',
+        running: running.map((r) => ({ id: r.e.id, description: r.e.description, project: r.p?.name ?? null })),
+      },
+      409,
+    )
+  }
+
+  // По умолчанию продолжаем последнее, что закончили в этом проекте.
+  const source = typeof b.id === 'string' && b.id
+    ? await db.query.timeEntries.findFirst({
+        where: and(eq(timeEntries.id, b.id), eq(timeEntries.projectId, scope.projectId), eq(timeEntries.userId, id.userId)),
+      })
+    : await db.query.timeEntries.findFirst({
+        where: and(eq(timeEntries.projectId, scope.projectId), eq(timeEntries.userId, id.userId), sql`${timeEntries.endedAt} is not null`),
+        orderBy: desc(timeEntries.endedAt),
+      })
+  if (!source) return c.json({ error: 'Nothing to resume — no finished entry of yours in this project' }, 404)
+
+  const [row] = await db
+    .insert(timeEntries)
+    .values({
+      projectId: scope.projectId,
+      userId: id.userId,
+      taskId: source.taskId,
+      description: source.description,
+      startedAt: new Date(),
+      createdVia: 'bridge',
+    })
+    .returning()
+  broadcast(scope.projectId, 'time', { action: 'start', id: row!.id, userId: id.userId })
+  sendToUserAnywhere(id.userId, 'time', { action: 'start', id: row!.id })
+  return c.json({ id: row!.id, description: row!.description, taskId: row!.taskId, startedAt: row!.startedAt, resumedFrom: source.id }, 201)
 })
 
 bridgeRoute.get('/time/report', async (c) => {
