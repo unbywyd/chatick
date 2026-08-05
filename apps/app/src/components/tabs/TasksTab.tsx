@@ -124,8 +124,50 @@ export function TasksTab({ projectId, meId }: { projectId: string; meId?: string
     },
     onError: onErr,
   })
+  /**
+   * Порядок — одним запросом, а сервер нумерует.
+   *
+   * Раньше клиент считал sortOrder как середину между соседями и слал PATCH на
+   * каждую сущность. Обе части были неверны. Во-первых, у всех задач проекта
+   * sort_order по умолчанию 0, а середина между нулями — тоже ноль: карточка
+   * возвращалась на место, и драг выглядел сломанным. Во-вторых, пачка запросов
+   * обновляла список после каждого, и карточка успевала съездить назад и
+   * вернуться — те самые «пара секунд» задержки.
+   */
+  const reorder = useMutation({
+    mutationFn: (body: { tasks?: { id: string; groupId: string | null }[]; groups?: string[] }) =>
+      api('/api/v1/tasks/reorder', { method: 'PATCH', body: JSON.stringify(body) }, 'project'),
+    onSuccess: () => {
+      refresh()
+      refreshGroups()
+    },
+    onError: (e) => {
+      // Порядок вернём с сервера: показывать перестановку, которой не
+      // случилось, хуже, чем откатить её на глазах.
+      refresh()
+      refreshGroups()
+      onErr(e)
+    },
+  })
+
   const reorderGroups = (orderedIds: string[]) => {
-    orderedIds.forEach((id, i) => patchGroup.mutate({ id, sortOrder: i }))
+    // Новый порядок показываем сразу: ждать ответа значит видеть, как группа
+    // прыгает обратно и лишь потом встаёт на место.
+    qc.setQueryData(['task-groups', projectId], (cur: TaskGroup[] | undefined) =>
+      (cur ?? []).map((g) => ({ ...g, sortOrder: orderedIds.indexOf(g.id) })),
+    )
+    reorder.mutate({ groups: orderedIds })
+  }
+
+  const reorderTasks = (items: { id: string; groupId: string | null }[]) => {
+    const pos = new Map(items.map((x, i) => [x.id, i]))
+    qc.setQueryData(['tasks', projectId], (cur: Task[] | undefined) =>
+      (cur ?? []).map((task) => {
+        const i = pos.get(task.id)
+        return i === undefined ? task : { ...task, sortOrder: i, groupId: items[i]!.groupId }
+      }),
+    )
+    reorder.mutate({ tasks: items })
   }
 
   const create = useMutation({
@@ -597,6 +639,7 @@ export function TasksTab({ projectId, meId }: { projectId: string; meId?: string
                 onPatchGroup={(id, body) => patchGroup.mutate({ id, ...body })}
                 onDeleteGroup={(id) => deleteGroup.mutate(id)}
                 onReorderGroups={reorderGroups}
+                onReorderTasks={reorderTasks}
               />
             </div>
           )}

@@ -264,7 +264,9 @@
     "discardConfirm": "Отменить",
     "dueLabel": "Срок",
     "groupLabel": "Спринт",
-    "noDue": "Без срока"
+    "noDue": "Без срока",
+    "collapseSprint": "Свернуть спринт",
+    "expandSprint": "Развернуть спринт"
   },
   "files": {
     "search": "Поиск файлов…",

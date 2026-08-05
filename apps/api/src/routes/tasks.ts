@@ -1,7 +1,7 @@
 import { Hono } from 'hono'
 import { zValidator } from '@hono/zod-validator'
 import { z } from 'zod'
-import { and, asc, desc, eq, isNull, sql } from 'drizzle-orm'
+import { and, asc, desc, eq, inArray, isNull, sql } from 'drizzle-orm'
 import { companyOf, projectPath } from '../lib/links.js'
 import { db } from '../db/client.js'
 import { files, projects, taskChecklist, taskComments, taskGroups, taskNotes, tasks, users } from '../db/schema.js'
@@ -220,6 +220,70 @@ tasksRoute.post('/', zValidator('json', z.object(taskShape)), async (c) => {
 })
 
 // Обновить: смена только статуса — tasks.changeStatus; всё остальное — tasks.edit
+/**
+ * Порядок задач и групп целиком.
+ *
+ * Раньше клиент считал новый sortOrder как середину между соседями и слал один
+ * PATCH. Пока значения различаются — работает; но у всех задач проекта
+ * sort_order по умолчанию 0, а середина между нулями — тоже ноль. Перетащенная
+ * карточка возвращалась на место, и выглядело это как сломанный драг. То же у
+ * групп: у них порядок был нулевым поголовно.
+ *
+ * Поэтому порядок задаём списком идентификаторов и нумеруем на сервере. Заодно
+ * уходит вторая беда: пачка PATCH по одному обновляла список после каждого, и
+ * карточка успевала съездить назад и вернуться.
+ */
+tasksRoute.patch(
+  '/reorder',
+  zValidator(
+    'json',
+    z.object({
+      // Список задач в нужном порядке. groupId передаётся, когда карточку
+      // перенесли в другую группу: одной операцией и порядок, и переезд.
+      tasks: z.array(z.object({ id: z.string(), groupId: z.string().nullable().optional() })).max(1000).optional(),
+      groups: z.array(z.string()).max(200).optional(),
+    }),
+  ),
+  async (c) => {
+    const { projectId, sub } = c.get('auth')
+    if (!(await hasPermission(projectId, sub, 'tasks.edit'))) return c.json({ error: 'Forbidden' }, 403)
+    const b = c.req.valid('json')
+
+    if (b.groups?.length) {
+      const own = await db.query.taskGroups.findMany({ where: eq(taskGroups.projectId, projectId) })
+      const mine = new Set(own.map((g) => g.id))
+      let i = 0
+      for (const id of b.groups) {
+        if (!mine.has(id)) continue // чужая группа не должна получить номер в этом проекте
+        await db.update(taskGroups).set({ sortOrder: i++ }).where(eq(taskGroups.id, id))
+      }
+    }
+
+    if (b.tasks?.length) {
+      const ids = b.tasks.map((x) => x.id)
+      const own = await db.query.tasks.findMany({
+        where: and(eq(tasks.projectId, projectId), inArray(tasks.id, ids), isNull(tasks.deletedAt)),
+      })
+      const byId = new Map(own.map((t) => [t.id, t]))
+      let i = 0
+      for (const item of b.tasks) {
+        const row = byId.get(item.id)
+        if (!row) continue
+        const patch: Record<string, unknown> = { sortOrder: i++ }
+        // groupId трогаем, только если он ПРИСЛАН: иначе перестановка внутри
+        // группы обнуляла бы принадлежность всем задачам списка.
+        if (item.groupId !== undefined && (row.groupId ?? null) !== (item.groupId ?? null)) {
+          patch.groupId = item.groupId ?? null
+        }
+        await db.update(tasks).set(patch).where(eq(tasks.id, row.id))
+      }
+    }
+
+    broadcast(projectId, 'tasks_changed', {})
+    return c.json({ ok: true })
+  },
+)
+
 tasksRoute.patch(
   '/:taskId',
   zValidator('json', z.object({ ...taskShape, title: taskShape.title.optional(), status: z.enum(STATUSES).optional(), priority: z.enum(PRIORITIES).optional(), description: z.string().max(10_000).optional() })),

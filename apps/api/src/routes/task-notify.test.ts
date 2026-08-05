@@ -52,7 +52,11 @@ describe('снятие уведомления', () => {
 
 describe('интерфейс', () => {
   it('переназначили — прежнему исполнителю уведомление снимаем', () => {
-    expect(handler(tasks, "tasksRoute.patch(")).toMatch(/unassignNotice\(task\.assigneeId, task\.id\)/)
+    // Именно PATCH задачи. Раньше брали первый попавшийся tasksRoute.patch(,
+    // и появившаяся рядом ручка порядка забрала срез себе: тест оставался
+    // зелёным на коде, где снятие уведомления удалено.
+    const patchTask = tasks.slice(tasks.search(/tasksRoute\.patch\(\s*'\/:taskId'/))
+    expect(handler(patchTask, 'tasksRoute.patch(')).toMatch(/unassignNotice\(task\.assigneeId, task\.id\)/)
   })
 
   it('удалили задачу — тоже снимаем: ссылка вела бы в пустоту', () => {

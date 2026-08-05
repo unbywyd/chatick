@@ -263,7 +263,9 @@
     "discardConfirm": "Discard",
     "dueLabel": "Due",
     "groupLabel": "Sprint",
-    "noDue": "No due date"
+    "noDue": "No due date",
+    "collapseSprint": "Collapse the sprint",
+    "expandSprint": "Expand the sprint"
   },
   "files": {
     "search": "Search files…",

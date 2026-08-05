@@ -3,7 +3,20 @@ import * as DropdownMenuPrimitive from '@radix-ui/react-dropdown-menu'
 import { Check } from 'lucide-react'
 import { cn } from '@/lib/utils'
 
-export const DropdownMenu = DropdownMenuPrimitive.Root
+/**
+ * Направление письма для содержимого в портале.
+ *
+ * Портал уносит меню в конец body, мимо всей вёрстки страницы: `dir`, стоящий
+ * на <html>, наследуется, а вот логические отступы Radix берёт из СВОЕГО
+ * `dir`, и без него меню в иврите раскладывалось слева направо — иконка
+ * оказывалась не с той стороны текста, а всплывало оно не от того края.
+ */
+export const uiDir = () => (typeof document === 'undefined' ? 'ltr' : (document.documentElement.dir as 'ltr' | 'rtl') || 'ltr')
+
+
+export function DropdownMenu(props: React.ComponentProps<typeof DropdownMenuPrimitive.Root>) {
+  return <DropdownMenuPrimitive.Root dir={uiDir()} {...props} />
+}
 export const DropdownMenuTrigger = DropdownMenuPrimitive.Trigger
 
 export function DropdownMenuContent({

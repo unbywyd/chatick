@@ -2,11 +2,18 @@ import * as React from 'react'
 import * as SelectPrimitive from '@radix-ui/react-select'
 import { Check, ChevronDown } from 'lucide-react'
 import { cn } from '@/lib/utils'
+import { uiDir } from './dropdown-menu'
 
 // Селект в дизайн-системе. Нативный <select> рисуется средствами ОС: в тёмной
 // теме приходит белый список, а на Windows ещё и своим шрифтом.
 
-export const Select = SelectPrimitive.Root
+/**
+ * Направление письма задаём на корне: у Select его читает и список в портале,
+ * и логика клавиш. Без него в иврите галочка и текст пункта менялись местами.
+ */
+export function Select(props: React.ComponentProps<typeof SelectPrimitive.Root>) {
+  return <SelectPrimitive.Root dir={uiDir()} {...props} />
+}
 export const SelectValue = SelectPrimitive.Value
 
 export function SelectTrigger({

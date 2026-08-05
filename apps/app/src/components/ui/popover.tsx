@@ -1,6 +1,7 @@
 import * as React from 'react'
 import * as PopoverPrimitive from '@radix-ui/react-popover'
 import { cn } from '@/lib/utils'
+import { uiDir } from './dropdown-menu'
 
 export const Popover = PopoverPrimitive.Root
 export const PopoverTrigger = PopoverPrimitive.Trigger
@@ -13,7 +14,9 @@ export function PopoverContent({
 }: React.ComponentProps<typeof PopoverPrimitive.Content>) {
   return (
     <PopoverPrimitive.Portal>
+      {/* dir — см. uiDir: портал уносит содержимое мимо вёрстки страницы. */}
       <PopoverPrimitive.Content
+        dir={uiDir()}
         align={align}
         sideOffset={sideOffset}
         className={cn(

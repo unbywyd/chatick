@@ -68,6 +68,7 @@ export function TasksTable({
   onPatchGroup,
   onDeleteGroup,
   onReorderGroups,
+  onReorderTasks,
 }: {
   tasks: Task[]
   groups: TaskGroup[]
@@ -85,6 +86,8 @@ export function TasksTable({
   onPatchGroup: (id: string, body: Record<string, unknown>) => void
   onDeleteGroup: (id: string) => void
   onReorderGroups: (orderedIds: string[]) => void
+  /** итоговый порядок задач одной группы — нумерует сервер */
+  onReorderTasks: (items: { id: string; groupId: string | null }[]) => void
 }) {
   const { t } = useTranslation()
   const [sort, setSort] = useState<{ key: SortKey; dir: SortDir } | null>(null)
@@ -174,17 +177,19 @@ export function TasksTable({
       targetGroupId = g === 'none' ? null : g
     } else return
 
-    // вычислить sortOrder среди задач целевой группы
+    // Порядок задаём СПИСКОМ, а не вычисленным sortOrder у одной задачи.
+    // Раньше клиент брал середину между соседями — но у всех задач проекта
+    // sort_order по умолчанию 0, а середина между нулями тоже ноль: карточка
+    // возвращалась на место, и выглядело это как сломанный драг.
+    //
+    // Вынимаем задачу и вставляем на место той, над которой её отпустили (или
+    // в конец, если бросили на пустое поле группы).
     const groupTasks = sortTasks((byGroup.get(targetGroupId) ?? []).filter((x) => x.id !== taskId))
     const idx = beforeTaskId ? groupTasks.findIndex((x) => x.id === beforeTaskId) : groupTasks.length
-    const prev = groupTasks[idx - 1]?.sortOrder
-    const next = groupTasks[idx]?.sortOrder
-    const sortOrder =
-      prev !== undefined && next !== undefined ? (prev + next) / 2 : prev !== undefined ? prev + 1 : next !== undefined ? next - 1 : 0
+    const at = idx < 0 ? groupTasks.length : idx
+    const ordered = [...groupTasks.slice(0, at), task, ...groupTasks.slice(at)]
 
-    const patch: Record<string, unknown> = { sortOrder }
-    if ((task.groupId ?? null) !== targetGroupId) patch.groupId = targetGroupId
-    onPatch(taskId, patch)
+    onReorderTasks(ordered.map((x) => ({ id: x.id, groupId: targetGroupId })))
   }
 
   return (
@@ -302,6 +307,24 @@ function GroupTable({
   const [editing, setEditing] = useState(false)
   const [name, setName] = useState(group?.name ?? '')
 
+  // Свёрнутые спринты помним между заходами: закрытый спринт закрывают, чтобы
+  // он не мешал, и открывать его заново при каждом возврате — та же помеха.
+  const [collapsed, setCollapsed] = useState(() =>
+    group ? localStorage.getItem(`sprintCollapsed:${group.id}`) === '1' : false,
+  )
+  const toggleCollapsed = () => {
+    if (!group) return
+    setCollapsed((v) => {
+      localStorage.setItem(`sprintCollapsed:${group.id}`, v ? '0' : '1')
+      return !v
+    })
+  }
+
+  // Прогресс спринта: закрытых из всех. Место в шапке свободно, а вопрос
+  // «сколько там осталось» задают, не открывая список.
+  const doneCount = tasks.filter((x) => x.status === 'done').length
+  const pct = tasks.length ? Math.round((doneCount / tasks.length) * 100) : 0
+
   // sortable-обёртка для строки-заголовка группы (перетаскивание групп)
   const sortable = useSortable({ id: group ? `group:${group.id}` : 'group:none', disabled: !group || !canEdit })
   const style = group ? { transform: CSS.Transform.toString(sortable.transform), transition: sortable.transition } : undefined
@@ -346,7 +369,14 @@ function GroupTable({
             ) : (
               <h3 className="text-sm font-semibold">{group.name}</h3>
             )}
-            <span className="text-xs tabular-nums text-muted-foreground">({tasks.length})</span>
+            <button
+              onClick={toggleCollapsed}
+              title={collapsed ? t('tasks.expandSprint') : t('tasks.collapseSprint')}
+              className="inline-flex items-center gap-1 text-xs tabular-nums text-muted-foreground hover:text-foreground"
+            >
+              <ChevronDown className={cn('size-3 transition-transform', collapsed && '-rotate-90 rtl:rotate-90')} />
+              ({tasks.length})
+            </button>
             {canEdit && (
               <div className="flex items-center gap-0.5">
                 <input
@@ -377,8 +407,25 @@ function GroupTable({
         ) : (
           <h3 className="text-sm font-semibold text-muted-foreground">{t('tasks.noGroup')}</h3>
         )}
+
+        {/* Прогресс — у противоположного края шапки: место там свободно, а
+            вопрос «сколько осталось» задают, не открывая список. */}
+        {tasks.length > 0 && (
+          <span className="ms-auto flex shrink-0 items-center gap-2">
+            <span className="h-1.5 w-24 overflow-hidden rounded-full bg-secondary">
+              <span
+                className={cn('block h-full transition-all', pct === 100 ? 'bg-brand' : 'bg-brand/70')}
+                style={{ width: `${pct}%` }}
+              />
+            </span>
+            <span className={cn('text-xs tabular-nums', pct === 100 ? 'text-brand' : 'text-muted-foreground')}>
+              {doneCount}/{tasks.length}
+            </span>
+          </span>
+        )}
       </div>
 
+      {!collapsed && (
       <div className="overflow-x-auto rounded-lg border">
         <table className="w-full min-w-[640px] text-sm">
           <thead>
@@ -423,6 +470,7 @@ function GroupTable({
           </SortableContext>
         </table>
       </div>
+      )}
     </section>
   )
 }
@@ -465,7 +513,14 @@ function TableRow({
 }) {
   const { t } = useTranslation()
   const { setNodeRef, transform, transition, isDragging, attributes, listeners } = useSortable({ id: `task:${task.id}` })
-  const style = { transform: CSS.Transform.toString(transform), transition }
+  // Только вертикальный сдвиг. CSS.Transform.toString добавляет ещё и
+  // scaleX/scaleY: в <tr> они растягивают строку шире таблицы, у контейнера
+  // появляется горизонтальная полоса, и содержимое дёргается на каждый
+  // пиксель перетаскивания.
+  const style = {
+    transform: transform ? `translate3d(0, ${transform.y}px, 0)` : undefined,
+    transition,
+  }
   const StatusIcon = STATUS_ICON[task.status]
   const overdue = isOverdue(task)
 

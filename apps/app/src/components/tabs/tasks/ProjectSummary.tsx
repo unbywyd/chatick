@@ -5,6 +5,7 @@ import { useNavigate, useParams } from 'react-router-dom'
 import { toast } from 'sonner'
 import { CalendarDays, Clock, MoreHorizontal, X } from 'lucide-react'
 import { api } from '@/lib/api'
+import { formatDuration } from '@/lib/time-parse'
 import { cn } from '@/lib/utils'
 import { Button } from '@/components/ui/button'
 import { Calendar } from '@/components/ui/calendar'
@@ -30,15 +31,6 @@ type Summary = {
   deadline: string | null
   tasks: { total: number; done: number; noEstimate: number; noEstimateOpen: number }
   minutes: { planned: number; plannedDone: number; plannedLeft: number; spent: number }
-}
-
-/** «12ч», «12ч 30м», «40м» — без нулей, которые нечего сообщать. */
-function fmtHours(minutes: number): string {
-  if (minutes <= 0) return '0'
-  const h = Math.floor(minutes / 60)
-  const m = minutes % 60
-  if (!h) return `${m}м`
-  return m ? `${h}ч ${m}м` : `${h}ч`
 }
 
 /** Полночь по местному в ISO — сервер ждёт отметку времени, а срок задают датой. */
@@ -106,24 +98,24 @@ export function ProjectSummary({ projectId, canEdit }: { projectId: string; canE
           {planned > 0 && (
             <>
               <span>
-                {t('summary.planned')}: <b className="font-medium text-foreground">{fmtHours(planned)}</b>
+                {t('summary.planned')}: <b className="font-medium text-foreground">{formatDuration(planned)}</b>
               </span>
               <span className="text-border">·</span>
               <span>
-                {t('summary.left')}: <b className="font-medium text-foreground">{fmtHours(plannedLeft)}</b>
+                {t('summary.left')}: <b className="font-medium text-foreground">{formatDuration(plannedLeft)}</b>
               </span>
               <span className="text-border">·</span>
             </>
           )}
           <span>
-            {t('summary.spent')}: <b className="font-medium text-foreground">{fmtHours(spent)}</b>
+            {t('summary.spent')}: <b className="font-medium text-foreground">{formatDuration(spent)}</b>
           </span>
           {/* Сравнение факта с закрытым планом, а не со всем: пока половина
               задач открыта, «100 из 200» читалось бы как отставание. */}
           {plannedDone > 0 && spent > 0 && (
             <span className={cn('rounded px-1', spent > plannedDone ? 'bg-orange-500/15 text-orange-600 dark:text-orange-400' : 'bg-brand/15 text-brand')}>
               {spent > plannedDone ? '+' : '−'}
-              {fmtHours(Math.abs(spent - plannedDone))}
+              {formatDuration(Math.abs(spent - plannedDone))}
             </span>
           )}
         </span>

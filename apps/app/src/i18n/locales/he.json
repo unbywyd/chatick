@@ -263,7 +263,9 @@
     "discardConfirm": "ביטול",
     "dueLabel": "תאריך יעד",
     "groupLabel": "ספרינט",
-    "noDue": "ללא תאריך יעד"
+    "noDue": "ללא תאריך יעד",
+    "collapseSprint": "לכווץ את הספרינט",
+    "expandSprint": "לפתוח את הספרינט"
   },
   "files": {
     "search": "חיפוש קבצים…",
