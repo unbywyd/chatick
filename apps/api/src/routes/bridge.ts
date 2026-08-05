@@ -815,6 +815,25 @@ const TASK_FIELDS = [
 ] as const
 
 /**
+ * Поля тела групповой правки.
+ *
+ * Отдельный список, а не TASK_FIELDS: здесь другое тело — какие задачи менять,
+ * что ставить всем и что своё каждой. Само содержимое set проверяется по
+ * TASK_FIELDS, поэтому набор допустимых полей задачи остаётся один.
+ */
+const BULK_FIELDS = ['tasks', 'set', 'refs', 'project'] as const
+
+/**
+ * Потолок задач в одной партии.
+ *
+ * Не из-за базы: сотня строк ей безразлична. Из-за уведомлений и писем — по
+ * задаче на исполнителя, и «обнови все» превращается в рассылку. Число
+ * пришлось выбирать: 100 покрывает и «все экраны макета», и разумную часть
+ * бэклога, но не даёт задеть проект целиком одним движением.
+ */
+const BULK_MAX = 100
+
+/**
  * Привязать уже загруженные файлы к задаче.
  *
  * Берём только свои файлы этого проекта и снимаем временный флаг — иначе
@@ -1030,6 +1049,236 @@ bridgeRoute.get('/tasks', async (c) => {
   return c.json({
     items: rows.map((r) => taskView(r.t, r.u, byTask.get(r.t.id))),
     count: rows.length,
+  })
+})
+
+/**
+ * Одинаковая правка сразу многим задачам.
+ *
+ * Зачем: «проставь номера всем экранам», «перекинь спринт», «закрой всё
+ * проверенное» — это десятки задач. По одному запросу на штуку ассистент
+ * упирается в лимиты, теряет середину списка и не может сказать, что именно
+ * прошло. Здесь одно тело, один ответ, и в ответе видно каждую задачу.
+ *
+ * Объявлено ДО '/tasks/:id': иначе параметр съел бы слово bulk и правка
+ * пришла бы в задачу с номером «bulk».
+ */
+bridgeRoute.patch('/tasks/bulk', async (c) => {
+  const id = auth(c as never)
+  const scope = await resolveProject(c as never)
+  if ('error' in scope) return c.json({ error: scope.error }, scope.status)
+
+  const b = (await c.req.json().catch(() => ({}))) as Record<string, unknown>
+  const bad = unknownFields(b, BULK_FIELDS)
+  if (bad) return c.json({ error: bad }, 400)
+
+  if (!Array.isArray(b.tasks) || !b.tasks.length) {
+    return c.json({ error: 'tasks must be a non-empty array of task numbers or ids' }, 400)
+  }
+  // Потолок на партию: ассистент охотно присылает «все задачи проекта», а это
+  // и запрос на минуту, и уведомление каждому участнику по каждой задаче.
+  if (b.tasks.length > BULK_MAX) {
+    return c.json({ error: `Too many tasks: ${b.tasks.length}. Maximum ${BULK_MAX} per request.` }, 400)
+  }
+
+  // Что меняем — одно и то же для всех. Разбираем ОДИН раз и теми же
+  // правилами, что в одиночном PATCH: расхождение здесь означало бы, что
+  // через партию можно записать то, что поштучно запрещено.
+  const set = (b.set ?? {}) as Record<string, unknown>
+  if (typeof set !== 'object' || Array.isArray(set)) return c.json({ error: 'set must be an object' }, 400)
+  const badSet = unknownFields(set, TASK_FIELDS)
+  if (badSet) return c.json({ error: badSet }, 400)
+
+  const patch: Record<string, unknown> = {}
+  if (typeof set.title === 'string') patch.title = set.title.slice(0, 300)
+  if (typeof set.description === 'string') patch.description = richText(set.description)
+  if ((['todo', 'in_progress', 'review', 'done'] as const).includes(set.status as never)) patch.status = set.status
+  if ((['low', 'normal', 'high', 'urgent'] as const).includes(set.priority as never)) patch.priority = set.priority
+  if (set.estimateMinutes !== undefined) patch.estimateMinutes = set.estimateMinutes == null ? null : String(set.estimateMinutes)
+  if (set.sprintId !== undefined) patch.groupId = set.sprintId ?? null
+  if (set.assignee !== undefined) {
+    const resolved = await resolveAssignee(id, scope.projectId, set.assignee)
+    if (resolved === undefined) return c.json({ error: `Unknown assignee: ${String(set.assignee)}` }, 400)
+    patch.assigneeId = resolved
+  }
+
+  // Номера — единственное поле, у которого своё значение на каждую задачу:
+  // «проставь 19.1, 19.2, 21.3» ровно за этим сюда и приходят. Общий refs в
+  // set тоже допустим — когда номер один на всех.
+  const refsById = (b.refs ?? null) as Record<string, unknown> | null
+  if (refsById !== null && (typeof refsById !== 'object' || Array.isArray(refsById))) {
+    return c.json({ error: 'refs must be an object mapping task number or id to its refs string' }, 400)
+  }
+  if (typeof set.refs === 'string') patch.refs = normalizeRefs(set.refs)
+
+  if (!Object.keys(patch).length && !refsById) return c.json({ error: 'Nothing to update' }, 400)
+
+  // Права — по тому, ЧТО меняют, ровно как поштучно: двигать по доске может
+  // любой, кто видит задачи, переписывать — только tasks.edit. Персональные
+  // номера это правка, поэтому одного changeStatus для них мало.
+  const statusOnly = !refsById && Object.keys(patch).every((k) => k === 'status' || k === 'groupId' || k === 'sortOrder')
+  const denied = await require(c as never, statusOnly ? 'tasks.changeStatus' : 'tasks.edit', scope.projectId)
+  if (denied) return c.json(denied, 403)
+
+  // Ключ задачи → строка номеров. Регистр приводим: TASK-4 и task-4 — одно.
+  const refsKey = new Map<string, string>()
+  for (const [k, v] of Object.entries(refsById ?? {})) {
+    if (typeof v !== 'string') return c.json({ error: `refs.${k} must be a string` }, 400)
+    refsKey.set(k.trim().toUpperCase(), v)
+  }
+
+  const wanted = b.tasks.map((x) => String(x).trim()).filter(Boolean)
+  const rows = await db
+    .select()
+    .from(tasks)
+    .where(and(eq(tasks.projectId, scope.projectId), isNull(tasks.deletedAt)))
+  const byKey = new Map<string, (typeof rows)[number]>()
+  for (const r of rows) {
+    byKey.set(r.id.toUpperCase(), r)
+    byKey.set(r.number.toUpperCase(), r)
+  }
+
+  const updated: ReturnType<typeof taskView>[] = []
+  const failed: { task: string; error: string }[] = []
+  const touched = new Set<string | null>()
+
+  for (const key of wanted) {
+    const existing = byKey.get(key.toUpperCase())
+    if (!existing) {
+      failed.push({ task: key, error: 'Not found in this project' })
+      continue
+    }
+    // Чужую задачу не переписываем — то же правило, что поштучно и в вебе.
+    // Проверяем КАЖДУЮ: иначе партия стала бы способом обойти проверку,
+    // подмешав к своим задачам чужие.
+    if (!statusOnly && !(await ownsOrManages(scope.projectId, id.userId, [existing.createdById, existing.assigneeId]))) {
+      failed.push({ task: existing.number, error: 'Forbidden: you can only edit tasks you created or that are assigned to you' })
+      continue
+    }
+
+    const own = { ...patch }
+    const personal = refsKey.get(existing.id.toUpperCase()) ?? refsKey.get(existing.number.toUpperCase())
+    if (personal !== undefined) own.refs = normalizeRefs(personal)
+    if (!Object.keys(own).length) {
+      failed.push({ task: existing.number, error: 'Nothing to update for this task' })
+      continue
+    }
+
+    const [row] = await db.update(tasks).set(own).where(eq(tasks.id, existing.id)).returning()
+    void logActivity({
+      projectId: scope.projectId,
+      actorId: id.userId,
+      action: 'update',
+      entityType: 'task',
+      entityId: existing.id,
+      entityLabel: `${row!.number} ${row!.title}`,
+    })
+    // Уведомления те же, что поштучно: партия не повод молча менять чужую
+    // задачу — человек должен узнать, что с его работой что-то сделали.
+    const assigneeChanged = own.assigneeId !== undefined && own.assigneeId !== existing.assigneeId
+    void notifyTask(scope.projectId, id.userId, row!, {
+      assigneeChanged: assigneeChanged && Boolean(row!.assigneeId),
+      statusChanged: own.status !== undefined && own.status !== existing.status,
+      mentions: own.description !== undefined && own.description !== existing.description,
+    })
+    if (assigneeChanged && existing.assigneeId) void unassignNotice(existing.assigneeId, existing.id)
+    for (const u of [row!.assigneeId, row!.createdById, existing.assigneeId, existing.createdById]) touched.add(u)
+
+    const who = row!.assigneeId ? await db.query.users.findFirst({ where: eq(users.id, row!.assigneeId) }) : null
+    updated.push(taskView(row!, who))
+  }
+
+  // Список обновляем один раз на всю партию, а не на каждую задачу.
+  if (updated.length) tasksChanged(scope.projectId, [...touched])
+
+  // Провалы отдаём рядом с успехами, а не прячем: «ok» на запрос, где половина
+  // задач не нашлась, — худший исход. Ассистент доложит о сделанном, а сделана
+  // будет половина.
+  return c.json({ updated: updated.length, failed: failed.length, items: updated, errors: failed })
+})
+
+/**
+ * Удалить сразу несколько задач.
+ *
+ * Удаление здесь мягкое и обратимое: запись уходит в корзину на семь дней, и
+ * вернуть её ассистент может сам через /x/trash. Поштучно мост это давно
+ * умеет, так что партия не даёт новых прав — только избавляет от тридцати
+ * запросов подряд, на середине которых ассистент теряет нить и не может
+ * сказать, что успел удалить.
+ *
+ * Права считаем ПО КАЖДОЙ задаче, как и поштучно: свою удаляет участник,
+ * чужую — только с tasks.delete. Одной проверки на всю партию хватило бы,
+ * чтобы к своим задачам подмешать чужие.
+ *
+ * Объявлено ДО '/tasks/:id' — иначе слово bulk уедет в параметр.
+ */
+bridgeRoute.delete('/tasks/bulk', async (c) => {
+  const id = auth(c as never)
+  const scope = await resolveProject(c as never)
+  if ('error' in scope) return c.json({ error: scope.error }, scope.status)
+
+  const b = (await c.req.json().catch(() => ({}))) as Record<string, unknown>
+  const bad = unknownFields(b, ['tasks', 'project'])
+  if (bad) return c.json({ error: bad }, 400)
+
+  if (!Array.isArray(b.tasks) || !b.tasks.length) {
+    return c.json({ error: 'tasks must be a non-empty array of task numbers or ids' }, 400)
+  }
+  if (b.tasks.length > BULK_MAX) {
+    return c.json({ error: `Too many tasks: ${b.tasks.length}. Maximum ${BULK_MAX} per request.` }, 400)
+  }
+
+  const rows = await db
+    .select()
+    .from(tasks)
+    .where(and(eq(tasks.projectId, scope.projectId), isNull(tasks.deletedAt)))
+  const byKey = new Map<string, (typeof rows)[number]>()
+  for (const r of rows) {
+    byKey.set(r.id.toUpperCase(), r)
+    byKey.set(r.number.toUpperCase(), r)
+  }
+
+  const deleted: { id: string; number: string; title: string }[] = []
+  const failed: { task: string; error: string }[] = []
+  const touched = new Set<string | null>()
+
+  for (const raw of b.tasks.map((x) => String(x).trim()).filter(Boolean)) {
+    const existing = byKey.get(raw.toUpperCase())
+    if (!existing) {
+      failed.push({ task: raw, error: 'Not found in this project' })
+      continue
+    }
+    const own = await ownsOrManages(scope.projectId, id.userId, [existing.createdById, existing.assigneeId])
+    const denied = await require(c as never, own ? 'tasks.create' : 'tasks.delete', scope.projectId)
+    if (denied) {
+      failed.push({ task: existing.number, error: 'Forbidden: not yours to delete' })
+      continue
+    }
+
+    await db.update(tasks).set({ deletedAt: new Date(), deletedById: id.userId }).where(eq(tasks.id, existing.id))
+    // Задачи нет в списках — уведомлению о ней там тоже делать нечего.
+    if (existing.assigneeId) void unassignNotice(existing.assigneeId, existing.id)
+    void logActivity({
+      projectId: scope.projectId,
+      actorId: id.userId,
+      action: 'delete',
+      entityType: 'task',
+      entityId: existing.id,
+      entityLabel: `${existing.number} ${existing.title}`,
+    })
+    touched.add(existing.assigneeId)
+    touched.add(existing.createdById)
+    deleted.push({ id: existing.id, number: existing.number, title: existing.title })
+  }
+
+  if (deleted.length) tasksChanged(scope.projectId, [...touched])
+
+  return c.json({
+    deleted: deleted.length,
+    failed: failed.length,
+    items: deleted,
+    errors: failed,
+    restorableForDays: 7,
   })
 })
 

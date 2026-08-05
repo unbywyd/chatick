@@ -29,7 +29,9 @@ function endpointCatalog(q: string): string {
   GET    /x/tasks/<id>${q}
   POST   /x/tasks${q}              {"title","description?","assignee?","status?","priority?","estimateMinutes?","sprintId?","attachmentIds?","refs?"}
   PATCH  /x/tasks/<id>${q}         any subset of the same fields
+  PATCH  /x/tasks/bulk${q}         {"tasks":["TASK-4","TASK-7"], "set":{...}, "refs":{"TASK-4":"19.1"}}
   DELETE /x/tasks/<id>${q}
+  DELETE /x/tasks/bulk${q}         {"tasks":["TASK-4","TASK-7"]}
   POST   /x/tasks/<id>/restore${q}
   GET    /x/trash${q}${amp}type=task|file
 
@@ -38,6 +40,33 @@ function endpointCatalog(q: string): string {
   COMMAS only: "12.3, 4 - 3, 5" is three refs, and "4 - 3" stays one because
   for some teams that is a range and for others a compound number. Digits, dots
   and hyphens are kept, anything else is dropped. Pass "" to clear.
+
+  PATCH /x/tasks/bulk applies ONE change to MANY tasks in a single request.
+  Use it whenever the human says "all of them", "the whole sprint", "every
+  screen": one call instead of thirty, and the reply tells you exactly which
+  tasks changed. Name tasks by number ("TASK-4") or id, up to 100 per request.
+
+    {"tasks":["TASK-4","TASK-7","TASK-9"], "set":{"status":"done"}}
+    {"tasks":["TASK-4","TASK-7"], "set":{"sprintId":"<id>","priority":"high"}}
+    {"tasks":["TASK-4","TASK-7"], "refs":{"TASK-4":"19.1","TASK-7":"19.2*"}}
+
+  "set" holds what is the same for every task and takes the same fields as a
+  single PATCH. "refs" holds what differs per task — numbering a list of
+  screens is the case it exists for. You may send both; refs wins for a task
+  named in it. At least one of them is required.
+
+  The reply is {"updated","failed","items","errors"} and a task can fail while
+  others succeed — not found, or not yours to edit. ALWAYS read "errors"
+  before reporting back: reporting "done" when half the list failed is worse
+  than failing outright, because the human stops checking. Nothing is rolled
+  back — the tasks in "items" really did change.
+
+  DELETE /x/tasks/bulk removes many at once, same shape of reply and the same
+  per-task rules: your own tasks you may delete, other people's need the
+  delete permission, and each one is checked separately. Deletion stays soft —
+  everything lands in /x/trash for seven days. Still, confirm with the human
+  before clearing a list you assembled yourself: "not found" costs a retry,
+  but a wrongly deleted sprint costs their afternoon.
 
   Deleting is soft and undoable — and now undoable BY YOU. /x/trash lists what
   was deleted in this project with daysLeft on each; restore puts it back.
