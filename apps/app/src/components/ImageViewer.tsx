@@ -104,7 +104,10 @@ export function ImageViewer() {
       </div>
 
       <div className="min-h-0 flex-1 p-4" onClick={(e) => e.target === e.currentTarget && setShot(null)}>
-        <ZoomableImage src={shot.src} alt={shot.alt} />
+        {/* Проверки цели здесь мало: поле вокруг картинки принадлежит самому
+            ZoomableImage — он занимает всю площадь, и клик мимо доставался
+            ему, а не этому блоку. */}
+        <ZoomableImage src={shot.src} alt={shot.alt} onBackdropClick={() => setShot(null)} />
       </div>
     </div>,
     document.body,

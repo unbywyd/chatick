@@ -32,6 +32,17 @@ export function kindOf(file: ViewerFile): 'image' | 'video' | 'audio' | 'pdf' | 
   return 'other'
 }
 
+/**
+ * Закрыть, если клик пришёлся ровно на подложку, а не на что-то внутри.
+ *
+ * Сравнение цели с самим элементом надёжнее, чем гасить всплытие у содержимого:
+ * гасить пришлось бы в каждом виде просмотра — картинка, pdf, таблица, текст, —
+ * и любой новый вид молча оказался бы «прозрачным» для закрытия.
+ */
+const closeOnBackdrop = (onClose: () => void) => (e: React.MouseEvent) => {
+  if (e.target === e.currentTarget) onClose()
+}
+
 // Встроенный просмотрщик: картинки, PDF, таблицы (SheetJS локально), текст, office → Google Viewer
 export function FileViewer({
   file,
@@ -110,8 +121,12 @@ export function FileViewer({
   const googleViewer = url ? `https://docs.google.com/gview?embedded=1&url=${encodeURIComponent(url)}` : null
 
   return (
-    <div className="fixed inset-0 z-50 flex flex-col bg-black/85 backdrop-blur-sm" onClick={onClose}>
-      <header className="flex items-center gap-2 px-4 py-3 text-white" onClick={(e) => e.stopPropagation()}>
+    // Клик мимо содержимого закрывает — так ведут себя все лайтбоксы.
+    // Проверяем именно цель клика, а не гасим всплытие у содержимого: раньше
+    // stopPropagation висел на всём поле просмотра, оно занимает весь экран, и
+    // «мимо» кликнуть было негде — оставался только крестик.
+    <div className="fixed inset-0 z-50 flex flex-col bg-black/85 backdrop-blur-sm" onClick={closeOnBackdrop(onClose)}>
+      <header className="flex items-center gap-2 px-4 py-3 text-white">
         <span className="min-w-0 flex-1 truncate text-sm font-medium">{file.name}</span>
         {kind === 'office' && googleViewer && (
           <Button variant="outline" size="sm" className="border-white/20 bg-white/10 text-white hover:bg-white/20" onClick={() => window.open(googleViewer, '_blank')}>
@@ -141,13 +156,13 @@ export function FileViewer({
         </Button>
       </header>
 
-      <div className="flex flex-1 items-center justify-center overflow-hidden p-4" onClick={(e) => e.stopPropagation()}>
+      <div className="flex flex-1 items-center justify-center overflow-hidden p-4" onClick={closeOnBackdrop(onClose)}>
         {error ? (
           <p className="text-white/70">{t('viewer.failed')}</p>
         ) : !url ? (
           <Loader2 className="size-6 animate-spin text-white/70" />
         ) : kind === 'image' ? (
-          <ZoomableImage src={url} alt={file.name} />
+          <ZoomableImage src={url} alt={file.name} onBackdropClick={onClose} />
         ) : kind === 'video' ? (
           <video src={url} controls autoPlay className="max-h-full max-w-full rounded-lg" />
         ) : kind === 'audio' ? (

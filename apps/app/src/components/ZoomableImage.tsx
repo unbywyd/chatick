@@ -12,7 +12,16 @@ const MIN = 1
 const MAX = 6
 const STEP = 0.4
 
-export function ZoomableImage({ src, alt }: { src: string; alt: string }) {
+export function ZoomableImage({
+  src,
+  alt,
+  onBackdropClick,
+}: {
+  src: string
+  alt: string
+  /** Клик по пустому полю вокруг картинки: в просмотрщике им закрывают окно. */
+  onBackdropClick?: () => void
+}) {
   const [zoom, setZoom] = useState(1)
   const [pos, setPos] = useState({ x: 0, y: 0 })
   const drag = useRef<{ x: number; y: number } | null>(null)
@@ -47,6 +56,13 @@ export function ZoomableImage({ src, alt }: { src: string; alt: string }) {
   return (
     <div
       className="relative flex size-full items-center justify-center overflow-hidden"
+      // Поле вокруг картинки принадлежит этому блоку, а не просмотрщику: он
+      // отдал ему всю площадь. Поэтому закрывать по клику мимо приходится
+      // отсюда. При увеличении не закрываем: там клик мимо — это перетаскивание,
+      // и окно захлопывалось бы посреди разглядывания.
+      onClick={(e) => {
+        if (e.target === e.currentTarget && zoom === 1) onBackdropClick?.()
+      }}
       onWheel={(e) => zoomBy(e.deltaY < 0 ? STEP : -STEP)}
       onMouseDown={(e) => {
         if (zoom <= 1) return
