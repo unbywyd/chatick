@@ -70,6 +70,7 @@ export function TasksTable({
   onReorderGroups,
   onReorderTasks,
   onCreateTask,
+  highlightId,
 }: {
   tasks: Task[]
   groups: TaskGroup[]
@@ -91,6 +92,8 @@ export function TasksTable({
   onReorderTasks: (items: { id: string; groupId: string | null }[]) => void
   /** быстрое добавление прямо в конец спринта */
   onCreateTask: (title: string, groupId: string | null) => void
+  /** задача, из которой только что вышли: подсвечена пару секунд */
+  highlightId?: string | null
 }) {
   const { t } = useTranslation()
   const [sort, setSort] = useState<{ key: SortKey; dir: SortDir } | null>(null)
@@ -275,6 +278,7 @@ export function TasksTable({
               onPatchGroup={onPatchGroup}
               onDeleteGroup={onDeleteGroup}
               onCreateTask={onCreateTask}
+              highlightId={highlightId}
               forceCollapsed={draggingGroup}
             />
           ))}
@@ -297,6 +301,7 @@ export function TasksTable({
             onPatchGroup={onPatchGroup}
             onDeleteGroup={onDeleteGroup}
             onCreateTask={onCreateTask}
+            highlightId={highlightId}
             forceCollapsed={draggingGroup}
           />
         </div>
@@ -383,6 +388,7 @@ function GroupTable({
   onPatchGroup,
   onDeleteGroup,
   onCreateTask,
+  highlightId,
   forceCollapsed,
 }: {
   group: TaskGroup | null
@@ -402,6 +408,7 @@ function GroupTable({
   onPatchGroup: (id: string, body: Record<string, unknown>) => void
   onDeleteGroup: (id: string) => void
   onCreateTask: (title: string, groupId: string | null) => void
+  highlightId?: string | null
   /** режим переноса спринтов: на его время все спринты схлопнуты */
   forceCollapsed?: boolean
 }) {
@@ -600,6 +607,7 @@ function GroupTable({
                   canEdit={canEditTask ? canEditTask(task) : canEdit}
                   meId={meId}
                   active={openTaskId === task.id}
+                  highlighted={highlightId === task.id}
                   onOpen={() => onOpen(task.id)}
                   onPatch={onPatch}
                   onDelete={onDelete}
@@ -661,6 +669,7 @@ function TableRow({
   canEditTask,
   meId,
   active,
+  highlighted,
   onOpen,
   onPatch,
   onDelete,
@@ -673,6 +682,7 @@ function TableRow({
   canEditTask?: (task: Task) => boolean
   meId?: string
   active: boolean
+  highlighted?: boolean
   onOpen: () => void
   onPatch: (id: string, body: Record<string, unknown>) => void
   onDelete: (id: string) => void
@@ -698,6 +708,10 @@ function TableRow({
     <tr
       ref={setNodeRef}
       style={style}
+      // Якорь для возврата из карточки: по нему список находит строку и
+      // подводит к ней. tabIndex — чтобы её можно было получить фокусом.
+      data-task-id={task.id}
+      tabIndex={-1}
       // Открываем по клику на всей строке: раньше работал только заголовок, и
       // попасть по нему в плотной таблице было отдельным упражнением. Клики по
       // кнопкам внутри (статус, приоритет, исполнитель) не считаем — они делают
@@ -709,6 +723,9 @@ function TableRow({
       className={cn(
         'cursor-pointer border-b last:border-0 transition-colors hover:bg-accent/40',
         active && 'bg-accent',
+        // Вернулись из карточки — на пару секунд отмечаем строку: глазами её
+        // после возврата всё равно ищут, а фокуса в тёмной теме почти не видно.
+        highlighted && 'bg-brand/10 ring-2 ring-inset ring-brand duration-500',
         isDragging && 'invisible',
       )}
     >

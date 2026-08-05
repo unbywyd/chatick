@@ -355,6 +355,15 @@ export function TasksTab({ projectId, meId }: { projectId: string; meId?: string
   // выбрасывает человека в начало. Одного requestAnimationFrame мало: строки
   // появляются после того, как приедут данные, и узла в этот момент может ещё
   // не быть. Поэтому ждём его появления, но не бесконечно.
+  // Из карточки выходят не только её кнопкой: «назад» в браузере, Escape,
+  // клик по другой вкладке. Все они меняют адрес мимо onClose, поэтому ловим
+  // сам переход «была открыта задача → списка», а не нажатие на крестик.
+  const prevOpenId = useRef<string | undefined>(openTaskId)
+  useEffect(() => {
+    if (prevOpenId.current && !openTaskId) justClosed.current = prevOpenId.current
+    prevOpenId.current = openTaskId
+  }, [openTaskId])
+
   useEffect(() => {
     const id = justClosed.current
     if (openTaskId || !id) return
@@ -655,6 +664,7 @@ export function TasksTab({ projectId, meId }: { projectId: string; meId?: string
                 onReorderGroups={reorderGroups}
                 onReorderTasks={reorderTasks}
                 onCreateTask={(title, groupId) => createInGroup.mutate({ title, groupId })}
+                highlightId={highlight}
               />
             </div>
           )}
