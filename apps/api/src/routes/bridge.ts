@@ -1040,6 +1040,43 @@ bridgeRoute.get('/tasks', async (c) => {
     .orderBy(desc(tasks.updatedAt))
     .limit(limit)
 
+  // Сколько задач ПОДОШЛО под фильтр, а не сколько поместилось в ответ.
+  //
+  // Без этого числа список молча обрезался: спринт из шестидесяти задач
+  // приезжал полусотней, count говорил «50», и ассистент честно докладывал
+  // «закрыл весь спринт», закрыв пятьдесят из шестидесяти. Обрезание, о
+  // котором не сказано, читается как полнота — а групповые ручки как раз и
+  // собирают список из этого ответа.
+  const [{ total }] = (await db
+    .select({ total: sql<number>`count(*)::int` })
+    .from(tasks)
+    .where(and(...conds))) as [{ total: number }]
+
+  // Короткий вид: номер, название и главные поля, без описаний и вложений.
+  //
+  // Описание — цельный HTML тела задачи, и весит оно на порядок больше всего
+  // остального: на живом проекте описания заняли 34 КБ против 2 КБ названий,
+  // одно доходит до 3.5 КБ. Когда список нужен, чтобы ВЫБРАТЬ задачи и отдать
+  // их номера в групповую ручку, все эти килобайты уходят в контекст впустую
+  // и вытесняют оттуда то, ради чего ассистента позвали.
+  if (c.req.query('fields') === 'brief') {
+    return c.json({
+      items: rows.map((r) => ({
+        id: r.t.id,
+        number: r.t.number,
+        title: r.t.title,
+        status: r.t.status,
+        priority: r.t.priority,
+        refs: r.t.refs || undefined,
+        sprintId: r.t.groupId,
+        assignee: r.u ? { id: r.u.id, name: r.u.name } : null,
+      })),
+      count: rows.length,
+      total,
+      truncated: total > rows.length,
+    })
+  }
+
   const byTask = await attachmentsFor(
     files.taskId,
     rows.map((r) => r.t.id),
@@ -1049,6 +1086,9 @@ bridgeRoute.get('/tasks', async (c) => {
   return c.json({
     items: rows.map((r) => taskView(r.t, r.u, byTask.get(r.t.id))),
     count: rows.length,
+    total,
+    // Явный признак, а не «сравни два числа сам»: пропустить его труднее.
+    truncated: total > rows.length,
   })
 })
 

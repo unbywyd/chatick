@@ -26,6 +26,11 @@ function endpointCatalog(q: string): string {
   const amp = q ? '&' : '?'
   return `  GET    /x/tasks${q}${amp}assignee=me&status=todo&q=text&sprint=<sprintId>&limit=50
          status: todo | in_progress | review | done
+         fields=brief — number, title, status, priority, refs, sprint, assignee
+         and no description or attachments. Use it whenever you are picking
+         tasks rather than reading them: descriptions are the bulk of the
+         payload, and a list you only need numbers from should not spend your
+         context on the full text of sixty task bodies.
   GET    /x/tasks/<id>${q}
   POST   /x/tasks${q}              {"title","description?","assignee?","status?","priority?","estimateMinutes?","sprintId?","attachmentIds?","refs?"}
   PATCH  /x/tasks/<id>${q}         any subset of the same fields
@@ -41,10 +46,21 @@ function endpointCatalog(q: string): string {
   for some teams that is a range and for others a compound number. Digits, dots
   and hyphens are kept, anything else is dropped. Pass "" to clear.
 
+  GET /x/tasks returns at most "limit" tasks (50 by default, 200 max) but also
+  tells you "total" — how many actually match — and "truncated": true when the
+  list you got is only part of them. CHECK IT before acting on "all of them":
+  a sprint of sixty comes back as fifty, and closing those fifty is not
+  closing the sprint. Narrow the filter or raise the limit, and if it still
+  does not fit, say so instead of silently doing part of the job.
+
   PATCH /x/tasks/bulk applies ONE change to MANY tasks in a single request.
   Use it whenever the human says "all of them", "the whole sprint", "every
   screen": one call instead of thirty, and the reply tells you exactly which
   tasks changed. Name tasks by number ("TASK-4") or id, up to 100 per request.
+  The usual pairing is GET /x/tasks?fields=brief to find them, then one bulk
+  call with the numbers from it — note the list allows 200 and bulk allows
+  100, so a very wide selection needs two calls rather than one rejected
+  with 400.
 
     {"tasks":["TASK-4","TASK-7","TASK-9"], "set":{"status":"done"}}
     {"tasks":["TASK-4","TASK-7"], "set":{"sprintId":"<id>","priority":"high"}}

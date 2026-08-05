@@ -118,6 +118,44 @@ describe('DELETE /x/tasks/bulk', () => {
   })
 })
 
+// Список задач — вход для групповых ручек: ассистент сначала находит задачи,
+// потом отдаёт их номера в bulk. Поэтому важны две вещи, которых раньше не
+// было: честность про обрезание и возможность не тянуть описания.
+describe('GET /x/tasks как источник для групповых ручек', () => {
+  const body = handler('get', '/tasks')
+
+  it('говорит, сколько задач подошло, а не только сколько отдал', () => {
+    // Иначе спринт из шестидесяти приезжает полусотней, и «закрыл весь
+    // спринт» означает «закрыл пятьдесят из шестидесяти».
+    expect(body).toMatch(/total/)
+    expect(body).toMatch(/count\(\*\)::int/)
+  })
+
+  it('обрезание помечено явным признаком, а не «сравни два числа»', () => {
+    expect(body).toMatch(/truncated: total > rows\.length/)
+  })
+
+  it('краткий вид не тащит описания и вложения', () => {
+    const brief = body.slice(body.indexOf("fields') === 'brief'"))
+    expect(brief).toMatch(/number: r\.t\.number/)
+    expect(brief).toMatch(/title: r\.t\.title/)
+    // Ради этого всё и делалось: описания — основная масса ответа.
+    const upToReturn = brief.slice(0, brief.indexOf('})'))
+    expect(upToReturn).not.toMatch(/description/)
+    expect(upToReturn).not.toMatch(/attachments/)
+  })
+
+  it('краткий вид сохраняет номер и refs — по ним и выбирают', () => {
+    const brief = body.slice(body.indexOf("fields') === 'brief'"))
+    expect(brief).toMatch(/refs: r\.t\.refs/)
+  })
+
+  it('краткий вид тоже сообщает про обрезание', () => {
+    const brief = body.slice(body.indexOf("fields') === 'brief'"))
+    expect(brief).toMatch(/truncated/)
+  })
+})
+
 describe('гайд для ассистента', () => {
   it('обе ручки перечислены', () => {
     expect(docs).toMatch(/PATCH  \/x\/tasks\/bulk/)
@@ -136,5 +174,20 @@ describe('гайд для ассистента', () => {
 
   it('велит спросить человека перед удалением собранного списка', () => {
     expect(docs).toMatch(/confirm with the human/)
+  })
+
+  it('предупреждает про обрезанный список', () => {
+    // Молчаливое обрезание читается как полнота — здесь это стоит дороже
+    // всего, потому что из этого списка собирают групповой запрос.
+    expect(docs).toMatch(/CHECK IT before acting on "all of them"/)
+  })
+
+  it('объясняет краткий вид и зачем он', () => {
+    expect(docs).toMatch(/fields=brief/)
+    expect(docs).toMatch(/picking\s+tasks rather than reading them/)
+  })
+
+  it('предупреждает, что список отдаёт 200, а партия принимает 100', () => {
+    expect(docs).toMatch(/list allows 200 and bulk allows/)
   })
 })
