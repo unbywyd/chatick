@@ -268,7 +268,9 @@
     "collapseSprint": "Свернуть спринт",
     "expandSprint": "Развернуть спринт",
     "collapseAllSprints": "Свернуть все",
-    "expandAllSprints": "Развернуть все"
+    "expandAllSprints": "Развернуть все",
+    "addInSprint": "Добавить задачу…",
+    "add": "Добавить"
   },
   "files": {
     "search": "Поиск файлов…",

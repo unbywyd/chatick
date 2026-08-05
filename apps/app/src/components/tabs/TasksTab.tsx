@@ -180,6 +180,20 @@ export function TasksTab({ projectId, meId }: { projectId: string; meId?: string
     onError: onErr,
   })
 
+  /**
+   * Быстрое добавление прямо в спринт.
+   *
+   * Отдельно от create: та открывает карточку сразу после создания, чтобы
+   * заполнить детали. Здесь это мешало бы — задачи в спринт вносят подряд, и
+   * карточка, распахивающаяся после каждой, выбивает из потока.
+   */
+  const createInGroup = useMutation({
+    mutationFn: ({ title, groupId }: { title: string; groupId: string | null }) =>
+      api<Task>('/api/v1/tasks', { method: 'POST', body: JSON.stringify({ title, groupId }) }, 'project'),
+    onSuccess: refresh,
+    onError: onErr,
+  })
+
   const patch = useMutation({
     mutationFn: ({ id, ...body }: { id: string } & Record<string, unknown>) =>
       api<Task>(`/api/v1/tasks/${id}`, { method: 'PATCH', body: JSON.stringify(body) }, 'project'),
@@ -640,6 +654,7 @@ export function TasksTab({ projectId, meId }: { projectId: string; meId?: string
                 onDeleteGroup={(id) => deleteGroup.mutate(id)}
                 onReorderGroups={reorderGroups}
                 onReorderTasks={reorderTasks}
+                onCreateTask={(title, groupId) => createInGroup.mutate({ title, groupId })}
               />
             </div>
           )}

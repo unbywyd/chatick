@@ -267,7 +267,9 @@
     "collapseSprint": "Collapse the sprint",
     "expandSprint": "Expand the sprint",
     "collapseAllSprints": "Collapse all",
-    "expandAllSprints": "Expand all"
+    "expandAllSprints": "Expand all",
+    "addInSprint": "Add a task…",
+    "add": "Add"
   },
   "files": {
     "search": "Search files…",

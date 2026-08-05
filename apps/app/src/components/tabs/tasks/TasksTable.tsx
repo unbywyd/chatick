@@ -69,6 +69,7 @@ export function TasksTable({
   onDeleteGroup,
   onReorderGroups,
   onReorderTasks,
+  onCreateTask,
 }: {
   tasks: Task[]
   groups: TaskGroup[]
@@ -88,6 +89,8 @@ export function TasksTable({
   onReorderGroups: (orderedIds: string[]) => void
   /** итоговый порядок задач одной группы — нумерует сервер */
   onReorderTasks: (items: { id: string; groupId: string | null }[]) => void
+  /** быстрое добавление прямо в конец спринта */
+  onCreateTask: (title: string, groupId: string | null) => void
 }) {
   const { t } = useTranslation()
   const [sort, setSort] = useState<{ key: SortKey; dir: SortDir } | null>(null)
@@ -271,6 +274,7 @@ export function TasksTable({
               onDelete={onDelete}
               onPatchGroup={onPatchGroup}
               onDeleteGroup={onDeleteGroup}
+              onCreateTask={onCreateTask}
               forceCollapsed={draggingGroup}
             />
           ))}
@@ -292,6 +296,7 @@ export function TasksTable({
             onDelete={onDelete}
             onPatchGroup={onPatchGroup}
             onDeleteGroup={onDeleteGroup}
+            onCreateTask={onCreateTask}
             forceCollapsed={draggingGroup}
           />
         </div>
@@ -377,6 +382,7 @@ function GroupTable({
   onDelete,
   onPatchGroup,
   onDeleteGroup,
+  onCreateTask,
   forceCollapsed,
 }: {
   group: TaskGroup | null
@@ -395,6 +401,7 @@ function GroupTable({
   onDelete: (id: string) => void
   onPatchGroup: (id: string, body: Record<string, unknown>) => void
   onDeleteGroup: (id: string) => void
+  onCreateTask: (title: string, groupId: string | null) => void
   /** режим переноса спринтов: на его время все спринты схлопнуты */
   forceCollapsed?: boolean
 }) {
@@ -412,6 +419,17 @@ function GroupTable({
   // тянешь вслепую: заголовок соседа уезжает за экран, и куда ты целишься, не
   // видно. Это временное состояние, в localStorage его не пишем.
   const collapsed = forceCollapsed || ownCollapsed
+  // Ввод новой задачи в конце спринта — как в Monday: список читают сверху
+  // вниз и дописывают снизу, не возвращаясь к общей форме наверху страницы.
+  const [newTask, setNewTask] = useState('')
+  const submitNewTask = () => {
+    const title = newTask.trim()
+    if (!title) return
+    onCreateTask(title, group ? group.id : null)
+    // Поле не закрываем и не очищаем фокус: задачи вносят подряд.
+    setNewTask('')
+  }
+
   const toggleCollapsed = () => {
     if (!group) return
     setOwnCollapsed((v) => {
@@ -485,9 +503,17 @@ function GroupTable({
               <button
                 onClick={toggleCollapsed}
                 title={collapsed ? t('tasks.expandSprint') : t('tasks.collapseSprint')}
-                className="inline-flex items-center gap-1.5 text-sm font-semibold hover:text-brand"
+                // При наведении подсвечиваем стрелку, а не текст: лайм на
+                // светлом фоне почти не читается, и заголовок пропадал ровно в
+                // тот момент, когда на него смотрят.
+                className="group/title inline-flex items-center gap-1.5 text-sm font-semibold"
               >
-                <ChevronDown className={cn('size-3.5 shrink-0 text-muted-foreground transition-transform', collapsed && '-rotate-90 rtl:rotate-90')} />
+                <ChevronDown
+                  className={cn(
+                    'size-3.5 shrink-0 text-muted-foreground transition-transform group-hover/title:text-foreground',
+                    collapsed && '-rotate-90 rtl:rotate-90',
+                  )}
+                />
                 {group.name}
                 <span className="text-xs font-normal tabular-nums text-muted-foreground">({tasks.length})</span>
               </button>
@@ -581,6 +607,30 @@ function GroupTable({
               ))}
               {tasks.length === 0 && (
                 <DropRow groupId={group ? group.id : 'none'} colSpan={cols.length + (canEdit ? 1 : 0)} label={t('tasks.emptyGroup')} />
+              )}
+              {canEdit && (
+                <tr className="border-t">
+                  <td colSpan={cols.length + 1} className="p-0">
+                    <div className="flex items-center gap-1.5 px-2 py-1.5">
+                      <Plus className="size-3.5 shrink-0 text-muted-foreground" />
+                      <input
+                        value={newTask}
+                        onChange={(e) => setNewTask(e.target.value)}
+                        onKeyDown={(e) => {
+                          if (e.key === 'Enter') submitNewTask()
+                          if (e.key === 'Escape') setNewTask('')
+                        }}
+                        placeholder={t('tasks.addInSprint')}
+                        className="min-w-0 flex-1 bg-transparent text-sm outline-none placeholder:text-muted-foreground"
+                      />
+                      {newTask.trim() && (
+                        <Button variant="brand" size="sm" onClick={submitNewTask}>
+                          {t('tasks.add')}
+                        </Button>
+                      )}
+                    </div>
+                  </td>
+                </tr>
               )}
             </tbody>
           </SortableContext>

@@ -267,7 +267,9 @@
     "collapseSprint": "לכווץ את הספרינט",
     "expandSprint": "לפתוח את הספרינט",
     "collapseAllSprints": "לכווץ הכול",
-    "expandAllSprints": "לפתוח הכול"
+    "expandAllSprints": "לפתוח הכול",
+    "addInSprint": "להוסיף משימה…",
+    "add": "להוסיף"
   },
   "files": {
     "search": "חיפוש קבצים…",
