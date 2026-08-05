@@ -6,7 +6,7 @@ import Placeholder from '@tiptap/extension-placeholder'
 import Mention from '@tiptap/extension-mention'
 import { TextDirection } from '@/components/ui/text-direction'
 import tippy, { type Instance } from 'tippy.js'
-import { Bold, Check, CheckSquare, ClipboardPaste, Code, FileText, Image as ImageIcon, Italic, KeyRound, List, Loader2, NotebookPen, Paperclip, SendHorizontal, Strikethrough, X, Zap } from 'lucide-react'
+import { Bold, Check, CheckSquare, ClipboardPaste, Code, FileText, Image as ImageIcon, Italic, KeyRound, List, Loader2, NotebookPen, Paperclip, SendHorizontal, Strikethrough, X } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
 import { toast } from 'sonner'
 import { useQuery } from '@tanstack/react-query'
@@ -41,6 +41,7 @@ export function Composer({
   prefill,
   onPrefillUsed,
   canBypassAi = false,
+  bypassAi = false,
 }: {
   disabled?: boolean
   placeholder: string
@@ -56,13 +57,16 @@ export function Composer({
   onPrefillUsed?: () => void
   /** отправка мимо проверки ИИ — только руководству проекта */
   canBypassAi?: boolean
+  /** Режим «мимо проверки ИИ». Живёт в ChatPanel: переключатель стоит в
+   *  строке режимов под полем, а не в самом поле. */
+  bypassAi?: boolean
   onSend: (payload: { markdown: string; mentionIds: string[]; attachmentIds: string[]; taskRefs: string[]; raw?: boolean }) => void
 }) {
   const { t } = useTranslation()
   // Режим прямой отправки залипает: включил — и дальше пишешь без проверки,
   // пока сам не выключишь. Разовый пункт в меню заставлял бы лезть туда
   // перед каждым сообщением.
-  const [bypassAi, setBypassAi] = useState(false)
+
   const [attachments, setAttachments] = useState<PendingAttachment[]>([])
   const [taskPins, setTaskPins] = useState<Pin[]>([])
   const [uploading, setUploading] = useState(0)
@@ -462,24 +466,6 @@ export function Composer({
             </DropdownMenuItem>
           </DropdownMenuContent>
         </DropdownMenu>
-
-        {/* Молния: режим отправки мимо проверки ИИ. Залипает — включил и
-            пишешь дальше, пока не выключишь. Видна только руководству
-            проекта: правила чата держатся на этой проверке. */}
-        {canBypassAi && (
-          <button
-            type="button"
-            onClick={() => setBypassAi((v) => !v)}
-            disabled={disabled}
-            title={bypassAi ? t('chat.bypassOn') : t('chat.bypassOff')}
-            className={cn(
-              'rounded-md p-2 transition-colors disabled:opacity-40',
-              bypassAi ? 'bg-brand/15 text-brand' : 'text-muted-foreground hover:text-foreground',
-            )}
-          >
-            <Zap className={cn('size-4', bypassAi && 'fill-current')} />
-          </button>
-        )}
 
         <input
           ref={fileRef}

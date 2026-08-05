@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useImperativeHandle, useMemo, useRef, useState } from 'react'
 import { useNavigate, useParams, useSearchParams } from 'react-router-dom'
 import { useInfiniteQuery, useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { AlertTriangle, ArrowDown, Bot, CheckSquare, Copy, FileText, Users, BrainCircuit, KeyRound, Loader2, Menu, MoreHorizontal, NotebookPen, PanelsTopLeft, Reply, Search, Settings, Share2, Trash2, UserPlus, X, MessagesSquare } from 'lucide-react'
+import { AlertTriangle, ArrowDown, Zap, Bot, CheckSquare, Copy, FileText, Users, BrainCircuit, KeyRound, Loader2, Menu, MoreHorizontal, NotebookPen, PanelsTopLeft, Reply, Search, Settings, Share2, Trash2, UserPlus, X, MessagesSquare } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
 import ReactMarkdown from 'react-markdown'
 import { toast } from 'sonner'
@@ -97,6 +97,11 @@ export function ChatPanel({
   // потому что противоречие — это цепочка реплик, одна ничего не доказывает.
   const [picked, setPicked] = useState<string[]>([])
   const [noteDraft, setNoteDraft] = useState<string[] | null>(null)
+  // Отправка мимо проверки ИИ. Режим залипающий: включил — и пишешь дальше,
+  // пока не выключишь. Живёт здесь, а не в композере, потому что переключатель
+  // стоит в строке режимов под полем — в самом поле он съедал место рядом со
+  // скрепкой и кнопкой отправки.
+  const [bypassAi, setBypassAi] = useState(false)
 
   const llm = useQuery({
     queryKey: ['llm-status', projectId],
@@ -734,6 +739,7 @@ export function ChatPanel({
           prefill={prefill}
           onPrefillUsed={() => setPrefill(null)}
           canBypassAi={!isAi && (myRole === 'owner' || myRole === 'admin')}
+          bypassAi={bypassAi}
         />
 
         {/* Под полем, а не над ним: переключатель отвечает на вопрос «куда
@@ -754,6 +760,28 @@ export function ChatPanel({
           {/* Компактная подпись вместо шапки-панели: чем личный канал
               отличается от общего, надо сказать, но не целой полосой. */}
           {isAi && <span className="ms-1 truncate text-xs text-muted-foreground">{t('aiChannel.subtitle')}</span>}
+
+          {/* Мимо проверки ИИ — на противоположном краю строки, напротив
+              переключателя каналов. Режим залипающий и вдали от поля ввода
+              легко забывается, поэтому включённый он подписан словом, а не
+              только подсвечен: молча уходящие непроверенные сообщения — не то,
+              что стоит экономить местом. */}
+          {!isAi && (myRole === 'owner' || myRole === 'admin') && (
+            <button
+              type="button"
+              onClick={() => setBypassAi((v) => !v)}
+              title={bypassAi ? t('chat.bypassOn') : t('chat.bypassOff')}
+              className={cn(
+                'ms-auto flex shrink-0 items-center gap-1.5 rounded-md px-2 py-1 text-xs transition-colors',
+                bypassAi
+                  ? 'bg-orange-400/15 text-orange-400'
+                  : 'text-muted-foreground hover:bg-accent hover:text-foreground',
+              )}
+            >
+              <Zap className={cn('size-3.5', bypassAi && 'fill-current')} />
+              {bypassAi && <span>{t('chat.rawBadge')}</span>}
+            </button>
+          )}
         </div>
       </footer>
     </div>
