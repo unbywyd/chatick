@@ -51,25 +51,27 @@ export function TaskRefs({
 
   const chips = (
     <span className={cn('inline-flex flex-wrap items-center', compact ? 'gap-0.5' : 'gap-1')}>
-      {refs.length ? (
-        refs.map((ref, i) => (
-          <span
-            key={`${ref}:${i}`}
-            // Слегка скруглённые, а не овальные: это номер, а не ярлык
-            // состояния. Знак номера перед цифрами обязателен — без него «12»
-            // в ряду других чисел не читается как чей-то внешний номер.
-            className={cn(
-              'rounded bg-secondary font-semibold tabular-nums text-foreground',
-              compact ? 'px-1 py-0 text-[11px]' : 'px-1.5 py-0.5 text-xs',
-            )}
-          >
-            {REFS_SIGN}
-            {ref}
-          </span>
-        ))
-      ) : (
-        <span className={cn('text-muted-foreground', compact ? 'text-[11px]' : 'text-xs')}>{REFS_SIGN}</span>
-      )}
+      {/* Знак номера — подписью ко всему ряду, а не в каждом чипе: повторять
+          его у каждого числа значит превращать метку в шум. dir="ltr" — чтобы
+          в иврите он остался ПЕРЕД числами, а не уехал за них. */}
+      <span
+        dir="ltr"
+        className={cn('me-0.5 shrink-0 text-muted-foreground', compact ? 'text-[11px]' : 'text-xs')}
+      >
+        {REFS_SIGN}
+      </span>
+      {refs.map((ref, i) => (
+        <span
+          key={`${ref}:${i}`}
+          // Слегка скруглённые, а не овальные: это номер, а не ярлык состояния.
+          className={cn(
+            'rounded bg-secondary font-semibold tabular-nums text-foreground',
+            compact ? 'px-1 py-0 text-[11px]' : 'px-1.5 py-0.5 text-xs',
+          )}
+        >
+          {ref}
+        </span>
+      ))}
     </span>
   )
 
@@ -133,13 +135,16 @@ function RefsEditor({ refs, onChange }: { refs: string[]; onChange: (next: strin
   return (
     <div className="space-y-2">
       {refs.length > 0 && (
-        <div className="flex flex-wrap gap-1">
+        <div className="flex flex-wrap items-center gap-1">
+          {/* Та же подпись, что и снаружи: одна на ряд, а не у каждого числа. */}
+          <span dir="ltr" className="me-0.5 shrink-0 text-xs text-muted-foreground">
+            {REFS_SIGN}
+          </span>
           {refs.map((ref, i) => (
             <span
               key={`${ref}:${i}`}
               className="inline-flex items-center gap-1 rounded bg-secondary px-1.5 py-0.5 text-xs font-semibold tabular-nums"
             >
-              {REFS_SIGN}
               {ref}
               <button
                 type="button"
