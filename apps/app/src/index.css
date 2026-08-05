@@ -122,6 +122,33 @@
   [dir=rtl] .tiptap-editor p.is-editor-empty:first-child::before {
     float: right;
   }
+  /* Направление — по содержимому КАЖДОГО абзаца, а не по языку интерфейса.
+     Русский интерфейс с ивритской задачей внутри — обычное дело здесь, и
+     прижатый влево ивритский текст читается наизнанку. unicode-bidi: plaintext
+     заставляет абзац взять направление у своего первого сильного символа, а
+     text-align: start — выровнять по этому же краю. Работает и в редакторе, и
+     в режиме чтения: правило одно, разъехаться им негде. */
+  .tiptap-editor :is(p, h1, h2, h3, h4, h5, h6, li, blockquote, pre, td, th) {
+    unicode-bidi: plaintext;
+    text-align: start;
+  }
+  /* Явно выбранное человеком направление сильнее автоматического: строка из
+     одних цифр или латиницы внутри ивритского текста иначе прыгает влево. */
+  .tiptap-editor [dir='rtl'],
+  .tiptap-editor [dir='ltr'] {
+    unicode-bidi: isolate;
+  }
+  .tiptap-editor [dir='rtl'] {
+    text-align: right;
+  }
+  .tiptap-editor [dir='ltr'] {
+    text-align: left;
+  }
+  /* Ссылка и код внутри абзаца на другом языке — отдельным островком:
+     без изоляции bidi растаскивает https://… и API по всей строке. */
+  .tiptap-editor :is(a, code) {
+    unicode-bidi: isolate;
+  }
   .tiptap-editor code {
     background: var(--secondary);
     border-radius: 4px;

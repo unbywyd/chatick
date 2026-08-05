@@ -21,9 +21,13 @@ const ALLOWED_ATTRS: Record<string, Set<string>> = {
   li: new Set(['data-checked']),
   ul: new Set(['data-type']), // чек-листы Tiptap
   input: new Set(['type', 'checked', 'disabled']),
+  // Упоминание Tiptap: без этих атрибутов span доезжает пустой оболочкой —
+  // человек в тексте виден, а ссылка на него потеряна.
+  span: new Set(['data-type', 'data-id', 'data-label']),
 }
-// разрешены везде
-const GLOBAL_ATTRS = new Set(['class', 'style'])
+// разрешены везде. dir — направление блока: в иврите его выбирают руками,
+// и вырезанный атрибут разворачивал бы абзац обратно при каждом сохранении.
+const GLOBAL_ATTRS = new Set(['class', 'style', 'dir'])
 
 // только безопасные схемы ссылок/картинок
 const SAFE_URL = /^(https?:\/\/|\/|mailto:|#)/i

@@ -51,6 +51,7 @@ import { notifyChatMentions } from './messages.js'
 import { notify, extractMentions } from '../lib/notify.js'
 import { projectPath, companyOf } from '../lib/links.js'
 import { htmlToText, sanitizeHtml } from '../lib/sanitize-html.js'
+import { richText } from '../lib/markdown.js'
 import { membersLockedForProject, MEMBERS_LOCKED } from '../lib/members-locked.js'
 import { broadcast, sendToUserAnywhere, tasksChanged } from '../ws.js'
 import { env } from '../env.js'
@@ -801,9 +802,31 @@ const TASK_FIELDS = [
   'dueDate',
   'estimateMinutes',
   'sprintId',
+  // Файлы к задаче: в интерфейсе их крепят прямо к ней, а через мост
+  // оставалось только комментировать со вложением — не то же самое.
+  'attachmentIds',
   // project передают в query, но в теле он безобиден и приходит по привычке
   'project',
 ] as const
+
+/**
+ * Привязать уже загруженные файлы к задаче.
+ *
+ * Берём только свои файлы этого проекта и снимаем временный флаг — иначе
+ * уборщик снесёт их через сутки как неприкаянные.
+ */
+async function attachToTask(fileIds: unknown, projectId: string, userId: string, taskId: string) {
+  const ids = Array.isArray(fileIds)
+    ? (fileIds as unknown[]).filter((x): x is string => typeof x === 'string').slice(0, 10)
+    : []
+  if (!ids.length) return []
+  await db
+    .update(files)
+    .set({ taskId, pendingUntil: null })
+    .where(and(inArray(files.id, ids), eq(files.projectId, projectId), eq(files.uploadedById, userId)))
+  const rows = await db.select().from(files).where(and(eq(files.taskId, taskId), isNull(files.deletedAt)))
+  return rows.map((f) => ({ id: f.id, name: f.name, mime: f.mime, size: Number(f.size) }))
+}
 
 function unknownFields(body: Record<string, unknown>, allowed: readonly string[]): string | null {
   const extra = Object.keys(body).filter((k) => !allowed.includes(k))
@@ -1080,7 +1103,7 @@ bridgeRoute.post('/tasks', async (c) => {
       projectId: scope.projectId,
       number: `TASK-${next}`,
       title: title.slice(0, 300),
-      description: typeof b.description === 'string' ? b.description : '',
+      description: typeof b.description === 'string' ? richText(b.description) : '',
       status: (['todo', 'in_progress', 'review', 'done'] as const).includes(b.status as never)
         ? (b.status as 'todo')
         : 'todo',
@@ -1103,10 +1126,11 @@ bridgeRoute.post('/tasks', async (c) => {
     entityId: row!.id,
     entityLabel: `${row!.number} ${row!.title}`,
   })
+  const attachments = await attachToTask(b.attachmentIds, scope.projectId, id.userId, row!.id)
   tasksChanged(scope.projectId, [row!.assigneeId, row!.createdById])
   // подтягиваем исполнителя, чтобы агент сразу видел, на кого задача ушла
   const who = row!.assigneeId ? await db.query.users.findFirst({ where: eq(users.id, row!.assigneeId) }) : null
-  return c.json(taskView(row!, who), 201)
+  return c.json({ ...taskView(row!, who), attachments }, 201)
 })
 
 bridgeRoute.patch('/tasks/:id', async (c) => {
@@ -1125,7 +1149,7 @@ bridgeRoute.patch('/tasks/:id', async (c) => {
 
   const patch: Record<string, unknown> = {}
   if (typeof b.title === 'string') patch.title = b.title.slice(0, 300)
-  if (typeof b.description === 'string') patch.description = b.description
+  if (typeof b.description === 'string') patch.description = richText(b.description)
   if ((['todo', 'in_progress', 'review', 'done'] as const).includes(b.status as never)) patch.status = b.status
   if ((['low', 'normal', 'high', 'urgent'] as const).includes(b.priority as never)) patch.priority = b.priority
   if (b.estimateMinutes !== undefined) patch.estimateMinutes = b.estimateMinutes == null ? null : String(b.estimateMinutes)
@@ -1168,9 +1192,10 @@ bridgeRoute.patch('/tasks/:id', async (c) => {
     entityId: taskId,
     entityLabel: `${row!.number} ${row!.title}`,
   })
+  const attachments = await attachToTask(b.attachmentIds, scope.projectId, id.userId, row!.id)
   tasksChanged(scope.projectId, [row!.assigneeId, row!.createdById, existing.assigneeId, existing.createdById])
   const who = row!.assigneeId ? await db.query.users.findFirst({ where: eq(users.id, row!.assigneeId) }) : null
-  return c.json(taskView(row!, who))
+  return c.json({ ...taskView(row!, who), ...(b.attachmentIds !== undefined ? { attachments } : {}) })
 })
 
 bridgeRoute.delete('/tasks/:id', async (c) => {
@@ -1554,7 +1579,9 @@ bridgeRoute.post('/tasks/:id/comments', async (c) => {
 
   const [row] = await db
     .insert(taskComments)
-    .values({ taskId, projectId: scope.projectId, authorId: id.userId, body: text || '📎', replyToId })
+    // Упоминания и превью берём из ИСХОДНОГО текста: в разметке @[Имя](id)
+    // уже превращён в span, а в письме нужен текст, а не теги.
+    .values({ taskId, projectId: scope.projectId, authorId: id.userId, body: text ? richText(text) : '📎', replyToId })
     .returning()
 
   // Привязываем только свои файлы этого проекта и снимаем временный флаг.
@@ -2617,7 +2644,7 @@ bridgeRoute.post('/notes', async (c) => {
     {
       type: type as NoteType,
       title: String(b.title ?? '').slice(0, 300),
-      body: String(b.body ?? ''),
+      body: richText(String(b.body ?? '')),
       tags: Array.isArray(b.tags) ? (b.tags as unknown[]).map(String).slice(0, 20) : [],
       scope: b.scope === 'company' ? 'company' : 'project',
       sources: Array.isArray(b.sources) ? (b.sources as never[]).slice(0, 50) : [],
@@ -2657,7 +2684,7 @@ bridgeRoute.patch('/notes/:id', async (c) => {
     patch.type = b.type
   }
   if (typeof b.title === 'string') patch.title = b.title.slice(0, 300)
-  if (typeof b.body === 'string') patch.body = sanitizeHtml(b.body)
+  if (typeof b.body === 'string') patch.body = richText(b.body)
   if (Array.isArray(b.tags)) patch.tags = JSON.stringify((b.tags as unknown[]).map((t) => String(t).toLowerCase()))
   if (b.scope === 'company' || b.scope === 'project') patch.scope = b.scope
   if (typeof b.remindAt === 'string' || b.remindAt === null) {
@@ -2812,7 +2839,7 @@ bridgeRoute.post('/documents', async (c) => {
     .values({
       projectId: scope.projectId,
       title: title.slice(0, 300),
-      content: typeof b.content === 'string' ? b.content.slice(0, 500_000) : '',
+      content: typeof b.content === 'string' ? richText(b.content).slice(0, 500_000) : '',
       createdById: id.userId,
       updatedById: id.userId,
     })
@@ -2844,7 +2871,7 @@ bridgeRoute.patch('/documents/:id', async (c) => {
   const b = (await c.req.json().catch(() => ({}))) as Record<string, unknown>
   const patch: Record<string, unknown> = { updatedById: id.userId }
   if (typeof b.title === 'string') patch.title = b.title.slice(0, 300)
-  if (typeof b.content === 'string') patch.content = b.content.slice(0, 500_000)
+  if (typeof b.content === 'string') patch.content = richText(b.content).slice(0, 500_000)
   if (Object.keys(patch).length === 1) return c.json({ error: 'Nothing to update' }, 400)
 
   // версия перед перезаписью — правка ИИ должна быть обратима
@@ -2876,7 +2903,7 @@ bridgeRoute.post('/documents/:id/append', async (c) => {
   })
   if (!d) return c.json({ error: 'Not found' }, 404)
   const b = (await c.req.json().catch(() => ({}))) as Record<string, unknown>
-  const add = typeof b.content === 'string' ? b.content : ''
+  const add = typeof b.content === 'string' ? richText(b.content) : ''
   if (!add) return c.json({ error: 'content is required' }, 400)
 
   const { snapshot } = await import('./documents.js')

@@ -1,4 +1,5 @@
-import { useEffect, useRef } from 'react'
+import { useEffect, useRef, useState } from 'react'
+import { useTranslation } from 'react-i18next'
 import { useEditor, EditorContent, ReactRenderer } from '@tiptap/react'
 import { BubbleMenu } from '@tiptap/react/menus'
 import StarterKit from '@tiptap/starter-kit'
@@ -9,8 +10,9 @@ import TaskList from '@tiptap/extension-task-list'
 import TaskItem from '@tiptap/extension-task-item'
 import Image from '@tiptap/extension-image'
 import tippy, { type Instance } from 'tippy.js'
-import { Bold, Code, Heading2, ImageIcon, Italic, Link2, List, ListChecks, ListOrdered, Quote, Strikethrough } from 'lucide-react'
+import { Bold, Code, Heading2, ImageIcon, Italic, Link2, List, ListChecks, ListOrdered, Pilcrow, PilcrowLeft, PilcrowRight, Quote, Strikethrough } from 'lucide-react'
 import { cn } from '@/lib/utils'
+import { TextDirection, currentDirection, type TextDir } from './text-direction'
 import { stripInlineImageAuth, uploadInlineImage, withInlineImageAuth } from '@/lib/api'
 import { MentionList, type MentionItem, type MentionListRef } from '@/components/chat/MentionList'
 
@@ -82,9 +84,13 @@ export function RichEditor({
   className?: string
   readOnly?: boolean
 }) {
+  const { t } = useTranslation()
   const fileRef = useRef<HTMLInputElement>(null)
   // Человек начал править — внешнее значение больше не подставляем.
   const touched = useRef(false)
+  // Направление блока под курсором — для подсветки кнопки. Пересчитывается на
+  // каждое движение каретки, поэтому живёт в состоянии, а не в render.
+  const [dir, setDir] = useState<TextDir | null>(null)
 
   const editor = useEditor({
     editable: !readOnly,
@@ -99,8 +105,10 @@ export function RichEditor({
       ...(preset === 'full' ? [TaskList, TaskItem.configure({ nested: true })] : []),
       Mention.configure({ HTMLAttributes: { class: 'mention' }, suggestion: mentionSuggestion(() => mentions) as never }),
       Image.configure({ inline: false, allowBase64: false, HTMLAttributes: { class: 'inline-doc-image' } }),
+      TextDirection,
     ],
     content: withInlineImageAuth(value),
+    onSelectionUpdate: ({ editor: e }) => setDir(currentDirection(e as never)),
     editorProps: {
       attributes: {
         // В режиме чтения ни отступы, ни минимальная высота не нужны: это
@@ -143,6 +151,7 @@ export function RichEditor({
     },
     onUpdate: ({ editor }) => {
       touched.current = true
+      setDir(currentDirection(editor as never))
       const json = editor.getJSON() as MdNode
       // токен доступа к картинкам в сохранённый текст попасть не должен
       onChange(stripInlineImageAuth(editor.getHTML()), collectMentions(json))
@@ -223,6 +232,19 @@ export function RichEditor({
           <Tool active={editor.isActive('blockquote')} onClick={() => editor.chain().focus().toggleBlockquote().run()}><Quote className="size-3.5" /></Tool>
           <Tool active={editor.isActive('codeBlock')} onClick={() => editor.chain().focus().toggleCodeBlock().run()}><Code className="size-3.5" /></Tool>
           <Tool active={false} onClick={() => fileRef.current?.click()}><ImageIcon className="size-3.5" /></Tool>
+          {/* Направление блока. Обычно определяется само по тексту; кнопка
+              нужна там, где определять не по чему — строка из цифр, пункт с
+              латинским названием в ивритском списке. */}
+          <Tool
+            active={dir !== null}
+            onClick={() => {
+              const next: TextDir | null = dir === null ? 'rtl' : dir === 'rtl' ? 'ltr' : null
+              editor.chain().focus().setTextDirection(next).run()
+            }}
+            title={dir === null ? t('editor.dirAuto') : dir === 'rtl' ? t('editor.dirRtl') : t('editor.dirLtr')}
+          >
+            {dir === 'rtl' ? <PilcrowRight className="size-3.5" /> : dir === 'ltr' ? <PilcrowLeft className="size-3.5" /> : <Pilcrow className="size-3.5" />}
+          </Tool>
         </div>
       )}
 
@@ -243,10 +265,11 @@ export function RichEditor({
   )
 }
 
-function Tool({ active, onClick, children }: { active: boolean; onClick: () => void; children: React.ReactNode }) {
+function Tool({ active, onClick, children, title }: { active: boolean; onClick: () => void; children: React.ReactNode; title?: string }) {
   return (
     <button
       type="button"
+      title={title}
       onMouseDown={(e) => e.preventDefault()}
       onClick={onClick}
       className={cn('rounded p-1.5 transition-colors', active ? 'bg-brand text-brand-foreground' : 'text-muted-foreground hover:text-foreground')}

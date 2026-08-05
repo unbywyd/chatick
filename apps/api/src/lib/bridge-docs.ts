@@ -27,7 +27,7 @@ function endpointCatalog(q: string): string {
   return `  GET    /x/tasks${q}${amp}assignee=me&status=todo&q=text&sprint=<sprintId>&limit=50
          status: todo | in_progress | review | done
   GET    /x/tasks/<id>${q}
-  POST   /x/tasks${q}              {"title","description?","assignee?","status?","priority?","dueDate?","estimateMinutes?","sprintId?"}
+  POST   /x/tasks${q}              {"title","description?","assignee?","status?","priority?","dueDate?","estimateMinutes?","sprintId?","attachmentIds?"}
   PATCH  /x/tasks/<id>${q}         any subset of the same fields
   DELETE /x/tasks/<id>${q}
   POST   /x/tasks/<id>/restore${q}
@@ -244,6 +244,14 @@ ${denied.length ? `\n  NOT ALLOWED: ${denied.join(', ')}\n  Do not attempt these
 - Destructive actions (delete, bulk status changes) need explicit human
   confirmation first. Ask, then act.
 - Write content in the project's language, not the language of the request.
+- MARKDOWN IS FINE. Task descriptions, comments, notes and documents accept
+  markdown and it is converted on our side — headings, lists, bold, code, links,
+  tables, and a single newline stays a line break. Send HTML if you already have
+  it; both end up as the same stored markup. What you must NOT do is send a wall
+  of prose because you feared markdown would show up raw — it will not.
+- Hebrew, Arabic and other right-to-left text needs nothing special: every
+  paragraph takes its direction from its own content, so mixed Russian, Hebrew
+  and English in one description each read the right way round.
 - NON-ASCII BODIES — read this before your first write. Never put non-ASCII text
   (Cyrillic, Hebrew, emoji, typographic dashes) inline in \`curl -d '...'\`. On
   Windows the shell re-encodes the argument and the server stores \`?????\`. The
@@ -309,13 +317,23 @@ ${endpointCatalog('')}
   GET    /x/files?type=image&q=name&taskId=<id>&limit=50
   GET    /x/files/<id>/content        -> raw bytes (redirects to storage)
   POST   /x/files/<id>/restore        bring one back from the trash
-  POST   /x/files                     multipart: file=@path, taskId=<id> (optional)
+  POST   /x/files                     multipart: file=@path, taskId=<id>, keepOriginal=1 (both optional)
   DELETE /x/files/<id>
 
   Several files in one call are allowed: repeat -F 'file=@...' and the reply is
   {"items":[...],"uploaded":N,"failed":N} instead of a single object, with a
   per-file error where one did not go through. Sending one file keeps the old
   single-object reply.
+
+  Images are resized to 2048px and converted to webp, and the original is NOT
+  kept — a second copy would eat everything the conversion saves. That is the
+  deliberate default, not a defect; pass keepOriginal=1 when the exact bytes
+  matter (a design source, a file someone must download unchanged).
+
+  To attach files to a TASK rather than to a comment, upload them first and
+  pass the ids as "attachmentIds" to POST or PATCH /x/tasks — the same place a
+  person drops them in the app. attachmentIds on a comment attaches to the
+  comment instead.
 
   Example — attach a file to a task:
     curl -s -X POST ${b}/x/files -H 'authorization: Bearer <token>' \\
@@ -651,6 +669,8 @@ Without ?project= a call returns 400 telling you the same thing.
 - Destructive actions (delete, bulk status changes) need explicit human
   confirmation first. Ask, then act.
 - Write content in each project's own language (GET /x/context tells you).
+- MARKDOWN IS FINE — descriptions, comments, notes and documents accept it and
+  it is converted on our side. Right-to-left text needs nothing special.
 - NON-ASCII BODIES — read this before your first write. Never put non-ASCII text
   (Cyrillic, Hebrew, emoji, typographic dashes) inline in \`curl -d '...'\`. On
   Windows the shell re-encodes the argument and the server stores \`?????\`. The

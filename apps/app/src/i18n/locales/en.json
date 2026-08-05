@@ -1427,5 +1427,10 @@
     "own": "Your own S3 / R2",
     "setup": "Set up own storage",
     "change": "Change"
+  },
+  "editor": {
+    "dirAuto": "Direction: automatic",
+    "dirRtl": "Direction: right to left",
+    "dirLtr": "Direction: left to right"
   }
 }
