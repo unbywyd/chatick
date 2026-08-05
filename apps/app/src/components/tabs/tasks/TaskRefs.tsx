@@ -1,6 +1,8 @@
 import { useEffect, useRef, useState } from 'react'
 import { useTranslation } from 'react-i18next'
+import { ChevronDown, X } from 'lucide-react'
 import { cn } from '@/lib/utils'
+import { Popover, PopoverTrigger, PopoverContent } from '@/components/ui/popover'
 
 // Свои номера задачи (SPEC §8.6).
 //
@@ -10,6 +12,10 @@ import { cn } from '@/lib/utils'
 //
 // Разбираем ТОЛЬКО по запятой. «12 - 14» — один номер: у одних это диапазон
 // экранов, у других составной шифр, и решать за них нельзя.
+//
+// Правка — в поповере, а не полем на месте. Инлайн-поле стояло в узкой ячейке
+// таблицы и в плотной строке карточки: по клику оно раздвигало строку и
+// переносило соседей, а попасть по самим цифрам было почти нечем.
 
 /** Цифры, точки, дефисы и пробелы внутри; запятая — разделитель. */
 const ALLOWED = /[^0-9.\-\s,]/g
@@ -40,83 +46,24 @@ export function TaskRefs({
   className?: string
 }) {
   const { t } = useTranslation()
-  const [editing, setEditing] = useState(false)
-  const [draft, setDraft] = useState(value ?? '')
-  const inputRef = useRef<HTMLInputElement>(null)
-
-  useEffect(() => {
-    if (!editing) setDraft(value ?? '')
-  }, [value, editing])
-
-  useEffect(() => {
-    if (editing) inputRef.current?.select()
-  }, [editing])
-
+  const [open, setOpen] = useState(false)
   const refs = parseRefs(value ?? '')
 
-  const commit = () => {
-    setEditing(false)
-    // Сравниваем по разобранному виду: «1,2» и «1, 2» — одно и то же, и слать
-    // из-за пробела запрос незачем.
-    if (parseRefs(draft).join(', ') !== refs.join(', ')) onChange(draft)
-  }
-
-  if (editing) {
-    return (
-      <input
-        ref={inputRef}
-        value={draft}
-        onChange={(e) => setDraft(e.target.value.replace(ALLOWED, ''))}
-        onBlur={commit}
-        onKeyDown={(e) => {
-          e.stopPropagation() // строка таблицы открывается по клавишам — не здесь
-          if (e.key === 'Enter') commit()
-          if (e.key === 'Escape') {
-            setDraft(value ?? '')
-            setEditing(false)
-          }
-        }}
-        onClick={(e) => e.stopPropagation()}
-        placeholder={t('tasks.refsPlaceholder')}
-        className={cn(
-          'w-full min-w-0 rounded border bg-transparent px-1.5 outline-none focus:ring-2 focus:ring-ring',
-          compact ? 'py-0 text-xs' : 'py-0.5 text-sm',
-          className,
-        )}
-      />
-    )
-  }
-
-  // Пусто и править нельзя — показывать нечего.
-  if (!refs.length && !canEdit) return null
-
-  return (
-    <span
-      role={canEdit ? 'button' : undefined}
-      tabIndex={canEdit ? 0 : undefined}
-      onClick={
-        canEdit
-          ? (e) => {
-              e.stopPropagation() // клик по строке открывает задачу — здесь не нужно
-              setEditing(true)
-            }
-          : undefined
-      }
-      onKeyDown={canEdit ? (e) => (e.key === 'Enter' ? setEditing(true) : undefined) : undefined}
-      title={canEdit ? t('tasks.refsHint') : undefined}
-      className={cn('inline-flex flex-wrap items-center gap-1', canEdit && 'cursor-text', className)}
-    >
+  const chips = (
+    <span className={cn('inline-flex flex-wrap items-center', compact ? 'gap-0.5' : 'gap-1')}>
       {refs.length ? (
         refs.map((ref, i) => (
           <span
             key={`${ref}:${i}`}
             // Слегка скруглённые, а не овальные: это номер, а не ярлык
-            // состояния. Цифры чуть жирнее — их и высматривают в списке.
+            // состояния. Знак номера перед цифрами обязателен — без него «12»
+            // в ряду других чисел не читается как чей-то внешний номер.
             className={cn(
               'rounded bg-secondary font-semibold tabular-nums text-foreground',
               compact ? 'px-1 py-0 text-[11px]' : 'px-1.5 py-0.5 text-xs',
             )}
           >
+            {REFS_SIGN}
             {ref}
           </span>
         ))
@@ -124,5 +71,108 @@ export function TaskRefs({
         <span className={cn('text-muted-foreground', compact ? 'text-[11px]' : 'text-xs')}>{REFS_SIGN}</span>
       )}
     </span>
+  )
+
+  // Пусто и править нельзя — показывать нечего.
+  if (!refs.length && !canEdit) return null
+  if (!canEdit) return <span className={className}>{chips}</span>
+
+  return (
+    <Popover open={open} onOpenChange={setOpen}>
+      <PopoverTrigger asChild>
+        <button
+          type="button"
+          title={t('tasks.refsHint')}
+          onClick={(e) => e.stopPropagation()} // клик по строке открывает задачу
+          className={cn(
+            // Как у соседних управляемых полей: рамка по наведению и стрелка,
+            // иначе не видно, что по этому месту вообще можно нажать.
+            'inline-flex items-center gap-1 rounded-md transition-colors hover:bg-accent',
+            compact ? 'px-1 py-0.5' : 'px-1.5 py-1',
+            className,
+          )}
+        >
+          {chips}
+          <ChevronDown className="size-3 shrink-0 opacity-40" />
+        </button>
+      </PopoverTrigger>
+      <PopoverContent align="start" className="w-64 p-2" onClick={(e) => e.stopPropagation()}>
+        <RefsEditor refs={refs} onChange={onChange} />
+      </PopoverContent>
+    </Popover>
+  )
+}
+
+/**
+ * Редактор номеров: готовые — чипами с крестиком, новый — полем снизу.
+ *
+ * Каждый номер отдельной сущностью, а не одной строкой с запятыми: строку
+ * приходилось перечитывать глазами, чтобы понять, где кончается один номер и
+ * начинается другой, — а «4 - 3» посреди неё выглядит как два.
+ */
+function RefsEditor({ refs, onChange }: { refs: string[]; onChange: (next: string) => void }) {
+  const { t } = useTranslation()
+  const [draft, setDraft] = useState('')
+  const inputRef = useRef<HTMLInputElement>(null)
+
+  useEffect(() => {
+    inputRef.current?.focus()
+  }, [])
+
+  const commit = (next: string[]) => onChange(next.join(', '))
+
+  const add = () => {
+    // Запятую внутри набранного тоже разбираем: её жмут по привычке, и
+    // «1, 2» одним вводом должно дать два номера, а не один сломанный.
+    const parts = parseRefs(draft)
+    if (!parts.length) return
+    setDraft('')
+    commit([...refs, ...parts])
+  }
+
+  return (
+    <div className="space-y-2">
+      {refs.length > 0 && (
+        <div className="flex flex-wrap gap-1">
+          {refs.map((ref, i) => (
+            <span
+              key={`${ref}:${i}`}
+              className="inline-flex items-center gap-1 rounded bg-secondary px-1.5 py-0.5 text-xs font-semibold tabular-nums"
+            >
+              {REFS_SIGN}
+              {ref}
+              <button
+                type="button"
+                title={t('files.delete')}
+                onClick={() => commit(refs.filter((_, j) => j !== i))}
+                className="text-muted-foreground hover:text-destructive"
+              >
+                <X className="size-3" />
+              </button>
+            </span>
+          ))}
+        </div>
+      )}
+
+      <input
+        ref={inputRef}
+        value={draft}
+        onChange={(e) => setDraft(e.target.value.replace(ALLOWED, ''))}
+        onBlur={add}
+        onKeyDown={(e) => {
+          e.stopPropagation()
+          if (e.key === 'Enter') {
+            e.preventDefault()
+            add()
+          }
+          // Backspace на пустом поле убирает последний — привычно по любому
+          // полю тегов и избавляет от прицеливания в крестик.
+          if (e.key === 'Backspace' && !draft && refs.length) commit(refs.slice(0, -1))
+        }}
+        placeholder={t('tasks.refsPlaceholder')}
+        className="w-full rounded border bg-transparent px-2 py-1 text-sm outline-none focus:ring-2 focus:ring-ring"
+      />
+      <p className="text-[11px] leading-snug text-muted-foreground">{t('tasks.refsHint')}</p>
+    </div>
   )
 }

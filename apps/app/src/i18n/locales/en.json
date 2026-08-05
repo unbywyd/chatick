@@ -270,8 +270,8 @@
     "expandAllSprints": "Expand all",
     "addInSprint": "Add a task…",
     "add": "Add",
-    "refsPlaceholder": "12, 4 - 3, 5.1",
-    "refsHint": "Your own numbers: design screens, contract clauses. Comma-separated."
+    "refsPlaceholder": "12 or 4 - 3",
+    "refsHint": "Your own numbers: design screens, contract clauses. Enter adds one; “4 - 3” stays a single number."
   },
   "files": {
     "search": "Search files…",
