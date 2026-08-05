@@ -261,10 +261,15 @@ export function TaskDrawer({
   const [focusDescription, setFocusDescription] = useState(false)
   // при смене задачи форму закрываем — кроме случая, когда её только что создали
   useEffect(() => setEditing(startEditing), [task.id, startEditing])
+  // Панель свойств на узких экранах: открывается кнопкой, а не сама.
+  const [propsOpen, setPropsOpen] = useState(false)
   // Форму закрыли — снимаем запрос фокуса, иначе следующая правка (уже кнопкой)
-  // молча уводила бы курсор в описание.
+  // молча уводила бы курсор в описание. Заодно закрываем панель свойств.
   useEffect(() => {
-    if (!editing) setFocusDescription(false)
+    if (!editing) {
+      setFocusDescription(false)
+      setPropsOpen(false)
+    }
   }, [editing])
 
   // Блокировка редактирования: кто сейчас правит эту задачу (SPEC §8.18)
@@ -305,11 +310,17 @@ export function TaskDrawer({
   // никуда не ведёт.
   const { id: routeProjectId, companyId } = useParams()
 
+  // Боковая форма — ТОЛЬКО свойства задачи: статус, важность, исполнитель,
+  // оценка, спринт, группа.
+  //
+  // Заголовок и описание сюда не входят намеренно. Раньше входили, и на экране
+  // получалось два одинаковых текста: крупный в колонке чтения и его тесная
+  // копия в узкой форме сбоку. Печатать можно было только в копию — по большому
+  // тексту жали, и не происходило ничего. Теперь заголовок и описание
+  // включаются правкой прямо на своём месте, а сбоку остаётся то, для чего
+  // боковая панель и нужна.
   const editForm = (
     <>
-      {/* Title */}
-      <Input value={title} onChange={(e) => setTitle(e.target.value)} placeholder={t('tasks.newPlaceholder')} className="text-base font-semibold" />
-
       {/* Properties: чипы-кнопки вместо селектов — выбор одним кликом */}
       <div className="space-y-3">
             <PropRow label={t('tasks.statusLabel')}>
@@ -467,43 +478,6 @@ export function TaskDrawer({
             )}
           </div>
 
-          {/* Description — Tiptap с mentions команды */}
-          <RichEditor
-            value={description}
-            onChange={(md) => setDescription(md)}
-            placeholder={t('tasks.descriptionPlaceholder')}
-            mentions={members.map((m) => ({ id: m.user.id, label: m.user.name || m.user.email, avatarUrl: m.user.avatarUrl }))}
-            preset="full"
-            autoFocus={focusDescription}
-          />
-
-          {/* ИИ-совет по задаче */}
-          {aiCheck && (
-            <div className="space-y-2 rounded-lg border border-brand/40 bg-brand/5 p-3">
-              <div className="flex items-center gap-1.5 text-sm font-medium">
-                <Sparkles className="size-4 text-brand" />
-                {t('tasks.aiAdvice')}
-              </div>
-              <p className="whitespace-pre-wrap text-sm text-muted-foreground">{aiCheck.advice}</p>
-              <div className="flex flex-wrap gap-2">
-                <Button
-                  variant="brand"
-                  size="sm"
-                  onClick={() => {
-                    setTitle(aiCheck.suggestedTitle)
-                    setDescription(aiCheck.suggestedDescription)
-                    setAiCheck(null)
-                  }}
-                >
-                  {t('tasks.applySuggestion')}
-                </Button>
-                <Button variant="ghost" size="sm" onClick={() => setAiCheck(null)}>
-                  {t('files.cancel')}
-                </Button>
-              </div>
-            </div>
-          )}
-
       {/* Сохранение и отмена — в шапке, рядом с «Изменить»: внизу длинной
           формы их не находили. Здесь остаётся только проверка ИИ. */}
       <div className="flex">
@@ -513,6 +487,34 @@ export function TaskDrawer({
         </Button>
       </div>
     </>
+  )
+
+  // Совет ИИ — в главной колонке, рядом с текстом, к которому относится:
+  // заменяет он именно заголовок и описание.
+  const aiAdvice = aiCheck && (
+    <div className="space-y-2 rounded-lg border border-brand/40 bg-brand/5 p-3">
+      <div className="flex items-center gap-1.5 text-sm font-medium">
+        <Sparkles className="size-4 text-brand" />
+        {t('tasks.aiAdvice')}
+      </div>
+      <p className="whitespace-pre-wrap text-sm text-muted-foreground">{aiCheck.advice}</p>
+      <div className="flex flex-wrap gap-2">
+        <Button
+          variant="brand"
+          size="sm"
+          onClick={() => {
+            setTitle(aiCheck.suggestedTitle)
+            setDescription(aiCheck.suggestedDescription)
+            setAiCheck(null)
+          }}
+        >
+          {t('tasks.applySuggestion')}
+        </Button>
+        <Button variant="ghost" size="sm" onClick={() => setAiCheck(null)}>
+          {t('files.cancel')}
+        </Button>
+      </div>
+    </div>
   )
 
   // Секция вложений (в левой read-колонке)
@@ -939,26 +941,47 @@ export function TaskDrawer({
       <div className="flex min-h-0 flex-1 overflow-hidden">
         {/* Левая колонка — чтение */}
         <div className="min-w-0 flex-1 space-y-6 overflow-y-auto p-4 sm:p-6">
+          {/* Заголовок и описание правятся на своём месте, а не в копии сбоку:
+              текст остаётся там же и той же ширины, меняется только
+              возможность печатать. */}
           <div className="space-y-3 border-b pb-5">
-            <h1 className="text-xl font-bold tracking-tight">{task.title}</h1>
+            {editing ? (
+              <Input
+                value={title}
+                onChange={(e) => setTitle(e.target.value)}
+                placeholder={t('tasks.newPlaceholder')}
+                className="h-auto border-0 bg-transparent px-0 py-0 text-xl font-bold tracking-tight shadow-none focus-visible:ring-0"
+              />
+            ) : (
+              <h1
+                className={cn('text-xl font-bold tracking-tight', canEdit && !lockedBy && 'cursor-text')}
+                onClick={() => canEdit && !lockedBy && setEditing(true)}
+                title={canEdit && !lockedBy ? t('tasks.clickToEdit') : undefined}
+              >
+                {task.title}
+              </h1>
+            )}
             {meta}
           </div>
 
           {/* Без карточки: описание — основное содержимое задачи, а не
               вложенный блок. В чате у сообщений подложки тоже нет. */}
-          {task.description?.trim() && (
-            // Клик по описанию открывает правку.
-            //
-            // Здесь описание лежит крупно и во всю ширину, а редактируемая
-            // копия — в узкой форме сбоку. Люди жмут по большому тексту, и
-            // раньше не происходило ровно ничего: на экране два одинаковых
-            // текста, печатать можно только в один, и выглядело это как
-            // сломавшийся редактор. Теперь клик ведёт к нему.
+          {editing ? (
+            <RichEditor
+              value={description}
+              onChange={(md) => setDescription(md)}
+              placeholder={t('tasks.descriptionPlaceholder')}
+              mentions={members.map((m) => ({ id: m.user.id, label: m.user.name || m.user.email, avatarUrl: m.user.avatarUrl }))}
+              preset="full"
+              autoFocus={focusDescription}
+            />
+          ) : task.description?.trim() ? (
+            // Клик по описанию включает правку прямо здесь.
             <div
-              className={cn('msg-md max-w-none break-words text-sm', canEdit && 'cursor-text')}
+              className={cn('msg-md max-w-none break-words text-sm', canEdit && !lockedBy && 'cursor-text')}
               onClick={(e) => {
                 if (!canEdit || lockedBy) return
-                // Ссылку в описании нажали, чтобы перейти по ней, а не править.
+                // Ссылку нажали, чтобы перейти по ней, а не править.
                 if ((e.target as HTMLElement).closest('a')) return
                 // Выделяли текст, чтобы скопировать, — не мешаем.
                 if (!window.getSelection()?.isCollapsed) return
@@ -969,7 +992,25 @@ export function TaskDrawer({
             >
               <RichEditor value={task.description} onChange={() => {}} mentions={[]} preset="full" readOnly />
             </div>
+          ) : (
+            // Описания нет — на его месте приглашение, а не пустота: иначе
+            // непонятно, что описание вообще бывает и куда его писать.
+            canEdit &&
+            !lockedBy && (
+              <button
+                type="button"
+                onClick={() => {
+                  setFocusDescription(true)
+                  setEditing(true)
+                }}
+                className="w-full rounded-md border border-dashed px-3 py-2 text-start text-sm text-muted-foreground transition-colors hover:border-solid hover:bg-accent"
+              >
+                {t('tasks.descriptionPlaceholder')}
+              </button>
+            )
           )}
+
+          {aiAdvice}
 
           {/* Чек-лист между описанием и вложениями: это часть постановки
               задачи, а не приложение к ней. */}
@@ -1019,19 +1060,41 @@ export function TaskDrawer({
           </div>
         </div>
 
-        {/* Правая колонка — форма редактирования (скрыта до «Редактировать»). Мобила: оверлей снизу */}
+        {/* Правая колонка — свойства задачи (скрыта до «Редактировать»).
+            Мобила: оверлей снизу, и открывается он отдельной кнопкой.
+            Раньше оверлей вылезал сам вместе с режимом правки — но теперь
+            заголовок с описанием правятся в главной колонке, и панель
+            накрывала бы собой ровно то, ради чего правку и открыли. */}
         {editing && (
           <>
-            <div className="absolute inset-0 z-20 bg-black/40 sm:hidden" onClick={() => setEditing(false)} />
-            <div className="absolute inset-x-0 bottom-0 z-30 max-h-[85%] space-y-4 overflow-y-auto rounded-t-2xl border-t bg-background p-4 shadow-2xl sm:static sm:z-0 sm:max-h-none sm:w-96 sm:rounded-none sm:border-s sm:border-t-0 sm:p-5 sm:shadow-none">
+            {propsOpen && <div className="absolute inset-0 z-20 bg-black/40 sm:hidden" onClick={() => setPropsOpen(false)} />}
+            <div
+              className={cn(
+                'absolute inset-x-0 bottom-0 z-30 max-h-[85%] space-y-4 overflow-y-auto rounded-t-2xl border-t bg-background p-4 shadow-2xl sm:static sm:z-0 sm:max-h-none sm:w-96 sm:rounded-none sm:border-s sm:border-t-0 sm:p-5 sm:shadow-none',
+                !propsOpen && 'hidden sm:block',
+              )}
+            >
               <div className="flex items-center justify-between sm:hidden">
-                <h2 className="text-sm font-semibold">{t('about.edit')}</h2>
-                <Button variant="ghost" size="icon" onClick={() => setEditing(false)}>
+                <h2 className="text-sm font-semibold">{t('tasks.properties')}</h2>
+                <Button variant="ghost" size="icon" onClick={() => setPropsOpen(false)}>
                   <X className="size-4" />
                 </Button>
               </div>
               {editForm}
             </div>
+            {/* Кнопка к свойствам — только на узких экранах: на широких панель
+                и так стоит рядом. */}
+            {!propsOpen && (
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => setPropsOpen(true)}
+                className="absolute bottom-4 end-4 z-20 gap-1.5 shadow-lg sm:hidden"
+              >
+                <Layers className="size-4" />
+                {t('tasks.properties')}
+              </Button>
+            )}
           </>
         )}
       </div>
