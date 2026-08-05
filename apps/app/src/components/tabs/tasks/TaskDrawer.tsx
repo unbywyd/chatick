@@ -256,8 +256,16 @@ export function TaskDrawer({
 
   // редактирование справа — по умолчанию скрыто (открывается кнопкой «Редактировать»)
   const [editing, setEditing] = useState(startEditing)
+  // Правку открыли кликом по описанию — значит, курсор ждут в описании, а не в
+  // заголовке. Кнопкой «Редактировать» — не трогаем фокус: там намерение шире.
+  const [focusDescription, setFocusDescription] = useState(false)
   // при смене задачи форму закрываем — кроме случая, когда её только что создали
   useEffect(() => setEditing(startEditing), [task.id, startEditing])
+  // Форму закрыли — снимаем запрос фокуса, иначе следующая правка (уже кнопкой)
+  // молча уводила бы курсор в описание.
+  useEffect(() => {
+    if (!editing) setFocusDescription(false)
+  }, [editing])
 
   // Блокировка редактирования: кто сейчас правит эту задачу (SPEC §8.18)
   const [lockedBy, setLockedBy] = useState<{ id: string; name: string; avatarUrl: string | null } | null>(null)
@@ -466,6 +474,7 @@ export function TaskDrawer({
             placeholder={t('tasks.descriptionPlaceholder')}
             mentions={members.map((m) => ({ id: m.user.id, label: m.user.name || m.user.email, avatarUrl: m.user.avatarUrl }))}
             preset="full"
+            autoFocus={focusDescription}
           />
 
           {/* ИИ-совет по задаче */}
@@ -938,7 +947,26 @@ export function TaskDrawer({
           {/* Без карточки: описание — основное содержимое задачи, а не
               вложенный блок. В чате у сообщений подложки тоже нет. */}
           {task.description?.trim() && (
-            <div className="msg-md max-w-none break-words text-sm">
+            // Клик по описанию открывает правку.
+            //
+            // Здесь описание лежит крупно и во всю ширину, а редактируемая
+            // копия — в узкой форме сбоку. Люди жмут по большому тексту, и
+            // раньше не происходило ровно ничего: на экране два одинаковых
+            // текста, печатать можно только в один, и выглядело это как
+            // сломавшийся редактор. Теперь клик ведёт к нему.
+            <div
+              className={cn('msg-md max-w-none break-words text-sm', canEdit && 'cursor-text')}
+              onClick={(e) => {
+                if (!canEdit || lockedBy) return
+                // Ссылку в описании нажали, чтобы перейти по ней, а не править.
+                if ((e.target as HTMLElement).closest('a')) return
+                // Выделяли текст, чтобы скопировать, — не мешаем.
+                if (!window.getSelection()?.isCollapsed) return
+                setFocusDescription(true)
+                setEditing(true)
+              }}
+              title={canEdit && !lockedBy ? t('tasks.clickToEdit') : undefined}
+            >
               <RichEditor value={task.description} onChange={() => {}} mentions={[]} preset="full" readOnly />
             </div>
           )}

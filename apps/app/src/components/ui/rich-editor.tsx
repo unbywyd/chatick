@@ -73,6 +73,7 @@ export function RichEditor({
   preset = 'full',
   className,
   readOnly = false,
+  autoFocus = false,
 }: {
   value: string
   /** HTML-содержимое: Tiptap хранит и отдаёт разметку напрямую */
@@ -83,6 +84,8 @@ export function RichEditor({
   preset?: 'full' | 'minimal'
   className?: string
   readOnly?: boolean
+  /** Поставить курсор в конец текста сразу после появления редактора. */
+  autoFocus?: boolean
 }) {
   const { t } = useTranslation()
   const fileRef = useRef<HTMLInputElement>(null)
@@ -178,6 +181,14 @@ export function RichEditor({
       /* тихо: пользователь увидит, что картинка не вставилась */
     }
   }
+
+  // Курсор в конец текста, а не в начало: правку почти всегда продолжают, а
+  // не переписывают с нуля. Один раз при появлении — иначе редактор отбирал бы
+  // фокус у соседних полей формы при каждой перерисовке.
+  useEffect(() => {
+    if (autoFocus && editor && !readOnly) editor.commands.focus('end')
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [editor])
 
   // Режим правки задаётся при создании редактора и сам по себе не меняется.
   // Если один и тот же экземпляр показывали то на чтение, то на правку —

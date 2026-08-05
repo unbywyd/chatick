@@ -244,6 +244,7 @@
     "share": "Share",
     "linkCopied": "Task link copied",
     "fromChat": "From chat",
+    "clickToEdit": "Click to edit",
     "editingNow": "{{name}} is editing",
     "lockedByOther": "Someone else is editing this task",
     "importExport": "Import / Export",
