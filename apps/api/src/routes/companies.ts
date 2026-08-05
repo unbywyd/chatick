@@ -18,6 +18,8 @@ import { encrypt } from '../lib/crypto.js'
 import { companyMail, sendVia, dropTransport } from '../lib/company-mail.js'
 import { companyStorageFor } from '../lib/s3.js'
 import { membersLockedForCompany, MEMBERS_LOCKED } from '../lib/members-locked.js'
+import { timeConfigSchema } from './projects.js'
+import { readTimeConfig } from './time.js'
 import { LLM_PROVIDERS, testLlm, type LlmProvider } from '../lib/llm.js'
 import { env } from '../env.js'
 
@@ -344,6 +346,50 @@ companiesRoute.patch(
     const [updated] = await db.update(companies).set(patch).where(eq(companies.id, companyId)).returning()
     if (!updated) return c.json({ error: 'Not found' }, 404)
     return c.json({ id: updated.id, name: updated.name, locale: updated.locale })
+  },
+)
+
+/**
+ * Настройки учёта времени компании (SPEC §8.36).
+ *
+ * Читают их все, кто состоит в компании: часовой пояс и первый день недели
+ * нужны любому, кто открывает отчёт по часам, — иначе «эта неделя» у него
+ * начнётся не там. Меняет только админ: пояс сдвигает суммы во всех проектах
+ * разом.
+ */
+companiesRoute.get('/:companyId/time-config', async (c) => {
+  const { sub } = c.get('session')
+  const companyId = c.req.param('companyId')
+  if (!(await memberRoleIn(companyId, sub))) return c.json({ error: 'Forbidden' }, 403)
+
+  const company = await db.query.companies.findFirst({ where: eq(companies.id, companyId) })
+  if (!company) return c.json({ error: 'Not found' }, 404)
+  return c.json({ config: readTimeConfig(company.timeConfig), canEdit: (await memberRoleIn(companyId, sub)) === 'admin' })
+})
+
+companiesRoute.patch(
+  '/:companyId/time-config',
+  zValidator('json', timeConfigSchema.partial()),
+  async (c) => {
+    const { sub } = c.get('session')
+    const companyId = c.req.param('companyId')
+    if ((await memberRoleIn(companyId, sub)) !== 'admin') return c.json({ error: 'Forbidden' }, 403)
+
+    const company = await db.query.companies.findFirst({ where: eq(companies.id, companyId) })
+    if (!company) return c.json({ error: 'Not found' }, 404)
+
+    const b = c.req.valid('json')
+    if (!Object.keys(b).length) return c.json({ error: 'Nothing to change.' }, 400)
+    // Конец раньше начала — сутки наизнанку. Ловим здесь, а не только при
+    // чтении: молча подменённое значение человек обнаружит, лишь перезагрузив
+    // страницу, и решит, что настройка не сохраняется.
+    const merged = { ...readTimeConfig(company.timeConfig), ...b }
+    if (merged.workDayEnd <= merged.workDayStart) {
+      return c.json({ error: 'workDayEnd must be later than workDayStart' }, 400)
+    }
+
+    await db.update(companies).set({ timeConfig: JSON.stringify(merged) }).where(eq(companies.id, companyId))
+    return c.json({ config: merged })
   },
 )
 

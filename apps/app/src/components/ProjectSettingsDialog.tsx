@@ -9,7 +9,6 @@ import { Button } from '@/components/ui/button'
 import {
   ProjectSettingsForm,
   DEFAULT_AI_CONFIG,
-  DEFAULT_TIME_CONFIG,
   type ProjectSettings,
   type AiConfig,
 } from '@/components/ProjectSettingsForm'
@@ -26,7 +25,6 @@ type ProjectDetails = {
   aiConfig: Partial<AiConfig>
   color?: string
   logoUrl?: string | null
-  timeConfig?: Record<string, unknown>
   storageLimit?: string | number | null
 }
 
@@ -57,7 +55,6 @@ export function ProjectSettingsDialog({
           aiConfig: { ...DEFAULT_AI_CONFIG, ...p.aiConfig },
           color: p.color,
           logoUrl: p.logoUrl ?? null,
-          timeConfig: { ...DEFAULT_TIME_CONFIG, ...(p.timeConfig ?? {}) } as never,
           storageLimit: p.storageLimit != null ? Number(p.storageLimit) : null,
         },
       )

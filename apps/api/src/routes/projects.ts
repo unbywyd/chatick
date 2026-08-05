@@ -7,7 +7,7 @@ import sharp from 'sharp'
 import { db } from '../db/client.js'
 import { env } from '../env.js'
 import { companyTrialSpendUsd } from '../lib/ai-usage.js'
-import { companies, companyMembers, files, FREE_STORAGE_BYTES, messages, notifications, projects, projectMembers, projectStorage, tasks, users, projectAi } from '../db/schema.js'
+import { companies, companyMembers, files, FREE_STORAGE_BYTES, messages, notifications, projects, projectMembers, projectStorage, tasks, timeEntries, users, projectAi } from '../db/schema.js'
 import { encrypt } from '../lib/crypto.js'
 import { membersLockedForCompany, membersLockedForProject, MEMBERS_LOCKED } from '../lib/members-locked.js'
 import { logActivity } from '../lib/audit.js'
@@ -60,6 +60,30 @@ const aiConfigSchema = z.object({
   generateTaskNotes: z.boolean().default(false),
   // автопубликация в чат системных сообщений о задачах (завершил / назначил) — SPEC §8.23
   autoPostTaskEvents: z.boolean().default(true),
+})
+
+/**
+ * Настройки учёта времени (SPEC §8.36).
+ *
+ * Один валидатор на компанию и на проект: настройки живут на компании, а
+ * проектное поле осталось под возможное переопределение. Разъехавшись, эти два
+ * места приняли бы разные значения одного и того же.
+ *
+ * Рабочие часы — минуты от полуночи: 9:00 = 540. Так их не надо разбирать из
+ * строки при каждом сравнении, а часовой пояс к ним отношения не имеет — это
+ * распорядок дня, а не момент времени.
+ */
+export const timeConfigSchema = z.object({
+  maxTimers: z.number().int().min(1).max(20),
+  idleAction: z.enum(['remind', 'stop']),
+  idleHours: z.number().int().min(1).max(48),
+  repeatHours: z.number().int().min(1).max(48),
+  country: z.string().max(2),
+  timezone: z.string().max(64),
+  weekStart: z.number().int().min(0).max(6),
+  translate: z.boolean(),
+  workDayStart: z.number().int().min(0).max(24 * 60),
+  workDayEnd: z.number().int().min(0).max(24 * 60),
 })
 
 // SPEC §4.3 / §8: доменная модель прав. Каждый домен получает УРОВЕНЬ доступа,
@@ -513,6 +537,75 @@ projectsRoute.get('/:projectId', async (c) => {
   })
 })
 
+/**
+ * Сводка проекта: план, факт, срок.
+ *
+ * Считается на сервере, а не на клиенте, по одной причине: часы из трекера
+ * клиенту целиком не отдаются. Непривилегированный участник видит только свои
+ * записи, а «сколько всего наработано в проекте» — это сумма по всем, и
+ * собрать её из того, что ему видно, нельзя.
+ *
+ * Ничего не прогнозируем. Только четыре числа и дата: сколько запланировано,
+ * сколько из этого уже закрыто, сколько осталось и сколько ушло на самом деле.
+ * Задачи без оценки в суммы не входят — их отдаём отдельным счётчиком, чтобы
+ * «осталось 12 часов» не читалось как «осталось всего ничего», когда рядом
+ * висят семь задач, которые никто не оценивал.
+ */
+projectsRoute.get('/:projectId/summary', async (c) => {
+  const { sub } = c.get('session')
+  const projectId = c.req.param('projectId')
+  const project = await db.query.projects.findFirst({ where: eq(projects.id, projectId) })
+  if (!project) return c.json({ error: 'Not found' }, 404)
+
+  const membership = await projectRoleOf(projectId, sub)
+  const companyRole = await companyRoleOf(project.companyId, sub)
+  if (!membership && !canCreateProjects(companyRole)) return c.json({ error: 'Forbidden' }, 403)
+
+  // estimate_minutes хранится строкой — приводим в SQL, иначе sum() сложит
+  // текст и упадёт. Пустая строка и мусор дают NULL и в сумму не попадают.
+  const est = sql<number>`coalesce(sum(nullif(${tasks.estimateMinutes}, '')::int), 0)::int`
+  const [totals] = await db
+    .select({
+      total: sql<number>`count(*)::int`,
+      done: sql<number>`count(*) filter (where ${tasks.status} = 'done')::int`,
+      planned: est,
+      plannedDone: sql<number>`coalesce(sum(nullif(${tasks.estimateMinutes}, '')::int) filter (where ${tasks.status} = 'done'), 0)::int`,
+      noEstimate: sql<number>`count(*) filter (where ${tasks.estimateMinutes} is null or ${tasks.estimateMinutes} = '')::int`,
+      noEstimateOpen: sql<number>`count(*) filter (where (${tasks.estimateMinutes} is null or ${tasks.estimateMinutes} = '') and ${tasks.status} <> 'done')::int`,
+    })
+    .from(tasks)
+    .where(and(eq(tasks.projectId, projectId), isNull(tasks.deletedAt)))
+
+  // Идущие таймеры не считаем: у них нет конца, и «потрачено» скакало бы от
+  // запроса к запросу.
+  const [spent] = await db
+    .select({
+      minutes: sql<number>`coalesce(sum(extract(epoch from (${timeEntries.endedAt} - ${timeEntries.startedAt})) / 60), 0)::int`,
+    })
+    .from(timeEntries)
+    .where(and(eq(timeEntries.projectId, projectId), sql`${timeEntries.endedAt} is not null`))
+
+  const planned = totals?.planned ?? 0
+  const plannedDone = totals?.plannedDone ?? 0
+  return c.json({
+    deadline: project.deadline,
+    tasks: {
+      total: totals?.total ?? 0,
+      done: totals?.done ?? 0,
+      noEstimate: totals?.noEstimate ?? 0,
+      noEstimateOpen: totals?.noEstimateOpen ?? 0,
+    },
+    minutes: {
+      planned,
+      plannedDone,
+      // Остаток по оценкам открытых задач, а не «план минус факт»: переработка
+      // по одной задаче не уменьшает того, что осталось сделать по другим.
+      plannedLeft: planned - plannedDone,
+      spent: spent?.minutes ?? 0,
+    },
+  })
+})
+
 // Обновить настройки проекта: about, aiConfig, chatRules (owner/admin проекта или company admin)
 projectsRoute.patch(
   '/:projectId',
@@ -524,19 +617,10 @@ projectsRoute.patch(
       aiConfig: aiConfigSchema.partial().optional(),
       chatRules: z.string().max(CHAT_RULES_MAX).optional(),
       color: z.string().regex(/^#[0-9a-fA-F]{6}$/).optional(),
-      timeConfig: z
-        .object({
-          maxTimers: z.number().int().min(1).max(20),
-          idleAction: z.enum(['remind', 'stop']),
-          idleHours: z.number().int().min(1).max(48),
-          repeatHours: z.number().int().min(1).max(48),
-          country: z.string().max(2),
-          timezone: z.string().max(64),
-          weekStart: z.number().int().min(0).max(6),
-          translate: z.boolean(),
-        })
-        .partial()
-        .optional(),
+      timeConfig: timeConfigSchema.partial().optional(),
+      // Срок сдачи: дата или null — «срока нет». Пустая строка сюда не
+      // приходит: её от «не трогать» уже не отличить.
+      deadline: z.string().datetime({ offset: true }).nullable().optional(),
       storageLimit: z.number().int().min(0).nullable().optional(), // байты; null = наследовать компанию, 0 = без override (безлимит в рамках компании)
       // Язык проекта для писем. null = наследовать компанию: команда одного
       // проекта может говорить не на языке всей фирмы.
@@ -554,9 +638,10 @@ projectsRoute.patch(
     const allowed = membership?.role === 'owner' || membership?.role === 'admin' || companyRole === 'admin'
     if (!allowed) return c.json({ error: 'Forbidden' }, 403)
 
-    const { name, about, aiConfig, chatRules, color, timeConfig, storageLimit, locale } = c.req.valid('json')
+    const { name, about, aiConfig, chatRules, color, timeConfig, storageLimit, locale, deadline } = c.req.valid('json')
     const patch: Record<string, unknown> = {}
     if (name !== undefined) patch.name = name
+    if (deadline !== undefined) patch.deadline = deadline ? new Date(deadline) : null
     if (about !== undefined) patch.about = about
     if (chatRules !== undefined) patch.chatRules = chatRules
     if (color !== undefined) patch.color = color

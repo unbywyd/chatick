@@ -45,7 +45,7 @@ import { logActivity } from '../lib/audit.js'
 import { sendAddedToProjectMail } from '../lib/mails.js'
 import { sendInviteMail } from '../lib/mail-invite.js'
 import { createNote, noteToTask, NOTE_TYPES, type NoteType } from './notes.js'
-import { readTimeConfig, maybeTranslate } from './time.js'
+import { readTimeConfig, maybeTranslate, timeConfigForProject } from './time.js'
 import { readPresence } from './auth.js'
 import { createShare, revokeShare, type ShareEntityType } from './shares.js'
 import { notifyChatMentions } from './messages.js'
@@ -2087,8 +2087,7 @@ bridgeRoute.get('/time/running', async (c) => {
   const scope = await resolveProject(c as never)
   if ('error' in scope) return c.json({ error: scope.error }, scope.status)
 
-  const project = await db.query.projects.findFirst({ where: eq(projects.id, scope.projectId) })
-  const cfg = readTimeConfig(project?.timeConfig)
+  const cfg = await timeConfigForProject(scope.projectId)
   const rows = await db
     .select({ e: timeEntries, p: projects })
     .from(timeEntries)
@@ -2120,8 +2119,7 @@ bridgeRoute.post('/time/start', async (c) => {
   if ('error' in scope) return c.json({ error: scope.error }, scope.status)
 
   const b = (await c.req.json().catch(() => ({}))) as Record<string, unknown>
-  const project = await db.query.projects.findFirst({ where: eq(projects.id, scope.projectId) })
-  const cfg = readTimeConfig(project?.timeConfig)
+  const cfg = await timeConfigForProject(scope.projectId)
 
   // Лимит считает ЧЕЛОВЕКА, а не проект. Пока условие включало projectId,
   // при лимите 1 можно было завести по таймеру в каждом проекте и «работать»
@@ -2450,8 +2448,7 @@ bridgeRoute.post('/time/resume', async (c) => {
   if ('error' in scope) return c.json({ error: scope.error }, scope.status)
 
   const b = (await c.req.json().catch(() => ({}))) as Record<string, unknown>
-  const project = await db.query.projects.findFirst({ where: eq(projects.id, scope.projectId) })
-  const cfg = readTimeConfig(project?.timeConfig)
+  const cfg = await timeConfigForProject(scope.projectId)
 
   const running = await db
     .select({ e: timeEntries, p: projects })

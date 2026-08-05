@@ -3,7 +3,7 @@ import { zValidator } from '@hono/zod-validator'
 import { z } from 'zod'
 import { and, asc, desc, eq, gte, inArray, isNull, lte, sql } from 'drizzle-orm'
 import { db } from '../db/client.js'
-import { projects, tasks, timeEntries, users } from '../db/schema.js'
+import { companies, projects, tasks, timeEntries, users } from '../db/schema.js'
 import { requireProject, requireSession, type ProjectEnv, type SessionEnv } from '../auth.js'
 import { projectRoleOf, companyRoleOf } from './projects.js'
 import { logActivity } from '../lib/audit.js'
@@ -162,6 +162,10 @@ export type TimeConfig = {
   weekStart: number
   /** пропускать описания записей через ИИ на язык проекта */
   translate: boolean
+  /** Начало рабочего дня, минуты от полуночи: 9:00 = 540. */
+  workDayStart: number
+  /** Конец рабочего дня, минуты от полуночи: 18:00 = 1080. */
+  workDayEnd: number
 }
 
 export const DEFAULT_TIME_CONFIG: TimeConfig = {
@@ -173,6 +177,14 @@ export const DEFAULT_TIME_CONFIG: TimeConfig = {
   timezone: 'UTC',
   weekStart: 1,
   translate: false,
+  workDayStart: 9 * 60,
+  workDayEnd: 18 * 60,
+}
+
+/** Минуты от полуночи из «9:00» или числа; вне суток — значение по умолчанию. */
+function readMinutes(v: unknown, fallback: number): number {
+  const n = typeof v === 'string' && v.includes(':') ? Number(v.split(':')[0]) * 60 + Number(v.split(':')[1]) : Number(v)
+  return Number.isFinite(n) && n >= 0 && n <= 24 * 60 ? Math.round(n) : fallback
 }
 
 export function readTimeConfig(raw: string | null | undefined): TimeConfig {
@@ -187,10 +199,41 @@ export function readTimeConfig(raw: string | null | undefined): TimeConfig {
       timezone: typeof p.timezone === 'string' && p.timezone ? p.timezone : DEFAULT_TIME_CONFIG.timezone,
       weekStart: Number.isInteger(p.weekStart) && Number(p.weekStart) >= 0 && Number(p.weekStart) <= 6 ? Number(p.weekStart) : 1,
       translate: p.translate === true,
+      workDayStart: readMinutes(p.workDayStart, DEFAULT_TIME_CONFIG.workDayStart),
+      // Конец раньше начала — сутки наизнанку: считать по такому нечего, и
+      // молча принимать это значит потом объяснять отрицательные часы.
+      workDayEnd:
+        readMinutes(p.workDayEnd, DEFAULT_TIME_CONFIG.workDayEnd) > readMinutes(p.workDayStart, DEFAULT_TIME_CONFIG.workDayStart)
+          ? readMinutes(p.workDayEnd, DEFAULT_TIME_CONFIG.workDayEnd)
+          : DEFAULT_TIME_CONFIG.workDayEnd,
     }
   } catch {
     return DEFAULT_TIME_CONFIG
   }
+}
+
+/**
+ * Настройки времени для проекта: свои, иначе компании.
+ *
+ * Наследование, а не копия при создании: часовой пояс меняют раз в жизни, но
+ * когда меняют — ожидают, что он поменяется везде, а не только в проектах,
+ * заведённых после. Из интерфейса проекта настройки убраны, поле осталось —
+ * если однажды понадобится проект в другом поясе, включать будет нечего.
+ */
+export async function timeConfigForProject(projectId: string): Promise<TimeConfig> {
+  const row = await db
+    .select({ own: projects.timeConfig, company: companies.timeConfig })
+    .from(projects)
+    .leftJoin(companies, eq(companies.id, projects.companyId))
+    .where(eq(projects.id, projectId))
+    .limit(1)
+  const r = row[0]
+  if (!r) return DEFAULT_TIME_CONFIG
+  // «{}» — это «не задано», а не «всё по умолчанию»: пустой объект стоит у
+  // всех проектов с рождения, и принимать его за настройку значило бы никогда
+  // не дойти до компании.
+  const own = (r.own ?? '').trim()
+  return readTimeConfig(own && own !== '{}' ? own : r.company)
 }
 
 /** Чужие записи видит и правит только руководство проекта. */
@@ -239,7 +282,7 @@ async function hydrate(rows: (typeof timeEntries.$inferSelect)[]) {
 export async function maybeTranslate(projectId: string, entryId: string, text: string): Promise<void> {
   if (!text.trim()) return
   const project = await db.query.projects.findFirst({ where: eq(projects.id, projectId) })
-  if (!project || !readTimeConfig(project.timeConfig).translate) return
+  if (!project || !(await timeConfigForProject(projectId)).translate) return
   const language = (JSON.parse(project.aiConfig || '{}') as { language?: string }).language ?? 'en'
   const translated = await translateTimeEntry(projectId, text, language)
   if (!translated) return
@@ -277,7 +320,7 @@ timeRoute.get('/running', async (c) => {
     projectName: rows[i]!.projectId === projectId ? null : nameById.get(rows[i]!.projectId) ?? '—',
   }))
 
-  return c.json({ items, config: readTimeConfig(project?.timeConfig) })
+  return c.json({ items, config: await timeConfigForProject(projectId) })
 })
 
 /**
@@ -343,8 +386,7 @@ timeRoute.post(
       projectId = body.projectId
     }
 
-    const project = await db.query.projects.findFirst({ where: eq(projects.id, projectId) })
-    const cfg = readTimeConfig(project?.timeConfig)
+    const cfg = await timeConfigForProject(projectId)
 
     // Лимит про ЧЕЛОВЕКА, а не про проект: иначе при лимите 1 можно набрать
     // по таймеру в каждом проекте и «работать» в пяти местах разом.
@@ -476,8 +518,7 @@ timeRoute.get(
       .orderBy(desc(timeEntries.startedAt))
       .limit(f.limit)
 
-    const projectRow = await db.query.projects.findFirst({ where: eq(projects.id, projectId) })
-    return c.json({ items: await hydrate(rows), canSeeOthers: privileged, config: readTimeConfig(projectRow?.timeConfig) })
+    return c.json({ items: await hydrate(rows), canSeeOthers: privileged, config: await timeConfigForProject(projectId) })
   },
 )
 
@@ -620,8 +661,7 @@ timeRoute.get(
     const f = c.req.valid('query')
     const privileged = await canSeeOthers(projectId, sub)
 
-    const project = await db.query.projects.findFirst({ where: eq(projects.id, projectId) })
-    const tz = readTimeConfig(project?.timeConfig).timezone
+    const tz = (await timeConfigForProject(projectId)).timezone
 
     // Границы периода в поясе ПРОЕКТА: «этот месяц» начинается в 00:00 там, где
     // работает команда, а не там, где стоит сервер.

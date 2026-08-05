@@ -1100,6 +1100,13 @@
     "badTime": "Не удалось разобрать время. Попробуйте 9, 930 или 9:30.",
     "maxTimers": "Параллельные таймеры",
     "maxTimersHint": "Сколько таймеров один человек может держать запущенными.",
+    "settingsTitle": "Учёт времени",
+    "settingsHint": "Общие для всех проектов компании: пояс, распорядок дня и правила таймера.",
+    "workDay": "Рабочий день",
+    "workDayHint": "По ним видно, укладывается ли день в норму.",
+    "workDayStart": "Начало",
+    "workDayEnd": "Конец",
+    "workDayInvalid": "Конец рабочего дня должен быть позже начала.",
     "idleAction": "Забытый таймер",
     "idleRemind": "Напоминать",
     "idleStop": "Останавливать",
@@ -1451,5 +1458,31 @@
     "dirAuto": "Направление: автоматически",
     "dirRtl": "Направление: справа налево",
     "dirLtr": "Направление: слева направо"
+  },
+  "companySettings": {
+    "company": "Компания",
+    "time": "Время",
+    "ai": "ИИ и почта",
+    "integration": "Интеграции",
+    "danger": "Опасная зона"
+  },
+  "summary": {
+    "planned": "Запланировано",
+    "left": "Осталось",
+    "spent": "Потрачено",
+    "noEstimate_one": "{{count}} задача без оценки",
+    "noEstimate_few": "{{count}} задачи без оценки",
+    "noEstimate_many": "{{count}} задач без оценки",
+    "noEstimateHint": "Эти задачи в суммы часов не входят.",
+    "daysLeft_one": "— {{count}} день",
+    "daysLeft_few": "— {{count}} дня",
+    "daysLeft_many": "— {{count}} дней",
+    "daysLeft_zero": "— сегодня",
+    "overdue_one": "— просрочен на {{count}} день",
+    "overdue_few": "— просрочен на {{count}} дня",
+    "overdue_many": "— просрочен на {{count}} дней",
+    "setDeadline": "Срок сдачи",
+    "clearDeadline": "Убрать срок",
+    "timeSettings": "Настроить часы"
   }
 }

@@ -1095,6 +1095,13 @@
     "badTime": "לא הצלחנו לקרוא את השעה. נסו 9, 930 או 9:30.",
     "maxTimers": "טיימרים במקביל",
     "maxTimersHint": "כמה טיימרים אדם אחד יכול להפעיל בו-זמנית.",
+    "settingsTitle": "מעקב זמן",
+    "settingsHint": "משותף לכל הפרויקטים בחברה: אזור זמן, סדר יום וכללי טיימר.",
+    "workDay": "יום עבודה",
+    "workDayHint": "לפיהם רואים אם היום נכנס לנורמה.",
+    "workDayStart": "משעה",
+    "workDayEnd": "עד שעה",
+    "workDayInvalid": "סוף יום העבודה חייב להיות מאוחר מתחילתו.",
     "idleAction": "טיימר שנשכח",
     "idleRemind": "להזכיר",
     "idleStop": "לעצור",
@@ -1439,5 +1446,28 @@
     "dirAuto": "כיוון: אוטומטי",
     "dirRtl": "כיוון: מימין לשמאל",
     "dirLtr": "כיוון: משמאל לימין"
+  },
+  "companySettings": {
+    "company": "חברה",
+    "time": "זמן",
+    "ai": "AI ודואר",
+    "integration": "אינטגרציות",
+    "danger": "אזור מסוכן"
+  },
+  "summary": {
+    "planned": "מתוכנן",
+    "left": "נותר",
+    "spent": "בפועל",
+    "noEstimate_one": "משימה אחת ללא הערכה",
+    "noEstimate_other": "{{count}} משימות ללא הערכה",
+    "noEstimateHint": "משימות אלה לא נכללות בסיכום השעות.",
+    "daysLeft_one": "— יום אחד",
+    "daysLeft_other": "— {{count}} ימים",
+    "daysLeft_zero": "— היום",
+    "overdue_one": "— באיחור של יום",
+    "overdue_other": "— באיחור של {{count}} ימים",
+    "setDeadline": "תאריך יעד",
+    "clearDeadline": "להסיר תאריך יעד",
+    "timeSettings": "הגדרות זמן"
   }
 }

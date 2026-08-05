@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react'
-import { useNavigate, useParams } from 'react-router-dom'
+import { useNavigate, useParams, useSearchParams } from 'react-router-dom'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { useTranslation } from 'react-i18next'
 import { toast } from 'sonner'
@@ -35,6 +35,7 @@ import { TeamTab } from '@/components/company/TeamTab'
 import { NotificationBell } from '@/components/NotificationBell'
 import { OnboardingWizard } from '@/components/OnboardingWizard'
 import { CompanyTimeTab } from '@/components/company/CompanyTimeTab'
+import { CompanyTimeSettings } from '@/components/company/CompanyTimeSettings'
 import { OverviewTab } from '@/components/company/OverviewTab'
 import { LlmSettings } from '@/components/company/LlmSettings'
 import { MailSettings } from '@/components/company/MailSettings'
@@ -490,50 +491,111 @@ function CompanyHome({
       ) : tab === 'backup' && isAdmin ? (
         <BackupTab company={company} />
       ) : (
+        <CompanySettings company={company} isAdmin={isAdmin} onDeleteCompany={onDeleteCompany} />
+      )}
+    </div>
+  )
+}
+
+// ---------------------------------------------------------------------------
+// Настройки компании
+// ---------------------------------------------------------------------------
+//
+// Секций стало столько, что до нужной приходилось прокручивать весь список, а
+// «Опасная зона» оказывалась в одном потоке с обычными полями. Разложены по
+// вкладкам, и вкладка живёт в адресе (?s=…): ссылкой на конкретную настройку
+// делятся, а возврат из соседнего экрана не сбрасывает на первую.
+
+const SETTINGS_TABS = ['company', 'time', 'ai', 'integration', 'danger'] as const
+type SettingsTab = (typeof SETTINGS_TABS)[number]
+
+function CompanySettings({
+  company,
+  isAdmin,
+  onDeleteCompany,
+}: {
+  company: Company
+  isAdmin: boolean
+  onDeleteCompany: (c: Company) => void
+}) {
+  const { t } = useTranslation()
+  const [params, setParams] = useSearchParams()
+  // Вкладки, до которых человеку нет доступа, не показываем — и в адресе они
+  // тоже не срабатывают: иначе ссылка вела бы на пустоту.
+  const tabs = SETTINGS_TABS.filter((k) => isAdmin || k === 'company' || k === 'time' || k === 'ai')
+  const asked = params.get('s') as SettingsTab | null
+  const tab: SettingsTab = asked && tabs.includes(asked) ? asked : 'company'
+
+  const go = (key: SettingsTab) => {
+    const p = new URLSearchParams(params)
+    // Первая вкладка — состояние по умолчанию, и в адресе ей делать нечего.
+    if (key === 'company') p.delete('s')
+    else p.set('s', key)
+    // replace: перебор вкладок не должен превращать кнопку «назад» в отмотку
+    // по настройкам вместо возврата на прошлый экран.
+    setParams(p, { replace: true })
+  }
+
+  return (
+    <div className="space-y-6">
+      <nav className="flex flex-wrap gap-1 border-b">
+        {tabs.map((key) => (
+          <button
+            key={key}
+            onClick={() => go(key)}
+            className={cn(
+              '-mb-px border-b-2 px-3 py-2 text-sm transition-colors',
+              tab === key ? 'border-brand font-medium text-foreground' : 'border-transparent text-muted-foreground hover:text-foreground',
+            )}
+          >
+            {t(`companySettings.${key}`)}
+          </button>
+        ))}
+      </nav>
+
+      {tab === 'company' && (
         <>
-          <CompanyProfile
-            companyId={company.id}
-            name={company.name}
-            logoUrl={company.logoUrl}
-            isAdmin={isAdmin}
-          />
-
+          <CompanyProfile companyId={company.id} name={company.name} logoUrl={company.logoUrl} isAdmin={isAdmin} />
           <CompanyLocale companyId={company.id} current={company.locale ?? 'en'} isAdmin={isAdmin} />
+          {/* Хранилище компании: проекты наследуют его, если не задали своё. */}
+          {isAdmin && <CompanyStorageCard companyId={company.id} />}
+        </>
+      )}
 
+      {tab === 'time' && <CompanyTimeSettings companyId={company.id} />}
+
+      {tab === 'ai' && (
+        <>
           <LlmSettings companyId={company.id} isAdmin={company.myRole === 'admin'} />
-
           {/* Своя почта: письма сотрудникам уходят с домена компании. Только
               админу — это доступ к отправке от её имени. */}
           {isAdmin && <MailSettings companyId={company.id} isAdmin={isAdmin} />}
-
-          {/* Хранилище компании: проекты наследуют его, если не задали своё. */}
-          {isAdmin && <CompanyStorageCard companyId={company.id} />}
-
-          {/* Интеграция: ключи для внешней системы. Только админу — ключ даёт
-              доступ ко всей компании. */}
-          {isAdmin && (
-            <>
-              <IntegrationSettings companyId={company.id} isAdmin={isAdmin} current={company} />
-              <WebhooksSettings companyId={company.id} isAdmin={isAdmin} />
-              <div className="rounded-xl border bg-card p-4">
-                <ApiKeysTab companyId={company.id} isAdmin={isAdmin} />
-              </div>
-            </>
-          )}
-
-          {/* Необратимое — отдельно и внизу: рядом с обычными настройками до
-              него дотягиваются случайно. */}
-          {isAdmin && (
-            <DangerZone>
-              <DangerAction
-                title={t('start.deleteCompany')}
-                description={t('danger.deleteCompanyHint')}
-                actionLabel={t('start.deleteCompany')}
-                onAction={() => onDeleteCompany(company)}
-              />
-            </DangerZone>
-          )}
         </>
+      )}
+
+      {/* Интеграция: ключи для внешней системы. Только админу — ключ даёт
+          доступ ко всей компании. */}
+      {tab === 'integration' && isAdmin && (
+        <>
+          <IntegrationSettings companyId={company.id} isAdmin={isAdmin} current={company} />
+          <WebhooksSettings companyId={company.id} isAdmin={isAdmin} />
+          <div className="rounded-xl border bg-card p-4">
+            <ApiKeysTab companyId={company.id} isAdmin={isAdmin} />
+          </div>
+        </>
+      )}
+
+      {/* Необратимое — своей вкладкой: рядом с обычными настройками до него
+          дотягивались случайно. */}
+      {tab === 'danger' && isAdmin && (
+        <DangerZone>
+          <DangerAction
+            title={t('start.deleteCompany')}
+            description={t('danger.deleteCompanyHint')}
+            actionLabel={t('start.deleteCompany')}
+            onAction={() => onDeleteCompany(company)}
+          />
+        </DangerZone>
       )}
     </div>
   )

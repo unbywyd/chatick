@@ -18,6 +18,7 @@ import {
 import { Avatar } from '@/components/ui/avatar'
 import { Popover, PopoverTrigger, PopoverContent } from '@/components/ui/popover'
 import { TaskDrawer } from './tasks/TaskDrawer'
+import { ProjectSummary } from './tasks/ProjectSummary'
 import { TasksTable } from './tasks/TasksTable'
 import { TaskContextMenu } from './tasks/TaskContextMenu'
 import { useTaskTimer } from '@/hooks/useTaskTimer'
@@ -435,6 +436,9 @@ export function TasksTab({ projectId, meId }: { projectId: string; meId?: string
               <div className="h-1.5 w-full overflow-hidden rounded-full bg-secondary">
                 <div className={cn('h-full transition-all', progress.pct === 100 ? 'bg-brand' : 'bg-brand/70')} style={{ width: `${progress.pct}%` }} />
               </div>
+              {/* Часы и срок — под той же полосой: это про один и тот же
+                  проект, и разносить их по разным углам экрана незачем. */}
+              <ProjectSummary projectId={projectId} canEdit={isManager} />
             </div>
           )}
 

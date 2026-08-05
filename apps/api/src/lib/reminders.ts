@@ -8,7 +8,7 @@ import { sweepPendingFiles, sweepSoftDeleted } from './file-cleanup.js'
 import { sweepBridge } from './bridge-auth.js'
 import { sendDailyDigests } from './digest.js'
 import { notify } from './notify.js'
-import { readTimeConfig } from '../routes/time.js'
+import { timeConfigForProject } from '../routes/time.js'
 import { broadcast } from '../ws.js'
 import { htmlToText } from './sanitize-html.js'
 import { companyOf, projectPath, projectUrl } from './links.js'
@@ -189,7 +189,7 @@ async function sweepRunningTimers() {
     for (const e of running) {
       const project = await db.query.projects.findFirst({ where: eq(projects.id, e.projectId) })
       if (!project) continue
-      const cfg = readTimeConfig(project.timeConfig)
+      const cfg = await timeConfigForProject(project.id)
       const hours = (now - e.startedAt.getTime()) / 3_600_000
       if (hours < cfg.idleHours) continue
 

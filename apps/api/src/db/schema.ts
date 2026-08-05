@@ -205,6 +205,13 @@ export const companies = pgTable('companies', {
   // универсальной, без следов конкретного заказчика.
   externalSystemName: text('external_system_name'),
   externalProjectUrl: text('external_project_url'), // https://…/projects/{externalId}
+  // --- учёт времени (SPEC §8.36) ---
+  // Живёт на компании, а не на проекте: часовой пояс, рабочие часы и правила
+  // забытого таймера — свойства организации, а не отдельной работы. Задавать
+  // их заново в каждом проекте значило заводить десять способов разойтись.
+  // Поле projects.time_config остаётся на месте под возможное переопределение
+  // отдельным проектом — из интерфейса его убрали, но не из данных.
+  timeConfig: text('time_config').notNull().default('{}'),
   // Проекты приходят только через API — кнопка создания в интерфейсе исчезает.
   projectsViaApiOnly: boolean('projects_via_api_only').notNull().default(false),
   // То же для людей: состав команды виден, но правится только снаружи. Иначе
@@ -297,6 +304,10 @@ export const projects = pgTable(
     lastSummarizedAt: timestamp('last_summarized_at', { withTimezone: true }),
     // override лимита хранилища проекта в байтах; NULL = наследует пул компании (SPEC §7)
     storageLimit: text('storage_limit'),
+    // Срок сдачи проекта. Дата, а не отметка времени: «до 14-го» — это до конца
+    // дня, и час здесь только мешал бы. NULL — срока нет, и это обычное дело:
+    // у внутренних проектов его чаще нет, чем есть.
+    deadline: timestamp('deadline', { withTimezone: true }),
     createdAt: createdAt(),
     updatedAt: updatedAt(),
   },

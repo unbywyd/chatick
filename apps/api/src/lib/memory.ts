@@ -6,7 +6,7 @@ import { hasPermission } from '../routes/projects.js'
 import { snapshot } from '../routes/documents.js'
 import { htmlToText, sanitizeHtml } from './sanitize-html.js'
 import { createNote, noteToTask, NOTE_TYPES } from '../routes/notes.js'
-import { readTimeConfig } from '../routes/time.js'
+import { timeConfigForProject } from '../routes/time.js'
 import { encrypt } from './crypto.js'
 import { notify, extractMentions } from './notify.js'
 import { projectLlm, complete, validateTask, type ToolDef, type ToolHandler } from './llm.js'
@@ -1163,8 +1163,7 @@ export function memoryTools(projectId: string, actorUserId: string): { tools: To
       ].join('\n')
     },
     start_timer: async (args) => {
-      const project = await db.query.projects.findFirst({ where: eq(projects.id, projectId) })
-      const cfg = readTimeConfig(project?.timeConfig)
+      const cfg = await timeConfigForProject(projectId)
       const running = await db
         .select()
         .from(timeEntries)
@@ -1219,8 +1218,7 @@ export function memoryTools(projectId: string, actorUserId: string): { tools: To
       return `Timer stopped: ${Math.floor(minutes / 60)}h ${minutes % 60}m recorded.`
     },
     list_timers: async () => {
-      const project = await db.query.projects.findFirst({ where: eq(projects.id, projectId) })
-      const cfg = readTimeConfig(project?.timeConfig)
+      const cfg = await timeConfigForProject(projectId)
       const running = await db
         .select()
         .from(timeEntries)

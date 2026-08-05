@@ -8,8 +8,6 @@ import { DangerZone, DangerAction } from '@/components/company/DangerZone'
 import { Switch } from '@/components/ui/switch'
 import { Input } from '@/components/ui/input'
 import { ProjectBadge } from '@/components/ui/project-badge'
-import { COUNTRIES, countryByCode, allTimezones, timezoneOffset } from '@/lib/countries'
-import { Combobox } from '@/components/ui/combobox'
 import { Select, SelectTrigger, SelectValue, SelectContent, SelectItem } from '@/components/ui/select'
 import { Button } from '@/components/ui/button'
 import { LanguagePicker } from '@/components/ui/language-picker'
@@ -46,34 +44,9 @@ export const DEFAULT_AI_CONFIG: AiConfig = {
   autoPostTaskEvents: true,
 }
 
-export type TimeConfig = {
-  maxTimers: number
-  idleAction: 'remind' | 'stop'
-  idleHours: number
-  repeatHours: number
-  /** страна задаёт пояс, первый день недели и язык — одним выбором */
-  country: string
-  timezone: string
-  weekStart: number
-  /** пропускать описания записей через ИИ на язык проекта */
-  translate: boolean
-}
-
-export const DEFAULT_TIME_CONFIG: TimeConfig = {
-  maxTimers: 1,
-  idleAction: 'remind',
-  idleHours: 8,
-  repeatHours: 8,
-  country: '',
-  timezone: 'UTC',
-  weekStart: 1,
-  translate: false,
-}
-
 export type ProjectSettings = {
   name: string
   about: string
-  timeConfig?: TimeConfig
   /** цвет значка проекта; при создании раздаётся случайный */
   color?: string
   logoUrl?: string | null
@@ -103,7 +76,9 @@ const MODES: { key: AiMode; icon: typeof Eye }[] = [
 // Хранилище и опасная зона — отдельными вкладками. Удаление проекта висело
 // прямо под обычными полями «Основного», куда заходят менять имя и цвет: до
 // необратимой кнопки дотягивались мимоходом.
-const FORM_TABS = ['general', 'ai', 'rules', 'time', 'danger'] as const
+// Настройки времени переехали в компанию: пояс и правила таймера — свойства
+// организации, а не отдельной работы. Наследуются, задавать здесь нечего.
+const FORM_TABS = ['general', 'ai', 'rules', 'danger'] as const
 type FormTab = (typeof FORM_TABS)[number]
 
 // Настройки проекта — поля растут, разбито табами: Основное / ИИ / Правила
@@ -160,14 +135,6 @@ export function ProjectSettingsForm({
   })
   const customStorage = storage.data?.provider === 'custom'
   const logoInput = useRef<HTMLInputElement>(null)
-  const time = { ...DEFAULT_TIME_CONFIG, ...(value.timeConfig ?? {}) }
-  // список зон длинный и не меняется — собираем один раз на монтирование
-  const timezoneOptions = useMemo(
-    () => allTimezones().map((tz) => ({ value: tz, label: tz.replace(/_/g, ' '), hint: timezoneOffset(tz) })),
-    [],
-  )
-  const setTime = <K extends keyof TimeConfig>(k: K, v: TimeConfig[K]) =>
-    onChange({ ...value, timeConfig: { ...time, [k]: v } })
   const set = <K extends keyof ProjectSettings>(k: K, v: ProjectSettings[K]) => onChange({ ...value, [k]: v })
   const setAi = <K extends keyof AiConfig>(k: K, v: AiConfig[K]) =>
     onChange({ ...value, aiConfig: { ...value.aiConfig, [k]: v } })
@@ -417,152 +384,6 @@ export function ProjectSettingsForm({
         </DangerZone>
       )}
 
-      {tab === 'time' && (
-        <div className="space-y-5">
-          {/* Регион задаётся одним выбором: пояс, первый день недели и язык
-              связаны, и настраивать их порознь — путь к рассинхрону отчётов. */}
-          <div className="space-y-3 rounded-lg border p-3">
-            <div className="flex items-center justify-between gap-3">
-              <div>
-                <p className="text-sm font-medium">{t('time.country')}</p>
-                <p className="text-xs text-muted-foreground">{t('time.countryHint')}</p>
-              </div>
-              <Select
-                value={time.country || 'none'}
-                onValueChange={(code) => {
-                  const preset = countryByCode(code)
-                  if (!preset) {
-                    setTime('country', '')
-                    return
-                  }
-                  onChange({
-                    ...value,
-                    timeConfig: {
-                      ...time,
-                      country: preset.code,
-                      timezone: preset.timezone,
-                      weekStart: preset.weekStart,
-                    },
-                    // язык проекта — тоже часть региона, но перебивать уже
-                    // выбранный не станем: его могли задать осознанно
-                    aiConfig: value.aiConfig.language
-                      ? value.aiConfig
-                      : { ...value.aiConfig, language: preset.language ?? 'en' },
-                  })
-                }}
-              >
-                <SelectTrigger className="w-52">
-                  <SelectValue placeholder={t('time.countryNone')} />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="none">{t('time.countryNone')}</SelectItem>
-                  {COUNTRIES.map((c) => (
-                    <SelectItem key={c.code} value={c.code}>
-                      {c.name}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
-
-            <div className="grid gap-3 sm:grid-cols-2">
-              <div>
-                <p className="mb-1 text-xs text-muted-foreground">{t('time.timezone')}</p>
-                <Combobox
-                  options={timezoneOptions}
-                  value={time.timezone}
-                  onChange={(tz) => setTime('timezone', tz)}
-                  placeholder="UTC"
-                />
-              </div>
-              <div>
-                <p className="mb-1 text-xs text-muted-foreground">{t('time.weekStart')}</p>
-                <Select value={String(time.weekStart)} onValueChange={(v) => setTime('weekStart', Number(v))}>
-                  <SelectTrigger>
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {[0, 1, 6].map((d) => (
-                      <SelectItem key={d} value={String(d)}>
-                        {t(`notif.weekday.${d}`)}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </div>
-            </div>
-          </div>
-
-          {/* Параллельные таймеры: они же закрывают потребность вести две
-              задачи разом — вместо списка задач внутри одной записи. */}
-          <div className="flex items-center justify-between gap-3">
-            <div>
-              <p className="text-sm font-medium">{t('time.maxTimers')}</p>
-              <p className="text-xs text-muted-foreground">{t('time.maxTimersHint')}</p>
-            </div>
-            <Input
-              type="number"
-              min={1}
-              max={20}
-              value={time.maxTimers}
-              onChange={(e) => setTime('maxTimers', Math.max(1, Math.min(20, Number(e.target.value) || 1)))}
-              className="w-20 text-center"
-            />
-          </div>
-
-          <ToggleRow
-            label={t('time.translate')}
-            hint={t('time.translateHint')}
-            checked={time.translate}
-            onChange={(v) => setTime('translate', v)}
-          />
-
-          <div className="space-y-2">
-            <p className="text-sm font-medium">{t('time.idleAction')}</p>
-            <div className="flex gap-1.5">
-              {(['remind', 'stop'] as const).map((action) => (
-                <button
-                  key={action}
-                  type="button"
-                  onClick={() => setTime('idleAction', action)}
-                  className={cn(
-                    'rounded-full border px-3 py-1 text-xs transition-colors',
-                    time.idleAction === action
-                      ? 'border-brand bg-brand/10 text-foreground'
-                      : 'text-muted-foreground hover:bg-accent',
-                  )}
-                >
-                  {t(action === 'remind' ? 'time.idleRemind' : 'time.idleStop')}
-                </button>
-              ))}
-            </div>
-            <div className="grid grid-cols-2 gap-3">
-              <div>
-                <p className="mb-1 text-xs text-muted-foreground">{t('time.idleHours')}</p>
-                <Input
-                  type="number"
-                  min={1}
-                  max={48}
-                  value={time.idleHours}
-                  onChange={(e) => setTime('idleHours', Math.max(1, Math.min(48, Number(e.target.value) || 8)))}
-                />
-              </div>
-              {time.idleAction === 'remind' && (
-                <div>
-                  <p className="mb-1 text-xs text-muted-foreground">{t('time.repeatHours')}</p>
-                  <Input
-                    type="number"
-                    min={1}
-                    max={48}
-                    value={time.repeatHours}
-                    onChange={(e) => setTime('repeatHours', Math.max(1, Math.min(48, Number(e.target.value) || 8)))}
-                  />
-                </div>
-              )}
-            </div>
-          </div>
-        </div>
-      )}
     </div>
   )
 }

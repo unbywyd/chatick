@@ -40,9 +40,12 @@ export function CompanyTimeTab({ companyId }: { companyId: string }) {
   // обзора не теряется — начальное состояние useState срабатывает только при
   // первом монтировании, и компонент про него не узнавал.
   const [params, setParams] = useSearchParams()
+  // По умолчанию — текущий месяц: открывают отчёт, чтобы посмотреть, что
+  // происходит сейчас, а не подвести итог позапрошлому. За прошлый месяц
+  // заходят раз в месяц и выбирают его руками.
   const period: Period = {
-    from: params.get('from') || resolvePreset('lastMonth').from,
-    to: params.get('to') || resolvePreset('lastMonth').to,
+    from: params.get('from') || resolvePreset('thisMonth').from,
+    to: params.get('to') || resolvePreset('thisMonth').to,
   }
   const userId = params.get('user') ?? ''
 
@@ -168,7 +171,7 @@ export function CompanyTimeTab({ companyId }: { companyId: string }) {
   // адреса (ссылка на отчёт), и тогда человек видит непонятно урезанный
   // список, не понимая почему.
   const selectedPerson = (members.data ?? []).find((m) => m.user.id === userId)?.user
-  const defaults = resolvePreset('lastMonth')
+  const defaults = resolvePreset('thisMonth')
   const periodChanged = period.from !== defaults.from || period.to !== defaults.to
   const activeFilters = Boolean(userId) || periodChanged || Boolean(q.trim())
 
@@ -228,7 +231,7 @@ export function CompanyTimeTab({ companyId }: { companyId: string }) {
           {periodChanged && (
             <FilterChip
               label={`${new Date(period.from).toLocaleDateString(i18n.language)} — ${new Date(period.to).toLocaleDateString(i18n.language)}`}
-              onClear={() => setPeriod(resolvePreset('lastMonth'))}
+              onClear={() => setPeriod(resolvePreset('thisMonth'))}
             />
           )}
           {userId && (

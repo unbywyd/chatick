@@ -1095,6 +1095,13 @@
     "badTime": "Could not read the time. Try 9, 930 or 9:30.",
     "maxTimers": "Parallel timers",
     "maxTimersHint": "How many timers one person may run at once.",
+    "settingsTitle": "Time tracking",
+    "settingsHint": "Shared by every project in the company: timezone, working hours and timer rules.",
+    "workDay": "Working day",
+    "workDayHint": "Shows whether a day fits the norm.",
+    "workDayStart": "From",
+    "workDayEnd": "To",
+    "workDayInvalid": "The end of the working day must be later than its start.",
     "idleAction": "A timer left running",
     "idleRemind": "Remind",
     "idleStop": "Stop it",
@@ -1440,5 +1447,28 @@
     "dirAuto": "Direction: automatic",
     "dirRtl": "Direction: right to left",
     "dirLtr": "Direction: left to right"
+  },
+  "companySettings": {
+    "company": "Company",
+    "time": "Time",
+    "ai": "AI & mail",
+    "integration": "Integrations",
+    "danger": "Danger zone"
+  },
+  "summary": {
+    "planned": "Planned",
+    "left": "Left",
+    "spent": "Spent",
+    "noEstimate_one": "{{count}} task without an estimate",
+    "noEstimate_other": "{{count}} tasks without an estimate",
+    "noEstimateHint": "These tasks are not counted in the hours.",
+    "daysLeft_one": "— {{count}} day",
+    "daysLeft_other": "— {{count}} days",
+    "daysLeft_zero": "— today",
+    "overdue_one": "— {{count}} day overdue",
+    "overdue_other": "— {{count}} days overdue",
+    "setDeadline": "Deadline",
+    "clearDeadline": "Clear the deadline",
+    "timeSettings": "Time settings"
   }
 }
