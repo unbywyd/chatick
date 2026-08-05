@@ -53,13 +53,14 @@ export function TaskRefs({
     <span className={cn('inline-flex flex-wrap items-center', compact ? 'gap-0.5' : 'gap-1')}>
       {/* Знак номера — подписью ко всему ряду, а не в каждом чипе: повторять
           его у каждого числа значит превращать метку в шум. dir="ltr" — чтобы
-          в иврите он остался ПЕРЕД числами, а не уехал за них. */}
-      <span
-        dir="ltr"
-        className={cn('me-0.5 shrink-0 text-muted-foreground', compact ? 'text-[11px]' : 'text-xs')}
-      >
-        {REFS_SIGN}
-      </span>
+          в иврите он остался ПЕРЕД числами, а не уехал за них.
+          В таблице знака нет вовсе: там он стоит в шапке колонки, и повторять
+          его в каждой строке — то же самое, только на весь столбец. */}
+      {!compact && (
+        <span dir="ltr" className="me-0.5 shrink-0 text-xs text-muted-foreground">
+          {REFS_SIGN}
+        </span>
+      )}
       {refs.map((ref, i) => (
         <span
           key={`${ref}:${i}`}
