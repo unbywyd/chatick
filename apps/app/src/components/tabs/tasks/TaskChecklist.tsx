@@ -161,9 +161,17 @@ export function TaskChecklist({ taskId, canEdit }: { taskId: string; canEdit: bo
 
       <ul className="space-y-0.5">
         {items.map((it) => (
-          // relative + hover:z-10 — под кнопку «ответить», которая висит на
-          // absolute под пунктом и при наведении должна лечь ПОВЕРХ соседнего.
-          <li key={it.id} className="group relative rounded-md px-1 py-0.5 hover:z-10 hover:bg-secondary/40">
+          // relative + hover:z-10 — под строку «ответить», которая висит на
+          // absolute под пунктом и при наведении ложится ПОВЕРХ соседнего.
+          // Нижние углы при наведении срезаем: подложка пункта и подложка этой
+          // строки должны читаться одним блоком, а не двумя пластинами.
+          <li
+            key={it.id}
+            className={cn(
+              'group relative rounded-md px-1 py-0.5 hover:z-10 hover:bg-secondary/40',
+              canEdit && isBlank(it.note) && noting !== it.id && 'hover:rounded-b-none',
+            )}
+          >
             <div className="flex items-start gap-2">
               {/* Ручка перетаскивания: пункт уносят в чат, чтобы спросить о нём
                   у ассистента, не перенабирая вопрос руками. */}
@@ -238,20 +246,6 @@ export function TaskChecklist({ taskId, canEdit }: { taskId: string; canEdit: bo
                       <span className="block whitespace-pre-wrap">{it.note}</span>
                     )}
                   </div>
-                ) : canEdit ? (
-                  // Кнопка не занимает места в потоке: пустая полоска под каждым
-                  // пунктом раздвигала список так, что читать его было нельзя.
-                  // Висит под текстом, появляется при наведении и накрывает
-                  // соседний пункт — но только пока курсор здесь.
-                  <button
-                    onClick={() => openNote(it)}
-                    // pointer-events-none в невидимом состоянии обязательны:
-                    // прозрачная кнопка висит НАД соседним пунктом и иначе
-                    // перехватывала бы клики по нему.
-                    className="pointer-events-none absolute start-0 top-full z-10 mt-1 rounded border bg-background px-1.5 py-0.5 text-xs text-muted-foreground opacity-0 shadow-sm transition-opacity hover:text-foreground focus-visible:pointer-events-auto focus-visible:opacity-100 group-hover:pointer-events-auto group-hover:opacity-100"
-                  >
-                    {t('checklist.addNote')}
-                  </button>
                 ) : null}
               </div>
 
@@ -278,6 +272,34 @@ export function TaskChecklist({ taskId, canEdit }: { taskId: string; canEdit: bo
                 )}
               </span>
             </div>
+
+            {/* Строка «ответить» — продолжение самого пункта, а не кнопка рядом.
+                В потоке она не стоит: пустая полоска под каждым пунктом
+                раздвигала список так, что читать его было нельзя. Поэтому висит
+                под пунктом на absolute, а при наведении подложка пункта и её
+                подложка сходятся в один блок, накрывающий соседей.
+
+                Двойная подложка не для красоты: та же bg-secondary/40, что у
+                пункта, полупрозрачна, и сквозь неё просвечивал бы текст снизу.
+                Нижний слой — сплошной фон, верхний повторяет оттенок строки. */}
+            {canEdit && isBlank(it.note) && noting !== it.id && (
+              <div
+                // pointer-events-none в невидимом состоянии обязательны: полоса
+                // висит НАД соседним пунктом и иначе перехватывала бы клики.
+                className="pointer-events-none absolute inset-x-0 top-full z-10 opacity-0 transition-opacity focus-within:pointer-events-auto focus-within:opacity-100 group-hover:pointer-events-auto group-hover:opacity-100"
+              >
+                <div className="rounded-b-md bg-background">
+                  <div className="rounded-b-md bg-secondary/40 px-1 pb-1 ps-14">
+                    <button
+                      onClick={() => openNote(it)}
+                      className="text-xs text-muted-foreground hover:text-foreground"
+                    >
+                      {t('checklist.addNote')}
+                    </button>
+                  </div>
+                </div>
+              </div>
+            )}
           </li>
         ))}
       </ul>

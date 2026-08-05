@@ -335,6 +335,11 @@ filesRoute.post('/', async (c) => {
   let buffer = Buffer.from(await file.arrayBuffer())
   let outName = displayName
   let outMime = mime
+  // Пережали или положили байт в байт. Нужно в ответе: hasOriginal отвечает на
+  // другой вопрос — «есть ли ВТОРАЯ копия», — и на keepOriginal=1 он всё равно
+  // false. Со стороны это выглядело как «просьбу проигнорировали», хотя файл
+  // как раз и лежит нетронутым.
+  let optimized = false
 
   // активное хранилище проекта: платформа (с префиксом) или свой S3/R2 (SPEC §8.10)
   const store = await resolveStorage(projectId)
@@ -344,17 +349,18 @@ filesRoute.post('/', async (c) => {
 
   if (!keepOriginal && OPTIMIZABLE.has(mime)) {
     try {
-      const optimized = await sharp(buffer, { failOn: 'none' })
+      const smaller = await sharp(buffer, { failOn: 'none' })
         .rotate() // EXIF-ориентация
         .resize(MAX_DIMENSION, MAX_DIMENSION, { fit: 'inside', withoutEnlargement: true })
         .webp({ quality: WEBP_QUALITY })
         .toBuffer()
       // применяем только если реально выгодно
-      if (optimized.length < buffer.length * 0.9) {
+      if (smaller.length < buffer.length * 0.9) {
         // Оригинал НЕ храним: смысл оптимизации — экономить место, а вторая
         // копия съедала бы сэкономленное и сверху. Нужен оригинал — есть
         // «отправлять без сжатия» в меню скрепки.
-        buffer = optimized
+        buffer = smaller
+        optimized = true
         outMime = 'image/webp'
         outName = displayName.replace(/\.[^.]+$/, '') + '.webp'
         key = `${kp}${projectId}/${fileId}-${outName.replace(/[/\\]/g, '_')}`
@@ -390,6 +396,10 @@ filesRoute.post('/', async (c) => {
       size: Number(row!.size),
       taskId: row!.taskId,
       hasOriginal: Boolean(row!.originalKey),
+      // Пережали или сохранили как есть. Без этого поля просьба keepOriginal=1
+      // выглядела проигнорированной: hasOriginal остаётся false и тогда, когда
+      // файл лежит нетронутым, — второй копии просто нет.
+      optimized,
       createdAt: row!.createdAt,
     },
     201,

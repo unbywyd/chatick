@@ -328,7 +328,15 @@ ${endpointCatalog('')}
   Images are resized to 2048px and converted to webp, and the original is NOT
   kept — a second copy would eat everything the conversion saves. That is the
   deliberate default, not a defect; pass keepOriginal=1 when the exact bytes
-  matter (a design source, a file someone must download unchanged).
+  matter (a design source, a PNG with transparency, a file someone must
+  download unchanged). With keepOriginal=1 nothing is converted at all: what
+  you sent is what is stored.
+
+  The reply says which happened: "optimized": true means it was converted to
+  webp, false means the bytes are yours untouched. Do NOT read "hasOriginal"
+  as an answer to that — it means "a SECOND, unconverted copy exists", and it
+  is false for every new upload including keepOriginal=1 ones, because when
+  nothing was converted there is nothing to keep a copy of.
 
   To attach files to a TASK rather than to a comment, upload them first and
   pass the ids as "attachmentIds" to POST or PATCH /x/tasks — the same place a
@@ -554,6 +562,10 @@ carry the answer.
   GET    /x/resources          links and credentials metadata
   POST   /x/resources          {"name"?, "url"?, "description"?}
   PATCH  /x/resources/<id>     same fields; pass "url": null to drop the link
+
+  Those three are the whole body — no other field is accepted, and an unknown
+  one is refused with 400 listing what is allowed rather than dropped. The
+  project goes in the query (?project=<id>) like everywhere else.
 
   This is where project links belong — designs, dashboards, repositories,
   staging environments. Put a link here rather than in a note: notes are a

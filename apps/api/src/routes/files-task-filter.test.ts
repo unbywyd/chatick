@@ -38,3 +38,30 @@ describe('GET /api/v1/files', () => {
     expect(guard).not.toMatch(/\bq\b|from|to\b/)
   })
 })
+
+// Ответ на загрузку должен говорить, что стало с файлом.
+//
+// hasOriginal отвечает на другой вопрос — «есть ли ВТОРАЯ, неконвертированная
+// копия», — и он false для всех новых загрузок, включая keepOriginal=1. Со
+// стороны это читалось как «просьбу сохранить оригинал проигнорировали», хотя
+// файл как раз лежит нетронутым.
+describe('POST /api/v1/files', () => {
+  const upload = src.slice(src.indexOf("filesRoute.post('/'"))
+
+  it('в ответе видно, пережали файл или нет', () => {
+    expect(upload).toMatch(/\n\s*optimized,/)
+  })
+
+  it('признак ставится только при реальной конвертации', () => {
+    expect(upload).toMatch(/optimized = true/)
+    expect(upload).toMatch(/let optimized = false/)
+  })
+
+  it('keepOriginal=1 отключает конвертацию целиком', () => {
+    expect(upload).toMatch(/if \(!keepOriginal && OPTIMIZABLE\.has\(mime\)\)/)
+  })
+
+  it('вторую копию по-прежнему не храним — иначе экономия съедается', () => {
+    expect(upload).toMatch(/const originalKey: string \| null = null/)
+  })
+})
