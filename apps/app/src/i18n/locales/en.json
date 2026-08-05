@@ -265,7 +265,9 @@
     "groupLabel": "Sprint",
     "noDue": "No due date",
     "collapseSprint": "Collapse the sprint",
-    "expandSprint": "Expand the sprint"
+    "expandSprint": "Expand the sprint",
+    "collapseAllSprints": "Collapse all",
+    "expandAllSprints": "Expand all"
   },
   "files": {
     "search": "Search files…",

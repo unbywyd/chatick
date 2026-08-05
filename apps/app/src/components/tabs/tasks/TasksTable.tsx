@@ -2,11 +2,13 @@ import { useMemo, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import {
   DndContext,
+  DragOverlay,
   PointerSensor,
   useSensor,
   useSensors,
   closestCenter,
   type DragEndEvent,
+  type DragStartEvent,
 } from '@dnd-kit/core'
 import {
   SortableContext,
@@ -92,6 +94,20 @@ export function TasksTable({
   const [sort, setSort] = useState<{ key: SortKey; dir: SortDir } | null>(null)
   const [newGroup, setNewGroup] = useState('')
   const sensors = useSensors(useSensor(PointerSensor, { activationConstraint: { distance: 4 } }))
+  // Что именно тащат прямо сейчас. Нужно для двух вещей: показать это в
+  // DragOverlay и на время переноса спринта схлопнуть все спринты.
+  const [activeId, setActiveId] = useState<string | null>(null)
+  const draggingGroup = Boolean(activeId?.startsWith('group:'))
+  // Общий переключатель: у каждого спринта есть своё состояние, но «схлопнуть
+  // всё и посмотреть состав» — отдельное желание, и обходить спринты по одному
+  // ради него не годится. Меняем ключ — секции пересоздаются с новым значением.
+  const [allCollapsed, setAllCollapsed] = useState<boolean | null>(null)
+  const [bulkKey, setBulkKey] = useState(0)
+  const collapseAll = (v: boolean) => {
+    for (const g of groups) localStorage.setItem(`sprintCollapsed:${g.id}`, v ? '1' : '0')
+    setAllCollapsed(v)
+    setBulkKey((k) => k + 1)
+  }
 
   const toggleSort = (key: SortKey) =>
     setSort((s) => (s?.key === key ? (s.dir === 'asc' ? { key, dir: 'desc' } : null) : { key, dir: 'asc' }))
@@ -144,6 +160,7 @@ export function TasksTable({
 
   // drag: строки внутри/между группами ИЛИ порядок групп (по префиксу id)
   const handleDragEnd = (e: DragEndEvent) => {
+    setActiveId(null)
     const { active, over } = e
     if (!over || active.id === over.id) return
     const activeId = String(active.id)
@@ -222,12 +239,27 @@ export function TasksTable({
   }
 
   return (
-    <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={handleDragEnd}>
+    <DndContext
+      sensors={sensors}
+      collisionDetection={closestCenter}
+      onDragStart={(e: DragStartEvent) => setActiveId(String(e.active.id))}
+      onDragCancel={() => setActiveId(null)}
+      onDragEnd={handleDragEnd}
+    >
+      {orderedGroups.length > 1 && (
+        <div className="mb-2 flex justify-end">
+          <Button variant="ghost" size="sm" onClick={() => collapseAll(!allCollapsed)}>
+            <ChevronDown className={cn('size-3.5 transition-transform', allCollapsed && '-rotate-90 rtl:rotate-90')} />
+            {allCollapsed ? t('tasks.expandAllSprints') : t('tasks.collapseAllSprints')}
+          </Button>
+        </div>
+      )}
+
       <SortableContext items={orderedGroups.map((g) => `group:${g.id}`)} strategy={verticalListSortingStrategy}>
         <div className="space-y-5">
           {orderedGroups.map((g) => (
             <GroupTable
-              key={g.id}
+              key={`${g.id}:${bulkKey}`}
               group={g}
               tasks={sortTasks(byGroup.get(g.id) ?? [])}
               members={members}
@@ -243,6 +275,7 @@ export function TasksTable({
               onDelete={onDelete}
               onPatchGroup={onPatchGroup}
               onDeleteGroup={onDeleteGroup}
+              forceCollapsed={draggingGroup}
             />
           ))}
 
@@ -263,6 +296,7 @@ export function TasksTable({
             onDelete={onDelete}
             onPatchGroup={onPatchGroup}
             onDeleteGroup={onDeleteGroup}
+            forceCollapsed={draggingGroup}
           />
         </div>
       </SortableContext>
@@ -293,6 +327,40 @@ export function TasksTable({
           </Button>
         </form>
       )}
+
+      {/* Что тащим — под курсором. Сама строка и сама секция остаются на месте
+          бледными: их сдвиг растягивал область прокрутки и уводил автоскролл в
+          петлю. Без этой подсказки перенос выглядел так, будто ничего не
+          происходит. */}
+      <DragOverlay dropAnimation={null}>
+        {activeId?.startsWith('group:') ? (
+          (() => {
+            const g = groups.find((x) => x.id === activeId.slice(6))
+            if (!g) return null
+            const n = byGroup.get(g.id)?.length ?? 0
+            return (
+              <div className="flex items-center gap-2 rounded-lg border bg-card px-3 py-2 text-sm font-semibold shadow-lg">
+                <GripVertical className="size-4 text-muted-foreground" />
+                <span className="size-3 rounded-full" style={{ backgroundColor: g.color }} />
+                {g.name}
+                <span className="text-xs font-normal tabular-nums text-muted-foreground">({n})</span>
+              </div>
+            )
+          })()
+        ) : activeId?.startsWith('task:') ? (
+          (() => {
+            const task = tasks.find((x) => x.id === activeId.slice(5))
+            if (!task) return null
+            return (
+              <div className="flex max-w-md items-center gap-2 rounded-lg border bg-card px-3 py-2 text-sm shadow-lg">
+                <GripVertical className="size-3.5 shrink-0 text-muted-foreground" />
+                <span className="shrink-0 text-xs text-muted-foreground">{task.number}</span>
+                <span className="truncate">{task.title}</span>
+              </div>
+            )
+          })()
+        ) : null}
+      </DragOverlay>
     </DndContext>
   )
 }
@@ -313,6 +381,7 @@ function GroupTable({
   onDelete,
   onPatchGroup,
   onDeleteGroup,
+  forceCollapsed,
 }: {
   group: TaskGroup | null
   tasks: Task[]
@@ -330,6 +399,8 @@ function GroupTable({
   onDelete: (id: string) => void
   onPatchGroup: (id: string, body: Record<string, unknown>) => void
   onDeleteGroup: (id: string) => void
+  /** режим переноса спринтов: на его время все спринты схлопнуты */
+  forceCollapsed?: boolean
 }) {
   const { t } = useTranslation()
   const confirm = useConfirm()
@@ -338,12 +409,16 @@ function GroupTable({
 
   // Свёрнутые спринты помним между заходами: закрытый спринт закрывают, чтобы
   // он не мешал, и открывать его заново при каждом возврате — та же помеха.
-  const [collapsed, setCollapsed] = useState(() =>
+  const [ownCollapsed, setOwnCollapsed] = useState(() =>
     group ? localStorage.getItem(`sprintCollapsed:${group.id}`) === '1' : false,
   )
+  // На время переноса спринтов схлопнуты все — иначе спринт с сотней задач
+  // тянешь вслепую: заголовок соседа уезжает за экран, и куда ты целишься, не
+  // видно. Это временное состояние, в localStorage его не пишем.
+  const collapsed = forceCollapsed || ownCollapsed
   const toggleCollapsed = () => {
     if (!group) return
-    setCollapsed((v) => {
+    setOwnCollapsed((v) => {
       localStorage.setItem(`sprintCollapsed:${group.id}`, v ? '0' : '1')
       return !v
     })
@@ -405,16 +480,20 @@ function GroupTable({
                 className="h-7 rounded border bg-transparent px-2 text-sm font-semibold outline-none focus:ring-2 focus:ring-ring"
               />
             ) : (
-              <h3 className="text-sm font-semibold">{group.name}</h3>
+              // Кликается само имя, а не только стрелка: свернуть спринт хотят
+              // часто, и целиться в значок размером с букву — лишняя работа.
+              // Переименование живёт на карандаше рядом и клику не мешает.
+              <button
+                onClick={toggleCollapsed}
+                title={collapsed ? t('tasks.expandSprint') : t('tasks.collapseSprint')}
+                className="inline-flex items-center gap-1.5 text-sm font-semibold hover:text-brand"
+              >
+                <ChevronDown className={cn('size-3.5 shrink-0 text-muted-foreground transition-transform', collapsed && '-rotate-90 rtl:rotate-90')} />
+                {group.name}
+                <span className="text-xs font-normal tabular-nums text-muted-foreground">({tasks.length})</span>
+              </button>
             )}
-            <button
-              onClick={toggleCollapsed}
-              title={collapsed ? t('tasks.expandSprint') : t('tasks.collapseSprint')}
-              className="inline-flex items-center gap-1 text-xs tabular-nums text-muted-foreground hover:text-foreground"
-            >
-              <ChevronDown className={cn('size-3 transition-transform', collapsed && '-rotate-90 rtl:rotate-90')} />
-              ({tasks.length})
-            </button>
+            {editing && <span className="text-xs tabular-nums text-muted-foreground">({tasks.length})</span>}
             {canEdit && (
               <div className="flex items-center gap-0.5">
                 <input

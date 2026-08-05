@@ -266,7 +266,9 @@
     "groupLabel": "Спринт",
     "noDue": "Без срока",
     "collapseSprint": "Свернуть спринт",
-    "expandSprint": "Развернуть спринт"
+    "expandSprint": "Развернуть спринт",
+    "collapseAllSprints": "Свернуть все",
+    "expandAllSprints": "Развернуть все"
   },
   "files": {
     "search": "Поиск файлов…",

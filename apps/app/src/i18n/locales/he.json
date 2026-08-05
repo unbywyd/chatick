@@ -265,7 +265,9 @@
     "groupLabel": "ספרינט",
     "noDue": "ללא תאריך יעד",
     "collapseSprint": "לכווץ את הספרינט",
-    "expandSprint": "לפתוח את הספרינט"
+    "expandSprint": "לפתוח את הספרינט",
+    "collapseAllSprints": "לכווץ הכול",
+    "expandAllSprints": "לפתוח הכול"
   },
   "files": {
     "search": "חיפוש קבצים…",
