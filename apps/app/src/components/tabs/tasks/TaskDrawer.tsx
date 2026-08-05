@@ -40,6 +40,7 @@ import { Avatar } from '@/components/ui/avatar'
 import { TaskComments } from './TaskComments'
 import { TaskNotes } from './TaskNotes'
 import { TaskChecklist } from './TaskChecklist'
+import { TaskRefs } from './TaskRefs'
 import { usePasteFiles } from '@/hooks/usePasteFiles'
 import { useProjectSocket } from '@/hooks/useProjectSocket'
 import { STATUSES, PRIORITIES, STATUS_ICON, STATUS_COLOR, PRIORITY_DOT, fmtEstimate, type Task, type Member, type TaskGroup } from './types'
@@ -786,6 +787,9 @@ export function TaskDrawer({
       )}
 
       {task.estimateMinutes ? <span className="text-muted-foreground">⏱ {fmtEstimate(task.estimateMinutes)}</span> : null}
+
+      {/* Свои номера: экраны в макете, пункты договора. Правятся по месту. */}
+      <TaskRefs value={task.refs} canEdit={canEdit} onChange={(refs) => onPatch({ refs })} />
 
       {/* Спринт */}
       {canEdit ? (

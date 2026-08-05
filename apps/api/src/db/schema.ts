@@ -469,6 +469,14 @@ export const tasks = pgTable(
     priority: taskPriority('priority').notNull().default('normal'),
     // оценка времени на выполнение в минутах (SPEC §8.13); null = не задана
     estimateMinutes: text('estimate_minutes'),
+    /**
+     * Свои номера задачи — то, чем её зовут ВНЕ Chatick: экраны в макете,
+     * пункты договора, позиции сметы. Строка, а не число и не связь: у каждой
+     * команды свой счёт, и «12 - 14» у одних значит диапазон, у других —
+     * составной номер. Разбираем только по запятой, остальное сохраняем как
+     * написали.
+     */
+    refs: text('refs').notNull().default(''),
     // ручной порядок внутри статус-группы (drag&drop); меньше = выше
     sortOrder: doublePrecision('sort_order').notNull().default(0),
     dueDate: timestamp('due_date', { withTimezone: true }),

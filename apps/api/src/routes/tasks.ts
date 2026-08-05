@@ -14,6 +14,7 @@ import { broadcast, tasksChanged } from '../ws.js'
 import { logActivity } from '../lib/audit.js'
 import { postTaskDone, postTaskAssigned } from '../lib/task-events.js'
 import { richText } from '../lib/markdown.js'
+import { normalizeRefs, MAX_REFS_LENGTH } from '../lib/task-refs.js'
 
 // Задачи проекта — project-токен; права per-user (SPEC §4.3) на каждое действие
 export const tasksRoute = new Hono<ProjectEnv>()
@@ -32,6 +33,8 @@ const taskShape = {
   assigneeId: z.string().nullable().optional(),
   groupId: z.string().nullable().optional(),
   estimateMinutes: z.number().int().min(0).max(100000).nullable().optional(),
+  // Свои номера задачи: экраны в макете, пункты договора. Разбор — по запятой.
+  refs: z.string().max(MAX_REFS_LENGTH).optional(),
 }
 
 /**
@@ -120,6 +123,7 @@ function serialize(row: typeof tasks.$inferSelect, assignee?: typeof users.$infe
     status: row.status,
     priority: row.priority,
     estimateMinutes: row.estimateMinutes ? Number(row.estimateMinutes) : null,
+    refs: row.refs,
     sortOrder: row.sortOrder,
     dueDate: row.dueDate,
     assignee: assignee ? { id: assignee.id, name: assignee.name, avatarUrl: assignee.avatarUrl } : null,
@@ -190,6 +194,7 @@ tasksRoute.post('/', zValidator('json', z.object(taskShape)), async (c) => {
       assigneeId: body.assigneeId ?? null,
       groupId: body.groupId ?? null,
       estimateMinutes: body.estimateMinutes != null ? String(body.estimateMinutes) : null,
+      refs: body.refs ? normalizeRefs(body.refs) : '',
       createdById: sub,
     })
     .returning()
@@ -318,6 +323,9 @@ tasksRoute.patch(
     if (body.assigneeId !== undefined) patch.assigneeId = body.assigneeId
     if (body.groupId !== undefined) patch.groupId = body.groupId
     if (body.estimateMinutes !== undefined) patch.estimateMinutes = body.estimateMinutes != null ? String(body.estimateMinutes) : null
+    // Приводим к одному виду на записи: иначе «1,2» и «1, 2» лягут в базу
+    // разными строками, и поиск по номеру находил бы то одну, то другую.
+    if (body.refs !== undefined) patch.refs = normalizeRefs(body.refs)
 
     const [row] = await db.update(tasks).set(patch).where(eq(tasks.id, taskId)).returning()
     const assignee = row!.assigneeId ? await db.query.users.findFirst({ where: eq(users.id, row!.assigneeId) }) : null

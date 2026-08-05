@@ -14,6 +14,8 @@ export type Task = {
   status: Status
   priority: Priority
   estimateMinutes: number | null
+  /** свои номера задачи: экраны в макете, пункты договора — см. TaskRefs */
+  refs?: string
   sortOrder: number
   dueDate: string | null
   assignee: { id: string; name: string; avatarUrl: string | null } | null

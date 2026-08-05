@@ -27,11 +27,17 @@ function endpointCatalog(q: string): string {
   return `  GET    /x/tasks${q}${amp}assignee=me&status=todo&q=text&sprint=<sprintId>&limit=50
          status: todo | in_progress | review | done
   GET    /x/tasks/<id>${q}
-  POST   /x/tasks${q}              {"title","description?","assignee?","status?","priority?","dueDate?","estimateMinutes?","sprintId?","attachmentIds?"}
+  POST   /x/tasks${q}              {"title","description?","assignee?","status?","priority?","dueDate?","estimateMinutes?","sprintId?","attachmentIds?","refs?"}
   PATCH  /x/tasks/<id>${q}         any subset of the same fields
   DELETE /x/tasks/<id>${q}
   POST   /x/tasks/<id>/restore${q}
   GET    /x/trash${q}${amp}type=task|file
+
+  "refs" — what this task is called OUTSIDE Chatick: screen numbers in a design
+  file, clauses of a contract, line items of an estimate. Free text, split on
+  COMMAS only: "12.3, 4 - 3, 5" is three refs, and "4 - 3" stays one because
+  for some teams that is a range and for others a compound number. Digits, dots
+  and hyphens are kept, anything else is dropped. Pass "" to clear.
 
   Deleting is soft and undoable — and now undoable BY YOU. /x/trash lists what
   was deleted in this project with daysLeft on each; restore puts it back.

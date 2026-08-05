@@ -269,7 +269,9 @@
     "collapseAllSprints": "לכווץ הכול",
     "expandAllSprints": "לפתוח הכול",
     "addInSprint": "להוסיף משימה…",
-    "add": "להוסיף"
+    "add": "להוסיף",
+    "refsPlaceholder": "12, 4 - 3, 5.1",
+    "refsHint": "מספרים משלכם: מסכים בעיצוב, סעיפי חוזה. מופרדים בפסיק."
   },
   "files": {
     "search": "חיפוש קבצים…",

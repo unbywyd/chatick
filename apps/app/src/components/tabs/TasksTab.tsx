@@ -21,6 +21,7 @@ import { TaskDrawer } from './tasks/TaskDrawer'
 import { ProjectSummary } from './tasks/ProjectSummary'
 import { TasksTable } from './tasks/TasksTable'
 import { TaskContextMenu } from './tasks/TaskContextMenu'
+import { TaskRefs } from './tasks/TaskRefs'
 import { useTaskTimer } from '@/hooks/useTaskTimer'
 import { exportTasksToExcel, downloadImportTemplate, parseTasksFromExcel } from './tasks/taskExcel'
 import { STATUSES, PRIORITIES, STATUS_ICON, STATUS_COLOR, PRIORITY_COLOR, fmtEstimate, type Task, type TaskGroup, type Member, type Status, type Priority } from './tasks/types'
@@ -869,6 +870,9 @@ function TaskRow({
         <span className="me-1.5 text-xs text-muted-foreground">{task.number}</span>
         {task.title}
       </span>
+
+      {/* Свой номер задачи — рядом с нашим: по нему её и ищут в макете. */}
+      <TaskRefs value={task.refs} canEdit={canEdit} compact onChange={(refs) => onPatch({ refs })} className="shrink-0" />
 
       {/* Компактные бейджи */}
       <span className="flex shrink-0 items-center gap-2 text-xs text-muted-foreground">

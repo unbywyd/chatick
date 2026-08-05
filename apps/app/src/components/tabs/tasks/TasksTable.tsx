@@ -42,11 +42,12 @@ import {
   type Priority,
 } from './types'
 import { parseDuration } from '@/lib/time-parse'
+import { TaskRefs, REFS_SIGN } from './TaskRefs'
 
 // Табличный вид задач (SPEC §8.6): вложенные таблицы по группам-спринтам,
 // сортировка по колонкам, инлайн-смена статуса/ассайни, drag строк и групп.
 
-type SortKey = 'number' | 'title' | 'status' | 'priority' | 'estimate' | 'assignee'
+type SortKey = 'number' | 'title' | 'status' | 'priority' | 'estimate' | 'assignee' | 'refs'
 type SortDir = 'asc' | 'desc'
 
 const STATUS_RANK: Record<Status, number> = { todo: 0, in_progress: 1, review: 2, done: 3 }
@@ -140,6 +141,10 @@ export function TasksTable({
           break
         case 'assignee':
           d = (a.assignee?.name ?? '').localeCompare(b.assignee?.name ?? '')
+          break
+        case 'refs':
+          // Численно, а не по алфавиту: иначе «10» встаёт между «1» и «2».
+          d = (parseFloat(a.refs ?? '') || Infinity) - (parseFloat(b.refs ?? '') || Infinity)
           break
       }
       return d * dir
@@ -472,6 +477,7 @@ function GroupTable({
 
   const cols: { key: SortKey; label: string; className?: string }[] = [
     { key: 'number', label: t('tasks.col.number'), className: 'w-20' },
+    { key: 'refs', label: REFS_SIGN, className: 'w-28' },
     { key: 'title', label: t('tasks.col.title') },
     { key: 'status', label: t('tasks.col.status'), className: 'w-36 whitespace-nowrap' },
     { key: 'priority', label: t('tasks.col.priority'), className: 'w-10' },
@@ -737,6 +743,9 @@ function TableRow({
         </td>
       )}
       <td className="px-2 py-1.5 align-middle text-xs text-muted-foreground">{task.number}</td>
+      <td className="px-2 py-1.5 align-middle">
+        <TaskRefs value={task.refs} canEdit={canEdit} compact onChange={(refs) => onPatch(task.id, { refs })} />
+      </td>
       <td className="px-2 py-1.5 align-middle">
         <span className={cn('line-clamp-1', task.status === 'done' && 'text-muted-foreground line-through')}>{task.title}</span>
         {task.attachmentsCount > 0 && (

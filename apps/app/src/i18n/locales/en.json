@@ -269,7 +269,9 @@
     "collapseAllSprints": "Collapse all",
     "expandAllSprints": "Expand all",
     "addInSprint": "Add a task…",
-    "add": "Add"
+    "add": "Add",
+    "refsPlaceholder": "12, 4 - 3, 5.1",
+    "refsHint": "Your own numbers: design screens, contract clauses. Comma-separated."
   },
   "files": {
     "search": "Search files…",

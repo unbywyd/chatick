@@ -54,6 +54,7 @@ import { notifyTask, unassignNotice } from './tasks.js'
 import { projectPath, companyOf } from '../lib/links.js'
 import { htmlToText, sanitizeHtml } from '../lib/sanitize-html.js'
 import { richText } from '../lib/markdown.js'
+import { normalizeRefs } from '../lib/task-refs.js'
 import { fetchSiteIcon, nameFromUrl } from '../lib/site-icon.js'
 import { membersLockedForProject, MEMBERS_LOCKED } from '../lib/members-locked.js'
 import { broadcast, sendToUserAnywhere, tasksChanged } from '../ws.js'
@@ -804,6 +805,8 @@ const TASK_FIELDS = [
   'priority',
   'dueDate',
   'estimateMinutes',
+  // Свои номера задачи: экраны в макете, пункты договора, позиции сметы.
+  'refs',
   'sprintId',
   // Файлы к задаче: в интерфейсе их крепят прямо к ней, а через мост
   // оставалось только комментировать со вложением — не то же самое.
@@ -996,6 +999,7 @@ const taskView = (
   status: t.status,
   priority: t.priority,
   estimateMinutes: t.estimateMinutes ? Number(t.estimateMinutes) : null,
+  refs: t.refs || undefined,
   dueDate: t.dueDate,
   sprintId: t.groupId,
   assignee: assignee ? { id: assignee.id, name: assignee.name } : null,
@@ -1116,6 +1120,7 @@ bridgeRoute.post('/tasks', async (c) => {
       assigneeId: assigneeId ?? null,
       dueDate: dueDate ?? null,
       estimateMinutes: b.estimateMinutes != null ? String(b.estimateMinutes) : null,
+      refs: typeof b.refs === 'string' ? normalizeRefs(b.refs) : '',
       groupId: typeof b.sprintId === 'string' ? b.sprintId : null,
       createdById: id.userId,
     })
@@ -1159,6 +1164,7 @@ bridgeRoute.patch('/tasks/:id', async (c) => {
   if ((['todo', 'in_progress', 'review', 'done'] as const).includes(b.status as never)) patch.status = b.status
   if ((['low', 'normal', 'high', 'urgent'] as const).includes(b.priority as never)) patch.priority = b.priority
   if (b.estimateMinutes !== undefined) patch.estimateMinutes = b.estimateMinutes == null ? null : String(b.estimateMinutes)
+  if (typeof b.refs === 'string') patch.refs = normalizeRefs(b.refs)
   if (b.sprintId !== undefined) patch.groupId = b.sprintId ?? null
   if (b.assignee !== undefined) {
     const resolved = await resolveAssignee(id, scope.projectId, b.assignee)
