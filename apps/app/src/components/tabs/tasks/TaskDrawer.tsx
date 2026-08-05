@@ -41,9 +41,10 @@ import { TaskComments } from './TaskComments'
 import { TaskNotes } from './TaskNotes'
 import { TaskChecklist } from './TaskChecklist'
 import { TaskRefs } from './TaskRefs'
+import { StatusBadge } from './StatusBadge'
 import { usePasteFiles } from '@/hooks/usePasteFiles'
 import { useProjectSocket } from '@/hooks/useProjectSocket'
-import { STATUSES, PRIORITIES, STATUS_ICON, STATUS_COLOR, PRIORITY_DOT, fmtEstimate, type Task, type Member, type TaskGroup } from './types'
+import { STATUSES, PRIORITIES, PRIORITY_DOT, fmtEstimate, type Task, type Member, type TaskGroup } from './types'
 import { parseDuration } from '@/lib/time-parse'
 import { ShareDialog } from '@/components/ShareDialog'
 import { UploadDialog, hasImages } from '@/components/UploadDialog'
@@ -324,23 +325,22 @@ export function TaskDrawer({
       {/* Properties: чипы-кнопки вместо селектов — выбор одним кликом */}
       <div className="space-y-3">
             <PropRow label={t('tasks.statusLabel')}>
+              {/* Все статусы сразу тегами: выбор в один клик, без открывания
+                  меню. Выбранный отмечен рамкой, остальные приглушены — иначе
+                  четыре цветных пятна рядом спорят между собой и непонятно,
+                  какое из них текущее. */}
               <div className="flex flex-wrap gap-1.5">
                 {STATUSES.map((s) => {
-                  const Icon = STATUS_ICON[s]
                   const active = s === task.status
                   return (
-                    <button
-                      key={s}
-                      type="button"
-                      onClick={() => onPatch({ status: s })}
-                      className={cn(
-                        'inline-flex items-center gap-1.5 rounded-full border px-2.5 py-1 text-xs transition-colors',
-                        active ? 'border-current bg-accent font-medium' : 'text-muted-foreground hover:text-foreground',
-                        active && STATUS_COLOR[s],
-                      )}
-                    >
-                      <Icon className={cn('size-3.5', STATUS_COLOR[s])} />
-                      {t(`tasks.status.${s}`)}
+                    <button key={s} type="button" onClick={() => onPatch({ status: s })} className="rounded-md">
+                      <StatusBadge
+                        status={s}
+                        className={cn(
+                          'ring-offset-1 ring-offset-background transition-all',
+                          active ? 'ring-2 ring-foreground/40' : 'opacity-50 hover:opacity-100',
+                        )}
+                      />
                     </button>
                   )
                 })}
@@ -668,7 +668,6 @@ export function TaskDrawer({
 
   // Мета-строка: статус · приоритет · исполнитель · дедлайн · оценка · спринт (read-only)
   const g = groups.find((x) => x.id === task.groupId)
-  const StatusIcon = STATUS_ICON[task.status]
   // Свойства задачи правятся по месту, а не через форму сбоку.
   //
   // Открыть задачу, нажать «Изменить», найти нужное поле в панели справа и
@@ -705,30 +704,20 @@ export function TaskDrawer({
       {canChangeStatus ? (
         <DropdownMenu>
           <DropdownMenuTrigger asChild>
-            <button type="button" title={t('tasks.statusLabel')}>
-              <Chip editable>
-                <StatusIcon className={cn('size-4', STATUS_COLOR[task.status])} />
-                {t(`tasks.status.${task.status}`)}
-              </Chip>
+            <button type="button" title={t('tasks.statusLabel')} className="rounded-md transition-opacity hover:opacity-80">
+              <StatusBadge status={task.status} />
             </button>
           </DropdownMenuTrigger>
           <DropdownMenuContent align="start">
-            {STATUSES.map((s) => {
-              const Icon = STATUS_ICON[s]
-              return (
-                <DropdownMenuCheckItem key={s} checked={s === task.status} onSelect={() => onPatch({ status: s })}>
-                  <Icon className={cn('size-3.5', STATUS_COLOR[s])} />
-                  {t(`tasks.status.${s}`)}
-                </DropdownMenuCheckItem>
-              )
-            })}
+            {STATUSES.map((s) => (
+              <DropdownMenuCheckItem key={s} checked={s === task.status} onSelect={() => onPatch({ status: s })}>
+                <StatusBadge status={s} />
+              </DropdownMenuCheckItem>
+            ))}
           </DropdownMenuContent>
         </DropdownMenu>
       ) : (
-        <Chip editable={false}>
-          <StatusIcon className={cn('size-4', STATUS_COLOR[task.status])} />
-          {t(`tasks.status.${task.status}`)}
-        </Chip>
+        <StatusBadge status={task.status} />
       )}
 
       {/* Важность */}

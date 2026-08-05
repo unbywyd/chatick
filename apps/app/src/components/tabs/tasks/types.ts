@@ -45,12 +45,42 @@ export const STATUS_ICON: Record<Status, typeof Circle> = {
   done: CircleCheck,
 }
 
-// Цвета статусов: путь задачи серый → синий → фиолетовый → лайм
+// Цвета статусов: путь задачи серый → жёлтый → голубой → зелёный
 export const STATUS_COLOR: Record<Status, string> = {
   todo: 'text-muted-foreground',
-  in_progress: 'text-sky-400',
-  review: 'text-violet-400',
-  done: 'text-brand',
+  in_progress: 'text-amber-500',
+  review: 'text-sky-500',
+  done: 'text-emerald-600',
+}
+
+/**
+ * Статус тегом, а не иконкой с подписью.
+ *
+ * Иконка в 14 пикселей плюс обычный текст не читались списком: чтобы понять,
+ * где какая задача, приходилось вчитываться в каждую строку. Тег с заливкой
+ * считывается боковым зрением — по цветовому пятну, ещё до чтения слова.
+ *
+ * Заливка светлая и цветная, текст тёмный: цветной текст на цветном фоне даёт
+ * низкий контраст, а нам нужно, чтобы слово оставалось читаемым, а не только
+ * узнаваемым. В тёмной теме то же самое наоборот — светлый текст на глухой
+ * подложке того же тона, иначе светло-жёлтая плашка выжигает глаз.
+ *
+ * Цвета взяты по смыслу, а не по «пути»: серый — ещё не трогали, жёлтый — в
+ * работе, голубой — ждёт чужого действия, зелёный — закрыто.
+ */
+export const STATUS_BADGE: Record<Status, string> = {
+  todo: 'bg-muted text-foreground/80 dark:bg-muted dark:text-foreground/80',
+  in_progress: 'bg-amber-100 text-amber-950 dark:bg-amber-500/20 dark:text-amber-200',
+  review: 'bg-sky-100 text-sky-950 dark:bg-sky-500/20 dark:text-sky-200',
+  done: 'bg-emerald-100 text-emerald-950 dark:bg-emerald-500/20 dark:text-emerald-200',
+}
+
+/** Заливка кружка статуса — для выпадающих меню, где тег был бы шумным. */
+export const STATUS_DOT: Record<Status, string> = {
+  todo: 'bg-muted-foreground/50',
+  in_progress: 'bg-amber-500',
+  review: 'bg-sky-500',
+  done: 'bg-emerald-600',
 }
 
 export const PRIORITY_COLOR: Record<Priority, string> = {

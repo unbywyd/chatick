@@ -31,8 +31,6 @@ import { TaskContextMenu } from './TaskContextMenu'
 import {
   STATUSES,
   PRIORITIES,
-  STATUS_ICON,
-  STATUS_COLOR,
   PRIORITY_COLOR,
   fmtEstimate,
   type Task,
@@ -43,6 +41,7 @@ import {
 } from './types'
 import { parseDuration } from '@/lib/time-parse'
 import { TaskRefs, REFS_SIGN } from './TaskRefs'
+import { StatusBadge } from './StatusBadge'
 
 // Табличный вид задач (SPEC §8.6): вложенные таблицы по группам-спринтам,
 // сортировка по колонкам, инлайн-смена статуса/ассайни, drag строк и групп.
@@ -707,8 +706,6 @@ function TableRow({
     transform: transform && !isDragging ? `translate3d(0, ${transform.y}px, 0)` : undefined,
     transition,
   }
-  const StatusIcon = STATUS_ICON[task.status]
-
   return (
     <TaskContextMenu task={task} canEdit={canEdit} meId={meId} onPatch={(body) => onPatch(task.id, body)} onDelete={() => onDelete(task.id)}>
     <tr
@@ -765,20 +762,17 @@ function TableRow({
               disabled={!canEdit}
               className="inline-flex h-full w-full items-center gap-1.5 whitespace-nowrap px-2 py-1.5 text-start text-xs hover:bg-accent/60 disabled:opacity-70"
             >
-              <StatusIcon className={cn('size-3.5 shrink-0', STATUS_COLOR[task.status])} />
-              {t(`tasks.status.${task.status}`)}
+              <StatusBadge status={task.status} size="sm" />
             </button>
           </DropdownMenuTrigger>
           <DropdownMenuContent align="start">
-            {STATUSES.map((s) => {
-              const Icon = STATUS_ICON[s]
-              return (
-                <DropdownMenuCheckItem key={s} checked={s === task.status} onSelect={() => onPatch(task.id, { status: s })}>
-                  <Icon className="size-3.5" />
-                  {t(`tasks.status.${s}`)}
-                </DropdownMenuCheckItem>
-              )
-            })}
+            {/* В меню тоже тегами: выбирать глазами проще по тому же пятну,
+                по которому статус потом и читается в списке. */}
+            {STATUSES.map((s) => (
+              <DropdownMenuCheckItem key={s} checked={s === task.status} onSelect={() => onPatch(task.id, { status: s })}>
+                <StatusBadge status={s} />
+              </DropdownMenuCheckItem>
+            ))}
           </DropdownMenuContent>
         </DropdownMenu>
       </td>

@@ -26,6 +26,7 @@ import {
   type Me,
 } from '@/lib/api'
 import { cn } from '@/lib/utils'
+import { STATUS_DOT } from '@/components/tabs/tasks/types'
 import { Logo } from '@/components/Logo'
 import { ThemeToggle } from '@/components/ThemeToggle'
 import { LanguageSelect } from '@/components/LanguageSelect'
@@ -642,21 +643,24 @@ function ProjectStats({ stats }: { stats: NonNullable<ProjectListItem['stats']> 
 
       {/* разбивка по статусам — что в работе, что ждёт ревью, что не начато */}
       <span className="flex flex-wrap items-center gap-x-3 gap-y-0.5 text-[11px] text-muted-foreground">
+        {/* Кружки берут цвет из общего словаря статусов: раньше здесь были
+            свои bg-sky-500 и bg-violet-500, и после смены палитры проект на
+            стартовом экране светился не теми цветами, что его же задачи. */}
         {stats.tasksInProgress > 0 && (
           <span className="inline-flex items-center gap-1">
-            <span className="size-1.5 rounded-full bg-sky-500" />
+            <span className={cn('size-1.5 rounded-full', STATUS_DOT.in_progress)} />
             {t('tasks.status.in_progress')}: {stats.tasksInProgress}
           </span>
         )}
         {stats.tasksReview > 0 && (
           <span className="inline-flex items-center gap-1">
-            <span className="size-1.5 rounded-full bg-violet-500" />
+            <span className={cn('size-1.5 rounded-full', STATUS_DOT.review)} />
             {t('tasks.status.review')}: {stats.tasksReview}
           </span>
         )}
         {stats.tasksTodo > 0 && (
           <span className="inline-flex items-center gap-1">
-            <span className="size-1.5 rounded-full bg-muted-foreground" />
+            <span className={cn('size-1.5 rounded-full', STATUS_DOT.todo)} />
             {t('tasks.status.todo')}: {stats.tasksTodo}
           </span>
         )}

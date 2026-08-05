@@ -12,7 +12,8 @@ import {
   ContextMenuLabel,
 } from '@/components/ui/context-menu'
 import { useConfirm } from '@/components/ui/confirm'
-import { STATUSES, PRIORITIES, STATUS_ICON, STATUS_COLOR, PRIORITY_COLOR, type Task } from './types'
+import { STATUSES, PRIORITIES, PRIORITY_COLOR, type Task } from './types'
+import { StatusBadge } from './StatusBadge'
 
 // Контекстное меню задачи (правый клик): быстрые статус/приоритет/назначить/ссылка/удалить.
 export function TaskContextMenu({
@@ -78,15 +79,11 @@ export function TaskContextMenu({
         {canEdit && (
           <>
             <ContextMenuLabel>{t('tasks.statusLabel')}</ContextMenuLabel>
-            {STATUSES.map((s) => {
-              const Icon = STATUS_ICON[s]
-              return (
-                <ContextMenuCheckItem key={s} checked={s === task.status} onSelect={() => onPatch({ status: s })}>
-                  <Icon className={`size-3.5 ${STATUS_COLOR[s]}`} />
-                  {t(`tasks.status.${s}`)}
-                </ContextMenuCheckItem>
-              )
-            })}
+            {STATUSES.map((s) => (
+              <ContextMenuCheckItem key={s} checked={s === task.status} onSelect={() => onPatch({ status: s })}>
+                <StatusBadge status={s} />
+              </ContextMenuCheckItem>
+            ))}
             <ContextMenuSeparator />
             <ContextMenuLabel>{t('tasks.priorityLabel')}</ContextMenuLabel>
             {PRIORITIES.map((p) => (

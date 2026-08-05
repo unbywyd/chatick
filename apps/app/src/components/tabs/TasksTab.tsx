@@ -25,6 +25,7 @@ import { TaskRefs } from './tasks/TaskRefs'
 import { useTaskTimer } from '@/hooks/useTaskTimer'
 import { exportTasksToExcel, downloadImportTemplate, parseTasksFromExcel } from './tasks/taskExcel'
 import { STATUSES, PRIORITIES, STATUS_ICON, STATUS_COLOR, PRIORITY_COLOR, fmtEstimate, type Task, type TaskGroup, type Member, type Status, type Priority } from './tasks/types'
+import { StatusBadge } from './tasks/StatusBadge'
 
 // Таб «Задачи»: список по статусам + drawer с деталями и вложениями (SPEC §4.3 — права)
 export function TasksTab({ projectId, meId }: { projectId: string; meId?: string }) {
@@ -514,15 +515,24 @@ export function TasksTab({ projectId, meId }: { projectId: string; meId?: string
               <Avatar name={me?.user.name} src={me?.user.avatarUrl} size={16} />
               {t('tasks.mine')}
             </Chip>
-            {STATUSES.map((s) => {
-              const Icon = STATUS_ICON[s]
-              return (
-                <Chip key={s} active={statusFilter === s} onClick={() => setStatusFilter(statusFilter === s ? null : s)}>
-                  <Icon className={cn('size-3.5', STATUS_COLOR[s])} />
-                  {t(`tasks.status.${s}`)}
-                </Chip>
-              )
-            })}
+            {/* Фильтры теми же тегами, что и сам статус: выключенные
+                приглушены, чтобы было видно, какой фильтр сейчас включён. */}
+            {STATUSES.map((s) => (
+              <button
+                key={s}
+                type="button"
+                onClick={() => setStatusFilter(statusFilter === s ? null : s)}
+                className="rounded-md"
+              >
+                <StatusBadge
+                  status={s}
+                  className={cn(
+                    'ring-offset-1 ring-offset-background transition-all',
+                    statusFilter === s ? 'ring-2 ring-foreground/40' : 'opacity-50 hover:opacity-100',
+                  )}
+                />
+              </button>
+            ))}
             <DropdownMenu>
               <DropdownMenuTrigger asChild>
                 <button
@@ -675,7 +685,6 @@ export function TasksTab({ projectId, meId }: { projectId: string; meId?: string
           <div className="mt-5 space-y-6">
             {tasksQ.isLoading && <p className="text-sm text-muted-foreground">…</p>}
             {groups.map(({ status, tasks: list }) => {
-              const Icon = STATUS_ICON[status]
               return (
                 <section
                   key={status}
@@ -690,8 +699,7 @@ export function TasksTab({ projectId, meId }: { projectId: string; meId?: string
                   }}
                 >
                   <h3 className="mb-2 flex items-center gap-2 text-sm font-semibold text-muted-foreground">
-                    <Icon className={cn('size-4', STATUS_COLOR[status])} />
-                    {t(`tasks.status.${status}`)}
+                    <StatusBadge status={status} />
                     <span className="tabular-nums">({list.length})</span>
                   </h3>
                   <ul
@@ -854,15 +862,11 @@ function TaskRow({
           </button>
         </DropdownMenuTrigger>
         <DropdownMenuContent align="start">
-          {STATUSES.map((s) => {
-            const Icon = STATUS_ICON[s]
-            return (
-              <DropdownMenuCheckItem key={s} checked={s === task.status} onSelect={() => onStatus(s)}>
-                <Icon className="size-3.5" />
-                {t(`tasks.status.${s}`)}
-              </DropdownMenuCheckItem>
-            )
-          })}
+          {STATUSES.map((s) => (
+            <DropdownMenuCheckItem key={s} checked={s === task.status} onSelect={() => onStatus(s)}>
+              <StatusBadge status={s} />
+            </DropdownMenuCheckItem>
+          ))}
         </DropdownMenuContent>
       </DropdownMenu>
 
