@@ -347,7 +347,13 @@ function Row({
           {/* Заметка под пунктом: ответ на вопрос или пояснение */}
           {editing ? (
             <div className="mt-1 rounded-md border">
+              {/* key разводит просмотр и правку на РАЗНЫЕ экземпляры. Без него
+                  React переиспользует один: он создан на чтение, и поле,
+                  открытое на правку, остаётся contenteditable="false" —
+                  выглядит как редактор, а печатать в нём нельзя. Отступы и
+                  минимальная высота тоже задаются при создании. */}
               <RichEditor
+                key="note-edit"
                 value={noteDraft}
                 onChange={onDraft}
                 onSubmit={onSaveNote}
@@ -386,7 +392,7 @@ function Row({
               className="group/note relative -mx-1 mt-1 block cursor-text break-words rounded px-1 py-0.5 pe-7 text-sm text-muted-foreground hover:bg-secondary/60 hover:text-foreground"
             >
               {looksLikeHtml(it.note) ? (
-                <RichEditor value={it.note} onChange={() => {}} mentions={[]} preset="minimal" readOnly />
+                <RichEditor key="note-read" value={it.note} onChange={() => {}} mentions={[]} preset="minimal" readOnly />
               ) : (
                 <span className="block whitespace-pre-wrap">{it.note}</span>
               )}
