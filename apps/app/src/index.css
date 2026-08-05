@@ -128,25 +128,36 @@
      заставляет абзац взять направление у своего первого сильного символа, а
      text-align: start — выровнять по этому же краю. Работает и в редакторе, и
      в режиме чтения: правило одно, разъехаться им негде. */
-  .tiptap-editor :is(p, h1, h2, h3, h4, h5, h6, li, blockquote, pre, td, th) {
+  /* Везде, где показывается написанный человеком или ассистентом текст:
+     редакторы (задачи, комментарии, заметки, документы, композер чата) и
+     режимы чтения (.msg-md — сообщения чата и комментарии через ReactMarkdown,
+     .tiptap-readonly, .prose). Список общий: правило одно, разъехаться ему
+     негде. */
+  :is(.tiptap-editor, .tiptap-readonly, .doc-editor, .msg-md, .prose)
+    :is(p, h1, h2, h3, h4, h5, h6, li, blockquote, pre, td, th) {
     unicode-bidi: plaintext;
     text-align: start;
   }
-  /* Явно выбранное человеком направление сильнее автоматического: строка из
-     одних цифр или латиницы внутри ивритского текста иначе прыгает влево. */
-  .tiptap-editor [dir='rtl'],
-  .tiptap-editor [dir='ltr'] {
+  /* Маркеры списка («1.», точки) слушаются не выравниванием текста, а
+     направлением самого списка: без этого ивритский список выходил текстом
+     справа и нумерацией слева. dir=auto браузер вычисляет по содержимому. */
+  :is(.tiptap-editor, .tiptap-readonly, .doc-editor, .msg-md, .prose) :is(ul, ol):not([dir]) {
+    unicode-bidi: plaintext;
+  }
+  /* Явно выбранное направление сильнее автоматического: строка из одних цифр
+     или латиницы внутри ивритского текста иначе прыгает влево. */
+  :is(.tiptap-editor, .tiptap-readonly, .doc-editor, .msg-md, .prose) :is([dir='rtl'], [dir='ltr']) {
     unicode-bidi: isolate;
   }
-  .tiptap-editor [dir='rtl'] {
+  :is(.tiptap-editor, .tiptap-readonly, .doc-editor, .msg-md, .prose) [dir='rtl'] {
     text-align: right;
   }
-  .tiptap-editor [dir='ltr'] {
+  :is(.tiptap-editor, .tiptap-readonly, .doc-editor, .msg-md, .prose) [dir='ltr'] {
     text-align: left;
   }
   /* Ссылка и код внутри абзаца на другом языке — отдельным островком:
      без изоляции bidi растаскивает https://… и API по всей строке. */
-  .tiptap-editor :is(a, code) {
+  :is(.tiptap-editor, .tiptap-readonly, .doc-editor, .msg-md, .prose) :is(a, code) {
     unicode-bidi: isolate;
   }
   .tiptap-editor code {

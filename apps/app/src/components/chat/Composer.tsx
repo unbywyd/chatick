@@ -4,6 +4,7 @@ import { BubbleMenu } from '@tiptap/react/menus'
 import StarterKit from '@tiptap/starter-kit'
 import Placeholder from '@tiptap/extension-placeholder'
 import Mention from '@tiptap/extension-mention'
+import { TextDirection } from '@/components/ui/text-direction'
 import tippy, { type Instance } from 'tippy.js'
 import { Bold, Check, CheckSquare, ClipboardPaste, Code, FileText, Image as ImageIcon, Italic, KeyRound, List, Loader2, NotebookPen, Paperclip, SendHorizontal, Strikethrough, X, Zap } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
@@ -118,6 +119,9 @@ export function Composer({
     editable: !disabled,
     extensions: [
       StarterKit.configure({ heading: false, blockquote: false, horizontalRule: false }),
+      // Направление блока: композер чата — такой же редактор, и ивритское
+      // сообщение должно писаться справа налево, а латинское слева направо.
+      TextDirection,
       Placeholder.configure({ placeholder }),
       Mention.configure({
         HTMLAttributes: { class: 'mention' },

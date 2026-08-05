@@ -250,7 +250,10 @@ export function TasksTable({
             placeholder={t('tasks.newGroupPlaceholder')}
             className="h-9 flex-1 rounded-md border bg-transparent px-3 text-sm outline-none focus:ring-2 focus:ring-ring"
           />
-          <Button variant="outline" type="submit" size="sm" disabled={!newGroup.trim()}>
+          {/* Набрал имя — значит уже решил создать. Обведённая кнопка тут
+              терялась рядом с подсвеченным полем ввода и читалась как
+              «может быть». */}
+          <Button variant={newGroup.trim() ? 'brand' : 'outline'} type="submit" size="sm" disabled={!newGroup.trim()}>
             <Plus className="size-4" />
             {t('tasks.addGroup')}
           </Button>
