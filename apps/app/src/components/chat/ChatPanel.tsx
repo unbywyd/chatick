@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useImperativeHandle, useMemo, useRef, useState } from 'react'
 import { useNavigate, useParams, useSearchParams } from 'react-router-dom'
 import { useInfiniteQuery, useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { ArrowDown, Bot, CheckSquare, Copy, FileText, Users, BrainCircuit, KeyRound, Loader2, Menu, MoreHorizontal, NotebookPen, PanelsTopLeft, Reply, Search, Settings, Share2, Trash2, UserPlus, X, MessagesSquare } from 'lucide-react'
+import { AlertTriangle, ArrowDown, Bot, CheckSquare, Copy, FileText, Users, BrainCircuit, KeyRound, Loader2, Menu, MoreHorizontal, NotebookPen, PanelsTopLeft, Reply, Search, Settings, Share2, Trash2, UserPlus, X, MessagesSquare } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
 import ReactMarkdown from 'react-markdown'
 import { toast } from 'sonner'
@@ -882,9 +882,12 @@ function MessageRow({
       {/* Одна кнопка вместо ряда: действий у сообщения становится больше, и
           ряд значков поверх текста разрастаться не может. Подложка нужна —
           без неё кнопка читается как часть сообщения. */}
+      {/* Кнопка действий появляется только при наведении, поэтому и должна
+          быть заметной: серые точки на тёмной подложке сообщения читались как
+          часть текста, и меню никто не находил. */}
       <div
         className={cn(
-          'absolute end-1 top-1 z-10 rounded-md border bg-popover shadow-sm transition-opacity',
+          'absolute end-1 top-1 z-10 rounded-md shadow-sm transition-opacity',
           picked ? 'opacity-100' : 'opacity-0 group-hover:opacity-100 focus-within:opacity-100',
         )}
       >
@@ -892,7 +895,7 @@ function MessageRow({
           <DropdownMenuTrigger asChild>
             <button
               title={t('chat.actions')}
-              className={cn('rounded p-1 hover:bg-accent', picked ? 'text-brand' : 'text-muted-foreground hover:text-foreground')}
+              className="rounded-md bg-brand p-1 text-brand-foreground transition-transform hover:scale-105"
             >
               <MoreHorizontal className="size-3.5" />
             </button>
@@ -920,9 +923,16 @@ function MessageRow({
           <p className="mb-0.5 flex items-baseline gap-2">
             <span className={cn('text-xs font-semibold', isAi && 'text-brand')}>{isAi ? 'AI' : message.author!.name}</span>
             <span className="text-[10px] text-muted-foreground">{time}</span>
+            {/* Только значок: подпись занимала полстроки и в иврите
+                переносилась на две, а сказать ей нужно одно слово. Текст
+                остаётся в подсказке при наведении. */}
             {message.rawSend && (
-              <span className="rounded-full bg-orange-400/15 px-1.5 py-0.5 text-[10px] text-orange-400">
-                ⚠ {t('chat.rawBadge')}
+              <span
+                title={t('chat.rawBadge')}
+                aria-label={t('chat.rawBadge')}
+                className="inline-flex size-4 shrink-0 items-center justify-center rounded-full bg-orange-400/15 text-[10px] text-orange-400"
+              >
+                <AlertTriangle className="size-2.5" />
               </span>
             )}
             {/* системное автосообщение о задаче (SPEC §8.23) */}
