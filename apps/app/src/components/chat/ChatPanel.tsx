@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useImperativeHandle, useMemo, useRef, useState } from 'react'
 import { useNavigate, useParams, useSearchParams } from 'react-router-dom'
 import { useInfiniteQuery, useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { AlertTriangle, ArrowDown, Zap, Bot, CheckSquare, Copy, FileText, Users, BrainCircuit, KeyRound, Loader2, Menu, MoreHorizontal, NotebookPen, PanelsTopLeft, Reply, Search, Settings, Share2, Trash2, UserPlus, X, MessagesSquare } from 'lucide-react'
+import { AlertTriangle, ArrowDown, Zap, Bot, CheckSquare, Copy, FileText, Users, BrainCircuit, KeyRound, Loader2, Menu, MoreHorizontal, NotebookPen, PanelsTopLeft, Reply, Search, Settings, Share2, Trash2, X, MessagesSquare } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
 import ReactMarkdown from 'react-markdown'
 import { toast } from 'sonner'
@@ -949,8 +949,12 @@ function MessageRow({
       <div className="min-w-0 flex-1">
         {!compact && (
           <p className="mb-0.5 flex items-baseline gap-2">
-            <span className={cn('text-xs font-semibold', isAi && 'text-brand')}>{isAi ? 'AI' : message.author!.name}</span>
-            <span className="text-[10px] text-muted-foreground">{time}</span>
+            {/* Длинное имя ужимается, а не разваливает строку на две: узнают
+                его по началу, а целиком оно есть в подсказке. */}
+            <span title={isAi ? 'AI' : message.author!.name} className={cn('min-w-0 truncate text-xs font-semibold', isAi && 'text-brand')}>
+              {isAi ? 'AI' : message.author!.name}
+            </span>
+            <span className="shrink-0 text-[10px] text-muted-foreground">{time}</span>
             {/* Только значок: подпись занимала полстроки и в иврите
                 переносилась на две, а сказать ей нужно одно слово. Текст
                 остаётся в подсказке при наведении. */}
@@ -963,18 +967,21 @@ function MessageRow({
                 <AlertTriangle className="size-2.5" />
               </span>
             )}
-            {/* системное автосообщение о задаче (SPEC §8.23) */}
+            {/* Системное автосообщение о задаче (SPEC §8.23). Строка узкая, и
+                плашка с иконкой в ней ломалась на две: два слова подписи
+                разъезжались, а в иврите разваливались совсем. Иконку убрали —
+                подпись и так говорит ровно то же, — а перенос запретили: пусть
+                ужимается имя автора, оно длиннее и читается по началу. */}
             {message.systemEvent && (
               <span
                 className={cn(
                   // на лаймовой подложке текст тёмный: светлый лайм на светлом фоне нечитаем
-                  'inline-flex items-center gap-1 rounded-full px-1.5 py-0.5 text-[10px] font-medium',
+                  'shrink-0 whitespace-nowrap rounded-full px-1.5 py-0.5 text-[10px] font-medium',
                   message.systemEvent === 'task_done'
                     ? 'bg-brand text-brand-foreground'
                     : 'bg-sky-500 text-white',
                 )}
               >
-                {message.systemEvent === 'task_done' ? <CheckSquare className="size-3" /> : <UserPlus className="size-3" />}
                 {t(`chat.systemEvent.${message.systemEvent}`)}
               </span>
             )}

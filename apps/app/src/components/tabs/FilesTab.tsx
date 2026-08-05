@@ -12,6 +12,7 @@ import {
   FileText,
   FileVideo,
   Loader2,
+  Paperclip,
   Search,
   Settings2,
   Square,
@@ -83,6 +84,10 @@ export function FilesTab({ projectId, isAdmin = false }: { projectId: string; is
   const [type, setType] = useState<FileType | null>(null)
   const [fromDate, setFromDate] = useState<Date | undefined>()
   const [toDate, setToDate] = useState<Date | undefined>()
+  // Вложения задач по умолчанию скрыты: их много, они однообразны и в общем
+  // списке заслоняют то, за чем сюда пришли. Прячет их сервер, а не мы, —
+  // иначе поиск и период считались бы по мусору, а на экран попадали крохи.
+  const [withTaskFiles, setWithTaskFiles] = useState(false)
   const [dragOver, setDragOver] = useState(false)
   // Выбранные, но ещё не отправленные файлы: ждут решения про оригиналы.
   const [asking, setAsking] = useState<File[] | null>(null)
@@ -113,6 +118,7 @@ export function FilesTab({ projectId, isAdmin = false }: { projectId: string; is
   if (type) query.set('type', type)
   if (fromDate) query.set('from', iso(fromDate))
   if (toDate) query.set('to', iso(toDate))
+  if (withTaskFiles) query.set('withTaskFiles', '1')
   const qs = query.toString()
 
   const filesQ = useInfiniteQuery({
@@ -318,6 +324,23 @@ export function FilesTab({ projectId, isAdmin = false }: { projectId: string; is
             {t(`files.type.${tp}`)}
           </button>
         ))}
+        {/* Во вкладке «Задачи» тумблер не при чём: там их и просят. */}
+        {source !== 'task' && (
+          <>
+            <span className="mx-1 h-4 w-px bg-border" />
+            <button
+              onClick={() => setWithTaskFiles((v) => !v)}
+              title={t('files.withTaskFilesHint')}
+              className={cn(
+                'inline-flex items-center gap-1.5 rounded-full border px-2.5 py-1 text-xs transition-colors',
+                withTaskFiles ? 'border-brand bg-accent text-accent-foreground' : 'text-muted-foreground hover:text-foreground',
+              )}
+            >
+              <Paperclip className="size-3" />
+              {t('files.withTaskFiles')}
+            </button>
+          </>
+        )}
         <span className="mx-1 h-4 w-px bg-border" />
         <DatePick label={t('files.from')} value={fromDate} onChange={setFromDate} lang={i18n.language} />
         <span className="text-xs text-muted-foreground">—</span>
@@ -393,6 +416,11 @@ export function FilesTab({ projectId, isAdmin = false }: { projectId: string; is
       {!filesQ.isLoading && items.length === 0 && (
         <p className="mt-4 rounded-lg border border-dashed p-6 text-center text-sm text-muted-foreground">
           {hasFilter ? t('start.nothingFound') : t('files.empty')}
+          {/* Пустой список при выключенном тумблере объясняем: иначе «ничего
+              нет» читается как потеря файлов, которые на самом деле на месте. */}
+          {!withTaskFiles && source !== 'task' && (
+            <span className="mt-2 block text-xs">{t('files.taskFilesHidden')}</span>
+          )}
         </p>
       )}
 

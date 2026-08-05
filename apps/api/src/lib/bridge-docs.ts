@@ -552,7 +552,20 @@ carry the answer.
 ## Resources
 
   GET    /x/resources          links and credentials metadata
-  Secret VALUES are never exposed through this bridge, by design. Do not ask for them.
+  POST   /x/resources          {"name"?, "url"?, "description"?}
+  PATCH  /x/resources/<id>     same fields; pass "url": null to drop the link
+
+  This is where project links belong — designs, dashboards, repositories,
+  staging environments. Put a link here rather than in a note: notes are a
+  stream, resources are the list people open when they need the link again.
+  Give either a url or a name; with only a url the name is taken from it.
+
+  Secret VALUES are never exposed through this bridge and cannot be written
+  through it either: a value sent this way would pass through an external model
+  and stay in its history. A person adds and edits secrets in the app. Sending
+  "secrets" in the body is refused with 400, not silently dropped.
+
+  Deleting a resource is left to humans — it takes its secrets with it.
 
 ## Project context
 
@@ -735,6 +748,10 @@ ${endpointCatalog('?project=<id>')}
          undone. Ask them to do it in the app.
   GET    /x/files?project=<id>          POST multipart to upload
   GET    /x/resources?project=<id>      metadata only; secret values never exposed
+  POST   /x/resources?project=<id>      {"name"?,"url"?,"description"?} — project links
+  PATCH  /x/resources/<id>?project=<id>
+         Secrets are neither read nor written through the bridge: a person adds
+         them in the app.
 
   POST   /x/disconnect                  close this tunnel when you are done
 

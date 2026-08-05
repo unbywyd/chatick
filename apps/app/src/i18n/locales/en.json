@@ -280,6 +280,9 @@
     "from": "From",
     "to": "To",
     "clearFilter": "Clear",
+    "withTaskFiles": "Task files",
+    "withTaskFilesHint": "Task attachments are hidden — there are many and they look alike. Turn on to search them too.",
+    "taskFilesHidden": "Task attachments are hidden — turn on «Task files» to search them too.",
     "jumpToChat": "Go to message in chat",
     "source": {
       "all": "All",
@@ -1319,6 +1322,7 @@
     "addPlaceholder": "New item — press Enter to add",
     "addNote": "+ note",
     "notePlaceholder": "Answer or note…",
+    "saveNote": "Save",
     "copy": "Copy question and answer",
     "dragHint": "Drag into chat to ask about it",
     "doneBy": "Checked by {{name}}"

@@ -36,6 +36,7 @@ const SAFE_STYLE = /^[a-z-]+:\s*[#a-z0-9 .,%()/-]+$/i
 
 function cleanAttrs(tag: string, attrsRaw: string): string {
   const out: string[] = []
+  let href = ''
   const re = /([a-zA-Z_:][-a-zA-Z0-9_:.]*)\s*=\s*("([^"]*)"|'([^']*)')/g
   let m: RegExpExecArray | null
   while ((m = re.exec(attrsRaw))) {
@@ -43,6 +44,10 @@ function cleanAttrs(tag: string, attrsRaw: string): string {
     const value = m[3] ?? m[4] ?? ''
     const allowed = ALLOWED_ATTRS[tag]?.has(name) || GLOBAL_ATTRS.has(name)
     if (!allowed) continue
+    // target и rel у ссылок задаём мы, ниже. Пришедшие значения выкидываем:
+    // иначе к нашим добавлялась бы вторая пара тех же атрибутов.
+    if (tag === 'a' && (name === 'target' || name === 'rel')) continue
+    if (tag === 'a' && name === 'href') href = value.trim()
     if (name.startsWith('on')) continue // обработчики — никогда
     if ((name === 'href' || name === 'src') && !SAFE_URL.test(value.trim())) continue
     // input допускаем только как чекбокс чек-листа — никаких полей ввода на нашем домене
@@ -58,8 +63,14 @@ function cleanAttrs(tag: string, attrsRaw: string): string {
     }
     out.push(`${name}="${value.replace(/"/g, '&quot;')}"`)
   }
-  // внешние ссылки открываем безопасно
-  if (tag === 'a') out.push('rel="noopener noreferrer nofollow"')
+  // Внешние ссылки открываем безопасно и в новой вкладке. Вкладка важна не
+  // меньше rel: без target клик по ссылке в описании задачи уводил из
+  // приложения — а задача осталась несохранённой в редакторе. Свои адреса
+  // (`/…`, `#…`) наоборот открываем на месте, это навигация внутри приложения.
+  if (tag === 'a') {
+    out.push('rel="noopener noreferrer nofollow"')
+    if (/^https?:\/\//i.test(href)) out.push('target="_blank"')
+  }
   // чекбоксы чек-листа на публичной странице — только для чтения
   if (tag === 'input') out.push('disabled')
   return out.length ? ' ' + out.join(' ') : ''

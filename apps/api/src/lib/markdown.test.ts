@@ -99,6 +99,72 @@ describe('инлайн', () => {
   })
 })
 
+// Ассистент в перечислениях пишет домен коротко — «turbosquid.com — поиск…».
+// Такой текст доезжал до задачи обычными буквами: видно, но не нажать.
+describe('ссылки', () => {
+  it('домен без протокола становится ссылкой', () => {
+    const html = richText('turbosquid.com — поиск моделей')
+    expect(html).toContain('href="https://turbosquid.com"')
+    expect(html).toContain('>turbosquid.com<')
+  })
+
+  it('домен с путём уходит по полному адресу, а не по корню', () => {
+    expect(richText('см. chatick.com/docs/x')).toContain('href="https://chatick.com/docs/x"')
+  })
+
+  it('внешняя ссылка открывается в новой вкладке — иначе клик уводит из приложения', () => {
+    expect(richText('https://chatick.com')).toContain('target="_blank"')
+    expect(richText('[тут](https://chatick.com)')).toContain('target="_blank"')
+  })
+
+  it('свой адрес открывается на месте: это навигация внутри приложения', () => {
+    const html = richText('[задача](/tasks/42)')
+    expect(html).toContain('href="/tasks/42"')
+    expect(html).not.toContain('target=')
+  })
+
+  it('безопасные атрибуты не задваиваются', () => {
+    const html = richText('<p><a href="https://chatick.com" target="_self" rel="me">тут</a></p>')
+    expect((html.match(/rel=/g) ?? []).length).toBe(1)
+    expect((html.match(/target=/g) ?? []).length).toBe(1)
+    expect(html).not.toContain('_self')
+  })
+
+  it('почта не разрезается пополам', () => {
+    // Без проверки предыдущего символа `example.com` внутри адреса стал бы
+    // отдельной ссылкой, а `dana@` — осиротевшим текстом.
+    const html = richText('пиши на dana@example.com')
+    expect(html).not.toContain('>example.com<')
+  })
+
+  it('ASP.NET — это не сайт', () => {
+    expect(richText('переписать на ASP.NET')).not.toContain('<a ')
+  })
+
+  it('имя файла ссылкой не становится', () => {
+    for (const name of ['README.md', 'main.rs', 'deploy.sh', 'app.py']) {
+      expect(richText(`смотри ${name} внутри`)).not.toContain('<a ')
+    }
+  })
+
+  it('домен внутри кода остаётся кодом', () => {
+    const html = richText('в конфиге `host = example.com` вот так')
+    expect(html).toContain('<code>')
+    expect(html).not.toContain('<a ')
+  })
+
+  it('домен в блоке кода остаётся кодом', () => {
+    const html = richText('```\ncurl example.com\n```')
+    expect(html).not.toContain('<a ')
+  })
+
+  it('адрес в скобках markdown не превращается в ссылку дважды', () => {
+    const html = richText('[тут](chatick.com)')
+    expect((html.match(/<a /g) ?? []).length).toBe(1)
+    expect(html).toContain('>тут<')
+  })
+})
+
 describe('упоминания — наш синтаксис, не markdown', () => {
   it('становятся span, а не ссылкой на id', () => {
     const html = markdownToHtml('привет @[Дана](u1)')

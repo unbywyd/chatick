@@ -212,6 +212,17 @@ filesRoute.get('/', async (c) => {
   // временные (неотправленные) вложения композера не показываем в менеджере (SPEC §8.17)
   conds.push(isNull(files.pendingUntil))
   if (taskId) conds.push(eq(files.taskId, taskId))
+  // Вложения задач в общем списке — шум: их десятки на каждую задачу, и они
+  // заслоняют то, ради чего в менеджер зашли. Прячем по умолчанию, тумблер
+  // возвращает.
+  //
+  // Условие общее, а не только для «без фильтров»: поиск и период считаются по
+  // тому же набору. Иначе выключенный тумблер прятал бы файлы из списка, но
+  // отдавал их в поиске — то есть «скрыто» значило бы «скрыто, пока не
+  // ищешь». Когда файлы задач просят явно (вкладка «Задачи» или конкретная
+  // задача), тумблер уже не при чём.
+  const withTaskFiles = c.req.query('withTaskFiles') === '1'
+  if (!taskId && source !== 'task' && !withTaskFiles) conds.push(isNull(files.taskId))
   if (source === 'chat') conds.push(sql`${files.messageId} is not null`)
   if (source === 'task') conds.push(sql`${files.taskId} is not null`)
   if (source === 'upload') conds.push(sql`${files.messageId} is null and ${files.taskId} is null`)

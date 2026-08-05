@@ -13,6 +13,7 @@ import { notify, extractMentions, dropNotice } from '../lib/notify.js'
 import { broadcast, tasksChanged } from '../ws.js'
 import { logActivity } from '../lib/audit.js'
 import { postTaskDone, postTaskAssigned } from '../lib/task-events.js'
+import { richText } from '../lib/markdown.js'
 
 // Задачи проекта — project-токен; права per-user (SPEC §4.3) на каждое действие
 export const tasksRoute = new Hono<ProjectEnv>()
@@ -528,7 +529,7 @@ tasksRoute.post(
 
     const [row] = await db
       .insert(taskChecklist)
-      .values({ taskId: access.task.id, projectId, text: body.trim(), note: note ?? '', sortOrder: maxSort + 1 })
+      .values({ taskId: access.task.id, projectId, text: body.trim(), note: note ? richText(note) : '', sortOrder: maxSort + 1 })
       .returning()
 
     tasksChanged(projectId, [access.task.assigneeId, access.task.createdById])
@@ -561,7 +562,10 @@ tasksRoute.patch(
     const b = c.req.valid('json')
     const patch: Record<string, unknown> = { updatedAt: new Date() }
     if (b.text !== undefined) patch.text = b.text.trim()
-    if (b.note !== undefined) patch.note = b.note
+    // Ответ под пунктом — размеченный текст, как описание и комментарии: из
+    // приложения приходит разметка редактора, из моста markdown. Один разбор на
+    // оба пути, чтобы храниться они начали одинаково.
+    if (b.note !== undefined) patch.note = richText(b.note)
     if (b.sortOrder !== undefined) patch.sortOrder = b.sortOrder
     if (b.done !== undefined) {
       patch.done = b.done

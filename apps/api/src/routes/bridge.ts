@@ -7,6 +7,7 @@ import {
   companies,
   companyInvites,
   companyMembers,
+  credentialAccessLog,
   credentials,
   documents,
   documentVersions,
@@ -53,6 +54,7 @@ import { notifyTask, unassignNotice } from './tasks.js'
 import { projectPath, companyOf } from '../lib/links.js'
 import { htmlToText, sanitizeHtml } from '../lib/sanitize-html.js'
 import { richText } from '../lib/markdown.js'
+import { fetchSiteIcon, nameFromUrl } from '../lib/site-icon.js'
 import { membersLockedForProject, MEMBERS_LOCKED } from '../lib/members-locked.js'
 import { broadcast, sendToUserAnywhere, tasksChanged } from '../ws.js'
 import { env } from '../env.js'
@@ -1391,7 +1393,9 @@ bridgeRoute.get('/tasks/:id/checklist', async (c) => {
   const items = rows.map((r) => ({
     id: r.item.id,
     text: r.item.text,
-    note: r.item.note || undefined,
+    // Ответ хранится размеченным, а читать его будет модель — отдаём текстом,
+    // как заметки и документы: теги в ответе она примет за часть ответа.
+    note: (r.item.note && htmlToText(r.item.note)) || undefined,
     done: r.item.done,
     doneBy: r.who ? r.who.name || r.who.email : undefined,
   }))
@@ -1424,7 +1428,10 @@ bridgeRoute.post('/tasks/:id/checklist', async (c) => {
   const parsed = incoming
     .map((x) => (typeof x === 'string' ? { text: x, note: '' } : (x as { text?: unknown; note?: unknown })))
     .filter((x) => typeof x.text === 'string' && (x.text as string).trim())
-    .map((x) => ({ text: (x.text as string).trim().slice(0, 500), note: typeof x.note === 'string' ? x.note.slice(0, 4000) : '' }))
+    // Текст пункта — одна строка, его показывают как есть. А ответ под пунктом
+    // живёт в том же виде, что описания и комментарии: ассистент пишет markdown,
+    // и без разбора он лёг бы в базу звёздочками наружу.
+    .map((x) => ({ text: (x.text as string).trim().slice(0, 500), note: typeof x.note === 'string' ? richText(x.note.slice(0, 4000)) : '' }))
 
   if (!parsed.length) return c.json({ error: 'Pass text or items: ["...", ...]' }, 400)
 
@@ -1465,7 +1472,7 @@ bridgeRoute.patch('/tasks/:id/checklist/:itemId', async (c) => {
   const b = (await c.req.json().catch(() => ({}))) as { text?: unknown; note?: unknown; done?: unknown }
   const patch: Record<string, unknown> = { updatedAt: new Date() }
   if (typeof b.text === 'string' && b.text.trim()) patch.text = b.text.trim().slice(0, 500)
-  if (typeof b.note === 'string') patch.note = b.note.slice(0, 4000)
+  if (typeof b.note === 'string') patch.note = richText(b.note.slice(0, 4000))
   if (typeof b.done === 'boolean') {
     patch.done = b.done
     patch.doneById = b.done ? id.userId : null
@@ -3296,6 +3303,117 @@ bridgeRoute.get('/resources', async (c) => {
     items: rows.map((r: typeof credentials.$inferSelect) => ({ id: r.id, name: r.name, url: r.url, description: r.description })),
     note: 'Secret values are never exposed through the bridge.',
   })
+})
+
+const RESOURCE_FIELDS = ['name', 'url', 'description', 'project'] as const
+
+/**
+ * Значок сайта — фоном, как и в интерфейсе: чужая сеть может думать
+ * секундами, а ответ ассистенту ждать этого не должен.
+ */
+function grabIcon(resourceId: string, url: string) {
+  void fetchSiteIcon(url)
+    .then((icon) => (icon ? db.update(credentials).set({ icon }).where(eq(credentials.id, resourceId)) : null))
+    .catch(() => {})
+}
+
+/**
+ * Завести ресурс.
+ *
+ * Ссылки на макеты, панели и репозитории всплывают в разговоре постоянно, и
+ * без этой ручки ассистент клал их в заметки — то есть в другое место, где их
+ * потом никто не искал. Секреты сюда не принимаем намеренно: значение прошло
+ * бы через внешнюю модель и осело в её истории. Их по-прежнему заводит человек
+ * руками — мост даже на чтение их не отдаёт.
+ */
+bridgeRoute.post('/resources', async (c) => {
+  const id = auth(c as never)
+  const scope = await resolveProject(c as never)
+  if ('error' in scope) return c.json({ error: scope.error }, scope.status)
+  const denied = await require(c as never, 'resources.manage', scope.projectId)
+  if (denied) return c.json(denied, 403)
+
+  const b = (await c.req.json().catch(() => ({}))) as Record<string, unknown>
+  if ('secrets' in b) {
+    return c.json({ error: 'Secrets cannot be created through the bridge: the value would pass through an external model. A person adds them in the app.' }, 400)
+  }
+  const bad = unknownFields(b, RESOURCE_FIELDS)
+  if (bad) return c.json({ error: bad }, 400)
+
+  const link = typeof b.url === 'string' && b.url.trim() ? b.url.trim().slice(0, 2000) : null
+  // Имя из домена, если своего не дали: «figma.com/board» понятнее пустой
+  // строки, а придумывать название ради галочки никто не станет.
+  const name = (typeof b.name === 'string' ? b.name.trim().slice(0, 200) : '') || (link ? nameFromUrl(link) : '')
+  if (!name && !link) return c.json({ error: 'Provide a link or a name' }, 400)
+
+  const [row] = await db
+    .insert(credentials)
+    .values({
+      projectId: scope.projectId,
+      name,
+      url: link,
+      description: typeof b.description === 'string' ? b.description.slice(0, 5000) : '',
+      source: 'chat',
+      createdById: id.userId,
+    })
+    .returning()
+  if (link) grabIcon(row!.id, link)
+  await db.insert(credentialAccessLog).values({
+    projectId: scope.projectId,
+    userId: id.userId,
+    action: 'create',
+    credentialId: row!.id,
+    credentialName: name,
+  })
+  return c.json({ id: row!.id, name: row!.name, url: row!.url }, 201)
+})
+
+bridgeRoute.patch('/resources/:id', async (c) => {
+  const id = auth(c as never)
+  const scope = await resolveProject(c as never)
+  if ('error' in scope) return c.json({ error: scope.error }, scope.status)
+  const denied = await require(c as never, 'resources.manage', scope.projectId)
+  if (denied) return c.json(denied, 403)
+
+  const existing = await db.query.credentials.findFirst({
+    where: and(eq(credentials.id, c.req.param('id')), eq(credentials.projectId, scope.projectId), isNull(credentials.deletedAt)),
+  })
+  if (!existing) return c.json({ error: 'Resource not found' }, 404)
+
+  const b = (await c.req.json().catch(() => ({}))) as Record<string, unknown>
+  if ('secrets' in b) {
+    return c.json({ error: 'Secrets cannot be changed through the bridge: the value would pass through an external model. A person edits them in the app.' }, 400)
+  }
+  const bad = unknownFields(b, RESOURCE_FIELDS)
+  if (bad) return c.json({ error: bad }, 400)
+
+  const patch: Partial<typeof credentials.$inferInsert> = {}
+  const link = b.url === undefined ? existing.url : typeof b.url === 'string' && b.url.trim() ? b.url.trim().slice(0, 2000) : null
+  if (typeof b.name === 'string') patch.name = b.name.trim().slice(0, 200)
+  if (b.url !== undefined) patch.url = link
+  if (typeof b.description === 'string') patch.description = b.description.slice(0, 5000)
+  if (!Object.keys(patch).length) return c.json({ error: `Nothing to change. Allowed: ${RESOURCE_FIELDS.join(', ')}.` }, 400)
+
+  // Имя стёрли или его и не было — берём из ссылки.
+  const nextName = patch.name ?? existing.name
+  if (!nextName && link) patch.name = nameFromUrl(link)
+  if (!(patch.name ?? existing.name) && !link) return c.json({ error: 'Provide a link or a name' }, 400)
+
+  // Ссылка сменилась — прежний значок теперь не про этот ресурс.
+  if (b.url !== undefined && link !== existing.url) {
+    patch.icon = null
+    if (link) grabIcon(existing.id, link)
+  }
+
+  await db.update(credentials).set(patch).where(eq(credentials.id, existing.id))
+  await db.insert(credentialAccessLog).values({
+    projectId: scope.projectId,
+    userId: id.userId,
+    action: 'update',
+    credentialId: existing.id,
+    credentialName: patch.name ?? existing.name,
+  })
+  return c.json({ ok: true, id: existing.id })
 })
 
 // --- Файлы ------------------------------------------------------------------
