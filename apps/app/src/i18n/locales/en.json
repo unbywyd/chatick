@@ -1323,6 +1323,7 @@
     "addNote": "+ note",
     "notePlaceholder": "Answer or note…",
     "saveNote": "Save",
+    "clearNote": "Remove answer",
     "copy": "Copy question and answer",
     "dragHint": "Drag into chat to ask about it",
     "doneBy": "Checked by {{name}}"

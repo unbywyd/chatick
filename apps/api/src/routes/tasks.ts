@@ -471,8 +471,17 @@ async function commentFiles(commentIds: string[]) {
 // --- чек-лист задачи (SPEC §8.37) -------------------------------------------
 //
 // Права те же, что у самой задачи: чек-лист — её часть, а не отдельная
-// сущность со своим доступом. Кому задача принадлежит, тот и отмечает.
-// Отдельных уведомлений нет: человек и так смотрит на свою задачу.
+// сущность со своим доступом. Отдельных уведомлений нет: человек и так
+// смотрит на свою задачу.
+//
+// Отметить галочку и написать ответ может каждый, кто задачу ВИДИТ. Чек-лист
+// здесь — способ спросить: «каким ключом подписывать?» пишет один, а знает
+// ответ обычно другой, и требовать от него права править задачу — значит
+// закрыть единственный путь, ради которого пункт и заведён.
+//
+// Состав списка — другое дело: добавить пункт, переписать формулировку,
+// переставить или удалить может только тот, кто правит саму задачу. Иначе
+// человек с одним лишь доступом на чтение переписывал бы её содержание.
 
 /** Есть ли доступ к задаче и можно ли её менять. */
 async function checklistAccess(projectId: string, taskId: string, userId: string) {
@@ -537,6 +546,42 @@ tasksRoute.post(
   },
 )
 
+/**
+ * Порядок пунктов целиком.
+ *
+ * Одним запросом, а не пачкой PATCH по каждому пункту: sort_order — целое,
+ * середину между соседями не занять, поэтому при любой перестановке
+ * перенумеровывать приходится хвост списка. Пачкой это N запросов, каждый со
+ * своим обновлением списка, и порядок на экране скакал между промежуточными
+ * состояниями.
+ */
+tasksRoute.patch(
+  '/:taskId/checklist/order',
+  zValidator('json', z.object({ ids: z.array(z.string()).max(500) })),
+  async (c) => {
+    const { projectId, sub } = c.get('auth')
+    const access = await checklistAccess(projectId, c.req.param('taskId'), sub)
+    if ('error' in access) return c.json({ error: access.error }, access.status)
+    // Порядок — часть состава списка, а не доклад о сделанном.
+    if (!(await hasPermission(projectId, sub, 'tasks.edit'))) return c.json({ error: 'Forbidden' }, 403)
+
+    const { ids } = c.req.valid('json')
+    // Только пункты этой задачи: чужой id в списке иначе получил бы номер и
+    // уехал в чей-то чужой чек-лист.
+    const own = await db.query.taskChecklist.findMany({ where: eq(taskChecklist.taskId, access.task.id) })
+    const mine = new Set(own.map((r) => r.id))
+
+    let i = 0
+    for (const itemId of ids) {
+      if (!mine.has(itemId)) continue
+      await db.update(taskChecklist).set({ sortOrder: i++, updatedAt: new Date() }).where(eq(taskChecklist.id, itemId))
+    }
+
+    tasksChanged(projectId, [access.task.assigneeId, access.task.createdById])
+    return c.json({ ok: true, ordered: i })
+  },
+)
+
 tasksRoute.patch(
   '/:taskId/checklist/:itemId',
   zValidator(
@@ -552,7 +597,6 @@ tasksRoute.patch(
     const { projectId, sub } = c.get('auth')
     const access = await checklistAccess(projectId, c.req.param('taskId'), sub)
     if ('error' in access) return c.json({ error: access.error }, access.status)
-    if (!(await hasPermission(projectId, sub, 'tasks.edit'))) return c.json({ error: 'Forbidden' }, 403)
 
     const existing = await db.query.taskChecklist.findFirst({
       where: and(eq(taskChecklist.id, c.req.param('itemId')), eq(taskChecklist.taskId, access.task.id)),
@@ -560,6 +604,12 @@ tasksRoute.patch(
     if (!existing) return c.json({ error: 'Not found' }, 404)
 
     const b = c.req.valid('json')
+    // Переписать формулировку или переставить пункт — правка задачи. Отметить
+    // и ответить — нет: см. комментарий у checklistAccess.
+    if ((b.text !== undefined || b.sortOrder !== undefined) && !(await hasPermission(projectId, sub, 'tasks.edit'))) {
+      return c.json({ error: 'Forbidden' }, 403)
+    }
+
     const patch: Record<string, unknown> = { updatedAt: new Date() }
     if (b.text !== undefined) patch.text = b.text.trim()
     // Ответ под пунктом — размеченный текст, как описание и комментарии: из

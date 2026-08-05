@@ -893,7 +893,12 @@ export function TaskDrawer({
   return (
     <div
       className="relative flex h-full flex-col bg-background"
+      // Подсвечиваем только перетаскивание ФАЙЛОВ. Иначе зона вспыхивала на
+      // любое движение с зажатой кнопкой — в том числе когда пункт чек-листа
+      // переставляют внутри списка, и выглядело это так, будто задача вот-вот
+      // проглотит текст как вложение.
       onDragOver={(e) => {
+        if (!e.dataTransfer.types.includes('Files')) return
         e.preventDefault()
         setDragOver(true)
       }}

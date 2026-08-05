@@ -49,3 +49,48 @@ describe('что получается из типичного ответа ас�
     expect(richText('   ')).toBe('')
   })
 })
+
+// Кто что может в чек-листе.
+//
+// Спрашивает один, а знает ответ обычно другой: требовать от него права
+// править задачу — значит закрыть единственный путь, ради которого пункт и
+// заведён. Но состав списка — другое дело: с одним доступом на чтение
+// переписывать содержание задачи нельзя.
+describe('права', () => {
+  const patchItem = tasks.slice(tasks.indexOf("  '/:taskId/checklist/:itemId',"), tasks.indexOf("tasksRoute.delete('/:taskId/checklist/:itemId'"))
+  const order = tasks.slice(tasks.indexOf("  '/:taskId/checklist/order',"), tasks.indexOf("  '/:taskId/checklist/:itemId',"))
+
+  it('видеть задачу достаточно, чтобы дойти до пункта', () => {
+    expect(tasks).toMatch(/hasPermission\(projectId, userId, 'tasks\.read'\)/)
+  })
+
+  it('отметить и ответить — без tasks.edit', () => {
+    // Права проверяются только для text/sortOrder; общей проверки на весь
+    // обработчик быть не должно.
+    expect(patchItem).toMatch(/b\.text !== undefined \|\| b\.sortOrder !== undefined/)
+    expect((patchItem.match(/tasks\.edit/g) ?? []).length).toBe(1)
+  })
+
+  it('переписать формулировку — только с tasks.edit', () => {
+    expect(patchItem).toMatch(/b\.sortOrder !== undefined\) && !\(await hasPermission\(projectId, sub, 'tasks\.edit'\)\)/)
+  })
+
+  it('порядок меняет тот, кто правит задачу', () => {
+    expect(order).toMatch(/tasks\.edit/)
+  })
+
+  it('перестановка не уносит чужие пункты', () => {
+    // Без проверки принадлежности чужой id в списке получил бы номер и уехал
+    // в чей-то другой чек-лист.
+    expect(order).toMatch(/mine\.has\(itemId\)/)
+  })
+
+  it('удалить пункт — только с tasks.edit', () => {
+    const del = tasks.slice(tasks.indexOf("tasksRoute.delete('/:taskId/checklist/:itemId'"))
+    expect(del.slice(0, 900)).toMatch(/tasks\.edit/)
+  })
+
+  it('ручка порядка объявлена ДО ручки пункта — иначе «order» примут за id', () => {
+    expect(tasks.indexOf("'/:taskId/checklist/order'")).toBeLessThan(tasks.indexOf("'/:taskId/checklist/:itemId'"))
+  })
+})

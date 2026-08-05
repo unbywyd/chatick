@@ -1322,6 +1322,7 @@
     "addNote": "+ הערה",
     "notePlaceholder": "תשובה או הערה…",
     "saveNote": "שמירה",
+    "clearNote": "להסיר תשובה",
     "copy": "העתקת שאלה ותשובה",
     "dragHint": "גררו לצ׳אט כדי לשאול",
     "doneBy": "סומן על ידי {{name}}"
