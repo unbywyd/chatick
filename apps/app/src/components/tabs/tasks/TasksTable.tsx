@@ -14,7 +14,6 @@ import {
   verticalListSortingStrategy,
   arrayMove,
 } from '@dnd-kit/sortable'
-import { CSS } from '@dnd-kit/utilities'
 import { ChevronDown, ChevronUp, ChevronsUpDown, Flag, GripVertical, Paperclip, Pencil, Plus, Trash2 } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { Button } from '@/components/ui/button'
@@ -150,12 +149,27 @@ export function TasksTable({
     const activeId = String(active.id)
     const overId = String(over.id)
 
-    // перетаскивание групп
-    if (activeId.startsWith('group:') && overId.startsWith('group:')) {
+    /**
+     * Перетаскивание групп.
+     *
+     * Цель ищем не только среди групп. Строки задач — тоже droppable и лежат
+     * внутри секций, поэтому ближайшим центром при переносе спринта почти
+     * всегда оказывается чужая строка, а не заголовок. Условие «отпустили ровно
+     * на другой группе» не выполнялось никогда, и спринты не двигались вовсе.
+     */
+    if (activeId.startsWith('group:')) {
+      const overGroupId = overId.startsWith('group:')
+        ? overId.slice(6)
+        : overId.startsWith('task:')
+          ? tasks.find((x) => x.id === overId.slice(5))?.groupId ?? null
+          : overId.startsWith('dropzone:')
+            ? (overId.slice(9) === 'none' ? null : overId.slice(9))
+            : null
+      if (!overGroupId) return // «без группы» — не спринт, местами с ним не меняются
       const ids = orderedGroups.map((g) => g.id)
       const from = ids.indexOf(activeId.slice(6))
-      const to = ids.indexOf(overId.slice(6))
-      if (from >= 0 && to >= 0) onReorderGroups(arrayMove(ids, from, to))
+      const to = ids.indexOf(overGroupId)
+      if (from >= 0 && to >= 0 && from !== to) onReorderGroups(arrayMove(ids, from, to))
       return
     }
 
@@ -181,13 +195,28 @@ export function TasksTable({
     // Раньше клиент брал середину между соседями — но у всех задач проекта
     // sort_order по умолчанию 0, а середина между нулями тоже ноль: карточка
     // возвращалась на место, и выглядело это как сломанный драг.
-    //
-    // Вынимаем задачу и вставляем на место той, над которой её отпустили (или
-    // в конец, если бросили на пустое поле группы).
-    const groupTasks = sortTasks((byGroup.get(targetGroupId) ?? []).filter((x) => x.id !== taskId))
-    const idx = beforeTaskId ? groupTasks.findIndex((x) => x.id === beforeTaskId) : groupTasks.length
-    const at = idx < 0 ? groupTasks.length : idx
-    const ordered = [...groupTasks.slice(0, at), task, ...groupTasks.slice(at)]
+    const inGroup = sortTasks(byGroup.get(targetGroupId) ?? [])
+    let ordered: Task[]
+
+    if ((task.groupId ?? null) === targetGroupId) {
+      // Своя группа — сдвиг внутри списка.
+      //
+      // Именно сдвиг, а не «вставить перед целью»: вынув задачу из списка, все
+      // следующие поднимаются на одну позицию, и вставка перед целью ставила
+      // её ПЕРЕД той же соседкой, откуда она уехала. Вверх это совпадало с
+      // ожиданием, а вниз возвращало на место — ровно то, что и наблюдалось.
+      const from = inGroup.findIndex((x) => x.id === taskId)
+      const to = beforeTaskId ? inGroup.findIndex((x) => x.id === beforeTaskId) : inGroup.length - 1
+      if (from < 0 || to < 0 || from === to) return
+      ordered = arrayMove(inGroup, from, to)
+    } else {
+      // Переезд в другую группу: встаём на место той задачи, на которую
+      // отпустили, а на пустом поле — в конец.
+      const rest = inGroup.filter((x) => x.id !== taskId)
+      const idx = beforeTaskId ? rest.findIndex((x) => x.id === beforeTaskId) : rest.length
+      const at = idx < 0 ? rest.length : idx
+      ordered = [...rest.slice(0, at), task, ...rest.slice(at)]
+    }
 
     onReorderTasks(ordered.map((x) => ({ id: x.id, groupId: targetGroupId })))
   }
@@ -327,7 +356,16 @@ function GroupTable({
 
   // sortable-обёртка для строки-заголовка группы (перетаскивание групп)
   const sortable = useSortable({ id: group ? `group:${group.id}` : 'group:none', disabled: !group || !canEdit })
-  const style = group ? { transform: CSS.Transform.toString(sortable.transform), transition: sortable.transition } : undefined
+  // Перетаскиваемую секцию оставляем на месте бледной — по той же причине, что
+  // и строку задачи: сдвиг за нижний край растягивает область прокрутки, и
+  // автоскролл уходит в петлю.
+  const style = group
+    ? {
+        transform:
+          sortable.transform && !sortable.isDragging ? `translate3d(0, ${sortable.transform.y}px, 0)` : undefined,
+        transition: sortable.transition,
+      }
+    : undefined
 
   // для «без группы» пустую секцию не показываем
   if (!group && tasks.length === 0) return null
@@ -513,12 +551,16 @@ function TableRow({
 }) {
   const { t } = useTranslation()
   const { setNodeRef, transform, transition, isDragging, attributes, listeners } = useSortable({ id: `task:${task.id}` })
-  // Только вертикальный сдвиг. CSS.Transform.toString добавляет ещё и
-  // scaleX/scaleY: в <tr> они растягивают строку шире таблицы, у контейнера
-  // появляется горизонтальная полоса, и содержимое дёргается на каждый
-  // пиксель перетаскивания.
+  // Саму перетаскиваемую строку НЕ двигаем — она остаётся на месте бледной, а
+  // расступаются соседние. Сдвиг за нижний край растягивал область прокрутки,
+  // автоскролл видел край и прокручивал дальше, от этого строка уезжала ещё
+  // ниже — и список прокручивался без конца, будто задач втрое больше.
+  //
+  // Соседи меняются местами внутри той же высоты, поэтому от их сдвига список
+  // не растёт. Только вертикальный: scaleX/scaleY, которые добавляет
+  // CSS.Transform.toString, в <tr> растягивают строку шире таблицы.
   const style = {
-    transform: transform ? `translate3d(0, ${transform.y}px, 0)` : undefined,
+    transform: transform && !isDragging ? `translate3d(0, ${transform.y}px, 0)` : undefined,
     transition,
   }
   const StatusIcon = STATUS_ICON[task.status]
