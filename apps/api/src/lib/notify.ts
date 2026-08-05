@@ -1,4 +1,4 @@
-import { and, eq, inArray } from 'drizzle-orm'
+import { and, eq, inArray, isNull } from 'drizzle-orm'
 import { db } from '../db/client.js'
 import { users, projects, projectMembers, notificationOptOuts, notificationLog, notifications } from '../db/schema.js'
 import { sendToUserAnywhere } from '../ws.js'
@@ -225,5 +225,47 @@ export async function notify(params: NotifyParams): Promise<void> {
     }
   } catch (err) {
     console.error('[notify] failed:', err)
+  }
+}
+
+/**
+ * Снять уведомление, которое перестало быть правдой.
+ *
+ * Задачу назначили на человека — он получил «вам назначили задачу». Потом её
+ * переназначили на другого, а уведомление продолжало висеть в колокольчике:
+ * человек открывал его и обнаруживал задачу, к которой уже не имеет отношения.
+ *
+ * Удаляем ТОЛЬКО непрочитанное. Прочитанное — часть истории: человек это уже
+ * видел, и стирать у него из-под носа то, на что он смотрел, хуже, чем оставить.
+ *
+ * Заодно снимаем запись из журнала дедупа. Без этого повторное назначение той
+ * же задачи тому же человеку проходило молча: ключ уже был занят, и второе
+ * уведомление не создавалось никогда.
+ */
+export async function dropNotice(opts: {
+  userId: string
+  event: NotificationEvent
+  entityId: string
+  dedupeKey: string
+}): Promise<void> {
+  try {
+    const removed = await db
+      .delete(notifications)
+      .where(
+        and(
+          eq(notifications.userId, opts.userId),
+          eq(notifications.event, opts.event),
+          eq(notifications.entityId, opts.entityId),
+          isNull(notifications.readAt),
+        ),
+      )
+      .returning({ id: notifications.id })
+
+    await db.delete(notificationLog).where(eq(notificationLog.dedupeKey, `${opts.dedupeKey}:${opts.userId}`))
+
+    // Колокольчик пересчитывается у получателя, где бы он ни был.
+    if (removed.length) sendToUserAnywhere(opts.userId, 'notification', {})
+  } catch (err) {
+    console.error('[notify] не удалось снять уведомление:', err)
   }
 }

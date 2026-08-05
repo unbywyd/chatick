@@ -101,7 +101,19 @@ export function RichEditor({
           : { horizontalRule: false },
       ),
       Placeholder.configure({ placeholder: placeholder ?? '' }),
-      Link.configure({ openOnClick: false, HTMLAttributes: { class: 'text-brand underline' } }),
+      // autolink: набрал адрес и поставил пробел — он стал ссылкой. Без этого
+      // адрес в описании оставался обычным текстом, и по нему нельзя было
+      // перейти: приходилось выделять и копировать руками.
+      //
+      // openOnClick только в чтении: в редакторе клик по ссылке должен ставить
+      // курсор, а не уводить со страницы посреди правки. Открываем в новой
+      // вкладке — приложение остаётся на месте.
+      Link.configure({
+        openOnClick: readOnly,
+        autolink: true,
+        linkOnPaste: true,
+        HTMLAttributes: { class: 'text-brand underline', target: '_blank', rel: 'noopener noreferrer nofollow' },
+      }),
       ...(preset === 'full' ? [TaskList, TaskItem.configure({ nested: true })] : []),
       Mention.configure({ HTMLAttributes: { class: 'mention' }, suggestion: mentionSuggestion(() => mentions) as never }),
       Image.configure({ inline: false, allowBase64: false, HTMLAttributes: { class: 'inline-doc-image' } }),

@@ -9,7 +9,7 @@ import { requireProject, type ProjectEnv } from '../auth.js'
 import { hasPermission, ownsOrManages } from './projects.js'
 import { improveTask, validateTask, generateTaskNotes } from '../lib/llm.js'
 import { buildTeamContext } from '../lib/memory.js'
-import { notify, extractMentions } from '../lib/notify.js'
+import { notify, extractMentions, dropNotice } from '../lib/notify.js'
 import { broadcast, tasksChanged } from '../ws.js'
 import { logActivity } from '../lib/audit.js'
 import { postTaskDone, postTaskAssigned } from '../lib/task-events.js'
@@ -33,8 +33,25 @@ const taskShape = {
   estimateMinutes: z.number().int().min(0).max(100000).nullable().optional(),
 }
 
+/**
+ * Задачу сняли с человека — снять и уведомление о назначении.
+ *
+ * Иначе в колокольчике висит «вам назначили задачу» про задачу, к которой он
+ * уже не имеет отношения: открывает и не понимает, чего от него хотят.
+ * Одна функция на все точки, где меняется исполнитель, — их несколько (форма,
+ * доска, мост), и разойтись им нельзя.
+ */
+export function unassignNotice(userId: string, taskId: string): Promise<void> {
+  return dropNotice({
+    userId,
+    event: 'task_assigned',
+    entityId: taskId,
+    dedupeKey: `task_assigned:${taskId}:${userId}`,
+  })
+}
+
 // Уведомления по задаче: назначение, смена статуса, упоминания в описании (SPEC §8.9).
-async function notifyTask(
+export async function notifyTask(
   projectId: string,
   actorId: string,
   task: typeof tasks.$inferSelect,
@@ -244,6 +261,9 @@ tasksRoute.patch(
       statusChanged: body.status !== undefined && body.status !== task.status,
       mentions: body.description !== undefined && body.description !== task.description,
     })
+    // Сняли человека с задачи — снимаем и его уведомление о назначении.
+    if (body.assigneeId !== undefined && task.assigneeId && body.assigneeId !== task.assigneeId)
+      void unassignNotice(task.assigneeId, task.id)
     tasksChanged(projectId, [row!.assigneeId, row!.createdById, task.assigneeId])
     const act = body.status !== undefined && body.status !== task.status ? 'status' : body.assigneeId !== undefined ? 'assign' : 'update'
     void logActivity({ projectId, actorId: sub, action: act, entityType: 'task', entityId: row!.id, entityLabel: `${row!.number}: ${row!.title}`, meta: { changed: Object.keys(patch) } })
@@ -274,6 +294,10 @@ tasksRoute.delete('/:taskId', async (c) => {
 
   // soft-delete (SPEC §8.21): восстановимо 7 дней
   await db.update(tasks).set({ deletedAt: new Date(), deletedById: sub }).where(eq(tasks.id, taskId))
+  // Задачи больше нет в списках — уведомлению о ней там тоже делать нечего:
+  // человек шёл бы по ссылке в пустоту. Восстановят — назначение уведомит
+  // заново, журнал дедупа мы тоже чистим.
+  if (task.assigneeId) void unassignNotice(task.assigneeId, task.id)
   void logActivity({ projectId, actorId: sub, action: 'delete', entityType: 'task', entityId: task.id, entityLabel: `${task.number}: ${task.title}` })
   tasksChanged(projectId, [task.assigneeId, task.createdById])
   return c.json({ ok: true })

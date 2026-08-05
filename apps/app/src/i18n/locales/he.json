@@ -260,7 +260,10 @@
     "estimateHint": "למשל 45 או 2:30",
     "discardTitle": "לבטל את השינויים?",
     "discardHint": "העריכות לא יישמרו.",
-    "discardConfirm": "ביטול"
+    "discardConfirm": "ביטול",
+    "dueLabel": "תאריך יעד",
+    "groupLabel": "ספרינט",
+    "noDue": "ללא תאריך יעד"
   },
   "files": {
     "search": "חיפוש קבצים…",

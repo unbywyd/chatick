@@ -49,6 +49,7 @@ import { readPresence } from './auth.js'
 import { createShare, revokeShare, type ShareEntityType } from './shares.js'
 import { notifyChatMentions } from './messages.js'
 import { notify, extractMentions } from '../lib/notify.js'
+import { notifyTask, unassignNotice } from './tasks.js'
 import { projectPath, companyOf } from '../lib/links.js'
 import { htmlToText, sanitizeHtml } from '../lib/sanitize-html.js'
 import { richText } from '../lib/markdown.js'
@@ -1127,6 +1128,9 @@ bridgeRoute.post('/tasks', async (c) => {
     entityLabel: `${row!.number} ${row!.title}`,
   })
   const attachments = await attachToTask(b.attachmentIds, scope.projectId, id.userId, row!.id)
+  // Назначение через мост затрагивает человека ровно так же, как из интерфейса:
+  // раньше задача сваливалась на него молча.
+  void notifyTask(scope.projectId, id.userId, row!, { assigneeChanged: Boolean(row!.assigneeId), mentions: true })
   tasksChanged(scope.projectId, [row!.assigneeId, row!.createdById])
   // подтягиваем исполнителя, чтобы агент сразу видел, на кого задача ушла
   const who = row!.assigneeId ? await db.query.users.findFirst({ where: eq(users.id, row!.assigneeId) }) : null
@@ -1193,6 +1197,14 @@ bridgeRoute.patch('/tasks/:id', async (c) => {
     entityLabel: `${row!.number} ${row!.title}`,
   })
   const attachments = await attachToTask(b.attachmentIds, scope.projectId, id.userId, row!.id)
+  // Те же уведомления, что из интерфейса: назначили — сказали, сняли — убрали.
+  const assigneeChanged = patch.assigneeId !== undefined && patch.assigneeId !== existing.assigneeId
+  void notifyTask(scope.projectId, id.userId, row!, {
+    assigneeChanged: assigneeChanged && Boolean(row!.assigneeId),
+    statusChanged: patch.status !== undefined && patch.status !== existing.status,
+    mentions: patch.description !== undefined && patch.description !== existing.description,
+  })
+  if (assigneeChanged && existing.assigneeId) void unassignNotice(existing.assigneeId, existing.id)
   tasksChanged(scope.projectId, [row!.assigneeId, row!.createdById, existing.assigneeId, existing.createdById])
   const who = row!.assigneeId ? await db.query.users.findFirst({ where: eq(users.id, row!.assigneeId) }) : null
   return c.json({ ...taskView(row!, who), ...(b.attachmentIds !== undefined ? { attachments } : {}) })
@@ -1215,6 +1227,8 @@ bridgeRoute.delete('/tasks/:id', async (c) => {
   if (denied) return c.json(denied, 403)
 
   await db.update(tasks).set({ deletedAt: new Date(), deletedById: id.userId }).where(eq(tasks.id, taskId))
+  // Задачи нет в списках — уведомлению о ней там тоже делать нечего.
+  if (existing.assigneeId) void unassignNotice(existing.assigneeId, existing.id)
   void logActivity({
     projectId: scope.projectId,
     actorId: id.userId,

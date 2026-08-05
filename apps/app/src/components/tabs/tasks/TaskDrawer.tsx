@@ -6,9 +6,11 @@ import { toast } from 'sonner'
 import {
   ArrowLeft,
   CalendarDays,
+  ChevronDown,
   Download,
   ExternalLink,
   File,
+  Layers,
   Loader2,
   MessagesSquare,
   Paperclip,
@@ -65,6 +67,7 @@ export function TaskDrawer({
   groups = [],
   meId,
   canEdit = true,
+  canChangeStatus = true,
   onPatch,
   onDelete,
   onClose,
@@ -75,6 +78,8 @@ export function TaskDrawer({
   groups?: TaskGroup[]
   meId?: string
   canEdit?: boolean
+  /** Двигать статус может каждый участник, даже если задачу править не вправе */
+  canChangeStatus?: boolean
   onPatch: (body: Record<string, unknown>) => void
   onDelete: () => void
   /** только что созданная задача — открываем сразу в режиме правки */
@@ -680,32 +685,207 @@ export function TaskDrawer({
   // Мета-строка: статус · приоритет · исполнитель · дедлайн · оценка · спринт (read-only)
   const g = groups.find((x) => x.id === task.groupId)
   const StatusIcon = STATUS_ICON[task.status]
-  const meta = (
-    <div className="flex flex-wrap items-center gap-x-4 gap-y-2 text-sm">
-      <span className="inline-flex items-center gap-1.5">
-        <StatusIcon className={cn('size-4', STATUS_COLOR[task.status])} />
-        {t(`tasks.status.${task.status}`)}
-      </span>
-      <span className="inline-flex items-center gap-1.5">
-        <span className={cn('size-2 rounded-full', PRIORITY_DOT[task.priority])} />
-        {t(`tasks.priority.${task.priority}`)}
-      </span>
-      <span className="inline-flex items-center gap-1.5 text-muted-foreground">
-        {task.assignee ? <Avatar name={task.assignee.name} src={task.assignee.avatarUrl} size={18} /> : <User className="size-3.5" />}
-        {task.assignee?.name ?? t('tasks.unassigned')}
-      </span>
-      {task.dueDate && (
-        <span className="inline-flex items-center gap-1.5 text-muted-foreground">
-          <CalendarDays className="size-3.5" />
-          {new Date(task.dueDate).toLocaleDateString(i18n.language, { day: 'numeric', month: 'short', year: 'numeric' })}
-        </span>
+  // Свойства задачи правятся по месту, а не через форму сбоку.
+  //
+  // Открыть задачу, нажать «Изменить», найти нужное поле в панели справа и
+  // закрыть её — четыре действия ради того, чтобы передвинуть статус. У кого
+  // прав нет, тот видит ровно то же самое, только не кликабельным: одна
+  // разметка на оба случая, и «почему у меня по-другому выглядит» не возникает.
+  //
+  // Статус отделён от остального намеренно: подвинуть карточку по доске может
+  // каждый участник (tasks.changeStatus), а переписывать задачу — нет.
+  const Chip = ({
+    editable,
+    children,
+    className,
+  }: {
+    editable: boolean
+    children: React.ReactNode
+    className?: string
+  }) => (
+    <span
+      className={cn(
+        'inline-flex items-center gap-1.5 rounded-md px-1.5 py-1 -mx-1.5',
+        editable && 'cursor-pointer transition-colors hover:bg-accent',
+        className,
       )}
+    >
+      {children}
+      {editable && <ChevronDown className="size-3 opacity-40" />}
+    </span>
+  )
+
+  const meta = (
+    <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-sm">
+      {/* Статус */}
+      {canChangeStatus ? (
+        <DropdownMenu>
+          <DropdownMenuTrigger asChild>
+            <button type="button" title={t('tasks.statusLabel')}>
+              <Chip editable>
+                <StatusIcon className={cn('size-4', STATUS_COLOR[task.status])} />
+                {t(`tasks.status.${task.status}`)}
+              </Chip>
+            </button>
+          </DropdownMenuTrigger>
+          <DropdownMenuContent align="start">
+            {STATUSES.map((s) => {
+              const Icon = STATUS_ICON[s]
+              return (
+                <DropdownMenuCheckItem key={s} checked={s === task.status} onSelect={() => onPatch({ status: s })}>
+                  <Icon className={cn('size-3.5', STATUS_COLOR[s])} />
+                  {t(`tasks.status.${s}`)}
+                </DropdownMenuCheckItem>
+              )
+            })}
+          </DropdownMenuContent>
+        </DropdownMenu>
+      ) : (
+        <Chip editable={false}>
+          <StatusIcon className={cn('size-4', STATUS_COLOR[task.status])} />
+          {t(`tasks.status.${task.status}`)}
+        </Chip>
+      )}
+
+      {/* Важность */}
+      {canEdit ? (
+        <DropdownMenu>
+          <DropdownMenuTrigger asChild>
+            <button type="button" title={t('tasks.priorityLabel')}>
+              <Chip editable>
+                <span className={cn('size-2 rounded-full', PRIORITY_DOT[task.priority])} />
+                {t(`tasks.priority.${task.priority}`)}
+              </Chip>
+            </button>
+          </DropdownMenuTrigger>
+          <DropdownMenuContent align="start">
+            {PRIORITIES.map((p) => (
+              <DropdownMenuCheckItem key={p} checked={p === task.priority} onSelect={() => onPatch({ priority: p })}>
+                <span className={cn('size-2 rounded-full', PRIORITY_DOT[p])} />
+                {t(`tasks.priority.${p}`)}
+              </DropdownMenuCheckItem>
+            ))}
+          </DropdownMenuContent>
+        </DropdownMenu>
+      ) : (
+        <Chip editable={false}>
+          <span className={cn('size-2 rounded-full', PRIORITY_DOT[task.priority])} />
+          {t(`tasks.priority.${task.priority}`)}
+        </Chip>
+      )}
+
+      {/* Исполнитель */}
+      {canEdit ? (
+        <DropdownMenu>
+          <DropdownMenuTrigger asChild>
+            <button type="button" title={t('tasks.assigneeLabel')}>
+              <Chip editable className="text-muted-foreground">
+                {task.assignee ? (
+                  <Avatar name={task.assignee.name} src={task.assignee.avatarUrl} size={18} />
+                ) : (
+                  <User className="size-3.5" />
+                )}
+                {task.assignee?.name ?? t('tasks.unassigned')}
+              </Chip>
+            </button>
+          </DropdownMenuTrigger>
+          <DropdownMenuContent align="start" className="max-h-72 overflow-y-auto">
+            <DropdownMenuCheckItem checked={!task.assignee} onSelect={() => onPatch({ assigneeId: null })}>
+              <User className="size-3.5" />
+              {t('tasks.unassigned')}
+            </DropdownMenuCheckItem>
+            {members.map((m) => (
+              <DropdownMenuCheckItem
+                key={m.user.id}
+                checked={task.assignee?.id === m.user.id}
+                onSelect={() => onPatch({ assigneeId: m.user.id })}
+              >
+                <Avatar name={m.user.name} src={m.user.avatarUrl} size={18} />
+                {m.user.name}
+              </DropdownMenuCheckItem>
+            ))}
+          </DropdownMenuContent>
+        </DropdownMenu>
+      ) : (
+        <Chip editable={false} className="text-muted-foreground">
+          {task.assignee ? <Avatar name={task.assignee.name} src={task.assignee.avatarUrl} size={18} /> : <User className="size-3.5" />}
+          {task.assignee?.name ?? t('tasks.unassigned')}
+        </Chip>
+      )}
+
+      {/* Срок. Без права правки пустой срок не показываем: сказать нечего. */}
+      {canEdit ? (
+        <Popover>
+          <PopoverTrigger asChild>
+            <button type="button" title={t('tasks.dueLabel')}>
+              <Chip editable className="text-muted-foreground">
+                <CalendarDays className="size-3.5" />
+                {task.dueDate
+                  ? new Date(task.dueDate).toLocaleDateString(i18n.language, { day: 'numeric', month: 'short', year: 'numeric' })
+                  : t('tasks.noDue')}
+              </Chip>
+            </button>
+          </PopoverTrigger>
+          <PopoverContent align="start" className="w-auto p-2">
+            <Calendar
+              selected={task.dueDate ? new Date(task.dueDate) : undefined}
+              onSelect={(d) =>
+                onPatch({ dueDate: d ? new Date(d.getFullYear(), d.getMonth(), d.getDate(), 12).toISOString() : null })
+              }
+            />
+            {task.dueDate && (
+              <Button variant="ghost" size="sm" className="mt-1 w-full" onClick={() => onPatch({ dueDate: null })}>
+                {t('tasks.clearDue')}
+              </Button>
+            )}
+          </PopoverContent>
+        </Popover>
+      ) : (
+        task.dueDate && (
+          <Chip editable={false} className="text-muted-foreground">
+            <CalendarDays className="size-3.5" />
+            {new Date(task.dueDate).toLocaleDateString(i18n.language, { day: 'numeric', month: 'short', year: 'numeric' })}
+          </Chip>
+        )
+      )}
+
       {task.estimateMinutes ? <span className="text-muted-foreground">⏱ {fmtEstimate(task.estimateMinutes)}</span> : null}
-      {g && (
-        <span className="inline-flex items-center gap-1.5">
-          <span className="size-2.5 rounded-full" style={{ backgroundColor: g.color }} />
-          {g.name}
-        </span>
+
+      {/* Спринт */}
+      {canEdit ? (
+        <DropdownMenu>
+          <DropdownMenuTrigger asChild>
+            <button type="button" title={t('tasks.groupLabel')}>
+              <Chip editable className={cn(!g && 'text-muted-foreground')}>
+                {g ? (
+                  <span className="size-2.5 rounded-full" style={{ backgroundColor: g.color }} />
+                ) : (
+                  <Layers className="size-3.5" />
+                )}
+                {g?.name ?? t('tasks.noGroup')}
+              </Chip>
+            </button>
+          </DropdownMenuTrigger>
+          <DropdownMenuContent align="start" className="max-h-72 overflow-y-auto">
+            <DropdownMenuCheckItem checked={!task.groupId} onSelect={() => onPatch({ groupId: null })}>
+              <Layers className="size-3.5" />
+              {t('tasks.noGroup')}
+            </DropdownMenuCheckItem>
+            {groups.map((gr) => (
+              <DropdownMenuCheckItem key={gr.id} checked={task.groupId === gr.id} onSelect={() => onPatch({ groupId: gr.id })}>
+                <span className="size-2.5 rounded-full" style={{ backgroundColor: gr.color }} />
+                {gr.name}
+              </DropdownMenuCheckItem>
+            ))}
+          </DropdownMenuContent>
+        </DropdownMenu>
+      ) : (
+        g && (
+          <Chip editable={false}>
+            <span className="size-2.5 rounded-full" style={{ backgroundColor: g.color }} />
+            {g.name}
+          </Chip>
+        )
       )}
     </div>
   )

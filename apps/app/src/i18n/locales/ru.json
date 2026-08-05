@@ -261,7 +261,10 @@
     "estimateHint": "например 45 или 2:30",
     "discardTitle": "Отменить изменения?",
     "discardHint": "Правки не сохранятся.",
-    "discardConfirm": "Отменить"
+    "discardConfirm": "Отменить",
+    "dueLabel": "Срок",
+    "groupLabel": "Спринт",
+    "noDue": "Без срока"
   },
   "files": {
     "search": "Поиск файлов…",

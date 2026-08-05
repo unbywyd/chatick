@@ -84,6 +84,12 @@ export function TasksTab({ projectId, meId }: { projectId: string; meId?: string
     () => isManager || Boolean(me?.permissions?.['tasks.edit']),
     [isManager, me],
   )
+  // Двигать статус может каждый участник: перенести карточку по доске — не то
+  // же самое, что переписать задачу. Право отдельное и на сервере тоже.
+  const canChangeStatus = useMemo(
+    () => isManager || Boolean(me?.permissions?.['tasks.changeStatus']),
+    [isManager, me],
+  )
   /**
    * Право править КОНКРЕТНУЮ задачу: чужую участник не переписывает.
    *
@@ -323,6 +329,7 @@ export function TasksTab({ projectId, meId }: { projectId: string; meId?: string
         groups={groupsQ.data ?? []}
         meId={meId}
         canEdit={canEditTask(openTask)}
+        canChangeStatus={canChangeStatus}
         onPatch={(body) => patch.mutate({ id: openTask.id, ...body })}
         onDelete={() => remove.mutate(openTask.id)}
         onClose={() => {

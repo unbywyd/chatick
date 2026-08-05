@@ -260,7 +260,10 @@
     "estimateHint": "e.g. 45 or 2:30",
     "discardTitle": "Discard changes?",
     "discardHint": "Your edits will not be saved.",
-    "discardConfirm": "Discard"
+    "discardConfirm": "Discard",
+    "dueLabel": "Due",
+    "groupLabel": "Sprint",
+    "noDue": "No due date"
   },
   "files": {
     "search": "Search files…",
