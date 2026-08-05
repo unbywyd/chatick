@@ -803,7 +803,6 @@ const TASK_FIELDS = [
   'assignee',
   'status',
   'priority',
-  'dueDate',
   'estimateMinutes',
   // Свои номера задачи: экраны в макете, пункты договора, позиции сметы.
   'refs',
@@ -841,28 +840,6 @@ function unknownFields(body: Record<string, unknown>, allowed: readonly string[]
   return `Unknown field${extra.length > 1 ? 's' : ''}: ${extra.join(', ')}. Allowed: ${allowed.join(', ')}.${
     hints.length ? ` ${hints.join('; ')}.` : ''
   }`
-}
-
-function parseDue(value: unknown): Date | null | undefined {
-  if (value === null) return null
-  if (typeof value !== 'string' || !value.trim()) return undefined
-  const v = value.trim().toLowerCase()
-  const day = 86400_000
-  const startOfDay = (d: Date) => new Date(d.getFullYear(), d.getMonth(), d.getDate(), 12, 0, 0)
-
-  if (v === 'today') return startOfDay(new Date())
-  if (v === 'tomorrow') return startOfDay(new Date(Date.now() + day))
-  const inDays = v.match(/^in (\d+) days?$/)
-  if (inDays) return startOfDay(new Date(Date.now() + Number(inDays[1]) * day))
-  const weekday = v.match(/^next (monday|tuesday|wednesday|thursday|friday|saturday|sunday)$/)
-  if (weekday) {
-    const target = ['sunday', 'monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday'].indexOf(weekday[1]!)
-    const now = new Date()
-    const delta = ((target - now.getDay() + 7) % 7) || 7
-    return startOfDay(new Date(Date.now() + delta * day))
-  }
-  const parsed = Date.parse(value)
-  return isNaN(parsed) ? undefined : new Date(parsed)
 }
 
 /**
@@ -1000,7 +977,6 @@ const taskView = (
   priority: t.priority,
   estimateMinutes: t.estimateMinutes ? Number(t.estimateMinutes) : null,
   refs: t.refs || undefined,
-  dueDate: t.dueDate,
   sprintId: t.groupId,
   assignee: assignee ? { id: assignee.id, name: assignee.name } : null,
   // Файлы, приложенные к задаче. Раньше их не было в ответе вовсе: ассистент
@@ -1095,7 +1071,6 @@ bridgeRoute.post('/tasks', async (c) => {
 
   const assigneeId = await resolveAssignee(id, scope.projectId, b.assignee)
   if (b.assignee !== undefined && assigneeId === undefined) return c.json({ error: `Unknown assignee: ${String(b.assignee)}` }, 400)
-  const dueDate = parseDue(b.dueDate)
 
   // Номер = max+1, а НЕ count: удалённые задачи оставляют дыры, и count
   // повторно выдаёт уже занятый номер (unique-индекс project+number).
@@ -1118,7 +1093,6 @@ bridgeRoute.post('/tasks', async (c) => {
         ? (b.priority as 'normal')
         : 'normal',
       assigneeId: assigneeId ?? null,
-      dueDate: dueDate ?? null,
       estimateMinutes: b.estimateMinutes != null ? String(b.estimateMinutes) : null,
       refs: typeof b.refs === 'string' ? normalizeRefs(b.refs) : '',
       groupId: typeof b.sprintId === 'string' ? b.sprintId : null,
@@ -1172,11 +1146,6 @@ bridgeRoute.patch('/tasks/:id', async (c) => {
     patch.assigneeId = resolved
   }
 
-  if (b.dueDate !== undefined) {
-    const due = parseDue(b.dueDate)
-    if (due === undefined) return c.json({ error: `Cannot parse dueDate: ${String(b.dueDate)}` }, 400)
-    patch.dueDate = due
-  }
   if (!Object.keys(patch).length) return c.json({ error: 'Nothing to update' }, 400)
 
   // Права — по тому, ЧТО меняют, как и в вебе: передвинуть карточку по доске
@@ -2761,7 +2730,8 @@ bridgeRoute.post('/notes/:id/task', async (c) => {
     title: typeof b.title === 'string' ? b.title : undefined,
     assigneeId: typeof b.assigneeId === 'string' ? b.assigneeId : null,
     priority: typeof b.priority === 'string' ? b.priority : undefined,
-    dueDate: typeof b.dueDate === 'string' ? b.dueDate : null,
+    // Срока у задач через мост нет — см. TASK_FIELDS.
+    dueDate: null,
   })
   if ('error' in res) return c.json({ error: res.error }, res.status)
   return c.json({ id: res.task.id, number: res.task.number, title: res.task.title, alreadyExisted: res.already })

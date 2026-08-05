@@ -110,3 +110,31 @@ describe('гайд для ассистента', () => {
     expect(docs).toMatch(/rather than in a note/)
   })
 })
+
+// Срок у задач через мост убран намеренно: дедлайн живёт на проекте, а не на
+// каждой задаче. Важно, чтобы поле именно ОТВЕРГАЛОСЬ: молча проглоченный
+// dueDate — худший исход, ассистент доложит о проставленной дате, которой нет.
+describe('срока у задач через мост нет', () => {
+  it('dueDate не в списке допустимых полей задачи', () => {
+    const fields = src.slice(src.indexOf('const TASK_FIELDS = ['), src.indexOf('] as const', src.indexOf('const TASK_FIELDS = [')))
+    expect(fields).not.toMatch(/'dueDate'/)
+    // Проверка неизвестных полей — то, что превращает отсутствие в явный отказ.
+    expect(src).toMatch(/unknownFields\(b, TASK_FIELDS\)/)
+  })
+
+  it('в задачу ничего не пишется и наружу не отдаётся', () => {
+    expect(src).not.toMatch(/dueDate: dueDate/)
+    expect(src).not.toMatch(/dueDate: t\.dueDate/)
+    expect(src).not.toMatch(/patch\.dueDate/)
+  })
+
+  it('разбор «tomorrow» и прочих дат удалён вместе с полем', () => {
+    // Оставшаяся функция выглядела бы действующей и однажды вернулась бы в дело.
+    expect(src).not.toMatch(/function parseDue/)
+  })
+
+  it('гайд говорит об этом прямо, а не умалчивает', () => {
+    expect(docs).toMatch(/Tasks have NO due date/)
+    expect(docs).not.toMatch(/dueDate accepts/)
+  })
+})

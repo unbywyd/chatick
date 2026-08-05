@@ -27,7 +27,7 @@ function endpointCatalog(q: string): string {
   return `  GET    /x/tasks${q}${amp}assignee=me&status=todo&q=text&sprint=<sprintId>&limit=50
          status: todo | in_progress | review | done
   GET    /x/tasks/<id>${q}
-  POST   /x/tasks${q}              {"title","description?","assignee?","status?","priority?","dueDate?","estimateMinutes?","sprintId?","attachmentIds?","refs?"}
+  POST   /x/tasks${q}              {"title","description?","assignee?","status?","priority?","estimateMinutes?","sprintId?","attachmentIds?","refs?"}
   PATCH  /x/tasks/<id>${q}         any subset of the same fields
   DELETE /x/tasks/<id>${q}
   POST   /x/tasks/<id>/restore${q}
@@ -116,7 +116,11 @@ function endpointCatalog(q: string): string {
   rewriting the task. Touching anything else needs tasks.edit.
 
   assignee accepts "me", a user id, a name or an email.
-  dueDate accepts ISO date or "tomorrow", "in 3 days", "next monday".
+
+  Tasks have NO due date. Deadlines live on the project, not on every task —
+  sending "dueDate" is rejected with 400 rather than quietly stored. Do not
+  invent one and do not ask the human for one: when a date matters here, it is
+  the project's, and a person sets it in the app.
 
   GET    /x/chat/summaries${q}${amp}q=text&from=&to=&full=1&limit=30
          The chat compressed into per-day summaries — how to know what was
@@ -469,7 +473,7 @@ was said earlier" — that is a note.
   PATCH  /x/notes/<id>              same fields; sourceMessageIds APPENDS quotes
   DELETE /x/notes/<id>
   POST   /x/notes/<id>/task         turn the note into a task
-         {"title?","assigneeId?","priority?","dueDate?"} — all optional.
+         {"title?","assigneeId?","priority?"} — all optional.
          The note SURVIVES and keeps a link to the task: it explains why the
          task exists and carries the quotes it grew from. Calling it twice
          returns the same task instead of creating a duplicate.
