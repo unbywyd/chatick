@@ -1,4 +1,5 @@
 import { useState } from 'react'
+import { createPortal } from 'react-dom'
 import { useMutation } from '@tanstack/react-query'
 import { useTranslation } from 'react-i18next'
 import { toast } from 'sonner'
@@ -45,7 +46,14 @@ export function DeleteProjectDialog({
 
   const matches = confirm.trim() === projectName
 
-  return (
+  // В body, а не на месте вызова.
+  //
+  // Диалог вызывается из меню внутри боковой панели, а у панели есть transform
+  // (она выезжает). Элемент с transform становится точкой отсчёта для position:
+  // fixed внутри себя — поэтому «на весь экран» оказывалось «на всю панель»:
+  // окно с подтверждением удаления проекта было зажато в колонку шириной 300px.
+  // Портал в body убирает эту зависимость от того, откуда диалог позвали.
+  return createPortal(
     <div className="fixed inset-0 z-50 grid place-items-center bg-black/60 p-6" onClick={onClose}>
       <div className="w-full max-w-md rounded-xl border bg-card p-6 shadow-xl" onClick={(e) => e.stopPropagation()}>
         <h2 className="flex items-center gap-2 text-lg font-bold text-destructive">
@@ -89,6 +97,7 @@ export function DeleteProjectDialog({
           </Button>
         </div>
       </div>
-    </div>
+    </div>,
+    document.body,
   )
 }
