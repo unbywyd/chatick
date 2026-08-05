@@ -25,7 +25,7 @@ type Payload = {
     author: { name: string; avatarUrl: string | null } | null
     attachments?: { id: string; name: string; mime: string; size: number }[]
   }
-  task?: { number: string; title: string; description: string; status: string; dueDate: string | null }
+  task?: { number: string; title: string; description: string; status: string }
 }
 
 export function PublicShareScreen() {
@@ -156,7 +156,6 @@ export function PublicShareScreen() {
           <Header
             icon={<MessageSquare className="size-4" />}
             title={`${data.task.number} ${data.task.title}`}
-            sub={data.task.dueDate ? date(data.task.dueDate) : undefined}
           />
           {data.task.description && (
             <div className="msg-md text-sm" dangerouslySetInnerHTML={{ __html: data.task.description }} />

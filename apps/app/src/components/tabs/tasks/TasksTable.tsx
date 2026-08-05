@@ -34,7 +34,6 @@ import {
   STATUS_ICON,
   STATUS_COLOR,
   PRIORITY_COLOR,
-  isOverdue,
   fmtEstimate,
   type Task,
   type TaskGroup,
@@ -47,7 +46,7 @@ import { parseDuration } from '@/lib/time-parse'
 // Табличный вид задач (SPEC §8.6): вложенные таблицы по группам-спринтам,
 // сортировка по колонкам, инлайн-смена статуса/ассайни, drag строк и групп.
 
-type SortKey = 'number' | 'title' | 'status' | 'priority' | 'estimate' | 'assignee' | 'dueDate'
+type SortKey = 'number' | 'title' | 'status' | 'priority' | 'estimate' | 'assignee'
 type SortDir = 'asc' | 'desc'
 
 const STATUS_RANK: Record<Status, number> = { todo: 0, in_progress: 1, review: 2, done: 3 }
@@ -135,9 +134,6 @@ export function TasksTable({
           break
         case 'assignee':
           d = (a.assignee?.name ?? '').localeCompare(b.assignee?.name ?? '')
-          break
-        case 'dueDate':
-          d = (a.dueDate ? Date.parse(a.dueDate) : Infinity) - (b.dueDate ? Date.parse(b.dueDate) : Infinity)
           break
       }
       return d * dir
@@ -431,9 +427,13 @@ function GroupTable({
 
   // sortable-обёртка для строки-заголовка группы (перетаскивание групп)
   const sortable = useSortable({ id: group ? `group:${group.id}` : 'group:none', disabled: !group || !canEdit })
-  // Перетаскиваемую секцию оставляем на месте бледной — по той же причине, что
-  // и строку задачи: сдвиг за нижний край растягивает область прокрутки, и
-  // автоскролл уходит в петлю.
+  // Перетаскиваемую секцию оставляем на месте и прячем целиком.
+  //
+  // На месте — потому что сдвиг за нижний край растягивает область прокрутки и
+  // уводит автоскролл в петлю. Прячем — потому что соседняя секция по правилам
+  // сортировки съезжает в освободившееся место и наезжала на неподвижную:
+  // два заголовка рисовались друг поверх друга. Видно её теперь под курсором,
+  // в DragOverlay, так что в списке показывать нечего.
   const style = group
     ? {
         transform:
@@ -452,11 +452,10 @@ function GroupTable({
     { key: 'priority', label: t('tasks.col.priority'), className: 'w-10' },
     { key: 'estimate', label: t('tasks.col.estimate'), className: 'w-24' },
     { key: 'assignee', label: t('tasks.col.assignee'), className: 'w-40' },
-    { key: 'dueDate', label: t('tasks.col.due'), className: 'w-24' },
   ]
 
   return (
-    <section ref={group ? sortable.setNodeRef : undefined} style={style} className={cn(sortable.isDragging && 'opacity-50')}>
+    <section ref={group ? sortable.setNodeRef : undefined} style={style} className={cn(sortable.isDragging && 'invisible')}>
       <div className="mb-1.5 flex items-center gap-2">
         {group && canEdit && (
           <button className="cursor-grab text-muted-foreground hover:text-foreground" {...sortable.attributes} {...sortable.listeners}>
@@ -630,8 +629,8 @@ function TableRow({
 }) {
   const { t } = useTranslation()
   const { setNodeRef, transform, transition, isDragging, attributes, listeners } = useSortable({ id: `task:${task.id}` })
-  // Саму перетаскиваемую строку НЕ двигаем — она остаётся на месте бледной, а
-  // расступаются соседние. Сдвиг за нижний край растягивал область прокрутки,
+  // Саму перетаскиваемую строку НЕ двигаем и прячем: соседние расступаются и
+  // наезжали бы на неподвижную. Видно её под курсором, в DragOverlay. Сдвиг за нижний край растягивал область прокрутки,
   // автоскролл видел край и прокручивал дальше, от этого строка уезжала ещё
   // ниже — и список прокручивался без конца, будто задач втрое больше.
   //
@@ -643,7 +642,6 @@ function TableRow({
     transition,
   }
   const StatusIcon = STATUS_ICON[task.status]
-  const overdue = isOverdue(task)
 
   return (
     <TaskContextMenu task={task} canEdit={canEdit} meId={meId} onPatch={(body) => onPatch(task.id, body)} onDelete={() => onDelete(task.id)}>
@@ -661,7 +659,7 @@ function TableRow({
       className={cn(
         'cursor-pointer border-b last:border-0 transition-colors hover:bg-accent/40',
         active && 'bg-accent',
-        isDragging && 'opacity-40',
+        isDragging && 'invisible',
       )}
     >
       {canEdit && (
@@ -742,9 +740,6 @@ function TableRow({
           canEdit={canEdit}
           onSelect={(id) => onPatch(task.id, { assigneeId: id })}
         />
-      </td>
-      <td className={cn('px-2 py-1.5 align-middle text-xs', overdue ? 'font-medium text-destructive' : 'text-muted-foreground')}>
-        {task.dueDate ? new Date(task.dueDate).toLocaleDateString(lang, { day: 'numeric', month: 'short' }) : '—'}
       </td>
     </tr>
     </TaskContextMenu>

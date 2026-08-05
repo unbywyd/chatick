@@ -23,7 +23,7 @@ import { TasksTable } from './tasks/TasksTable'
 import { TaskContextMenu } from './tasks/TaskContextMenu'
 import { useTaskTimer } from '@/hooks/useTaskTimer'
 import { exportTasksToExcel, downloadImportTemplate, parseTasksFromExcel } from './tasks/taskExcel'
-import { STATUSES, PRIORITIES, STATUS_ICON, STATUS_COLOR, PRIORITY_COLOR, isOverdue, fmtEstimate, type Task, type TaskGroup, type Member, type Status, type Priority } from './tasks/types'
+import { STATUSES, PRIORITIES, STATUS_ICON, STATUS_COLOR, PRIORITY_COLOR, fmtEstimate, type Task, type TaskGroup, type Member, type Status, type Priority } from './tasks/types'
 
 // Таб «Задачи»: список по статусам + drawer с деталями и вложениями (SPEC §4.3 — права)
 export function TasksTab({ projectId, meId }: { projectId: string; meId?: string }) {
@@ -782,7 +782,6 @@ function TaskRow({
   onStartTimer?: () => void
 }) {
   const { t } = useTranslation()
-  const overdue = isOverdue(task)
   const StatusIcon = STATUS_ICON[task.status]
 
   return (
@@ -861,12 +860,6 @@ function TaskRow({
             {fmtEstimate(task.estimateMinutes)}
           </span>
         ) : null}
-        {task.dueDate && (
-          <span className={cn('inline-flex items-center gap-0.5', overdue && 'font-medium text-destructive')}>
-            <CalendarDays className="size-3" />
-            {new Date(task.dueDate).toLocaleDateString(lang, { day: 'numeric', month: 'short' })}
-          </span>
-        )}
         {task.assignee && <Avatar name={task.assignee.name} src={task.assignee.avatarUrl} size={22} title={task.assignee.name} />}
       </span>
     </li>

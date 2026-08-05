@@ -5,7 +5,6 @@ import { useTranslation } from 'react-i18next'
 import { toast } from 'sonner'
 import {
   ArrowLeft,
-  CalendarDays,
   ChevronDown,
   Download,
   ExternalLink,
@@ -35,7 +34,6 @@ import {
   DropdownMenuCheckItem,
 } from '@/components/ui/dropdown-menu'
 import { Popover, PopoverTrigger, PopoverContent } from '@/components/ui/popover'
-import { Calendar } from '@/components/ui/calendar'
 import { FileViewer, kindOf, type ViewerFile } from '@/components/files/FileViewer'
 import { RichEditor } from '@/components/ui/rich-editor'
 import { Avatar } from '@/components/ui/avatar'
@@ -397,32 +395,6 @@ export function TaskDrawer({
                 </DropdownMenu>
               </PropRow>
 
-              <PropRow label={t('tasks.due')}>
-                <Popover>
-                  <PopoverTrigger asChild>
-                    <Button variant="outline" size="sm" className="w-full justify-start gap-2">
-                      <CalendarDays className="size-3.5 text-muted-foreground" />
-                      {task.dueDate
-                        ? new Date(task.dueDate).toLocaleDateString(i18n.language, { day: 'numeric', month: 'short', year: 'numeric' })
-                        : '—'}
-                    </Button>
-                  </PopoverTrigger>
-                  <PopoverContent align="end" className="w-auto">
-                    <Calendar
-                      selected={task.dueDate ? new Date(task.dueDate) : undefined}
-                      onSelect={(d) =>
-                        onPatch({ dueDate: d ? new Date(d.getFullYear(), d.getMonth(), d.getDate(), 12).toISOString() : null })
-                      }
-                    />
-                    {task.dueDate && (
-                      <Button variant="ghost" size="sm" className="mt-1 w-full" onClick={() => onPatch({ dueDate: null })}>
-                        <X className="size-3.5" />
-                        {t('tasks.clearDue')}
-                      </Button>
-                    )}
-                  </PopoverContent>
-                </Popover>
-              </PropRow>
             </div>
 
             {/* Оценка времени (SPEC §8.13) */}
@@ -811,42 +783,6 @@ export function TaskDrawer({
           {task.assignee ? <Avatar name={task.assignee.name} src={task.assignee.avatarUrl} size={18} /> : <User className="size-3.5" />}
           {task.assignee?.name ?? t('tasks.unassigned')}
         </Chip>
-      )}
-
-      {/* Срок. Без права правки пустой срок не показываем: сказать нечего. */}
-      {canEdit ? (
-        <Popover>
-          <PopoverTrigger asChild>
-            <button type="button" title={t('tasks.dueLabel')}>
-              <Chip editable className="text-muted-foreground">
-                <CalendarDays className="size-3.5" />
-                {task.dueDate
-                  ? new Date(task.dueDate).toLocaleDateString(i18n.language, { day: 'numeric', month: 'short', year: 'numeric' })
-                  : t('tasks.noDue')}
-              </Chip>
-            </button>
-          </PopoverTrigger>
-          <PopoverContent align="start" className="w-auto p-2">
-            <Calendar
-              selected={task.dueDate ? new Date(task.dueDate) : undefined}
-              onSelect={(d) =>
-                onPatch({ dueDate: d ? new Date(d.getFullYear(), d.getMonth(), d.getDate(), 12).toISOString() : null })
-              }
-            />
-            {task.dueDate && (
-              <Button variant="ghost" size="sm" className="mt-1 w-full" onClick={() => onPatch({ dueDate: null })}>
-                {t('tasks.clearDue')}
-              </Button>
-            )}
-          </PopoverContent>
-        </Popover>
-      ) : (
-        task.dueDate && (
-          <Chip editable={false} className="text-muted-foreground">
-            <CalendarDays className="size-3.5" />
-            {new Date(task.dueDate).toLocaleDateString(i18n.language, { day: 'numeric', month: 'short', year: 'numeric' })}
-          </Chip>
-        )
       )}
 
       {task.estimateMinutes ? <span className="text-muted-foreground">⏱ {fmtEstimate(task.estimateMinutes)}</span> : null}

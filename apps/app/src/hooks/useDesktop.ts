@@ -112,7 +112,6 @@ type TaskLite = {
   number: string
   title: string
   status: string
-  dueDate?: string | null
   project: { id: string; name: string; color?: string }
 }
 type BridgeSessionLite = {
@@ -329,7 +328,6 @@ export function useDesktopSync() {
         link: `/c/${companyOf(t.project.id) ?? ''}/p/${t.project.id}/tasks/${t.id}`,
         projectId: t.project.id,
         projectName: t.project.name,
-        due: t.dueDate ? new Date(t.dueDate).toLocaleDateString() : undefined,
       })),
       projects: projectList.map((p) => ({
         id: p.id,
