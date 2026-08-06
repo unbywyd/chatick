@@ -7,6 +7,7 @@ import { health } from './routes/health.js'
 import { auth } from './routes/auth.js'
 import { companiesRoute, companyLogoRoute } from './routes/companies.js'
 import { projectsRoute, projectLogoRoute } from './routes/projects.js'
+import { linkPreviewRoute } from './routes/link-preview.js'
 import { filesRoute, filesPublicRoute } from './routes/files.js'
 import { resourcesRoute } from './routes/resources.js'
 import { tasksRoute } from './routes/tasks.js'
@@ -31,6 +32,9 @@ app.use('*', cors({ origin: env.CORS_ORIGIN === '*' ? '*' : env.CORS_ORIGIN.spli
 if (!isProd) app.use('*', logger())
 
 app.route('/health', health)
+// Превью ссылок на проект для мессенджеров: путь БЕЗ решётки, чтобы сервер
+// видел проект. Без сессии — превью скачивают серверы WhatsApp и Telegram.
+app.route('/link', linkPreviewRoute)
 // Внешний API для систем-заказчиков: только ключ компании, сессий тут нет.
 app.route('/api/v1/ext', extRoute)
 app.route('/api/v1/auth', auth)

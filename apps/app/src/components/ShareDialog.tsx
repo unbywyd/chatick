@@ -3,7 +3,7 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { useTranslation } from 'react-i18next'
 import { toast } from 'sonner'
 import { Check, Copy, Globe, Link2, Lock, Trash2, TriangleAlert } from 'lucide-react'
-import { api } from '@/lib/api'
+import { api, previewUrl } from '@/lib/api'
 import { Button } from '@/components/ui/button'
 import { cn } from '@/lib/utils'
 
@@ -63,7 +63,14 @@ export function ShareDialog({
     onError: (e) => toast.error(e instanceof Error ? e.message : String(e)),
   })
 
-  const appUrl = `${window.location.origin}/#${appPath}`
+  // Ссылка для команды идёт через /link у API, а не прямо в приложение.
+  //
+  // Адрес приложения хэшевый, а всё после «#» браузер серверу не отправляет —
+  // значит, мессенджер, скачивая превью, про проект ничего не узнаёт, и в
+  // WhatsApp все ссылки выглядят одинаково: «Chatick, app.chatick.com».
+  // /link отдаёт теги с именем и логотипом проекта, а человека тут же
+  // переводит на тот же самый адрес в приложении.
+  const appUrl = previewUrl(appPath)
   // Ссылка ведёт на СТРАНИЦУ, а не на JSON: /s/:slug у API — это данные для
   // неё, и присылать человеку голый ответ сервера было бы издевательством.
   const publicUrl = share ? `${window.location.origin}/#/s/${share.slug}` : ''

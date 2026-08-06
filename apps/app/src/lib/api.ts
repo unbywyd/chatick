@@ -53,6 +53,23 @@ export function consumeReturnTo(): string | null {
   return path
 }
 
+/**
+ * Ссылка, которую не стыдно отправить в мессенджер.
+ *
+ * Наш адрес хэшевый, а хэш браузер серверу не отправляет — поэтому WhatsApp,
+ * скачивая превью, видит только «Chatick / app.chatick.com», одинаково для
+ * всех проектов. /link у API — тот же адрес, но БЕЗ решётки: сервер видит
+ * проект, отдаёт его имя и логотип в og-тегах и переводит человека в
+ * приложение.
+ *
+ * Переписываем только адреса проекта: у остального превью взять неоткуда, а
+ * лишний переход через API — потерянная секунда и ещё одна точка отказа.
+ */
+export function previewUrl(appPath: string): string {
+  const origin = typeof window === 'undefined' ? '' : window.location.origin
+  return /^\/c\/[^/]+\/p\/[^/]+/.test(appPath) ? `${API_URL}/link${appPath}` : `${origin}/#${appPath}`
+}
+
 export function logout() {
   setSessionToken(null)
   setProjectToken(null)
