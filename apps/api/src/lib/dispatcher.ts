@@ -76,7 +76,19 @@ function parseJson<T>(text: string | null): T | null {
  * Ответ ИИ в личном режиме («ИИ»-таб чата): полный доступ к памяти и инструментам,
  * CRUD задач — строго в пределах пермишенов автора (SPEC §5.6).
  */
-export async function aiChatReply(projectId: string, userId: string, userMessage: string): Promise<string | null> {
+export async function aiChatReply(
+  projectId: string,
+  userId: string,
+  userMessage: string,
+  /**
+   * Картинки к сообщению. Пусто — обычный текстовый ответ.
+   *
+   * Решение принято на сервере ДО вызова: сюда они доходят, только если
+   * человек прямо попросил посмотреть. Промптом такое не удержать — картинка,
+   * уехавшая в запрос, уже увидена и уже оплачена.
+   */
+  images: { mediaType: string; base64: string }[] = [],
+): Promise<string | null> {
   const project = await db.query.projects.findFirst({ where: eq(projects.id, projectId) })
   if (!project) return null
   const cfg = await projectLlm(projectId, 'chat')
@@ -147,6 +159,9 @@ export async function aiChatReply(projectId: string, userId: string, userMessage
       // доступа», хотя доступ есть.
       'DEPENDENCIES: get_blockers shows what holds the WHOLE project — which tasks block others and who owns them. get_task_blockers is the same for one task. link_tasks records that a task waits for others. Report chains, not totals: "TASK-82 blocks five screens, all waiting on Elisha" is actionable, "22 tasks are blocked" is not.',
       'DATABASE: the project may have a real database attached. list_databases shows which tables you may read; call it before querying. query_database runs a SELECT — read-only, the database itself rejects any change. This is a customer\'s production data: read what the question needs, and never paste personal data (names, emails, phones) into tasks or messages where it outlives the conversation.',
+      images.length
+        ? 'IMAGES: the user attached image(s) and asked you to look. Describe what is actually there — do not guess at what you cannot make out, say that part is unclear.'
+        : 'IMAGES: if the user mentions a picture but you were given none, it is because they did not ask you to look at it. Say so and tell them to ask explicitly ("посмотри скрин", "look at this") — do not pretend you saw it.',
       'DOCUMENTS: read_document returns a CHUNK — it tells you the total length and the next offset. For long documents call it repeatedly with increasing offset until you have what you need. To add text use append_to_document (never resend a whole long document).',
       'You can edit any editable field of a task on request. When assigning, use the person the TEAM section says is responsible for that area (assign by name). Use list_sprints for valid names; create_sprint if a new one is needed.',
       'When CREATING a task, ALWAYS set estimateMinutes — your best estimate of how long it takes assuming the person works WITH an AI assistant (so estimates are realistic and usually shorter). If truly unsure, still give a rough estimate.',

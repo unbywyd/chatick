@@ -213,6 +213,14 @@ export async function completeWithTools(
   cfg: LlmConfig,
   opts: {
     system: string
+    /**
+     * Картинки к запросу. Пусто — обычный текстовый вызов.
+     *
+     * Решение «прикладывать или нет» принято ВЫШЕ, на сервере: сюда они
+     * доходят, только если человек попросил посмотреть. Здесь мы лишь
+     * укладываем их в формат провайдера.
+     */
+    images?: { mediaType: string; base64: string }[]
     user: string
     tools: ToolDef[]
     handlers: Record<string, ToolHandler>
@@ -249,7 +257,18 @@ export async function completeWithTools(
     const acc: TokenUsage = { tokensIn: 0, tokensOut: 0 }
     if (p.kind === 'anthropic') {
       const tools = opts.tools.map((t) => ({ name: t.name, description: t.description, input_schema: t.parameters }))
-      const msgs: unknown[] = [{ role: 'user', content: opts.user }]
+      // Картинки ПЕРЕД текстом: так рекомендует Anthropic — модель сначала
+      // смотрит, потом читает вопрос о том, что увидела.
+      const userContent = opts.images?.length
+        ? [
+            ...opts.images.map((im) => ({
+              type: 'image',
+              source: { type: 'base64', media_type: im.mediaType, data: im.base64 },
+            })),
+            { type: 'text', text: opts.user },
+          ]
+        : opts.user
+      const msgs: unknown[] = [{ role: 'user', content: userContent }]
       for (let i = 0; i < maxIter; i++) {
         const res = await fetch(`${p.baseUrl}/messages`, {
           method: 'POST',
@@ -302,9 +321,19 @@ export async function completeWithTools(
 
     // OpenAI-compatible
     const tools = opts.tools.map((t) => ({ type: 'function', function: { name: t.name, description: t.description, parameters: t.parameters } }))
+    // У OpenAI-совместимых формат свой: image_url с data-URI.
+    const openaiUser = opts.images?.length
+      ? [
+          ...opts.images.map((im) => ({
+            type: 'image_url',
+            image_url: { url: `data:${im.mediaType};base64,${im.base64}` },
+          })),
+          { type: 'text', text: opts.user },
+        ]
+      : opts.user
     const msgs: unknown[] = [
       { role: 'system', content: opts.system },
-      { role: 'user', content: opts.user },
+      { role: 'user', content: openaiUser },
     ]
     for (let i = 0; i < maxIter; i++) {
       const res = await fetch(`${p.baseUrl}/chat/completions`, {

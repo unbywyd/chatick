@@ -8,6 +8,7 @@ import { chatSummaries, credentials, documents, files, messages, notes, sandboxM
 import { requireProject, type ProjectEnv } from '../auth.js'
 import { broadcast, sendToUser } from '../ws.js'
 import { evaluateMessage, sandboxReply, aiChatReply } from '../lib/dispatcher.js'
+import { imagesForMessage } from '../lib/vision.js'
 import { maybeCompress } from '../lib/memory.js'
 import { notify, extractMentions } from '../lib/notify.js'
 import { projectRoleOf } from './projects.js'
@@ -284,7 +285,11 @@ messagesRoute.post(
         // оставляли индикатор висеть навсегда, и написать заново было нельзя.
         let answer: string | null = null
         try {
-          answer = await aiChatReply(projectId, sub, text)
+          // Картинки — только если человек попросил посмотреть. Правило
+          // исполняется здесь, а не в промпте: изображение, уехавшее в
+          // запрос, уже увидено и уже оплачено.
+          const images = await imagesForMessage(row!.id, projectId, text)
+          answer = await aiChatReply(projectId, sub, text, images)
         } catch (e) {
           console.error('[ai-chat] reply failed:', e)
         }
