@@ -150,16 +150,26 @@ tasksRoute.get('/', async (c) => {
       // сам, когда блокеры завершены, а связь при этом остаётся.
       // blocking — сколько ждут ЕЁ, независимо от их статуса: это мера того,
       // насколько задача держит проект.
+      //
+      // Ссылка на внешнюю строку — через "tasks"."id" ЯВНО, а не через
+      // ${tasks.id}.
+      //
+      // Подзапрос снова заходит в tasks (нужен статус блокера), и голое «id»
+      // разрешилось бы во внутреннюю таблицу: Postgres отвечает «column
+      // reference is ambiguous», и весь список падает с 500. Здесь это до сих
+      // пор работало СЛУЧАЙНО — из-за leftJoin(users) drizzle подставлял
+      // квалифицированное имя. Убери join, и запрос сломается. В мосте такого
+      // join не было, и он сломался. Поэтому квалифицируем руками.
       blockedBy: sql<number>`(
         select count(*)::int from ${taskBlockers} b
         join ${tasks} bt on bt.id = b.blocker_task_id
-        where b.blocked_task_id = ${tasks.id}
+        where b.blocked_task_id = "tasks"."id"
           and bt.status <> 'done' and bt.deleted_at is null
       )`,
       blocking: sql<number>`(
         select count(*)::int from ${taskBlockers} b
         join ${tasks} dt on dt.id = b.blocked_task_id
-        where b.blocker_task_id = ${tasks.id} and dt.deleted_at is null
+        where b.blocker_task_id = "tasks"."id" and dt.deleted_at is null
       )`,
     })
     .from(tasks)
