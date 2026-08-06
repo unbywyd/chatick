@@ -870,7 +870,7 @@ function TaskRow({
         dropBefore && 'border-t-2 border-t-brand',
         // Ждёт другие задачи — приглушаем: карточка рабочая, просто видно,
         // что брать её рано. При наведении яркость возвращается.
-        (task.blockedBy ?? 0) > 0 && 'opacity-55 hover:opacity-100',
+        (task.blockedBy ?? 0) > 0 && task.status !== 'done' && 'opacity-55 hover:opacity-100',
       )}
       onClick={onOpen}
     >
@@ -902,6 +902,7 @@ function TaskRow({
         taskId={task.id}
         blockedBy={task.blockedBy}
         blocking={task.blocking}
+        done={task.status === 'done'}
         onOpenTask={onOpenTask}
       />
 

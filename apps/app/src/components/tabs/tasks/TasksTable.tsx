@@ -60,7 +60,10 @@ const PRIORITY_RANK: Record<Priority, number> = { low: 0, normal: 1, high: 2, ur
  * начать». Заблокированную всё равно нельзя взять, пока не сделана та, что
  * сверху.
  */
-const depsRank = (t: Task) => ((t.blocking ?? 0) > 0 ? 2 : (t.blockedBy ?? 0) > 0 ? 1 : 0)
+const depsRank = (t: Task) =>
+  // Завершённая — всегда «свободна»: поднимать её наверх как «делать первой»
+  // значит советовать сделать сделанное.
+  t.status === 'done' ? 0 : (t.blocking ?? 0) > 0 ? 2 : (t.blockedBy ?? 0) > 0 ? 1 : 0
 
 export function TasksTable({
   tasks,
@@ -721,7 +724,9 @@ function TableRow({
   const { setNodeRef, transform, transition, isDragging, attributes, listeners } = useSortable({ id: `task:${task.id}` })
   // Ждёт незакрытые задачи — значит брать её рано. Считает сервер: связь
   // остаётся после завершения блокера, а замочек должен гаснуть сам.
-  const blocked = (task.blockedBy ?? 0) > 0
+  // Завершённую не приглушаем, даже если её блокер всё ещё открыт: работа
+  // сделана, «брать рано» про неё уже неправда.
+  const blocked = (task.blockedBy ?? 0) > 0 && task.status !== 'done'
   // Саму перетаскиваемую строку НЕ двигаем и прячем: соседние расступаются и
   // наезжали бы на неподвижную. Видно её под курсором, в DragOverlay. Сдвиг за нижний край растягивал область прокрутки,
   // автоскролл видел край и прокручивал дальше, от этого строка уезжала ещё
@@ -849,6 +854,7 @@ function TableRow({
           taskId={task.id}
           blockedBy={task.blockedBy}
           blocking={task.blocking}
+          done={task.status === 'done'}
           onOpenTask={onOpenTask}
         />
       </td>

@@ -31,12 +31,15 @@ export function TaskBlockedMark({
   taskId,
   blockedBy = 0,
   blocking = 0,
+  done = false,
   onOpenTask,
   className,
 }: {
   taskId: string
   blockedBy?: number
   blocking?: number
+  /** задача завершена — значок про «что делать сейчас» ей не нужен */
+  done?: boolean
   onOpenTask?: (id: string) => void
   className?: string
 }) {
@@ -51,6 +54,13 @@ export function TaskBlockedMark({
     queryFn: () => api<{ blockers: LinkedTask[]; blocking: LinkedTask[] }>(`/api/v1/tasks/${taskId}/blockers`, {}, 'project'),
   })
 
+  // Завершённая задача никого не держит и ничего не ждёт.
+  //
+  // Связи после закрытия остаются намеренно — это история работы. Но значок
+  // говорит не про историю, а про «что делать сейчас»: восклицательный знак у
+  // сделанной задачи требует действий, которых уже не нужно, и противоречит
+  // её собственному «выполнено» в соседней колонке.
+  if (done) return null
   if (!blockedBy && !blocking) return null
 
   // Ждёт — важнее: это про «нельзя брать сейчас». Держит — про очерёдность.

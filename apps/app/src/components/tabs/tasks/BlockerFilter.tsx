@@ -14,8 +14,11 @@ export type BlockerFilterValue = Set<'blocked' | 'blocking' | 'free'>
 /** Подходит ли задача под выбранное. Пустой набор пропускает всех. */
 export function matchesBlockerFilter(task: Task, f: BlockerFilterValue): boolean {
   if (!f.size) return true
-  const blocked = (task.blockedBy ?? 0) > 0
-  const blocking = (task.blocking ?? 0) > 0
+  // Завершённая задача не блокирует и не заблокирована: связи у неё остаются,
+  // но фильтр отвечает на вопрос «что сейчас», а не «что было».
+  const done = task.status === 'done'
+  const blocked = !done && (task.blockedBy ?? 0) > 0
+  const blocking = !done && (task.blocking ?? 0) > 0
   if (f.has('blocked') && blocked) return true
   if (f.has('blocking') && blocking) return true
   // Свободна к работе — ничего не ждёт. Держит она кого-то или нет, неважно:
