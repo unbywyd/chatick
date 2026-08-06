@@ -22,6 +22,10 @@ export type Task = {
   createdById: string | null
   createdAt: string
   attachmentsCount: number
+  /** Сколько НЕЗАВЕРШЁННЫХ задач она ждёт: замочек гаснет сам, связь остаётся. */
+  blockedBy?: number
+  /** Сколько задач ждут её — насколько она держит проект. */
+  blocking?: number
 }
 
 export type TaskGroup = {

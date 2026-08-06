@@ -1486,5 +1486,27 @@
     "setDeadline": "Deadline",
     "clearDeadline": "Clear the deadline",
     "timeSettings": "Time settings"
+  },
+  "blockers": {
+    "waitingFor": "Waiting for",
+    "holding": "Holding back",
+    "waitingHint_one": "Waiting for {{count}} unfinished task",
+    "waitingHint_other": "Waiting for {{count}} unfinished tasks",
+    "holdingHint_one": "{{count}} task is waiting for this one",
+    "holdingHint_other": "{{count}} tasks are waiting for this one",
+    "blockedBy": "Blocked by",
+    "blocks": "Blocks",
+    "addBlocker": "Add task",
+    "noBlockers": "Nothing is blocking this task",
+    "noBlocking": "No tasks depend on this one",
+    "pickTitle": "Select tasks",
+    "pickSearch": "Search by number, title or ref…",
+    "pickEmpty": "Nothing to add — tasks already linked and those that depend on this one are not offered, they would create a loop",
+    "pickAdd": "Add ({{count}})",
+    "remove": "Remove link",
+    "filterBlocked": "Blocked",
+    "filterBlocking": "Blocking",
+    "filterFree": "Ready to take",
+    "cycleHint": "Tasks that depend on this one are not shown: linking them would close a loop, and neither task could ever be finished."
   }
 }

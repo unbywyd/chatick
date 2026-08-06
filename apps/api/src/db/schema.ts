@@ -547,6 +547,42 @@ export const taskChecklist = pgTable(
   (t) => [index('task_checklist_task_idx').on(t.taskId, t.sortOrder)],
 )
 
+/**
+ * Зависимости между задачами: «эта ждёт ту».
+ *
+ * Одна строка = одна связь: blockedTaskId ЖДЁТ blockerTaskId. Обратное
+ * направление («кого держит эта») — тот же список, прочитанный с другой
+ * стороны, поэтому второй таблицы нет и рассинхронизироваться нечему.
+ *
+ * Связь переживает закрытие блокирующей задачи: это факт о работе, а не
+ * временный флаг. Замочек гаснет сам, когда все блокеры завершены, а история
+ * «что чего ждало» остаётся — иначе через месяц не восстановить, почему
+ * задача простояла две недели.
+ *
+ * Кольца (A ждёт B ждёт A) запрещены на записи: обе задачи в кольце
+ * невозможно закрыть никогда.
+ */
+export const taskBlockers = pgTable(
+  'task_blockers',
+  {
+    id: id(),
+    projectId: text('project_id').notNull().references(() => projects.id, { onDelete: 'cascade' }),
+    /** Кто ждёт. */
+    blockedTaskId: text('blocked_task_id').notNull().references(() => tasks.id, { onDelete: 'cascade' }),
+    /** Кого ждёт. */
+    blockerTaskId: text('blocker_task_id').notNull().references(() => tasks.id, { onDelete: 'cascade' }),
+    createdById: text('created_by_id').references(() => users.id, { onDelete: 'set null' }),
+    createdAt: createdAt(),
+  },
+  (t) => [
+    // Одна и та же связь дважды — это не две связи.
+    uniqueIndex('task_blockers_pair_idx').on(t.blockedTaskId, t.blockerTaskId),
+    index('task_blockers_blocked_idx').on(t.blockedTaskId),
+    index('task_blockers_blocker_idx').on(t.blockerTaskId),
+    index('task_blockers_project_idx').on(t.projectId),
+  ],
+)
+
 export const taskNotes = pgTable(
   'task_notes',
   {

@@ -40,6 +40,7 @@ import { Avatar } from '@/components/ui/avatar'
 import { TaskComments } from './TaskComments'
 import { TaskNotes } from './TaskNotes'
 import { TaskChecklist } from './TaskChecklist'
+import { TaskBlockers } from './TaskBlockers'
 import { TaskRefs } from './TaskRefs'
 import { StatusBadge } from './StatusBadge'
 import { usePasteFiles } from '@/hooks/usePasteFiles'
@@ -1004,6 +1005,19 @@ export function TaskDrawer({
           {/* Чек-лист между описанием и вложениями: это часть постановки
               задачи, а не приложение к ней. */}
           <TaskChecklist taskId={task.id} canEdit={canEdit} />
+
+          {/* Зависимости: кого ждём и кто ждёт нас. Ниже чек-листа — это не
+              часть постановки, а порядок работ вокруг задачи. */}
+          {routeProjectId && (
+            <TaskBlockers
+              taskId={task.id}
+              projectId={routeProjectId}
+              canEdit={canEdit}
+              onOpenTask={(id) =>
+                navigate(`/c/${companyId}/p/${routeProjectId}/tasks/${id}`)
+              }
+            />
+          )}
 
           {attachmentsSection}
 

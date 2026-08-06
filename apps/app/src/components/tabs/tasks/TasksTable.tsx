@@ -16,7 +16,7 @@ import {
   verticalListSortingStrategy,
   arrayMove,
 } from '@dnd-kit/sortable'
-import { ChevronDown, ChevronUp, ChevronsUpDown, Flag, GripVertical, Paperclip, Pencil, Plus, Trash2 } from 'lucide-react'
+import { ChevronDown, ChevronUp, ChevronsUpDown, Flag, GripVertical, Lock, Paperclip, Pencil, Plus, Trash2 } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { Button } from '@/components/ui/button'
 import {
@@ -42,15 +42,25 @@ import {
 import { parseDuration } from '@/lib/time-parse'
 import { TaskRefs, REFS_SIGN } from './TaskRefs'
 import { StatusBadge } from './StatusBadge'
+import { TaskBlockedMark } from './TaskBlockedMark'
 
 // Табличный вид задач (SPEC §8.6): вложенные таблицы по группам-спринтам,
 // сортировка по колонкам, инлайн-смена статуса/ассайни, drag строк и групп.
 
-type SortKey = 'number' | 'title' | 'status' | 'priority' | 'estimate' | 'assignee' | 'refs'
+type SortKey = 'number' | 'title' | 'status' | 'priority' | 'estimate' | 'assignee' | 'refs' | 'deps'
 type SortDir = 'asc' | 'desc'
 
 const STATUS_RANK: Record<Status, number> = { todo: 0, in_progress: 1, review: 2, done: 3 }
 const PRIORITY_RANK: Record<Priority, number> = { low: 0, normal: 1, high: 2, urgent: 3 }
+
+/**
+ * Вес задачи в порядке работ: держит других > ждёт других > свободна.
+ *
+ * Блокирующие выше заблокированных намеренно: это ответ на вопрос «с чего
+ * начать». Заблокированную всё равно нельзя взять, пока не сделана та, что
+ * сверху.
+ */
+const depsRank = (t: Task) => ((t.blocking ?? 0) > 0 ? 2 : (t.blockedBy ?? 0) > 0 ? 1 : 0)
 
 export function TasksTable({
   tasks,
@@ -144,6 +154,12 @@ export function TasksTable({
         case 'refs':
           // Численно, а не по алфавиту: иначе «10» встаёт между «1» и «2».
           d = (parseFloat(a.refs ?? '') || Infinity) - (parseFloat(b.refs ?? '') || Infinity)
+          break
+        case 'deps':
+          // Порядок работ: сначала те, что ДЕРЖАТ других (их делать первыми),
+          // потом заблокированные, потом свободные. Внутри блокирующих —
+          // кто держит больше, тот выше: он и есть узкое место.
+          d = depsRank(b) - depsRank(a) || (b.blocking ?? 0) - (a.blocking ?? 0)
           break
       }
       return d * dir
@@ -474,7 +490,7 @@ function GroupTable({
   // для «без группы» пустую секцию не показываем
   if (!group && tasks.length === 0) return null
 
-  const cols: { key: SortKey; label: string; className?: string }[] = [
+  const cols: { key: SortKey; label: React.ReactNode; className?: string }[] = [
     { key: 'number', label: t('tasks.col.number'), className: 'w-20' },
     // Узкая: в строку влезает два номера и счётчик остальных, переносов нет.
     { key: 'refs', label: REFS_SIGN, className: 'w-24' },
@@ -483,6 +499,10 @@ function GroupTable({
     { key: 'priority', label: t('tasks.col.priority'), className: 'w-10' },
     { key: 'estimate', label: t('tasks.col.estimate'), className: 'w-24' },
     { key: 'assignee', label: t('tasks.col.assignee'), className: 'w-40' },
+    // Зависимости последней: колонка узкая и чаще пустая, а по клику на
+    // заголовок поднимает наверх то, с чего надо начинать. В заголовке
+    // значок, а не слово: подписи длиннее самой колонки.
+    { key: 'deps', label: <Lock className="size-3.5" />, className: 'w-14' },
   ]
 
   return (
@@ -614,6 +634,7 @@ function GroupTable({
                   meId={meId}
                   active={openTaskId === task.id}
                   highlighted={highlightId === task.id}
+                  onOpenTask={onOpen}
                   onOpen={() => onOpen(task.id)}
                   onPatch={onPatch}
                   onDelete={onDelete}
@@ -677,6 +698,7 @@ function TableRow({
   active,
   highlighted,
   onOpen,
+  onOpenTask,
   onPatch,
   onDelete,
 }: {
@@ -692,9 +714,14 @@ function TableRow({
   onOpen: () => void
   onPatch: (id: string, body: Record<string, unknown>) => void
   onDelete: (id: string) => void
+  /** открыть ЧУЖУЮ задачу — из списка зависимостей */
+  onOpenTask?: (id: string) => void
 }) {
   const { t } = useTranslation()
   const { setNodeRef, transform, transition, isDragging, attributes, listeners } = useSortable({ id: `task:${task.id}` })
+  // Ждёт незакрытые задачи — значит брать её рано. Считает сервер: связь
+  // остаётся после завершения блокера, а замочек должен гаснуть сам.
+  const blocked = (task.blockedBy ?? 0) > 0
   // Саму перетаскиваемую строку НЕ двигаем и прячем: соседние расступаются и
   // наезжали бы на неподвижную. Видно её под курсором, в DragOverlay. Сдвиг за нижний край растягивал область прокрутки,
   // автоскролл видел край и прокручивал дальше, от этого строка уезжала ещё
@@ -731,6 +758,10 @@ function TableRow({
         // после возврата всё равно ищут, а фокуса в тёмной теме почти не видно.
         highlighted && 'bg-brand/10 ring-2 ring-inset ring-brand duration-500',
         isDragging && 'invisible',
+        // Ждёт другие задачи — приглушаем. Строка остаётся рабочей: открыть,
+        // назначить, поменять статус можно, просто видно, что брать её рано.
+        // При наведении возвращаем полную яркость, иначе читать неудобно.
+        blocked && 'opacity-55 hover:opacity-100',
       )}
     >
       {canEdit && (
@@ -810,6 +841,15 @@ function TableRow({
           members={members}
           canEdit={canEdit}
           onSelect={(id) => onPatch(task.id, { assigneeId: id })}
+        />
+      </td>
+      {/* Зависимости: замочек — ждёт, восклицательный — держит других. */}
+      <td className="px-1 align-middle">
+        <TaskBlockedMark
+          taskId={task.id}
+          blockedBy={task.blockedBy}
+          blocking={task.blocking}
+          onOpenTask={onOpenTask}
         />
       </td>
     </tr>

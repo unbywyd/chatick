@@ -4,7 +4,7 @@ import { z } from 'zod'
 import { and, asc, desc, eq, inArray, isNull, sql } from 'drizzle-orm'
 import { companyOf, projectPath } from '../lib/links.js'
 import { db } from '../db/client.js'
-import { files, projects, taskChecklist, taskComments, taskGroups, taskNotes, tasks, users } from '../db/schema.js'
+import { files, projects, taskBlockers, taskChecklist, taskComments, taskGroups, taskNotes, tasks, users } from '../db/schema.js'
 import { requireProject, type ProjectEnv } from '../auth.js'
 import { hasPermission, ownsOrManages } from './projects.js'
 import { improveTask, validateTask, generateTaskNotes } from '../lib/llm.js'
@@ -142,12 +142,38 @@ tasksRoute.get('/', async (c) => {
       task: tasks,
       assignee: users,
       attachmentsCount: sql<number>`(select count(*)::int from ${files} where ${files.taskId} = ${tasks.id} and ${files.deletedAt} is null)`,
+      // Зависимости считаем здесь, а не отдельным запросом на каждую строку:
+      // значок нужен КАЖДОЙ задаче в списке, и N+1 запросов на таблицу в
+      // тысячу задач — это секунды ожидания.
+      //
+      // blockedBy — сколько НЕЗАКРЫТЫХ задач она ждёт: замочек должен гаснуть
+      // сам, когда блокеры завершены, а связь при этом остаётся.
+      // blocking — сколько ждут ЕЁ, независимо от их статуса: это мера того,
+      // насколько задача держит проект.
+      blockedBy: sql<number>`(
+        select count(*)::int from ${taskBlockers} b
+        join ${tasks} bt on bt.id = b.blocker_task_id
+        where b.blocked_task_id = ${tasks.id}
+          and bt.status <> 'done' and bt.deleted_at is null
+      )`,
+      blocking: sql<number>`(
+        select count(*)::int from ${taskBlockers} b
+        join ${tasks} dt on dt.id = b.blocked_task_id
+        where b.blocker_task_id = ${tasks.id} and dt.deleted_at is null
+      )`,
     })
     .from(tasks)
     .leftJoin(users, eq(users.id, tasks.assigneeId))
     .where(and(eq(tasks.projectId, projectId), sql`${tasks.deletedAt} is null`))
     .orderBy(asc(tasks.sortOrder), desc(tasks.createdAt))
-  return c.json(rows.map((r) => ({ ...serialize(r.task, r.assignee), attachmentsCount: r.attachmentsCount })))
+  return c.json(
+    rows.map((r) => ({
+      ...serialize(r.task, r.assignee),
+      attachmentsCount: r.attachmentsCount,
+      blockedBy: r.blockedBy,
+      blocking: r.blocking,
+    })),
+  )
 })
 
 // Создать — tasks.create
@@ -717,6 +743,238 @@ tasksRoute.delete('/:taskId/checklist/:itemId', async (c) => {
     .where(and(eq(taskChecklist.id, c.req.param('itemId')), eq(taskChecklist.taskId, access.task.id)))
 
   tasksChanged(projectId, [access.task.assigneeId, access.task.createdById])
+  return c.json({ ok: true })
+})
+
+// --- Зависимости между задачами --------------------------------------------
+//
+// «Эта ждёт ту». Одна таблица, читаемая с двух сторон: слева «кого я жду»
+// (блокеры), справа «кто ждёт меня». Второй таблицы нет — расходиться нечему.
+
+/** Краткий вид задачи для списков зависимостей: строка, а не карточка. */
+const linkView = (t: typeof tasks.$inferSelect, assignee?: typeof users.$inferSelect | null) => ({
+  id: t.id,
+  number: t.number,
+  title: t.title,
+  status: t.status,
+  priority: t.priority,
+  refs: t.refs || undefined,
+  assignee: assignee ? { id: assignee.id, name: assignee.name, avatarUrl: assignee.avatarUrl } : null,
+})
+
+/**
+ * Все задачи, которые (прямо или через цепочку) ждут указанную.
+ *
+ * Нужно, чтобы не дать замкнуть кольцо: если A уже где-то в хвосте у B, то
+ * «B ждёт A» замкнёт круг, и обе задачи станут незакрываемыми навсегда.
+ * Обход в ширину по готовому индексу — на проектных объёмах это доли
+ * миллисекунды, а рекурсивный SQL здесь читался бы вдвое хуже.
+ */
+async function dependentsOf(projectId: string, taskId: string): Promise<Set<string>> {
+  const seen = new Set<string>()
+  let frontier = [taskId]
+  while (frontier.length) {
+    const rows = await db
+      .select({ blocked: taskBlockers.blockedTaskId })
+      .from(taskBlockers)
+      .where(and(eq(taskBlockers.projectId, projectId), inArray(taskBlockers.blockerTaskId, frontier)))
+    frontier = []
+    for (const r of rows) {
+      if (seen.has(r.blocked)) continue
+      seen.add(r.blocked)
+      frontier.push(r.blocked)
+    }
+  }
+  return seen
+}
+
+/** Обе стороны связей задачи. */
+tasksRoute.get('/:taskId/blockers', async (c) => {
+  const { projectId, sub } = c.get('auth')
+  if (!(await hasPermission(projectId, sub, 'tasks.read'))) return c.json({ error: 'Forbidden' }, 403)
+  const taskId = c.req.param('taskId')
+
+  const blockers = await db
+    .select({ task: tasks, assignee: users, linkId: taskBlockers.id })
+    .from(taskBlockers)
+    .innerJoin(tasks, eq(tasks.id, taskBlockers.blockerTaskId))
+    .leftJoin(users, eq(users.id, tasks.assigneeId))
+    .where(and(eq(taskBlockers.blockedTaskId, taskId), isNull(tasks.deletedAt)))
+    .orderBy(asc(tasks.status), asc(tasks.number))
+
+  const blocking = await db
+    .select({ task: tasks, assignee: users, linkId: taskBlockers.id })
+    .from(taskBlockers)
+    .innerJoin(tasks, eq(tasks.id, taskBlockers.blockedTaskId))
+    .leftJoin(users, eq(users.id, tasks.assigneeId))
+    .where(and(eq(taskBlockers.blockerTaskId, taskId), isNull(tasks.deletedAt)))
+    .orderBy(asc(tasks.status), asc(tasks.number))
+
+  return c.json({
+    blockers: blockers.map((r) => ({ ...linkView(r.task, r.assignee), linkId: r.linkId })),
+    blocking: blocking.map((r) => ({ ...linkView(r.task, r.assignee), linkId: r.linkId })),
+  })
+})
+
+/**
+ * Кого МОЖНО добавить в блокеры этой задачи.
+ *
+ * Отдаём только допустимых кандидатов, а не все задачи проекта: выбрать
+ * заведомо запрещённую и получить отказ — худший вид подсказки. Выпадают сама
+ * задача, уже связанные и все, кто прямо или косвенно ждёт эту, — последние
+ * как раз и замкнули бы кольцо.
+ */
+tasksRoute.get('/:taskId/blockers/candidates', async (c) => {
+  const { projectId, sub } = c.get('auth')
+  if (!(await hasPermission(projectId, sub, 'tasks.read'))) return c.json({ error: 'Forbidden' }, 403)
+  const taskId = c.req.param('taskId')
+  const q = (c.req.query('q') ?? '').trim()
+  // Направление: кого добавляем — блокеров этой задачи или зависимых от неё.
+  const side = c.req.query('side') === 'blocking' ? 'blocking' : 'blockers'
+
+  const linked = await db
+    .select({ a: taskBlockers.blockedTaskId, b: taskBlockers.blockerTaskId })
+    .from(taskBlockers)
+    .where(
+      and(
+        eq(taskBlockers.projectId, projectId),
+        side === 'blockers' ? eq(taskBlockers.blockedTaskId, taskId) : eq(taskBlockers.blockerTaskId, taskId),
+      ),
+    )
+  const already = new Set(linked.map((r) => (side === 'blockers' ? r.b : r.a)))
+
+  // Кольцо: при добавлении блокера нельзя брать тех, кто уже ждёт нас; при
+  // добавлении зависимой — тех, кого ждём мы.
+  const forbidden =
+    side === 'blockers' ? await dependentsOf(projectId, taskId) : await blockersOf(projectId, taskId)
+
+  const conds = [eq(tasks.projectId, projectId), isNull(tasks.deletedAt)]
+  if (q) {
+    conds.push(
+      sql`(${tasks.title} ilike ${`%${q}%`} or ${tasks.number} ilike ${`%${q}%`} or ${tasks.refs} ilike ${`%${q}%`})`,
+    )
+  }
+  const rows = await db
+    .select({ task: tasks, assignee: users })
+    .from(tasks)
+    .leftJoin(users, eq(users.id, tasks.assigneeId))
+    .where(and(...conds))
+    .orderBy(asc(tasks.status), desc(tasks.createdAt))
+    .limit(200)
+
+  const items = rows
+    .filter((r) => r.task.id !== taskId && !already.has(r.task.id) && !forbidden.has(r.task.id))
+    .slice(0, 50)
+    .map((r) => linkView(r.task, r.assignee))
+  return c.json({ items })
+})
+
+/** Всё, чего ждёт задача — прямо или по цепочке. Зеркало dependentsOf. */
+async function blockersOf(projectId: string, taskId: string): Promise<Set<string>> {
+  const seen = new Set<string>()
+  let frontier = [taskId]
+  while (frontier.length) {
+    const rows = await db
+      .select({ blocker: taskBlockers.blockerTaskId })
+      .from(taskBlockers)
+      .where(and(eq(taskBlockers.projectId, projectId), inArray(taskBlockers.blockedTaskId, frontier)))
+    frontier = []
+    for (const r of rows) {
+      if (seen.has(r.blocker)) continue
+      seen.add(r.blocker)
+      frontier.push(r.blocker)
+    }
+  }
+  return seen
+}
+
+/** Добавить связи. Принимаем список: выбрали несколько галочками — один запрос. */
+tasksRoute.post(
+  '/:taskId/blockers',
+  zValidator(
+    'json',
+    z.object({
+      taskIds: z.array(z.string()).min(1).max(50),
+      /** blockers — эти задачи держат нашу; blocking — наша держит эти. */
+      side: z.enum(['blockers', 'blocking']).default('blockers'),
+    }),
+  ),
+  async (c) => {
+    const { projectId, sub } = c.get('auth')
+    if (!(await hasPermission(projectId, sub, 'tasks.edit'))) return c.json({ error: 'Forbidden' }, 403)
+    const taskId = c.req.param('taskId')
+    const { taskIds, side } = c.req.valid('json')
+
+    const task = await db.query.tasks.findFirst({
+      where: and(eq(tasks.id, taskId), eq(tasks.projectId, projectId), isNull(tasks.deletedAt)),
+    })
+    if (!task) return c.json({ error: 'Not found' }, 404)
+
+    // Только задачи ЭТОГО проекта: связь между проектами означала бы, что
+    // человек видит в списке задачу, к которой у него может не быть доступа.
+    const found = await db
+      .select({ id: tasks.id, number: tasks.number })
+      .from(tasks)
+      .where(and(eq(tasks.projectId, projectId), inArray(tasks.id, taskIds), isNull(tasks.deletedAt)))
+    if (found.length !== taskIds.length) return c.json({ error: 'Some tasks are not in this project' }, 400)
+    if (taskIds.includes(taskId)) return c.json({ error: 'A task cannot block itself' }, 400)
+
+    // Кольцо проверяем ДО вставки и по каждой задаче: A и B по отдельности
+    // безобидны, а вместе замыкают круг.
+    const forbidden =
+      side === 'blockers' ? await dependentsOf(projectId, taskId) : await blockersOf(projectId, taskId)
+    const looped = found.filter((f) => forbidden.has(f.id))
+    if (looped.length) {
+      return c.json(
+        {
+          error: `Circular dependency: ${looped.map((l) => l.number).join(', ')} already depends on this task. Neither could ever be finished.`,
+        },
+        400,
+      )
+    }
+
+    await db
+      .insert(taskBlockers)
+      .values(
+        taskIds.map((other) => ({
+          projectId,
+          blockedTaskId: side === 'blockers' ? taskId : other,
+          blockerTaskId: side === 'blockers' ? other : taskId,
+          createdById: sub,
+        })),
+      )
+      // Повторная связь — не ошибка и не вторая связь: молча пропускаем.
+      .onConflictDoNothing()
+
+    void logActivity({
+      projectId,
+      actorId: sub,
+      action: 'update',
+      entityType: 'task',
+      entityId: taskId,
+      entityLabel: `${task.number} ${task.title}`,
+    })
+    tasksChanged(projectId, [task.assigneeId, task.createdById])
+    return c.json({ ok: true, added: taskIds.length })
+  },
+)
+
+/** Убрать связь. Направление не важно — у связи один id. */
+tasksRoute.delete('/:taskId/blockers/:linkId', async (c) => {
+  const { projectId, sub } = c.get('auth')
+  if (!(await hasPermission(projectId, sub, 'tasks.edit'))) return c.json({ error: 'Forbidden' }, 403)
+  const taskId = c.req.param('taskId')
+
+  const task = await db.query.tasks.findFirst({
+    where: and(eq(tasks.id, taskId), eq(tasks.projectId, projectId)),
+  })
+  if (!task) return c.json({ error: 'Not found' }, 404)
+
+  await db
+    .delete(taskBlockers)
+    .where(and(eq(taskBlockers.id, c.req.param('linkId')), eq(taskBlockers.projectId, projectId)))
+
+  tasksChanged(projectId, [task.assigneeId, task.createdById])
   return c.json({ ok: true })
 })
 

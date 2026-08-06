@@ -26,6 +26,8 @@ import { useTaskTimer } from '@/hooks/useTaskTimer'
 import { exportTasksToExcel, downloadImportTemplate, parseTasksFromExcel } from './tasks/taskExcel'
 import { STATUSES, PRIORITIES, STATUS_ICON, STATUS_COLOR, PRIORITY_COLOR, fmtEstimate, type Task, type TaskGroup, type Member, type Status, type Priority } from './tasks/types'
 import { StatusBadge } from './tasks/StatusBadge'
+import { TaskBlockedMark } from './tasks/TaskBlockedMark'
+import { BlockerFilter, matchesBlockerFilter, type BlockerFilterValue } from './tasks/BlockerFilter'
 
 // Таб «Задачи»: список по статусам + drawer с деталями и вложениями (SPEC §4.3 — права)
 export function TasksTab({ projectId, meId }: { projectId: string; meId?: string }) {
@@ -40,6 +42,8 @@ export function TasksTab({ projectId, meId }: { projectId: string; meId?: string
   const [newSprintId, setNewSprintId] = useState<string | null>(null) // спринт для новой задачи
   const [statusFilter, setStatusFilter] = useState<Status | null>(null)
   const [priorityFilter, setPriorityFilter] = useState<Priority | null>(null)
+  // Зависимости: ни один значок не нажат — показываем всё.
+  const [depFilter, setDepFilter] = useState<BlockerFilterValue>(() => new Set())
   const [showDone, setShowDone] = useState(false)
   const [newTitle, setNewTitle] = useState('')
   // drawer открывается по URL: /c/:companyId/p/:id/tasks/:taskId — прямые
@@ -263,10 +267,13 @@ export function TasksTab({ projectId, meId }: { projectId: string; meId?: string
     if (assigneeFilter) list = list.filter((task) => task.assignee?.id === assigneeFilter)
     if (statusFilter) list = list.filter((task) => task.status === statusFilter)
     if (priorityFilter) list = list.filter((task) => task.priority === priorityFilter)
+    // Пустой набор пропускает всех — это обычное состояние контрола, а не
+    // «фильтр не задан», поэтому отдельной проверки на размер здесь нет.
+    list = list.filter((task) => matchesBlockerFilter(task, depFilter))
     const needle = q.trim().toLowerCase()
     if (needle) list = list.filter((task) => task.title.toLowerCase().includes(needle) || task.number.toLowerCase().includes(needle))
     return list
-  }, [tasksQ.data, onlyMine, meId, assigneeFilter, statusFilter, priorityFilter, q])
+  }, [tasksQ.data, onlyMine, meId, assigneeFilter, statusFilter, priorityFilter, depFilter, q])
 
   const hasFilters = onlyMine || Boolean(assigneeFilter) || Boolean(statusFilter) || Boolean(priorityFilter) || q.trim().length > 0
   const resetFilters = () => {
@@ -533,6 +540,8 @@ export function TasksTab({ projectId, meId }: { projectId: string; meId?: string
                 />
               </button>
             ))}
+            {/* Зависимости: замочек / восклицательный / свободные. */}
+            <BlockerFilter value={depFilter} onChange={setDepFilter} />
             <DropdownMenu>
               <DropdownMenuTrigger asChild>
                 <button
@@ -720,6 +729,7 @@ export function TasksTab({ projectId, meId }: { projectId: string; meId?: string
                         dragging={dragId === task.id}
                         dropBefore={dropHint?.status === status && dropHint.beforeId === task.id}
                         onOpen={() => setOpenTaskId(task.id)}
+                        onOpenTask={(id) => setOpenTaskId(id)}
                         onStatus={(s) => patch.mutate({ id: task.id, status: s })}
                         onPatch={(body) => patch.mutate({ id: task.id, ...body })}
                         onDelete={() => remove.mutate(task.id)}
@@ -787,6 +797,7 @@ function TaskRow({
   dragging,
   dropBefore,
   onOpen,
+  onOpenTask,
   onStatus,
   onPatch,
   onDelete,
@@ -806,6 +817,8 @@ function TaskRow({
   dragging: boolean
   dropBefore: boolean
   onOpen: () => void
+  /** открыть ЧУЖУЮ задачу — из списка зависимостей */
+  onOpenTask?: (id: string) => void
   onStatus: (s: Status) => void
   onPatch: (body: Record<string, unknown>) => void
   onDelete: () => void
@@ -852,6 +865,9 @@ function TaskRow({
         highlighted && 'border-brand bg-brand/10 transition-colors duration-500',
         dragging && 'opacity-40',
         dropBefore && 'border-t-2 border-t-brand',
+        // Ждёт другие задачи — приглушаем: карточка рабочая, просто видно,
+        // что брать её рано. При наведении яркость возвращается.
+        (task.blockedBy ?? 0) > 0 && 'opacity-55 hover:opacity-100',
       )}
       onClick={onOpen}
     >
@@ -877,6 +893,14 @@ function TaskRow({
 
       {/* Свой номер задачи — рядом с нашим: по нему её и ищут в макете. */}
       <TaskRefs value={task.refs} canEdit={canEdit} compact onChange={(refs) => onPatch({ refs })} className="shrink-0" />
+
+      {/* Зависимости: замочек — ждёт, восклицательный — держит других. */}
+      <TaskBlockedMark
+        taskId={task.id}
+        blockedBy={task.blockedBy}
+        blocking={task.blocking}
+        onOpenTask={onOpenTask}
+      />
 
       {/* Компактные бейджи */}
       <span className="flex shrink-0 items-center gap-2 text-xs text-muted-foreground">

@@ -1485,5 +1485,27 @@
     "setDeadline": "תאריך יעד",
     "clearDeadline": "להסיר תאריך יעד",
     "timeSettings": "הגדרות זמן"
+  },
+  "blockers": {
+    "waitingFor": "ממתין ל",
+    "holding": "מעכב",
+    "waitingHint_one": "ממתין למשימה {{count}} שטרם הושלמה",
+    "waitingHint_other": "ממתין ל-{{count}} משימות שטרם הושלמו",
+    "holdingHint_one": "משימה {{count}} ממתינה לזו",
+    "holdingHint_other": "{{count}} משימות ממתינות לזו",
+    "blockedBy": "ממתין להשלמת",
+    "blocks": "חוסם",
+    "addBlocker": "הוספת משימה",
+    "noBlockers": "שום דבר לא חוסם את המשימה הזו",
+    "noBlocking": "אף משימה לא תלויה בזו",
+    "pickTitle": "בחירת משימות",
+    "pickSearch": "חיפוש לפי מספר, שם או №…",
+    "pickEmpty": "אין מה להוסיף — משימות מקושרות ואלה שתלויות בזו לא מוצעות, הן היו יוצרות לולאה",
+    "pickAdd": "הוספה ({{count}})",
+    "remove": "הסרת הקישור",
+    "filterBlocked": "חסומות",
+    "filterBlocking": "חוסמות",
+    "filterFree": "זמינות לעבודה",
+    "cycleHint": "משימות שתלויות בזו אינן מוצגות: קישור היה סוגר לולאה, ואי אפשר היה להשלים אף אחת מהן."
   }
 }
