@@ -108,6 +108,29 @@ function endpointCatalog(q: string): string {
          Use it before asking the human "what happened here" — and to find
          things that no longer exist: a deleted file still has its entry.
 
+  GET    /x/db${q}                            databases connected to this project, and what you may read
+  POST   /x/db/<id>/read${q}                   {"sql":"select ...", "limit":100}
+
+  A project can have a real database attached — the customer's, not ours. You
+  can READ it. You cannot write: the query runs inside a read-only transaction,
+  so the database engine itself rejects any UPDATE, INSERT, DELETE or DROP,
+  including ones hidden in a CTE or after a semicolon. Do not try to work
+  around it; ask the human to make the change.
+
+  Call GET /x/db first. It lists "readableTables" — the ONLY tables you may
+  touch, chosen by a human, plus "hiddenColumns" that are stripped from every
+  answer. Querying anything else fails with a message naming what is allowed;
+  that is a closed door, not a hint to keep guessing.
+
+  Plain SELECT is fine — joins, aggregates, whatever answers the question.
+  Results are capped and "truncated": true means you saw only part; say so
+  rather than reporting a partial count as the total.
+
+  This is production data belonging to someone else. Read what the question
+  needs, not the whole table, and do not copy personal data (names, emails,
+  phone numbers) into chat messages or task descriptions where it will outlive
+  the conversation.
+
   GET    /x/blockers${q}                      what is holding the WHOLE project, and who owns it
   GET    /x/tasks/<id>/blockers${q}           what this task waits for, and what waits for it
   POST   /x/tasks/<id>/blockers${q}           {"tasks":["TASK-3","TASK-5"], "side":"blockedBy"|"blocking"}

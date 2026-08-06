@@ -8,6 +8,7 @@ import { auth } from './routes/auth.js'
 import { companiesRoute, companyLogoRoute } from './routes/companies.js'
 import { projectsRoute, projectLogoRoute } from './routes/projects.js'
 import { linkPreviewRoute } from './routes/link-preview.js'
+import { dbConnectionsRoute } from './routes/db-connections.js'
 import { filesRoute, filesPublicRoute } from './routes/files.js'
 import { resourcesRoute } from './routes/resources.js'
 import { tasksRoute } from './routes/tasks.js'
@@ -47,6 +48,8 @@ app.route('/api/v1/files', filesRoute)
 app.route('/files', filesPublicRoute) // публичная прокси-отдача по file-токену (iframe/img/Google)
 app.route('/api/v1/resources', resourcesRoute)
 app.route('/api/v1/tasks', tasksRoute)
+// Подключения к внешним БД. Фича за выключателем: выключено — ручки 404.
+app.route('/api/v1/db-connections', dbConnectionsRoute)
 app.route('/api/v1/messages', messagesRoute)
 app.route('/api/v1/notifications', notificationsRoute)
 app.route('/api/v1/ai', aiRoute)

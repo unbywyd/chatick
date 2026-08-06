@@ -11,7 +11,7 @@ import {
   credentials,
   documents,
   documentVersions,
-  files,
+  dbConnections, dbTablePolicies, files,
   messages,
   notes,
   notifications,
@@ -40,6 +40,7 @@ import {
   type ProjectPermission, ownsOrManages } from './projects.js'
 import { nanoid } from 'nanoid'
 import { authenticateBridge, closeSession, startDeviceAuth, pollDeviceAuth, IDLE_TTL_MS, type BridgeIdentity } from '../lib/bridge-auth.js'
+import { readFromConnection } from './db-connections.js'
 import { connectDoc, guideDoc } from '../lib/bridge-docs.js'
 import { logActivity } from '../lib/audit.js'
 import { sendAddedToProjectMail } from '../lib/mails.js'
@@ -1744,6 +1745,79 @@ async function taskByKey(projectId: string, key: string) {
  * что одна закрытая задача разблокирует пятерых. Порядок — по весу: сверху то,
  * с чего начинать.
  */
+// --- Внешние БД проекта (шаг 1: только чтение) ------------------------------
+//
+// Ассистенту нужно знать, что за база у проекта, и уметь достать оттуда факты:
+// «сколько заказов за месяц», «какие поля у таблицы настроек». Без этого он
+// рассуждает о данных, которых не видел.
+//
+// Писать он не может ничего: read-only транзакция, и это гарантия СУБД, а не
+// наша проверка.
+
+bridgeRoute.get('/db', async (c) => {
+  const scope = await resolveProject(c as never)
+  if ('error' in scope) return c.json({ error: scope.error }, scope.status)
+  if (env.DB_CONNECTIONS_ENABLED !== 'true') return c.json({ error: 'Not found' }, 404)
+  const denied = await require(c as never, 'resources.read', scope.projectId)
+  if (denied) return c.json(denied, 403)
+
+  const rows = await db
+    .select()
+    .from(dbConnections)
+    .where(and(eq(dbConnections.projectId, scope.projectId), isNull(dbConnections.deletedAt)))
+
+  const items = await Promise.all(
+    rows.map(async (r) => {
+      const pol = await db.select().from(dbTablePolicies).where(eq(dbTablePolicies.connectionId, r.id))
+      const readable = pol.filter((p) => p.canRead)
+      return {
+        id: r.id,
+        name: r.name,
+        kind: r.kind,
+        // Хост и база — чтобы ассистент понимал, о какой системе речь.
+        // Строки подключения здесь нет и не будет: она прошла бы через
+        // историю внешней модели и осталась там навсегда.
+        host: r.host,
+        database: r.database,
+        // Читать можно ТОЛЬКО это. Список отдаём сразу: иначе ассистент
+        // сочиняет запрос к таблице, которой для него не существует, и
+        // получает отказ вместо ответа.
+        readableTables: readable.map((p) => ({
+          name: p.schemaName === 'public' ? p.tableName : `${p.schemaName}.${p.tableName}`,
+          hiddenColumns: JSON.parse(p.hiddenColumns || '[]') as string[],
+        })),
+      }
+    }),
+  )
+  return c.json({ items, writable: false })
+})
+
+bridgeRoute.post('/db/:id/read', async (c) => {
+  const id = auth(c as never)
+  const scope = await resolveProject(c as never)
+  if ('error' in scope) return c.json({ error: scope.error }, scope.status)
+  if (env.DB_CONNECTIONS_ENABLED !== 'true') return c.json({ error: 'Not found' }, 404)
+  const denied = await require(c as never, 'resources.read', scope.projectId)
+  if (denied) return c.json(denied, 403)
+
+  const b = (await c.req.json().catch(() => ({}))) as Record<string, unknown>
+  const bad = unknownFields(b, ['sql', 'limit', 'project'])
+  if (bad) return c.json({ error: bad }, 400)
+  const sqlText = typeof b.sql === 'string' ? b.sql.trim() : ''
+  if (!sqlText) return c.json({ error: 'sql is required' }, 400)
+
+  const r = await readFromConnection({
+    projectId: scope.projectId,
+    userId: id.userId,
+    connectionId: c.req.param('id'),
+    sql: sqlText,
+    limit: typeof b.limit === 'number' ? b.limit : undefined,
+    viaBridge: true,
+  })
+  if ('error' in r) return c.json({ error: r.error }, r.status)
+  return c.json(r.result)
+})
+
 bridgeRoute.get('/blockers', async (c) => {
   const scope = await resolveProject(c as never)
   if ('error' in scope) return c.json({ error: scope.error }, scope.status)
