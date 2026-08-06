@@ -1471,6 +1471,9 @@
   "summary": {
     "planned": "Planned",
     "left": "Left",
+    "fasterBy": "{{time}} under estimate",
+    "slowerBy": "{{time}} over estimate",
+    "vsDoneHint": "Tracked time compared with the estimates of finished tasks only — tasks still open are not counted, or every project would look behind.",
     "spent": "Spent",
     "noEstimate_one": "{{count}} task without an estimate",
     "noEstimate_other": "{{count}} tasks without an estimate",

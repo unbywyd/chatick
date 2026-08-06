@@ -111,11 +111,21 @@ export function ProjectSummary({ projectId, canEdit }: { projectId: string; canE
             {t('summary.spent')}: <b className="font-medium text-foreground">{formatDuration(spent)}</b>
           </span>
           {/* Сравнение факта с закрытым планом, а не со всем: пока половина
-              задач открыта, «100 из 200» читалось бы как отставание. */}
-          {plannedDone > 0 && spent > 0 && (
-            <span className={cn('rounded px-1', spent > plannedDone ? 'bg-orange-500/15 text-orange-600 dark:text-orange-400' : 'bg-brand/15 text-brand')}>
-              {spent > plannedDone ? '+' : '−'}
-              {formatDuration(Math.abs(spent - plannedDone))}
+              задач открыта, «100 из 200» читалось бы как отставание.
+              Со словом, а не одним знаком: голое «−0:20» сразу после
+              «Потрачено» читается как поправка к потраченному, хотя это
+              отклонение от ОЦЕНКИ завершённых задач. На этом спотыкались. */}
+          {plannedDone > 0 && spent > 0 && spent !== plannedDone && (
+            <span
+              title={t('summary.vsDoneHint')}
+              className={cn(
+                'rounded px-1',
+                spent > plannedDone ? 'bg-orange-500/15 text-orange-600 dark:text-orange-400' : 'bg-brand/15 text-brand',
+              )}
+            >
+              {t(spent > plannedDone ? 'summary.slowerBy' : 'summary.fasterBy', {
+                time: formatDuration(Math.abs(spent - plannedDone)),
+              })}
             </span>
           )}
         </span>

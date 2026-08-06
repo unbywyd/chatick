@@ -106,12 +106,49 @@ export function TaskRefs({
 
   // Пусто и править нельзя — показывать нечего.
   if (!refs.length && !canEdit) return null
-  if (!canEdit)
+
+  // Без права на правку — но со спрятанными номерами. Поповер всё равно нужен:
+  // иначе «+10» превращается в тупик, а прочитать десять номеров бывает нужно
+  // и тому, кто задачу не правит. Права это не даёт — внутри только список.
+  //
+  // Случай не редкий: canEdit тут false у любого участника на ЧУЖОЙ задаче, а
+  // не только у гостя с доступом на чтение.
+  if (!canEdit) {
+    if (!hidden) return <span className={className}>{chips}</span>
     return (
-      <span className={className} title={hidden > 0 ? hint : undefined}>
-        {chips}
-      </span>
+      <Popover open={open} onOpenChange={setOpen}>
+        <PopoverTrigger asChild>
+          <button
+            type="button"
+            title={hint}
+            onClick={(e) => e.stopPropagation()} // клик по строке открывает задачу
+            className={cn(
+              'inline-flex items-center gap-1 rounded-md transition-colors hover:bg-accent',
+              compact ? 'px-1 py-0.5' : 'px-1.5 py-1',
+              className,
+            )}
+          >
+            {chips}
+          </button>
+        </PopoverTrigger>
+        <PopoverContent align="start" className="w-64 p-2" onClick={(e) => e.stopPropagation()}>
+          <div className="flex flex-wrap items-center gap-1">
+            <span dir="ltr" className="me-0.5 shrink-0 text-xs text-muted-foreground">
+              {REFS_SIGN}
+            </span>
+            {refs.map((ref, i) => (
+              <span
+                key={`${ref}:${i}`}
+                className="rounded bg-secondary px-1.5 py-0.5 text-xs font-semibold tabular-nums"
+              >
+                {ref}
+              </span>
+            ))}
+          </div>
+        </PopoverContent>
+      </Popover>
     )
+  }
 
   return (
     <Popover open={open} onOpenChange={setOpen}>
