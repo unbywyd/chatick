@@ -1,4 +1,4 @@
-import { and, desc, eq, inArray, isNull } from 'drizzle-orm'
+import { and, desc, eq, gte, isNull } from 'drizzle-orm'
 import { db } from '../db/client.js'
 import { companies, files, messages, projects } from '../db/schema.js'
 import { getObjectStream, resolveStorage } from './s3.js'
@@ -28,6 +28,14 @@ const SUPPORTED = new Set(['image/jpeg', 'image/png', 'image/gif', 'image/webp']
 const MAX_BYTES = 4 * 1024 * 1024
 /** Сколько картинок за раз: десяток скриншотов в одном вопросе — это не вопрос. */
 const MAX_IMAGES = 4
+/**
+ * Насколько назад смотрим в диалоге.
+ *
+ * Полчаса: картинка, показанная только что, — та самая, о которой спрашивают.
+ * Вчерашнюю подтягивать нельзя, иначе «глянь» через сутки оплатит забытый
+ * скриншот.
+ */
+const RECENT_WINDOW_MS = 30 * 60 * 1000
 
 /**
  * Просят ли посмотреть картинку.
@@ -100,22 +108,44 @@ export async function imagesForMessage(
    * следом «посмотри, что там». Требовать, чтобы просьба была в той же
    * реплике, — значит требовать от человека знать, как мы устроены внутри.
    *
-   * Только соседнее и только своё: дальше в историю не лезем, иначе «глянь»
-   * через час подтянет забытый скриншот, за который ещё и заплатим.
+   * Ищем по АВТОРУ, а не по получателю: ответы ассистента тоже адресованы
+   * человеку, и по recipientId «два последних» оказывались его репликой и
+   * ответом ИИ — картинка из предыдущего сообщения в окно не попадала.
+   *
+   * Три последних СВОИХ: между отправкой картинки и просьбой человек успевает
+   * написать что-то ещё («ну как?», «а теперь?»). Дальше не лезем — иначе
+   * «глянь» через час подтянет забытый скриншот, за который ещё и заплатим.
    */
-  const own = await db
-    .select({ id: messages.id })
-    .from(messages)
-    .where(and(eq(messages.projectId, projectId), eq(messages.mode, 'ai'), eq(messages.recipientId, userId)))
-    .orderBy(desc(messages.createdAt))
-    .limit(2)
-  const ids = own.map((m) => m.id)
-  if (!ids.includes(messageId)) ids.push(messageId)
-
+  // Берём картинки из СВЕЖИХ сообщений этого диалога — по времени, а не по
+  // числу реплик.
+  //
+  // Считать сообщения бессмысленно: между «вот скрин» и «а теперь глянь»
+  // человек напишет то одну реплику, то пять, и любое N окажется неверным.
+  // А по времени граница осмысленна: картинка, показанная десять минут назад,
+  // почти наверняка та самая, о которой речь; вчерашняя — почти наверняка нет.
+  const since = new Date(Date.now() - RECENT_WINDOW_MS)
   const rows = await db
-    .select()
+    .select({
+      id: files.id,
+      name: files.name,
+      mime: files.mime,
+      size: files.size,
+      key: files.key,
+      at: files.createdAt,
+    })
     .from(files)
-    .where(and(inArray(files.messageId, ids), eq(files.projectId, projectId), isNull(files.deletedAt)))
+    .innerJoin(messages, eq(messages.id, files.messageId))
+    .where(
+      and(
+        eq(files.projectId, projectId),
+        eq(files.uploadedById, userId),
+        eq(messages.mode, 'ai'),
+        eq(messages.authorId, userId),
+        gte(files.createdAt, since),
+        isNull(files.deletedAt),
+      ),
+    )
+    .orderBy(desc(files.createdAt))
 
   const images = rows.filter((f) => SUPPORTED.has(f.mime) && Number(f.size) <= MAX_BYTES).slice(0, MAX_IMAGES)
   if (!images.length) return []

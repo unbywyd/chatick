@@ -32,8 +32,11 @@ describe('картинка уходит только по просьбе', () =>
     // предыдущем своём сообщении — но только в соседнем, чтобы «глянь» через
     // час не подтянуло забытый скриншот.
     const fn = lib.slice(lib.indexOf('export async function imagesForMessage'))
-    expect(fn).toMatch(/\.limit\(2\)/)
-    expect(fn).toMatch(/eq\(messages\.recipientId, userId\)/)
+    // Граница по ВРЕМЕНИ, а не по числу реплик: между «вот скрин» и «глянь»
+    // человек напишет то одну, то пять — любое N окажется неверным.
+    expect(fn).toMatch(/gte\(files\.createdAt, since\)/)
+    expect(fn).toMatch(/eq\(messages\.authorId, userId\)/)
+    expect(lib).toMatch(/const RECENT_WINDOW_MS = \d+ \* 60 \* 1000/)
   })
 
   it('обычное сообщение картинку не тянет', () => {
