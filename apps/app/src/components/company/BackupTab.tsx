@@ -286,27 +286,33 @@ export function BackupTab({ company }: { company: Company }) {
           {t('backup.importTitle')}
         </h3>
         <p className="mt-1 text-xs text-muted-foreground">{t('backup.importHint')}</p>
-        <Input
-          type="password"
-          value={importPassword}
-          onChange={(e) => setImportPassword(e.target.value)}
-          placeholder={t('backup.importPasswordPlaceholder')}
-          className="mt-3 max-w-sm"
-        />
-        <input
-          ref={fileRef}
-          type="file"
-          accept="application/json,.json"
-          hidden
-          onChange={(e) => {
-            if (e.target.files?.[0]) void runImport(e.target.files[0])
-            e.target.value = ''
-          }}
-        />
-        <Button variant="outline" className="mt-3" disabled={busy} onClick={() => fileRef.current?.click()}>
-          <Upload className="size-4" />
-          {t('backup.importAction')}
-        </Button>
+        {/* Поле и кнопка — одной колонкой с явным зазором.
+            Раньше отступы задавались каждому элементу отдельно, а между ними
+            стоял скрытый input для выбора файла: в разметке он есть, в
+            раскладке его нет, и кнопка прижималась вплотную к полю пароля. */}
+        <div className="mt-3 flex flex-col items-start gap-3">
+          <Input
+            type="password"
+            value={importPassword}
+            onChange={(e) => setImportPassword(e.target.value)}
+            placeholder={t('backup.importPasswordPlaceholder')}
+            className="max-w-sm"
+          />
+          <input
+            ref={fileRef}
+            type="file"
+            accept="application/json,.json"
+            hidden
+            onChange={(e) => {
+              if (e.target.files?.[0]) void runImport(e.target.files[0])
+              e.target.value = ''
+            }}
+          />
+          <Button variant="outline" disabled={busy} onClick={() => fileRef.current?.click()}>
+            <Upload className="size-4" />
+            {t('backup.importAction')}
+          </Button>
+        </div>
       </section>
 
       {storageOpen && <BackupStorageDialog companyId={company.id} onClose={() => setStorageOpen(false)} />}

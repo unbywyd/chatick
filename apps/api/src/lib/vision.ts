@@ -1,6 +1,6 @@
-import { and, eq, inArray, isNull } from 'drizzle-orm'
+import { and, desc, eq, inArray, isNull } from 'drizzle-orm'
 import { db } from '../db/client.js'
-import { companies, files, projects } from '../db/schema.js'
+import { companies, files, messages, projects } from '../db/schema.js'
 import { getObjectStream, resolveStorage } from './s3.js'
 
 /**
@@ -49,7 +49,19 @@ const ASK_RE = new RegExp(
   'i',
 )
 
-export const asksToLook = (text: string): boolean => ASK_RE.test(text)
+/**
+ * Просьба посмотреть — либо словами, либо самим фактом отправки картинки.
+ *
+ * Сообщение из одного скрепыша («📎», пустой текст) — это и есть «вот,
+ * смотри»: человек приложил картинку и ничего не написал, потому что и так
+ * понятно. Требовать от него ещё и слов — значит заставлять угадывать
+ * заклинание.
+ */
+export const asksToLook = (text: string): boolean => {
+  const t = text.trim()
+  if (!t || t === '📎') return true
+  return ASK_RE.test(t)
+}
 
 export type VisionImage = { mediaType: string; base64: string; name: string }
 
@@ -63,6 +75,7 @@ export async function imagesForMessage(
   messageId: string,
   projectId: string,
   text: string,
+  userId: string,
 ): Promise<VisionImage[]> {
   if (!asksToLook(text)) return []
 
@@ -79,10 +92,30 @@ export async function imagesForMessage(
     .limit(1)
   if (!company?.vision) return []
 
+  /**
+   * Ищем вложения текущего сообщения — и предыдущего своего, если в текущем
+   * их нет.
+   *
+   * Люди отправляют картинку и просьбу РАЗНЫМИ сообщениями: сначала «📎», а
+   * следом «посмотри, что там». Требовать, чтобы просьба была в той же
+   * реплике, — значит требовать от человека знать, как мы устроены внутри.
+   *
+   * Только соседнее и только своё: дальше в историю не лезем, иначе «глянь»
+   * через час подтянет забытый скриншот, за который ещё и заплатим.
+   */
+  const own = await db
+    .select({ id: messages.id })
+    .from(messages)
+    .where(and(eq(messages.projectId, projectId), eq(messages.mode, 'ai'), eq(messages.recipientId, userId)))
+    .orderBy(desc(messages.createdAt))
+    .limit(2)
+  const ids = own.map((m) => m.id)
+  if (!ids.includes(messageId)) ids.push(messageId)
+
   const rows = await db
     .select()
     .from(files)
-    .where(and(eq(files.messageId, messageId), eq(files.projectId, projectId), isNull(files.deletedAt)))
+    .where(and(inArray(files.messageId, ids), eq(files.projectId, projectId), isNull(files.deletedAt)))
 
   const images = rows.filter((f) => SUPPORTED.has(f.mime) && Number(f.size) <= MAX_BYTES).slice(0, MAX_IMAGES)
   if (!images.length) return []

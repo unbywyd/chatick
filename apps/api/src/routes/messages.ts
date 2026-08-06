@@ -299,7 +299,7 @@ messagesRoute.post(
           // Картинки — только если человек попросил посмотреть. Правило
           // исполняется здесь, а не в промпте: изображение, уехавшее в
           // запрос, уже увидено и уже оплачено.
-          const images = await imagesForMessage(row!.id, projectId, text)
+          const images = await imagesForMessage(row!.id, projectId, text, sub)
           answer = await aiChatReply(projectId, sub, text, images)
         } catch (e) {
           console.error('[ai-chat] reply failed:', e)
