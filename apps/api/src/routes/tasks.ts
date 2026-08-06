@@ -770,7 +770,7 @@ const linkView = (t: typeof tasks.$inferSelect, assignee?: typeof users.$inferSe
  * Обход в ширину по готовому индексу — на проектных объёмах это доли
  * миллисекунды, а рекурсивный SQL здесь читался бы вдвое хуже.
  */
-async function dependentsOf(projectId: string, taskId: string): Promise<Set<string>> {
+export async function dependentsOf(projectId: string, taskId: string): Promise<Set<string>> {
   const seen = new Set<string>()
   let frontier = [taskId]
   while (frontier.length) {
@@ -870,7 +870,7 @@ tasksRoute.get('/:taskId/blockers/candidates', async (c) => {
 })
 
 /** Всё, чего ждёт задача — прямо или по цепочке. Зеркало dependentsOf. */
-async function blockersOf(projectId: string, taskId: string): Promise<Set<string>> {
+export async function blockersOf(projectId: string, taskId: string): Promise<Set<string>> {
   const seen = new Set<string>()
   let frontier = [taskId]
   while (frontier.length) {

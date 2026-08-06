@@ -18,7 +18,7 @@ import {
   projectMembers,
   projects,
   shares,
-  taskChecklist,
+  taskBlockers, taskChecklist,
   taskComments,
   taskGroups,
   tasks,
@@ -50,7 +50,7 @@ import { readPresence } from './auth.js'
 import { createShare, revokeShare, type ShareEntityType } from './shares.js'
 import { notifyChatMentions } from './messages.js'
 import { notify, extractMentions } from '../lib/notify.js'
-import { notifyTask, unassignNotice } from './tasks.js'
+import { notifyTask, unassignNotice, dependentsOf, blockersOf } from './tasks.js'
 import { projectPath, companyOf } from '../lib/links.js'
 import { htmlToText, sanitizeHtml } from '../lib/sanitize-html.js'
 import { richText } from '../lib/markdown.js'
@@ -1002,6 +1002,7 @@ const taskView = (
   t: typeof tasks.$inferSelect,
   assignee?: { id: string; name: string } | null,
   attachments?: ReturnType<typeof fileView>[],
+  deps?: { openBlockers: number; blocking: number },
 ) => ({
   id: t.id,
   number: t.number,
@@ -1017,8 +1018,36 @@ const taskView = (
   // видел задачу, но не знал, что к ней приложен макет, и узнать это мог
   // только перебрав все файлы проекта.
   attachments: attachments ?? [],
+  // Зависимости: сколько НЕзакрытых задач эта ждёт и скольких держит сама.
+  // Без этих чисел ассистент предлагает браться за работу, которую нельзя
+  // начать, — а узнать об этом можно было только запросом на каждую задачу.
+  ...(deps ? { openBlockers: deps.openBlockers, blocking: deps.blocking } : {}),
   updatedAt: t.updatedAt,
 })
+
+/** Счётчики зависимостей одним запросом на весь список. */
+async function depCounts(taskIds: string[]): Promise<Map<string, { openBlockers: number; blocking: number }>> {
+  const out = new Map<string, { openBlockers: number; blocking: number }>()
+  if (!taskIds.length) return out
+  const rows = await db
+    .select({
+      id: tasks.id,
+      openBlockers: sql<number>`(
+        select count(*)::int from ${taskBlockers} b
+        join ${tasks} bt on bt.id = b.blocker_task_id
+        where b.blocked_task_id = ${tasks.id} and bt.status <> 'done' and bt.deleted_at is null
+      )`,
+      blocking: sql<number>`(
+        select count(*)::int from ${taskBlockers} b
+        join ${tasks} dt on dt.id = b.blocked_task_id
+        where b.blocker_task_id = ${tasks.id} and dt.deleted_at is null
+      )`,
+    })
+    .from(tasks)
+    .where(inArray(tasks.id, taskIds))
+  for (const r of rows) out.set(r.id, { openBlockers: r.openBlockers, blocking: r.blocking })
+  return out
+}
 
 // --- Задачи -----------------------------------------------------------------
 
@@ -1075,6 +1104,7 @@ bridgeRoute.get('/tasks', async (c) => {
   // их номера в групповую ручку, все эти килобайты уходят в контекст впустую
   // и вытесняют оттуда то, ради чего ассистента позвали.
   if (c.req.query('fields') === 'brief') {
+    const briefDeps = await depCounts(rows.map((r) => r.t.id))
     return c.json({
       items: rows.map((r) => ({
         id: r.t.id,
@@ -1085,6 +1115,10 @@ bridgeRoute.get('/tasks', async (c) => {
         refs: r.t.refs || undefined,
         sprintId: r.t.groupId,
         assignee: r.u ? { id: r.u.id, name: r.u.name } : null,
+        // Ждёт ли задача чего-то — нужно и в кратком виде: именно по нему
+        // выбирают, за что браться.
+        openBlockers: briefDeps.get(r.t.id)?.openBlockers ?? 0,
+        blocking: briefDeps.get(r.t.id)?.blocking ?? 0,
       })),
       count: rows.length,
       total,
@@ -1098,8 +1132,9 @@ bridgeRoute.get('/tasks', async (c) => {
     scope.projectId,
     new Map(rows.map((r) => [r.t.id, r.t.description])),
   )
+  const deps = await depCounts(rows.map((r) => r.t.id))
   return c.json({
-    items: rows.map((r) => taskView(r.t, r.u, byTask.get(r.t.id))),
+    items: rows.map((r) => taskView(r.t, r.u, byTask.get(r.t.id), deps.get(r.t.id))),
     count: rows.length,
     total,
     // Явный признак, а не «сравни два числа сам»: пропустить его труднее.
@@ -1650,6 +1685,157 @@ bridgeRoute.post('/files/:id/restore', async (c) => {
 //
 // Ассистент и задаёт вопросы по задаче, и закрывает пункты, когда сделал.
 // Права те же, что у человека, от чьего имени он работает.
+
+// --- Зависимости между задачами ---------------------------------------------
+//
+// «Эта ждёт ту». Ассистент разбирает макет и первым видит, что оплата не
+// делается раньше авторизации, — а расставить это до сих пор не мог.
+//
+// Проверка колец — та же функция, что и в вебе, а не своя копия: разойдись они,
+// и через мост стало бы можно создать связь, запрещённую в интерфейсе.
+
+/** Краткий вид связанной задачи: список зависимостей, а не карточки. */
+const linkedView = (t: typeof tasks.$inferSelect) => ({
+  id: t.id,
+  number: t.number,
+  title: t.title,
+  status: t.status,
+  refs: t.refs || undefined,
+})
+
+/** Задача по номеру ИЛИ id — ассистент оперирует номерами. */
+async function taskByKey(projectId: string, key: string) {
+  const raw = key.trim()
+  return db.query.tasks.findFirst({
+    where: and(
+      eq(tasks.projectId, projectId),
+      isNull(tasks.deletedAt),
+      or(eq(tasks.id, raw), eq(tasks.number, raw.toUpperCase()))!,
+    ),
+  })
+}
+
+bridgeRoute.get('/tasks/:id/blockers', async (c) => {
+  const scope = await resolveProject(c as never)
+  if ('error' in scope) return c.json({ error: scope.error }, scope.status)
+  const denied = await require(c as never, 'tasks.read', scope.projectId)
+  if (denied) return c.json(denied, 403)
+
+  const task = await taskByKey(scope.projectId, c.req.param('id'))
+  if (!task) return c.json({ error: 'Task not found' }, 404)
+
+  const blockers = await db
+    .select({ t: tasks, linkId: taskBlockers.id })
+    .from(taskBlockers)
+    .innerJoin(tasks, eq(tasks.id, taskBlockers.blockerTaskId))
+    .where(and(eq(taskBlockers.blockedTaskId, task.id), isNull(tasks.deletedAt)))
+    .orderBy(asc(tasks.number))
+
+  const blocking = await db
+    .select({ t: tasks, linkId: taskBlockers.id })
+    .from(taskBlockers)
+    .innerJoin(tasks, eq(tasks.id, taskBlockers.blockedTaskId))
+    .where(and(eq(taskBlockers.blockerTaskId, task.id), isNull(tasks.deletedAt)))
+    .orderBy(asc(tasks.number))
+
+  return c.json({
+    task: { number: task.number, title: task.title },
+    // Чего ждёт эта задача. Незакрытые здесь — и есть причина, по которой её
+    // нельзя брать в работу.
+    blockedBy: blockers.map((r) => ({ ...linkedView(r.t), linkId: r.linkId })),
+    // Кого держит она сама.
+    blocking: blocking.map((r) => ({ ...linkedView(r.t), linkId: r.linkId })),
+    /** Сколько НЕзакрытых блокеров: ноль — задачу можно брать. */
+    openBlockers: blockers.filter((r) => r.t.status !== 'done').length,
+  })
+})
+
+bridgeRoute.post('/tasks/:id/blockers', async (c) => {
+  const id = auth(c as never)
+  const scope = await resolveProject(c as never)
+  if ('error' in scope) return c.json({ error: scope.error }, scope.status)
+  const denied = await require(c as never, 'tasks.edit', scope.projectId)
+  if (denied) return c.json(denied, 403)
+
+  const b = (await c.req.json().catch(() => ({}))) as Record<string, unknown>
+  const bad = unknownFields(b, ['tasks', 'side', 'project'])
+  if (bad) return c.json({ error: bad }, 400)
+
+  const task = await taskByKey(scope.projectId, c.req.param('id'))
+  if (!task) return c.json({ error: 'Task not found' }, 404)
+
+  const side = b.side === 'blocking' ? 'blocking' : 'blockedBy'
+  const keys = Array.isArray(b.tasks) ? b.tasks.map((x) => String(x).trim()).filter(Boolean) : []
+  if (!keys.length) return c.json({ error: 'tasks must be a non-empty array of task numbers or ids' }, 400)
+  if (keys.length > 50) return c.json({ error: `Too many tasks: ${keys.length}. Maximum 50 per request.` }, 400)
+
+  const resolved: { id: string; number: string }[] = []
+  for (const k of keys) {
+    const found = await taskByKey(scope.projectId, k)
+    if (!found) return c.json({ error: `Task ${k} not found in this project` }, 404)
+    if (found.id === task.id) return c.json({ error: 'A task cannot block itself' }, 400)
+    resolved.push({ id: found.id, number: found.number })
+  }
+
+  // Кольцо: обе задачи в нём невозможно закрыть НИКОГДА. Проверяем той же
+  // функцией, что и веб, и до вставки.
+  const forbidden =
+    side === 'blockedBy'
+      ? await dependentsOf(scope.projectId, task.id)
+      : await blockersOf(scope.projectId, task.id)
+  const looped = resolved.filter((r) => forbidden.has(r.id))
+  if (looped.length) {
+    return c.json(
+      {
+        error: `Circular dependency: ${looped.map((l) => l.number).join(', ')} already depends on ${task.number}. Linking them would mean neither could ever be finished.`,
+      },
+      400,
+    )
+  }
+
+  await db
+    .insert(taskBlockers)
+    .values(
+      resolved.map((r) => ({
+        projectId: scope.projectId,
+        blockedTaskId: side === 'blockedBy' ? task.id : r.id,
+        blockerTaskId: side === 'blockedBy' ? r.id : task.id,
+        createdById: id.userId,
+      })),
+    )
+    .onConflictDoNothing()
+
+  void logActivity({
+    projectId: scope.projectId,
+    actorId: id.userId,
+    action: 'update',
+    entityType: 'task',
+    entityId: task.id,
+    entityLabel: `${task.number} ${task.title}`,
+  })
+  tasksChanged(scope.projectId, [task.assigneeId, task.createdById])
+  return c.json({ ok: true, linked: resolved.length })
+})
+
+bridgeRoute.delete('/tasks/:id/blockers/:linkId', async (c) => {
+  const id = auth(c as never)
+  const scope = await resolveProject(c as never)
+  if ('error' in scope) return c.json({ error: scope.error }, scope.status)
+  const denied = await require(c as never, 'tasks.edit', scope.projectId)
+  if (denied) return c.json(denied, 403)
+
+  const task = await taskByKey(scope.projectId, c.req.param('id'))
+  if (!task) return c.json({ error: 'Task not found' }, 404)
+
+  const [gone] = await db
+    .delete(taskBlockers)
+    .where(and(eq(taskBlockers.id, c.req.param('linkId')), eq(taskBlockers.projectId, scope.projectId)))
+    .returning()
+  if (!gone) return c.json({ error: 'Link not found' }, 404)
+
+  tasksChanged(scope.projectId, [task.assigneeId, task.createdById])
+  return c.json({ ok: true })
+})
 
 bridgeRoute.get('/tasks/:id/checklist', async (c) => {
   const scope = await resolveProject(c as never)

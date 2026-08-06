@@ -110,3 +110,78 @@ describe('кандидаты на связь', () => {
     expect(body).toMatch(/tasks\.refs.*ilike/s)
   })
 })
+
+// --- Мост -------------------------------------------------------------------
+//
+// Ассистент разбирает макет целиком и первым видит порядок работ. Но связь,
+// созданная через мост, обязана подчиняться тем же правилам, что и в вебе, —
+// иначе мост становится дырой в защите от колец.
+
+const bridge = readFileSync(join(import.meta.dirname, 'bridge.ts'), 'utf8')
+const guide = readFileSync(join(import.meta.dirname, '../lib/bridge-docs.ts'), 'utf8')
+
+describe('зависимости через мост', () => {
+  it('ручки есть: читать, ставить, снимать', () => {
+    expect(bridge).toMatch(/bridgeRoute\.get\('\/tasks\/:id\/blockers'/)
+    expect(bridge).toMatch(/bridgeRoute\.post\('\/tasks\/:id\/blockers'/)
+    expect(bridge).toMatch(/bridgeRoute\.delete\('\/tasks\/:id\/blockers\/:linkId'/)
+  })
+
+  it('проверка колец — ОБЩАЯ с вебом, а не своя копия', () => {
+    // Разойдись они, и через мост стало бы можно то, что запрещено в
+    // интерфейсе, — а заметили бы это по трём мёртвым задачам.
+    expect(bridge).toMatch(/dependentsOf|blockersOf/)
+    expect(bridge).toMatch(/from '\.\/tasks\.js'/)
+    expect(bridge).not.toMatch(/async function dependentsOf/)
+  })
+
+  it('кольцо отвергается до вставки и с объяснением', () => {
+    const body = bridge.slice(bridge.indexOf("bridgeRoute.post('/tasks/:id/blockers'"))
+    const check = body.indexOf('Circular dependency')
+    const insert = body.search(/\.insert\(taskBlockers\)/)
+    expect(check).toBeGreaterThan(-1)
+    expect(insert).toBeGreaterThan(check)
+  })
+
+  it('задачи называются номером, а не только id', () => {
+    // Ассистент оперирует TASK-4; заставлять его искать uuid — лишний круг.
+    expect(bridge).toMatch(/async function taskByKey/)
+    expect(bridge).toMatch(/eq\(tasks\.number, raw\.toUpperCase\(\)\)/)
+  })
+
+  it('правка связей требует права на правку задач', () => {
+    const body = bridge.slice(bridge.indexOf("bridgeRoute.post('/tasks/:id/blockers'"))
+    expect(body).toMatch(/require\(c as never, 'tasks\.edit'/)
+  })
+
+  it('счётчики едут вместе со списком, а не запросом на задачу', () => {
+    expect(bridge).toMatch(/async function depCounts/)
+    expect(bridge).toMatch(/openBlockers/)
+  })
+})
+
+describe('гайд про зависимости', () => {
+  it('перечисляет ручки', () => {
+    expect(guide).toMatch(/GET    \/x\/tasks\/<id>\/blockers/)
+    expect(guide).toMatch(/POST   \/x\/tasks\/<id>\/blockers/)
+    expect(guide).toMatch(/DELETE \/x\/tasks\/<id>\/blockers/)
+  })
+
+  it('объясняет обе стороны связи', () => {
+    expect(guide).toMatch(/side="blockedBy"/)
+    expect(guide).toMatch(/side="blocking"/)
+  })
+
+  it('запрещает «прибираться», удаляя связи после закрытия', () => {
+    // История «что чего ждало» — единственный способ объяснить простой.
+    expect(guide).toMatch(/SURVIVES the blocker being finished/)
+  })
+
+  it('объясняет, почему кольцо — это тупик', () => {
+    expect(guide).toMatch(/NEITHER can\s+ever be finished/)
+  })
+
+  it('велит не предлагать заблокированную работу', () => {
+    expect(guide).toMatch(/openBlockers > 0 means the work/)
+  })
+})

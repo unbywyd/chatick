@@ -31,6 +31,10 @@ function endpointCatalog(q: string): string {
          tasks rather than reading them: descriptions are the bulk of the
          payload, and a list you only need numbers from should not spend your
          context on the full text of sixty task bodies.
+         Every task carries "openBlockers" (unfinished tasks it waits for) and
+         "blocking" (tasks waiting for it). openBlockers > 0 means the work
+         cannot start yet — do not propose it as the next thing to do, and do
+         not assign someone to it without saying what it is waiting for.
   GET    /x/tasks/<id>${q}
   POST   /x/tasks${q}              {"title","description?","assignee?","status?","priority?","estimateMinutes?","sprintId?","attachmentIds?","refs?"}
   PATCH  /x/tasks/<id>${q}         any subset of the same fields
@@ -99,6 +103,37 @@ function endpointCatalog(q: string): string {
          entityType: task | file | document | note | resource | member | project
          Use it before asking the human "what happened here" — and to find
          things that no longer exist: a deleted file still has its entry.
+
+  GET    /x/tasks/<id>/blockers${q}           what this task waits for, and what waits for it
+  POST   /x/tasks/<id>/blockers${q}           {"tasks":["TASK-3","TASK-5"], "side":"blockedBy"|"blocking"}
+  DELETE /x/tasks/<id>/blockers/<linkId>${q}  remove one link
+
+  Dependencies say WHAT ORDER the work happens in: "payment cannot be built
+  before authentication". You are often the first to see this — you read the
+  whole design file at once, while a human opens one screen at a time. When
+  the order is obvious from what you just read, record it instead of
+  mentioning it in a comment nobody will act on.
+
+  side="blockedBy" (the default) means the listed tasks must be finished
+  BEFORE this one. side="blocking" is the mirror: this task must be finished
+  before the listed ones. Both write the same link, so pick whichever matches
+  the sentence you would say out loud.
+
+  The reply to GET includes "openBlockers" — unfinished tasks in the way.
+  Zero means the task can be picked up right now; that is the number worth
+  reporting to a human asking "what can I start?".
+
+  A link SURVIVES the blocker being finished — it is a fact about the work,
+  not a temporary flag. Do not delete links to "clean up" after a task is
+  done: openBlockers already drops to zero on its own, and the history of what
+  waited for what is the only way to explain later why something sat for two
+  weeks.
+
+  Loops are rejected with 400. If A waits for B and B waits for A, NEITHER can
+  ever be finished, and nothing in the interface makes that visible — every
+  single step looks reasonable. The check follows the whole chain, so
+  A→B→C→A is caught too. When you get that error, the link you wanted is
+  backwards: the other task already depends on this one.
 
   GET    /x/tasks/<id>/checklist${q}          items, done/total
   POST   /x/tasks/<id>/checklist${q}          {"items":["...","..."]} or {"text":"...","note":"..."}
