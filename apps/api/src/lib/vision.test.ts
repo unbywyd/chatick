@@ -38,6 +38,42 @@ describe('картинка уходит только по просьбе', () =>
   })
 })
 
+describe('выключатель у компании', () => {
+  it('вижен выключен по умолчанию', () => {
+    // Модель, которая не умеет смотреть картинки, отвечает ошибкой на ВЕСЬ
+    // запрос: человек получит «не получилось» вместо ответа.
+    const schema = readFileSync(join(import.meta.dirname, '../db/schema.ts'), 'utf8')
+    expect(schema).toMatch(/llmVision: boolean\('llm_vision'\)\.notNull\(\)\.default\(false\)/)
+  })
+
+  it('выключен — картинки не читаются вовсе', () => {
+    const fn = lib.slice(lib.indexOf('export async function imagesForMessage'))
+    expect(fn).toMatch(/if \(!company\?\.vision\) return \[\]/)
+    expect(fn.indexOf('company?.vision')).toBeLessThan(fn.indexOf('getObjectStream'))
+  })
+
+  it('модель знает, ГДЕ его включить', () => {
+    // Иначе человек видит «не могу смотреть» и идёт искать причину сам.
+    expect(disp).toMatch(/Company settings . AI/)
+    expect(disp).toMatch(/TURNED OFF for this company/)
+  })
+})
+
+describe('файлы ассистента временные', () => {
+  it('в ai-режиме флаг временности НЕ снимается', () => {
+    // Иначе каждый показанный скриншот навсегда оседает в файлах проекта.
+    expect(route).toMatch(/\.\.\.\(mode === 'ai' \? \{\} : \{ pendingUntil: null \}\)/)
+  })
+
+  it('сохранение — отдельное решение человека', () => {
+    const mem = readFileSync(join(import.meta.dirname, 'memory.ts'), 'utf8')
+    expect(mem).toMatch(/keep_attached_file/)
+    expect(mem).toMatch(/discard_attached_file/)
+    // Ассистент не сохраняет молча: большинство скриншотов показывают один раз.
+    expect(mem).toMatch(/Do not save on your own/)
+  })
+})
+
 describe('потолки', () => {
   it('картинок за раз немного', () => {
     // Десяток скриншотов в одном вопросе — это не вопрос.

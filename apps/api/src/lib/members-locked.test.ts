@@ -72,10 +72,14 @@ describe('граница запрета', () => {
    * найденного пути нельзя — ближайшим объявлением окажется соседняя ручка.
    */
   const endpoint = (src: string, routeVar: string, verb: string, path: string) => {
-    const decl = `${routeVar}.${verb}(`
-    const head = [`${decl}'${path}'`, `${decl}\n  '${path}'`]
-      .map((v) => src.indexOf(v))
-      .find((i) => i >= 0)
+    // Регуляркой, а не парой точных строк: перенос бывает CRLF, и якорь
+    // «\n  '» молча не находился — тест сообщал «ручки нет» вместо того, чтобы
+    // проверить её содержимое.
+    const re = new RegExp(
+      `${routeVar}\\.${verb}\\(\\s*'${path.replace(/[/:]/g, (m) => `\\${m}`)}'`,
+    )
+    const m = re.exec(src)
+    const head = m?.index
     if (head === undefined) return null
     const next = src.indexOf(`\n${routeVar}.`, head + 1)
     return src.slice(head, next < 0 ? undefined : next)

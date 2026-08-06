@@ -1,6 +1,6 @@
 import { and, eq, inArray, isNull } from 'drizzle-orm'
 import { db } from '../db/client.js'
-import { files } from '../db/schema.js'
+import { companies, files, projects } from '../db/schema.js'
 import { getObjectStream, resolveStorage } from './s3.js'
 
 /**
@@ -66,6 +66,19 @@ export async function imagesForMessage(
 ): Promise<VisionImage[]> {
   if (!asksToLook(text)) return []
 
+  // Вижен выключен у компании — картинок не шлём вовсе.
+  //
+  // Не всякая модель их понимает, а та, что не понимает, отвечает ошибкой на
+  // ВЕСЬ запрос: человек получит «не получилось» вместо ответа и не поймёт,
+  // при чём тут скриншот. Пусть включают осознанно, зная свою модель.
+  const [company] = await db
+    .select({ vision: companies.llmVision })
+    .from(companies)
+    .innerJoin(projects, eq(projects.companyId, companies.id))
+    .where(eq(projects.id, projectId))
+    .limit(1)
+  if (!company?.vision) return []
+
   const rows = await db
     .select()
     .from(files)
@@ -88,6 +101,17 @@ export async function imagesForMessage(
     }
   }
   return out
+}
+
+/** Включён ли вижен у компании проекта — чтобы объяснить, ПОЧЕМУ не смотрим. */
+export async function visionEnabled(projectId: string): Promise<boolean> {
+  const [company] = await db
+    .select({ vision: companies.llmVision })
+    .from(companies)
+    .innerJoin(projects, eq(projects.companyId, companies.id))
+    .where(eq(projects.id, projectId))
+    .limit(1)
+  return Boolean(company?.vision)
 }
 
 /** Сколько картинок приложено к сообщению — чтобы честно сказать про них. */

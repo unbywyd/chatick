@@ -18,6 +18,7 @@ type LlmStatus = {
   configured: boolean
   provider: string | null
   model: string | null
+  vision?: boolean
   providers: { id: string; label: string; defaultModel: string }[]
 }
 
@@ -28,6 +29,8 @@ export function LlmSettings({ companyId, isAdmin }: { companyId: string; isAdmin
   const confirm = useConfirm()
   const [provider, setProvider] = useState<string | null>(null)
   const [model, setModel] = useState('')
+  // Вижен: выключен по умолчанию — не всякая модель умеет смотреть картинки.
+  const [vision, setVision] = useState(false)
   const [apiKey, setApiKey] = useState('')
 
   const status = useQuery({
@@ -41,7 +44,7 @@ export function LlmSettings({ companyId, isAdmin }: { companyId: string; isAdmin
     mutationFn: () =>
       api(`/api/v1/companies/${companyId}/llm`, {
         method: 'PUT',
-        body: JSON.stringify({ provider: provider ?? status.data?.provider, model: model || undefined, apiKey }),
+        body: JSON.stringify({ provider: provider ?? status.data?.provider, model: model || undefined, apiKey, vision }),
       }),
     onSuccess: () => {
       toast.success(t('llm.saved'))
@@ -146,6 +149,24 @@ export function LlmSettings({ companyId, isAdmin }: { companyId: string; isAdmin
               />
             </div>
           </div>
+          {/* Распознавание изображений.
+              Выключено по умолчанию намеренно: модель, которая не умеет
+              смотреть картинки, отвечает ошибкой на ВЕСЬ запрос — человек
+              получит «не получилось» вместо ответа и не поймёт, при чём тут
+              скриншот. Включать должен тот, кто знает свою модель. */}
+          <label className="flex cursor-pointer items-start gap-2 rounded-md border p-2.5">
+            <input
+              type="checkbox"
+              checked={vision}
+              onChange={(e) => setVision(e.target.checked)}
+              className="mt-0.5 size-3.5 shrink-0"
+            />
+            <span className="min-w-0">
+              <span className="block text-xs font-medium">{t('llm.vision')}</span>
+              <span className="block text-[11px] leading-snug text-muted-foreground">{t('llm.visionHint')}</span>
+            </span>
+          </label>
+
           <div>
             <p className="mb-1 text-xs text-muted-foreground">{t('llm.apiKey')}</p>
             <Input

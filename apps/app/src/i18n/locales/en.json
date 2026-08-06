@@ -102,7 +102,9 @@
     "testing": "Testing key…",
     "saved": "LLM connected",
     "disconnect": "Disconnect",
-    "disconnectConfirm": "Disconnect the LLM? AI features will stop working."
+    "disconnectConfirm": "Disconnect the LLM? AI features will stop working.",
+    "vision": "Image recognition",
+    "visionHint": "Lets the assistant look at pictures you attach in the private chat — and only when you ask it to. Your model must support images; if it does not, requests with pictures will fail."
   },
   "projectForm": {
     "createTitle": "New project",

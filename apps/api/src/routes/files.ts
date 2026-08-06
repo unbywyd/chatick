@@ -8,7 +8,7 @@ import sharp from 'sharp'
 import { PutObjectCommand } from '@aws-sdk/client-s3'
 import { db } from '../db/client.js'
 import { authenticateBridge } from '../lib/bridge-auth.js'
-import { files, companies, documents, projects, tasks, users } from '../db/schema.js'
+import { files, messages, companies, documents, projects, tasks, users } from '../db/schema.js'
 import { requireProject, signFileToken, verifyFileToken, verifyToken, type ProjectEnv } from '../auth.js'
 import { hasPermission } from './projects.js'
 import { logActivity } from '../lib/audit.js'
@@ -223,6 +223,28 @@ filesRoute.get('/', async (c) => {
   // задача), тумблер уже не при чём.
   const withTaskFiles = c.req.query('withTaskFiles') === '1'
   if (!taskId && source !== 'task' && !withTaskFiles) conds.push(isNull(files.taskId))
+  /**
+   * Вложения ЛИЧНОГО диалога с ассистентом в общий список не попадают.
+   *
+   * Диалог с ИИ приватный: его видит только автор. А файл, приложенный к
+   * такому сообщению, оказывался во вкладке «Файлы» — то есть у всей команды.
+   * Человек переписывается один на один, а скриншот видят все; это утечка, а
+   * не мусор в списке.
+   *
+   * Свои — показываем: это по-прежнему файлы этого человека в этом проекте, и
+   * прятать их от него самого незачем.
+   *
+   * Само вложение при этом ещё и временное (см. messages.ts): через сутки его
+   * уберёт уборщик, если человек не решит сохранить. Но сутки оно существует —
+   * и всё это время не должно висеть у команды на виду.
+   */
+  conds.push(
+    sql`(${files.messageId} is null or exists (
+      select 1 from ${messages} m
+      where m.id = ${files.messageId}
+        and (m.mode <> 'ai' or m.recipient_id = ${sub} or m.author_id = ${sub})
+    ))`,
+  )
   if (source === 'chat') conds.push(sql`${files.messageId} is not null`)
   if (source === 'task') conds.push(sql`${files.taskId} is not null`)
   if (source === 'upload') conds.push(sql`${files.messageId} is null and ${files.taskId} is null`)

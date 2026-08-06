@@ -312,6 +312,7 @@ companiesRoute.get('/:companyId/llm', async (c) => {
     configured: Boolean(company?.llmProvider && company.llmKeyEncrypted),
     provider: company?.llmProvider ?? null,
     model: company?.llmModel ?? null,
+    vision: Boolean(company?.llmVision),
     providers: Object.entries(LLM_PROVIDERS).map(([id, p]) => ({ id, label: p.label, defaultModel: p.defaultModel })),
   })
 })
@@ -1013,6 +1014,8 @@ companiesRoute.put(
       provider: z.enum(Object.keys(LLM_PROVIDERS) as [LlmProvider, ...LlmProvider[]]),
       model: z.string().min(1).max(120).optional(),
       apiKey: z.string().min(8).max(512),
+      /** Разрешить модели смотреть картинки. Выключено, пока не включат. */
+      vision: z.boolean().optional(),
     }),
   ),
   async (c) => {
@@ -1020,7 +1023,7 @@ companiesRoute.put(
     const companyId = c.req.param('companyId')
     if ((await memberRoleIn(companyId, sub)) !== 'admin') return c.json({ error: 'Forbidden' }, 403)
 
-    const { provider, model, apiKey } = c.req.valid('json')
+    const { provider, model, apiKey, vision } = c.req.valid('json')
     const resolvedModel = model || LLM_PROVIDERS[provider].defaultModel
 
     // проверяем ключ живым запросом до сохранения
@@ -1029,7 +1032,7 @@ companiesRoute.put(
 
     await db
       .update(companies)
-      .set({ llmProvider: provider, llmModel: resolvedModel, llmKeyEncrypted: encrypt(apiKey) })
+      .set({ llmProvider: provider, llmModel: resolvedModel, llmKeyEncrypted: encrypt(apiKey), llmVision: vision === true })
       .where(eq(companies.id, companyId))
     return c.json({ ok: true, provider, model: resolvedModel })
   },

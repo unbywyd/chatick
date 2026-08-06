@@ -463,6 +463,13 @@
       "when": 1785066503121,
       "tag": "0065_db_connections",
       "breakpoints": true
+    },
+    {
+      "idx": 66,
+      "version": "7",
+      "when": 1785066504121,
+      "tag": "0066_llm_vision",
+      "breakpoints": true
     }
   ]
 }

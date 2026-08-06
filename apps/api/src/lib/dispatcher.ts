@@ -1,5 +1,6 @@
 import { and, desc, eq, sql } from 'drizzle-orm'
 import { db } from '../db/client.js'
+import { visionEnabled } from './vision.js'
 import { messages, projects, sandboxMessages, users } from '../db/schema.js'
 import { projectLlm, complete, completeStream, completeWithTools } from './llm.js'
 import { buildMemoryContext, buildTeamContext, memoryTools } from './memory.js'
@@ -95,6 +96,7 @@ export async function aiChatReply(
   if (!cfg) return null
 
   const ai = JSON.parse(project.aiConfig || '{}') as AiConfig
+  const visionOn = await visionEnabled(projectId)
   const lang = await aiLang(ai, projectId)
   const user = await db.query.users.findFirst({ where: eq(users.id, userId) })
   const team = await buildTeamContext(projectId) // кто за что отвечает (SPEC §8.12)
@@ -161,7 +163,12 @@ export async function aiChatReply(
       'DATABASE: the project may have a real database attached. list_databases shows which tables you may read; call it before querying. query_database runs a SELECT — read-only, the database itself rejects any change. This is a customer\'s production data: read what the question needs, and never paste personal data (names, emails, phones) into tasks or messages where it outlives the conversation.',
       images.length
         ? 'IMAGES: the user attached image(s) and asked you to look. Describe what is actually there — do not guess at what you cannot make out, say that part is unclear.'
-        : 'IMAGES: if the user mentions a picture but you were given none, it is because they did not ask you to look at it. Say so and tell them to ask explicitly ("посмотри скрин", "look at this") — do not pretend you saw it.',
+        : visionOn
+          ? 'IMAGES: if the user mentions a picture but you were given none, it is because they did not ask you to look at it. Say so and tell them to ask explicitly ("посмотри скрин", "look at this") — do not pretend you saw it.'
+          : 'IMAGES: image recognition is TURNED OFF for this company, so you cannot see attachments at all. If the user shows you a picture, say plainly that you cannot see it and that an owner or admin can turn it on in Company settings → AI → "Image recognition". Do not guess at the contents, and do not pretend you looked.',
+      // Файлы, показанные ассистенту, живут сутки и исчезают. Человек об этом
+      // не знает — сказать должен ассистент, иначе он решит, что файл в проекте.
+      'ATTACHED FILES in this private chat are TEMPORARY: they are deleted within a day unless saved. When the user shows you something worth keeping, ask whether to save it into the project — keep_attached_file saves, discard_attached_file removes it now. Do not save on your own: most screenshots are shown once and never needed again.',
       'DOCUMENTS: read_document returns a CHUNK — it tells you the total length and the next offset. For long documents call it repeatedly with increasing offset until you have what you need. To add text use append_to_document (never resend a whole long document).',
       'You can edit any editable field of a task on request. When assigning, use the person the TEAM section says is responsible for that area (assign by name). Use list_sprints for valid names; create_sprint if a new one is needed.',
       'When CREATING a task, ALWAYS set estimateMinutes — your best estimate of how long it takes assuming the person works WITH an AI assistant (so estimates are realistic and usually shorter). If truly unsure, still give a rough estimate.',

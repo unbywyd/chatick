@@ -1,4 +1,4 @@
-import { and, asc, desc, eq, gt, gte, ilike, inArray, isNull, lte, or, sql } from 'drizzle-orm'
+import { and, asc, desc, eq, gt, gte, ilike, inArray, isNotNull, isNull, lte, or, sql } from 'drizzle-orm'
 import { companyOf, projectPath } from './links.js'
 import { db } from '../db/client.js'
 import { chatSummaries, credentials, documents, files, messages, notes, projectMembers, projects, resourceSecrets, taskComments, taskGroups, taskBlockers, dbConnections, dbTablePolicies, tasks, timeEntries, users } from '../db/schema.js'
@@ -414,6 +414,29 @@ export function memoryTools(projectId: string, actorUserId: string): { tools: To
           limit: { type: 'number' },
         },
         required: ['databaseId', 'sql'],
+      },
+    },
+    // Файлы, показанные ассистенту, — временные (см. routes/messages.ts).
+    // Через сутки их уберёт уборщик. Сохранить в проект — отдельное решение
+    // человека, и спросить о нём должен ассистент.
+    {
+      name: 'keep_attached_file',
+      description:
+        'Save a file the user showed you into the project permanently. Files attached in this private chat are TEMPORARY — they are deleted within a day unless saved. When the user shows you something worth keeping (a design, a document, a screenshot of a bug), ASK whether to save it; call this only if they say yes. Do not save on your own: most screenshots are shown once and never needed again.',
+      parameters: {
+        type: 'object',
+        properties: { fileName: { type: 'string', description: 'name of the attached file' } },
+        required: ['fileName'],
+      },
+    },
+    {
+      name: 'discard_attached_file',
+      description:
+        'Delete a temporary file the user showed you, right now instead of waiting a day. Use when they say "delete it", "I sent the wrong one".',
+      parameters: {
+        type: 'object',
+        properties: { fileName: { type: 'string' } },
+        required: ['fileName'],
       },
     },
     {
@@ -1649,6 +1672,41 @@ export function memoryTools(projectId: string, actorUserId: string): { tools: To
       const head = r.result.columns.join(' | ')
       const body = r.result.rows.map((row) => r.result.columns.map((c) => String(row[c] ?? '')).join(' | ')).join('\n')
       return `${head}\n${body}${r.result.truncated ? '\n(truncated — this is only part of the result)' : ''}`
+    },
+    keep_attached_file: async (args: Record<string, unknown>) => {
+      const a = args as { fileName: string }
+      if (!(await hasPermission(projectId, actorUserId, 'files.upload')))
+        return 'PERMISSION DENIED: the author cannot upload files. Politely refuse.'
+      // Только СВОЙ временный файл этого проекта: чужие и уже сохранённые не
+      // трогаем.
+      const f = await db.query.files.findFirst({
+        where: and(
+          eq(files.projectId, projectId),
+          eq(files.uploadedById, actorUserId),
+          eq(files.name, String(a.fileName)),
+          isNotNull(files.pendingUntil),
+          isNull(files.deletedAt),
+        ),
+      })
+      if (!f) return `No temporary file named "${a.fileName}" found — it may have been saved already or removed.`
+      await db.update(files).set({ pendingUntil: null }).where(eq(files.id, f.id))
+      broadcast(projectId, 'files_changed', {})
+      return `Saved "${f.name}" to the project files.`
+    },
+    discard_attached_file: async (args: Record<string, unknown>) => {
+      const a = args as { fileName: string }
+      const f = await db.query.files.findFirst({
+        where: and(
+          eq(files.projectId, projectId),
+          eq(files.uploadedById, actorUserId),
+          eq(files.name, String(a.fileName)),
+          isNotNull(files.pendingUntil),
+          isNull(files.deletedAt),
+        ),
+      })
+      if (!f) return `No temporary file named "${a.fileName}" found.`
+      await db.update(files).set({ deletedAt: new Date(), deletedById: actorUserId }).where(eq(files.id, f.id))
+      return `Removed "${f.name}".`
     },
     list_sprints: async () => {
       if (!(await hasPermission(projectId, actorUserId, 'tasks.read')))
