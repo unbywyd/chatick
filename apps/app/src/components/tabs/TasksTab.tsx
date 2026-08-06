@@ -3,8 +3,8 @@ import { useNavigate, useParams, useSearchParams } from 'react-router-dom'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { useTranslation } from 'react-i18next'
 import { toast } from 'sonner'
-import { CalendarDays, Download, FileSpreadsheet, Flag, LayoutList, MoreHorizontal, Paperclip, Plus, Search, Table2, Timer, Upload, User, X } from 'lucide-react'
-import { api } from '@/lib/api'
+import { CalendarDays, Download, FileSpreadsheet, Flag, LayoutList, Link2, MoreHorizontal, Paperclip, Plus, Search, Table2, Timer, Upload, User, X } from 'lucide-react'
+import { api, previewUrl } from '@/lib/api'
 import { cn } from '@/lib/utils'
 import { Input } from '@/components/ui/input'
 import { Button } from '@/components/ui/button'
@@ -480,6 +480,25 @@ export function TasksTab({ projectId, meId }: { projectId: string; meId?: string
               </Button>
             </DropdownMenuTrigger>
             <DropdownMenuContent align="end" className="w-64">
+              {/* Ссылка на страницу проекта.
+                  Раньше поделиться можно было только КОНКРЕТНОЙ задачей, а
+                  ссылку на сам проект брали из адресной строки — а у неё
+                  превью в мессенджере не будет никогда: всё после «#» браузеру
+                  и остаётся, сервер этого не видит. Здесь копируется адрес,
+                  который умеет показать имя и логотип проекта. */}
+              <DropdownMenuItem
+                onSelect={async () => {
+                  try {
+                    await navigator.clipboard.writeText(previewUrl(`/c/${companyId}/p/${projectId}/tasks`))
+                    toast.success(t('tasks.linkCopied'))
+                  } catch {
+                    toast.error(t('composer.clipboardDenied'))
+                  }
+                }}
+              >
+                <Link2 className="size-3.5" />
+                {t('tasks.copyLink')}
+              </DropdownMenuItem>
               <DropdownMenuItem onSelect={() => exportTasksToExcel(tasksQ.data ?? [], groupsQ.data ?? [], projectName)}>
                 <Download className="size-3.5" />
                 {t('tasks.exportExcel')}
