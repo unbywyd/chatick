@@ -6,6 +6,14 @@ import { env } from '../env.js'
 import { logAiUsage, trialBudgetExceeded, type TokenUsage } from './ai-usage.js'
 
 // BYO-LLM: каждая компания подключает своего провайдера (ключ шифрован в БД).
+/**
+ * Что вернул инструмент.
+ *
+ * Строка — обычный случай. Объект с картинками — для тех, кто показывает
+ * модели изображение: например «открой скриншот, о котором спросил человек».
+ */
+export type ToolOutput = string | { text: string; images: { mediaType: string; base64: string }[] }
+
 // Единый тонкий адаптер: anthropic — нативный API, остальные — OpenAI-compatible.
 // Схема настроек (provider/model/apiKey) совместима по духу с Vercel AI SDK —
 // миграция на него позже не потребует смены модели данных.
@@ -203,7 +211,11 @@ export type ToolDef = {
   description: string
   parameters: Record<string, unknown> // JSON Schema
 }
-export type ToolHandler = (args: Record<string, unknown>) => Promise<string>
+/**
+ * Обработчик инструмента. Обычно возвращает текст; ToolOutput позволяет
+ * вернуть ещё и картинку — например «открой скриншот, о котором спросили».
+ */
+export type ToolHandler = (args: Record<string, unknown>) => Promise<ToolOutput>
 
 /**
  * Диалог с инструментами: модель может вызывать tools, результаты возвращаются ей,
@@ -239,7 +251,15 @@ export async function completeWithTools(
    * `Error: [object Object]` не даёт ей понять, чинить запрос или сдаться,
    * а неизвестный инструмент — это наш баг, который иначе теряется.
    */
-  const runTool = async (name: string, input: Record<string, unknown>): Promise<string> => {
+  /**
+   * Результат инструмента: текст или текст с картинкой.
+   *
+   * Anthropic разрешает вкладывать изображение прямо в tool_result — значит
+   * инструменту, который «открывает картинку», не нужен отдельный ход модели:
+   * он возвращает её там же, где вернул бы текст. Переделывать цикл вызовов не
+   * пришлось.
+   */
+  const runTool = async (name: string, input: Record<string, unknown>): Promise<ToolOutput> => {
     const handler = opts.handlers[name]
     if (!handler) {
       console.error('[llm] model called an unknown tool:', name)
@@ -293,11 +313,22 @@ export async function completeWithTools(
         const results = await Promise.all(
           data.content
             .filter((b): b is { type: 'tool_use'; id: string; name: string; input: Record<string, unknown> } => b.type === 'tool_use')
-            .map(async (b) => ({
-              type: 'tool_result',
-              tool_use_id: b.id,
-              content: await runTool(b.name, b.input),
-            })),
+            .map(async (b) => {
+              const out = await runTool(b.name, b.input)
+              // Строка — как раньше. Картинки — блоками рядом с текстом:
+              // модель видит их в том же ответе, ждать следующего хода не надо.
+              const content =
+                typeof out === 'string'
+                  ? out
+                  : [
+                      ...out.images.map((im) => ({
+                        type: 'image',
+                        source: { type: 'base64', media_type: im.mediaType, data: im.base64 },
+                      })),
+                      { type: 'text', text: out.text },
+                    ]
+              return { type: 'tool_result', tool_use_id: b.id, content }
+            }),
         )
         msgs.push({ role: 'user', content: results })
       }
@@ -365,7 +396,16 @@ export async function completeWithTools(
         try {
           args = JSON.parse(call.function.arguments || '{}')
         } catch { /* пустые аргументы */ }
-        const result = await runTool(call.function.name, args)
+        const out = await runTool(call.function.name, args)
+        // OpenAI-совместимые не принимают картинку в ответе инструмента.
+        // Отдаём текст и честно говорим, что изображение показать не вышло, —
+        // иначе модель будет описывать картинку, которой не видела.
+        const result =
+          typeof out === 'string'
+            ? out
+            : `${out.text}
+
+(Image could not be shown: this model's API does not accept images in tool results. Ask the user to attach it to their next message instead.)`
         msgs.push({ role: 'tool', tool_call_id: call.id, content: result })
       }
     }

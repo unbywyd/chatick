@@ -154,3 +154,46 @@ describe('формат для провайдеров', () => {
     expect(llm).toMatch(/image_url: \{ url: `data:\$\{im\.mediaType\};base64,\$\{im\.base64\}` \}/)
   })
 })
+
+// Окно по времени закрывает частый случай, но не любой: человек возвращается
+// к вчерашнему скриншоту. Тогда ассистент открывает картинку сам.
+describe('ассистент может открыть картинку сам', () => {
+  const mem = readFileSync(join(import.meta.dirname, 'memory.ts'), 'utf8')
+  const llm = readFileSync(join(import.meta.dirname, 'llm.ts'), 'utf8')
+
+  it('есть чем найти и чем открыть', () => {
+    expect(mem).toMatch(/name: 'list_chat_images'/)
+    expect(mem).toMatch(/name: 'view_image'/)
+  })
+
+  it('картинка возвращается ТЕМ ЖЕ вызовом, без лишнего хода', () => {
+    // Anthropic разрешает изображение внутри tool_result — цикл вызовов
+    // переделывать не пришлось.
+    expect(llm).toMatch(/export type ToolOutput/)
+    const block = llm.slice(llm.indexOf('const out = await runTool'), llm.indexOf('tool_use_id: b.id'))
+    expect(block).toMatch(/type: 'image'/)
+    expect(block).toMatch(/type: 'base64', media_type: im\.mediaType/)
+  })
+
+  it('там, где картинки в ответе инструмента нельзя, честно говорим', () => {
+    // Иначе модель опишет изображение, которого не видела.
+    expect(llm).toMatch(/does not accept images in tool results/)
+  })
+
+  it('открыть можно только СВОЮ картинку из ЭТОГО диалога', () => {
+    // Диалог с ассистентом приватный: чужие вложения и файлы общего чата сюда
+    // попадать не должны.
+    const fn = mem.slice(mem.indexOf('view_image: async'), mem.indexOf('keep_attached_file: async'))
+    expect(fn).toMatch(/eq\(files\.uploadedById, actorUserId\)/)
+    expect(fn).toMatch(/eq\(messages\.mode, 'ai'\)/)
+  })
+
+  it('при выключенном вижене объясняет, где включить', () => {
+    const fn = mem.slice(mem.indexOf('view_image: async'), mem.indexOf('keep_attached_file: async'))
+    expect(fn).toMatch(/Company settings . AI/)
+  })
+
+  it('модель знает, что искать надо ДО ответа «картинки нет»', () => {
+    expect(disp).toMatch(/Do not tell them the image is missing without looking first/)
+  })
+})

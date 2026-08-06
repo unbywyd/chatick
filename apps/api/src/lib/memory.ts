@@ -13,6 +13,8 @@ import { encrypt } from './crypto.js'
 import { notify, extractMentions } from './notify.js'
 import { projectLlm, complete, validateTask, type ToolDef, type ToolHandler } from './llm.js'
 import { broadcast } from '../ws.js'
+import { visionEnabled, SUPPORTED, MAX_BYTES } from './vision.js'
+import { getObjectStream, resolveStorage } from './s3.js'
 import { env } from '../env.js'
 import { logActivity } from './audit.js'
 
@@ -419,6 +421,28 @@ export function memoryTools(projectId: string, actorUserId: string): { tools: To
     // Файлы, показанные ассистенту, — временные (см. routes/messages.ts).
     // Через сутки их уберёт уборщик. Сохранить в проект — отдельное решение
     // человека, и спросить о нём должен ассистент.
+    // Окно «последние полчаса» решает частый случай, но не любой: человек
+    // может вернуться к вчерашнему скриншоту. Пусть ассистент сам скажет,
+    // какую картинку открыть, — это надёжнее любой эвристики.
+    {
+      name: 'list_chat_images',
+      description:
+        'Images the user has sent you in this private chat, newest first — file name, when it was sent, and the message it came with. Call this when they refer to a picture you were not given: "look at the one I sent earlier", "check that screenshot again".',
+      parameters: {
+        type: 'object',
+        properties: { limit: { type: 'number', description: 'how many to list, default 10' } },
+      },
+    },
+    {
+      name: 'view_image',
+      description:
+        'Open a specific image from this chat and LOOK at it. Take the exact file name from list_chat_images. The picture comes back with this call — describe what you actually see, and say plainly if something is unreadable rather than guessing.',
+      parameters: {
+        type: 'object',
+        properties: { fileName: { type: 'string' } },
+        required: ['fileName'],
+      },
+    },
     {
       name: 'keep_attached_file',
       description:
@@ -1672,6 +1696,69 @@ export function memoryTools(projectId: string, actorUserId: string): { tools: To
       const head = r.result.columns.join(' | ')
       const body = r.result.rows.map((row) => r.result.columns.map((c) => String(row[c] ?? '')).join(' | ')).join('\n')
       return `${head}\n${body}${r.result.truncated ? '\n(truncated — this is only part of the result)' : ''}`
+    },
+    list_chat_images: async (args: Record<string, unknown>) => {
+      const limit = Math.min(Math.max(1, Number((args as { limit?: number }).limit) || 10), 30)
+      const rows = await db
+        .select({ name: files.name, mime: files.mime, at: files.createdAt, text: messages.text })
+        .from(files)
+        .innerJoin(messages, eq(messages.id, files.messageId))
+        .where(
+          and(
+            eq(files.projectId, projectId),
+            eq(files.uploadedById, actorUserId),
+            eq(messages.mode, 'ai'),
+            isNull(files.deletedAt),
+          ),
+        )
+        .orderBy(desc(files.createdAt))
+        .limit(limit)
+      const imgs = rows.filter((r) => r.mime.startsWith('image/'))
+      if (!imgs.length) return 'No images in this chat yet.'
+      return imgs
+        .map(
+          (r) =>
+            `${r.name} — ${r.at.toISOString().slice(0, 16).replace('T', ' ')}, sent with: "${(r.text || '').slice(0, 60)}"`,
+        )
+        .join('\n')
+    },
+    view_image: async (args: Record<string, unknown>) => {
+      const a = args as { fileName: string }
+      if (!(await visionEnabled(projectId)))
+        return 'Image recognition is turned off for this company. An owner or admin can enable it in Company settings → AI → "Image recognition".'
+
+      // Только СВОЯ картинка из ЭТОГО диалога: чужие вложения и файлы общего
+      // чата сюда не попадают — диалог с ассистентом приватный.
+      const [f] = await db
+        .select({ name: files.name, mime: files.mime, size: files.size, key: files.key })
+        .from(files)
+        .innerJoin(messages, eq(messages.id, files.messageId))
+        .where(
+          and(
+            eq(files.projectId, projectId),
+            eq(files.uploadedById, actorUserId),
+            eq(files.name, String(a.fileName)),
+            eq(messages.mode, 'ai'),
+            isNull(files.deletedAt),
+          ),
+        )
+        .limit(1)
+      if (!f) return `No image named "${a.fileName}" in this chat. Call list_chat_images to see what is there.`
+      if (!SUPPORTED.has(f.mime)) return `"${f.name}" is ${f.mime} — not an image format I can look at.`
+      if (Number(f.size) > MAX_BYTES) return `"${f.name}" is too large to open (over 4 MB).`
+
+      try {
+        const storage = await resolveStorage(projectId)
+        const { body } = await getObjectStream(storage, f.key)
+        const chunks: Buffer[] = []
+        for await (const chunk of body) chunks.push(Buffer.from(chunk as Buffer))
+        return {
+          text: `Image "${f.name}":`,
+          images: [{ mediaType: f.mime, base64: Buffer.concat(chunks).toString('base64') }],
+        }
+      } catch {
+        return `Could not open "${f.name}" — the file may have been removed.`
+      }
     },
     keep_attached_file: async (args: Record<string, unknown>) => {
       const a = args as { fileName: string }
