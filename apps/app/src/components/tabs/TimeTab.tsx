@@ -646,8 +646,10 @@ function DurationCell({
         }
       }}
       className={cn(
-        'w-full rounded-md bg-transparent py-1 text-end font-mono text-base tabular-nums outline-none transition-colors',
-        'hover:bg-accent focus:bg-accent focus:text-start focus:ring-1 focus:ring-ring',
+        // По центру и в покое, и в фокусе. Было text-end с focus:text-start —
+        // значение перепрыгивало от одного края к другому по клику.
+        'w-full rounded-md bg-transparent py-1 text-center font-mono text-base tabular-nums outline-none transition-colors',
+        'hover:bg-accent focus:bg-accent focus:ring-1 focus:ring-ring',
         saved && 'bg-brand/15 ring-1 ring-brand/40',
       )}
     />
@@ -699,17 +701,18 @@ function DateCell({
       <PopoverTrigger asChild>
         <button
           type="button"
-          title={t('time.changeDate')}
+          // Даты не печатаем — в строке и так две времени и длительность, а
+          // день записи виден в заголовке группы. Но в подсказке они есть:
+          // иначе, чтобы узнать дату, пришлось бы открывать календарь.
+          title={`${t('time.changeDate')}: ${short(start)}${offset > 0 && end ? ` → ${short(end)}` : ''}`}
           className={cn(
-            'flex shrink-0 items-center gap-1 rounded-md px-1.5 py-1 text-[11px] tabular-nums transition-colors',
+            'grid size-7 shrink-0 place-items-center rounded-md transition-colors',
             'text-muted-foreground hover:bg-accent hover:text-foreground',
             // Переход через полночь — не мелочь: пометку видно и без наведения.
             offset > 0 && 'text-brand',
           )}
         >
-          <CalendarDays className="size-3.5" />
-          {short(start)}
-          {offset > 0 && end && <>→{short(end)}</>}
+          <CalendarDays className="size-[18px]" />
         </button>
       </PopoverTrigger>
       {/* dir у PopoverContent уже свой — портал уносит содержимое мимо вёрстки. */}
