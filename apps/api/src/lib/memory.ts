@@ -1,7 +1,9 @@
 import { and, asc, desc, eq, gt, gte, ilike, inArray, isNull, lte, or, sql } from 'drizzle-orm'
 import { companyOf, projectPath } from './links.js'
 import { db } from '../db/client.js'
-import { chatSummaries, credentials, documents, files, messages, notes, projectMembers, projects, resourceSecrets, taskComments, taskGroups, tasks, timeEntries, users } from '../db/schema.js'
+import { chatSummaries, credentials, documents, files, messages, notes, projectMembers, projects, resourceSecrets, taskComments, taskGroups, taskBlockers, dbConnections, dbTablePolicies, tasks, timeEntries, users } from '../db/schema.js'
+import { dependentsOf } from '../routes/tasks.js'
+import { readFromConnection } from '../routes/db-connections.js'
 import { hasPermission } from '../routes/projects.js'
 import { snapshot } from '../routes/documents.js'
 import { htmlToText, sanitizeHtml } from './sanitize-html.js'
@@ -11,6 +13,7 @@ import { encrypt } from './crypto.js'
 import { notify, extractMentions } from './notify.js'
 import { projectLlm, complete, validateTask, type ToolDef, type ToolHandler } from './llm.js'
 import { broadcast } from '../ws.js'
+import { env } from '../env.js'
 import { logActivity } from './audit.js'
 
 // Память ИИ (SPEC §5.6): саммари-цепочка + инструменты + фоновое сжатие.
@@ -357,6 +360,61 @@ export function memoryTools(projectId: string, actorUserId: string): { tools: To
       description:
         'Attach an existing project file (by id, e.g. one shared in chat) to a task (by number). The file then appears in the task Files section. Requires files.upload + tasks.edit.',
       parameters: { type: 'object', properties: { fileId: { type: 'string' }, number: { type: 'string' } }, required: ['fileId', 'number'] },
+    },
+    // --- Зависимости задач ---
+    //
+    // Связи видны в интерфейсе всем, а ассистент про них не знал: на вопрос
+    // «что держит проект» он отвечал, что таких данных у него нет. Для ПМ,
+    // который сидит в этом же чате, это выглядит как «ИИ поглупел».
+    {
+      name: 'get_blockers',
+      description:
+        'What is holding the WHOLE project: tasks that block others, who owns them, and what waits for each. Use for "why is this stuck", "what should we do first", "who is holding us up". Report chains ("TASK-82 blocks five screens, all waiting on Elisha"), not totals.',
+      parameters: { type: 'object', properties: {} },
+    },
+    {
+      name: 'get_task_blockers',
+      description:
+        'For ONE task: what it waits for and what waits for it. openBlockers > 0 means the work cannot start yet.',
+      parameters: { type: 'object', properties: { number: { type: 'string' } }, required: ['number'] },
+    },
+    {
+      name: 'link_tasks',
+      description:
+        'Record that a task waits for others: "payment cannot be built before authentication". blockedBy = the listed tasks must finish first. Loops are rejected — if A already depends on B, you cannot make B wait for A, because neither could ever be finished.',
+      parameters: {
+        type: 'object',
+        properties: {
+          number: { type: 'string', description: 'the task, e.g. TASK-10' },
+          blockedBy: { type: 'array', items: { type: 'string' }, description: 'task numbers it must wait for' },
+        },
+        required: ['number', 'blockedBy'],
+      },
+    },
+    // --- База данных проекта ---
+    //
+    // Читать можно только таблицы, которые человек открыл галочкой, и только
+    // на чтение: запрос идёт в read-only транзакции, СУБД сама отвергает любое
+    // изменение. Это чужая боевая база.
+    {
+      name: 'list_databases',
+      description:
+        'Databases connected to this project, and which tables you may read. Call this BEFORE querying: anything not listed will be refused.',
+      parameters: { type: 'object', properties: {} },
+    },
+    {
+      name: 'query_database',
+      description:
+        'Run a SELECT against a connected database. Read-only — the database itself rejects any change, do not try to work around it. Only tables from list_databases are allowed. This is production data belonging to a customer: read what the question needs, and do not paste personal data (names, emails, phones) into tasks or messages where it outlives the conversation.',
+      parameters: {
+        type: 'object',
+        properties: {
+          databaseId: { type: 'string' },
+          sql: { type: 'string', description: 'a SELECT statement' },
+          limit: { type: 'number' },
+        },
+        required: ['databaseId', 'sql'],
+      },
     },
     {
       name: 'list_sprints',
@@ -1455,6 +1513,142 @@ export function memoryTools(projectId: string, actorUserId: string): { tools: To
       void logActivity({ projectId, actorId: actorUserId, action: 'delete', entityType: 'document', entityId: d.id, entityLabel: d.title || '—' })
       broadcast(projectId, 'documents_changed', {})
       return `Deleted document "${d.title || '—'}" (recoverable for 7 days).`
+    },
+    get_blockers: async () => {
+      if (!(await hasPermission(projectId, actorUserId, 'tasks.read')))
+        return 'PERMISSION DENIED: the author cannot read tasks. Politely refuse.'
+      const rows = await db
+        .select({
+          blockerNumber: tasks.number,
+          blockerTitle: tasks.title,
+          owner: users.name,
+          blockedNumber: sql<string>`blocked.number`,
+        })
+        .from(taskBlockers)
+        .innerJoin(tasks, eq(tasks.id, taskBlockers.blockerTaskId))
+        .innerJoin(sql`${tasks} blocked`, sql`blocked.id = ${taskBlockers.blockedTaskId}`)
+        .leftJoin(users, eq(users.id, tasks.assigneeId))
+        .where(
+          and(
+            eq(taskBlockers.projectId, projectId),
+            isNull(tasks.deletedAt),
+            sql`blocked.deleted_at is null`,
+            // Закрытая задача никого не держит: связь остаётся историей.
+            sql`${tasks.status} <> 'done'`,
+            sql`blocked.status <> 'done'`,
+          ),
+        )
+      if (!rows.length) return 'Nothing is blocking anything right now.'
+      const byBlocker = new Map<string, { title: string; owner: string; blocks: string[] }>()
+      for (const r of rows) {
+        const cur = byBlocker.get(r.blockerNumber) ?? { title: r.blockerTitle, owner: r.owner ?? '', blocks: [] }
+        cur.blocks.push(r.blockedNumber)
+        byBlocker.set(r.blockerNumber, cur)
+      }
+      const items = [...byBlocker.entries()].sort((a, b) => b[1].blocks.length - a[1].blocks.length)
+      return items
+        .map(
+          ([num, v]) =>
+            `${num} "${v.title}" — blocks ${v.blocks.length} (${v.blocks.join(', ')}); owner: ${v.owner || 'NOBODY — nobody to ask'}`,
+        )
+        .join('\n')
+    },
+    get_task_blockers: async (args: Record<string, unknown>) => {
+      const a = args as { number: string }
+      if (!(await hasPermission(projectId, actorUserId, 'tasks.read')))
+        return 'PERMISSION DENIED: the author cannot read tasks. Politely refuse.'
+      const task = await db.query.tasks.findFirst({
+        where: and(eq(tasks.projectId, projectId), eq(tasks.number, String(a.number).toUpperCase()), isNull(tasks.deletedAt)),
+      })
+      if (!task) return `Task ${a.number} not found.`
+      const waits = await db
+        .select({ n: tasks.number, t: tasks.title, st: tasks.status })
+        .from(taskBlockers)
+        .innerJoin(tasks, eq(tasks.id, taskBlockers.blockerTaskId))
+        .where(and(eq(taskBlockers.blockedTaskId, task.id), isNull(tasks.deletedAt)))
+      const holds = await db
+        .select({ n: tasks.number, t: tasks.title, st: tasks.status })
+        .from(taskBlockers)
+        .innerJoin(tasks, eq(tasks.id, taskBlockers.blockedTaskId))
+        .where(and(eq(taskBlockers.blockerTaskId, task.id), isNull(tasks.deletedAt)))
+      const open = waits.filter((w) => w.st !== 'done').length
+      const fmt = (list: typeof waits) => list.map((x) => `${x.n} "${x.t}" [${x.st}]`).join(', ') || 'none'
+      return [
+        `${task.number} "${task.title}"`,
+        `waits for: ${fmt(waits)}`,
+        `blocks: ${fmt(holds)}`,
+        open ? `CANNOT START: ${open} unfinished blocker(s).` : 'Ready to work on — nothing unfinished in the way.',
+      ].join('\n')
+    },
+    link_tasks: async (args: Record<string, unknown>) => {
+      const a = args as { number: string; blockedBy: string[] }
+      if (!(await hasPermission(projectId, actorUserId, 'tasks.edit')))
+        return 'PERMISSION DENIED: the author cannot edit tasks. Politely refuse.'
+      const task = await db.query.tasks.findFirst({
+        where: and(eq(tasks.projectId, projectId), eq(tasks.number, String(a.number).toUpperCase()), isNull(tasks.deletedAt)),
+      })
+      if (!task) return `Task ${a.number} not found.`
+      const wanted = (Array.isArray(a.blockedBy) ? a.blockedBy : []).map((x) => String(x).toUpperCase())
+      if (!wanted.length) return 'blockedBy is empty.'
+      const found = await db
+        .select()
+        .from(tasks)
+        .where(and(eq(tasks.projectId, projectId), inArray(tasks.number, wanted), isNull(tasks.deletedAt)))
+      if (found.length !== wanted.length) return `Some tasks were not found in this project: ${wanted.join(', ')}`
+      if (found.some((f) => f.id === task.id)) return 'A task cannot block itself.'
+      // Кольцо — тупик: обе задачи невозможно закрыть никогда. Проверяем ТОЙ ЖЕ
+      // функцией, что и веб с мостом, а не своей копией.
+      const forbidden = await dependentsOf(projectId, task.id)
+      const looped = found.filter((f) => forbidden.has(f.id))
+      if (looped.length)
+        return `Cannot link: ${looped.map((l) => l.number).join(', ')} already depends on ${task.number}. That would close a loop and neither could ever be finished.`
+      await db
+        .insert(taskBlockers)
+        .values(found.map((f) => ({ projectId, blockedTaskId: task.id, blockerTaskId: f.id, createdById: actorUserId })))
+        .onConflictDoNothing()
+      broadcast(projectId, 'tasks_changed', {})
+      return `${task.number} now waits for: ${found.map((f) => f.number).join(', ')}.`
+    },
+    list_databases: async () => {
+      if (env.DB_CONNECTIONS_ENABLED !== 'true') return 'No databases are connected to this project.'
+      if (!(await hasPermission(projectId, actorUserId, 'resources.read')))
+        return 'PERMISSION DENIED: the author cannot read resources. Politely refuse.'
+      const conns = await db
+        .select()
+        .from(dbConnections)
+        .where(and(eq(dbConnections.projectId, projectId), isNull(dbConnections.deletedAt)))
+      if (!conns.length) return 'No databases are connected to this project.'
+      const out: string[] = []
+      for (const c of conns) {
+        const pol = await db.select().from(dbTablePolicies).where(eq(dbTablePolicies.connectionId, c.id))
+        const readable = pol.filter((p) => p.canRead)
+        out.push(
+          `${c.name} (id: ${c.id}, ${c.kind}, ${c.host}/${c.database}) — readable tables: ${
+            readable.length ? readable.map((p) => p.tableName).join(', ') : 'NONE yet; a project admin must open them first'
+          }`,
+        )
+      }
+      return out.join('\n')
+    },
+    query_database: async (args: Record<string, unknown>) => {
+      const a = args as { databaseId: string; sql: string; limit?: number }
+      if (env.DB_CONNECTIONS_ENABLED !== 'true') return 'No databases are connected to this project.'
+      if (!(await hasPermission(projectId, actorUserId, 'resources.read')))
+        return 'PERMISSION DENIED: the author cannot read resources. Politely refuse.'
+      const r = await readFromConnection({
+        projectId,
+        userId: actorUserId,
+        connectionId: String(a.databaseId),
+        sql: String(a.sql),
+        limit: typeof a.limit === 'number' ? a.limit : undefined,
+        viaBridge: false,
+      })
+      if ('error' in r) return `Query failed: ${r.error}`
+      if (!r.result.rows.length) return 'No rows.'
+      // Компактно: модель читает текст, а не таблицу.
+      const head = r.result.columns.join(' | ')
+      const body = r.result.rows.map((row) => r.result.columns.map((c) => String(row[c] ?? '')).join(' | ')).join('\n')
+      return `${head}\n${body}${r.result.truncated ? '\n(truncated — this is only part of the result)' : ''}`
     },
     list_sprints: async () => {
       if (!(await hasPermission(projectId, actorUserId, 'tasks.read')))
