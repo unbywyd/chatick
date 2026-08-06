@@ -1246,3 +1246,106 @@ export const supportLogins = pgTable(
   },
   (t) => [index('support_logins_target_idx').on(t.targetUserId, t.createdAt)],
 )
+
+// --- Подключения к внешним БД (шаг 1: только чтение) -------------------------
+//
+// Отдельные таблицы, ничего существующего не трогают. Фича новая и может не
+// прижиться: снести её — это DROP трёх таблиц и удаление своих файлов, без
+// правки чужих данных. Плюс выключатель в окружении (DB_CONNECTIONS_ENABLED):
+// выключено — ручки отвечают 404 и подключения не устанавливаются вовсе.
+
+export const dbConnectionKind = pgEnum('db_connection_kind', ['postgres', 'mysql'])
+
+/**
+ * Подключение к чужой БД. Живёт у проекта: база относится к конкретной работе,
+ * как и ресурсы, и права наследует от проекта.
+ *
+ * Строка подключения шифруется тем же способом, что и секреты ресурсов: в
+ * дампе базы её нет. Наружу не отдаётся НИКОГДА — ни в интерфейс, ни через
+ * мост; показываем только хост и имя базы, чтобы человек понимал, куда
+ * подключён, и не мог случайно скопировать пароль в переписку.
+ */
+export const dbConnections = pgTable(
+  'db_connections',
+  {
+    id: id(),
+    projectId: text('project_id').notNull().references(() => projects.id, { onDelete: 'cascade' }),
+    name: text('name').notNull(),
+    kind: dbConnectionKind('kind').notNull(),
+    /** Разобранные части — для показа человеку. Пароля здесь нет. */
+    host: text('host').notNull().default(''),
+    database: text('database').notNull().default(''),
+    dsnEncrypted: text('dsn_encrypted').notNull(),
+    /**
+     * Запись по этому подключению разрешена вообще.
+     *
+     * По умолчанию ВЫКЛЮЧЕНО. Шаг 1 записи не умеет, но флаг заводим сразу:
+     * добавить его потом значит менять таблицу с боевыми подключениями.
+     */
+    writeEnabled: boolean('write_enabled').notNull().default(false),
+    /** Последняя удачная проверка связи — чтобы «не работает» было видно сразу. */
+    checkedAt: timestamp('checked_at', { withTimezone: true }),
+    lastError: text('last_error'),
+    createdById: text('created_by_id').references(() => users.id, { onDelete: 'set null' }),
+    deletedAt: timestamp('deleted_at', { withTimezone: true }),
+    createdAt: createdAt(),
+    updatedAt: updatedAt(),
+  },
+  (t) => [index('db_connections_project_idx').on(t.projectId)],
+)
+
+/**
+ * Какие таблицы вообще видны и что с ними можно.
+ *
+ * Белый список, а не чёрный: таблица, о которой забыли, должна быть НЕдоступна.
+ * Схему стягиваем автоматически, но каждая таблица приходит выключенной —
+ * решение «эту можно» принимает человек, а не автоопределение.
+ */
+export const dbTablePolicies = pgTable(
+  'db_table_policies',
+  {
+    id: id(),
+    connectionId: text('connection_id').notNull().references(() => dbConnections.id, { onDelete: 'cascade' }),
+    schemaName: text('schema_name').notNull().default('public'),
+    tableName: text('table_name').notNull(),
+    /** Читать эту таблицу. Выключено по умолчанию. */
+    canRead: boolean('can_read').notNull().default(false),
+    /** Писать в эту таблицу. Отдельно от canRead и тоже выключено. */
+    canWrite: boolean('can_write').notNull().default(false),
+    /**
+     * Колонки, которые НЕ отдаём наружу: пароли, токены, персональные данные.
+     * JSON-массив имён. Проверяется и на чтении — иначе «покажи всё из users»
+     * выгрузит хеши паролей в переписку с моделью.
+     */
+    hiddenColumns: text('hidden_columns').notNull().default('[]'),
+    createdAt: createdAt(),
+    updatedAt: updatedAt(),
+  },
+  (t) => [uniqueIndex('db_table_policies_uniq_idx').on(t.connectionId, t.schemaName, t.tableName)],
+)
+
+/**
+ * Журнал обращений к чужой БД: кто, что и с каким результатом.
+ *
+ * Сам запрос пишем, СТРОКИ — нет: в них персональные данные заказчика, и
+ * копить их у себя мы не имеем права. Для записи (шаг 2) здесь же будет
+ * снимок затронутых строк — но это отдельное поле и отдельное решение.
+ */
+export const dbQueryLog = pgTable(
+  'db_query_log',
+  {
+    id: id(),
+    connectionId: text('connection_id').notNull().references(() => dbConnections.id, { onDelete: 'cascade' }),
+    projectId: text('project_id').notNull().references(() => projects.id, { onDelete: 'cascade' }),
+    userId: text('user_id').references(() => users.id, { onDelete: 'set null' }),
+    /** Пришло из моста (ассистент) или из интерфейса — разбирать инциденты. */
+    viaBridge: boolean('via_bridge').notNull().default(false),
+    kind: text('kind').notNull(), // read | write
+    sqlText: text('sql_text').notNull(),
+    rowCount: integer('row_count'),
+    ms: integer('ms'),
+    error: text('error'),
+    createdAt: createdAt(),
+  },
+  (t) => [index('db_query_log_conn_idx').on(t.connectionId, t.createdAt)],
+)
