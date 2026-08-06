@@ -2,6 +2,8 @@ import { useEffect, useRef, useState } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { useTranslation } from 'react-i18next'
 import ReactMarkdown from 'react-markdown'
+// GFM: без него markdown не знает таблиц вовсе — они схлопывались в строку.
+import remarkGfm from 'remark-gfm'
 import { toast } from 'sonner'
 import { Bot, Check, Eye, EyeOff, FileText, Image as ImageIcon, Loader2, SendHorizontal, X } from 'lucide-react'
 import { api } from '@/lib/api'
@@ -129,7 +131,7 @@ export function SandboxOverlay({
                   {t('sandbox.original')}
                 </p>
                 <div className="msg-md text-sm">
-                  <ReactMarkdown>{original.text}</ReactMarkdown>
+                  <ReactMarkdown remarkPlugins={[remarkGfm]}>{original.text}</ReactMarkdown>
                 </div>
                 {original.attachments.length > 0 && (
                   <div className="mt-2 flex flex-wrap gap-1.5">
@@ -185,7 +187,7 @@ export function SandboxOverlay({
                     </Button>
                   </div>
                   <div className="msg-md text-sm">
-                    <ReactMarkdown>{item.text}</ReactMarkdown>
+                    <ReactMarkdown remarkPlugins={[remarkGfm]}>{item.text}</ReactMarkdown>
                   </div>
                 </div>
               ) : (
@@ -201,7 +203,7 @@ export function SandboxOverlay({
                       item.role === 'user' ? 'bg-primary text-primary-foreground' : 'bg-card border',
                     )}
                   >
-                    <ReactMarkdown>{item.text}</ReactMarkdown>
+                    <ReactMarkdown remarkPlugins={[remarkGfm]}>{item.text}</ReactMarkdown>
                   </div>
                 </div>
               ),
@@ -213,7 +215,7 @@ export function SandboxOverlay({
                   <Bot className="size-4" />
                 </span>
                 <div className="msg-md max-w-[85%] rounded-lg border bg-card px-3 py-2 text-sm">
-                  <ReactMarkdown>{streamingText}</ReactMarkdown>
+                  <ReactMarkdown remarkPlugins={[remarkGfm]}>{streamingText}</ReactMarkdown>
                   <span className="inline-block h-3.5 w-1 animate-pulse bg-brand align-text-bottom" />
                 </div>
               </div>

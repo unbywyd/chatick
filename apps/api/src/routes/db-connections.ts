@@ -240,6 +240,59 @@ dbConnectionsRoute.patch(
   },
 )
 
+/**
+ * Массовое переключение чтения по таблицам.
+ *
+ * Отдельная ручка, а не цикл запросов с клиента: у базы бывает полсотни
+ * таблиц, и «снять все» превращалось бы в полсотни обращений — половина из
+ * них успевала бы разойтись с тем, что человек видит на экране.
+ *
+ * Пишем только canRead: право на запись массово не раздаём даже когда оно
+ * появится. Открыть на запись полсотни таблиц одним движением — не то
+ * действие, которое стоит делать лёгким.
+ */
+dbConnectionsRoute.patch(
+  '/:id/tables/bulk',
+  zValidator(
+    'json',
+    z.object({
+      /** Кого трогаем. Пусто — все таблицы подключения. */
+      tables: z.array(z.object({ schema: z.string(), table: z.string() })).max(2000).optional(),
+      /** true — открыть, false — закрыть, 'invert' — поменять на противоположное. */
+      canRead: z.union([z.boolean(), z.literal('invert')]),
+    }),
+  ),
+  async (c) => {
+    const { projectId, sub } = c.get('auth')
+    if (!(await canManage(projectId, sub))) return c.json({ error: 'Forbidden: project owner or admin only' }, 403)
+    const b = c.req.valid('json')
+
+    const conn = await db.query.dbConnections.findFirst({
+      where: and(eq(dbConnections.id, c.req.param('id')), eq(dbConnections.projectId, projectId), isNull(dbConnections.deletedAt)),
+    })
+    if (!conn) return c.json({ error: 'Not found' }, 404)
+
+    const all = await db.select().from(dbTablePolicies).where(eq(dbTablePolicies.connectionId, conn.id))
+    // Список пришёл — работаем только с ним: человек мог отфильтровать
+    // таблицы поиском, и «снять все» должно означать «снять найденные».
+    const wanted = b.tables?.length
+      ? new Set(b.tables.map((t) => `${t.schema}.${t.table}`))
+      : null
+    const target = wanted ? all.filter((p) => wanted.has(`${p.schemaName}.${p.tableName}`)) : all
+
+    for (const p of target) {
+      const next = b.canRead === 'invert' ? !p.canRead : b.canRead
+      if (next === p.canRead) continue
+      await db
+        .update(dbTablePolicies)
+        .set({ canRead: next, updatedAt: new Date() })
+        .where(eq(dbTablePolicies.id, p.id))
+    }
+    const after = await db.select().from(dbTablePolicies).where(eq(dbTablePolicies.connectionId, conn.id))
+    return c.json({ ok: true, readable: after.filter((p) => p.canRead).length, total: after.length })
+  },
+)
+
 /** Убрать подключение. Мягко: строка остаётся, но ей уже не воспользоваться. */
 dbConnectionsRoute.delete('/:id', async (c) => {
   const { projectId, sub } = c.get('auth')

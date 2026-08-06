@@ -4,6 +4,8 @@ import { useInfiniteQuery, useMutation, useQuery, useQueryClient } from '@tansta
 import { AlertTriangle, ArrowDown, Zap, Bot, CheckSquare, Copy, FileText, Users, BrainCircuit, KeyRound, Loader2, Menu, MoreHorizontal, NotebookPen, PanelsTopLeft, Reply, Search, Settings, Share2, Trash2, X, MessagesSquare } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
 import ReactMarkdown from 'react-markdown'
+// GFM: без него markdown не знает таблиц вовсе — они схлопывались в строку.
+import remarkGfm from 'remark-gfm'
 import { toast } from 'sonner'
 import { api } from '@/lib/api'
 import { cn } from '@/lib/utils'
@@ -1002,7 +1004,7 @@ function MessageRow({
         )}
         {!(message.text === '📎' && (message.attachments?.length ?? 0) > 0) && (
           <div className="msg-md break-words text-sm">
-            <ReactMarkdown>{renderMentions(message.text)}</ReactMarkdown>
+            <ReactMarkdown remarkPlugins={[remarkGfm]}>{renderMentions(message.text)}</ReactMarkdown>
           </div>
         )}
         {(message.attachments?.length ?? 0) > 0 && (
@@ -1273,7 +1275,7 @@ function ChatSearch({ projectId, lang, onJump, onClose }: { projectId: string; l
                 <span className="text-muted-foreground">{new Date(m.createdAt).toLocaleString(lang)}</span>
               </p>
               <div className="msg-md line-clamp-3 break-words text-sm">
-                <ReactMarkdown>{renderMentions(m.text)}</ReactMarkdown>
+                <ReactMarkdown remarkPlugins={[remarkGfm]}>{renderMentions(m.text)}</ReactMarkdown>
               </div>
               {(m.attachments?.length ?? 0) > 0 && (
                 <p className="mt-1 text-xs text-muted-foreground">📎 {m.attachments!.map((a) => a.name).join(', ')}</p>

@@ -1527,6 +1527,15 @@
     "rowsInfo": "{{count}} rows · {{ms}} ms",
     "truncated": "truncated",
     "readableHint": "Tables open for reading, out of total",
-    "deleteConfirm": "Disconnect «{{name}}»?"
+    "deleteConfirm": "Disconnect «{{name}}»?",
+    "searchTables": "Find a table…",
+    "selectAll": "All",
+    "selectNone": "None",
+    "invert": "Invert",
+    "invertHint": "Flip the selection — handy after a search",
+    "foundTables": "{{shown}} of {{total}} tables · {{readable}} open for reading",
+    "doneSelecting": "Done",
+    "readyHint": "{{count}} tables open — the assistant can read them",
+    "noneSelectedHint": "Nothing selected — reading is not possible yet"
   }
 }

@@ -1526,6 +1526,15 @@
     "rowsInfo": "{{count}} שורות · {{ms}} מ״ש",
     "truncated": "נחתך",
     "readableHint": "טבלאות פתוחות לקריאה מתוך הסך הכול",
-    "deleteConfirm": "לנתק את «{{name}}»?"
+    "deleteConfirm": "לנתק את «{{name}}»?",
+    "searchTables": "חיפוש טבלה…",
+    "selectAll": "הכול",
+    "selectNone": "ניקוי",
+    "invert": "היפוך",
+    "invertHint": "היפוך הבחירה — נוח אחרי חיפוש",
+    "foundTables": "{{shown}} מתוך {{total}} טבלאות · פתוחות לקריאה: {{readable}}",
+    "doneSelecting": "סיום",
+    "readyHint": "{{count}} טבלאות פתוחות — העוזר יוכל לקרוא אותן",
+    "noneSelectedHint": "לא נבחר דבר — אין מה לקרוא"
   }
 }

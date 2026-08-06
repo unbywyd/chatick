@@ -2,7 +2,7 @@ import { useState } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { useTranslation } from 'react-i18next'
 import { toast } from 'sonner'
-import { Check, Copy, Database, Loader2, Play, Plus, RefreshCw, Trash2, TriangleAlert } from 'lucide-react'
+import { Check, Copy, Database, Loader2, Play, Plus, RefreshCw, Search, Trash2, TriangleAlert } from 'lucide-react'
 import { api } from '@/lib/api'
 import { cn } from '@/lib/utils'
 import { Button } from '@/components/ui/button'
@@ -208,6 +208,8 @@ function AddForm({ projectId, outboundIp, onDone }: { projectId: string; outboun
 function ConnectionDetail({ conn, canManage, onChanged }: { conn: Conn; canManage: boolean; onChanged: () => void }) {
   const { t } = useTranslation()
   const [tables, setTables] = useState<TableInfo[] | null>(null)
+  // Поиск по таблицам: у базы их бывает полсотни, и глазами нужную не найти.
+  const [tq, setTq] = useState('')
   const [sqlText, setSqlText] = useState('')
   const [result, setResult] = useState<{ columns: string[]; rows: Record<string, unknown>[]; truncated: boolean; ms: number } | null>(null)
 
@@ -227,6 +229,45 @@ function ConnectionDetail({ conn, canManage, onChanged }: { conn: Conn; canManag
     onError: (e) => toast.error(e instanceof Error ? e.message : String(e)),
   })
 
+  /**
+   * Отметить/снять/инвертировать пачкой.
+   *
+   * Одним запросом, а не циклом по таблицам: полсотни обращений подряд
+   * успевают разойтись с тем, что человек видит на экране. И действует на
+   * НАЙДЕННЫЕ поиском таблицы — «снять все» при активном фильтре означает
+   * «снять найденные», иначе фильтр был бы ловушкой.
+   */
+  const bulk = useMutation({
+    mutationFn: (canRead: boolean | 'invert') =>
+      api<{ readable: number; total: number }>(
+        `/api/v1/db-connections/${conn.id}/tables/bulk`,
+        {
+          method: 'PATCH',
+          body: JSON.stringify({
+            canRead,
+            tables: shown.map((x) => ({ schema: x.schema, table: x.table })),
+          }),
+        },
+        'project',
+      ),
+    onSuccess: () => {
+      setTables((cur) =>
+        cur?.map((x) =>
+          shownKeys.has(`${x.schema}.${x.table}`)
+            ? { ...x, canRead: pending === 'invert' ? !x.canRead : (pending as boolean) }
+            : x,
+        ) ?? null,
+      )
+      onChanged()
+    },
+    onError: (e) => toast.error(e instanceof Error ? e.message : String(e)),
+  })
+  const [pending, setPending] = useState<boolean | 'invert'>(false)
+  const applyBulk = (v: boolean | 'invert') => {
+    setPending(v)
+    bulk.mutate(v)
+  }
+
   const run = useMutation({
     mutationFn: () =>
       api<{ columns: string[]; rows: Record<string, unknown>[]; truncated: boolean; ms: number }>(
@@ -237,6 +278,14 @@ function ConnectionDetail({ conn, canManage, onChanged }: { conn: Conn; canManag
     onSuccess: setResult,
     onError: (e) => toast.error(e instanceof Error ? e.message : String(e)),
   })
+
+  // Ищем и по имени таблицы, и по схеме: в чужой базе таблицы часто разложены
+  // по схемам, и «найти всё из billing» — обычный запрос.
+  const needle = tq.trim().toLowerCase()
+  const shown = (tables ?? []).filter(
+    (x) => !needle || x.table.toLowerCase().includes(needle) || x.schema.toLowerCase().includes(needle),
+  )
+  const shownKeys = new Set(shown.map((x) => `${x.schema}.${x.table}`))
 
   return (
     <div className="space-y-3 border-t p-3">
@@ -251,8 +300,42 @@ function ConnectionDetail({ conn, canManage, onChanged }: { conn: Conn; canManag
       )}
 
       {tables && (
+        <>
+          <div className="flex items-center gap-1.5">
+            <div className="relative min-w-0 flex-1">
+              <Search className="absolute start-2 top-1/2 size-3 -translate-y-1/2 text-muted-foreground" />
+              <input
+                value={tq}
+                onChange={(e) => setTq(e.target.value)}
+                placeholder={t('db.searchTables')}
+                className="w-full rounded-md border bg-transparent py-1 pe-2 ps-6 text-xs outline-none focus:ring-2 focus:ring-ring"
+              />
+            </div>
+            {canManage && (
+              <>
+                {/* Три действия вместо одной галочки «выбрать всё»: снять,
+                    отметить и инвертировать — разные намерения, и «инвертировать»
+                    после поиска экономит больше всего кликов. */}
+                <Button variant="outline" size="sm" className="h-7 px-2 text-[11px]" disabled={bulk.isPending} onClick={() => applyBulk(true)}>
+                  {t('db.selectAll')}
+                </Button>
+                <Button variant="outline" size="sm" className="h-7 px-2 text-[11px]" disabled={bulk.isPending} onClick={() => applyBulk(false)}>
+                  {t('db.selectNone')}
+                </Button>
+                <Button variant="outline" size="sm" className="h-7 px-2 text-[11px]" disabled={bulk.isPending} onClick={() => applyBulk('invert')} title={t('db.invertHint')}>
+                  {t('db.invert')}
+                </Button>
+              </>
+            )}
+          </div>
+          {/* Сколько нашлось и сколько открыто — чтобы «снять все» не оказалось
+              неожиданностью при активном фильтре. */}
+          <p className="text-[11px] text-muted-foreground">
+            {t('db.foundTables', { shown: shown.length, total: tables.length, readable: tables.filter((x) => x.canRead).length })}
+          </p>
         <div className="max-h-64 space-y-0.5 overflow-y-auto rounded-md border p-1.5">
-          {tables.map((tb) => {
+          {shown.length === 0 && <p className="px-1.5 py-2 text-xs text-muted-foreground">{t('start.nothingFound')}</p>}
+          {shown.map((tb) => {
             const full = tb.schema === 'public' ? tb.table : `${tb.schema}.${tb.table}`
             return (
               <label
@@ -277,6 +360,23 @@ function ConnectionDetail({ conn, canManage, onChanged }: { conn: Conn; canManag
             )
           })}
         </div>
+
+          {/* Явное завершение настройки.
+              Галочки сохраняются сразу, но по одному этому не понять,
+              закончен конфиг или нет: панель просто висит открытой. Кнопка
+              закрывает список и подводит итог — сколько таблиц открыто. */}
+          <div className="flex items-center justify-between gap-2">
+            <span className="text-[11px] text-muted-foreground">
+              {tables.filter((x) => x.canRead).length > 0
+                ? t('db.readyHint', { count: tables.filter((x) => x.canRead).length })
+                : t('db.noneSelectedHint')}
+            </span>
+            <Button variant="brand" size="sm" className="h-7 gap-1.5 px-2.5 text-xs" onClick={() => { setTables(null); setTq('') }}>
+              <Check className="size-3.5" />
+              {t('db.doneSelecting')}
+            </Button>
+          </div>
+        </>
       )}
 
       {/* Пробный запрос — чтобы человек убедился, что видно то, что нужно, а

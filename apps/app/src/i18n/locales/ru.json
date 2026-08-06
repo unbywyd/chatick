@@ -1544,6 +1544,15 @@
     "rowsInfo": "{{count}} строк · {{ms}} мс",
     "truncated": "обрезано",
     "readableHint": "Открыто для чтения из общего числа таблиц",
-    "deleteConfirm": "Отключить «{{name}}»?"
+    "deleteConfirm": "Отключить «{{name}}»?",
+    "searchTables": "Найти таблицу…",
+    "selectAll": "Все",
+    "selectNone": "Снять",
+    "invert": "Инвертировать",
+    "invertHint": "Поменять выбор на противоположный — удобно после поиска",
+    "foundTables": "{{shown}} из {{total}} таблиц · открыто на чтение: {{readable}}",
+    "doneSelecting": "Готово",
+    "readyHint": "Открыто {{count}} таблиц — ассистент сможет их читать",
+    "noneSelectedHint": "Ничего не выбрано — читать пока нечего"
   }
 }

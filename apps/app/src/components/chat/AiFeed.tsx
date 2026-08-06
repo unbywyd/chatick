@@ -1,6 +1,8 @@
 import { useEffect, useRef } from 'react'
 import { useTranslation } from 'react-i18next'
 import ReactMarkdown from 'react-markdown'
+// GFM: без него markdown не знает таблиц вовсе — они схлопывались в строку.
+import remarkGfm from 'remark-gfm'
 import { Bot, Loader2 } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import type { ChatMessage } from '@/hooks/useProjectSocket'
@@ -39,7 +41,7 @@ export function AiFeed({ messages, thinking }: { messages: ChatMessage[]; thinki
                 isAi ? 'border bg-card' : 'bg-primary text-primary-foreground',
               )}
             >
-              <ReactMarkdown>{m.text}</ReactMarkdown>
+              <ReactMarkdown remarkPlugins={[remarkGfm]}>{m.text}</ReactMarkdown>
             </div>
           </div>
         )

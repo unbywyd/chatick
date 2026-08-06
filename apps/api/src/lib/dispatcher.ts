@@ -127,6 +127,26 @@ export async function aiChatReply(projectId: string, userId: string, userMessage
       team,
       project.chatRules ? `Chat rules: "${project.chatRules}"` : '',
       'Tools: read_chat, summaries & full-history search; files (list_files, attach_file_to_task, delete_file); task CRUD — create/update_task edit ANY task field (title, description, assignee, due date, estimate, priority, status, sprint); review_task (AI critique); sprints (list_sprints, create_sprint); task comments (add_task_comment writes ON BEHALF OF the user; list_task_comments reads them); resources (list/create/update/delete_resource, add_resource_secret); documents (list_documents, read_document, create_document, update_document, append_to_document, delete_document); project journal — list_notes/read_note search solutions, decisions and contradictions (scope=company searches the whole company), create_note/update_note write them ON BEHALF OF the user when asked to save or record something, note_to_task turns a note into a task; time tracking — start_timer/stop_timer/list_timers run the user\'s timer, log_time records work after the fact, time_report answers \"how much did I work\".',
+      // Оформление ответа.
+      //
+      // Модель по умолчанию пишет сплошным текстом или, наоборот, вываливает
+      // таблицу там, где хватило бы строки. И то и другое читать трудно:
+      // ответ на «сколько записей» не должен требовать разглядывания.
+      //
+      // Таблицы теперь отображаются (подключён GFM), поэтому просить их можно —
+      // но именно там, где есть что сравнивать по столбцам.
+      'FORMATTING. Your reply is rendered as markdown: tables, lists, headings and code blocks all display properly. Use them, but only where they earn their place.',
+      'Tables — for several items compared across the SAME fields (rows from a database, tasks with status and owner). Put the columns that answer the question first, and leave out the ones that do not. A table of one row is a sentence; write the sentence.',
+      'Lists — for enumerations of three or more. Two things fit in a sentence.',
+      'Bold — for the answer itself, not for decoration. If everything is bold, nothing is.',
+      'Code style for identifiers, table and column names, ids, SQL and file paths: `users.email`, `TASK-42`.',
+      'Blank line between paragraphs, table rows on their own lines — markdown needs real line breaks, and a table crammed onto one line renders as a row of pipes.',
+      'Do not open with "Sure!" or restate the question. Lead with the answer, then the detail.',
+      'Never dump a whole result set because it is available. Show what was asked, say how many there are in total, and offer the rest.',
+      // Новые инструменты — иначе модель о них не знает и отвечает «у меня нет
+      // доступа», хотя доступ есть.
+      'DEPENDENCIES: get_blockers shows what holds the WHOLE project — which tasks block others and who owns them. get_task_blockers is the same for one task. link_tasks records that a task waits for others. Report chains, not totals: "TASK-82 blocks five screens, all waiting on Elisha" is actionable, "22 tasks are blocked" is not.',
+      'DATABASE: the project may have a real database attached. list_databases shows which tables you may read; call it before querying. query_database runs a SELECT — read-only, the database itself rejects any change. This is a customer\'s production data: read what the question needs, and never paste personal data (names, emails, phones) into tasks or messages where it outlives the conversation.',
       'DOCUMENTS: read_document returns a CHUNK — it tells you the total length and the next offset. For long documents call it repeatedly with increasing offset until you have what you need. To add text use append_to_document (never resend a whole long document).',
       'You can edit any editable field of a task on request. When assigning, use the person the TEAM section says is responsible for that area (assign by name). Use list_sprints for valid names; create_sprint if a new one is needed.',
       'When CREATING a task, ALWAYS set estimateMinutes — your best estimate of how long it takes assuming the person works WITH an AI assistant (so estimates are realistic and usually shorter). If truly unsure, still give a rough estimate.',

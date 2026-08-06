@@ -127,15 +127,21 @@ describe('кто заводит подключение', () => {
   it('только владелец или админ ПРОЕКТА', () => {
     // Строка подключения — ключ от боевой базы, это не то, что даётся каждому.
     expect(route).toMatch(/m\?\.role === 'owner' \|\| m\?\.role === 'admin'/)
-    const create = route.slice(route.indexOf("dbConnectionsRoute.post(\n  '/',"))
+    // Якорь по содержимому ручки, а не по её позиции: рядом появились другие
+    // post-ручки, и слайс «от первого post» уезжал на них.
+    const create = route.slice(route.indexOf('/** Завести подключение'), route.indexOf('* Стянуть схему'))
     expect(create.slice(0, 800)).toMatch(/canManage\(projectId, sub\)/)
   })
 
   it('связь проверяется до сохранения', () => {
     // Нерабочее подключение заводить незачем: человек узнает об этом позже и
     // будет гадать, что сломалось.
-    const create = route.slice(route.indexOf("dbConnectionsRoute.post(\n  '/',"))
-    expect(create.indexOf('testConnection')).toBeLessThan(create.indexOf('db\n      .insert(dbConnections)'))
+    // Якорь по содержимому ручки, а не по её позиции: рядом появились другие
+    // post-ручки, и слайс «от первого post» уезжал на них.
+    const create = route.slice(route.indexOf('/** Завести подключение'), route.indexOf('* Стянуть схему'))
+    // Регуляркой, а не точной строкой: перенос строки бывает CRLF, и якорь по
+    // «\n» молча не находится — тест «зеленел» бы, не проверив ничего.
+    expect(create.indexOf('testConnection')).toBeLessThan(create.search(/\.insert\(dbConnections\)/))
   })
 
   it('при отказе показываем наш IP — его надо открыть у себя', () => {
