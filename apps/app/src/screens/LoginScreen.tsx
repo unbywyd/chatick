@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from 'react'
 import { useNavigate, useSearchParams } from 'react-router-dom'
 import { useTranslation } from 'react-i18next'
 import { toast } from 'sonner'
-import { API_URL, ApiError, api, consumePendingInvite, getSessionToken, setSessionToken } from '@/lib/api'
+import { API_URL, ApiError, api, consumeReturnTo, consumePendingInvite, getSessionToken, setSessionToken } from '@/lib/api'
 import { Logo } from '@/components/Logo'
 import { ThemeToggle } from '@/components/ThemeToggle'
 import { LanguageSelect } from '@/components/LanguageSelect'
@@ -37,7 +37,9 @@ export function LoginScreen() {
     // сразу, второй раз Google спрашивать незачем.
     if (!getSessionToken()) return
     if (desktopCode) navigate(`/auth?desktop=${desktopCode}`, { replace: true })
-    else navigate('/start', { replace: true })
+    // Сессия уже есть, а его всё равно занесло на вход — значит, он шёл по
+    // ссылке и его развернули. Возвращаем к ней, а не на общий экран.
+    else navigate(consumeReturnTo() ?? '/start', { replace: true })
   }, [navigate, desktopCode])
 
   // --- вход из десктопа ------------------------------------------------------
@@ -82,7 +84,9 @@ export function LoginScreen() {
       // Вход мог начинаться из десктопа — тогда идём туда же, куда увёл бы
       // Google: подтвердить код приложению.
       if (desktopCode) navigate(`/auth?desktop=${desktopCode}`, { replace: true })
-      else navigate('/start', { replace: true })
+      // Вход по коду на почту — самый частый путь как раз для тех, кто пришёл
+      // по ссылке с чужого устройства: возвращаем к ней, а не на общий экран.
+      else navigate(consumeReturnTo() ?? '/start', { replace: true })
     } catch {
       toast.error(t('login.otpWrong'))
     } finally {
@@ -288,9 +292,19 @@ export function AuthCallback() {
       return
     }
 
-    // пришёл по ссылке-приглашению и был отправлен на вход — возвращаем его туда
+    // Возвращаем туда, откуда пришли.
+    //
+    // Приглашение впереди адреса: его надо принять, иначе доступа к проекту,
+    // ради которого человек и шёл, у него ещё нет.
     const invite = consumePendingInvite()
-    navigate(invite ? `/invite/${invite}` : '/start', { replace: true })
+    if (invite) {
+      navigate(`/invite/${invite}`, { replace: true })
+      return
+    }
+    // Ссылка на задачу или файл, открытая без сессии: после входа человек
+    // должен оказаться на ней, а не на общем списке проектов, откуда её ещё
+    // надо найти.
+    navigate(consumeReturnTo() ?? '/start', { replace: true })
   }, [params, navigate, t])
 
   if (!handedOff) return null

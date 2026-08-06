@@ -3,7 +3,7 @@ import { NavLink, Outlet, useLocation, useNavigate, useOutletContext, useParams,
 import { useQuery } from '@tanstack/react-query'
 import { useTranslation } from 'react-i18next'
 import { ArrowLeft, ExternalLink, MessagesSquare, X, FolderX } from 'lucide-react'
-import { api, getSessionToken, type Me } from '@/lib/api'
+import { api, getSessionToken, setReturnTo, type Me } from '@/lib/api'
 import { cn } from '@/lib/utils'
 import { useProjectToken } from '@/hooks/useProjectToken'
 import { useResizable } from '@/hooks/useResizable'
@@ -105,7 +105,11 @@ export function ProjectLayout() {
   }, [wide, isChatTab, id, base, navigate, search])
 
   useEffect(() => {
-    if (!getSessionToken()) navigate('/login', { replace: true })
+    if (getSessionToken()) return
+    // Запоминаем, куда шли: ссылкой на задачу делятся, и терять её на входе
+    // значит заставить человека искать ту же задачу руками.
+    setReturnTo(window.location.hash.slice(1) || '/start')
+    navigate('/login', { replace: true })
   }, [navigate])
 
   const token = useProjectToken(id)

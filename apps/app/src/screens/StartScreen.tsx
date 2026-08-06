@@ -20,6 +20,7 @@ import {
   logout,
   setProjectToken,
   getSessionToken,
+  setReturnTo,
   type Company,
   type CompanyInvite,
   type ProjectListItem,
@@ -64,7 +65,10 @@ export function StartScreen() {
   const setCompanyId = (id: string | null) => navigate(id ? `/start/${id}` : '/start')
 
   useEffect(() => {
-    if (!getSessionToken()) navigate('/login', { replace: true })
+    if (!getSessionToken()) {
+      setReturnTo(window.location.hash.slice(1) || '/start')
+      navigate('/login', { replace: true })
+    }
   }, [navigate])
 
   const me = useQuery({ queryKey: ['me'], queryFn: () => api<Me>('/api/v1/auth/me') })

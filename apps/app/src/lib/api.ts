@@ -21,6 +21,38 @@ export function consumePendingInvite(): string | null {
   return token
 }
 
+/**
+ * Куда человек шёл, когда его отправили на вход.
+ *
+ * Ссылками на задачу и файл делятся постоянно — это и есть обычный способ
+ * позвать коллегу. Открыв такую ссылку без сессии, человек попадал на вход и
+ * после него оказывался на общем экране проектов: адрес терялся, и найти ту
+ * самую задачу приходилось руками, зная только, что «где-то её показывали».
+ *
+ * Храним в localStorage, а не в состоянии: вход через Google уводит на чужой
+ * домен и возвращает новой загрузкой страницы, память React этого не переживёт.
+ */
+const RETURN_TO_KEY = 'chatick_return_to'
+
+/** Запомнить цель. Только внутренние адреса — снаружи это открытый редирект. */
+export function setReturnTo(path: string) {
+  // Ведёт наружу — не наш адрес: «//evil.com» и «https://…» браузер поймёт как
+  // чужой домен, и после входа мы бы сами увели человека с сайта.
+  if (!path.startsWith('/') || path.startsWith('//')) return
+  // На вход возвращать некуда: получилось бы кольцо.
+  if (path === '/' || path.startsWith('/login') || path.startsWith('/auth')) return
+  localStorage.setItem(RETURN_TO_KEY, path)
+}
+
+/** Забрать цель и стереть: второй раз она уже не нужна. */
+export function consumeReturnTo(): string | null {
+  const path = localStorage.getItem(RETURN_TO_KEY)
+  if (path) localStorage.removeItem(RETURN_TO_KEY)
+  // Проверяем и на выходе: значение могли положить руками через devtools.
+  if (!path || !path.startsWith('/') || path.startsWith('//')) return null
+  return path
+}
+
 export function logout() {
   setSessionToken(null)
   setProjectToken(null)
