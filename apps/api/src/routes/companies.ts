@@ -1038,6 +1038,29 @@ companiesRoute.put(
   },
 )
 
+/**
+ * Распознавание изображений — отдельной ручкой.
+ *
+ * Не через общее сохранение настроек ИИ: оно требует ввести ключ заново и
+ * проверяет его живым запросом. Ключ уже сохранён и повторно не показывается,
+ * поэтому переключить одну галочку было нечем — кнопка оставалась серой.
+ *
+ * Здесь ключ не нужен: мы не трогаем ни модель, ни доступ, а только
+ * разрешение отправлять картинки.
+ */
+companiesRoute.patch(
+  '/:companyId/llm/vision',
+  zValidator('json', z.object({ vision: z.boolean() })),
+  async (c) => {
+    const { sub } = c.get('session')
+    const companyId = c.req.param('companyId')
+    if ((await memberRoleIn(companyId, sub)) !== 'admin') return c.json({ error: 'Forbidden' }, 403)
+    const { vision } = c.req.valid('json')
+    await db.update(companies).set({ llmVision: vision }).where(eq(companies.id, companyId))
+    return c.json({ ok: true, vision })
+  },
+)
+
 companiesRoute.delete('/:companyId/llm', async (c) => {
   const { sub } = c.get('session')
   const companyId = c.req.param('companyId')

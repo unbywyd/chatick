@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { useTranslation } from 'react-i18next'
 import { toast } from 'sonner'
@@ -31,6 +31,25 @@ export function LlmSettings({ companyId, isAdmin }: { companyId: string; isAdmin
   const [model, setModel] = useState('')
   // Вижен: выключен по умолчанию — не всякая модель умеет смотреть картинки.
   const [vision, setVision] = useState(false)
+
+  /**
+   * Галочка сохраняется САМА, без кнопки.
+   *
+   * Через общее сохранение не выходило: оно требует ввести ключ заново, а он
+   * уже сохранён и повторно не показывается — кнопка оставалась серой, и
+   * переключить галочку было нечем.
+   */
+  const saveVision = useMutation({
+    mutationFn: (v: boolean) =>
+      api(`/api/v1/companies/${companyId}/llm/vision`, { method: 'PATCH', body: JSON.stringify({ vision: v }) }),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['llm-status', companyId] }),
+    onError: (e) => {
+      // Не сохранилось — возвращаем галочку на место, иначе человек уйдёт с
+      // экрана в уверенности, что включил.
+      setVision((v) => !v)
+      toast.error(e instanceof Error ? e.message : String(e))
+    },
+  })
   const [apiKey, setApiKey] = useState('')
 
   const status = useQuery({
@@ -38,13 +57,19 @@ export function LlmSettings({ companyId, isAdmin }: { companyId: string; isAdmin
     queryFn: () => api<LlmStatus>(`/api/v1/companies/${companyId}/llm`),
   })
 
+  // Показываем сохранённое значение, а не «выключено» при каждом заходе:
+  // иначе человек видит снятую галочку и думает, что настройка не применилась.
+  useEffect(() => {
+    if (status.data) setVision(Boolean(status.data.vision))
+  }, [status.data])
+
   const selected = status.data?.providers.find((p) => p.id === (provider ?? status.data?.provider))
 
   const save = useMutation({
     mutationFn: () =>
       api(`/api/v1/companies/${companyId}/llm`, {
         method: 'PUT',
-        body: JSON.stringify({ provider: provider ?? status.data?.provider, model: model || undefined, apiKey, vision }),
+        body: JSON.stringify({ provider: provider ?? status.data?.provider, model: model || undefined, apiKey }),
       }),
     onSuccess: () => {
       toast.success(t('llm.saved'))
@@ -158,7 +183,11 @@ export function LlmSettings({ companyId, isAdmin }: { companyId: string; isAdmin
             <input
               type="checkbox"
               checked={vision}
-              onChange={(e) => setVision(e.target.checked)}
+              onChange={(e) => {
+                setVision(e.target.checked)
+                saveVision.mutate(e.target.checked)
+              }}
+              disabled={saveVision.isPending}
               className="mt-0.5 size-3.5 shrink-0"
             />
             <span className="min-w-0">
