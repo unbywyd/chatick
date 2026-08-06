@@ -1507,6 +1507,8 @@
     "filterBlocked": "Blocked",
     "filterBlocking": "Blocking",
     "filterFree": "Ready to take",
-    "cycleHint": "Tasks that depend on this one are not shown: linking them would close a loop, and neither task could ever be finished."
+    "cycleHint": "Tasks that depend on this one are not shown: linking them would close a loop, and neither task could ever be finished.",
+    "stripHolding_one": "holding back {{count}} task",
+    "stripHolding_other": "holding back {{count}} tasks"
   }
 }

@@ -19,6 +19,7 @@ import { Avatar } from '@/components/ui/avatar'
 import { Popover, PopoverTrigger, PopoverContent } from '@/components/ui/popover'
 import { TaskDrawer } from './tasks/TaskDrawer'
 import { ProjectSummary } from './tasks/ProjectSummary'
+import { BlockersStrip } from './tasks/BlockersStrip'
 import { TasksTable } from './tasks/TasksTable'
 import { TaskContextMenu } from './tasks/TaskContextMenu'
 import { TaskRefs } from './tasks/TaskRefs'
@@ -513,6 +514,8 @@ export function TasksTab({ projectId, meId }: { projectId: string; meId?: string
               {/* Часы и срок — под той же полосой: это про один и тот же
                   проект, и разносить их по разным углам экрана незачем. */}
               <ProjectSummary projectId={projectId} canEdit={isManager} />
+              {/* Что держит проект: видно сразу, без открывания задач. */}
+              <BlockersStrip tasks={tasksQ.data ?? []} onOpen={(id) => setOpenTaskId(id)} className="mt-3" />
             </div>
           )}
 
