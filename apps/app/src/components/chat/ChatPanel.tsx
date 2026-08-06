@@ -1143,7 +1143,16 @@ export function MessageAttachments({
                 className="block max-h-52 max-w-64 overflow-hidden rounded-lg border transition-opacity hover:opacity-90"
               >
                 {previews.data?.[a.id] ? (
-                  <img src={previews.data[a.id]} alt={a.name} className="max-h-52 max-w-64 object-cover" loading="lazy" />
+                  <img
+                    src={previews.data[a.id]}
+                    alt={a.name}
+                    /* no-zoom: у вложения свой просмотрщик — с именем файла,
+                       скачиванием и «поделиться». Без этого открывались ДВА
+                       окна сразу: глобальный просмотрщик картинок ловит любой
+                       <img> внутри .msg-md, а вложение открывает ещё и своё. */
+                    className="no-zoom max-h-52 max-w-64 object-cover"
+                    loading="lazy"
+                  />
                 ) : (
                   <span className="grid h-24 w-32 place-items-center bg-secondary text-xs text-muted-foreground">…</span>
                 )}

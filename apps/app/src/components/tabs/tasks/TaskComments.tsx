@@ -249,7 +249,7 @@ export function TaskComments({
                         {/* Превью вместо скрепки: по имени вроде
                             «354881888_6f937116-….webp» не понять, что внутри. */}
                         {f.mime.startsWith('image/') && previewUrls.data?.[f.id] ? (
-                          <img src={previewUrls.data[f.id]} alt="" className="size-5 rounded object-cover" />
+                          <img src={previewUrls.data[f.id]} alt="" className="no-zoom size-5 rounded object-cover" />
                         ) : (
                           <Paperclip className="size-3" />
                         )}
@@ -293,7 +293,7 @@ export function TaskComments({
                     понять, тот ли он — а прикрепив не тот, узнаёшь об этом
                     уже после отправки. */}
                 {f.type.startsWith('image/') ? (
-                  <img src={previews[i] ?? ''} alt="" className="size-5 rounded object-cover" />
+                  <img src={previews[i] ?? ''} alt="" className="no-zoom size-5 rounded object-cover" />
                 ) : (
                   <Paperclip className="size-3" />
                 )}
