@@ -49,8 +49,25 @@ export function TaskRefs({
   const [open, setOpen] = useState(false)
   const refs = parseRefs(value ?? '')
 
+  // В таблице показываем первые два номера, остальные — счётчиком.
+  //
+  // У задачи их бывает и десять: строка разъезжалась на четыре ряда, и колонка
+  // номеров начинала задавать высоту всей таблице. Читать по ним всё равно
+  // нечего — по номерам ищут конкретный, а для этого есть поповер, он и так
+  // открывается по клику. Полный список уезжает в подсказку, чтобы его можно
+  // было увидеть не открывая.
+  const LIMIT = 2
+  const shown = compact ? refs.slice(0, LIMIT) : refs
+  const hidden = refs.length - shown.length
+
   const chips = (
-    <span className={cn('inline-flex flex-wrap items-center', compact ? 'gap-0.5' : 'gap-1')}>
+    <span
+      className={cn(
+        'inline-flex items-center',
+        // В таблице в одну строку: перенос — это и есть то, что разгоняло высоту.
+        compact ? 'flex-nowrap gap-0.5' : 'flex-wrap gap-1',
+      )}
+    >
       {/* Знак номера — подписью ко всему ряду, а не в каждом чипе: повторять
           его у каждого числа значит превращать метку в шум. dir="ltr" — чтобы
           в иврите он остался ПЕРЕД числами, а не уехал за них.
@@ -61,31 +78,47 @@ export function TaskRefs({
           {REFS_SIGN}
         </span>
       )}
-      {refs.map((ref, i) => (
+      {shown.map((ref, i) => (
         <span
           key={`${ref}:${i}`}
           // Слегка скруглённые, а не овальные: это номер, а не ярлык состояния.
           className={cn(
             'rounded bg-secondary font-semibold tabular-nums text-foreground',
             compact ? 'px-1 py-0 text-[11px]' : 'px-1.5 py-0.5 text-xs',
+            // Номер бывает и составным («12 - 14»): в таблице обрезаем, чтобы
+            // одно длинное значение не растянуло колонку на всех.
+            compact && 'max-w-[3.5rem] truncate',
           )}
         >
           {ref}
         </span>
       ))}
+      {hidden > 0 && (
+        <span dir="ltr" className="shrink-0 px-0.5 text-[11px] tabular-nums text-muted-foreground">
+          +{hidden}
+        </span>
+      )}
     </span>
   )
 
+  // Спрятанные номера — в подсказку: увидеть все, не открывая поповер.
+  const hint = hidden > 0 ? `${REFS_SIGN} ${refs.join(', ')}` : t('tasks.refsHint')
+
   // Пусто и править нельзя — показывать нечего.
   if (!refs.length && !canEdit) return null
-  if (!canEdit) return <span className={className}>{chips}</span>
+  if (!canEdit)
+    return (
+      <span className={className} title={hidden > 0 ? hint : undefined}>
+        {chips}
+      </span>
+    )
 
   return (
     <Popover open={open} onOpenChange={setOpen}>
       <PopoverTrigger asChild>
         <button
           type="button"
-          title={t('tasks.refsHint')}
+          title={hint}
           onClick={(e) => e.stopPropagation()} // клик по строке открывает задачу
           className={cn(
             // Как у соседних управляемых полей: рамка по наведению и стрелка,

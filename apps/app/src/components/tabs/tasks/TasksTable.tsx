@@ -476,7 +476,8 @@ function GroupTable({
 
   const cols: { key: SortKey; label: string; className?: string }[] = [
     { key: 'number', label: t('tasks.col.number'), className: 'w-20' },
-    { key: 'refs', label: REFS_SIGN, className: 'w-28' },
+    // Узкая: в строку влезает два номера и счётчик остальных, переносов нет.
+    { key: 'refs', label: REFS_SIGN, className: 'w-24' },
     { key: 'title', label: t('tasks.col.title') },
     { key: 'status', label: t('tasks.col.status'), className: 'w-36 whitespace-nowrap' },
     { key: 'priority', label: t('tasks.col.priority'), className: 'w-10' },
