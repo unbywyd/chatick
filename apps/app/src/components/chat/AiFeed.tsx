@@ -6,6 +6,7 @@ import remarkGfm from 'remark-gfm'
 import { Bot, Loader2 } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import type { ChatMessage } from '@/hooks/useProjectSocket'
+import { MessageAttachments } from './ChatPanel'
 
 /**
  * Лента личного диалога с ИИ. Раньше это был оверлей поверх чата со своей
@@ -41,7 +42,14 @@ export function AiFeed({ messages, thinking }: { messages: ChatMessage[]; thinki
                 isAi ? 'border bg-card' : 'bg-primary text-primary-foreground',
               )}
             >
-              <ReactMarkdown remarkPlugins={[remarkGfm]}>{m.text}</ReactMarkdown>
+              {/* «📎» без картинки — это скрепка, которую человек сам и
+                  отправил: понять по ней ничего нельзя. Показываем вложение. */}
+              {m.text && m.text.trim() !== '📎' && (
+                <ReactMarkdown remarkPlugins={[remarkGfm]}>{m.text}</ReactMarkdown>
+              )}
+              {m.attachments && m.attachments.length > 0 && (
+                <MessageAttachments attachments={m.attachments} canPublish={false} />
+              )}
             </div>
           </div>
         )
