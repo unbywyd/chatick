@@ -1732,6 +1732,126 @@ async function taskByKey(projectId: string, key: string) {
   })
 }
 
+/**
+ * Что держит проект и с кого спрашивать.
+ *
+ * Ответ на вопрос, который человек задаёт первым: «почему не движется?».
+ * Собрать это из /x/tasks можно было и раньше, но пришлось бы вытянуть все
+ * задачи, построить граф самому и не ошибиться — а ошибка тут тихая: назовёшь
+ * не того ответственного, и человек пойдёт торопить постороннего.
+ *
+ * Отдаём цепочками, а не плоским списком: важно не «сколько заблокировано», а
+ * что одна закрытая задача разблокирует пятерых. Порядок — по весу: сверху то,
+ * с чего начинать.
+ */
+bridgeRoute.get('/blockers', async (c) => {
+  const scope = await resolveProject(c as never)
+  if ('error' in scope) return c.json({ error: scope.error }, scope.status)
+  const denied = await require(c as never, 'tasks.read', scope.projectId)
+  if (denied) return c.json(denied, 403)
+
+  const companyId = (await companyOf(scope.projectId)) ?? ''
+  const url = (taskId: string) => `${APP()}/#${projectPath(companyId, scope.projectId, `/tasks/${taskId}`)}`
+
+  // Все живые связи проекта одним запросом: и держащая задача, и ждущая, и оба
+  // исполнителя. По одной задаче за раз это N запросов на ровном месте.
+  const rows = await db
+    .select({
+      blockerId: tasks.id,
+      blockerNumber: tasks.number,
+      blockerTitle: tasks.title,
+      blockerStatus: tasks.status,
+      blockerAssignee: users.name,
+      blockerAssigneeId: users.id,
+      blockedId: sql<string>`blocked.id`,
+      blockedNumber: sql<string>`blocked.number`,
+      blockedTitle: sql<string>`blocked.title`,
+      blockedStatus: sql<string>`blocked.status`,
+    })
+    .from(taskBlockers)
+    .innerJoin(tasks, eq(tasks.id, taskBlockers.blockerTaskId))
+    .innerJoin(sql`${tasks} blocked`, sql`blocked.id = ${taskBlockers.blockedTaskId}`)
+    .leftJoin(users, eq(users.id, tasks.assigneeId))
+    .where(
+      and(
+        eq(taskBlockers.projectId, scope.projectId),
+        isNull(tasks.deletedAt),
+        sql`blocked.deleted_at is null`,
+        // Закрытая задача никого не держит: связь остаётся историей, но в
+        // «что мешает сейчас» ей не место.
+        sql`${tasks.status} <> 'done'`,
+        sql`blocked.status <> 'done'`,
+      ),
+    )
+
+  // Группируем по держащей задаче.
+  const byBlocker = new Map<
+    string,
+    {
+      task: { id: string; number: string; title: string; status: string; url: string }
+      owner: { id: string; name: string } | null
+      blocks: { id: string; number: string; title: string; status: string; url: string }[]
+    }
+  >()
+  for (const r of rows) {
+    let entry = byBlocker.get(r.blockerId)
+    if (!entry) {
+      entry = {
+        task: {
+          id: r.blockerId,
+          number: r.blockerNumber,
+          title: r.blockerTitle,
+          status: r.blockerStatus,
+          url: url(r.blockerId),
+        },
+        // Кто отвечает. null — задача ничья, и это отдельная проблема: спросить
+        // не с кого, а держит она столько же.
+        owner: r.blockerAssigneeId ? { id: r.blockerAssigneeId, name: r.blockerAssignee ?? '' } : null,
+        blocks: [],
+      }
+      byBlocker.set(r.blockerId, entry)
+    }
+    entry.blocks.push({
+      id: r.blockedId,
+      number: r.blockedNumber,
+      title: r.blockedTitle,
+      status: r.blockedStatus,
+      url: url(r.blockedId),
+    })
+  }
+
+  const items = [...byBlocker.values()].sort((a, b) => b.blocks.length - a.blocks.length)
+
+  // Сводка по людям: с кого спрашивать и сколько на нём висит. Считаем
+  // РАЗЛИЧНЫЕ ждущие задачи, а не сумму — одна задача может ждать двоих, и
+  // сумма приписала бы её обоим.
+  const byOwner = new Map<string, { id: string | null; name: string; holding: number; blocks: Set<string> }>()
+  for (const it of items) {
+    const key = it.owner?.id ?? ''
+    const cur = byOwner.get(key) ?? {
+      id: it.owner?.id ?? null,
+      name: it.owner?.name ?? '',
+      holding: 0,
+      blocks: new Set<string>(),
+    }
+    cur.holding += 1
+    for (const b of it.blocks) cur.blocks.add(b.id)
+    byOwner.set(key, cur)
+  }
+  const owners = [...byOwner.values()]
+    .map((o) => ({ id: o.id, name: o.name || undefined, holdingTasks: o.holding, blockingTasks: o.blocks.size }))
+    .sort((a, b) => b.blockingTasks - a.blockingTasks)
+
+  return c.json({
+    // Сколько задач держат другие и сколько ждут — по головам, без двойного счёта.
+    holdingCount: items.length,
+    blockedCount: new Set(rows.map((r) => r.blockedId)).size,
+    // Кто отвечает за то, что держит. Пусто — значит всё ничьё.
+    owners,
+    items,
+  })
+})
+
 bridgeRoute.get('/tasks/:id/blockers', async (c) => {
   const scope = await resolveProject(c as never)
   if ('error' in scope) return c.json({ error: scope.error }, scope.status)

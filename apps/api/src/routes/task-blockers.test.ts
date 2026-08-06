@@ -229,3 +229,78 @@ describe('задачу можно звать номером во всех руч
     expect(body).toMatch(/not in the trash/)
   })
 })
+
+// Что держит проект целиком — одной ручкой.
+//
+// Собрать это из /x/tasks ассистент мог и раньше, но ошибка здесь тихая:
+// назовёшь не того ответственного — человек пойдёт торопить постороннего.
+describe('GET /x/blockers — обзор по проекту', () => {
+  const body = bridge.slice(bridge.indexOf("bridgeRoute.get('/blockers'"), bridge.indexOf("bridgeRoute.get('/tasks/:id/blockers'"))
+
+  it('объявлена раньше /tasks/:id/blockers и не конфликтует с ней', () => {
+    expect(bridge.indexOf("bridgeRoute.get('/blockers'")).toBeGreaterThan(-1)
+    expect(bridge.indexOf("bridgeRoute.get('/blockers'")).toBeLessThan(
+      bridge.indexOf("bridgeRoute.get('/tasks/:id/blockers'"),
+    )
+  })
+
+  it('завершённые не считаются держащими — с обеих сторон связи', () => {
+    // Закрытая задача никого не держит, хотя связь остаётся историей.
+    expect(body).toMatch(/tasks\.status\} <> 'done'/)
+    expect(body).toMatch(/blocked\.status <> 'done'/)
+  })
+
+  it('удалённые тоже не в счёт', () => {
+    expect(body).toMatch(/isNull\(tasks\.deletedAt\)/)
+    expect(body).toMatch(/blocked\.deleted_at is null/)
+  })
+
+  it('отдаёт ответственного, а не только задачу', () => {
+    expect(body).toMatch(/owner:/)
+    expect(body).toMatch(/leftJoin\(users/)
+  })
+
+  it('ничьи задачи не прячет: спросить не с кого — это тоже ответ', () => {
+    expect(body).toMatch(/blockerAssigneeId \?/)
+  })
+
+  it('ссылки на задачи — полные, по ним можно перейти', () => {
+    expect(body).toMatch(/projectPath\(companyId, scope\.projectId/)
+    expect(body).toMatch(/url\(r\.blockerId\)/)
+    expect(body).toMatch(/url\(r\.blockedId\)/)
+  })
+
+  it('сверху тот, кто держит больше всех', () => {
+    expect(body).toMatch(/sort\(\(a, b\) => b\.blocks\.length - a\.blocks\.length\)/)
+  })
+
+  it('ждущие считаются по головам, а не суммой', () => {
+    // Задача, ждущая двоих, в сумме учлась бы дважды — на живом проекте это
+    // давало 26 вместо 22.
+    expect(body).toMatch(/new Set\(rows\.map\(\(r\) => r\.blockedId\)\)\.size/)
+    expect(body).toMatch(/blocks: Set<string>/)
+  })
+
+  it('одним запросом, а не по задаче за раз', () => {
+    expect((body.match(/await db/g) ?? []).length).toBe(1)
+  })
+})
+
+describe('превью ссылок', () => {
+  const preview = readFileSync(join(import.meta.dirname, 'link-preview.ts'), 'utf8')
+
+  it('запасная картинка — существующий файл, а не путь наугад', () => {
+    // У SPA любой несуществующий путь отдаёт index.html с кодом 200: «картинка»
+    // молча оказывается страницей, превью выходит без изображения, и ошибки
+    // при этом нигде не видно.
+    expect(preview).toMatch(/logo\.png/)
+    expect(preview).not.toMatch(/icon-512\.png/)
+  })
+
+  it('адрес для человека — без префикса монтирования', () => {
+    // c.req.path отдаёт «/link/c/…»; с ним ссылка из превью не открывает
+    // приложение.
+    expect(preview).toContain(String.raw`replace(/^\/link/`)
+    expect(preview).not.toContain('${APP()}/#${c.req.path}')
+  })
+})

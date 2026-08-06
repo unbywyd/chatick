@@ -108,6 +108,7 @@ function endpointCatalog(q: string): string {
          Use it before asking the human "what happened here" — and to find
          things that no longer exist: a deleted file still has its entry.
 
+  GET    /x/blockers${q}                      what is holding the WHOLE project, and who owns it
   GET    /x/tasks/<id>/blockers${q}           what this task waits for, and what waits for it
   POST   /x/tasks/<id>/blockers${q}           {"tasks":["TASK-3","TASK-5"], "side":"blockedBy"|"blocking"}
   DELETE /x/tasks/<id>/blockers/<linkId>${q}  remove one link
@@ -117,6 +118,25 @@ function endpointCatalog(q: string): string {
   whole design file at once, while a human opens one screen at a time. When
   the order is obvious from what you just read, record it instead of
   mentioning it in a comment nobody will act on.
+
+  GET /x/blockers answers "why is this project not moving?" in one call. It
+  returns the tasks that hold others — sorted so the worst offender is first —
+  each with its owner, and a link straight to the task. Do not rebuild this
+  from /x/tasks: naming the wrong owner sends the human to chase the wrong
+  person, and that costs more than the call you saved.
+
+    holdingCount   how many tasks are holding others
+    blockedCount   how many distinct tasks are waiting
+    owners[]       who to ask, with blockingTasks = how much rides on them
+    items[]        each holder: task, owner, and the tasks it blocks (with urls)
+
+  Report it as chains, not totals: "TASK-82 blocks five screens, all waiting
+  on Elisha" is actionable; "22 tasks are blocked" is not. An owner of null
+  means the task belongs to nobody — that is its own problem, and worth saying
+  out loud, because there is no one to ask.
+
+  Finished tasks are excluded on both sides: a closed task holds nobody, even
+  though the link stays for history.
 
   side="blockedBy" (the default) means the listed tasks must be finished
   BEFORE this one. side="blocking" is the mirror: this task must be finished
