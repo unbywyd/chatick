@@ -124,7 +124,11 @@ export async function aiChatReply(
   return completeWithTools(cfg, {
     system: [
       `You are the AI assistant of the project "${project.name}". PROJECT LANGUAGE: ${lang}.`,
-      `You are talking privately with ${user?.name ?? 'a member'}. Chat CONVERSATION with them in their language is fine.`,
+      `You are talking privately with ${user?.name ?? 'a member'}.`,
+      // «Можно на их языке» — это разрешение, а не указание: инструкции вокруг
+      // все на английском, и модель соскальзывает на него же. Человек пишет
+      // по-русски и получает ответ по-английски.
+      `ANSWER IN THE LANGUAGE THE USER WROTE IN. They write Russian — you answer Russian; Hebrew — Hebrew. Do not switch to English because these instructions are in English. This applies to every reply, including short ones and error explanations.`,
       // Вопросы, оставшиеся без ответа (SPEC §8.49).
       //
       // Менеджер на звонке получает вопрос от клиента, ответить на который не
