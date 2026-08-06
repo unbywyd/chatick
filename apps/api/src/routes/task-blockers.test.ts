@@ -185,3 +185,47 @@ describe('гайд про зависимости', () => {
     expect(guide).toMatch(/openBlockers > 0 means the work/)
   })
 })
+
+// Подзапрос со счётчиками сам обращается к tasks — значит внешняя таблица
+// ОБЯЗАНА быть под алиасом. Без него «id» разрешается во внутреннюю таблицу из
+// join, Postgres отвечает «column reference is ambiguous», и весь список задач
+// падает с 500. Тип-чекер такого не ловит: SQL для него строка.
+describe('счётчики моста не ломают список', () => {
+  const fn = bridge.slice(bridge.indexOf('async function depCounts'), bridge.indexOf('// --- Задачи'))
+
+  it('внешняя задача — под алиасом, а не голым tasks', () => {
+    expect(fn).toMatch(/outer_t/)
+    // Ссылка на внешнюю строку должна идти через алиас в ОБОИХ подзапросах.
+    const refs = fn.match(/= outer_t\.id/g) ?? []
+    expect(refs.length).toBeGreaterThanOrEqual(2)
+  })
+
+  it('неквалифицированной ссылки на id не осталось', () => {
+    // Ровно та строка, что роняла GET /x/tasks.
+    expect(fn).not.toMatch(/blocked_task_id = \$\{tasks\.id\}/)
+    expect(fn).not.toMatch(/blocker_task_id = \$\{tasks\.id\}/)
+  })
+})
+
+describe('задачу можно звать номером во всех ручках', () => {
+  it('одиночный GET принимает номер, а не только id', () => {
+    // Иначе у соседних ручек две разные привычки: /blockers берёт TASK-81,
+    // а GET задачи — нет. На этом ассистент и спотыкался.
+    const body = bridge.slice(bridge.indexOf("bridgeRoute.get('/tasks/:id'"))
+    expect(body.slice(0, 900)).toMatch(/eq\(tasks\.number, key\.toUpperCase\(\)\)|taskByKey/)
+  })
+
+  it('restore ищет ВКЛЮЧАЯ удалённые', () => {
+    // taskByKey отдаёт только живые. Подставить его сюда — значит навсегда
+    // сломать восстановление: удалённая задача просто не найдётся.
+    // Ровно до следующей ручки: дальше taskByKey встречается законно.
+    const from = bridge.indexOf("bridgeRoute.post('/tasks/:id/restore'")
+    const rest = bridge.slice(from + 20)
+    const body = rest.slice(0, rest.indexOf('bridgeRoute.'))
+    // Проверяем ВЫЗОВ, а не упоминание: в комментарии рядом объясняется,
+    // почему общий помощник здесь не годится.
+    expect(body).not.toMatch(/await taskByKey\(/)
+    expect(body).toMatch(/findFirst/)
+    expect(body).toMatch(/not in the trash/)
+  })
+})

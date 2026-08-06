@@ -1029,23 +1029,26 @@ const taskView = (
 async function depCounts(taskIds: string[]): Promise<Map<string, { openBlockers: number; blocking: number }>> {
   const out = new Map<string, { openBlockers: number; blocking: number }>()
   if (!taskIds.length) return out
-  const rows = await db
-    .select({
-      id: tasks.id,
-      openBlockers: sql<number>`(
-        select count(*)::int from ${taskBlockers} b
+  // Внешнюю задачу берём под явным алиасом «outer_t».
+  //
+  // Подзапрос сам обращается к tasks (нужен статус блокера), и без алиаса
+  // ссылка на «id» разрешалась во ВНУТРЕННЮЮ таблицу из join, а не во внешнюю
+  // строку: Postgres честно отвечал «column reference "id" is ambiguous», и
+  // весь список задач падал с 500 — при том, что одиночная задача работала.
+  const rows = await db.execute<{ id: string; open_blockers: number; blocking: number }>(sql`
+    select outer_t.id as id,
+      (select count(*)::int from ${taskBlockers} b
         join ${tasks} bt on bt.id = b.blocker_task_id
-        where b.blocked_task_id = ${tasks.id} and bt.status <> 'done' and bt.deleted_at is null
-      )`,
-      blocking: sql<number>`(
-        select count(*)::int from ${taskBlockers} b
+        where b.blocked_task_id = outer_t.id
+          and bt.status <> 'done' and bt.deleted_at is null) as open_blockers,
+      (select count(*)::int from ${taskBlockers} b
         join ${tasks} dt on dt.id = b.blocked_task_id
-        where b.blocker_task_id = ${tasks.id} and dt.deleted_at is null
-      )`,
-    })
-    .from(tasks)
-    .where(inArray(tasks.id, taskIds))
-  for (const r of rows) out.set(r.id, { openBlockers: r.openBlockers, blocking: r.blocking })
+        where b.blocker_task_id = outer_t.id
+          and dt.deleted_at is null) as blocking
+    from ${tasks} outer_t
+    where outer_t.id in (${sql.join(taskIds.map((x) => sql`${x}`), sql`, `)})
+  `)
+  for (const r of rows) out.set(r.id, { openBlockers: r.open_blockers, blocking: r.blocking })
   return out
 }
 
@@ -1378,11 +1381,21 @@ bridgeRoute.get('/tasks/:id', async (c) => {
   if ('error' in scope) return c.json({ error: scope.error }, scope.status)
   const denied = await require(c as never, 'tasks.read', scope.projectId)
   if (denied) return c.json(denied, 403)
+  // Номер ИЛИ id, как и у зависимостей: ассистент оперирует «TASK-81», и
+  // требовать здесь uuid значило бы держать две разные привычки для соседних
+  // ручек. Ровно на этом он и спотыкался, когда терялся idmap.
+  const key = c.req.param('id').trim()
   const row = await db
     .select({ t: tasks, u: users })
     .from(tasks)
     .leftJoin(users, eq(users.id, tasks.assigneeId))
-    .where(and(eq(tasks.id, c.req.param('id')), eq(tasks.projectId, scope.projectId), isNull(tasks.deletedAt)))
+    .where(
+      and(
+        or(eq(tasks.id, key), eq(tasks.number, key.toUpperCase()))!,
+        eq(tasks.projectId, scope.projectId),
+        isNull(tasks.deletedAt),
+      ),
+    )
     .limit(1)
   if (!row.length) return c.json({ error: 'Not found' }, 404)
   const attached = await attachmentsFor(
@@ -1461,11 +1474,10 @@ bridgeRoute.patch('/tasks/:id', async (c) => {
   const id = auth(c as never)
   const scope = await resolveProject(c as never)
   if ('error' in scope) return c.json({ error: scope.error }, scope.status)
-  const taskId = c.req.param('id')
-  const existing = await db.query.tasks.findFirst({
-    where: and(eq(tasks.id, taskId), eq(tasks.projectId, scope.projectId), isNull(tasks.deletedAt)),
-  })
+  // Номер или id — одинаково во всех ручках задачи.
+  const existing = await taskByKey(scope.projectId, c.req.param('id'))
   if (!existing) return c.json({ error: 'Not found' }, 404)
+  const taskId = existing.id
 
   const b = (await c.req.json().catch(() => ({}))) as Record<string, unknown>
   const bad = unknownFields(b, TASK_FIELDS)
@@ -1530,11 +1542,10 @@ bridgeRoute.delete('/tasks/:id', async (c) => {
   const id = auth(c as never)
   const scope = await resolveProject(c as never)
   if ('error' in scope) return c.json({ error: scope.error }, scope.status)
-  const taskId = c.req.param('id')
-  const existing = await db.query.tasks.findFirst({
-    where: and(eq(tasks.id, taskId), eq(tasks.projectId, scope.projectId), isNull(tasks.deletedAt)),
-  })
+  // Номер или id — одинаково во всех ручках задачи.
+  const existing = await taskByKey(scope.projectId, c.req.param('id'))
   if (!existing) return c.json({ error: 'Not found' }, 404)
+  const taskId = existing.id
 
   // Свою задачу удаляет и участник; чужую — только с tasks.delete. То же
   // правило, что в интерфейсе: удаление мягкое, восстановимо 7 дней.
@@ -1630,8 +1641,14 @@ bridgeRoute.post('/tasks/:id/restore', async (c) => {
   const denied = await require(c as never, 'tasks.delete', scope.projectId)
   if (denied) return c.json(denied, 403)
 
+  // Здесь ищем ВКЛЮЧАЯ удалённые — восстанавливать нечего, если не видеть
+  // корзину. Общий taskByKey не подходит: он живые задачи и отдаёт.
+  const key = c.req.param('id').trim()
   const task = await db.query.tasks.findFirst({
-    where: and(eq(tasks.id, c.req.param('id')), eq(tasks.projectId, scope.projectId)),
+    where: and(
+      or(eq(tasks.id, key), eq(tasks.number, key.toUpperCase()))!,
+      eq(tasks.projectId, scope.projectId),
+    ),
   })
   if (!task) return c.json({ error: 'Not found' }, 404)
   if (!task.deletedAt) return c.json({ error: 'That task is not in the trash' }, 400)
@@ -1843,9 +1860,7 @@ bridgeRoute.get('/tasks/:id/checklist', async (c) => {
   const denied = await require(c as never, 'tasks.read', scope.projectId)
   if (denied) return c.json(denied, 403)
 
-  const task = await db.query.tasks.findFirst({
-    where: and(eq(tasks.id, c.req.param('id')), eq(tasks.projectId, scope.projectId), isNull(tasks.deletedAt)),
-  })
+  const task = await taskByKey(scope.projectId, c.req.param('id'))
   if (!task) return c.json({ error: 'Task not found' }, 404)
 
   const rows = await db
@@ -1875,9 +1890,7 @@ bridgeRoute.post('/tasks/:id/checklist', async (c) => {
   const denied = await require(c as never, 'tasks.edit', scope.projectId)
   if (denied) return c.json(denied, 403)
 
-  const task = await db.query.tasks.findFirst({
-    where: and(eq(tasks.id, c.req.param('id')), eq(tasks.projectId, scope.projectId), isNull(tasks.deletedAt)),
-  })
+  const task = await taskByKey(scope.projectId, c.req.param('id'))
   if (!task) return c.json({ error: 'Task not found' }, 404)
   if (!(await ownsOrManages(scope.projectId, id.userId, [task.createdById, task.assigneeId]))) {
     return c.json({ error: 'Forbidden: you can only edit tasks you created or that are assigned to you' }, 403)
@@ -1921,9 +1934,7 @@ bridgeRoute.patch('/tasks/:id/checklist/:itemId', async (c) => {
   const denied = await require(c as never, 'tasks.edit', scope.projectId)
   if (denied) return c.json(denied, 403)
 
-  const task = await db.query.tasks.findFirst({
-    where: and(eq(tasks.id, c.req.param('id')), eq(tasks.projectId, scope.projectId), isNull(tasks.deletedAt)),
-  })
+  const task = await taskByKey(scope.projectId, c.req.param('id'))
   if (!task) return c.json({ error: 'Task not found' }, 404)
   if (!(await ownsOrManages(scope.projectId, id.userId, [task.createdById, task.assigneeId]))) {
     return c.json({ error: 'Forbidden: you can only edit tasks you created or that are assigned to you' }, 403)
@@ -1964,9 +1975,7 @@ bridgeRoute.delete('/tasks/:id/checklist/:itemId', async (c) => {
   const denied = await require(c as never, 'tasks.edit', scope.projectId)
   if (denied) return c.json(denied, 403)
 
-  const task = await db.query.tasks.findFirst({
-    where: and(eq(tasks.id, c.req.param('id')), eq(tasks.projectId, scope.projectId), isNull(tasks.deletedAt)),
-  })
+  const task = await taskByKey(scope.projectId, c.req.param('id'))
   if (!task) return c.json({ error: 'Task not found' }, 404)
   if (!(await ownsOrManages(scope.projectId, id.userId, [task.createdById, task.assigneeId]))) {
     return c.json({ error: 'Forbidden: you can only edit tasks you created or that are assigned to you' }, 403)
@@ -2045,11 +2054,9 @@ bridgeRoute.post('/tasks/:id/comments', async (c) => {
   if (!text && !attachmentIds.length) return c.json({ error: 'text or attachmentIds is required' }, 400)
   if (text.length > 10_000) return c.json({ error: 'text is too long (max 10000 characters)' }, 400)
 
-  const taskId = c.req.param('id')
-  const task = await db.query.tasks.findFirst({
-    where: and(eq(tasks.id, taskId), eq(tasks.projectId, scope.projectId), isNull(tasks.deletedAt)),
-  })
+  const task = await taskByKey(scope.projectId, c.req.param('id'))
   if (!task) return c.json({ error: 'Not found' }, 404)
+  const taskId = task.id
 
   // Отвечать можно только на реплику из этой же задачи: иначе ветка укажет
   // в чужое обсуждение, и в интерфейсе цитата не найдётся.

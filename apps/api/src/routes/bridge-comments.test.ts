@@ -60,7 +60,9 @@ describe('POST /x/tasks/:id/comments', () => {
   })
 
   it('пишет комментарий только в задачу своего проекта', () => {
-    expect(body).toMatch(/eq\(tasks\.projectId, scope\.projectId\)/)
+    // Область проекта проверяется либо здесь, либо в taskByKey — он ищет
+    // строго внутри scope.projectId. Важна гарантия, а не написание.
+    expect(body).toMatch(/eq\(tasks\.projectId, scope\.projectId\)|taskByKey\(scope\.projectId/)
   })
 
   it('уведомляет упомянутых', () => {

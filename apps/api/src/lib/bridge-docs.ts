@@ -36,6 +36,10 @@ function endpointCatalog(q: string): string {
          cannot start yet — do not propose it as the next thing to do, and do
          not assign someone to it without saying what it is waiting for.
   GET    /x/tasks/<id>${q}
+         <id> is the task NUMBER ("TASK-81") or its id — everywhere a task
+         appears in a path. Use the number: it is what the human says out
+         loud, it survives you losing whatever id map you kept, and it is
+         what the reply shows you.
   POST   /x/tasks${q}              {"title","description?","assignee?","status?","priority?","estimateMinutes?","sprintId?","attachmentIds?","refs?"}
   PATCH  /x/tasks/<id>${q}         any subset of the same fields
   PATCH  /x/tasks/bulk${q}         {"tasks":["TASK-4","TASK-7"], "set":{...}, "refs":{"TASK-4":"19.1"}}

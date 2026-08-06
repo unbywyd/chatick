@@ -42,6 +42,8 @@ describe('восстановление задачи', () => {
   const body = handler('post', '/tasks/:id/restore')
 
   it('только своего проекта', () => {
+    // Здесь проверка остаётся явной: restore ищет ВКЛЮЧАЯ удалённые и общим
+    // taskByKey пользоваться не может — тот отдаёт только живые задачи.
     expect(body).toMatch(/eq\(tasks\.projectId, scope\.projectId\)/)
   })
 
@@ -119,7 +121,9 @@ describe('пункт чек-листа можно убрать', () => {
   const body = handler('delete', '/tasks/:id/checklist/:itemId')
 
   it('только у задачи своего проекта', () => {
-    expect(body).toMatch(/eq\(tasks\.projectId, scope\.projectId\)/)
+    // Область проекта проверяется либо здесь, либо в taskByKey — он ищет
+    // строго внутри scope.projectId. Важна гарантия, а не написание.
+    expect(body).toMatch(/eq\(tasks\.projectId, scope\.projectId\)|taskByKey\(scope\.projectId/)
   })
 
   it('и только у пункта этой задачи', () => {
