@@ -62,8 +62,12 @@ async function render(c: Context) {
   const company = project ? await db.query.companies.findFirst({ where: eq(companies.id, project.companyId) }) : null
 
   const title = project ? project.name : 'Chatick'
+  // Путь БЕЗ префикса монтирования: c.req.path отдаёт «/link/c/…», а человеку
+  // нужен адрес внутри приложения — «/c/…». С префиксом ссылка из превью
+  // никуда не ведёт, и заметить это можно только открыв её.
+  const appPath = c.req.path.replace(/^\/link/, '')
   // Вкладка — сегмент сразу после проекта: /c/<c>/p/<p>/<tab>[/<id>].
-  const tabSeg = c.req.path.split('/')[5] ?? ''
+  const tabSeg = appPath.split('/')[5] ?? ''
   const tab = TABS[tabSeg.split('?')[0]!.toLowerCase()]
   const subtitle = project
     ? [company?.name, tab].filter(Boolean).join(' · ') || 'Project workspace'
@@ -74,7 +78,7 @@ async function render(c: Context) {
 
   // Куда идти человеку: тот самый хэшевый адрес. Мессенджер показывает
   // превью, а по нажатию открывается приложение на нужном месте.
-  const target = `${APP()}/#${c.req.path}`
+  const target = `${APP()}/#${appPath}`
 
   c.header('Content-Type', 'text/html; charset=utf-8')
   // Превью мессенджеры кэшируют надолго; час — компромисс между «имя проекта
