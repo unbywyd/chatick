@@ -62,7 +62,15 @@ function open(dsn: string, kind: DbKind) {
     // что работает: молчаливая полуподдержка хуже отсутствия.
     throw new Error('MySQL support is not implemented yet')
   }
-  // SSL по строке подключения, но с самоподписанным сертификатом мириться
+  // Шифрование ВКЛЮЧЕНО по умолчанию, а не по флагу в строке подключения.
+  //
+  // Сначала было наоборот — SSL только если в строке есть sslmode=require. Это
+  // неверно для самого частого случая: Heroku Postgres и AWS RDS требуют
+  // шифрование ВСЕГДА, а строку подключения они выдают без всякого sslmode.
+  // Итог был «no pg_hba.conf entry ... no encryption» — отказ, по которому
+  // человек начинает искать проблему у себя в правах, хотя виноваты мы.
+  //
+  // С самоподписанным сертификатом мириться
   // приходится: у управляемых баз и у серверов заказчиков он сплошь и рядом,
   // и без этого фича просто не подключится к половине из них. Проверено на
   // живой базе — обычный TLS-клиент падает с DEPTH_ZERO_SELF_SIGNED_CERT.
@@ -71,12 +79,14 @@ function open(dsn: string, kind: DbKind) {
   // сервера мы не проверяем. Строку подключения человек вводит сам и знает,
   // куда подключается, а требовать от заказчика валидный сертификат ради
   // нашей вкладки — нереалистично.
-  const wantsSsl = /[?&]sslmode=(require|verify|prefer)/i.test(dsn)
+  // sslmode=disable — единственный случай, когда шифрование не нужно: так
+  // помечают локальную базу в одной сети с приложением.
+  const noSsl = /[?&]sslmode=disable/i.test(dsn)
   return postgres(dsn, {
     max: 2,
     idle_timeout: 20,
     connect_timeout: 10,
-    ssl: wantsSsl ? { rejectUnauthorized: false } : undefined,
+    ssl: noSsl ? undefined : { rejectUnauthorized: false },
     // Собственный таймаут на запрос — на случай, если чужая БД задумается.
     connection: { statement_timeout: STATEMENT_TIMEOUT_MS },
     onnotice: () => {},

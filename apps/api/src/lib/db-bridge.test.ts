@@ -175,3 +175,16 @@ describe('разбор строки подключения', () => {
     expect(describeDsn('не строка вовсе')).toEqual({ host: '', database: '' })
   })
 })
+
+describe('шифрование канала', () => {
+  it('SSL включён по умолчанию, а не по флагу в строке', () => {
+    // Heroku и AWS RDS требуют шифрование ВСЕГДА, а строку подключения выдают
+    // без всякого sslmode. Обратное условие давало отказ «no pg_hba.conf entry
+    // ... no encryption», по которому человек ищет проблему у себя в правах —
+    // хотя виноваты мы. Проверено на живой базе RDS.
+    expect(lib).toMatch(/sslmode=disable/)
+    expect(lib).toMatch(/ssl: noSsl \? undefined : \{ rejectUnauthorized: false \}/)
+    // Старое условие «включаем только если попросили» вернуться не должно.
+    expect(lib).not.toMatch(/wantsSsl/)
+  })
+})
