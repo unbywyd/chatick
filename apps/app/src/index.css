@@ -261,10 +261,17 @@
     margin-bottom: 0;
   }
   /* Ссылки видно — по ним и правда переходят из описания задачи */
-  :is(.tiptap-readonly, .msg-md, .prose) a {
-    color: var(--brand);
+  /* Ссылки в тексте — цветом текста, не брендом.
+     Ядовито-лаймовый на белом фоне не читается вовсе: строка со ссылкой
+     превращалась в пропуск. Бренд хорош для кнопки, где под ним тёмная
+     заливка, но не для текста на светлом.
+     Подчёркивание тут и есть указание, что это ссылка, — этого достаточно,
+     и работает одинаково в обеих темах. */
+  :is(.tiptap-readonly, .tiptap-editor, .doc-editor, .msg-md, .prose) a {
+    color: inherit;
     text-decoration: underline;
     text-underline-offset: 2px;
+    text-decoration-color: color-mix(in oklab, currentColor 45%, transparent);
   }
   .tiptap-editor pre {
     background: var(--secondary);
@@ -523,10 +530,10 @@
     background: none;
     padding: 0;
   }
-  .msg-md a {
-    color: var(--brand);
-    text-decoration: underline;
-    text-underline-offset: 2px;
+  /* При наведении подчёркивание становится чётким: ссылка «оживает» под
+     курсором, не требуя цвета. */
+  :is(.tiptap-readonly, .tiptap-editor, .doc-editor, .msg-md, .prose) a:hover {
+    text-decoration-color: currentColor;
   }
   /* SheetJS-таблица во вьюере */
   .sheet-view table {

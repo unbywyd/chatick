@@ -115,7 +115,7 @@ export function RichEditor({
         openOnClick: readOnly,
         autolink: true,
         linkOnPaste: true,
-        HTMLAttributes: { class: 'text-brand underline', target: '_blank', rel: 'noopener noreferrer nofollow' },
+        HTMLAttributes: { class: 'underline', target: '_blank', rel: 'noopener noreferrer nofollow' },
       }),
       ...(preset === 'full' ? [TaskList, TaskItem.configure({ nested: true })] : []),
       Mention.configure({ HTMLAttributes: { class: 'mention' }, suggestion: mentionSuggestion(() => mentions) as never }),

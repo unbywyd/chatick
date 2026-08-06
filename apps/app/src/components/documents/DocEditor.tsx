@@ -89,7 +89,7 @@ export function DocEditor({
         // history выключаем: с Collaboration за отмену отвечает Yjs (общая история)
         StarterKit.configure({ horizontalRule: { HTMLAttributes: { class: 'doc-hr' } }, undoRedo: false }),
         Placeholder.configure({ placeholder: placeholder ?? '' }),
-        Link.configure({ openOnClick: false, HTMLAttributes: { class: 'text-brand underline' } }),
+        Link.configure({ openOnClick: false, HTMLAttributes: { class: 'underline' } }),
         Underline,
         Highlight.configure({ multicolor: false }),
         TextAlign.configure({ types: ['heading', 'paragraph'] }),
