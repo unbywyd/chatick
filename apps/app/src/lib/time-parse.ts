@@ -115,9 +115,18 @@ export function withTimeOfDay(date: Date, minutes: number): Date {
 /**
  * Конец раньше начала — значит работа перешла через полночь: конец на
  * следующий день. Без этого ночная смена превращалась бы в отрицательное время.
+ *
+ * keepDay — уже известный сдвиг в днях у правящейся записи. Он важен: без него
+ * день конца каждый раз вычислялся заново от начала, и у ночной смены нельзя
+ * было получить конец в ТОТ ЖЕ день — правка времени всегда возвращала «+1».
+ * Сочетание оказывалось недостижимым, хотя ошибиться при вводе легко.
  */
-export function resolveEnd(start: Date, endMinutes: number): Date {
+export function resolveEnd(start: Date, endMinutes: number, keepDay?: number): Date {
   const end = withTimeOfDay(start, endMinutes)
+  if (keepDay !== undefined) {
+    end.setDate(end.getDate() + keepDay)
+    return end
+  }
   if (end.getTime() <= start.getTime()) end.setDate(end.getDate() + 1)
   return end
 }

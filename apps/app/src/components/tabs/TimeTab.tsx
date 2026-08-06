@@ -2,7 +2,7 @@ import { useMemo, useState } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { useTranslation } from 'react-i18next'
 import { toast } from 'sonner'
-import { BarChart3, CalendarRange, Clock, Download, Plus, Search, Trash2, User, X } from 'lucide-react'
+import { BarChart3, CalendarDays, CalendarRange, Clock, Download, Plus, Search, Trash2, User, X } from 'lucide-react'
 import { api } from '@/lib/api'
 import { cn } from '@/lib/utils'
 import { Avatar } from '@/components/ui/avatar'
@@ -16,10 +16,12 @@ import { Bar, BarChart, CartesianGrid, Tooltip, XAxis, YAxis } from 'recharts'
 import { ChartBox } from '@/components/ui/chart-box'
 import { useProjectSocket } from '@/hooks/useProjectSocket'
 import { Popover, PopoverTrigger, PopoverContent } from '@/components/ui/popover'
+import { Calendar } from '@/components/ui/calendar'
 import {
   dayOffset,
   formatDuration,
   formatTimeOfDay,
+  parseDuration,
   parseTimeOfDay,
   resolveEnd,
   withTimeOfDay,
@@ -491,7 +493,14 @@ function EntryRow({ projectId, entry }: { projectId: string; entry: Entry }) {
       <span className="text-xs text-muted-foreground">–</span>
       {end ? (
         <span className="relative">
-          <TimeCell value={end} saved={saved} onCommit={(minutes) => patch.mutate({ endedAt: resolveEnd(start, minutes).toISOString() })} />
+          {/* Сдвиг дня сохраняем, а не пересчитываем: иначе у ночной смены
+              конец нельзя вернуть в тот же день — правка времени всегда
+              возвращала бы «+1». */}
+          <TimeCell
+            value={end}
+            saved={saved}
+            onCommit={(minutes) => patch.mutate({ endedAt: resolveEnd(start, minutes, offset).toISOString() })}
+          />
           {offset > 0 && (
             <span className="absolute -end-3 -top-1 text-[9px] text-brand" title={t('time.nextDay')}>
               +{offset}
@@ -502,8 +511,36 @@ function EntryRow({ projectId, entry }: { projectId: string; entry: Entry }) {
         <span className="w-12 text-center text-xs text-brand">{t('time.running')}</span>
       )}
 
-      <span className="relative w-16 shrink-0 text-end font-mono text-base tabular-nums">
-        {entry.minutes != null ? formatDuration(entry.minutes) : '—'}
+      {/* Дата — отдельной кнопкой: время набирают часто, дату меняют редко,
+          и вешать календарь на клик по времени значит мешать частому ради
+          редкого. */}
+      {end && (
+        <DateCell
+          start={start}
+          end={end}
+          offset={offset}
+          onStart={(d) => patch.mutate({ startedAt: d.toISOString() })}
+          onEnd={(d) => patch.mutate({ endedAt: d.toISOString() })}
+        />
+      )}
+
+      {/* Длительность тоже правится: набрал 10:00 — конец подвинулся сам, а
+          дата подставилась какая нужна, хоть на следующие сутки. Обычно
+          человек знает именно «сколько отработал», а не «во сколько закончил»,
+          и раньше это приходилось считать в уме и вводить временем конца. */}
+      <span className="relative w-16 shrink-0 text-end">
+        {end ? (
+          <DurationCell
+            minutes={entry.minutes ?? 0}
+            saved={saved}
+            onCommit={(mins) => {
+              const next = new Date(start.getTime() + mins * 60_000)
+              patch.mutate({ endedAt: next.toISOString() })
+            }}
+          />
+        ) : (
+          <span className="block font-mono text-base tabular-nums">—</span>
+        )}
         {saved && (
           <span className="absolute -bottom-3 end-0 text-[9px] font-sans text-brand">{t('time.saved')}</span>
         )}
@@ -562,6 +599,149 @@ function TimeCell({ value, onCommit, saved }: { value: Date; onCommit: (minutes:
         saved && 'bg-brand/15 ring-1 ring-brand/40',
       )}
     />
+  )
+}
+
+/**
+ * Длительность записи: показывает «10:00», принимает «1000», «10:00», «1h30».
+ *
+ * Правится тем же способом, что и время: набрал сколько отработал — конец
+ * подвинулся сам, дата подставилась какая нужна, хоть на следующие сутки.
+ * Человек обычно помнит именно «отработал два с половиной часа», а не «закончил
+ * в 20:03», и раньше это приходилось пересчитывать в уме.
+ *
+ * Разбор — parseDuration, а не parseTimeOfDay: здесь «10:00» это десять часов,
+ * а не десять утра, и «1000» должно дать то же самое.
+ */
+function DurationCell({
+  minutes,
+  onCommit,
+  saved,
+}: {
+  minutes: number
+  onCommit: (minutes: number) => void
+  saved?: boolean
+}) {
+  const shown = formatDuration(minutes)
+  const [draft, setDraft] = useState<string | null>(null)
+
+  return (
+    <input
+      value={draft ?? shown}
+      onChange={(e) => setDraft(e.target.value)}
+      onFocus={(e) => e.target.select()}
+      onBlur={() => {
+        if (draft === null) return
+        const mins = parseDuration(draft)
+        setDraft(null)
+        // Нулевая длительность — не запись, а ошибка ввода: конец должен быть
+        // позже начала, и сервер такое всё равно отвергнет.
+        if (mins !== null && mins > 0 && formatDuration(mins) !== shown) onCommit(mins)
+      }}
+      onKeyDown={(e) => {
+        if (e.key === 'Enter') e.currentTarget.blur()
+        if (e.key === 'Escape') {
+          setDraft(null)
+          e.currentTarget.blur()
+        }
+      }}
+      className={cn(
+        'w-full rounded-md bg-transparent py-1 text-end font-mono text-base tabular-nums outline-none transition-colors',
+        'hover:bg-accent focus:bg-accent focus:text-start focus:ring-1 focus:ring-ring',
+        saved && 'bg-brand/15 ring-1 ring-brand/40',
+      )}
+    />
+  )
+}
+
+/**
+ * Даты записи — кнопкой рядом со временем.
+ *
+ * Время правится набором на месте, и это правильный быстрый путь: набрал 930 и
+ * пошёл дальше. Вешать календарь на тот же клик значит показывать панель при
+ * каждой правке времени — то есть в частом случае ради редкого. Поэтому дата
+ * получила свой значок.
+ *
+ * Показываем обе даты, а не одну: у смены через полночь начало и конец в разных
+ * днях, и «сменить дату» без уточнения какую — вопрос без ответа.
+ *
+ * Календарь двигает день, СОХРАНЯЯ время суток. Сдвиг именно дня — то, зачем
+ * сюда приходят: время уже набрано в соседнем поле.
+ */
+function DateCell({
+  start,
+  end,
+  offset,
+  onStart,
+  onEnd,
+}: {
+  start: Date
+  end: Date | null
+  /** на сколько дней конец позже начала: 0 — тот же день */
+  offset: number
+  onStart: (d: Date) => void
+  onEnd: (d: Date) => void
+}) {
+  const { t, i18n } = useTranslation()
+  const [open, setOpen] = useState(false)
+  const locale = i18n.resolvedLanguage ?? 'en'
+  const short = (d: Date) => d.toLocaleDateString(locale, { day: '2-digit', month: '2-digit' })
+
+  /** Тот же час и минута, но другой день. */
+  const moveDay = (from: Date, to: Date) => {
+    const next = new Date(to)
+    next.setHours(from.getHours(), from.getMinutes(), 0, 0)
+    return next
+  }
+
+  return (
+    <Popover open={open} onOpenChange={setOpen}>
+      <PopoverTrigger asChild>
+        <button
+          type="button"
+          title={t('time.changeDate')}
+          className={cn(
+            'flex shrink-0 items-center gap-1 rounded-md px-1.5 py-1 text-[11px] tabular-nums transition-colors',
+            'text-muted-foreground hover:bg-accent hover:text-foreground',
+            // Переход через полночь — не мелочь: пометку видно и без наведения.
+            offset > 0 && 'text-brand',
+          )}
+        >
+          <CalendarDays className="size-3.5" />
+          {short(start)}
+          {offset > 0 && end && <>→{short(end)}</>}
+        </button>
+      </PopoverTrigger>
+      {/* dir у PopoverContent уже свой — портал уносит содержимое мимо вёрстки. */}
+      <PopoverContent className="w-auto p-2" align="end">
+        <div className="space-y-2">
+          <p className="px-1 text-xs font-medium">{t('time.startDate')}</p>
+          <Calendar
+            selected={start}
+            onSelect={(d) => {
+              if (d) onStart(moveDay(start, d))
+              setOpen(false)
+            }}
+          />
+          {/* Конец отдельным календарём только когда он в другом дне: обычной
+              записи внутри одних суток второй календарь ни к чему, а вот у
+              ночной смены конец иначе не сдвинуть — он пересчитывается от
+              начала, и «тот же день» оказывался недостижим. */}
+          {end && offset > 0 && (
+            <>
+              <p className="border-t px-1 pt-2 text-xs font-medium">{t('time.endDate')}</p>
+              <Calendar
+                selected={end}
+                onSelect={(d) => {
+                  if (d) onEnd(moveDay(end, d))
+                  setOpen(false)
+                }}
+              />
+            </>
+          )}
+        </div>
+      </PopoverContent>
+    </Popover>
   )
 }
 
