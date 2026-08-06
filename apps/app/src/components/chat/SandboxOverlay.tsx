@@ -6,7 +6,7 @@ import ReactMarkdown from 'react-markdown'
 import remarkGfm from 'remark-gfm'
 import { toast } from 'sonner'
 import { Bot, Check, Eye, EyeOff, FileText, Image as ImageIcon, Loader2, SendHorizontal, X } from 'lucide-react'
-import { api } from '@/lib/api'
+import { api, ApiError } from '@/lib/api'
 import { cn } from '@/lib/utils'
 import { Button } from '@/components/ui/button'
 import { useConfirm } from '@/components/ui/confirm'
@@ -52,7 +52,23 @@ export function SandboxOverlay({
   const sandbox = useQuery({
     queryKey: ['sandbox', messageId],
     queryFn: () => api<SandboxData>(`/api/v1/messages/${messageId}/sandbox`, {}, 'project'),
+    // Сообщения нет — повторять бессмысленно: оно не появится. Без этого опрос
+    // бился в 404 бесконечно, а оверлей висел на весь экран и не давал
+    // работать.
+    retry: false,
   })
+
+  /**
+   * Сообщение исчезло — закрываем оверлей сами.
+   *
+   * Он занимает весь экран, и единственный выход из него — крестик, который
+   * удаляет сообщение. Если сообщения уже нет (удалили в другой вкладке,
+   * потеряли при сбое), крестик получает 404, обработчик успеха не
+   * срабатывает, и человек заперт в окне, из которого нет выхода.
+   */
+  useEffect(() => {
+    if (sandbox.isError) onDiscard()
+  }, [sandbox.isError, onDiscard])
 
   useEffect(() => {
     bottomRef.current?.scrollIntoView({ behavior: 'smooth' })
@@ -80,7 +96,14 @@ export function SandboxOverlay({
   const discard = useMutation({
     mutationFn: () => api(`/api/v1/messages/${messageId}`, { method: 'DELETE' }, 'project'),
     onSuccess: onDiscard,
-    onError: (e) => toast.error(e instanceof Error ? e.message : String(e)),
+    onError: (e) => {
+      // Закрываем в любом случае. Удалять уже нечего, а держать человека в
+      // окне из-за неудачного запроса — худшее, что можно сделать: выйти
+      // отсюда больше нечем.
+      const notFound = e instanceof ApiError && e.status === 404
+      if (!notFound) toast.error(e instanceof Error ? e.message : String(e))
+      onDiscard()
+    },
   })
 
   const original = sandbox.data?.original

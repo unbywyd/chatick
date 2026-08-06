@@ -207,6 +207,21 @@ export function Composer({
     editor?.setEditable(!disabled)
   }, [editor, disabled])
 
+  /**
+   * Плейсхолдер задаётся при СОЗДАНИИ редактора и сам не меняется.
+   *
+   * Человек переключает язык интерфейса — всё переводится, а подсказка в поле
+   * ввода остаётся на прежнем. Правим настройку расширения на месте и просим
+   * перерисовку: пересоздавать редактор нельзя, в нём набранный текст.
+   */
+  useEffect(() => {
+    if (!editor) return
+    const ext = editor.extensionManager.extensions.find((e) => e.name === 'placeholder')
+    if (!ext || ext.options.placeholder === placeholder) return
+    ext.options.placeholder = placeholder
+    editor.view.dispatch(editor.state.tr)
+  }, [editor, placeholder])
+
   // Внешний запрос фокуса: «Ответить» на сообщении ставит курсор сюда, чтобы
   // не приходилось отдельно кликать в поле.
   //

@@ -190,6 +190,18 @@ export function RichEditor({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [editor])
 
+  // Плейсхолдер тоже задаётся при создании: смена языка интерфейса его не
+  // трогала, и подсказка оставалась на прежнем языке. Правим на месте —
+  // пересоздавать редактор нельзя, в нём набранный текст.
+  useEffect(() => {
+    if (!editor) return
+    const ext = editor.extensionManager.extensions.find((e) => e.name === 'placeholder')
+    const next = placeholder ?? ''
+    if (!ext || ext.options.placeholder === next) return
+    ext.options.placeholder = next
+    editor.view.dispatch(editor.state.tr)
+  }, [editor, placeholder])
+
   // Режим правки задаётся при создании редактора и сам по себе не меняется.
   // Если один и тот же экземпляр показывали то на чтение, то на правку —
   // React переиспользует его, а contenteditable остаётся false: поле выглядит
