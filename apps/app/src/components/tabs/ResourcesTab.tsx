@@ -25,6 +25,7 @@ import { Input } from '@/components/ui/input'
 import { Button } from '@/components/ui/button'
 import { DragHandle } from '@/components/ui/drag-handle'
 import { useConfirm } from '@/components/ui/confirm'
+import { DbConnections } from './DbConnections'
 
 type ResourceRow = {
   id: string
@@ -194,6 +195,10 @@ export function ResourcesTab({ projectId, isAdmin }: { projectId: string; isAdmi
           <p className="rounded-lg border border-dashed p-6 text-center text-sm text-muted-foreground">{q ? t('start.nothingFound') : t('resources.empty')}</p>
         )}
       </ul>
+
+      {/* Базы данных проекта — такой же ресурс, как доступ к серверу.
+          Секция сама себя прячет, если фича выключена на сервере. */}
+      <DbConnections projectId={projectId} />
     </div>
       {sharing && (
         <ShareDialog

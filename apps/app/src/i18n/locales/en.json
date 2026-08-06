@@ -1510,5 +1510,23 @@
     "cycleHint": "Tasks that depend on this one are not shown: linking them would close a loop, and neither task could ever be finished.",
     "stripHolding_one": "holding back {{count}} task",
     "stripHolding_other": "holding back {{count}} tasks"
+  },
+  "db": {
+    "title": "Databases",
+    "add": "Connect a database",
+    "empty": "No databases connected.",
+    "namePlaceholder": "Name, e.g. «Shop production»",
+    "connect": "Connect",
+    "added": "Database connected",
+    "ipHint": "Allow this address in your database firewall:",
+    "readOnlyNote": "Read-only. Writing is not possible: queries run in a read-only transaction, and the database itself rejects any change.",
+    "scan": "Scan schema",
+    "scanHint": "Tables arrive switched off — tick what may be read.",
+    "columns": "columns",
+    "run": "Run",
+    "rowsInfo": "{{count}} rows · {{ms}} ms",
+    "truncated": "truncated",
+    "readableHint": "Tables open for reading, out of total",
+    "deleteConfirm": "Disconnect «{{name}}»?"
   }
 }
