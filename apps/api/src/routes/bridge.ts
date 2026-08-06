@@ -39,7 +39,7 @@ import {
   PROJECT_COLORS,
   type ProjectPermission, ownsOrManages } from './projects.js'
 import { nanoid } from 'nanoid'
-import { authenticateBridge, closeSession, startDeviceAuth, pollDeviceAuth, type BridgeIdentity } from '../lib/bridge-auth.js'
+import { authenticateBridge, closeSession, startDeviceAuth, pollDeviceAuth, IDLE_TTL_MS, type BridgeIdentity } from '../lib/bridge-auth.js'
 import { connectDoc, guideDoc } from '../lib/bridge-docs.js'
 import { logActivity } from '../lib/audit.js'
 import { sendAddedToProjectMail } from '../lib/mails.js'
@@ -104,6 +104,10 @@ bridgeRoute.post('/device/poll', async (c) => {
     token: r.token,
     user: r.identity.user,
     project: r.identity.project,
+    // Срок сразу при выдаче: не «когда-нибудь протухнет», а конкретный момент,
+    // на который клиент может смотреть до начала долгой работы.
+    expiresAt: r.identity.expiresAt?.toISOString(),
+    idleTimeoutSec: Math.floor(IDLE_TTL_MS / 1000),
     guideUrl: `${(process.env.API_PUBLIC_URL || 'https://api.chatick.com').replace(/\/$/, '')}/x/guide`,
     next: 'Read the guide with: curl -s <guideUrl> -H "authorization: Bearer <token>"',
   })
@@ -128,7 +132,18 @@ bridgeRoute.use('/*', async (c, next) => {
     )
   }
   ;(c as unknown as { set: (k: 'bridge', v: BridgeIdentity) => void }).set('bridge', identity)
-  return next()
+  await next()
+  // Сколько туннелю осталось — на КАЖДОМ ответе.
+  //
+  // Иначе о протухании узнают единственным способом: поймав 401 посреди
+  // многошаговой работы. Так уже получалась задача-полуфабрикат — сама задача
+  // создалась, а чеклист к ней упал с 401. Зная остаток, клиент переподключится
+  // до начала длинной операции, а не после половины.
+  if (identity.expiresAt) {
+    const left = Math.max(0, Math.floor((identity.expiresAt.getTime() - Date.now()) / 1000))
+    c.res.headers.set('x-tunnel-expires-at', identity.expiresAt.toISOString())
+    c.res.headers.set('x-tunnel-expires-in', String(left))
+  }
 })
 
 const auth = (c: { get: (k: 'bridge') => BridgeIdentity }) => c.get('bridge')

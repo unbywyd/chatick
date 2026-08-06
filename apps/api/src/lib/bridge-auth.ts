@@ -10,9 +10,42 @@ import { memberDomains, type DomainPermissions } from '../routes/projects.js'
 // закрыл — токен мёртв». Плюс device flow: токен не проходит через историю
 // команд, человек подтверждает доступ в браузере (как gh/heroku/vercel).
 
-export const CODE_TTL_MS = 10 * 60_000 // на подтверждение в браузере
-export const SESSION_TTL_MS = 12 * 3600_000 // потолок жизни туннеля
-export const IDLE_TTL_MS = 2 * 3600_000 // простой: забытый туннель закрывается сам
+/**
+ * Сколько живёт код подтверждения.
+ *
+ * Десяти минут (как у gh/heroku) на практике не хватало: ассистент выдаёт код,
+ * человека отвлекают, он возвращается — код мёртв, и всё сначала. Промах здесь
+ * стоит целого круга device flow, а он не мгновенный.
+ *
+ * Восемь часов — рабочий день: код, взятый утром, доживает до вечера.
+ *
+ * Дальше не растягиваем. Страницу подтверждения закрывает requireSession, то
+ * есть подбирать код может только уже вошедший человек, а одобрит он его в
+ * СВОЮ область — чужих проектов так не получить. Но код одноразовый и ждёт
+ * первого, кто его подтвердит: чем дольше он висит, тем выше шанс, что туннель
+ * уедет не тому коллеге, который его просил. Сутками это окно держать незачем —
+ * незакрытый код к утру всё равно уже никому не нужен.
+ */
+export const CODE_TTL_MS = 8 * 3600_000
+/** Потолок жизни туннеля: сутки работы, а не полсмены. */
+export const SESSION_TTL_MS = 24 * 3600_000
+
+/**
+ * Простой, после которого забытый туннель закрывается сам.
+ *
+ * Было два часа — и это оказалось главной причиной постоянных переподключений.
+ * Ассистент работает рывками: полчаса правок, потом человек ушёл на совещание,
+ * вернулся — туннель мёртв. По журналу сессии жили 27, 32 и 184 минуты и
+ * умирали именно от простоя, ни одна не дошла до потолка.
+ *
+ * Хуже всего, что смерть настигала посреди многошаговой операции: задача
+ * создалась, а чеклист к ней упал с 401 — получался полуфабрикат, и откатывать
+ * его приходилось руками.
+ *
+ * Двенадцать часов — рабочий день с перерывами. Туннель по-прежнему смертен и
+ * закрывается сам, но не посреди работы.
+ */
+export const IDLE_TTL_MS = 12 * 3600_000
 
 // В БД лежит только хэш — дамп базы не даёт доступа.
 const hash = (token: string) => createHash('sha256').update(token).digest('hex')
@@ -40,6 +73,14 @@ export type BridgeIdentity = {
   company: { id: string; name: string } | null
   /** Права в текущем проекте; для company-туннеля вычисляются при выборе проекта. */
   permissions: DomainPermissions | null
+  /**
+   * Когда туннель закроется, если ничего не делать.
+   *
+   * Нужен клиенту, чтобы переподключиться ЗАРАНЕЕ, а не поймать 401 посреди
+   * многошаговой работы: создать задачу и не суметь залить к ней чеклист хуже,
+   * чем не начинать вовсе.
+   */
+  expiresAt?: Date
 }
 
 /** Роль пользователя в компании (для company-туннеля). */
@@ -142,7 +183,10 @@ export async function pollDeviceAuth(
 
   const identity = await identityOf(session!.id, row.userId, row.projectId, row.companyId, row.scopeAll)
   if (!identity) return { status: 'expired' }
-  return { status: 'approved', token, identity }
+  // Срок отдаём сразу с токеном: свежий туннель упрётся в простой раньше, чем
+  // в потолок, поэтому берём ближайшее из двух — как и на обычных запросах.
+  const expiresAt = new Date(Math.min(session!.expiresAt.getTime(), now + IDLE_TTL_MS))
+  return { status: 'approved', token, identity: { ...identity, expiresAt } }
 }
 
 async function identityOf(
@@ -232,7 +276,11 @@ export async function authenticateBridge(token: string | undefined | null): Prom
   }
 
   await db.update(bridgeSessions).set({ lastUsedAt: new Date() }).where(eq(bridgeSessions.id, row.id))
-  return identityOf(row.id, row.userId, row.projectId, row.companyId, row.scopeAll)
+  const identity = await identityOf(row.id, row.userId, row.projectId, row.companyId, row.scopeAll)
+  if (!identity) return null
+  // Когда туннель закроется, считая от ЭТОГО запроса. Простой отсчитывается
+  // заново на каждом обращении, поэтому берём то, что наступит раньше.
+  return { ...identity, expiresAt: new Date(Math.min(row.expiresAt.getTime(), now + IDLE_TTL_MS)) }
 }
 
 /** Закрыть туннель (человеком со страницы подключения или самим ИИ). */

@@ -239,8 +239,15 @@ You are NOT connected yet. Connect first, then re-read the authenticated guide.
 
 ## Notes
 
-- The token dies when the tunnel is closed, after 12h, or after 2h idle.
+- The token dies when the tunnel is closed, after 24h, or after 12h idle.
   If a call returns 401, the tunnel is closed: start over from step 1.
+- Every response carries "x-tunnel-expires-in" (seconds left) and
+  "x-tunnel-expires-at". CHECK IT BEFORE STARTING ANYTHING MULTI-STEP. Dying
+  halfway leaves the work half-done — a task created and its checklist
+  rejected with 401 is worse than not starting: the human is left with a
+  stub they did not ask for and have to clean up. If the remaining time
+  looks short for what you are about to do, re-run the device flow first, or
+  do the part that matters and tell the human what is left.
 - Everything you do happens AS THE HUMAN who approved the code, limited to
   their permissions, and is recorded in the project history under their name.
 `
@@ -327,7 +334,9 @@ ${denied.length ? `\n  NOT ALLOWED: ${denied.join(', ')}\n  Do not attempt these
   Applies to every endpoint with a body: messages, tasks, documents, comments.
   Corrupted text CANNOT be fixed through this bridge — there is no edit/delete for
   chat messages — so verify before sending, not after.
-- On 401 the tunnel is closed — re-run the device flow (GET ${b}/x).
+- On 401 the tunnel is closed — re-run the device flow (GET ${b}/x). Watch
+  "x-tunnel-expires-in" on every response and reconnect BEFORE a long
+  multi-step job rather than after it fails halfway.
 
 ## What concerns me — start here
 
@@ -764,7 +773,9 @@ Without ?project= a call returns 400 telling you the same thing.
 
   This applies to EVERY write. Projects here are rarely in English, so treat
   stdin as the default way to send a body, not the exception.
-- On 401 the tunnel is closed — re-run the device flow (GET ${b}/x).
+- On 401 the tunnel is closed — re-run the device flow (GET ${b}/x). Watch
+  "x-tunnel-expires-in" on every response and reconnect BEFORE a long
+  multi-step job rather than after it fails halfway.
 
 ## Endpoints
 
