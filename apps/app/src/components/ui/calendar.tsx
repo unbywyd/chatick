@@ -38,13 +38,19 @@ export function Calendar({
         weekday: 'w-9 text-center text-xs font-normal text-muted-foreground',
         week: 'flex mt-1',
         day: 'p-0',
-        day_button: cn(
-          'grid size-9 place-items-center rounded-md text-sm transition-colors hover:bg-accent',
-          'aria-selected:bg-brand aria-selected:font-semibold aria-selected:text-brand-foreground',
-        ),
-        today: 'font-bold text-brand',
+        day_button: 'grid size-9 place-items-center rounded-md text-sm transition-colors hover:bg-accent',
+        // Выделение вешаем на ЯЧЕЙКУ дня, а не на кнопку внутри.
+        //
+        // aria-selected в react-day-picker v10 стоит на ячейке, поэтому
+        // «aria-selected:…» на day_button не срабатывало никогда: выбранный
+        // день ничем не отличался от остальных. Заметно это стало на записи от
+        // 5 августа — подсвеченным выглядел 6-е, то есть просто «сегодня».
+        selected: '[&>button]:bg-brand [&>button]:font-semibold [&>button]:text-brand-foreground',
+        // Сегодня — жирным и цветом. Цвет задаём кнопке, чтобы выделение выше
+        // его перебивало: у выбранного сегодняшнего дня иначе остаётся
+        // брендовый текст на брендовом фоне, то есть нечитаемый.
+        today: 'font-bold [&>button]:text-brand',
         outside: 'text-muted-foreground/40',
-        selected: '',
       }}
       components={{
         Chevron: ({ orientation }) =>

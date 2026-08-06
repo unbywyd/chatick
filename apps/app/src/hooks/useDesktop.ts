@@ -443,6 +443,17 @@ export function useDesktopSync() {
       const link = typeof payload === 'string' ? payload : payload?.link
       const notificationId = typeof payload === 'string' ? null : payload?.notificationId
       if (!link) return
+      // Старый трей слал «/p/<id>/…» без компании — такой адрес не совпадает
+      // ни с одним маршрутом, и вместо проекта открывался чёрный экран.
+      // Обновится трей не у всех и не сразу, поэтому чиним и здесь: компанию
+      // берём из того же списка проектов, что показывает панель.
+      const legacy = link.match(/^\/p\/([^/]+)(\/.*)?$/)
+      if (legacy) {
+        const pid = legacy[1]!
+        const cid = liveRef.current.projects?.find((p) => p.id === pid)?.companyId
+        navigate(cid ? `/c/${cid}/p/${pid}${legacy[2] ?? '/chat'}` : '/start')
+        return
+      }
       navigate(link)
 
       // Клик из панели — это прочтение: уведомление привело человека на место,
