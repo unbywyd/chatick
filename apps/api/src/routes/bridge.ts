@@ -4034,6 +4034,42 @@ bridgeRoute.post('/messages', async (c) => {
   return c.json({ id: row!.id, attachments }, 201)
 })
 
+/**
+ * Удалить сообщение из общего чата: своё — автор, любое — админ.
+ *
+ * Правило и последствия те же, что в интерфейсе: сообщение исчезает у всех
+ * насовсем, корзины для него нет. Файлы при этом остаются в проекте —
+ * отвязываем их от сообщения, а не стираем: вложение часто нужнее реплики,
+ * с которой его прислали.
+ *
+ * Правки сообщений нет и здесь — её нет нигде: ни в интерфейсе, ни в REST,
+ * ни в схеме (отметки «изменено» у сообщения не существует). Мост не может
+ * дать то, чего в продукте нет; молча переписать чужую реплику задним числом
+ * он тем более не должен.
+ */
+bridgeRoute.delete('/messages/:id', async (c) => {
+  const id = auth(c as never)
+  const scope = await resolveProject(c as never)
+  if ('error' in scope) return c.json({ error: scope.error }, scope.status)
+
+  const messageId = c.req.param('id')
+  const msg = await db.query.messages.findFirst({
+    // Только общий чат: личный диалог с ассистентом чистится своей ручкой, а
+    // чужую переписку мост не трогает вовсе.
+    where: and(eq(messages.id, messageId), eq(messages.projectId, scope.projectId), eq(messages.mode, 'group')),
+  })
+  if (!msg) return c.json({ error: 'Not found' }, 404)
+
+  if (!(await ownerOrAdmin(scope.projectId, id.userId, msg.authorId))) {
+    return c.json({ error: 'Forbidden: you can delete only your own messages unless you are an admin' }, 403)
+  }
+
+  await db.update(files).set({ messageId: null }).where(eq(files.messageId, msg.id))
+  await db.delete(messages).where(eq(messages.id, msg.id))
+  broadcast(scope.projectId, 'message_deleted', { messageId })
+  return c.json({ ok: true })
+})
+
 // --- Ресурсы (только метаданные: значения секретов через мост не отдаём) -----
 
 bridgeRoute.get('/resources', async (c) => {

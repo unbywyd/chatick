@@ -710,7 +710,18 @@ carry the answer.
   with 400 rather than trimmed — a truncated message that returns 201 would
   read as delivered in full.
 
-  Editing and deleting messages is not available through the bridge.
+  DELETE /x/messages/<id>
+
+  Deleting follows the usual rule: the author removes their own, an admin
+  removes any. You act as the person whose token this is. A message from the
+  assistant itself has no author, so only an admin can remove it.
+
+  This is permanent and it disappears for everyone — chat has no trash, unlike
+  tasks. Attached files stay in the project; they are only detached from the
+  message. Say what you removed rather than doing it quietly.
+
+  Editing a message is not possible for anyone — there is no edit in the app
+  either, and no "edited" marker exists. Post a correction instead.
 
 ## Resources
 
@@ -882,10 +893,14 @@ ${endpointCatalog('?project=<id>')}
   POST   /x/documents/<id>/append?project=<id>
   GET / POST  /x/messages?project=<id>   POST takes {"text","replyToId?","attachmentIds?"}
   GET    /x/messages/<messageId>/context?project=<id>   conversation around a message
+  DELETE /x/messages/<id>?project=<id>   author removes their own, admin any
          Messages carry "replyTo" — pass it back as "replyToId" to answer one.
          Mention with @[Their Name](<userId>); max 20000 characters, refused
          rather than trimmed. You see only what the human sees: drafts still
          under the dispatcher's question are not in the feed.
+         Deleting is permanent and visible to everyone — chat has no trash.
+         A message from the assistant has no author: only an admin removes it.
+         Editing a message is not possible for anyone; post a correction.
 
   GET / POST  /x/time/start | /x/time/stop | /x/time/resume | /x/time...?project=<id>
   PATCH  /x/time/<entryId>?project=<id>  {"description?","task?","startedAt?","endedAt?","project?"}

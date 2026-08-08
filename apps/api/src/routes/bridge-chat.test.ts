@@ -103,9 +103,40 @@ describe('поиск по чату', () => {
   })
 })
 
+describe('DELETE /x/messages/:id', () => {
+  const body = handler('delete', '/messages/:id')
+
+  it('своё удаляет автор, любое — админ', () => {
+    expect(body).toMatch(/ownerOrAdmin\(scope\.projectId, id\.userId, msg\.authorId\)/)
+    expect(body).toMatch(/403/)
+  })
+
+  it('не выходит за пределы проекта туннеля', () => {
+    expect(body).toMatch(/eq\(messages\.projectId, scope\.projectId\)/)
+  })
+
+  it('трогает только общий чат', () => {
+    // Личный диалог человека с ассистентом — не то, что мост вправе чистить
+    // по чужой просьбе.
+    expect(body).toMatch(/eq\(messages\.mode, 'group'\)/)
+  })
+
+  it('файлы остаются в проекте, а не удаляются вместе с репликой', () => {
+    expect(body).toMatch(/set\(\{ messageId: null \}\)/)
+  })
+
+  it('чат узнаёт об удалении сразу', () => {
+    // Без этого сообщение висит у всех открытых вкладок до перезагрузки.
+    expect(body).toMatch(/broadcast\(scope\.projectId, 'message_deleted'/)
+  })
+})
+
 describe('чего мосту не дают', () => {
-  it('нет удаления и правки сообщений', () => {
-    expect(src).not.toMatch(/bridgeRoute\.(delete|patch)\('\/messages/)
+  it('нет правки сообщений — её нет нигде в продукте', () => {
+    // Не ограничение моста, а отсутствие возможности: у сообщения нет ни
+    // правки в интерфейсе, ни отметки «изменено» в схеме. Появится в
+    // продукте — этот тест и надо будет пересмотреть, осознанно.
+    expect(src).not.toMatch(/bridgeRoute\.patch\('\/messages/)
   })
 })
 
@@ -125,5 +156,34 @@ describe('гайд для ассистента', () => {
 
   it('описывает поиск по слову без дат', () => {
     expect(docs).toMatch(/pass q on its own/)
+  })
+
+  it('описывает удаление и правило', () => {
+    expect(docs).toMatch(/DELETE \/x\/messages\/<id>/)
+    expect(docs).toMatch(/the author removes their own, an admin\s+removes any/)
+  })
+
+  it('оба гайда знают про удаление — и проектный, и компанейский', () => {
+    // Ровно та ошибка, о которой предупреждает шапка bridge-docs: гайдов два,
+    // и фича, описанная в одном, для половины подключений молча не
+    // существует. Так уже было с чек-листом.
+    const docCount = (docs.match(/DELETE \/x\/messages/g) ?? []).length
+    expect(docCount, 'удаление сообщений описано только в одном из двух гайдов').toBeGreaterThanOrEqual(2)
+    // И оба предупреждают о необратимости, а не только один.
+    expect((docs.match(/permanent|no trash/gi) ?? []).length).toBeGreaterThanOrEqual(2)
+  })
+
+  it('предупреждает, что удаление необратимо и видно всем', () => {
+    expect(docs).toMatch(/This is permanent and it disappears for everyone/)
+  })
+
+  it('говорит, что своё сообщение ассистента снимает только админ', () => {
+    // У реплики ИИ автора нет, и без этой оговорки ассистент будет считать
+    // её «своей» и не поймёт отказа.
+    expect(docs).toMatch(/assistant itself has no author/)
+  })
+
+  it('говорит, что правки нет ни у кого — чтобы не искал ручку', () => {
+    expect(docs).toMatch(/Editing a message is not possible for anyone/)
   })
 })
