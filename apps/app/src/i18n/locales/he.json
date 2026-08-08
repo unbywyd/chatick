@@ -1175,7 +1175,8 @@
     "empty": "אין עדיין פרויקטים",
     "weekOf": "שבוע מ-{{date}}",
     "overdueShort": "באיחור: {{count}}",
-    "reportFor": "דוח שעות: {{name}}"
+    "reportFor": "דוח שעות: {{name}}",
+    "totalHoursHint": "סך כל הזמן שנרשם בפרויקט, מאז ומתמיד"
   },
   "desktop": {
     "start": "הפעלת טיימר",

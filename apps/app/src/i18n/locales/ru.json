@@ -1180,7 +1180,8 @@
     "empty": "Проектов пока нет",
     "weekOf": "Неделя с {{date}}",
     "overdueShort": "просрочено: {{count}}",
-    "reportFor": "Отчёт по часам: {{name}}"
+    "reportFor": "Отчёт по часам: {{name}}",
+    "totalHoursHint": "Всё время, затраченное на проект"
   },
   "desktop": {
     "start": "Запустить таймер",

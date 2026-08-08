@@ -150,7 +150,15 @@ companiesRoute.get('/:companyId/overview', async (c) => {
   const q = c.req.query()
   const now = new Date()
   const since = q.from ? new Date(q.from) : new Date(now.getFullYear(), now.getMonth(), 1)
-  const until = q.to ? new Date(q.to) : now
+  // «по 8 августа» включает весь день. Дата без времени разбирается как
+  // полночь, и сегодняшние часы выпадали целиком: проект, где работали
+  // только сегодня, показывал 0:00 при живых записях в базе. Заметно это
+  // становится не сразу — вчерашние проекты считаются верно, и цифра
+  // выглядит правдоподобной ровно до того дня, когда в проекте начали
+  // работать.
+  const until = q.to
+    ? new Date(q.to.length <= 10 ? `${q.to}T23:59:59.999` : q.to)
+    : now
   if (Number.isNaN(since.getTime()) || Number.isNaN(until.getTime())) {
     return c.json({ error: 'Invalid period' }, 400)
   }
@@ -230,7 +238,25 @@ companiesRoute.get('/:companyId/overview', async (c) => {
     .groupBy(timeEntries.userId, users.name, users.avatarUrl)
     .orderBy(sql`2 desc`)
 
+  /**
+   * Часы за всё время — рядом с часами за период.
+   *
+   * По одной цифре не понять, что она за месяц: проект, где работали до
+   * первого числа, показывает 0:00 и читается как «часов нет вовсе». Две
+   * величины рядом отвечают сразу на оба вопроса — сколько наработали сейчас
+   * и сколько всего.
+   */
+  const totalTimeRows = await db
+    .select({
+      projectId: timeEntries.projectId,
+      minutes: sql<number>`coalesce(sum(extract(epoch from (${timeEntries.endedAt} - ${timeEntries.startedAt})) / 60), 0)::int`,
+    })
+    .from(timeEntries)
+    .where(and(inArray(timeEntries.projectId, ids), sql`${timeEntries.endedAt} is not null`))
+    .groupBy(timeEntries.projectId)
+
   const byId = <T extends { projectId: string }>(rows: T[]) => new Map(rows.map((r) => [r.projectId, r]))
+  const totalTimeMap = byId(totalTimeRows)
   const taskMap = byId(taskRows)
   const memberMap = byId(memberRows)
   const timeMap = byId(timeRows)
@@ -249,6 +275,7 @@ companiesRoute.get('/:companyId/overview', async (c) => {
       progress: t?.total ? Math.round(((t.done ?? 0) / t.total) * 100) : 0,
       members: memberMap.get(p.id)?.count ?? 0,
       minutes: timeMap.get(p.id)?.minutes ?? 0,
+      totalMinutes: totalTimeMap.get(p.id)?.minutes ?? 0,
       messages: msgMap.get(p.id)?.count ?? 0,
     }
   })

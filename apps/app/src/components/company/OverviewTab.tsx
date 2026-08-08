@@ -35,6 +35,8 @@ type ProjectStat = {
   progress: number
   members: number
   minutes: number
+  /** За всё время — чтобы часы за период не читались как «часов нет». */
+  totalMinutes: number
   messages: number
 }
 type Overview = {
@@ -289,7 +291,20 @@ export function OverviewTab({
                 <MessageSquare className="size-3" />
                 {p.messages}
               </span>
-              <span className="w-16 shrink-0 text-end font-mono text-sm tabular-nums">{formatDuration(p.minutes)}</span>
+              {/* Часы за период и, приглушённо, за всё время. Вторую цифру
+                  показываем только когда она отличается: одинаковые числа
+                  рядом читаются как ошибка, а не как уточнение. */}
+              <span className="flex w-24 shrink-0 items-baseline justify-end gap-1.5">
+                <span className="font-mono text-sm tabular-nums">{formatDuration(p.minutes)}</span>
+                {p.totalMinutes > p.minutes && (
+                  <span
+                    className="font-mono text-[10px] tabular-nums text-muted-foreground"
+                    title={t('overview.totalHoursHint')}
+                  >
+                    {formatDuration(p.totalMinutes)}
+                  </span>
+                )}
+              </span>
             </li>
           ))}
         </ul>

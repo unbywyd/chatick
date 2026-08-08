@@ -1175,7 +1175,8 @@
     "empty": "No projects yet",
     "weekOf": "Week of {{date}}",
     "overdueShort": "{{count}} overdue",
-    "reportFor": "Hours report for {{name}}"
+    "reportFor": "Hours report for {{name}}",
+    "totalHoursHint": "Total time tracked on this project, all time"
   },
   "desktop": {
     "start": "Start timer",
