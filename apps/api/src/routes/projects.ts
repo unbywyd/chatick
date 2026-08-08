@@ -459,7 +459,10 @@ projectsRoute.post(
         about,
         slug,
         chatRules,
-        aiConfig: JSON.stringify(aiConfig),
+        // Язык не прислали — берём у компании, а не оставляем умолчание.
+        // Интерфейс его передаёт, но любой другой вызывающий (мост, скрипт,
+        // интеграция) о поле не знает, и проект молча заводился английским.
+        aiConfig: JSON.stringify({ language: company?.locale || 'en', ...aiConfig }),
         // цвет раздаём сразу: в свёрнутом сайдбаре проекты различают по нему,
         // и заставлять человека выбирать его вручную незачем
         color: PROJECT_COLORS[Math.floor(Math.random() * PROJECT_COLORS.length)]!,

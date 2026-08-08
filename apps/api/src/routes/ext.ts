@@ -118,6 +118,18 @@ extRoute.post('/projects', guard('projects:write'), async (c) => {
     return c.json({ created: false, project: serializeProject(updated!) })
   }
 
+  /**
+   * Язык ИИ наследуется от компании.
+   *
+   * Через API он не приходит и приходить не может: у системы-заказчика такого
+   * поля нет. Без наследования проект израильской фирмы заводился с
+   * английским языком по умолчанию, и ассистент писал задачи на английском в
+   * ивритском проекте — при том, что рядом, у проекта из интерфейса, язык
+   * стоял правильный.
+   */
+  const company = await db.query.companies.findFirst({ where: eq(companies.id, companyId) })
+  const language = company?.locale || 'en'
+
   const [created] = await db
     .insert(projects)
     .values({
@@ -128,6 +140,7 @@ extRoute.post('/projects', guard('projects:write'), async (c) => {
       about,
       slug: slugOf(name),
       color: PROJECT_COLORS[Math.floor(Math.random() * PROJECT_COLORS.length)]!,
+      aiConfig: JSON.stringify({ language }),
     })
     .returning()
 
