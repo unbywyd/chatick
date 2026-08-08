@@ -8,6 +8,7 @@ import { deleteProjectCompletely } from '../lib/delete-project.js'
 import { companies, companyMembers, projectMembers, projects, tasks, timeEntries, users } from '../db/schema.js'
 import { checkKey, logCall, type KeyScope } from '../lib/company-key.js'
 import { defaultPermissions } from './projects.js'
+import { keepHigherCompanyRole, keepHigherProjectRole } from '../lib/role-rank.js'
 import { sendAddedToProjectMail } from '../lib/mail-added.js'
 import { localeFor } from '../lib/locale.js'
 import { issueEnterToken } from '../lib/enter-link.js'
@@ -367,12 +368,11 @@ extRoute.post('/projects/:externalId/members', guard('users:write'), async (c) =
       where: and(eq(projectMembers.projectId, project.id), eq(projectMembers.userId, user.id)),
     })
 
-    // Как и в /users/batch: роль обновляем, права не трогаем, владельца не
-    // понижаем. Здесь роль пришла явно в запросе — тем более странно её
-    // игнорировать.
+    // Как и в /users/batch: роль только вверх, права не трогаем.
     if (already) {
-      if (already.role !== w.role && already.role !== 'owner') {
-        await db.update(projectMembers).set({ role: w.role }).where(eq(projectMembers.id, already.id))
+      const role = keepHigherProjectRole(already.role, w.role)
+      if (role !== already.role) {
+        await db.update(projectMembers).set({ role: role as 'member' }).where(eq(projectMembers.id, already.id))
         updated.push(w.externalUserId)
       }
       continue
@@ -533,16 +533,19 @@ async function upsertUser(companyId: string, companyName: string, u: IncomingUse
     }
   }
 
-  // Роль обновляем, а не пропускаем при повторе: внешняя система — источник
-  // правды по людям, и если она прислала другую роль, значит человека
-  // повысили или перевели. Прежний onConflictDoNothing отвечал «ок» и
-  // оставлял всё как было — Atlas считал, что управляет, а он не управлял.
+  // Роль повышаем, но не понижаем: внешняя система задаёт состав, а не
+  // старшинство у нас. Подробности — в keepHigherCompanyRole.
+  const inCompany = await db.query.companyMembers.findFirst({
+    where: and(eq(companyMembers.companyId, companyId), eq(companyMembers.userId, user.id)),
+  })
+  const companyRole = keepHigherCompanyRole(inCompany?.role ?? null, u.companyRole)
+
   await db
     .insert(companyMembers)
-    .values({ companyId, userId: user.id, role: u.companyRole })
+    .values({ companyId, userId: user.id, role: companyRole as 'member' })
     .onConflictDoUpdate({
       target: [companyMembers.companyId, companyMembers.userId],
-      set: { role: u.companyRole },
+      set: { role: companyRole as 'member' },
     })
 
   let addedTo = 0
@@ -556,13 +559,13 @@ async function upsertUser(companyId: string, companyName: string, u: IncomingUse
       where: and(eq(projectMembers.projectId, project.id), eq(projectMembers.userId, user.id)),
     })
 
-    // Уже в проекте — обновляем роль, если она изменилась. Права при этом не
-    // трогаем: их могли настроить у нас вручную, и затирать чужую работу
-    // из-за повторного пуша нельзя. Владельца не понижаем — проект остался бы
-    // без хозяина.
+    // Уже в проекте — роль только вверх. Права при этом не трогаем: их могли
+    // настроить у нас вручную, и затирать чужую работу из-за повторного пуша
+    // нельзя.
     if (already) {
-      if (already.role !== p.role && already.role !== 'owner') {
-        await db.update(projectMembers).set({ role: p.role }).where(eq(projectMembers.id, already.id))
+      const role = keepHigherProjectRole(already.role, p.role)
+      if (role !== already.role) {
+        await db.update(projectMembers).set({ role: role as 'member' }).where(eq(projectMembers.id, already.id))
       }
       continue
     }
