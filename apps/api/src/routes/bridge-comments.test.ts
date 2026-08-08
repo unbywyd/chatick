@@ -99,6 +99,35 @@ describe('POST /x/tasks/:id/comments', () => {
   })
 })
 
+describe('номер задачи работает везде одинаково', () => {
+  // Ассистент оперирует «TASK-2», а не идентификатором: номер он видит в
+  // задаче, в ссылке и в ответе моста. Стоит одной ручке принять номер, а
+  // соседней — нет, и они расходятся молча, без ошибки.
+  //
+  // Так и было: POST разрешал номер и создавал комментарий, GET искал
+  // комментарии с taskId = 'TASK-2' и возвращал пустой список. Запись
+  // отвечала успехом, чтение — пустотой; выглядело как потеря данных.
+
+  it('чтение и запись комментариев разрешают ключ одинаково', () => {
+    expect(handler('get', '/tasks/:id/comments')).toMatch(/taskByKey\(scope\.projectId/)
+    expect(handler('post', '/tasks/:id/comments')).toMatch(/taskByKey\(scope\.projectId/)
+  })
+
+  it('ни одна ручка задачи не ищет по сырому параметру', () => {
+    // Сторож класса: сырой c.req.param('id') в условии по taskId — это ровно
+    // тот баг. Ручки задач обязаны разрешать номер, а не сравнивать строку.
+    const routes = [...src.matchAll(/bridgeRoute\.(get|post|patch|delete)\('(\/tasks\/:id[^']*)'/g)]
+    expect(routes.length).toBeGreaterThan(5)
+
+    const raw = routes
+      .map(([, method, path]) => ({ method: method!, path: path!, body: handler(method!, path!) }))
+      .filter((r) => /eq\(\s*\w+\.taskId,\s*c\.req\.param\('id'\)/.test(r.body))
+      .map((r) => `${r.method.toUpperCase()} ${r.path}`)
+
+    expect(raw, `ищут по сырому параметру вместо taskByKey: ${raw.join(', ')}`).toEqual([])
+  })
+})
+
 describe('чего мосту не дают', () => {
   it('нет правки и удаления комментариев', () => {
     expect(src).not.toMatch(/bridgeRoute\.(patch|delete)\('\/tasks\/:id\/comments/)

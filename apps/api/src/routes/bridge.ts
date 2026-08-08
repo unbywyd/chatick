@@ -2196,13 +2196,23 @@ bridgeRoute.get('/tasks/:id/comments', async (c) => {
   if ('error' in scope) return c.json({ error: scope.error }, scope.status)
   const denied = await require(c as never, 'tasks.read', scope.projectId)
   if (denied) return c.json(denied, 403)
+  // Номер ИЛИ id — тем же ключом, что и POST рядом.
+  //
+  // Пока здесь стоял сырой параметр, пара «написал / прочитал» расходилась:
+  // POST разрешал «TASK-2» в настоящий id и создавал комментарий правильно, а
+  // GET искал комментарии с taskId = 'TASK-2' и не находил ничего. Наружу это
+  // выглядело как молчаливая потеря — запись вернула id, чтение вернуло
+  // пустоту, — и уводило от причины: искали «отдельный поток» и задержку.
+  const task = await taskByKey(scope.projectId, c.req.param('id'))
+  if (!task) return c.json({ error: 'Not found' }, 404)
+
   const rows = await db
     .select({ c: taskComments, u: users })
     .from(taskComments)
     // Ограничение по проекту обязательно: id задачи угадывать не нужно, его
     // видно в любой ссылке, и без этого условия туннель в один проект читал
     // бы обсуждения соседнего.
-    .where(and(eq(taskComments.taskId, c.req.param('id')), eq(taskComments.projectId, scope.projectId)))
+    .where(and(eq(taskComments.taskId, task.id), eq(taskComments.projectId, scope.projectId)))
     .leftJoin(users, eq(users.id, taskComments.authorId))
     .orderBy(taskComments.createdAt)
   // Файлы комментария привязаны к нему через commentId
