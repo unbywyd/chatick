@@ -2336,6 +2336,60 @@ bridgeRoute.post('/tasks/:id/comments', async (c) => {
   return c.json({ id: row!.id, replyTo: row!.replyToId || undefined, attachments, createdAt: row!.createdAt }, 201)
 })
 
+/** Комментарий этого проекта — или отказ. Общая часть правки и удаления. */
+async function commentForWrite(c: Ctx, scope: { projectId: string }, commentId: string) {
+  const row = await db.query.taskComments.findFirst({
+    where: and(eq(taskComments.id, commentId), eq(taskComments.projectId, scope.projectId)),
+  })
+  if (!row) return { error: 'Not found', status: 404 as const }
+  if (!(await ownerOrAdmin(scope.projectId, auth(c).userId, row.authorId))) {
+    return { error: 'Forbidden: you can change only your own comments unless you are an admin', status: 403 as const }
+  }
+  return { comment: row }
+}
+
+bridgeRoute.patch('/tasks/:id/comments/:commentId', async (c) => {
+  const scope = await resolveProject(c as never)
+  if ('error' in scope) return c.json({ error: scope.error }, scope.status)
+  const denied = await require(c as never, 'tasks.read', scope.projectId)
+  if (denied) return c.json(denied, 403)
+
+  const b = (await c.req.json().catch(() => ({}))) as Record<string, unknown>
+  const bad = unknownFields(b, ['text'] as const)
+  if (bad) return c.json({ error: bad }, 400)
+  const text = typeof b.text === 'string' ? b.text.trim() : ''
+  if (!text) return c.json({ error: 'text is required' }, 400)
+  if (text.length > 10_000) return c.json({ error: 'text is too long (max 10000 characters)' }, 400)
+
+  const found = await commentForWrite(c as never, scope, c.req.param('commentId'))
+  if ('error' in found) return c.json({ error: found.error }, found.status)
+
+  const [row] = await db
+    .update(taskComments)
+    // Разметка та же, что при создании: иначе упоминание, добавленное при
+    // правке, осталось бы простым текстом и человека бы не позвали.
+    .set({ body: richText(text) })
+    .where(eq(taskComments.id, found.comment.id))
+    .returning()
+
+  broadcast(scope.projectId, 'task_comments_changed', { taskId: found.comment.taskId })
+  return c.json({ id: row!.id, text: row!.body })
+})
+
+bridgeRoute.delete('/tasks/:id/comments/:commentId', async (c) => {
+  const scope = await resolveProject(c as never)
+  if ('error' in scope) return c.json({ error: scope.error }, scope.status)
+  const denied = await require(c as never, 'tasks.read', scope.projectId)
+  if (denied) return c.json(denied, 403)
+
+  const found = await commentForWrite(c as never, scope, c.req.param('commentId'))
+  if ('error' in found) return c.json({ error: found.error }, found.status)
+
+  await db.delete(taskComments).where(eq(taskComments.id, found.comment.id))
+  broadcast(scope.projectId, 'task_comments_changed', { taskId: found.comment.taskId })
+  return c.json({ ok: true })
+})
+
 // --- Спринты ----------------------------------------------------------------
 
 // --- команда проекта -------------------------------------------------------
@@ -2344,6 +2398,24 @@ bridgeRoute.post('/tasks/:id/comments', async (c) => {
 // оно необратимо (уходит письмо, рвутся туннели), а цена ошибки ассистента
 // здесь выше, чем удобство. Понизить до «только чтение» мост может — это
 // откатывается одной строкой.
+
+/**
+ * Правило правки чужого: свои слова правит автор, любые — админ.
+ *
+ * То же самое, что в интерфейсе, и намеренно то же самое. Мост работает ОТ
+ * ИМЕНИ человека — токен привязан к его учётной записи, — поэтому «можно ли
+ * править» здесь вопрос не про ассистента, а про того, кто его послал. Прав
+ * у него ровно столько же, сколько когда он делает это руками.
+ *
+ * Раньше правки и удаления через мост не было вовсе. Ограничение не
+ * запрашивали, оно появилось попутно, из соображения «сказанное не
+ * забрать» — и на деле означало, что автор не может исправить собственную
+ * опечатку тем же способом, каким её сделал.
+ */
+async function ownerOrAdmin(projectId: string, userId: string, authorId: string | null): Promise<boolean> {
+  if (authorId && authorId === userId) return true
+  return managesTeam(projectId, userId)
+}
 
 /** Кто распоряжается людьми проекта: owner/admin проекта или admin компании. */
 async function managesTeam(projectId: string, userId: string): Promise<boolean> {

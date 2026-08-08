@@ -221,9 +221,18 @@ function endpointCatalog(q: string): string {
   own file list, exactly as when a person attaches one. "text" may be empty
   when there are files.
 
-  Commenting needs tasks.read: anyone who can see tasks can comment. Editing
-  and deleting comments — including your own — is not available through the
-  bridge; words already read by the team are not yours to take back.
+  Commenting needs tasks.read: anyone who can see tasks can comment.
+
+  PATCH  /x/tasks/<id>/comments/<commentId>${q}   { "text": "..." }
+  DELETE /x/tasks/<id>/comments/<commentId>${q}
+
+  Editing and deleting follow the same rule as everywhere else: the author
+  changes their own, an admin changes any. You act as the person whose token
+  this is, so "your own" means theirs — not every comment the assistant wrote
+  on someone else's behalf. Anything else comes back 403, not a silent no-op.
+
+  Deleting a comment is permanent — unlike a task, it is not recoverable.
+  Prefer editing when the point is to correct something.
 
   GET    /x/sprints${q}                    id, name, color, taskCount
   POST   /x/sprints${q}            {"name","startsAt?","endsAt?"}

@@ -128,9 +128,45 @@ describe('номер задачи работает везде одинаково
   })
 })
 
-describe('чего мосту не дают', () => {
-  it('нет правки и удаления комментариев', () => {
-    expect(src).not.toMatch(/bridgeRoute\.(patch|delete)\('\/tasks\/:id\/comments/)
+describe('правка и удаление: автор или админ', () => {
+  // То же правило, что в интерфейсе. Мост работает от имени человека, значит
+  // «своё» — это своё у него, а не «всё, что написал ассистент».
+  const patch = handler('patch', '/tasks/:id/comments/:commentId')
+  const del = handler('delete', '/tasks/:id/comments/:commentId')
+
+  it('обе ручки спрашивают право по автору комментария', () => {
+    // Через общую commentForWrite — правило должно быть одно на обе.
+    expect(patch).toMatch(/commentForWrite\(/)
+    expect(del).toMatch(/commentForWrite\(/)
+    const rule = src.slice(src.indexOf('async function commentForWrite'))
+    expect(rule).toMatch(/ownerOrAdmin\(scope\.projectId, auth\(c\)\.userId, row\.authorId\)/)
+  })
+
+  it('чужой комментарий без прав — 403, а не молчаливый отказ', () => {
+    const rule = src.slice(src.indexOf('async function commentForWrite'))
+    expect(rule).toMatch(/status: 403/)
+  })
+
+  it('не выходит за пределы проекта туннеля', () => {
+    const rule = src.slice(src.indexOf('async function commentForWrite'))
+    expect(rule).toMatch(/eq\(taskComments\.projectId, scope\.projectId\)/)
+  })
+
+  it('правка проходит ту же разметку, что и создание', () => {
+    // Иначе упоминание, добавленное при правке, осталось бы текстом и
+    // человека бы не позвали.
+    expect(patch).toMatch(/richText\(text\)/)
+  })
+
+  it('правка держит тот же предел длины', () => {
+    expect(patch).toMatch(/text\.length > 10_000/)
+  })
+
+  it('автор — это автор, а не любой участник', () => {
+    // Сторож смысла: если условие про authorId пропадёт, править сможет
+    // каждый, у кого есть tasks.read.
+    const rule = src.slice(src.indexOf('async function ownerOrAdmin'))
+    expect(rule).toMatch(/authorId && authorId === userId/)
   })
 })
 
@@ -143,8 +179,16 @@ describe('гайд для ассистента', () => {
     expect(docs).toMatch(/@\\\[Their Name\\\]\(<userId>\)|@\[Their Name\]\(<userId>\)/)
   })
 
-  it('говорит, что удалять и править комментарии нельзя', () => {
-    expect(docs).toMatch(/Editing\s+and deleting comments/)
+  it('описывает правку и удаление вместе с правилом', () => {
+    expect(docs).toMatch(/PATCH\s+\/x\/tasks\/<id>\/comments\/<commentId>/)
+    expect(docs).toMatch(/DELETE \/x\/tasks\/<id>\/comments\/<commentId>/)
+    expect(docs).toMatch(/the author\s+changes their own, an admin changes any/)
+  })
+
+  it('предупреждает, что удаление комментария необратимо', () => {
+    // У задачи есть корзина на 7 дней, у комментария — нет. Ассистент должен
+    // знать разницу до того, как сотрёт чужую мысль.
+    expect(docs).toMatch(/Deleting a comment is permanent/)
   })
 
   it('описывает вложения', () => {
