@@ -152,8 +152,20 @@
      .tiptap-readonly, .prose). Список общий: правило одно, разъехаться ему
      негде. */
   :is(.tiptap-editor, .tiptap-readonly, .doc-editor, .msg-md, .prose)
-    :is(p, h1, h2, h3, h4, h5, h6, li, blockquote, td, th) {
+    :is(p, h1, h2, h3, h4, h5, h6, blockquote, td, th) {
     unicode-bidi: plaintext;
+    text-align: start;
+  }
+  /* Пункт списка — не здесь, и это не забывчивость.
+     plaintext разворачивает текст пункта, но НЕ двигает его маркер: сторону
+     маркера решает direction, а plaintext его не меняет. В списке со
+     смешанными языками — четыре ивритских пункта и пятый «heroku ps:scale» —
+     текст уезжал к правому краю, «1.» оставалась у левого, и между ними
+     зияла пустота во всю строку: какой номер к какой строке, было не понять.
+     Направление пункту задаёт dir="auto" (см. text-direction.ts), а маркер
+     послушно едет за ним. text-align: start здесь тоже не нужен — он следует
+     из direction сам. */
+  :is(.tiptap-editor, .tiptap-readonly, .doc-editor, .msg-md, .prose) li {
     text-align: start;
   }
   /* Блок кода — исключение из правила выше, и намеренное.
