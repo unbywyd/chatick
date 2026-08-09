@@ -71,12 +71,10 @@
     "heroTitleAccent": "עוזר ה-AI",
     "heroSubtitle": "צ׳אט הפרויקט, משימות וזמן — באותו מקום שבו עובד העוזר.",
     "language": "שפה",
-    "restartForDirection": "האפליקציה תופעל מחדש כדי להחליף את כיוון הכתיבה",
     "justNow": "הרגע",
     "minutesAgo": "לפני {{count}} דק׳",
     "hoursAgo": "לפני {{count}} שע׳",
     "daysAgo": "לפני {{count}} ימים",
-    "continue": "להמשיך",
     "hourShort": "שע׳",
     "minuteShort": "דק׳"
   }

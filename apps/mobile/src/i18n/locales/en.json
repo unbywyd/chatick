@@ -70,12 +70,10 @@
     "heroTitleAccent": "AI assistant",
     "heroSubtitle": "Project chat, tasks and time — where the assistant works.",
     "language": "Language",
-    "restartForDirection": "The app will restart to switch text direction",
     "justNow": "just now",
     "minutesAgo": "{{count}} min ago",
     "hoursAgo": "{{count}} h ago",
     "daysAgo": "{{count}} d ago",
-    "continue": "Continue",
     "hourShort": "h",
     "minuteShort": "m"
   }

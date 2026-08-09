@@ -71,12 +71,10 @@
     "heroTitleAccent": "ИИ-ассистент",
     "heroSubtitle": "Чат проекта, задачи и время — там же, где работает ассистент.",
     "language": "Язык",
-    "restartForDirection": "Приложение перезапустится, чтобы сменить направление письма",
     "justNow": "только что",
     "minutesAgo": "{{count}} мин назад",
     "hoursAgo": "{{count}} ч назад",
     "daysAgo": "{{count}} дн назад",
-    "continue": "Продолжить",
     "hourShort": "ч",
     "minuteShort": "м"
   }

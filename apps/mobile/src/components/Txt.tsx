@@ -1,5 +1,6 @@
-import { I18nManager, StyleSheet, Text, type TextProps, type TextStyle } from 'react-native'
+import { StyleSheet, Text, type TextProps, type TextStyle } from 'react-native'
 import i18n from '../i18n'
+import { useDirection } from '../lib/direction'
 
 // Общая обёртка над <Text> (Rule 3 руководства по RTL).
 //
@@ -61,7 +62,10 @@ const FONTS: Record<string, Record<string, string>> = {
 }
 
 export function Txt({ auto, ltr, style, ...rest }: Props) {
-  const isRTL = I18nManager.isRTL
+  // Направление — из языка приложения, а не из I18nManager.isRTL: тот флаг
+  // снимается при старте нативного модуля и в процессе не обновляется.
+  // На железе измерено, что он бывает false при зеркальной раскладке.
+  const { isRTL } = useDirection()
 
   const direction: TextStyle = ltr
     ? // Цифры и латиница в RTL-окружении иначе переставляются группами —

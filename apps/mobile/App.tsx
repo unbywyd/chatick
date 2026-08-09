@@ -3,10 +3,11 @@ import { ActivityIndicator, StyleSheet, Text, View } from 'react-native'
 import { StatusBar } from 'expo-status-bar'
 import { SafeAreaProvider } from 'react-native-safe-area-context'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
+import { useTranslation } from 'react-i18next'
 import { api, getToken, setToken, type CompaniesResponse, type Company, type Me } from './src/lib/api'
 import { getCompanyId, setCompanyId } from './src/lib/company'
 import { bootstrapLanguage } from './src/i18n'
-import { restartApp } from './src/i18n/restart'
+import { DirectionProvider } from './src/lib/direction'
 import { LoginScreen } from './src/screens/LoginScreen'
 import { CompanyPickerScreen } from './src/screens/CompanyPickerScreen'
 import { HomeScreen } from './src/screens/HomeScreen'
@@ -37,12 +38,9 @@ function Root() {
   const [company, setCompany] = useState<Company | null>(null)
 
   const check = useCallback(async () => {
-    // Язык и направление письма — раньше всего остального. Если направление
-    // сменилось, перезагружаем бандл прямо здесь, не показав ни одного кадра:
-    // флаг I18nManager читается при создании корневого представления, и без
-    // перезагрузки интерфейс остался бы в прежнюю сторону (Rule 6).
-    const { needsRestart } = await bootstrapLanguage()
-    if (needsRestart) return restartApp()
+    // Язык и шрифты — раньше всего остального. Направление письма при этом
+    // не требует ни флага, ни перезагрузки: его задаёт DirectionProvider.
+    await bootstrapLanguage()
 
     const token = await getToken()
     if (!token) return setStage('guest')
@@ -119,16 +117,24 @@ function Root() {
   )
 }
 
-export default function App() {
+function App() {
+  // Язык из i18next: провайдер должен перерисоваться при его смене, иначе
+  // направление останется прежним до перезапуска.
+  const { i18n: instance } = useTranslation()
   return (
     <SafeAreaProvider>
       <QueryClientProvider client={qc}>
         <StatusBar style="light" />
-        <Root />
+        {/* Направление всего дерева — из языка приложения. */}
+        <DirectionProvider lang={instance.language ?? 'en'}>
+          <Root />
+        </DirectionProvider>
       </QueryClientProvider>
     </SafeAreaProvider>
   )
 }
+
+export default App
 
 const s = StyleSheet.create({
   splash: { flex: 1, backgroundColor: theme.bg, alignItems: 'center', justifyContent: 'center', gap: 16, padding: 24 },

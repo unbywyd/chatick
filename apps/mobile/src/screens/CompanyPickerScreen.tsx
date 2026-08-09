@@ -1,7 +1,6 @@
 import { useState } from 'react'
 import {
   ActivityIndicator,
-  I18nManager,
   Pressable,
   ScrollView,
   StyleSheet,
@@ -16,6 +15,7 @@ import { LogoMark } from '../components/Logo'
 import { Avatar } from '../components/Avatar'
 import { Txt } from '../components/Txt'
 import { LanguagePicker } from '../components/LanguagePicker'
+import { useDirection } from '../lib/direction'
 import { IconChevronRight, IconLogOut, IconPlus } from '../components/icons'
 import { theme } from '../theme'
 
@@ -33,6 +33,9 @@ export function CompanyPickerScreen({
 }) {
   const insets = useSafeAreaInsets()
   const { t } = useTranslation()
+  // Выравнивание в поле ввода не следует за раскладкой само: задаём явно,
+  // из языка приложения.
+  const { textAlign } = useDirection()
   const qc = useQueryClient()
   const [creating, setCreating] = useState(false)
   const [name, setName] = useState('')
@@ -161,7 +164,7 @@ export function CompanyPickerScreen({
       {showForm ? (
         <View style={s.form}>
           <TextInput
-            style={s.input}
+            style={[s.input, { textAlign }]}
             value={name}
             onChangeText={setName}
             placeholder={t('start.companyName')}
@@ -251,9 +254,6 @@ const s = StyleSheet.create({
     fontSize: 16,
     paddingHorizontal: 14,
     paddingVertical: 14,
-    // Выравнивание в поле ввода НЕ следует за раскладкой само (Rule 3):
-    // без этого в иврите курсор прижимается влево, а текст утекает от него.
-    textAlign: I18nManager.isRTL ? 'right' : 'left',
   },
   primary: {
     flexDirection: 'row',

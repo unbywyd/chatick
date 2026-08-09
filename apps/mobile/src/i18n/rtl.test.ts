@@ -108,74 +108,74 @@ describe('Rule 3: TextInput и Text выравниваются явно', () => 
   })
 })
 
-describe('Rule 6: смена направления применяется перезагрузкой', () => {
-  const i18n = files.find((f) => f.path.endsWith(join('i18n', 'index.ts')))!.code
+describe('направление берётся из языка, а не из I18nManager', () => {
+  const dirSrc = files.find((f) => f.path.endsWith(join('lib', 'direction.tsx')))!.code
 
-  it('на импорте только разрешаем RTL, но не выбираем направление', () => {
-    // forceRTL по запасному языку даёт «английский текст в RTL-раскладке»
-    // до следующего запуска.
-    expect(i18n).toMatch(/I18nManager\.allowRTL\(true\)/)
-    const beforeBootstrap = i18n.slice(0, i18n.indexOf('export async function bootstrapLanguage'))
-    expect(stripComments(beforeBootstrap)).not.toMatch(/I18nManager\.forceRTL/)
+  it('I18nManager.isRTL нигде не читается', () => {
+    // Флаг снимается при создании нативного модуля, до запуска JS, и в
+    // процессе не обновляется. На железе измерено: раскладка зеркалится
+    // правильно, а флаг при этом false — и весь код, который ему верил,
+    // ошибался. Причём молча: на иврите в ивритском интерфейсе ошибаться
+    // не на чем, вылезает только на латинице, телефонах и кодах.
+    const bad: string[] = []
+    for (const f of files) {
+      if (f.path.endsWith('rtl.test.ts')) continue
+      for (const line of stripComments(f.code).split('\n')) {
+        if (/I18nManager\.isRTL/.test(line)) bad.push(`${f.path}: ${line.trim()}`)
+      }
+    }
+    expect(bad, `чтение ненадёжного флага:\n${bad.join('\n')}`).toEqual([])
   })
 
-  it('есть защита от вечного перезапуска', () => {
-    // Без неё сбой применения флага уводит в бесконечный цикл, и человек
-    // видит только сплеш.
-    expect(i18n).toMatch(/RTL_GUARD_KEY/)
-    expect(i18n).toMatch(/needsRestart: false/)
+  it('провайдер выводит направление из языка', () => {
+    expect(dirSrc).toMatch(/isRTLLanguage\(lang\)/)
+    expect(dirSrc).toMatch(/direction: dir/)
   })
 
-  it('перезагрузка работает и в разработке, и в сборке', () => {
-    const restart = files.find((f) => f.path.endsWith(join('i18n', 'restart.ts')))!.code
-    expect(restart).toMatch(/__DEV__/)
-    expect(restart).toMatch(/DevSettings\.reload/)
-    expect(restart).toMatch(/expo-updates/)
+  it('провайдер обёрнут вокруг дерева и получает текущий язык', () => {
+    const app = readFileSync(join(SRC, '..', 'App.tsx'), 'utf8')
+    expect(app).toMatch(/<DirectionProvider lang=/)
+    // Язык из i18next, а не из состояния: иначе смена языка не перерисует
+    // провайдер и направление останется прежним.
+    expect(app).toMatch(/instance\.language/)
   })
 
-  it('expo-updates установлен — без него вариант B невозможен', () => {
-    const pkg = JSON.parse(readFileSync(join(SRC, '..', 'package.json'), 'utf8'))
-    expect(pkg.dependencies['expo-updates'], 'без expo-updates смена направления не применится').toBeTruthy()
+  it('forceRTL и перезагрузка бандла больше не используются', () => {
+    // На iOS forceRTL не применяется вовсе, на Android оставляет isRTL
+    // несогласованным. direction на View работает на обеих платформах и
+    // применяется к смонтированному дереву сразу.
+    for (const f of files) {
+      if (f.path.endsWith('rtl.test.ts')) continue
+      expect(stripComments(f.code), f.path).not.toMatch(/I18nManager\.forceRTL/)
+    }
+  })
+
+  it('смена языка не требует перезапуска', () => {
+    const hook = files.find((f) => f.path.endsWith('useChangeLanguage.ts'))!.code
+    expect(hook).toMatch(/storeLanguage\(target\)/)
+    expect(hook).toMatch(/loadFontsFor\(target\)/)
+    expect(stripComments(hook)).not.toMatch(/restartApp/)
   })
 
   it('язык готовится до показа интерфейса', () => {
     const app = readFileSync(join(SRC, '..', 'App.tsx'), 'utf8')
     expect(app).toMatch(/bootstrapLanguage\(\)/)
-    expect(app).toMatch(/needsRestart/)
   })
 })
 
-describe('Rule 7: смена языка целиком', () => {
-  const hook = files.find((f) => f.path.endsWith('useChangeLanguage.ts'))!.code
-
-  it('выбор сохраняется', () => {
-    expect(hook).toMatch(/storeLanguage\(target\)/)
+describe('textAlign задаётся явно и из языка', () => {
+  it('нет textAlign: start — это не значение RN', () => {
+    // 'start' не входит в типы RN и молча игнорируется: текст просто
+    // остаётся не с той стороны.
+    for (const f of ui) {
+      expect(stripComments(f.code), f.path).not.toMatch(/textAlign:\s*['"]start['"]/)
+    }
   })
 
-  it('перезапуск только при смене направления', () => {
-    // Русский → английский направление не меняют, и дёргать человека нельзя.
-    expect(hook).toMatch(/isRTLLanguage\(current\) !== isRTLLanguage\(target\)/)
-    expect(hook).toMatch(/if \(!directionChanged\) return/)
-  })
-})
-
-describe('Hermes: Intl нельзя доверять форматирование слов', () => {
-  const fmt = files.find((f) => f.path.endsWith(join('lib', 'format.ts')))!.code
-
-  it('единицы времени берутся из словаря, а не из Intl', () => {
-    // В Node Intl отдаёт «שע׳», а Hermes на устройстве собран без полных
-    // данных ICU и молча возвращает английское «h». На экране это выглядело
-    // как «15h 12m» посреди иврита — без ошибки и без исключения.
-    expect(stripComments(fmt)).not.toMatch(/style:\s*['"]unit['"]/)
-    expect(fmt).toMatch(/mobile\.hourShort/)
-    expect(fmt).toMatch(/mobile\.minuteShort/)
-  })
-
-  it('во всех языках заданы короткие единицы', () => {
-    for (const lang of ['en', 'ru', 'he']) {
-      const d = JSON.parse(readFileSync(join(SRC, 'i18n', 'locales', `${lang}.json`), 'utf8'))
-      expect(d.mobile.hourShort, `${lang}: нет hourShort`).toBeTruthy()
-      expect(d.mobile.minuteShort, `${lang}: нет minuteShort`).toBeTruthy()
+  it('у каждого TextInput задан textAlign', () => {
+    for (const f of ui) {
+      if (!/<TextInput/.test(f.code)) continue
+      expect(f.code, `${f.path} — есть TextInput, но нет textAlign`).toMatch(/textAlign/)
     }
   })
 })

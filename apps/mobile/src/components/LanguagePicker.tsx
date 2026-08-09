@@ -1,4 +1,4 @@
-import { useRef, useState } from 'react'
+import { useState } from 'react'
 import { Modal, Pressable, StyleSheet, View } from 'react-native'
 import { useTranslation } from 'react-i18next'
 import { LOCALES, type LocaleCode } from '../i18n'
@@ -13,38 +13,20 @@ import { theme } from '../theme'
 // должен иметь возможность прочитать его на своём языке, а не после того, как
 // разберётся с чужим.
 //
-// Смена направления письма требует перезапуска (Rule 6), поэтому о нём
-// предупреждаем заранее — иначе приложение «само закрылось».
+// Смена мгновенная, в том числе между языками разного направления: его задаёт
+// DirectionProvider через свойство direction, а не нативный флаг с
+// перезагрузкой. Предупреждение о перезапуске убрано — перезапуска нет.
 
 export function LanguagePicker({ compact = false }: { compact?: boolean }) {
   const { t, i18n } = useTranslation()
   const change = useChangeLanguage()
   const [open, setOpen] = useState(false)
-  const [confirming, setConfirming] = useState<LocaleCode | null>(null)
-  // Ответ на вопрос «перезапустить?» приходит из обработчика кнопки, а не из
-  // рендера, поэтому держим продолжение в ref, а не в состоянии.
-  const resolveRef = useRef<((v: boolean) => void) | null>(null)
 
   const current = LOCALES.find((l) => l.code === i18n.language) ?? LOCALES[0]
 
   const pick = async (code: LocaleCode) => {
     setOpen(false)
-    await change(code, {
-      onDirectionChange: () =>
-        new Promise<boolean>((resolve) => {
-          // Показываем предупреждение своим экраном, а не Alert: Alert не
-          // переводится вместе с приложением и выглядит чужеродно.
-          resolveRef.current = resolve
-          setConfirming(code)
-        }),
-    })
-  }
-
-  const answer = (ok: boolean) => {
-    const resolve = resolveRef.current
-    resolveRef.current = null
-    setConfirming(null)
-    resolve?.(ok)
+    await change(code)
   }
 
   return (
@@ -74,21 +56,6 @@ export function LanguagePicker({ compact = false }: { compact?: boolean }) {
         </Pressable>
       </Modal>
 
-      <Modal visible={confirming !== null} transparent animationType="fade">
-        <View style={s.backdrop}>
-          <View style={s.sheet}>
-            <Txt style={s.warn}>{t('mobile.restartForDirection')}</Txt>
-            <View style={s.actions}>
-              <Pressable style={s.ghostBtn} onPress={() => answer(false)}>
-                <Txt style={s.ghostText}>{t('common.cancel')}</Txt>
-              </Pressable>
-              <Pressable style={s.primaryBtn} onPress={() => answer(true)}>
-                <Txt style={s.primaryText}>{t('mobile.continue')}</Txt>
-              </Pressable>
-            </View>
-          </View>
-        </View>
-      </Modal>
     </>
   )
 }
@@ -112,10 +79,4 @@ const s = StyleSheet.create({
   item: { flexDirection: 'row', alignItems: 'center', gap: 10, paddingVertical: 13 },
   itemText: { flex: 1, color: theme.fg, fontSize: 17 },
   itemActive: { color: theme.brand, fontWeight: '700' },
-  warn: { color: theme.fg, fontSize: 15, lineHeight: 21 },
-  actions: { flexDirection: 'row', gap: 10, marginTop: 14 },
-  ghostBtn: { flex: 1, borderWidth: 1, borderColor: theme.border, borderRadius: 999, paddingVertical: 13, alignItems: 'center' },
-  ghostText: { color: theme.fg, fontSize: 15, fontWeight: '600' },
-  primaryBtn: { flex: 1, backgroundColor: theme.brand, borderRadius: 999, paddingVertical: 13, alignItems: 'center' },
-  primaryText: { color: theme.brandFg, fontSize: 15, fontWeight: '700' },
 })

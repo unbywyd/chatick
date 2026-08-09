@@ -12,9 +12,10 @@ import he from './locales/he.json'
 // Коды и файлы те же, что в вебе (apps/app/src/i18n): человек, сменивший язык
 // на сайте, ждёт его же в телефоне, а два набора ключей неизбежно разойдутся.
 //
-// Направление письма — по Rule 6 руководства: приложение многоязычное, значит
-// вариант B — флаг ставится в JS и применяется перезагрузкой бандла под
-// сплешем. Без expo-updates это НЕ работает вовсе, поэтому пакет обязателен.
+// Направление письма здесь не выставляется: им занимается DirectionProvider,
+// который берёт его из языка и ставит direction на корневой View. Нативный
+// флаг I18nManager для этого не годится — он снимается до запуска JS и в
+// процессе не обновляется.
 
 export const LOCALES = [
   { code: 'en', label: 'English', dir: 'ltr' },
@@ -25,20 +26,13 @@ export const LOCALES = [
 export type LocaleCode = (typeof LOCALES)[number]['code']
 
 const LANG_KEY = 'chatick.lang'
-/**
- * Одноразовая отметка о перезагрузке ради смены направления. Без неё сбой
- * применения флага уводит приложение в вечный перезапуск — человек видит
- * бесконечный сплеш и не может ничего сделать (Rule 6, пункт 2).
- */
-const RTL_GUARD_KEY = 'chatick.rtlRestarted'
 
 export const isRTLLanguage = (code: string): boolean =>
   LOCALES.find((l) => l.code === code)?.dir === 'rtl'
 
 /**
- * Разрешаем RTL, но НЕ решаем направление на этапе импорта: настоящий язык
- * читается из хранилища асинхронно, и направление, выставленное по запасному
- * языку, дало бы «английский текст в RTL-раскладке» до следующего запуска.
+ * Разрешаем системе зеркалить нативные элементы (диалоги, меню выбора текста).
+ * Направление самого интерфейса задаёт DirectionProvider, а не этот флаг.
  */
 I18nManager.allowRTL(true)
 
@@ -120,36 +114,24 @@ export async function loadFontsFor(code: string): Promise<void> {
 }
 
 /**
- * Готовит язык до показа интерфейса.
+ * Готовит язык до показа интерфейса: выбирает его и грузит шрифты.
  *
- * Возвращает needsRestart, если направление письма не совпадает с текущим:
- * флаг I18nManager записывается нативно и читается при создании корневого
- * представления, поэтому применяется только со следующей загрузки бандла.
- * Перезагружаемся под сплешем — человек видит чуть более долгий запуск,
- * но никогда не видит кадр в неверном направлении.
+ * Направление письма здесь НЕ применяется и перезапуск не нужен. Раньше тут
+ * стоял I18nManager.forceRTL с перезагрузкой бандла под сплешем. От этого
+ * отказались: на iOS forceRTL не применяется вовсе (проверено на релизной
+ * сборке при чистой установке), а на Android он работает, но оставляет
+ * I18nManager.isRTL несогласованным с настоящей раскладкой — и весь код,
+ * который верил флагу, ошибался молча.
+ *
+ * Теперь направление задаёт DirectionProvider через свойство direction на
+ * корневом View: оно применяется к уже смонтированному дереву сразу, без
+ * перезагрузки и одинаково на обеих платформах.
  */
-export async function bootstrapLanguage(): Promise<{ needsRestart: boolean }> {
+export async function bootstrapLanguage(): Promise<void> {
   const stored = await getStoredLanguage()
   const resolved = stored ?? deviceLanguage()
   if (i18n.language !== resolved) await i18n.changeLanguage(resolved)
-
   await loadFontsFor(resolved)
-
-  const shouldBeRTL = isRTLLanguage(resolved)
-  if (I18nManager.isRTL !== shouldBeRTL) {
-    I18nManager.forceRTL(shouldBeRTL)
-    const already = await AsyncStorage.getItem(RTL_GUARD_KEY).catch(() => null)
-    if (!already) {
-      await AsyncStorage.setItem(RTL_GUARD_KEY, '1').catch(() => {})
-      return { needsRestart: true }
-    }
-    // Перезапуск уже был и не помог: один неверный кадр лучше вечного цикла.
-    return { needsRestart: false }
-  }
-
-  // Направление совпало — снимаем отметку, чтобы следующая смена сработала.
-  await AsyncStorage.removeItem(RTL_GUARD_KEY).catch(() => {})
-  return { needsRestart: false }
 }
 
 export default i18n

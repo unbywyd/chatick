@@ -1,7 +1,6 @@
 import { useEffect, useRef, useState } from 'react'
 import {
   ActivityIndicator,
-  I18nManager,
   Modal,
   Pressable,
   ScrollView,
@@ -16,6 +15,7 @@ import { projectToken, RulesRequired } from '../lib/project-token'
 import { formatClock } from '../lib/format'
 import { Avatar } from './Avatar'
 import { Txt } from './Txt'
+import { useDirection } from '../lib/direction'
 import { IconPause, IconPlay, IconSearch } from './icons'
 import { theme } from '../theme'
 
@@ -156,6 +156,9 @@ function PickerSheet({
 }) {
   const insets = useSafeAreaInsets()
   const { t } = useTranslation()
+  // Поле ввода само за раскладкой не следует — направление задаём явно и из
+  // языка приложения (I18nManager.isRTL на устройстве бывает несогласован).
+  const { textAlign } = useDirection()
   const [q, setQ] = useState('')
   const [what, setWhat] = useState('')
   const inputRef = useRef<TextInput>(null)
@@ -175,7 +178,7 @@ function PickerSheet({
 
         <TextInput
           ref={inputRef}
-          style={s.field}
+          style={[s.field, { textAlign }]}
           value={what}
           onChangeText={setWhat}
           placeholder={t('mobile.descriptionOptional')}
@@ -279,8 +282,6 @@ const s = StyleSheet.create({
     fontSize: 15,
     paddingHorizontal: 14,
     paddingVertical: 12,
-    // Поле ввода само за раскладкой не следует (Rule 3).
-    textAlign: I18nManager.isRTL ? 'right' : 'left',
   },
   list: { marginTop: 4 },
   item: { flexDirection: 'row', alignItems: 'center', gap: 12, paddingVertical: 10 },

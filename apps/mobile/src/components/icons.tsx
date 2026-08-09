@@ -1,5 +1,6 @@
 import Svg, { Circle, Path, Rect } from 'react-native-svg'
-import { I18nManager, type StyleProp, type ViewStyle } from 'react-native'
+import { type StyleProp, type ViewStyle } from 'react-native'
+import { useDirection } from '../lib/direction'
 import { theme } from '../theme'
 
 // Иконки интерфейса.
@@ -38,7 +39,11 @@ function Icon({
   directional,
   children,
 }: IconProps & { children: React.ReactNode }) {
-  const flip = directional && I18nManager.isRTL
+  // Значок отражаем по направлению ЯЗЫКА. Раньше здесь стоял
+  // I18nManager.isRTL — на устройстве он давал false в ивритском интерфейсе,
+  // и стрелка молча продолжала смотреть в прежнюю сторону.
+  const { isRTL } = useDirection()
+  const flip = directional && isRTL
   return (
     <Svg
       width={size}
