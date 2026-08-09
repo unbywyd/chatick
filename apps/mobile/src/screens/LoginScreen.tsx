@@ -45,28 +45,39 @@ export function LoginScreen({ onDone }: { onDone: () => void }) {
         {/* Знак — первое, что человек видит. Без него экран читался как
             страница текста: непонятно даже, какое приложение открылось. */}
         <Logo size={34} />
+        {/* Один язык на экране. Заголовок был английским, подсказки под
+            кнопкой — русскими: вперемешку это читается как недоделка.
+            Полноценные переводы приедут вместе с настройками языка. */}
         <Text style={s.title}>
-          Streamline teamwork,{'\n'}
-          <Text style={s.titleAccent}>one chat</Text> at a time
+          Место, где ваш{'\n'}
+          <Text style={s.titleAccent}>ИИ-ассистент</Text>{'\n'}работает в команде
         </Text>
-        <Text style={s.sub}>A chat platform built for efficient project teamwork.</Text>
+        <Text style={s.sub}>Чат проекта, задачи и время — там же, где работает ассистент.</Text>
       </View>
 
       <View style={s.bottom}>
         {error ? <Text style={s.error}>{error}</Text> : null}
 
+        {/* «Войти в Chatick», а не «Войти через Google».
+            Кнопка ведёт не к Google, а на наш экран входа в браузере — там
+            способов два: Google и код на почту, и второй у корпоративной
+            почты часто единственный. Обещать один способ и показать другой
+            экран хуже, чем назвать вещи своими именами. */}
         <Pressable style={s.btn} onPress={start}>
           {waiting ? <ActivityIndicator color={theme.brandFg} /> : null}
-          <Text style={s.btnText}>{waiting ? 'Попробовать ещё раз' : 'Sign in with Google'}</Text>
+          <Text style={s.btnText}>{waiting ? 'Войти ещё раз' : 'Войти в Chatick'}</Text>
         </Pressable>
 
+        {/* Сказать заранее, что откроется браузер: иначе переход выглядит как
+            сбой — «меня выкинуло из приложения». */}
+        <Text style={s.hint}>
+          {waiting ? 'Ждём подтверждения в браузере…' : 'Откроется браузер — войдите через Google или по коду на почту'}
+        </Text>
+
         {waiting ? (
-          <>
-            <Text style={s.hint}>Ждём завершения входа в браузере…</Text>
-            <Pressable onPress={cancel} hitSlop={12}>
-              <Text style={s.cancel}>Отмена</Text>
-            </Pressable>
-          </>
+          <Pressable onPress={cancel} hitSlop={12}>
+            <Text style={s.cancel}>Отмена</Text>
+          </Pressable>
         ) : null}
       </View>
     </View>
@@ -96,6 +107,8 @@ const s = StyleSheet.create({
     width: '100%',
   },
   btnText: { color: theme.brandFg, fontSize: 16, fontWeight: '700' },
-  hint: { color: theme.muted, fontSize: 14 },
+  // Подсказка длиннее прежней и переносится — без центровки вторая строка
+  // висела бы слева, а кнопка над ней стоит по центру.
+  hint: { color: theme.muted, fontSize: 13, textAlign: 'center', lineHeight: 18 },
   cancel: { color: theme.muted, fontSize: 13, textDecorationLine: 'underline' },
 })
