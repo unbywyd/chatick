@@ -33,3 +33,7 @@ apps/mobile/ios/
 *.apk
 *.aab
 apps/mobile/android/
+
+# Скомпилированный питон из скилов — возвращается при каждом запуске
+__pycache__/
+*.pyc
