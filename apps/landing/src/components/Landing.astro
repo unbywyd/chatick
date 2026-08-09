@@ -167,55 +167,31 @@ const MARK_ANYAPP = asset('anyapp-logo-twotone-dark.svg')
         </li>
       </ul>
 
-      {/* Единственная анимация на странице — и она же главный аргумент.
-          Скриншот показывал, что продукт существует; это показывает, что он
-          делает: реплика в чате на глазах становится задачей с исполнителем
-          и сроком. Три секунды вместо абзаца текста.
-          Разметка честная и в статике: без JS и при reduced-motion виден
-          готовый результат, а не пустая рамка. */}
       </div>
 
-      <figure class="hero-demo">
-        <figcaption class="sr-only">{t.hero.demo.alt}</figcaption>
-        {/* Одним SVG с жёсткой системой координат: DOM-вёрстка этой сцены
-            разъезжалась на разных ширинах и локалях, а здесь геометрия задана
-            числами, и плыть ей некуда. */}
-        <svg class="demo-svg" viewBox="0 0 460 424" aria-hidden="true">
-          <g class="ds-1">
-            <rect x="1" y="1" width="458" height="94" rx="13" class="ds-card"></rect>
-            <text x="22" y="28" class="ds-label">{t.hero.demo.chatLabel}</text>
-            <circle cx="36" cy="62" r="13" class="ds-ava"></circle>
-            <text x="36" y="67" class="ds-ava-t" text-anchor="middle">{t.hero.demo.author.slice(0, 1)}</text>
-            <text x="60" y="55" class="ds-name">{t.hero.demo.author}</text>
-            <text x="60" y="76" class="ds-msg">{t.hero.demo.message}</text>
-          </g>
-          <g class="ds-arr ds-arr-1">
-            <path d="M230 106v20m0 0-6-7m6 7 6-7"></path>
-          </g>
-          <g class="ds-2">
-            <rect x="1" y="140" width="458" height="106" rx="13" class="ds-card"></rect>
-            <text x="22" y="167" class="ds-label ds-label-task">{t.hero.demo.taskLabel}</text>
-            <text x="22" y="196" class="ds-title">{t.hero.demo.taskTitle}</text>
-            <g class="ds-chips">
-              <circle cx="33" cy="224" r="10" class="ds-ava"></circle>
-              <text x="33" y="228" class="ds-ava-t" text-anchor="middle">{t.hero.demo.assignee.slice(0, 1)}</text>
-              <text x="50" y="229" class="ds-chip">{t.hero.demo.assignee}  ·  {t.hero.demo.due}  ·  {t.hero.demo.status}</text>
-            </g>
-          </g>
-          <g class="ds-arr ds-arr-2">
-            <path d="M230 257v20m0 0-6-7m6 7 6-7"></path>
-          </g>
-          <g class="ds-3">
-            <rect x="1" y="291" width="458" height="120" rx="13" class="ds-card ds-term"></rect>
-            <text x="22" y="318" class="ds-label">{t.hero.demo.agentLabel}</text>
-            <text x="22" y="350" class="ds-code"><tspan class="ds-cmd">▸ </tspan>{t.hero.demo.agentWork}</text>
-            <g class="ds-done">
-              <path d="m24 379 5 5 11-12" class="ds-check"></path>
-              <text x="48" y="388" class="ds-done-t">{t.hero.demo.agentDone}</text>
-            </g>
-          </g>
-        </svg>
-      </figure>
+      {/* Главное действие страницы — на первом экране.
+          Здесь была анимация «реплика в чате становится задачей»: она
+          показывала, что продукт делает, но не давала ничего сделать. Строка
+          ниже даёт: человек копирует её, отдаёт своему ассистенту, и тот
+          читает ai.txt и подключается сам. Этого нет у трекеров, и незачем
+          прятать это в середину страницы. */}
+      <div class="hero-handoff">
+        <p class="hero-handoff-title">{t.numbers.title}</p>
+        {/* dir="auto", а не "ltr": строка на иврите — ивритская, и жёсткий LTR
+            развернул бы её задом наперёд. Браузер смотрит на первую сильную
+            букву и ставит направление сам. */}
+        <p class="handoff-line" dir="auto">{t.ask.prompt}</p>
+        <button class="btn handoff-copy" data-copy-text={t.ask.prompt} data-copied={t.ask.copied}>
+          <svg viewBox="0 0 24 24" width="17" height="17" fill="none" aria-hidden="true">
+            <rect x="9" y="9" width="12" height="12" rx="2.5" stroke="currentColor" stroke-width="2"></rect>
+            <path d="M5 15V5.5A2.5 2.5 0 0 1 7.5 3H15" stroke="currentColor" stroke-width="2" stroke-linecap="round"></path>
+          </svg>
+          <span>{t.ask.copy}</span>
+        </button>
+        <ol class="hero-handoff-steps">
+          {t.numbers.steps.map((s) => <li>{s}</li>)}
+        </ol>
+      </div>
     </div>
   </section>
 
@@ -486,51 +462,6 @@ const MARK_ANYAPP = asset('anyapp-logo-twotone-dark.svg')
        Здесь были столбики часов и полоска статусов с выдуманными числами.
        Такие графики есть у любого трекера и не отвечают, чем мы отличаемся;
        а заголовок над ними обещал настоящие цифры. -->
-  <section class="section handoff">
-    <div class="container">
-      <h2>{t.numbers.title}</h2>
-      <p class="section-sub">{t.numbers.subtitle}</p>
-
-      <!-- Сама строка — крупно и целиком: её забирают глазами не реже, чем
-           кнопкой (буфер закрыт без https, да и просто привычка). -->
-      <div class="handoff-prompt">
-        {/* dir="auto", а не "ltr": строка на иврите — ивритская, и жёсткий LTR
-            развернул бы её задом наперёд. Браузер смотрит на первую сильную
-            букву и ставит нужное направление сам, а ссылка внутри остаётся
-            читаемой в обоих случаях. */}
-        <p class="handoff-line" dir="auto">{t.ask.prompt}</p>
-        <button class="btn handoff-copy" data-copy-text={t.ask.prompt} data-copied={t.ask.copied}>
-          <svg viewBox="0 0 24 24" width="17" height="17" fill="none" aria-hidden="true">
-            <rect x="9" y="9" width="12" height="12" rx="2.5" stroke="currentColor" stroke-width="2"></rect>
-            <path d="M5 15V5.5A2.5 2.5 0 0 1 7.5 3H15" stroke="currentColor" stroke-width="2" stroke-linecap="round"></path>
-          </svg>
-          <span>{t.ask.copy}</span>
-        </button>
-      </div>
-
-      <ol class="handoff-steps">
-        {t.numbers.steps.map((s) => <li>{s}</li>)}
-      </ol>
-
-      <!-- Два файла ниже: кто хочет прочитать сам или отдать разработчикам.
-           Ссылки, а не кнопки: копирование уже есть выше и в шапке. -->
-      <ul class="handoff-files">
-        <li>
-          <a href="/ai.txt">
-            <span class="handoff-file-name">{t.numbers.fileAi}</span>
-            <span class="handoff-file-note">{t.numbers.fileAiNote}</span>
-          </a>
-        </li>
-        <li>
-          <a href="/integration.txt">
-            <span class="handoff-file-name">{t.numbers.fileApi}</span>
-            <span class="handoff-file-note">{t.numbers.fileApiNote}</span>
-          </a>
-        </li>
-      </ul>
-    </div>
-  </section>
-
   <!-- ДОВЕРИЕ -->
   <section class="section section-soft">
     <div class="container">
@@ -1268,18 +1199,28 @@ const MARK_ANYAPP = asset('anyapp-logo-twotone-dark.svg')
   .hero {
     padding: 88px 0 80px;
   }
-  /* Две колонки: сцена «сообщение → задача» — главный довод страницы, и она
+  /* Две колонки: строка для ассистента — главное действие страницы, и она
      должна попадать в первый экран, а не уезжать под сгиб. Ширина шире общей
      сетки: в 1060px на большом мониторе всё сбивалось в узкий столбец, и
      страница выглядела беднее, чем есть. */
   .hero-grid {
     max-width: 1280px;
     display: grid;
-    /* 65/35: заголовок — главное на первом экране, сцена его поясняет, а не
-       спорит с ним за место. */
-    grid-template-columns: minmax(0, 65fr) minmax(0, 35fr);
+    /* 58/42: справа теперь не узкая картинка, а строка, которую копируют, —
+       ей нужна ширина, иначе моноширинный текст рвётся на пять строк.
+       Раньше было 65/35 под схему. */
+    grid-template-columns: minmax(0, 58fr) minmax(0, 42fr);
     gap: 56px;
     align-items: center;
+  }
+  /* Узко — в одну колонку. Без этого карточка уезжала за край экрана, а
+     моноширинная строка внутри резалась по два-три символа: колонка в 42%
+     от 390px — это полторы сотни пикселей. */
+  @media (max-width: 900px) {
+    .hero-grid {
+      grid-template-columns: minmax(0, 1fr);
+      gap: 36px;
+    }
   }
   /* Текст по краю, а не по центру: с левой выключкой глаз находит начало
      строки сам, и колонка держится рядом со сценой. */
@@ -1739,33 +1680,40 @@ const MARK_ANYAPP = asset('anyapp-logo-twotone-dark.svg')
 </style>
 
 <style>
-  /* --- Отдать ассистенту --------------------------------------------------- */
-  .handoff-prompt {
-    display: flex;
-    align-items: stretch;
-    gap: 12px;
-    margin-top: 28px;
-    padding: 16px 18px;
+  /* --- Отдать ассистенту (первый экран) ------------------------------------ */
+  /* Карточка на месте бывшей схемы. Она не иллюстрация: с неё уходят в свой
+     чат с ассистентом, поэтому вес такой же, как у кнопки «Начать» слева. */
+  .hero-handoff {
+    padding: 22px;
     background: var(--bg-soft);
     border: 1px solid var(--border);
     border-radius: var(--radius);
   }
-  /* Строка всегда слева направо, даже на иврите: внутри неё ссылка и
-     английские названия моделей, и в RTL они рассыпаются. */
+  .hero-handoff-title {
+    margin: 0 0 14px;
+    font-size: 1.02rem;
+    font-weight: 700;
+    line-height: 1.3;
+  }
+  /* Строка всегда читается как код: моноширинный шрифт отделяет её от
+     подписей вокруг, и видно, что копируют именно это. */
   .handoff-line {
-    flex: 1;
     margin: 0;
-    align-self: center;
+    padding: 13px 15px;
+    background: var(--bg);
+    border: 1px solid var(--border);
+    border-radius: 10px;
     font-family: var(--font-mono);
-    font-size: 0.84rem;
-    line-height: 1.55;
+    font-size: 0.8rem;
+    line-height: 1.6;
     color: var(--fg);
     word-break: break-word;
   }
   .handoff-copy {
-    flex: none;
-    align-self: center;
+    width: 100%;
+    margin-top: 12px;
     gap: 8px;
+    justify-content: center;
   }
   .handoff-copy.done {
     background: var(--fg);
@@ -1773,75 +1721,31 @@ const MARK_ANYAPP = asset('anyapp-logo-twotone-dark.svg')
 
   /* Шаги нумерует счётчик, а не маркеры списка: цифра здесь — часть рисунка,
      и её размер и цвет должны слушаться нас. */
-  .handoff-steps {
+  .hero-handoff-steps {
     list-style: none;
     counter-reset: handoff;
     display: grid;
-    grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
-    gap: 14px;
-    margin-top: 26px;
+    gap: 8px;
+    margin: 16px 0 0;
     padding: 0;
   }
-  .handoff-steps li {
+  .hero-handoff-steps li {
     counter-increment: handoff;
     display: flex;
     align-items: baseline;
-    gap: 10px;
-    font-size: 0.94rem;
+    gap: 9px;
+    font-size: 0.86rem;
+    line-height: 1.45;
     color: var(--fg-muted);
   }
-  .handoff-steps li::before {
+  .hero-handoff-steps li::before {
     content: counter(handoff);
     flex: none;
+    min-width: 1.1em;
     font-family: var(--font-mono);
-    font-size: 0.78rem;
+    font-size: 0.74rem;
     font-weight: 700;
     color: var(--lime);
-  }
-
-  .handoff-files {
-    list-style: none;
-    display: grid;
-    grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
-    gap: 12px;
-    margin-top: 26px;
-    padding: 0;
-  }
-  .handoff-files a {
-    display: block;
-    padding: 14px 16px;
-    border: 1px solid var(--border);
-    border-radius: var(--radius);
-    text-decoration: none;
-    color: inherit;
-    transition: border-color 0.15s ease, background 0.15s ease;
-  }
-  .handoff-files a:hover {
-    border-color: rgba(212, 242, 40, 0.35);
-    background: var(--bg-soft);
-  }
-  .handoff-file-name {
-    display: block;
-    font-weight: 600;
-    font-size: 0.94rem;
-  }
-  .handoff-file-note {
-    display: block;
-    margin-top: 3px;
-    font-size: 0.84rem;
-    color: var(--fg-muted);
-  }
-
-  @media (max-width: 600px) {
-    /* Кнопка под строкой, во всю ширину: рядом ей остаётся полполосы, и
-       подпись переносится по слогам. */
-    .handoff-prompt {
-      flex-direction: column;
-    }
-    .handoff-copy {
-      align-self: stretch;
-      justify-content: center;
-    }
   }
 
   /* --- Скачивание --------------------------------------------------------- */
@@ -2286,7 +2190,10 @@ const MARK_ANYAPP = asset('anyapp-logo-twotone-dark.svg')
     list-style: none;
     margin: 26px auto 0;
     padding: 0;
-    max-width: 720px;
+    /* Та же ширина, что у .section-sub над списком. Было 720 против 660, и
+       левый край списка не совпадал ни с подзаголовком, ни с заголовком —
+       на глаз читалось как случайный сдвиг. */
+    max-width: 660px;
     display: grid;
     gap: 12px;
     text-align: start;
@@ -2311,114 +2218,6 @@ const MARK_ANYAPP = asset('anyapp-logo-twotone-dark.svg')
     justify-content: center;
     gap: 12px;
   }
-
-  /* --- Оживший момент в шапке: одним SVG ----------------------------------- */
-  /* Геометрия сцены задана числами во viewBox — разъезжаться нечему. Шрифты и
-     цвета наследуются из токенов страницы, поэтому сцена живёт в той же
-     палитре, что и всё вокруг. */
-  .hero-demo {
-    margin: 0;
-  }
-  .demo-svg {
-    display: block;
-    width: 100%;
-    height: auto;
-  }
-  .ds-card {
-    fill: var(--bg-soft);
-    stroke: var(--border);
-  }
-  .ds-term {
-    fill: rgba(0, 0, 0, 0.4);
-  }
-  .ds-label {
-    font-family: var(--font-mono);
-    font-size: 10.5px;
-    font-weight: 600;
-    letter-spacing: 0.09em;
-    text-transform: uppercase;
-    fill: var(--fg-muted);
-  }
-  .ds-label-task {
-    fill: var(--lime);
-  }
-  .ds-ava {
-    fill: rgba(212, 242, 40, 0.16);
-    stroke: rgba(212, 242, 40, 0.35);
-  }
-  .ds-ava-t {
-    font-size: 12px;
-    font-weight: 700;
-    fill: var(--lime);
-  }
-  .ds-name {
-    font-size: 13px;
-    font-weight: 600;
-    fill: var(--fg-muted);
-  }
-  .ds-msg {
-    font-size: 14px;
-    fill: var(--fg);
-  }
-  .ds-title {
-    font-size: 15px;
-    font-weight: 650;
-    fill: var(--fg);
-  }
-  .ds-chip {
-    font-size: 13.5px;
-    fill: var(--fg-muted);
-  }
-  .ds-arr path {
-    fill: none;
-    stroke: var(--lime);
-    stroke-width: 2.2;
-    stroke-linecap: round;
-    stroke-linejoin: round;
-  }
-  .ds-code {
-    font-family: var(--font-mono);
-    font-size: 13px;
-    fill: var(--fg-muted);
-  }
-  .ds-cmd {
-    fill: var(--lime);
-  }
-  .ds-check {
-    fill: none;
-    stroke: var(--lime);
-    stroke-width: 2.6;
-    stroke-linecap: round;
-    stroke-linejoin: round;
-  }
-  .ds-done-t {
-    font-size: 13.5px;
-    fill: var(--lime);
-  }
-  /* История разворачивается по шагам; без анимации (reduced-motion) видна
-     сразу целиком — финал важнее спецэффекта. */
-  .ds-1, .ds-arr-1, .ds-2, .ds-chips, .ds-arr-2, .ds-3, .ds-done {
-    opacity: 0;
-    animation: ds-in 0.5s ease-out both;
-  }
-  .ds-1 { animation-delay: 0.2s; }
-  .ds-arr-1 { animation-delay: 0.9s; }
-  .ds-2 { animation-delay: 1.15s; }
-  .ds-chips { animation-delay: 1.8s; }
-  .ds-arr-2 { animation-delay: 2.35s; }
-  .ds-3 { animation-delay: 2.6s; }
-  .ds-done { animation-delay: 3.35s; }
-  @keyframes ds-in {
-    from { opacity: 0; transform: translateY(8px); }
-    to { opacity: 1; transform: none; }
-  }
-  @media (prefers-reduced-motion: reduce) {
-    .ds-1, .ds-arr-1, .ds-2, .ds-chips, .ds-arr-2, .ds-3, .ds-done {
-      animation: none;
-      opacity: 1;
-    }
-  }
-
 
   .hero-trust {
     list-style: none;
@@ -2503,6 +2302,9 @@ const MARK_ANYAPP = asset('anyapp-logo-twotone-dark.svg')
   }
   .integrate-note {
     margin-top: 12px;
+    /* Под центрированными кнопками — тоже по центру. Без этого подпись
+       прижималась к левому краю контейнера и висела сама по себе. */
+    text-align: center;
   }
   .doc-copy-lg.done {
     color: var(--lime);
