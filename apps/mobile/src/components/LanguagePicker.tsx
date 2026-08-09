@@ -4,6 +4,7 @@ import { useTranslation } from 'react-i18next'
 import { LOCALES, type LocaleCode } from '../i18n'
 import { useChangeLanguage } from '../i18n/useChangeLanguage'
 import { Txt } from './Txt'
+import { IconCheck, IconGlobe } from './icons'
 import { theme } from '../theme'
 
 // Переключатель языка.
@@ -48,7 +49,14 @@ export function LanguagePicker({ compact = false }: { compact?: boolean }) {
 
   return (
     <>
-      <Pressable style={[s.trigger, compact && s.triggerCompact]} onPress={() => setOpen(true)} hitSlop={10}>
+      <Pressable
+        style={[s.trigger, compact && s.triggerCompact]}
+        onPress={() => setOpen(true)}
+        hitSlop={10}
+        accessibilityRole="button"
+        accessibilityLabel={t('mobile.language')}
+      >
+        <IconGlobe size={14} color={theme.muted} />
         <Txt style={s.triggerText}>{current.label}</Txt>
       </Pressable>
 
@@ -59,7 +67,7 @@ export function LanguagePicker({ compact = false }: { compact?: boolean }) {
             {LOCALES.map((l) => (
               <Pressable key={l.code} style={s.item} onPress={() => void pick(l.code)}>
                 <Txt style={[s.itemText, l.code === current.code && s.itemActive]}>{l.label}</Txt>
-                {l.code === current.code ? <Txt style={s.check}>✓</Txt> : null}
+                {l.code === current.code ? <IconCheck size={17} color={theme.brand} /> : null}
               </Pressable>
             ))}
           </View>
@@ -86,8 +94,17 @@ export function LanguagePicker({ compact = false }: { compact?: boolean }) {
 }
 
 const s = StyleSheet.create({
-  trigger: { paddingHorizontal: 10, paddingVertical: 6, borderRadius: 999, borderWidth: 1, borderColor: theme.border },
-  triggerCompact: { paddingHorizontal: 8, paddingVertical: 4 },
+  trigger: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    paddingHorizontal: 11,
+    paddingVertical: 7,
+    borderRadius: 999,
+    borderWidth: 1,
+    borderColor: theme.border,
+  },
+  triggerCompact: { paddingHorizontal: 9, paddingVertical: 5 },
   triggerText: { color: theme.muted, fontSize: 13, fontWeight: '600' },
   backdrop: { flex: 1, backgroundColor: 'rgba(0,0,0,0.6)', alignItems: 'center', justifyContent: 'center', padding: 32 },
   sheet: { backgroundColor: theme.card, borderRadius: 18, padding: 18, gap: 6, width: '100%', maxWidth: 340 },
@@ -95,7 +112,6 @@ const s = StyleSheet.create({
   item: { flexDirection: 'row', alignItems: 'center', gap: 10, paddingVertical: 13 },
   itemText: { flex: 1, color: theme.fg, fontSize: 17 },
   itemActive: { color: theme.brand, fontWeight: '700' },
-  check: { color: theme.brand, fontSize: 16 },
   warn: { color: theme.fg, fontSize: 15, lineHeight: 21 },
   actions: { flexDirection: 'row', gap: 10, marginTop: 14 },
   ghostBtn: { flex: 1, borderWidth: 1, borderColor: theme.border, borderRadius: 999, paddingVertical: 13, alignItems: 'center' },

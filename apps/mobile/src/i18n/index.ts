@@ -86,6 +86,40 @@ void i18n.use(initReactI18next).init({
 })
 
 /**
+ * Загружает шрифт под язык: Heebo для иврита, Inter для остального.
+ *
+ * Ни один из них не покрывает оба письма — я сверил таблицы cmap: в Heebo
+ * ноль кириллических знаков, в Inter ноль ивритских. Один шрифт на всё
+ * оставил бы половину интерфейса на системном.
+ *
+ * Грузим только нужный набор: второй в этом запуске не понадобится, а лишние
+ * 300 КБ на старте — задержка на пустом месте. Вызывается и при старте, и при
+ * смене языка: переход между языками одного направления (иврит → английский)
+ * идёт без перезапуска, и шрифт там иначе не появился бы.
+ */
+export async function loadFontsFor(code: string): Promise<void> {
+  try {
+    const Font = await import('expo-font')
+    await Font.loadAsync(
+      code === 'he'
+        ? {
+            'Heebo-Regular': require('../../assets/fonts/Heebo-Regular.ttf'),
+            'Heebo-Medium': require('../../assets/fonts/Heebo-Medium.ttf'),
+            'Heebo-Bold': require('../../assets/fonts/Heebo-Bold.ttf'),
+          }
+        : {
+            'Inter-Regular': require('../../assets/fonts/Inter-Regular.ttf'),
+            'Inter-Medium': require('../../assets/fonts/Inter-Medium.ttf'),
+            'Inter-Bold': require('../../assets/fonts/Inter-Bold.ttf'),
+          },
+    )
+  } catch {
+    // Шрифт не загрузился — интерфейс отрисуется системным. Это хуже внешне,
+    // но лучше, чем не показать приложение вовсе.
+  }
+}
+
+/**
  * Готовит язык до показа интерфейса.
  *
  * Возвращает needsRestart, если направление письма не совпадает с текущим:
@@ -98,6 +132,8 @@ export async function bootstrapLanguage(): Promise<{ needsRestart: boolean }> {
   const stored = await getStoredLanguage()
   const resolved = stored ?? deviceLanguage()
   if (i18n.language !== resolved) await i18n.changeLanguage(resolved)
+
+  await loadFontsFor(resolved)
 
   const shouldBeRTL = isRTLLanguage(resolved)
   if (I18nManager.isRTL !== shouldBeRTL) {

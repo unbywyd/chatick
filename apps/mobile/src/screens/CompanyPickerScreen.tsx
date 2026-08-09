@@ -16,6 +16,7 @@ import { LogoMark } from '../components/Logo'
 import { Avatar } from '../components/Avatar'
 import { Txt } from '../components/Txt'
 import { LanguagePicker } from '../components/LanguagePicker'
+import { IconChevronRight, IconLogOut, IconPlus } from '../components/icons'
 import { theme } from '../theme'
 
 // Выбор компании — обязательный шаг после входа (SPEC §4.3).
@@ -94,7 +95,14 @@ export function CompanyPickerScreen({
         <LogoMark size={30} />
         <View style={s.headRight}>
           <LanguagePicker compact />
-          <Pressable onPress={onLogout} hitSlop={12}>
+          <Pressable
+            style={s.logoutBtn}
+            onPress={onLogout}
+            hitSlop={12}
+            accessibilityRole="button"
+            accessibilityLabel={t('start.logout')}
+          >
+            <IconLogOut size={15} color={theme.muted} />
             <Txt style={s.logout}>{t('start.logout')}</Txt>
           </Pressable>
         </View>
@@ -144,9 +152,7 @@ export function CompanyPickerScreen({
                       : t('mobile.projectsCount', { count: c.projectsCount }))}
                 </Txt>
               </View>
-              {/* Шеврон указывает «дальше» — направление зависит от письма,
-                  поэтому отражаем сам знак (Rule 1: иконки RN не переворачивает). */}
-              <Txt style={[s.chevron, I18nManager.isRTL && s.flip]}>›</Txt>
+              <IconChevronRight size={18} color={theme.muted} />
             </Pressable>
           ))}
         </View>
@@ -192,6 +198,7 @@ export function CompanyPickerScreen({
         // Кнопки нет, когда своя компания уже есть: обещать действие, которое
         // сервер отклонит с 409, — худший вид неработающей кнопки.
         <Pressable style={s.ghost} onPress={() => setCreating(true)}>
+          <IconPlus size={17} color={theme.fg} />
           <Txt style={s.ghostText}>{t('mobile.createOwnCompany')}</Txt>
         </Pressable>
       ) : null}
@@ -205,6 +212,7 @@ const s = StyleSheet.create({
   center: { flex: 1, backgroundColor: theme.bg, alignItems: 'center', justifyContent: 'center', gap: 16 },
   head: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 20 },
   headRight: { flexDirection: 'row', alignItems: 'center', gap: 12 },
+  logoutBtn: { flexDirection: 'row', alignItems: 'center', gap: 6 },
   logout: { color: theme.muted, fontSize: 14 },
   title: { color: theme.fg, fontSize: 28, fontWeight: '700' },
   sub: { color: theme.muted, fontSize: 15, lineHeight: 21, marginBottom: 12 },
@@ -231,8 +239,6 @@ const s = StyleSheet.create({
   rowText: { flex: 1, gap: 2 },
   rowName: { color: theme.fg, fontSize: 16, fontWeight: '600' },
   rowMeta: { color: theme.muted, fontSize: 13 },
-  chevron: { color: theme.muted, fontSize: 22, lineHeight: 24 },
-  flip: { transform: [{ scaleX: -1 }] },
   acceptBtn: { backgroundColor: theme.brand, borderRadius: 999, paddingHorizontal: 16, paddingVertical: 9 },
   acceptText: { color: theme.brandFg, fontSize: 14, fontWeight: '700' },
   form: { gap: 12, marginTop: 20, alignItems: 'stretch' },
@@ -261,11 +267,14 @@ const s = StyleSheet.create({
   primaryOff: { opacity: 0.4 },
   primaryText: { color: theme.brandFg, fontSize: 16, fontWeight: '700' },
   ghost: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 8,
     borderWidth: 1,
     borderColor: theme.border,
     borderRadius: 999,
     paddingVertical: 15,
-    alignItems: 'center',
     marginTop: 20,
   },
   ghostText: { color: theme.fg, fontSize: 15, fontWeight: '600' },

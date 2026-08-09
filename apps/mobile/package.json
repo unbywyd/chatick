@@ -18,6 +18,7 @@
     "expo": "~57.0.8",
     "expo-auth-session": "~57.0.5",
     "expo-constants": "~57.0.7",
+    "expo-font": "~57.0.1",
     "expo-localization": "~57.0.1",
     "expo-secure-store": "~57.0.1",
     "expo-speech-recognition": "^2.1.1",

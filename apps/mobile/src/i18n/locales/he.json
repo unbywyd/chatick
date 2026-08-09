@@ -34,7 +34,7 @@
   "mobile": {
     "pickCompany": "בחרו חברה",
     "pickCompanyHint": "פרויקטים וצ׳אטים נמצאים בתוך חברה.",
-    "createOwnCompany": "+ צרו חברה משלכם",
+    "createOwnCompany": "צרו חברה משלכם",
     "companiesFailed": "לא ניתן לטעון את החברות",
     "retry": "לנסות שוב",
     "alreadyHaveCompany": "כבר יש לכם חברה משלכם",

@@ -16,6 +16,7 @@ import { projectToken, RulesRequired } from '../lib/project-token'
 import { formatClock } from '../lib/format'
 import { Avatar } from './Avatar'
 import { Txt } from './Txt'
+import { IconPause, IconPlay, IconSearch } from './icons'
 import { theme } from '../theme'
 
 // Кнопка таймера в шапке (SPEC §4.4).
@@ -106,7 +107,11 @@ export function TimerButton({
         <Txt ltr style={s.clock}>
           {formatClock(seconds)}
         </Txt>
-        {busy ? <ActivityIndicator size="small" color={theme.brandFg} /> : <Txt style={s.pause}>❚❚</Txt>}
+        {busy ? (
+          <ActivityIndicator size="small" color={theme.brandFg} />
+        ) : (
+          <IconPause size={15} color={theme.brandFg} />
+        )}
       </Pressable>
     )
   }
@@ -114,8 +119,9 @@ export function TimerButton({
   return (
     <>
       <Pressable style={s.idle} onPress={() => setOpen(true)} hitSlop={8}>
-        {/* Знак «пуск» указывает вперёд — в RTL это другая сторона (Rule 1). */}
-        <Txt style={[s.play, I18nManager.isRTL && s.flip]}>▶</Txt>
+        {/* Знак «пуск» указывает вперёд — в RTL это другая сторона; компонент
+            отражает его сам. */}
+        <IconPlay size={15} color={theme.brand} />
       </Pressable>
 
       <PickerSheet
@@ -178,13 +184,16 @@ function PickerSheet({
         />
 
         {mine.length > 6 ? (
-          <TextInput
-            style={s.field}
-            value={q}
-            onChangeText={setQ}
-            placeholder={t('projSwitch.search')}
-            placeholderTextColor={theme.muted}
-          />
+          <View style={s.searchRow}>
+            <IconSearch size={17} color={theme.muted} style={s.searchIcon} />
+            <TextInput
+              style={[s.field, s.searchField]}
+              value={q}
+              onChangeText={setQ}
+              placeholder={t('projSwitch.search')}
+              placeholderTextColor={theme.muted}
+            />
+          </View>
         ) : null}
 
         {error ? <Txt style={s.error}>{error}</Txt> : null}
@@ -204,7 +213,7 @@ function PickerSheet({
                 {busy ? (
                   <ActivityIndicator size="small" color={theme.muted} />
                 ) : (
-                  <Txt style={[s.itemPlay, I18nManager.isRTL && s.flip]}>▶</Txt>
+                  <IconPlay size={14} color={theme.brand} />
                 )}
               </Pressable>
             ))
@@ -225,23 +234,32 @@ const s = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
   },
-  // marginStart, а не marginLeft: треугольник смещён от начала строки,
-  // и в RTL это правый край (Rule 1).
-  play: { color: theme.brand, fontSize: 14, marginStart: 2 },
-  flip: { transform: [{ scaleX: -1 }] },
+  searchRow: { justifyContent: 'center' },
+  // Иконка лежит поверх поля у начала строки: start, а не left,
+  // иначе в иврите она окажется поверх текста.
+  searchIcon: { position: 'absolute', start: 13, zIndex: 1 },
+  searchField: { paddingStart: 40 },
   live: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 8,
+    gap: 9,
     backgroundColor: theme.brand,
     borderRadius: 999,
     // start/end вместо left/right: намерение читается прямо (Rule 1).
+    // Со стороны лого отступ меньше: круглый значок сам добавляет воздуха,
+    // и равные поля выглядели бы съехавшими.
     paddingStart: 6,
-    paddingEnd: 12,
+    paddingEnd: 13,
     paddingVertical: 6,
   },
-  clock: { color: theme.brandFg, fontSize: 14, fontWeight: '700', fontVariant: ['tabular-nums'] },
-  pause: { color: theme.brandFg, fontSize: 11, fontWeight: '700' },
+  // Табличные цифры: без них секунды меняют ширину и плашка дёргается.
+  clock: {
+    color: theme.brandFg,
+    fontSize: 15,
+    fontWeight: '700',
+    fontVariant: ['tabular-nums'],
+    letterSpacing: -0.2,
+  },
   backdrop: { flex: 1, backgroundColor: 'rgba(0,0,0,0.6)' },
   sheet: {
     backgroundColor: theme.card,

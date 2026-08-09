@@ -180,6 +180,95 @@ describe('Hermes: Intl нельзя доверять форматировани�
   })
 })
 
+describe('иконки: рисованные, а не глифы', () => {
+  it('в интерфейсе нет эмодзи и типографских стрелок', () => {
+    // Эмодзи рисует система: он цветной, разный на Android и iOS и не
+    // подчиняется цвету текста. Знаки ▶ › ✓ берутся из шрифта: толщина у них
+    // своя, к сетке они не выровнены. И то, и другое выдаёт черновик.
+    const bad: string[] = []
+    for (const f of ui) {
+      if (f.path.endsWith('icons.tsx')) continue
+      const code = stripComments(f.code)
+      for (const m of code.matchAll(/[\u{1F300}-\u{1FAFF}\u{2600}-\u{27BF}\u{2B00}-\u{2BFF}‹›▶◀❚]/gu)) {
+        bad.push(`${f.path}: ${m[0]}`)
+      }
+    }
+    expect(bad, `глифы вместо иконок:\n${bad.join('\n')}`).toEqual([])
+  })
+
+  it('в переводах нет знаков, которые рисует иконка', () => {
+    // «+ Создать» рядом с нарисованным плюсом даёт два плюса подряд. Знак
+    // остался в строке с тех пор, когда иконок не было, и на экране это
+    // выглядит как опечатка.
+    const bad: string[] = []
+    for (const lang of ['en', 'ru', 'he']) {
+      const d = JSON.parse(readFileSync(join(SRC, 'i18n', 'locales', `${lang}.json`), 'utf8'))
+      const walk = (o: Record<string, unknown>, p = '') => {
+        for (const [k, v] of Object.entries(o)) {
+          if (typeof v === 'string') {
+            if (/^\s*[+＋»«<>›‹→←]\s+/.test(v)) bad.push(`${lang}.${p}${k}: ${v}`)
+          } else if (v && typeof v === 'object') {
+            walk(v as Record<string, unknown>, `${p}${k}.`)
+          }
+        }
+      }
+      walk(d)
+    }
+    expect(bad, `знак в переводе дублирует иконку:\n${bad.join('\n')}`).toEqual([])
+  })
+
+  it('иконки собраны из одного набора с общей толщиной линии', () => {
+    const icons = files.find((f) => f.path.endsWith('icons.tsx'))!.code
+    expect(icons).toMatch(/strokeWidth = 2/)
+    expect(icons).toMatch(/strokeLinecap="round"/)
+  })
+})
+
+describe('шрифты: под каждое письмо своё начертание', () => {
+  const txt = files.find((f) => f.path.endsWith('Txt.tsx'))!.code
+  const i18nSrc = files.find((f) => f.path.endsWith(join('i18n', 'index.ts')))!.code
+
+  it('иврит и кириллица получают разные семейства', () => {
+    // Ни Heebo, ни Inter не покрывают оба письма: в Heebo нет кириллицы,
+    // в Inter нет иврита. Один шрифт на всё оставил бы половину интерфейса
+    // на системном — молча, без ошибки.
+    expect(txt).toMatch(/he:\s*\{/)
+    expect(txt).toMatch(/Heebo-/)
+    expect(txt).toMatch(/Inter-/)
+  })
+
+  it('вес переводится в имя файла, а fontWeight снимается', () => {
+    // fontWeight вместе с fontFamily даёт синтетически утолщённый Regular
+    // вместо настоящего Bold.
+    expect(txt).toMatch(/font\.fontWeight = undefined/)
+  })
+
+  it('шрифт грузится и при старте, и при смене языка', () => {
+    // Переход иврит → английский идёт без перезапуска: без загрузки на лету
+    // интерфейс остался бы с ивритским шрифтом на латинице.
+    expect(i18nSrc).toMatch(/export async function loadFontsFor/)
+    expect(i18nSrc).toMatch(/loadFontsFor\(resolved\)/)
+    const hook = files.find((f) => f.path.endsWith('useChangeLanguage.ts'))!.code
+    expect(hook).toMatch(/loadFontsFor\(target\)/)
+  })
+
+  it('файлы шрифтов лежат в проекте и зарегистрированы', () => {
+    const pkg = JSON.parse(readFileSync(join(SRC, '..', 'app.json'), 'utf8'))
+    const plugin = pkg.expo.plugins.find(
+      (p: unknown) => Array.isArray(p) && p[0] === 'expo-font',
+    ) as [string, { fonts: string[] }] | undefined
+    expect(plugin, 'expo-font не подключён в app.json').toBeTruthy()
+    for (const rel of plugin![1].fonts) {
+      const file = join(SRC, '..', rel.replace('./', ''))
+      const size = statSync(file).size
+      // Настоящий TTF весит десятки килобайт. Страница 404, сохранённая под
+      // именем шрифта, тоже «существует» — и молча ничего не отрисует.
+      expect(size, `${rel}: подозрительный размер`).toBeGreaterThan(20_000)
+      expect(readFileSync(file).subarray(0, 4).toString('hex')).toMatch(/^(00010000|74727565)$/)
+    }
+  })
+})
+
 describe('переводы: ничего не зашито в экранах', () => {
   it('в коде нет кириллических строк', () => {
     // Кириллица в JSX означает, что фраза не переводится вовсе.

@@ -34,7 +34,7 @@
   "mobile": {
     "pickCompany": "Choose a company",
     "pickCompanyHint": "Projects and chats live inside a company.",
-    "createOwnCompany": "+ Create your own company",
+    "createOwnCompany": "Create your own company",
     "companiesFailed": "Could not load companies",
     "retry": "Try again",
     "alreadyHaveCompany": "You already have a company",

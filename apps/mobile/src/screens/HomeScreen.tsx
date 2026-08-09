@@ -1,13 +1,5 @@
 import { useMemo, useState } from 'react'
-import {
-  ActivityIndicator,
-  I18nManager,
-  Pressable,
-  RefreshControl,
-  ScrollView,
-  StyleSheet,
-  View,
-} from 'react-native'
+import { ActivityIndicator, Pressable, RefreshControl, ScrollView, StyleSheet, View } from 'react-native'
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
 import { useTranslation } from 'react-i18next'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
@@ -24,7 +16,8 @@ import { Avatar } from '../components/Avatar'
 import { Txt } from '../components/Txt'
 import { TimerButton } from '../components/TimerButton'
 import { NotificationCarousel } from '../components/NotificationCarousel'
-import { ago, formatHm } from '../lib/format'
+import { ago, formatHours } from '../lib/format'
+import { IconBell, IconChevronRight, IconPlus } from '../components/icons'
 
 // Главный экран (SPEC §4.4).
 //
@@ -102,37 +95,52 @@ export function HomeScreen({
         <Txt auto style={s.companyName} numberOfLines={1}>
           {company.name}
         </Txt>
-        <Txt style={s.companySwitch}>
-          {t('start.changeCompany')} <Txt style={I18nManager.isRTL ? s.flip : undefined}>›</Txt>
-        </Txt>
+        <View style={s.companySwitch}>
+          <Txt style={s.companySwitchText}>{t('start.changeCompany')}</Txt>
+          <IconChevronRight size={13} color={theme.muted} />
+        </View>
       </Pressable>
 
       <View style={s.header}>
-        <Pressable onPress={onLogout} hitSlop={8}>
+        {/* Аватар, часы и таймер — одна группа: всё это про меня и про мою
+            работу. Кнопка пуска стоит вплотную к часам, потому что запускают
+            её ради них; у колокольчика с ней общего нет. */}
+        <Pressable
+          onPress={onLogout}
+          accessibilityRole="button"
+          accessibilityLabel={t('start.logout')}
+        >
           <Avatar name={me?.name || me?.email || '?'} logoUrl={me?.avatarUrl ?? null} size={38} round />
         </Pressable>
 
-        {/* Часы за месяц: рядом с аватаром, потому что это про меня.
-            Ошибку показываем прочерком, а не нулём: «0м» — правдоподобное
-            значение, и человек поверит, что не наработал ничего, вместо того
-            чтобы понять, что данные не пришли. */}
-        <Pressable style={s.hours} hitSlop={8}>
-          <Txt style={[s.hoursValue, hoursQ.isError && s.hoursOff]}>
-            {hoursQ.isPending || hoursQ.isError ? '—' : formatHm(hoursQ.data?.totalMinutes ?? 0)}
+        {/* Часы за месяц — крупным числом: это главная цифра экрана.
+            Ошибку показываем прочерком, а не нулём: «0» — правдоподобное
+            значение, и человек поверит, что не наработал ничего, вместо
+            того чтобы понять, что данные не пришли. */}
+        <Pressable style={s.hours} hitSlop={8} accessibilityRole="button">
+          <Txt ltr style={[s.hoursValue, hoursQ.isError && s.hoursOff]}>
+            {hoursQ.isPending || hoursQ.isError ? '—' : formatHours(hoursQ.data?.totalMinutes ?? 0)}
           </Txt>
           <Txt style={s.hoursLabel}>{hoursQ.isError ? t('mobile.noData') : t('mobile.perMonth')}</Txt>
         </Pressable>
 
-        <View style={s.headerSpacer} />
-
         <TimerButton running={running} projects={projects} onChanged={() => void qc.invalidateQueries()} />
 
-        <Pressable style={s.bell} hitSlop={8}>
-          <Txt style={s.bellIcon}>🔔</Txt>
+        <View style={s.headerSpacer} />
+
+        <Pressable
+          style={s.bell}
+          hitSlop={8}
+          accessibilityRole="button"
+          accessibilityLabel={t('inbox.title')}
+        >
+          <IconBell size={22} color={theme.fg} />
           {unread > 0 ? (
             <View style={s.badge}>
               {/* Счётчик — цифры: всегда слева направо (Rule 5). */}
-              <Txt ltr style={s.badgeText}>{unread > 99 ? '99+' : unread}</Txt>
+              <Txt ltr style={s.badgeText}>
+                {unread > 99 ? '99+' : unread}
+              </Txt>
             </View>
           ) : null}
         </Pressable>
@@ -166,7 +174,7 @@ export function HomeScreen({
 
         {canCreate ? (
           <Pressable style={s.create}>
-            <Txt style={s.createIcon}>+</Txt>
+            <IconPlus size={19} color={theme.brandFg} />
             <Txt style={s.createText}>{t('mobile.createProject')}</Txt>
           </Pressable>
         ) : null}
@@ -215,24 +223,32 @@ const s = StyleSheet.create({
     borderBottomColor: theme.border,
   },
   companyName: { color: theme.muted, fontSize: 13, fontWeight: '600', flex: 1 },
-  companySwitch: { color: theme.muted, fontSize: 13 },
-  // Стрелка «дальше» — направленный знак: RN его не переворачивает (Rule 1).
-  flip: { transform: [{ scaleX: -1 }] },
+  companySwitch: { flexDirection: 'row', alignItems: 'center', gap: 3 },
+  companySwitchText: { color: theme.muted, fontSize: 13 },
   header: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 10,
+    gap: 12,
     paddingHorizontal: 20,
     paddingVertical: 12,
   },
   headerSpacer: { flex: 1 },
-  hours: { gap: 1 },
-  hoursValue: { color: theme.fg, fontSize: 15, fontWeight: '700' },
+  // Часы прижаты к аватару, а таймер — к часам: три элемента об одном.
+  hours: { gap: 0 },
+  // Главная цифра экрана. Табличные цифры, чтобы число не дёргалось при
+  // смене значения, и отрицательный трекинг — крупные цифры иначе рыхлые.
+  hoursValue: {
+    color: theme.fg,
+    fontSize: 26,
+    fontWeight: '700',
+    letterSpacing: -0.7,
+    fontVariant: ['tabular-nums'],
+    lineHeight: 30,
+  },
   // Прочерк вместо числа — приглушённо: это отсутствие данных, а не значение.
   hoursOff: { color: theme.muted },
-  hoursLabel: { color: theme.muted, fontSize: 11 },
+  hoursLabel: { color: theme.muted, fontSize: 11, lineHeight: 13 },
   bell: { padding: 6 },
-  bellIcon: { fontSize: 20 },
   badge: {
     position: 'absolute',
     top: 0,
@@ -285,6 +301,5 @@ const s = StyleSheet.create({
     paddingVertical: 16,
     marginTop: 8,
   },
-  createIcon: { color: theme.brandFg, fontSize: 20, fontWeight: '700' },
   createText: { color: theme.brandFg, fontSize: 16, fontWeight: '700' },
 })

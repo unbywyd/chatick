@@ -34,7 +34,7 @@
   "mobile": {
     "pickCompany": "Выберите компанию",
     "pickCompanyHint": "Проекты и чаты открываются внутри компании.",
-    "createOwnCompany": "+ Создать свою компанию",
+    "createOwnCompany": "Создать свою компанию",
     "companiesFailed": "Не удалось загрузить компании",
     "retry": "Повторить",
     "alreadyHaveCompany": "У вас уже есть своя компания",

@@ -1,7 +1,7 @@
 import { useCallback } from 'react'
 import { I18nManager } from 'react-native'
 import { useTranslation } from 'react-i18next'
-import i18n, { isRTLLanguage, storeLanguage, type LocaleCode } from './index'
+import i18n, { isRTLLanguage, loadFontsFor, storeLanguage, type LocaleCode } from './index'
 import { restartApp } from './restart'
 
 // Смена языка целиком, одним местом (Rule 7).
@@ -26,6 +26,10 @@ export function useChangeLanguage() {
       const directionChanged = isRTLLanguage(current) !== isRTLLanguage(target)
 
       await storeLanguage(target)
+      // Шрифт — до смены языка: иначе на кадр между ними интерфейс покажется
+      // системным начертанием. Переход иврит → английский идёт без
+      // перезапуска, и там это единственное место, где шрифт подгружается.
+      await loadFontsFor(target)
       await i18n.changeLanguage(target)
 
       if (!directionChanged) return
