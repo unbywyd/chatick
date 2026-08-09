@@ -1,6 +1,7 @@
 import { useRef, useState } from 'react'
 import { ActivityIndicator, Pressable, StyleSheet, Text, View } from 'react-native'
 import { signInWithGoogle } from '../lib/auth'
+import { Logo } from '../components/Logo'
 import { theme } from '../theme'
 
 // Вход. Одна кнопка: пароля у нас нет, письма с кодом — тоже.
@@ -41,6 +42,9 @@ export function LoginScreen({ onDone }: { onDone: () => void }) {
   return (
     <View style={s.root}>
       <View style={s.top}>
+        {/* Знак — первое, что человек видит. Без него экран читался как
+            страница текста: непонятно даже, какое приложение открылось. */}
+        <Logo size={34} />
         <Text style={s.title}>
           Streamline teamwork,{'\n'}
           <Text style={s.titleAccent}>one chat</Text> at a time
@@ -71,10 +75,14 @@ export function LoginScreen({ onDone }: { onDone: () => void }) {
 
 const s = StyleSheet.create({
   root: { flex: 1, backgroundColor: theme.bg, paddingHorizontal: 24, justifyContent: 'space-between' },
-  top: { paddingTop: 120 },
+  // Блок опущен от верха и держится ближе к середине: с paddingTop: 120 текст
+  // прижимался к статус-бару, а между ним и кнопкой оставалась пустота в две
+  // трети экрана — экран читался как незагрузившийся.
+  top: { flex: 1, justifyContent: 'center', gap: 20, paddingBottom: 40 },
   title: { color: theme.fg, fontSize: 40, fontWeight: '700', lineHeight: 46 },
   titleAccent: { color: theme.brand },
-  sub: { color: theme.muted, fontSize: 16, marginTop: 16, lineHeight: 22 },
+  // Отступ задаёт gap блока — свой marginTop сложился бы с ним вторым слоем.
+  sub: { color: theme.muted, fontSize: 16, lineHeight: 22 },
   bottom: { paddingBottom: 56, gap: 12, alignItems: 'center' },
   error: { color: theme.danger, fontSize: 14, textAlign: 'center', marginBottom: 4 },
   btn: {
