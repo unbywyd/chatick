@@ -86,6 +86,10 @@ companiesRoute.get('/', async (c) => {
     companies: memberships.map((m) => ({
       ...m.company,
       myRole: m.role,
+      // Своя или чужая. Отдаём готовым признаком, а не оставляем клиенту
+      // сравнивать идентификаторы: от этого зависит и кнопка «создать
+      // компанию», и возможность из неё выйти, и права в опасной зоне.
+      isOwner: m.company.createdById === sub,
       projectsCount: byCompany.get(m.company.id) ?? 0,
     })),
     invites: invites.map((i) => ({ id: i.id, token: i.token, role: i.role, company: { id: i.company.id, name: i.company.name, logoUrl: i.company.logoUrl } })),
@@ -103,17 +107,27 @@ companiesRoute.post(
     // Своя компания — одна. Участвовать можно в скольких угодно: это чужие
     // пространства, куда позвали. А заводить их пачками незачем — проекты
     // для того и существуют.
-    const own = await db.query.companyMembers.findFirst({
-      where: and(eq(companyMembers.userId, sub), eq(companyMembers.role, 'admin')),
+    //
+    // Считаем по создателю, а не по роли. Раньше стояло условие «есть где-то
+    // роль admin», и человек, которого повысили в ЧУЖОЙ компании, терял право
+    // завести собственную — при том, что своей у него нет. Роль говорит о
+    // правах внутри пространства, а не о том, чьё оно.
+    const own = await db.query.companies.findFirst({
+      where: eq(companies.createdById, sub),
+      columns: { id: true, name: true },
     })
     if (own) {
       return c.json(
-        { error: 'You already have a company', hint: 'Create projects inside it, or ask to be invited elsewhere.' },
+        {
+          error: 'You already have a company',
+          hint: 'Create projects inside it, or ask to be invited elsewhere.',
+          company: own.name,
+        },
         409,
       )
     }
 
-    const [company] = await db.insert(companies).values({ name, logoUrl }).returning()
+    const [company] = await db.insert(companies).values({ name, logoUrl, createdById: sub }).returning()
     await db.insert(companyMembers).values({ companyId: company!.id, userId: sub, role: 'admin' })
 
     return c.json({ ...company, myRole: 'admin' }, 201)

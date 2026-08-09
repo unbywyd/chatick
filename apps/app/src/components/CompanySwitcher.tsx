@@ -32,12 +32,16 @@ export function CompanySwitcher({
 }) {
   const { t } = useTranslation()
 
-  // Своя компания — та, где человек админ. Заводить вторую незачем: для
-  // разделения работы существуют проекты.
-  const hasOwn = companies.some((c) => c.myRole === 'admin')
+  // Своя компания — та, которую человек завёл сам. Заводить вторую незачем:
+  // для разделения работы существуют проекты.
+  //
+  // По роли это определять нельзя: админом делают и в чужой компании, и тогда
+  // человек терял и кнопку «создать свою», и возможность из чужой выйти —
+  // хотя своей у него нет вовсе.
+  const hasOwn = companies.some((c) => c.isOwner)
   const canCreate = Boolean(onCreate) && !hasOwn
   // Уйти можно только из чужой: свою без хозяина не оставишь.
-  const canLeave = current.myRole !== 'admin'
+  const canLeave = !current.isOwner
 
   return (
     <DropdownMenu>
