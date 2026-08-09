@@ -3,6 +3,9 @@
   "version": "0.3.8",
   "private": true,
   "main": "main.cjs",
+  "description": "Team chat and project workspace where your AI assistant works alongside the team: tasks, files, documents and time tracking in one place.",
+  "author": "Artyom Gorlovetskiy (unbywyd) <unbywyd@gmail.com>",
+  "homepage": "https://chatick.com",
   "scripts": {
     "dev": "electron . --dev",
     "build": "echo \"desktop: packaging via electron-builder (pnpm dist) — skipped in turbo build\"",
