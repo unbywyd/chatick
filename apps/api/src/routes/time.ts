@@ -3,7 +3,7 @@ import { zValidator } from '@hono/zod-validator'
 import { z } from 'zod'
 import { and, asc, desc, eq, gte, inArray, isNull, lte, sql } from 'drizzle-orm'
 import { db } from '../db/client.js'
-import { companies, projects, tasks, timeEntries, users } from '../db/schema.js'
+import { companies, projectMembers, projects, tasks, timeEntries, users } from '../db/schema.js'
 import { requireProject, requireSession, type ProjectEnv, type SessionEnv } from '../auth.js'
 import { projectRoleOf, companyRoleOf } from './projects.js'
 import { logActivity } from '../lib/audit.js'
@@ -355,6 +355,133 @@ timeMineRoute.get('/running', async (c) => {
   }))
   return c.json({ items })
 })
+
+/**
+ * Мои часы по ВСЕМ проектам — экран времени в мобильном.
+ *
+ * Права здесь те же, что и в проектной ручке: свои записи человек видит и
+ * правит всегда. Отдельная ручка нужна не ради прав, а ради одного запроса
+ * вместо запроса на каждый проект: иначе главная опрашивала бы их по очереди,
+ * а итог в шапке расходился бы с итогом на странице из-за округлений.
+ *
+ * userId в фильтре слушаем только у того, кто и так вправе видеть чужое, и
+ * только по проектам, где он руководит. Без прав параметр игнорируется молча —
+ * подделанный запрос не отдаёт чужие часы и не сообщает, что попытка замечена.
+ */
+timeMineRoute.get(
+  '/summary',
+  zValidator(
+    'query',
+    z.object({
+      from: z.string().optional(),
+      to: z.string().optional(),
+      projectId: z.string().optional(),
+      userId: z.string().optional(),
+    }),
+  ),
+  async (c) => {
+    const { sub } = c.get('session')
+    const f = c.req.valid('query')
+
+    // Проекты, где я состою, и те из них, где я вправе видеть чужие часы.
+    const myMemberships = await db
+      .select({ projectId: projectMembers.projectId, role: projectMembers.role })
+      .from(projectMembers)
+      .where(eq(projectMembers.userId, sub))
+
+    const myProjectIds = myMemberships.map((m) => m.projectId)
+    if (!myProjectIds.length) {
+      return c.json({ items: [], byProject: [], totalMinutes: 0, canSeeOthers: false, people: [] })
+    }
+
+    const leadProjectIds = myMemberships
+      .filter((m) => m.role === 'owner' || m.role === 'admin')
+      .map((m) => m.projectId)
+    const canSeeOthers = leadProjectIds.length > 0
+
+    // Чьи записи показываем. Кнопка выбора человека на клиенте блокируется, но
+    // решает всё равно сервер: заблокированный контрол — подсказка, не защита.
+    const scopeIds = f.projectId ? [f.projectId] : myProjectIds
+    const allowedIds = scopeIds.filter((id) => myProjectIds.includes(id))
+    if (!allowedIds.length) return c.json({ error: 'Forbidden' }, 403)
+
+    const target = canSeeOthers && f.userId ? f.userId : sub
+    // Чужие часы — только там, где я руковожу, даже если проекты общие.
+    const searchIds = target === sub ? allowedIds : allowedIds.filter((id) => leadProjectIds.includes(id))
+    if (!searchIds.length) {
+      return c.json({ items: [], byProject: [], totalMinutes: 0, canSeeOthers, people: [] })
+    }
+
+    const periodFrom = f.from ? new Date(f.from) : null
+    const periodTo = f.to ? new Date(f.to) : null
+    // Дата без времени — это все сутки целиком: иначе «по сегодня» теряет день.
+    if (periodTo && !f.to!.includes('T')) periodTo.setHours(23, 59, 59, 999)
+
+    const conds = [
+      inArray(timeEntries.projectId, searchIds),
+      eq(timeEntries.userId, target),
+      sql`${timeEntries.endedAt} is not null`,
+    ]
+    // Берём пересекающиеся с периодом записи, лишнее отрежем ниже.
+    if (periodFrom) conds.push(sql`${timeEntries.endedAt} >= ${periodFrom.toISOString()}::timestamptz`)
+    if (periodTo) conds.push(lte(timeEntries.startedAt, periodTo))
+
+    /**
+     * Минуты ВНУТРИ периода — та же обрезка, что в проектной сводке. Смена с
+     * 23:00 до 02:00 на границе месяца иначе попала бы в отчёт целиком.
+     */
+    const clipEnd = periodTo ? sql`${periodTo.toISOString()}::timestamptz` : sql`${timeEntries.endedAt}`
+    const clipStart = periodFrom ? sql`${periodFrom.toISOString()}::timestamptz` : sql`${timeEntries.startedAt}`
+    const clipped = sql<number>`extract(epoch from (
+      least(${timeEntries.endedAt}, ${clipEnd})
+      - greatest(${timeEntries.startedAt}, ${clipStart})
+    )) / 60`
+    const minutes = sql<number>`coalesce(sum(greatest(${clipped}, 0)), 0)::int`
+
+    const [rows, byProjectRows] = await Promise.all([
+      db
+        .select()
+        .from(timeEntries)
+        .where(and(...conds))
+        .orderBy(desc(timeEntries.startedAt))
+        .limit(500),
+      db
+        .select({
+          projectId: timeEntries.projectId,
+          projectName: projects.name,
+          color: projects.color,
+          logoUrl: projects.logoUrl,
+          minutes,
+          entries: sql<number>`count(*)::int`,
+        })
+        .from(timeEntries)
+        .innerJoin(projects, eq(projects.id, timeEntries.projectId))
+        .where(and(...conds))
+        .groupBy(timeEntries.projectId, projects.name, projects.color, projects.logoUrl),
+    ])
+
+    /**
+     * Коллеги для фильтра — только тем, кто вправе их видеть. Без прав список
+     * не приходит вовсе, а не приходит и прячется: скрытое в клиенте достаётся
+     * из ответа за минуту, и состав команды утёк бы тому, кого он не касается.
+     */
+    const people = canSeeOthers
+      ? await db
+          .selectDistinct({ id: users.id, name: users.name, avatarUrl: users.avatarUrl })
+          .from(projectMembers)
+          .innerJoin(users, eq(users.id, projectMembers.userId))
+          .where(inArray(projectMembers.projectId, leadProjectIds))
+      : []
+
+    return c.json({
+      items: await hydrate(rows),
+      byProject: byProjectRows,
+      totalMinutes: byProjectRows.reduce((s, r) => s + r.minutes, 0),
+      canSeeOthers,
+      people,
+    })
+  },
+)
 
 timeRoute.post(
   '/start',
