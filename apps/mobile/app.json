@@ -47,7 +47,8 @@
       ],
       "expo-secure-store",
       "expo-web-browser",
-      "expo-splash-screen"
+      "expo-splash-screen",
+      "expo-localization"
     ],
     "extra": {
       "apiUrl": "https://api.chatick.com"

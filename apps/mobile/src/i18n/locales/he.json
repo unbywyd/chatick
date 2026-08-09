@@ -1,0 +1,83 @@
+{
+  "common": {
+    "cancel": "ביטול",
+    "loading": "טוען…",
+    "save": "שמירה"
+  },
+  "login": {
+    "title": "ברוכים הבאים ל-Chatick",
+    "subtitle": "התחברו כדי לפתוח את סביבת העבודה של הפרויקט",
+    "failed": "ההתחברות נכשלה, נסו שוב"
+  },
+  "start": {
+    "companyTitle": "החברה שלכם",
+    "companySubtitle": "חברה מאגדת פרויקטים וצוות",
+    "yourCompanies": "החברות שלכם",
+    "invitesTitle": "הזמנות",
+    "accept": "לקבל",
+    "changeCompany": "החלפת חברה",
+    "logout": "התנתקות",
+    "companyName": "שם החברה",
+    "create": "ליצור",
+    "createFirstCompany": "צרו את החברה הראשונה שלכם"
+  },
+  "inbox": {
+    "title": "התראות",
+    "empty": "אין חדש"
+  },
+  "projSwitch": {
+    "search": "חיפוש פרויקטים…"
+  },
+  "time": {
+    "title": "זמן"
+  },
+  "mobile": {
+    "pickCompany": "בחרו חברה",
+    "pickCompanyHint": "פרויקטים וצ׳אטים נמצאים בתוך חברה.",
+    "createOwnCompany": "+ צרו חברה משלכם",
+    "companiesFailed": "לא ניתן לטעון את החברות",
+    "retry": "לנסות שוב",
+    "alreadyHaveCompany": "כבר יש לכם חברה משלכם",
+    "createFailed": "היצירה נכשלה. נסו שוב.",
+    "ownCompany": "החברה שלכם",
+    "projectsCount_one": "פרויקט אחד",
+    "projectsCount_two": "שני פרויקטים",
+    "projectsCount_other": "{{count}} פרויקטים",
+    "noProjects": "ללא פרויקטים",
+    "projects": "פרויקטים",
+    "projectsEmptyCanCreate": "אין עדיין פרויקטים — צרו את הראשון.",
+    "projectsEmpty": "עדיין לא צורפתם לאף פרויקט.",
+    "createProject": "יצירת פרויקט",
+    "noMessages": "אין עדיין הודעות",
+    "perMonth": "החודש",
+    "noData": "אין נתונים",
+    "noNewNotifications": "אין התראות חדשות",
+    "assistant": "עוזר",
+    "whatWorkingOn": "על מה אתם עובדים?",
+    "descriptionOptional": "תיאור (לא חובה)",
+    "startFailed": "ההפעלה נכשלה",
+    "stopFailed": "העצירה נכשלה",
+    "acceptRulesFirst": "פתחו תחילה את הפרויקט ואשרו את כללי הצ׳אט",
+    "notMemberAnywhere": "אינכם חברים באף פרויקט",
+    "nothingFound": "לא נמצא דבר",
+    "signIn": "כניסה ל-Chatick",
+    "signInAgain": "להיכנס שוב",
+    "signInHint": "ייפתח דפדפן — היכנסו עם Google או עם קוד שנשלח למייל",
+    "signInWaiting": "ממתינים לאישור בדפדפן…",
+    "signInDenied": "הגישה לא אושרה",
+    "signInExpired": "הכניסה ארכה זמן רב מדי. נסו שוב.",
+    "signInError": "הכניסה נכשלה. בדקו את החיבור ונסו שוב.",
+    "heroTitle": "המקום שבו עוזר ה-AI שלכם עובד עם הצוות",
+    "heroTitleAccent": "עוזר ה-AI",
+    "heroSubtitle": "צ׳אט הפרויקט, משימות וזמן — באותו מקום שבו עובד העוזר.",
+    "language": "שפה",
+    "restartForDirection": "האפליקציה תופעל מחדש כדי להחליף את כיוון הכתיבה",
+    "justNow": "הרגע",
+    "minutesAgo": "לפני {{count}} דק׳",
+    "hoursAgo": "לפני {{count}} שע׳",
+    "daysAgo": "לפני {{count}} ימים",
+    "continue": "להמשיך",
+    "hourShort": "שע׳",
+    "minuteShort": "דק׳"
+  }
+}

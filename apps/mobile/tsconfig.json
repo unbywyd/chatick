@@ -2,5 +2,9 @@
   "extends": "expo/tsconfig.base",
   "compilerOptions": {
     "strict": true
-  }
+  },
+  // Тесты живут в Node и читают файлы с диска — в конфигурации React Native
+  // такого окружения нет. Проверяем их отдельным конфигом (tsconfig.test.json),
+  // а здесь исключаем, чтобы typecheck приложения не спотыкался о node:fs.
+  "exclude": ["**/*.test.ts", "**/*.test.tsx"]
 }

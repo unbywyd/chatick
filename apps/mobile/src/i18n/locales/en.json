@@ -1,0 +1,82 @@
+{
+  "common": {
+    "cancel": "Cancel",
+    "loading": "Loading…",
+    "save": "Save"
+  },
+  "login": {
+    "title": "Welcome to Chatick",
+    "subtitle": "Sign in to open your project workspace",
+    "failed": "Sign-in failed, please try again"
+  },
+  "start": {
+    "companyTitle": "Your company",
+    "companySubtitle": "A company holds your projects and your team",
+    "yourCompanies": "Your companies",
+    "invitesTitle": "Invitations",
+    "accept": "Accept",
+    "changeCompany": "Change company",
+    "logout": "Sign out",
+    "companyName": "Company name",
+    "create": "Create",
+    "createFirstCompany": "Create your first company"
+  },
+  "inbox": {
+    "title": "Notifications",
+    "empty": "Nothing new"
+  },
+  "projSwitch": {
+    "search": "Search projects…"
+  },
+  "time": {
+    "title": "Time"
+  },
+  "mobile": {
+    "pickCompany": "Choose a company",
+    "pickCompanyHint": "Projects and chats live inside a company.",
+    "createOwnCompany": "+ Create your own company",
+    "companiesFailed": "Could not load companies",
+    "retry": "Try again",
+    "alreadyHaveCompany": "You already have a company",
+    "createFailed": "Could not create. Please try again.",
+    "ownCompany": "Your company",
+    "projectsCount_one": "{{count}} project",
+    "projectsCount_other": "{{count}} projects",
+    "noProjects": "no projects",
+    "projects": "Projects",
+    "projectsEmptyCanCreate": "No projects yet — create the first one.",
+    "projectsEmpty": "You have not been added to any project yet.",
+    "createProject": "Create project",
+    "noMessages": "No messages yet",
+    "perMonth": "this month",
+    "noData": "no data",
+    "noNewNotifications": "No new notifications",
+    "assistant": "Assistant",
+    "whatWorkingOn": "What are you working on?",
+    "descriptionOptional": "Description (optional)",
+    "startFailed": "Could not start",
+    "stopFailed": "Could not stop",
+    "acceptRulesFirst": "Open the project and accept the chat rules first",
+    "notMemberAnywhere": "You are not a member of any project",
+    "nothingFound": "Nothing found",
+    "signIn": "Sign in to Chatick",
+    "signInAgain": "Sign in again",
+    "signInHint": "A browser will open — sign in with Google or a code sent to your email",
+    "signInWaiting": "Waiting for confirmation in the browser…",
+    "signInDenied": "Access was not confirmed",
+    "signInExpired": "Sign-in took too long. Please try again.",
+    "signInError": "Could not sign in. Check your connection and try again.",
+    "heroTitle": "Where your AI assistant works with the team",
+    "heroTitleAccent": "AI assistant",
+    "heroSubtitle": "Project chat, tasks and time — where the assistant works.",
+    "language": "Language",
+    "restartForDirection": "The app will restart to switch text direction",
+    "justNow": "just now",
+    "minutesAgo": "{{count}} min ago",
+    "hoursAgo": "{{count}} h ago",
+    "daysAgo": "{{count}} d ago",
+    "continue": "Continue",
+    "hourShort": "h",
+    "minuteShort": "m"
+  }
+}

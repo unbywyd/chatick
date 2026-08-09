@@ -1,0 +1,83 @@
+{
+  "common": {
+    "cancel": "Отмена",
+    "loading": "Загрузка…",
+    "save": "Сохранить"
+  },
+  "login": {
+    "title": "Добро пожаловать в Chatick",
+    "subtitle": "Войдите, чтобы открыть рабочее пространство проекта",
+    "failed": "Не удалось войти, попробуйте ещё раз"
+  },
+  "start": {
+    "companyTitle": "Ваша компания",
+    "companySubtitle": "Компания объединяет проекты и команду",
+    "yourCompanies": "Ваши компании",
+    "invitesTitle": "Приглашения",
+    "accept": "Принять",
+    "changeCompany": "Сменить компанию",
+    "logout": "Выйти",
+    "companyName": "Название компании",
+    "create": "Создать",
+    "createFirstCompany": "Создайте первую компанию"
+  },
+  "inbox": {
+    "title": "Уведомления",
+    "empty": "Ничего нового"
+  },
+  "projSwitch": {
+    "search": "Поиск проектов…"
+  },
+  "time": {
+    "title": "Время"
+  },
+  "mobile": {
+    "pickCompany": "Выберите компанию",
+    "pickCompanyHint": "Проекты и чаты открываются внутри компании.",
+    "createOwnCompany": "+ Создать свою компанию",
+    "companiesFailed": "Не удалось загрузить компании",
+    "retry": "Повторить",
+    "alreadyHaveCompany": "У вас уже есть своя компания",
+    "createFailed": "Не получилось создать. Попробуйте ещё раз.",
+    "ownCompany": "Ваша компания",
+    "projectsCount_one": "{{count}} проект",
+    "projectsCount_few": "{{count}} проекта",
+    "projectsCount_many": "{{count}} проектов",
+    "noProjects": "без проектов",
+    "projects": "Проекты",
+    "projectsEmptyCanCreate": "Проектов пока нет — создайте первый.",
+    "projectsEmpty": "Вас пока не добавили ни в один проект.",
+    "createProject": "Создать проект",
+    "noMessages": "Пока нет сообщений",
+    "perMonth": "за месяц",
+    "noData": "нет данных",
+    "noNewNotifications": "Новых уведомлений нет",
+    "assistant": "Ассистент",
+    "whatWorkingOn": "Над чем работаете?",
+    "descriptionOptional": "Описание (необязательно)",
+    "startFailed": "Не удалось запустить",
+    "stopFailed": "Не удалось остановить",
+    "acceptRulesFirst": "Сначала откройте проект и примите правила чата",
+    "notMemberAnywhere": "Вы пока не участник ни одного проекта",
+    "nothingFound": "Ничего не найдено",
+    "signIn": "Войти в Chatick",
+    "signInAgain": "Войти ещё раз",
+    "signInHint": "Откроется браузер — войдите через Google или по коду на почту",
+    "signInWaiting": "Ждём подтверждения в браузере…",
+    "signInDenied": "Доступ не подтверждён",
+    "signInExpired": "Вход занял слишком много времени. Попробуйте ещё раз.",
+    "signInError": "Не получилось войти. Проверьте связь и попробуйте ещё раз.",
+    "heroTitle": "Место, где ваш ИИ-ассистент работает в команде",
+    "heroTitleAccent": "ИИ-ассистент",
+    "heroSubtitle": "Чат проекта, задачи и время — там же, где работает ассистент.",
+    "language": "Язык",
+    "restartForDirection": "Приложение перезапустится, чтобы сменить направление письма",
+    "justNow": "только что",
+    "minutesAgo": "{{count}} мин назад",
+    "hoursAgo": "{{count}} ч назад",
+    "daysAgo": "{{count}} дн назад",
+    "continue": "Продолжить",
+    "hourShort": "ч",
+    "minuteShort": "м"
+  }
+}

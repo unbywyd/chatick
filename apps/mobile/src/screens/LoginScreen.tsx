@@ -1,16 +1,21 @@
 import { useRef, useState } from 'react'
-import { ActivityIndicator, Pressable, StyleSheet, Text, View } from 'react-native'
+import { ActivityIndicator, Pressable, StyleSheet, View } from 'react-native'
+import { useTranslation } from 'react-i18next'
 import { signInWithGoogle } from '../lib/auth'
 import { Logo } from '../components/Logo'
+import { Txt } from '../components/Txt'
+import { LanguagePicker } from '../components/LanguagePicker'
 import { theme } from '../theme'
 
-// Вход. Одна кнопка: пароля у нас нет, письма с кодом — тоже.
+// Вход. Одна кнопка: она ведёт на наш экран входа в браузере, а там способов
+// два — Google и код на почту.
 //
 // Кнопка НЕ блокируется на время ожидания: в браузере что-то могло пойти не
 // так, и человек вправе начать заново, не дожидаясь десяти минут. В десктопе
 // эта блокировка уже стоила залипшего экрана — повторять не будем.
 
 export function LoginScreen({ onDone }: { onDone: () => void }) {
+  const { t } = useTranslation()
   const [waiting, setWaiting] = useState(false)
   const [error, setError] = useState<string | null>(null)
   // Номер попытки: по нему прежний опрос понимает, что больше не нужен.
@@ -24,10 +29,10 @@ export function LoginScreen({ onDone }: { onDone: () => void }) {
       const res = await signInWithGoogle(() => attempt.current !== mine)
       if (attempt.current !== mine) return
       if (res === 'ok') return onDone()
-      if (res === 'denied') setError('Доступ не подтверждён')
-      if (res === 'expired') setError('Вход занял слишком много времени. Попробуйте ещё раз.')
+      if (res === 'denied') setError(t('mobile.signInDenied'))
+      if (res === 'expired') setError(t('mobile.signInExpired'))
     } catch {
-      if (attempt.current === mine) setError('Не получилось войти. Проверьте связь и попробуйте ещё раз.')
+      if (attempt.current === mine) setError(t('mobile.signInError'))
     } finally {
       if (attempt.current === mine) setWaiting(false)
     }
@@ -39,24 +44,41 @@ export function LoginScreen({ onDone }: { onDone: () => void }) {
     setError(null)
   }
 
+  // Заголовок с выделенным словом: ищем его в строке, а не режем перевод на
+  // куски. Разбитый на три ключа заголовок невозможно перевести — порядок слов
+  // в иврите и английском разный, и склейка даёт бессмыслицу.
+  const title = t('mobile.heroTitle')
+  const accent = t('mobile.heroTitleAccent')
+  const at = title.indexOf(accent)
+
   return (
     <View style={s.root}>
+      {/* Язык доступен до входа: человек должен прочитать первый экран на
+          своём языке, а не после того, как разберётся с чужим. */}
+      <View style={s.langRow}>
+        <LanguagePicker compact />
+      </View>
+
       <View style={s.top}>
         {/* Знак — первое, что человек видит. Без него экран читался как
             страница текста: непонятно даже, какое приложение открылось. */}
         <Logo size={34} />
-        {/* Один язык на экране. Заголовок был английским, подсказки под
-            кнопкой — русскими: вперемешку это читается как недоделка.
-            Полноценные переводы приедут вместе с настройками языка. */}
-        <Text style={s.title}>
-          Место, где ваш{'\n'}
-          <Text style={s.titleAccent}>ИИ-ассистент</Text>{'\n'}работает в команде
-        </Text>
-        <Text style={s.sub}>Чат проекта, задачи и время — там же, где работает ассистент.</Text>
+        <Txt style={s.title}>
+          {at >= 0 ? (
+            <>
+              {title.slice(0, at)}
+              <Txt style={s.titleAccent}>{accent}</Txt>
+              {title.slice(at + accent.length)}
+            </>
+          ) : (
+            title
+          )}
+        </Txt>
+        <Txt style={s.sub}>{t('mobile.heroSubtitle')}</Txt>
       </View>
 
       <View style={s.bottom}>
-        {error ? <Text style={s.error}>{error}</Text> : null}
+        {error ? <Txt style={s.error}>{error}</Txt> : null}
 
         {/* «Войти в Chatick», а не «Войти через Google».
             Кнопка ведёт не к Google, а на наш экран входа в браузере — там
@@ -65,18 +87,16 @@ export function LoginScreen({ onDone }: { onDone: () => void }) {
             экран хуже, чем назвать вещи своими именами. */}
         <Pressable style={s.btn} onPress={start}>
           {waiting ? <ActivityIndicator color={theme.brandFg} /> : null}
-          <Text style={s.btnText}>{waiting ? 'Войти ещё раз' : 'Войти в Chatick'}</Text>
+          <Txt style={s.btnText}>{waiting ? t('mobile.signInAgain') : t('mobile.signIn')}</Txt>
         </Pressable>
 
         {/* Сказать заранее, что откроется браузер: иначе переход выглядит как
             сбой — «меня выкинуло из приложения». */}
-        <Text style={s.hint}>
-          {waiting ? 'Ждём подтверждения в браузере…' : 'Откроется браузер — войдите через Google или по коду на почту'}
-        </Text>
+        <Txt style={s.hint}>{waiting ? t('mobile.signInWaiting') : t('mobile.signInHint')}</Txt>
 
         {waiting ? (
           <Pressable onPress={cancel} hitSlop={12}>
-            <Text style={s.cancel}>Отмена</Text>
+            <Txt style={s.cancel}>{t('common.cancel')}</Txt>
           </Pressable>
         ) : null}
       </View>
@@ -86,6 +106,9 @@ export function LoginScreen({ onDone }: { onDone: () => void }) {
 
 const s = StyleSheet.create({
   root: { flex: 1, backgroundColor: theme.bg, paddingHorizontal: 24, justifyContent: 'space-between' },
+  // Переключатель прижат к концу строки — в иврите это левый край, и RN
+  // отзеркалит flex-end сам (Rule 2: руками не переворачиваем).
+  langRow: { flexDirection: 'row', justifyContent: 'flex-end', paddingTop: 52 },
   // Блок опущен от верха и держится ближе к середине: с paddingTop: 120 текст
   // прижимался к статус-бару, а между ним и кнопкой оставалась пустота в две
   // трети экрана — экран читался как незагрузившийся.

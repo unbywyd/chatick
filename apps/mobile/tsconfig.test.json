@@ -1,0 +1,13 @@
+{
+  // Тесты проверяем отдельно: они выполняются в Node, читают файлы с диска и
+  // пользуются import.meta — ничего этого нет в конфигурации React Native.
+  "extends": "expo/tsconfig.base",
+  "compilerOptions": {
+    "strict": true,
+    "module": "esnext",
+    "moduleResolution": "bundler",
+    "types": ["node", "vitest/globals"],
+    "noEmit": true
+  },
+  "include": ["**/*.test.ts", "**/*.test.tsx"]
+}

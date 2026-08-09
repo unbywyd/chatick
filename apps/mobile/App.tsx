@@ -1,17 +1,22 @@
-import { useEffect, useState } from 'react'
+import { useCallback, useEffect, useState } from 'react'
 import { ActivityIndicator, StyleSheet, Text, View } from 'react-native'
 import { StatusBar } from 'expo-status-bar'
 import { SafeAreaProvider } from 'react-native-safe-area-context'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
-import { api, getToken, type Me } from './src/lib/api'
+import { api, getToken, setToken, type CompaniesResponse, type Company, type Me } from './src/lib/api'
+import { getCompanyId, setCompanyId } from './src/lib/company'
+import { bootstrapLanguage } from './src/i18n'
+import { restartApp } from './src/i18n/restart'
 import { LoginScreen } from './src/screens/LoginScreen'
+import { CompanyPickerScreen } from './src/screens/CompanyPickerScreen'
+import { HomeScreen } from './src/screens/HomeScreen'
 import { theme } from './src/theme'
 
 // Корень приложения (SPEC.md рядом).
 //
-// Пока три состояния: проверяем сохранённый вход → экран входа → заглушка
-// после входа. Экраны компаний, проектов и чата приезжают следующими шагами;
-// каждый шаг должен собираться в APK, поэтому дерево держим рабочим.
+// Путь: проверяем сохранённый вход → вход → выбор компании → главная.
+// Компания обязательна: токен действует на всю компанию, и без неё непонятно,
+// чьи проекты показывать (SPEC §4.3).
 
 const qc = new QueryClient({
   defaultOptions: {
@@ -24,26 +29,69 @@ const qc = new QueryClient({
   },
 })
 
-type Stage = 'checking' | 'guest' | 'authed'
+type Stage = 'checking' | 'guest' | 'picking' | 'ready'
 
 function Root() {
   const [stage, setStage] = useState<Stage>('checking')
   const [me, setMe] = useState<Me | null>(null)
+  const [company, setCompany] = useState<Company | null>(null)
 
-  const check = async () => {
+  const check = useCallback(async () => {
+    // Язык и направление письма — раньше всего остального. Если направление
+    // сменилось, перезагружаем бандл прямо здесь, не показав ни одного кадра:
+    // флаг I18nManager читается при создании корневого представления, и без
+    // перезагрузки интерфейс остался бы в прежнюю сторону (Rule 6).
+    const { needsRestart } = await bootstrapLanguage()
+    if (needsRestart) return restartApp()
+
     const token = await getToken()
     if (!token) return setStage('guest')
     try {
       setMe(await api<Me>('/api/v1/auth/me'))
-      setStage('authed')
     } catch {
       // Токен есть, но сервер его не принял — это гость, а не поломка.
-      setStage('guest')
+      return setStage('guest')
     }
-  }
+
+    // Компанию, выбранную в прошлый раз, подтверждаем у сервера, а не берём
+    // на веру: из неё могли исключить, и тогда приложение открылось бы на
+    // пространстве, куда доступа больше нет, и упало бы на первом запросе.
+    try {
+      const saved = await getCompanyId()
+      if (saved) {
+        const { companies } = await api<CompaniesResponse>('/api/v1/companies')
+        const found = companies.find((c) => c.id === saved)
+        if (found) {
+          setCompany(found)
+          return setStage('ready')
+        }
+        await setCompanyId(null)
+      }
+    } catch {
+      // Список не пришёл — покажем экран выбора, там будет и ошибка, и повтор.
+    }
+    setStage('picking')
+  }, [])
 
   useEffect(() => {
     void check()
+  }, [check])
+
+  const pick = useCallback((c: Company) => {
+    void setCompanyId(c.id)
+    setCompany(c)
+    setStage('ready')
+  }, [])
+
+  const logout = useCallback(async () => {
+    await setToken(null)
+    await setCompanyId(null)
+    // Чужие данные не должны пережить выход: без сброса кэша следующий вход
+    // на мгновение показал бы компании и уведомления предыдущего человека.
+    qc.clear()
+    setMe(null)
+    setCompany(null)
+    setStage('guest')
   }, [])
 
   if (stage === 'checking') {
@@ -57,12 +105,17 @@ function Root() {
 
   if (stage === 'guest') return <LoginScreen onDone={() => void check()} />
 
+  if (stage === 'picking' || !company) {
+    return <CompanyPickerScreen onPick={pick} onLogout={() => void logout()} />
+  }
+
   return (
-    <View style={s.splash}>
-      <Text style={s.logo}>Chatick</Text>
-      <Text style={s.hi}>{me ? `Вошли как ${me.name || me.email}` : ''}</Text>
-      <Text style={s.next}>Следующий шаг: выбор компании и список проектов</Text>
-    </View>
+    <HomeScreen
+      me={me}
+      company={company}
+      onSwitchCompany={() => setStage('picking')}
+      onLogout={() => void logout()}
+    />
   )
 }
 
@@ -80,6 +133,4 @@ export default function App() {
 const s = StyleSheet.create({
   splash: { flex: 1, backgroundColor: theme.bg, alignItems: 'center', justifyContent: 'center', gap: 16, padding: 24 },
   logo: { color: theme.fg, fontSize: 34, fontWeight: '700' },
-  hi: { color: theme.brand, fontSize: 16 },
-  next: { color: theme.muted, fontSize: 14, textAlign: 'center' },
 })

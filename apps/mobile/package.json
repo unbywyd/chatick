@@ -9,7 +9,8 @@
     "ios": "expo run:ios",
     "typecheck": "tsc --noEmit",
     "build": "echo \"mobile: APK собирается через eas build — в turbo не участвует\"",
-    "apk": "eas build --platform android --profile preview"
+    "apk": "eas build --platform android --profile preview",
+    "test": "vitest run"
   },
   "dependencies": {
     "@react-native-async-storage/async-storage": "^2.2.0",
@@ -17,20 +18,26 @@
     "expo": "~57.0.8",
     "expo-auth-session": "~57.0.5",
     "expo-constants": "~57.0.7",
+    "expo-localization": "~57.0.1",
     "expo-secure-store": "~57.0.1",
     "expo-speech-recognition": "^2.1.1",
     "expo-splash-screen": "~57.0.5",
     "expo-status-bar": "~57.0.1",
     "expo-system-ui": "^57.0.1",
+    "expo-updates": "~57.0.12",
     "expo-web-browser": "~57.0.2",
+    "i18next": "^26.3.6",
     "react": "19.2.3",
+    "react-i18next": "^17.0.11",
     "react-native": "0.86.0",
     "react-native-safe-area-context": "~5.7.0",
     "react-native-screens": "~4.26.2",
     "react-native-svg": "15.15.4"
   },
   "devDependencies": {
+    "@types/node": "^22.20.1",
     "@types/react": "~19.2.2",
-    "typescript": "~6.0.3"
+    "typescript": "~6.0.3",
+    "vitest": "^4.1.10"
   }
 }
