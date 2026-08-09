@@ -65,23 +65,6 @@ const MARK_WTP = asset('logo.svg')
 // до тёмного слова внутри и перекрасить его: на чёрном фоне оно не читается.
 const MARK_ANYAPP = asset('anyapp-logo-twotone-dark.svg')
 
-// Цифры для графиков — то, что видно на овервью в самом продукте.
-const CHART_HOURS = [
-  { d: 'Mon', v: 6.5 },
-  { d: 'Tue', v: 7.5 },
-  { d: 'Wed', v: 5 },
-  { d: 'Thu', v: 8 },
-  { d: 'Fri', v: 6 },
-  { d: 'Sat', v: 2 },
-  { d: 'Sun', v: 1 },
-]
-const CHART_MAX = 8
-const CHART_STATUSES = [
-  { label: 'Done', v: 46, color: '#d4f228' },
-  { label: 'In progress', v: 28, color: '#7fd1ff' },
-  { label: 'Review', v: 14, color: '#ffc46b' },
-  { label: 'To do', v: 12, color: '#6d7566' },
-]
 ---
 
 <header class="nav">
@@ -499,55 +482,52 @@ const CHART_STATUSES = [
     </div>
   </section>
 
-  <!-- ЧИСЛА: что видно в самом продукте -->
-  <section class="section">
+  <!-- ОТДАТЬ АССИСТЕНТУ: главное действие страницы.
+       Здесь были столбики часов и полоска статусов с выдуманными числами.
+       Такие графики есть у любого трекера и не отвечают, чем мы отличаемся;
+       а заголовок над ними обещал настоящие цифры. -->
+  <section class="section handoff">
     <div class="container">
       <h2>{t.numbers.title}</h2>
       <p class="section-sub">{t.numbers.subtitle}</p>
 
-      <div class="charts">
-        <!-- Часы за неделю -->
-        <figure class="chart-card">
-          <figcaption class="chart-head">
-            <span class="chart-title">Hours this week</span>
-            <span class="chart-total">34h 00m</span>
-          </figcaption>
-          <div class="bars" role="img" aria-label="Hours tracked per day this week">
-            {
-              CHART_HOURS.map((h) => (
-                <div class="bar-col">
-                  <div class="bar-track">
-                    <div class="bar-fill" style={`height:${Math.round((h.v / CHART_MAX) * 100)}%`} />
-                  </div>
-                  <span class="bar-label">{h.d}</span>
-                </div>
-              ))
-            }
-          </div>
-        </figure>
-
-        <!-- Задачи по статусам -->
-        <figure class="chart-card">
-          <figcaption class="chart-head">
-            <span class="chart-title">Tasks by status</span>
-            <span class="chart-total">100</span>
-          </figcaption>
-          <div class="stack" role="img" aria-label="Share of tasks by status">
-            {CHART_STATUSES.map((x) => <span class="stack-part" style={`width:${x.v}%;background:${x.color}`} />)}
-          </div>
-          <ul class="legend">
-            {
-              CHART_STATUSES.map((x) => (
-                <li>
-                  <i style={`background:${x.color}`} />
-                  <span>{x.label}</span>
-                  <b>{x.v}%</b>
-                </li>
-              ))
-            }
-          </ul>
-        </figure>
+      <!-- Сама строка — крупно и целиком: её забирают глазами не реже, чем
+           кнопкой (буфер закрыт без https, да и просто привычка). -->
+      <div class="handoff-prompt">
+        {/* dir="auto", а не "ltr": строка на иврите — ивритская, и жёсткий LTR
+            развернул бы её задом наперёд. Браузер смотрит на первую сильную
+            букву и ставит нужное направление сам, а ссылка внутри остаётся
+            читаемой в обоих случаях. */}
+        <p class="handoff-line" dir="auto">{t.ask.prompt}</p>
+        <button class="btn handoff-copy" data-copy-text={t.ask.prompt} data-copied={t.ask.copied}>
+          <svg viewBox="0 0 24 24" width="17" height="17" fill="none" aria-hidden="true">
+            <rect x="9" y="9" width="12" height="12" rx="2.5" stroke="currentColor" stroke-width="2"></rect>
+            <path d="M5 15V5.5A2.5 2.5 0 0 1 7.5 3H15" stroke="currentColor" stroke-width="2" stroke-linecap="round"></path>
+          </svg>
+          <span>{t.ask.copy}</span>
+        </button>
       </div>
+
+      <ol class="handoff-steps">
+        {t.numbers.steps.map((s) => <li>{s}</li>)}
+      </ol>
+
+      <!-- Два файла ниже: кто хочет прочитать сам или отдать разработчикам.
+           Ссылки, а не кнопки: копирование уже есть выше и в шапке. -->
+      <ul class="handoff-files">
+        <li>
+          <a href="/ai.txt">
+            <span class="handoff-file-name">{t.numbers.fileAi}</span>
+            <span class="handoff-file-note">{t.numbers.fileAiNote}</span>
+          </a>
+        </li>
+        <li>
+          <a href="/integration.txt">
+            <span class="handoff-file-name">{t.numbers.fileApi}</span>
+            <span class="handoff-file-note">{t.numbers.fileApiNote}</span>
+          </a>
+        </li>
+      </ul>
     </div>
   </section>
 
@@ -835,21 +815,61 @@ const CHART_STATUSES = [
       menu.hidden = !v
       btn.setAttribute('aria-expanded', String(v))
     }
+    const choose = (o: HTMLElement) => {
+      hiddenInput.value = o.dataset.v ?? 'question'
+      label.textContent = o.textContent
+      options.forEach((x) => x.setAttribute('aria-selected', String(x === o)))
+      setOpen(false)
+      btn.focus()
+    }
     btn.addEventListener('click', () => setOpen(menu.hidden))
-    options.forEach((o) =>
-      o.addEventListener('click', () => {
-        hiddenInput.value = o.dataset.v ?? 'question'
-        label.textContent = o.textContent
-        options.forEach((x) => x.setAttribute('aria-selected', String(x === o)))
-        setOpen(false)
-      }),
-    )
+    options.forEach((o) => o.addEventListener('click', () => choose(o)))
+
+    /**
+     * Управление с клавиатуры.
+     *
+     * Роли listbox/option были расставлены, но выбрать пункт можно было только
+     * мышью: пункты не получали фокус, стрелки не работали. Программа чтения с
+     * экрана объявляла список, который не поддаётся — хуже, чем если бы разметки
+     * не было вовсе.
+     */
+    const focusAt = (i: number) => {
+      const next = options[(i + options.length) % options.length]!
+      options.forEach((x) => (x.tabIndex = x === next ? 0 : -1))
+      next.focus()
+    }
+    options.forEach((o, i) => {
+      o.tabIndex = o.getAttribute('aria-selected') === 'true' ? 0 : -1
+      o.addEventListener('keydown', (e) => {
+        if (e.key === 'ArrowDown') { e.preventDefault(); focusAt(i + 1) }
+        else if (e.key === 'ArrowUp') { e.preventDefault(); focusAt(i - 1) }
+        else if (e.key === 'Home') { e.preventDefault(); focusAt(0) }
+        else if (e.key === 'End') { e.preventDefault(); focusAt(options.length - 1) }
+        else if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); choose(o) }
+      })
+    })
+    btn.addEventListener('keydown', (e) => {
+      // Стрелка вниз с кнопки открывает список и ведёт внутрь — привычка,
+      // выученная на нативном select.
+      if (e.key === 'ArrowDown' || e.key === 'Enter' || e.key === ' ') {
+        if (menu.hidden) {
+          e.preventDefault()
+          setOpen(true)
+          focusAt(Math.max(0, options.findIndex((x) => x.getAttribute('aria-selected') === 'true')))
+        }
+      }
+    })
+
     // клик мимо и Esc закрывают — как у любого выпадающего
     document.addEventListener('click', (e) => {
       if (!topicSel.contains(e.target as Node)) setOpen(false)
     })
     window.addEventListener('keydown', (e) => {
-      if (e.key === 'Escape') setOpen(false)
+      if (e.key !== 'Escape' || menu.hidden) return
+      setOpen(false)
+      // Фокус возвращаем на кнопку: иначе он остаётся на скрытом пункте и
+      // следующий Tab уводит в неожиданное место.
+      btn.focus()
     })
   }
 
@@ -867,7 +887,10 @@ const CHART_STATUSES = [
   }
 
   function validate(form: HTMLFormElement): boolean {
-    let firstBad: Field | null = null
+    // Тип пишем явно: присваивание происходит внутри forEach, анализ потока
+    // этого не видит и сужает переменную до null — а тогда .focus() «не
+    // существует». Поведение то же, ошибка проверки уходит.
+    let firstBad = null as Field | null
     form.querySelectorAll<Field>('input[name]:not([type=hidden]):not(.trap), textarea[name]').forEach((el) => {
       const msg = fieldError(form, el)
       const err = el.parentElement?.querySelector<HTMLElement>('.err')
@@ -972,6 +995,9 @@ const CHART_STATUSES = [
     btn.addEventListener('click', async () => {
       try {
         const text = btn.dataset.copyText ?? (await fetch(btn.dataset.copy!).then((r) => r.text()))
+        // Пустая строка в буфер — молчаливая пропажа: кнопка отчитается
+        // «скопировано», а вставить будет нечего. Лучше уйти в запасной путь.
+        if (!text) throw new Error('empty')
         await navigator.clipboard.writeText(text)
         if (label) label.textContent = btn.dataset.copied!
         btn.classList.add('done')
@@ -1713,109 +1739,109 @@ const CHART_STATUSES = [
 </style>
 
 <style>
-  /* --- Графики ------------------------------------------------------------ */
-  .charts {
-    display: grid;
-    grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
-    gap: 18px;
-    margin-top: 30px;
-  }
-  /* Карточка отделяется от полосы, на которой стоит: на светлой — тёмная,
-     на тёмной — светлая. Иначе на своём же фоне она пропадает. */
-  .chart-card {
+  /* --- Отдать ассистенту --------------------------------------------------- */
+  .handoff-prompt {
+    display: flex;
+    align-items: stretch;
+    gap: 12px;
+    margin-top: 28px;
+    padding: 16px 18px;
     background: var(--bg-soft);
     border: 1px solid var(--border);
     border-radius: var(--radius);
-    padding: 20px;
   }
-  .section-soft .chart-card {
-    background: var(--bg);
+  /* Строка всегда слева направо, даже на иврите: внутри неё ссылка и
+     английские названия моделей, и в RTL они рассыпаются. */
+  .handoff-line {
+    flex: 1;
+    margin: 0;
+    align-self: center;
+    font-family: var(--font-mono);
+    font-size: 0.84rem;
+    line-height: 1.55;
+    color: var(--fg);
+    word-break: break-word;
   }
-  .chart-head {
+  .handoff-copy {
+    flex: none;
+    align-self: center;
+    gap: 8px;
+  }
+  .handoff-copy.done {
+    background: var(--fg);
+  }
+
+  /* Шаги нумерует счётчик, а не маркеры списка: цифра здесь — часть рисунка,
+     и её размер и цвет должны слушаться нас. */
+  .handoff-steps {
+    list-style: none;
+    counter-reset: handoff;
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+    gap: 14px;
+    margin-top: 26px;
+    padding: 0;
+  }
+  .handoff-steps li {
+    counter-increment: handoff;
     display: flex;
     align-items: baseline;
-    justify-content: space-between;
-    gap: 12px;
-    margin-bottom: 18px;
-  }
-  .chart-title {
-    font-weight: 600;
-    font-size: 0.95rem;
-  }
-  .chart-total {
-    color: var(--lime);
-    font-weight: 700;
-  }
-  .bars {
-    display: flex;
-    align-items: flex-end;
     gap: 10px;
-    height: 140px;
-  }
-  .bar-col {
-    flex: 1;
-    display: flex;
-    flex-direction: column;
-    align-items: center;
-    gap: 8px;
-    height: 100%;
-  }
-  .bar-track {
-    flex: 1;
-    width: 100%;
-    display: flex;
-    align-items: flex-end;
-    background: rgba(255, 255, 255, 0.04);
-    border-radius: 6px;
-    overflow: hidden;
-  }
-  .bar-fill {
-    width: 100%;
-    background: linear-gradient(180deg, var(--lime), rgba(212, 242, 40, 0.45));
-    border-radius: 6px 6px 0 0;
-    animation: grow 0.7s ease-out both;
-  }
-  @keyframes grow {
-    from {
-      height: 0 !important;
-    }
-  }
-  .bar-label {
-    font-size: 0.72rem;
+    font-size: 0.94rem;
     color: var(--fg-muted);
   }
-  .stack {
-    display: flex;
-    height: 14px;
-    border-radius: 999px;
-    overflow: hidden;
-    margin-bottom: 18px;
+  .handoff-steps li::before {
+    content: counter(handoff);
+    flex: none;
+    font-family: var(--font-mono);
+    font-size: 0.78rem;
+    font-weight: 700;
+    color: var(--lime);
   }
-  .stack-part {
-    height: 100%;
-  }
-  .legend {
+
+  .handoff-files {
     list-style: none;
     display: grid;
-    gap: 9px;
+    grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+    gap: 12px;
+    margin-top: 26px;
+    padding: 0;
   }
-  .legend li {
-    display: flex;
-    align-items: center;
-    gap: 9px;
-    font-size: 0.86rem;
+  .handoff-files a {
+    display: block;
+    padding: 14px 16px;
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    text-decoration: none;
+    color: inherit;
+    transition: border-color 0.15s ease, background 0.15s ease;
+  }
+  .handoff-files a:hover {
+    border-color: rgba(212, 242, 40, 0.35);
+    background: var(--bg-soft);
+  }
+  .handoff-file-name {
+    display: block;
+    font-weight: 600;
+    font-size: 0.94rem;
+  }
+  .handoff-file-note {
+    display: block;
+    margin-top: 3px;
+    font-size: 0.84rem;
     color: var(--fg-muted);
   }
-  .legend i {
-    width: 10px;
-    height: 10px;
-    border-radius: 3px;
-    flex: none;
-  }
-  .legend b {
-    margin-inline-start: auto;
-    color: var(--fg);
-    font-weight: 600;
+
+  @media (max-width: 600px) {
+    /* Кнопка под строкой, во всю ширину: рядом ей остаётся полполосы, и
+       подпись переносится по слогам. */
+    .handoff-prompt {
+      flex-direction: column;
+    }
+    .handoff-copy {
+      align-self: stretch;
+      justify-content: center;
+    }
   }
 
   /* --- Скачивание --------------------------------------------------------- */
@@ -2104,10 +2130,6 @@ const CHART_STATUSES = [
     }
     .footer-links {
       gap: 14px;
-    }
-    .bars {
-      height: 118px;
-      gap: 6px;
     }
   }
 </style>
@@ -2653,6 +2675,13 @@ const CHART_STATUSES = [
   }
   .sel-menu li:hover {
     background: rgba(255, 255, 255, 0.06);
+  }
+  /* Тот же вид, что при наведении: с клавиатуры человек должен видеть, на чём
+     стоит, ровно так же ясно, как мышью. */
+  .sel-menu li:focus-visible {
+    background: rgba(255, 255, 255, 0.06);
+    outline: 2px solid var(--lime);
+    outline-offset: -2px;
   }
   .sel-menu li[aria-selected='true'] {
     color: var(--lime);

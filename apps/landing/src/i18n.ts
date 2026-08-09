@@ -45,8 +45,28 @@ type Dict = {
   pain: { title: string; items: Feature[] }
   solution: { title: string; subtitle: string; items: Feature[] }
   workspace: { title: string; subtitle: string; items: Feature[] }
-  /** Секция с графиками: раньше повторяла заголовок workspace дважды на странице */
-  numbers: { title: string; subtitle: string }
+  /**
+   * Секция «дайте это своему ассистенту».
+   *
+   * Раньше здесь были столбики часов по дням и полоска задач по статусам — с
+   * выдуманными числами под заголовком «цифры уже собраны». Секция обещала
+   * реальность и показывала вымысел, а такие же графики есть у любого
+   * трекера: на вопрос «чем вы лучше» они не отвечали.
+   *
+   * Теперь на этом месте то, чего у трекеров нет: готовая инструкция, которую
+   * человек отдаёт своему ассистенту, и тот подключается к чату сам.
+   */
+  numbers: {
+    title: string
+    subtitle: string
+    /** Три шага: скопировать → вставить ассистенту → он в проекте */
+    steps: [string, string, string]
+    /** Подписи к двум файлам: для ИИ и для интеграции */
+    fileAi: string
+    fileApi: string
+    fileAiNote: string
+    fileApiNote: string
+  }
   /** Блок на главной для компаний со своей системой + страница интеграции */
   integrate: {
     tag: string
@@ -253,8 +273,14 @@ export const dict: Record<LocaleCode, Dict> = {
       ],
     },
     numbers: {
-      title: 'The numbers are already there',
-      subtitle: 'Hours, tasks and activity add up as you work — no separate reporting ritual, and your assistant can read them too.',
+      title: 'Hand this to your assistant',
+      subtitle:
+        'Everything it needs to know is written down for it, not for you. Copy one line, paste it into Claude, ChatGPT or whatever you use — it reads the page and connects itself.',
+      steps: ['Copy the prompt', 'Paste it into your assistant', 'It joins the project and starts working'],
+      fileAi: 'For your assistant',
+      fileApi: 'For your developers',
+      fileAiNote: 'What Chatick is and how to connect to the chat',
+      fileApiNote: 'The API for wiring up your own system',
     },
     integrate: {
       tag: 'For companies with their own system',
@@ -519,8 +545,14 @@ export const dict: Record<LocaleCode, Dict> = {
       ],
     },
     numbers: {
-      title: 'Цифры уже собраны',
-      subtitle: 'Часы, задачи и активность копятся по ходу работы — без отдельного ритуала отчётности. Ассистент их тоже читает.',
+      title: 'Отдайте это своему ассистенту',
+      subtitle:
+        'Всё, что ему нужно знать, уже записано — для него, а не для вас. Скопируйте одну строку и вставьте в Claude, ChatGPT или что вы используете: он прочитает страницу и подключится сам.',
+      steps: ['Скопируйте строку', 'Вставьте её своему ассистенту', 'Он войдёт в проект и начнёт работать'],
+      fileAi: 'Для ассистента',
+      fileApi: 'Для разработчиков',
+      fileAiNote: 'Что такое Chatick и как подключиться к чату',
+      fileApiNote: 'API, чтобы связать со своей системой',
     },
     integrate: {
       tag: 'Для компаний со своей системой',
@@ -785,8 +817,14 @@ export const dict: Record<LocaleCode, Dict> = {
       ],
     },
     numbers: {
-      title: 'המספרים כבר כאן',
-      subtitle: 'שעות, משימות ופעילות מצטברים תוך כדי עבודה — בלי טקס דיווח נפרד, והעוזר שלכם קורא אותם גם.',
+      title: 'תנו את זה לעוזר שלכם',
+      subtitle:
+        'כל מה שהוא צריך לדעת כבר כתוב — בשבילו, לא בשבילכם. העתיקו שורה אחת והדביקו ב-Claude, ב-ChatGPT או במה שאתם משתמשים: הוא יקרא את העמוד ויתחבר בעצמו.',
+      steps: ['העתיקו את השורה', 'הדביקו אותה לעוזר שלכם', 'הוא נכנס לפרויקט ומתחיל לעבוד'],
+      fileAi: 'לעוזר שלכם',
+      fileApi: 'למפתחים שלכם',
+      fileAiNote: 'מה זה Chatick ואיך להתחבר לצ׳אט',
+      fileApiNote: 'ה-API לחיבור המערכת שלכם',
     },
     integrate: {
       tag: 'לחברות עם מערכת משלהן',
