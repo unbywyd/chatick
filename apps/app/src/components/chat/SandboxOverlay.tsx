@@ -5,12 +5,15 @@ import ReactMarkdown from 'react-markdown'
 // GFM: без него markdown не знает таблиц вовсе — они схлопывались в строку.
 import remarkGfm from 'remark-gfm'
 import { toast } from 'sonner'
-import { Bot, Check, Eye, EyeOff, FileText, Image as ImageIcon, Loader2, SendHorizontal, X } from 'lucide-react'
+import { Bot, Check, Eye, EyeOff, FileText, Image as ImageIcon, ListTodo, Loader2, SendHorizontal, X } from 'lucide-react'
 import { api, ApiError } from '@/lib/api'
 import { cn } from '@/lib/utils'
 import { Button } from '@/components/ui/button'
 import { useConfirm } from '@/components/ui/confirm'
 import type { MessageAttachment } from '@/hooks/useProjectSocket'
+
+/** Задача, предложенная ИИ. Создаётся только по кнопке — сам он ничего не заводит. */
+type ProposedTask = { title: string; description?: string; assignee?: string; estimateMinutes?: number }
 
 type SandboxItem = {
   id: string
@@ -18,6 +21,10 @@ type SandboxItem = {
   text: string
   suggestion: boolean
   approved: boolean
+  /** 'tasks' — карточка с предложенными задачами; пусто — обычная реплика или вариант текста. */
+  kind: string | null
+  payload: ProposedTask[] | null
+  applied: boolean
   createdAt: string
 }
 type SandboxData = {
@@ -192,7 +199,9 @@ export function SandboxOverlay({
 
             {/* Диалог */}
             {sandbox.data?.items.map((item) =>
-              item.suggestion ? (
+              item.kind === 'tasks' ? (
+                <TaskProposal key={item.id} messageId={messageId} item={item} />
+              ) : item.suggestion ? (
                 <div key={item.id} className={cn('rounded-lg border p-3', item.approved ? 'border-brand bg-accent/60' : 'bg-card')}>
                   <div className="mb-1.5 flex items-center justify-between gap-2">
                     <p className="flex items-center gap-1.5 text-[10px] font-medium uppercase tracking-wide text-muted-foreground">
@@ -277,6 +286,104 @@ export function SandboxOverlay({
             </form>
           </footer>
         </>
+      )}
+    </div>
+  )
+}
+
+/**
+ * Предложенные задачи (SPEC §5.5.3).
+ *
+ * ИИ заметил, что реплика — это работа, и предложил завести её в трекер.
+ * Создаёт СЕРВЕР по нажатию: список перед глазами, лишние строки снимаются,
+ * и заводится ровно отмеченное — не то, что ИИ решил, будто с ним согласились.
+ *
+ * Сообщение при этом остаётся held: задача заведена, но сказать её вслух автор
+ * всё ещё может — это его выбор, а не следствие нажатия.
+ */
+function TaskProposal({ messageId, item }: { messageId: string; item: SandboxItem }) {
+  const { t } = useTranslation()
+  const qc = useQueryClient()
+  const tasks = item.payload ?? []
+  const [picked, setPicked] = useState<number[]>(() => tasks.map((_, i) => i))
+
+  const apply = useMutation({
+    mutationFn: (indexes: number[]) =>
+      api<{ report: string }>(
+        `/api/v1/messages/${messageId}/sandbox/${item.id}/apply`,
+        { method: 'POST', body: JSON.stringify({ indexes }) },
+        'project',
+      ),
+    onSuccess: (res) => {
+      toast.success(res.report)
+      qc.invalidateQueries({ queryKey: ['sandbox', messageId] })
+      qc.invalidateQueries({ queryKey: ['tasks'] })
+    },
+    onError: (e) => toast.error(e instanceof Error ? e.message : String(e)),
+  })
+
+  if (!tasks.length) return null
+
+  return (
+    <div className="rounded-lg border border-brand/40 bg-card p-3">
+      <p className="mb-2 flex items-center gap-1.5 text-[10px] font-medium uppercase tracking-wide text-muted-foreground">
+        <ListTodo className="size-3.5 text-brand" />
+        {item.applied ? t('sandbox.tasksCreated') : t('sandbox.tasksProposed')}
+      </p>
+
+      <ul className="space-y-1.5">
+        {tasks.map((task, i) => {
+          const on = picked.includes(i)
+          return (
+            <li key={i}>
+              <label
+                className={cn(
+                  'flex cursor-pointer items-start gap-2 rounded-md border p-2 text-sm transition-colors',
+                  item.applied ? 'cursor-default opacity-60' : on ? 'border-brand/50 bg-accent/40' : 'hover:bg-accent/20',
+                )}
+              >
+                <input
+                  type="checkbox"
+                  className="mt-0.5 size-3.5 accent-brand"
+                  checked={on}
+                  disabled={item.applied || apply.isPending}
+                  onChange={() => setPicked((p) => (on ? p.filter((x) => x !== i) : [...p, i]))}
+                />
+                <span className="min-w-0 flex-1">
+                  <span className="block font-medium">{task.title}</span>
+                  {task.description && <span className="mt-0.5 block text-xs text-muted-foreground">{task.description}</span>}
+                  {(task.assignee || task.estimateMinutes) && (
+                    <span className="mt-1 flex flex-wrap gap-1.5 text-[11px] text-muted-foreground">
+                      {task.assignee && <span className="rounded-full border px-1.5 py-0.5">{task.assignee}</span>}
+                      {task.estimateMinutes ? (
+                        <span className="rounded-full border px-1.5 py-0.5">
+                          {t('sandbox.estimate', { minutes: task.estimateMinutes })}
+                        </span>
+                      ) : null}
+                    </span>
+                  )}
+                </span>
+              </label>
+            </li>
+          )
+        })}
+      </ul>
+
+      {/* Отказ ничего не удаляет: карточка остаётся в переписке, а сообщение
+          всё ещё можно просто отправить в чат — отдельная кнопка «отменить»
+          была бы четвёртым выходом там, где хватает трёх. */}
+      {!item.applied && (
+        <div className="mt-2.5">
+          <Button
+            variant="brand"
+            size="sm"
+            disabled={!picked.length || apply.isPending}
+            onClick={() => apply.mutate([...picked].sort((a, b) => a - b))}
+          >
+            {apply.isPending ? <Loader2 className="size-3.5 animate-spin" /> : <Check className="size-3.5" />}
+            {t('sandbox.createTasks', { count: picked.length })}
+          </Button>
+        </div>
       )}
     </div>
   )

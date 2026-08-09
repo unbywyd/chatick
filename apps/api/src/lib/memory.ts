@@ -30,7 +30,7 @@ const TAIL_SIZE = 30 // живой хвост в промпте
  */
 export async function buildTeamContext(projectId: string): Promise<string> {
   const rows = await db
-    .select({ name: users.name, email: users.email, jobTitle: projectMembers.jobTitle, responsibility: projectMembers.responsibility, role: projectMembers.role })
+    .select({ id: users.id, name: users.name, email: users.email, locale: users.locale, jobTitle: projectMembers.jobTitle, responsibility: projectMembers.responsibility, role: projectMembers.role })
     .from(projectMembers)
     .innerJoin(users, eq(users.id, projectMembers.userId))
     .where(eq(projectMembers.projectId, projectId))
@@ -38,9 +38,16 @@ export async function buildTeamContext(projectId: string): Promise<string> {
   const lines = rows.map((r) => {
     const who = r.name || r.email
     const bits = [r.jobTitle, r.responsibility && `responsible for: ${r.responsibility}`].filter(Boolean).join('; ')
-    return `- ${who} (${r.role})${bits ? ` — ${bits}` : ''}`
+    // id и язык — чтобы ИИ мог собрать упоминание @[Имя](id) и понять, на каком
+    // языке человек читает. Без id упоминание не станет ссылкой и не создаст
+    // уведомление: адресат просто не узнает, что обращались к нему.
+    return `- ${who} (${r.role}, id=${r.id}, reads ${LANG_NAMES[r.locale] ?? r.locale})${bits ? ` — ${bits}` : ''}`
   })
-  return ['TEAM (who does what — use to route tasks/questions to the right person):', ...lines].join('\n')
+  return [
+    'TEAM (who does what — use to route tasks/questions to the right person):',
+    ...lines,
+    'To address someone in chat write @[Name](id) with their id from this list — that is what notifies them.',
+  ].join('\n')
 }
 
 export async function buildMemoryContext(projectId: string): Promise<string> {

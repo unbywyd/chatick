@@ -7,9 +7,9 @@ import { db } from '../db/client.js'
 import { chatSummaries, credentials, documents, files, messages, notes, sandboxMessages, tasks, users } from '../db/schema.js'
 import { requireProject, type ProjectEnv } from '../auth.js'
 import { broadcast, sendToUser } from '../ws.js'
-import { evaluateMessage, sandboxReply, aiChatReply } from '../lib/dispatcher.js'
+import { evaluateMessage, sandboxReply, aiChatReply, type ProposedTask } from '../lib/dispatcher.js'
 import { imagesForMessage } from '../lib/vision.js'
-import { maybeCompress } from '../lib/memory.js'
+import { maybeCompress, memoryTools } from '../lib/memory.js'
 import { notify, extractMentions } from '../lib/notify.js'
 import { projectRoleOf } from './projects.js'
 
@@ -360,6 +360,33 @@ messagesRoute.post(
             suggestion: true,
             approved: true,
           })
+        // Карточка задач — сразу, а не после первой реплики автора.
+        //
+        // Диспетчер выносит вердикт коротким JSON и задач не предлагает: это
+        // работа sandbox-модели, у которой есть ростер команды. Без этого
+        // вызова «Артём, проверь функцию» открывал sandbox с одним текстом —
+        // человеку приходилось спрашивать «а можешь завести задачу?», хотя
+        // предложить должны были ему.
+        //
+        // Только когда диспетчер сам сказал, что это работа: иначе каждый
+        // придержанный «привет» стоил бы второго вызова модели впустую.
+        if (verdict.work) {
+          try {
+            const opening = await sandboxReply(row!.id)
+            if (opening?.tasks.length)
+              await db.insert(sandboxMessages).values({
+                messageId: row!.id,
+                role: 'ai',
+                text: '',
+                kind: 'tasks',
+                payload: JSON.stringify(opening.tasks),
+              })
+          } catch (e) {
+            // Сбой здесь не должен ломать hold: сообщение придержано, объяснение
+            // уже лежит, а задачи автор всегда может попросить репликой.
+            console.error('[sandbox] opening proposal failed:', e)
+          }
+        }
         sendToUser(projectId, sub, 'held', { messageId: row!.id })
         broadcast(projectId, 'checking_done', { userId: sub }, { except: sub })
       }
@@ -381,6 +408,21 @@ async function heldMessageOf(c: { get: (k: 'auth') => ProjectEnv['Variables']['a
 }
 
 // Содержимое sandbox: исходник + диалог
+/** Пункт sandbox для клиента. Карточка отдаётся разобранной — фронту незачем парсить JSON. */
+function serializeSandboxItem(i: typeof sandboxMessages.$inferSelect) {
+  return {
+    id: i.id,
+    role: i.role,
+    text: i.text,
+    suggestion: i.suggestion,
+    approved: i.approved,
+    kind: i.kind,
+    payload: i.payload ? (JSON.parse(i.payload) as unknown) : null,
+    applied: Boolean(i.appliedAt),
+    createdAt: i.createdAt,
+  }
+}
+
 messagesRoute.get('/:messageId/sandbox', async (c) => {
   const msg = await heldMessageOf(c, c.req.param('messageId'))
   if (!msg) return c.json({ error: 'Not found' }, 404)
@@ -392,7 +434,7 @@ messagesRoute.get('/:messageId/sandbox', async (c) => {
   const atts = await attachmentsOf([msg.id])
   return c.json({
     original: { id: msg.id, text: msg.text, attachments: atts.get(msg.id) ?? [] },
-    items: items.map((i) => ({ id: i.id, role: i.role, text: i.text, suggestion: i.suggestion, approved: i.approved, createdAt: i.createdAt })),
+    items: items.map(serializeSandboxItem),
   })
 })
 
@@ -423,10 +465,65 @@ messagesRoute.post(
           .returning()
         created.push(sugg!)
       }
+      // Карточка задач — отдельным пунктом: у неё свои кнопки, и текст реплики
+      // она не заменяет.
+      if (reply.tasks.length) {
+        const [card] = await db
+          .insert(sandboxMessages)
+          .values({ messageId: msg.id, role: 'ai', text: '', kind: 'tasks', payload: JSON.stringify(reply.tasks) })
+          .returning()
+        created.push(card!)
+      }
     }
-    return c.json(
-      created.map((i) => ({ id: i.id, role: i.role, text: i.text, suggestion: i.suggestion, approved: i.approved, createdAt: i.createdAt })),
-    )
+    return c.json(created.map(serializeSandboxItem))
+  },
+)
+
+/**
+ * Создать задачи из карточки (SPEC §5.5.3).
+ *
+ * Исполняет сервер по сохранённому payload, а не модель «по согласию в
+ * разговоре»: человек нажал на то, что видел, и получить он должен ровно это.
+ * Строки выбирает он же — лишние снимаются галочкой, до сюда не доезжают.
+ */
+messagesRoute.post(
+  '/:messageId/sandbox/:itemId/apply',
+  zValidator('json', z.object({ indexes: z.array(z.number().int().min(0)).optional() })),
+  async (c) => {
+    const { projectId, sub } = c.get('auth')
+    const msg = await heldMessageOf(c, c.req.param('messageId'))
+    if (!msg) return c.json({ error: 'Not found' }, 404)
+
+    const item = await db.query.sandboxMessages.findFirst({
+      where: and(eq(sandboxMessages.id, c.req.param('itemId')), eq(sandboxMessages.messageId, msg.id)),
+    })
+    if (!item || item.kind !== 'tasks') return c.json({ error: 'Not a task proposal' }, 400)
+    // Sandbox остаётся открытым после нажатия — без этого «Создать» повторно
+    // заводит те же задачи второй раз.
+    if (item.appliedAt) return c.json({ error: 'Already applied' }, 409)
+
+    const proposed = JSON.parse(item.payload || '[]') as ProposedTask[]
+    const { indexes } = c.req.valid('json')
+    const chosen = indexes?.length ? (indexes.map((i) => proposed[i]).filter(Boolean) as ProposedTask[]) : proposed
+    if (!chosen.length) return c.json({ error: 'Nothing to create' }, 400)
+
+    // Тем же кодом, что и ИИ: нумерация, разрешение исполнителя по имени,
+    // уведомления и проверка права — всё уже живёт в create_tasks. Своя копия
+    // здесь разошлась бы с ним при первой же правке.
+    const { handlers } = memoryTools(projectId, sub)
+    const out = await handlers.create_tasks!({
+      tasks: chosen.map((t) => ({
+        title: t.title,
+        description: t.description ?? '',
+        assignee: t.assignee,
+        estimateMinutes: t.estimateMinutes,
+      })),
+    })
+    const report = typeof out === 'string' ? out : out.text
+    if (report.startsWith('PERMISSION DENIED')) return c.json({ error: 'Forbidden' }, 403)
+
+    await db.update(sandboxMessages).set({ appliedAt: new Date() }).where(eq(sandboxMessages.id, item.id))
+    return c.json({ report })
   },
 )
 

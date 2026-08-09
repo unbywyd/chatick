@@ -812,6 +812,25 @@ export const sandboxMessages = pgTable(
     text: text('text').notNull(),
     suggestion: boolean('suggestion').notNull().default(false),
     approved: boolean('approved').notNull().default(false),
+    /**
+     * Тип предложения (SPEC §5.5.3).
+     *
+     * Пусто — исторический случай: вариант текста сообщения, который «Выбрать»
+     * отправляет в чат. Так работал sandbox с самого начала.
+     *
+     * 'tasks' — задачи, которые предлагается создать вместо отправки реплики в
+     * чат: «Артём, проверь функцию» — это работа, а не разговор, и в чате она
+     * теряется. Поля задач лежат в payload, исполняет их сервер по кнопке.
+     *
+     * Почему не «модель сама создаст, когда человек согласится»: тогда
+     * созданное определяется её пониманием диалога, а не тем, что человек
+     * видел в карточке. Кнопка исполняет ровно показанное.
+     */
+    kind: text('kind'),
+    payload: text('payload'), // JSON под kind
+    // Исполнено — чтобы карточка не сработала дважды: у held-сообщения
+    // sandbox остаётся открытым, и «Создать» можно нажать повторно.
+    appliedAt: timestamp('applied_at', { withTimezone: true }),
     createdAt: createdAt(),
   },
   (t) => [index('sandbox_message_idx').on(t.messageId, t.createdAt)],

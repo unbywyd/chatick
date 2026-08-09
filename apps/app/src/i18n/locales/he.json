@@ -581,7 +581,13 @@
     "placeholder": "להשיב ל-AI…",
     "forceSend": "לשלוח בכל זאת",
     "forceConfirm": "לשלוח למרות עיכוב ה-AI?",
-    "forceNote": "ההודעה תופיע בצ׳אט עם תווית «לא נבדק»."
+    "forceNote": "ההודעה תופיע בצ׳אט עם תווית «לא נבדק».",
+    "tasksProposed": "נראה כמו עבודה — ליצור משימות?",
+    "tasksCreated": "המשימות נוצרו",
+    "createTasks_one": "ליצור משימה",
+    "createTasks_two": "ליצור {{count}} משימות",
+    "createTasks_other": "ליצור {{count}} משימות",
+    "estimate": "≈ {{minutes}} דק׳"
   },
   "tabs": {
     "about": "אודות",

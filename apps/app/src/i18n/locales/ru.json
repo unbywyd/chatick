@@ -586,7 +586,13 @@
     "placeholder": "Ответить ИИ…",
     "forceSend": "Послать всё равно",
     "forceConfirm": "Отправить вопреки ИИ?",
-    "forceNote": "Сообщение появится в чате с пометкой «без проверки»."
+    "forceNote": "Сообщение появится в чате с пометкой «без проверки».",
+    "tasksProposed": "Похоже на задачу — завести?",
+    "tasksCreated": "Задачи созданы",
+    "createTasks_one": "Создать задачу",
+    "createTasks_few": "Создать {{count}} задачи",
+    "createTasks_many": "Создать {{count}} задач",
+    "estimate": "≈ {{minutes}} мин"
   },
   "tabs": {
     "about": "О проекте",

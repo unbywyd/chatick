@@ -218,10 +218,32 @@ function dispatcherSystem(project: { chatRules: string }, ai: AiConfig, authorNa
     `LANGUAGE RULE (always enforced): if the message is NOT in ${lang}, HOLD it and provide a faithful ${lang} translation as the suggestion (mark it good to send).`,
     project.chatRules ? `Chat rules set by the team: "${project.chatRules}"` : 'No special chat rules.',
     '',
+    // Обращение к человеку, который читает на другом языке (SPEC §5.5).
+    //
+    // «Таль, как дела?» написано на языке проекта, правил не нарушает — и
+    // уходило в чат как есть. Таль читает на иврите: сообщение адресовано ему,
+    // но написано не для него, и упоминания нет — уведомление не придёт.
+    //
+    // Держим и предлагаем готовый вариант: на его языке, с @[Имя](id).
+    // Переписывать за человека нельзя — он сам выберет, отправлять ли.
+    'ADDRESSING A TEAMMATE. If the message is aimed at a specific person (starts with their name, asks them something, tells them to do something) and the TEAM list says they read another language — HOLD it.',
+    'The suggestion is that same message written in THEIR language, opening with @[Name](id) taken from the TEAM list. Keep the meaning exactly; do not add politeness the author did not write. Mark it good to send.',
+    'If they read the project language, a plain name is fine — but still HOLD when there is no @[Name](id) mention at all, and suggest the same text with the mention added, so they actually get notified.',
+    // Поручение, брошенное в чат (SPEC §8.49 — тот же мотив, что у вопросов).
+    //
+    // «Артём, там надо проверить функцию» — это работа, а не разговор. В чате
+    // она тонет: через день никто не помнит, договорились или нет.
+    //
+    // Предлагаем задачу, но НЕ создаём: в чате такое звучит постоянно, и
+    // задача из каждой реплики завалила бы доску. Решает человек.
+    'WORK ASSIGNED IN CHAT. If the message asks someone to do something — check, fix, add, look into, remind, prepare — it is work, and work said in chat gets lost. HOLD it, set "work":true, and say so briefly.',
+    'Do NOT create anything: you are the dispatcher and you have no such power here. The author will decide in the private sandbox that opens next; your job is only to stop the message and name what you noticed.',
+    'Say who the work seems to be for. Keep the suggestion as the chat message itself (with the mention), not as a task description.',
     'Judge ONLY the incoming message below — the recent chat is context, NOT the subject of evaluation.',
     'Decide: PASS (deliver to the group as-is) or HOLD (needs a private clarification with the author).',
+    'Be sparing: HOLD only on the grounds listed above. Ordinary talk, answers, jokes, status updates and thanks all PASS. When unsure, PASS — a message stopped for nothing costs the author more than one that slipped through.',
     'Respond with ONLY JSON:',
-    '{"verdict":"pass"} or {"verdict":"hold","reason":"<short reason in the AUTHOR\'S language>","questions":"<what to clarify, author\'s language>","suggestion":"<improved message in the PROJECT language, or empty>"}',
+    '{"verdict":"pass"} or {"verdict":"hold","reason":"<short reason in the AUTHOR\'S language>","questions":"<what to clarify, author\'s language>","suggestion":"<improved message in the PROJECT language, or empty>","work":<true only when the message asks someone to do something>}',
     'Keep reason/questions to 1-2 sentences. Suggestion must preserve the author\'s meaning.',
     'IMPORTANT: output valid JSON — escape any double quotes inside string values as \\".',
   ].join('\n')
@@ -230,7 +252,9 @@ function dispatcherSystem(project: { chatRules: string }, ai: AiConfig, authorNa
 export type Verdict =
   // unchecked=true означает «проверка НЕ отработала» (сбой LLM), а не «сообщение чистое»
   | { verdict: 'pass'; unchecked?: boolean }
-  | { verdict: 'hold'; reason: string; questions?: string; suggestion?: string }
+  // work=true — «это поручение»: только тогда есть смысл звать модель за
+  // карточкой задач. Иначе каждый придержанный пустяк стоил бы лишнего вызова.
+  | { verdict: 'hold'; reason: string; questions?: string; suggestion?: string; work?: boolean }
 
 /**
  * Оценка входящего группового сообщения.
@@ -290,6 +314,10 @@ export async function evaluateMessage(messageId: string): Promise<Verdict> {
           unescape(reason) ??
           'The AI flagged this message but the details were lost. Please rephrase or ask the AI below.',
         ...(questions ? { questions: unescape(questions) } : {}),
+        // work стоит в JSON последним и при обрыве теряется первым — а без него
+        // поручение открывает sandbox без карточки задач, ради которой его и
+        // придержали.
+        ...(/"work"\s*:\s*true/.test(raw) ? { work: true } : {}),
       }
     }
     // так же вытаскиваем усечённый pass, чтобы не помечать его «без проверки»
@@ -307,6 +335,15 @@ export async function evaluateMessage(messageId: string): Promise<Verdict> {
  * Ответ ИИ в sandbox-диалоге: помогает довести сообщение, предлагает варианты.
  * onChunk — стриминг «text»-части ответа для постепенной печати (SPEC: streaming).
  */
+/** Задача, предложенная к созданию. Поля — минимум, остальное человек допишет в трекере. */
+export type ProposedTask = {
+  title: string
+  description?: string
+  /** Имя из ростера команды; сопоставляется при исполнении, здесь ещё не id. */
+  assignee?: string
+  estimateMinutes?: number
+}
+
 export async function sandboxReply(
   messageId: string,
   onChunk?: (delta: string) => void,
@@ -314,6 +351,8 @@ export async function sandboxReply(
   text: string
   suggestion: string | null
   approved: boolean
+  /** Непусто — ИИ предлагает завести задачи вместо реплики в чат. */
+  tasks: ProposedTask[]
 } | null> {
   const msg = await db.query.messages.findFirst({ where: eq(messages.id, messageId) })
   if (!msg) return null
@@ -329,18 +368,40 @@ export async function sandboxReply(
     orderBy: (t, { asc }) => [asc(t.createdAt)],
   })
   const context = await recentContext(msg.projectId, msg.id, 10)
+  // Кто в команде, на каком языке читает и какой у него id — тем же составом,
+  // что видел диспетчер. Без этого предложить «на иврите и с упоминанием» здесь
+  // невозможно: имена из сообщения не с чем сопоставить.
+  const team = await buildTeamContext(msg.projectId)
 
   // формат под стриминг: свободный ответ (стримится) → маркеры с вариантом
   const system = [
     `You help an author finalize a held chat message. Project language: ${lang}.`,
     project.chatRules ? `Chat rules: "${project.chatRules}"` : '',
+    team,
     'Talk to the author in THEIR language. Be brief and practical.',
+    'When the message is aimed at a teammate, the version you suggest must open with @[Name](id) from the TEAM list — that mention is what notifies them — and be written in the language that person reads.',
     'Format your response EXACTLY like this:',
     '<your reply to the author>',
     'Then, if you have a message version ready for the group chat (project language, rules respected), add:',
     '---SUGGESTION---',
     '<the message version>',
     '---APPROVED--- (add this line ONLY if the version is good to send as-is)',
+    // Задача вместо реплики (SPEC §8.49).
+    //
+    // «Артём, надо проверить функцию» — это работа. Сказанная в чат, она живёт
+    // до следующего экрана прокрутки; заведённая — до того, как её сделают.
+    //
+    // Только ПРЕДЛАГАЕМ: создаст сервер, когда человек нажмёт кнопку. Модель
+    // здесь не исполняет ничего — иначе созданное определялось бы тем, как она
+    // поняла разговор, а не тем, что человек увидел в карточке.
+    'If the held message is work asked of someone, ALSO offer to turn it into tasks. Add:',
+    '---TASKS---',
+    '[{"title":"...","description":"...","assignee":"<name from TEAM>","estimateMinutes":60}]',
+    `Rules for that JSON: a plain array, nothing after it. Titles and descriptions in ${lang} (the project language) — they live in the tracker, not in this conversation.`,
+    'Split into SEVERAL tasks only when the message really asks for separate pieces of work that could be done by different people or finished at different times. One request is one task — splitting it to look thorough gives the team a board full of fragments.',
+    'estimateMinutes is your honest guess assuming the person works with an AI assistant. Omit assignee only when nobody in TEAM obviously fits.',
+    'Offer tasks ONCE, in the reply where you first notice the work. If the author already declined them, or the conversation has moved on to wording the message, do not add the block again.',
+    'Do not repeat the task list in your text reply — the author sees it as a card with buttons. Just say briefly that you can create it.',
   ]
     .filter(Boolean)
     .join('\n')
@@ -361,7 +422,10 @@ export async function sandboxReply(
     (delta) => {
       if (streamedPastMarker || !onChunk) return
       buffer += delta
-      const idx = buffer.indexOf('---SUGGESTION---')
+      // Стримится только реплика автору. Обрываем на ЛЮБОМ маркере: карточка
+      // задач — это JSON, и печатать его человеку незачем.
+      const idx =
+        [buffer.indexOf('---SUGGESTION---'), buffer.indexOf('---TASKS---')].filter((i) => i >= 0).sort((a, b) => a - b)[0] ?? -1
       if (idx >= 0) {
         streamedPastMarker = true
         const before = buffer.slice(0, idx)
@@ -375,8 +439,59 @@ export async function sandboxReply(
   )
   if (!raw) return null
 
-  const [textPart, rest] = raw.split('---SUGGESTION---')
+  // Маркеры могут прийти в любом порядке: сначала отделяем задачи, потом вариант.
+  const [beforeTasks, tasksPart] = raw.split('---TASKS---')
+  const [textPart, rest] = (beforeTasks ?? '').split('---SUGGESTION---')
   const approved = rest?.includes('---APPROVED---') ?? false
   const suggestion = rest?.replace('---APPROVED---', '').trim() || null
-  return { text: (textPart ?? '').trim(), suggestion, approved: Boolean(approved && suggestion) }
+
+  // Задачи могли уехать ПЕРЕД ---SUGGESTION--- — тогда вариант лежит в их хвосте.
+  let tasksRaw = tasksPart ?? null
+  let suggestionOut = suggestion
+  let approvedOut = approved
+  if (tasksRaw?.includes('---SUGGESTION---')) {
+    const [json, tail] = tasksRaw.split('---SUGGESTION---')
+    tasksRaw = json ?? null
+    const tailApproved = tail?.includes('---APPROVED---') ?? false
+    const tailSuggestion = tail?.replace('---APPROVED---', '').trim() || null
+    if (tailSuggestion) {
+      suggestionOut = tailSuggestion
+      approvedOut = tailApproved
+    }
+  }
+
+  return {
+    text: (textPart ?? '').trim(),
+    suggestion: suggestionOut,
+    approved: Boolean(approvedOut && suggestionOut),
+    tasks: parseProposedTasks(tasksRaw),
+  }
+}
+
+/**
+ * Задачи из хвоста ответа. Кривой JSON — не повод терять всю реплику:
+ * вернём пустой список, разговор останется, карточки просто не будет.
+ */
+export function parseProposedTasks(raw: string | null): ProposedTask[] {
+  if (!raw?.trim()) return []
+  const parsed = parseJson<unknown>(raw.trim().replace(/^```(?:json)?\s*|\s*```$/g, ''))
+  if (!Array.isArray(parsed)) {
+    if (raw.trim()) console.error('[sandbox] unreadable TASKS block:', raw.slice(0, 200))
+    return []
+  }
+  return parsed
+    .filter((t): t is Record<string, unknown> => Boolean(t) && typeof t === 'object')
+    .map((t) => ({
+      title: String(t.title ?? '').trim().slice(0, 300),
+      description: typeof t.description === 'string' ? t.description.slice(0, 10_000) : undefined,
+      assignee: typeof t.assignee === 'string' && t.assignee.trim() ? t.assignee.trim() : undefined,
+      estimateMinutes:
+        typeof t.estimateMinutes === 'number' && Number.isFinite(t.estimateMinutes) && t.estimateMinutes > 0
+          ? Math.round(t.estimateMinutes)
+          : undefined,
+    }))
+    .filter((t) => t.title)
+    // Больше семи — это уже не разбиение, а измельчение: карточку такой длины
+    // не читают, а принимают целиком, не глядя.
+    .slice(0, 7)
 }

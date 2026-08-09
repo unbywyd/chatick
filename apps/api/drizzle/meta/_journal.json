@@ -470,6 +470,13 @@
       "when": 1785066504121,
       "tag": "0066_llm_vision",
       "breakpoints": true
+    },
+    {
+      "idx": 67,
+      "version": "7",
+      "when": 1786258509892,
+      "tag": "0067_sandbox_proposals",
+      "breakpoints": true
     }
   ]
 }

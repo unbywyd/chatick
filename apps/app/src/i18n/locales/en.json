@@ -581,7 +581,12 @@
     "placeholder": "Reply to the AI…",
     "forceSend": "Send anyway",
     "forceConfirm": "Send despite the AI's hold?",
-    "forceNote": "The message will appear in the chat with an “unverified” badge."
+    "forceNote": "The message will appear in the chat with an “unverified” badge.",
+    "tasksProposed": "This looks like work — create tasks?",
+    "tasksCreated": "Tasks created",
+    "createTasks_one": "Create task",
+    "createTasks_other": "Create {{count}} tasks",
+    "estimate": "≈ {{minutes}} min"
   },
   "tabs": {
     "about": "About",
