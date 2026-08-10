@@ -1026,16 +1026,30 @@ export function TaskDrawer({
               остаётся за ресурсом, и отозвать его можно. */}
           {(task.resources?.length ?? 0) > 0 && (
             <section className="space-y-2">
-              <h4 className="text-xs font-medium text-muted-foreground">{t('resources.title')}</h4>
+              {/* tabs.resources, а не свой ключ: вкладка уже называется этим
+                  словом, и второе имя для того же завтра разъедется. */}
+              <h4 className="text-xs font-medium text-muted-foreground">{t('tabs.resources')}</h4>
               <ul className="space-y-1">
                 {task.resources!.map((r) => (
                   <li key={r.id}>
                     <button
-                      className="flex w-full items-center gap-2 rounded-md border px-2 py-1.5 text-start text-sm transition-colors hover:border-brand hover:text-brand"
+                      className="group/res flex w-full items-center gap-2 rounded-md border px-2 py-1.5 text-start text-sm transition-colors hover:border-brand hover:text-brand"
                       onClick={() => navigate(`/c/${companyId}/p/${routeProjectId}/resources/${r.id}`)}
+                      // Куда ведёт — видно до клика: у ресурса с именем сам
+                      // адрес в строке не показан, и «Access test resource»
+                      // ничего не говорит о том, что откроется.
+                      title={r.url ?? undefined}
                     >
                       <ExternalLink className="size-3.5 shrink-0 text-muted-foreground" />
                       <span className="truncate">{r.name || r.url}</span>
+                      {/* Адрес справа: в списке из нескольких ресурсов имя
+                          часто одинаково содержательное, а различает их
+                          именно ссылка. */}
+                      {r.name && r.url && (
+                        <span className="ms-auto hidden max-w-[45%] shrink-0 truncate text-xs text-muted-foreground group-hover/res:inline">
+                          {r.url}
+                        </span>
+                      )}
                     </button>
                   </li>
                 ))}
