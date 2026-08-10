@@ -40,13 +40,21 @@ function endpointCatalog(q: string): string {
          appears in a path. Use the number: it is what the human says out
          loud, it survives you losing whatever id map you kept, and it is
          what the reply shows you.
-  POST   /x/tasks${q}              {"title","description?","assignee?","status?","priority?","estimateMinutes?","sprintId?","attachmentIds?","refs?"}
+  POST   /x/tasks${q}              {"title","description?","assignee?","status?","priority?","estimateMinutes?","sprintId?","attachmentIds?","resourceIds?","refs?"}
   PATCH  /x/tasks/<id>${q}         any subset of the same fields
   PATCH  /x/tasks/bulk${q}         {"tasks":["TASK-4","TASK-7"], "set":{...}, "refs":{"TASK-4":"19.1"}}
   DELETE /x/tasks/<id>${q}
   DELETE /x/tasks/bulk${q}         {"tasks":["TASK-4","TASK-7"]}
   POST   /x/tasks/<id>/restore${q}
   GET    /x/trash${q}${amp}type=task|file
+
+  "resourceIds" — resources this task needs: a staging URL, an SSH key, a
+  database. Link them, never copy a secret into the description: a password
+  pasted there is readable by everyone who can see the task and cannot be taken
+  back, while a linked resource keeps deciding for itself who may open it.
+  Create the resource with POST /x/resources, pass its id here. Ids from
+  another project are ignored rather than rejected, so one stale id does not
+  fail the whole call.
 
   "refs" — what this task is called OUTSIDE Chatick: screen numbers in a design
   file, clauses of a contract, line items of an estimate. Free text, split on
@@ -931,11 +939,18 @@ ${endpointCatalog('?project=<id>')}
          the first hands out access to other people's data, the second cannot be
          undone. Ask them to do it in the app.
   GET    /x/files?project=<id>          POST multipart to upload
-  GET    /x/resources?project=<id>      metadata only; secret values never exposed
-  POST   /x/resources?project=<id>      {"name"?,"url"?,"description"?} — project links
-  PATCH  /x/resources/<id>?project=<id>
-         Secrets are neither read nor written through the bridge: a person adds
-         them in the app.
+  GET    /x/resources?project=<id>      list; "canSeeSecrets" says whether the
+                                        secrets under it are shared with you
+  POST   /x/resources?project=<id>      {"name"?,"url"?,"description"?,"secrets"?,"viewers"?}
+  PATCH  /x/resources/<id>?project=<id> {"name"?,"url"?,"description"?,"viewers"?}
+         A resource is a link plus optional secrets under it. The link and the
+         description are visible to the whole project; each SECRET is visible
+         only to the people listed in "viewers", plus whoever created the
+         resource. Do not list the author — they always see their own.
+         Created through the bridge, a resource starts shared with NOBODY but
+         its author. Name the people who need it in "viewers" (user ids from
+         GET /x/members), or the human you made it for will not be able to
+         open it. Changing "viewers" later is allowed only to the author.
 
   POST   /x/disconnect                  close this tunnel when you are done
 

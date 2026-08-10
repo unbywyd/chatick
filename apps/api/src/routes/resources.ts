@@ -1,9 +1,9 @@
 import { Hono } from 'hono'
 import { zValidator } from '@hono/zod-validator'
 import { z } from 'zod'
-import { and, desc, eq, sql } from 'drizzle-orm'
+import { and, desc, eq, inArray, sql } from 'drizzle-orm'
 import { db } from '../db/client.js'
-import { credentials, resourceSecrets, credentialAccessLog, users } from '../db/schema.js'
+import { credentials, resourceSecrets, resourceViewers, credentialAccessLog, projectMembers, users } from '../db/schema.js'
 import { requireProject, type ProjectEnv } from '../auth.js'
 import { encrypt, decrypt } from '../lib/crypto.js'
 import { hasPermission } from './projects.js'
@@ -11,9 +11,15 @@ import { logActivity } from '../lib/audit.js'
 import { fetchSiteIcon, nameFromUrl } from '../lib/site-icon.js'
 
 // Ресурсы (SPEC §8.1): ссылка + описание + опциональные секреты.
-// Секреты — самая чувствительная часть: значения только AES-256-GCM,
-// список отдаёт лишь метаданные, значение — отдельный /reveal с аудитом,
-// значения секретов НИКОГДА не попадают в контекст ИИ.
+//
+// Секреты — самая чувствительная часть: значения только AES-256-GCM, список
+// отдаёт лишь метаданные, значение — отдельный /reveal с аудитом.
+//
+// У секретов есть СВОЙ список зрителей (resource_viewers). Ссылка и описание
+// остаются общими для проекта — адрес макета не тайна, — а пароль от прода
+// видят только названные люди и автор. Автора в списке нет: он видит свои
+// секреты всегда, иначе запись можно было бы снять и оставить ресурс без
+// единственного владельца.
 export const resourcesRoute = new Hono<ProjectEnv>()
 resourcesRoute.use('*', requireProject)
 
@@ -21,6 +27,50 @@ const VALUE_MAX = 10_000
 
 async function audit(projectId: string, userId: string, action: 'reveal' | 'create' | 'update' | 'delete', resourceId: string | null, name: string) {
   await db.insert(credentialAccessLog).values({ projectId, userId, action, credentialId: resourceId, credentialName: name })
+}
+
+/**
+ * Видит ли человек СЕКРЕТЫ этого ресурса.
+ *
+ * Одно место на все ручки: правило доступа, размазанное по четырём
+ * обработчикам, разъезжается на первой же правке — и расходится оно молча,
+ * в сторону «видно больше, чем задумано».
+ *
+ * Автор — всегда. Остальные — по списку. Право credentials.manage сюда НЕ
+ * входит: администратор проекта управляет ресурсами, но это не повод читать
+ * чужие пароли.
+ */
+async function canSeeSecrets(resource: { id: string; createdById: string | null }, userId: string): Promise<boolean> {
+  if (resource.createdById === userId) return true
+  const row = await db.query.resourceViewers.findFirst({
+    where: and(eq(resourceViewers.resourceId, resource.id), eq(resourceViewers.userId, userId)),
+    columns: { id: true },
+  })
+  return Boolean(row)
+}
+
+/** Зрители ресурса — id, чтобы отдать их форме и мосту. */
+async function viewerIds(resourceId: string): Promise<string[]> {
+  const rows = await db
+    .select({ userId: resourceViewers.userId })
+    .from(resourceViewers)
+    .where(eq(resourceViewers.resourceId, resourceId))
+  return rows.map((r) => r.userId)
+}
+
+/**
+ * Переписать список зрителей.
+ *
+ * Автор из входящего списка вычёркивается: он и так видит всегда, а запись о
+ * нём можно было бы снять — и ресурс остался бы без единственного человека,
+ * способного открыть секрет.
+ */
+async function setViewers(resourceId: string, authorId: string | null, userIds: string[]): Promise<void> {
+  const clean = [...new Set(userIds)].filter((u) => u && u !== authorId)
+  await db.delete(resourceViewers).where(eq(resourceViewers.resourceId, resourceId))
+  if (clean.length) {
+    await db.insert(resourceViewers).values(clean.map((userId) => ({ resourceId, userId })))
+  }
 }
 
 /**
@@ -58,6 +108,17 @@ resourcesRoute.get('/', async (c) => {
   const counts = new Map<string, number>()
   for (const s of secretRows) counts.set(s.resourceId, (counts.get(s.resourceId) ?? 0) + 1)
 
+  // Кто из ресурсов открыт мне — одним запросом, а не по одному на строку:
+  // список бывает длинным, и N запросов на отрисовку замков того не стоят.
+  const ids = rows.map((r) => r.r.id)
+  const mineRows = ids.length
+    ? await db
+        .select({ resourceId: resourceViewers.resourceId })
+        .from(resourceViewers)
+        .where(and(inArray(resourceViewers.resourceId, ids), eq(resourceViewers.userId, sub)))
+    : []
+  const shared = new Set(mineRows.map((r) => r.resourceId))
+
   return c.json(
     rows.map((r) => ({
       id: r.r.id,
@@ -68,6 +129,8 @@ resourcesRoute.get('/', async (c) => {
       source: r.r.source,
       messageId: r.r.messageId,
       secretCount: counts.get(r.r.id) ?? 0,
+      // Замок в списке: ресурс виден всем, а его секреты — нет.
+      canSeeSecrets: r.r.createdById === sub || shared.has(r.r.id),
       createdAt: r.r.createdAt,
       updatedAt: r.r.updatedAt,
       creator: r.creator ? { id: r.creator.id, name: r.creator.name } : null,
@@ -81,7 +144,15 @@ resourcesRoute.get('/:id', async (c) => {
   if (!(await hasPermission(projectId, sub, 'credentials.read'))) return c.json({ error: 'Forbidden' }, 403)
   const r = await db.query.credentials.findFirst({ where: and(eq(credentials.id, c.req.param('id')), eq(credentials.projectId, projectId)) })
   if (!r) return c.json({ error: 'Not found' }, 404)
-  const secrets = await db.query.resourceSecrets.findMany({ where: eq(resourceSecrets.resourceId, r.id), orderBy: (t, { asc }) => [asc(t.createdAt)] })
+  const mine = await canSeeSecrets(r, sub)
+  const secrets = mine
+    ? await db.query.resourceSecrets.findMany({ where: eq(resourceSecrets.resourceId, r.id), orderBy: (t, { asc }) => [asc(t.createdAt)] })
+    : []
+  // Метки секретов («Пароль от прода», «Ключ Stripe») сами по себе говорят
+  // достаточно, поэтому не-зрителю не отдаём и их: он видит замок и число.
+  const total = mine
+    ? secrets.length
+    : (await db.select({ n: sql<number>`count(*)::int` }).from(resourceSecrets).where(eq(resourceSecrets.resourceId, r.id)))[0]!.n
   return c.json({
     id: r.id,
     name: r.name,
@@ -90,7 +161,13 @@ resourcesRoute.get('/:id', async (c) => {
     description: r.description,
     source: r.source,
     messageId: r.messageId,
+    canSeeSecrets: mine,
+    secretCount: total,
     secrets: secrets.map((s) => ({ id: s.id, label: s.label })),
+    // Кто видит секреты — форме, чтобы нарисовать теги. Автора здесь нет: он
+    // видит всегда и в списке не показывается.
+    viewers: await viewerIds(r.id),
+    authorId: r.createdById,
   })
 })
 
@@ -120,12 +197,23 @@ resourcesRoute.post(
       // ИИ создаёт из чата: source=chat, messageId — связь
       source: z.enum(['manual', 'chat']).default('manual'),
       messageId: z.string().nullable().optional(),
+      /**
+       * Кому видны СЕКРЕТЫ. Автора перечислять не нужно — он видит всегда.
+       *
+       * Не передан — умолчание зависит от того, кто создаёт, и это не мелочь:
+       *  — человек в приложении получает всю команду проекта (форма и так
+       *    показывает теги, лишних снимают крестиком);
+       *  — ИИ через мост — никого, кроме автора, пока не назовёт людей явно.
+       * Отсюда defaultViewers: клиент говорит намерение, а не пустоту.
+       */
+      viewers: z.array(z.string()).max(200).optional(),
+      defaultViewers: z.enum(['project', 'author']).default('project'),
     }),
   ),
   async (c) => {
     const { projectId, sub } = c.get('auth')
     if (!(await hasPermission(projectId, sub, 'credentials.manage'))) return c.json({ error: 'Forbidden' }, 403)
-    const { name, url, description, secrets, source, messageId } = c.req.valid('json')
+    const { name, url, description, secrets, source, messageId, viewers, defaultViewers } = c.req.valid('json')
 
     const link = url?.trim() || null
     // Имя из домена, если своего не дали: «figma.com/board» понятнее пустой
@@ -143,23 +231,56 @@ resourcesRoute.post(
     if (secrets.length) {
       await db.insert(resourceSecrets).values(secrets.map((s) => ({ resourceId: row!.id, label: s.label, valueEncrypted: encrypt(s.value) })))
     }
+
+    // Кто видит секреты. Явный список сильнее умолчания; без него — вся
+    // команда (приложение) либо никто (мост).
+    let allow: string[] = viewers ?? []
+    if (!viewers && defaultViewers === 'project') {
+      const team = await db
+        .select({ userId: projectMembers.userId })
+        .from(projectMembers)
+        .where(eq(projectMembers.projectId, projectId))
+      allow = team.map((m) => m.userId)
+    }
+    await setViewers(row!.id, sub, allow)
+
     if (link) grabIcon(row!.id, link)
     await audit(projectId, sub, 'create', row!.id, title)
-    return c.json({ id: row!.id, name: row!.name }, 201)
+    return c.json({ id: row!.id, name: row!.name, viewers: await viewerIds(row!.id) }, 201)
   },
 )
 
 // Обновить метаданные ресурса
 resourcesRoute.patch(
   '/:id',
-  zValidator('json', z.object({ name: z.string().max(200).optional(), url: z.string().max(2000).nullable().optional(), description: z.string().max(5000).optional() })),
+  zValidator(
+    'json',
+    z.object({
+      name: z.string().max(200).optional(),
+      url: z.string().max(2000).nullable().optional(),
+      description: z.string().max(5000).optional(),
+      /** Полный новый список зрителей секретов. Меняет только автор. */
+      viewers: z.array(z.string()).max(200).optional(),
+    }),
+  ),
   async (c) => {
     const { projectId, sub } = c.get('auth')
     if (!(await hasPermission(projectId, sub, 'credentials.manage'))) return c.json({ error: 'Forbidden' }, 403)
     const id = c.req.param('id')
     const r = await db.query.credentials.findFirst({ where: and(eq(credentials.id, id), eq(credentials.projectId, projectId)) })
     if (!r) return c.json({ error: 'Not found' }, 404)
-    const { name, url, description } = c.req.valid('json')
+    const { name, url, description, viewers } = c.req.valid('json')
+
+    // Список зрителей меняет только автор — тот, кто эти секреты положил.
+    // Права credentials.manage тут мало: администратор ведает ресурсами, но
+    // раздавать чужой пароль от его имени он не должен.
+    if (viewers !== undefined) {
+      if (r.createdById !== sub) {
+        return c.json({ error: 'Only the person who created the resource can change who sees its secrets' }, 403)
+      }
+      await setViewers(r.id, r.createdById, viewers)
+    }
+
     const patch: Record<string, unknown> = {}
     const link = url === undefined ? r.url : url?.trim() || null
 
@@ -251,6 +372,11 @@ resourcesRoute.post('/:id/secrets/:secretId/reveal', async (c) => {
   if (!(await hasPermission(projectId, sub, 'credentials.read'))) return c.json({ error: 'Forbidden' }, 403)
   const r = await ownResource(projectId, c.req.param('id'))
   if (!r) return c.json({ error: 'Not found' }, 404)
+  // Главная дверь к значению: без этой проверки список зрителей был бы
+  // украшением — любой участник проекта открыл бы чужой пароль.
+  if (!(await canSeeSecrets(r, sub))) {
+    return c.json({ error: 'This secret is not shared with you. Ask the person who created the resource.' }, 403)
+  }
   const s = await db.query.resourceSecrets.findFirst({ where: and(eq(resourceSecrets.id, c.req.param('secretId')), eq(resourceSecrets.resourceId, r.id)) })
   if (!s) return c.json({ error: 'Not found' }, 404)
   await audit(projectId, sub, 'reveal', r.id, r.name)

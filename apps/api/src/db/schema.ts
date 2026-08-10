@@ -889,6 +889,56 @@ export const resourceSecrets = pgTable(
   (t) => [index('resource_secrets_idx').on(t.resourceId)],
 )
 
+/**
+ * Кто видит секреты ресурса.
+ *
+ * Ссылка и описание доступны всем участникам проекта — это адрес макета, а не
+ * тайна. Ограничение касается ТОЛЬКО секретов под ресурсом: пароля, ключа,
+ * строки подключения.
+ *
+ * Автора в таблице нет и быть не должно: он видит свои секреты всегда, по
+ * created_by_id. Запись автора здесь означала бы, что её можно удалить и
+ * оставить ресурс без единого владельца — с секретом, который больше никто не
+ * откроет.
+ */
+export const resourceViewers = pgTable(
+  'resource_viewers',
+  {
+    id: id(),
+    resourceId: text('resource_id').notNull().references(() => credentials.id, { onDelete: 'cascade' }),
+    userId: text('user_id').notNull().references(() => users.id, { onDelete: 'cascade' }),
+    createdAt: createdAt(),
+  },
+  (t) => [
+    index('resource_viewers_idx').on(t.resourceId),
+    // Один человек — одна запись: повторное добавление не должно плодить
+    // дубликаты, иначе снятие доступа снимает только одну из них.
+    uniqueIndex('resource_viewers_unique').on(t.resourceId, t.userId),
+  ],
+)
+
+/**
+ * Связь задачи с ресурсами — необязательная.
+ *
+ * Задаче нужны доступы: «вот стенд, вот ключ». Держать их копией в описании
+ * значит рассыпать секреты по тексту, который читают все; ссылка на ресурс
+ * оставляет право решать за самим ресурсом.
+ */
+export const taskResources = pgTable(
+  'task_resources',
+  {
+    id: id(),
+    taskId: text('task_id').notNull().references(() => tasks.id, { onDelete: 'cascade' }),
+    resourceId: text('resource_id').notNull().references(() => credentials.id, { onDelete: 'cascade' }),
+    createdAt: createdAt(),
+  },
+  (t) => [
+    index('task_resources_task_idx').on(t.taskId),
+    index('task_resources_resource_idx').on(t.resourceId),
+    uniqueIndex('task_resources_unique').on(t.taskId, t.resourceId),
+  ],
+)
+
 // Аудит доступа к кредишенам: кто/когда раскрывал, создавал, менял, удалял.
 // Значения сюда НИКОГДА не пишутся.
 export const credentialActions = pgEnum('credential_action', ['reveal', 'create', 'update', 'delete'])

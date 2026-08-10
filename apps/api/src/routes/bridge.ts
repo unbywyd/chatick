@@ -18,7 +18,8 @@ import {
   projectMembers,
   projects,
   shares,
-  taskBlockers, taskChecklist,
+  resourceSecrets, resourceViewers,
+  taskBlockers, taskChecklist, taskResources,
   taskComments,
   taskGroups,
   tasks,
@@ -57,6 +58,7 @@ import { htmlToText, sanitizeHtml } from '../lib/sanitize-html.js'
 import { richText } from '../lib/markdown.js'
 import { normalizeRefs } from '../lib/task-refs.js'
 import { fetchSiteIcon, nameFromUrl } from '../lib/site-icon.js'
+import { encrypt } from '../lib/crypto.js'
 import { membersLockedForProject, MEMBERS_LOCKED } from '../lib/members-locked.js'
 import { broadcast, sendToUserAnywhere, tasksChanged } from '../ws.js'
 import { env } from '../env.js'
@@ -468,7 +470,7 @@ bridgeRoute.post('/shares/:type/:id', async (c) => {
   return c.json({
     // Ссылка для команды: откроется у того, кто в проекте. Публичная работает
     // без входа — её отдаём отдельно, чтобы ассистент не путал их местами.
-    appUrl: `${app}/#${appPathOf(type, scope.projectId, entityId)}`,
+    appUrl: `${app}/#${await appPathOf(type, scope.projectId, entityId)}`,
     publicUrl: `${app}/#/s/${share.slug}`,
     slug: share.slug,
   })
@@ -513,11 +515,18 @@ bridgeRoute.delete('/shares/:type/:id', async (c) => {
   return c.json({ ok: true })
 })
 
-/** Внутренний адрес сущности — тот же, что открывается в приложении. */
-function appPathOf(type: string, projectId: string, id: string): string {
-  if (type === 'message') return `/p/${projectId}/chat?msg=${id}`
+/**
+ * Внутренний адрес сущности — тот же, что открывается в приложении.
+ *
+ * Через projectPath: адрес проекта включает компанию (SPEC §8.45). Здесь
+ * оставался формат `/p/<id>/…` без неё — такого маршрута во фронте нет, и
+ * ссылка, которую ассистент отдавал человеку, открывала пустую страницу.
+ */
+async function appPathOf(type: string, projectId: string, id: string): Promise<string> {
+  const companyId = (await companyOf(projectId)) ?? ''
+  if (type === 'message') return projectPath(companyId, projectId, `/chat?msg=${id}`)
   const tab = type === 'file' ? 'files' : type === 'note' ? 'notes' : type === 'resource' ? 'resources' : 'tasks'
-  return `/p/${projectId}/${tab}/${id}`
+  return projectPath(companyId, projectId, `/${tab}/${id}`)
 }
 
 // --- Контекст проекта -------------------------------------------------------
@@ -826,6 +835,9 @@ const TASK_FIELDS = [
   // Файлы к задаче: в интерфейсе их крепят прямо к ней, а через мост
   // оставалось только комментировать со вложением — не то же самое.
   'attachmentIds',
+  // Ресурсы к задаче: «вот стенд, вот ключ». Ссылкой, а не копией в описании —
+  // иначе доступы расползаются по тексту, который читают все.
+  'resourceIds',
   // project передают в query, но в теле он безобиден и приходит по привычке
   'project',
 ] as const
@@ -866,6 +878,39 @@ async function attachToTask(fileIds: unknown, projectId: string, userId: string,
     .where(and(inArray(files.id, ids), eq(files.projectId, projectId), eq(files.uploadedById, userId)))
   const rows = await db.select().from(files).where(and(eq(files.taskId, taskId), isNull(files.deletedAt)))
   return rows.map((f) => ({ id: f.id, name: f.name, mime: f.mime, size: Number(f.size) }))
+}
+
+/**
+ * Привязать ресурсы к задаче.
+ *
+ * Ссылкой, а не копией: доступы живут в ресурсе, и право решать, кто видит
+ * секрет, остаётся за ним. Скопированный в описание пароль читают все, кому
+ * видна задача, и отозвать его уже нельзя.
+ *
+ * Чужие id молча отбрасываем — ресурс из другого проекта к этой задаче не
+ * относится, и 400 на такое означало бы отказ во всей операции из-за одной
+ * опечатки в списке.
+ */
+async function linkResources(resourceIds: unknown, projectId: string, taskId: string) {
+  const ids = Array.isArray(resourceIds)
+    ? (resourceIds as unknown[]).filter((x): x is string => typeof x === 'string').slice(0, 20)
+    : []
+  await db.delete(taskResources).where(eq(taskResources.taskId, taskId))
+  if (ids.length) {
+    const mine = await db
+      .select({ id: credentials.id })
+      .from(credentials)
+      .where(and(inArray(credentials.id, ids), eq(credentials.projectId, projectId), isNull(credentials.deletedAt)))
+    if (mine.length) {
+      await db.insert(taskResources).values(mine.map((r) => ({ taskId, resourceId: r.id }))).onConflictDoNothing()
+    }
+  }
+  const rows = await db
+    .select({ id: credentials.id, name: credentials.name, url: credentials.url })
+    .from(taskResources)
+    .innerJoin(credentials, eq(credentials.id, taskResources.resourceId))
+    .where(eq(taskResources.taskId, taskId))
+  return rows
 }
 
 function unknownFields(body: Record<string, unknown>, allowed: readonly string[]): string | null {
@@ -1462,6 +1507,7 @@ bridgeRoute.post('/tasks', async (c) => {
     entityLabel: `${row!.number} ${row!.title}`,
   })
   const attachments = await attachToTask(b.attachmentIds, scope.projectId, id.userId, row!.id)
+  const resources = b.resourceIds !== undefined ? await linkResources(b.resourceIds, scope.projectId, row!.id) : []
   // Назначение через мост затрагивает человека ровно так же, как из интерфейса:
   // раньше задача сваливалась на него молча.
   void notifyTask(scope.projectId, id.userId, row!, { assigneeChanged: Boolean(row!.assigneeId), mentions: true })
@@ -1526,6 +1572,7 @@ bridgeRoute.patch('/tasks/:id', async (c) => {
     entityLabel: `${row!.number} ${row!.title}`,
   })
   const attachments = await attachToTask(b.attachmentIds, scope.projectId, id.userId, row!.id)
+  const resources = b.resourceIds !== undefined ? await linkResources(b.resourceIds, scope.projectId, row!.id) : []
   // Те же уведомления, что из интерфейса: назначили — сказали, сняли — убрали.
   const assigneeChanged = patch.assigneeId !== undefined && patch.assigneeId !== existing.assigneeId
   void notifyTask(scope.projectId, id.userId, row!, {
@@ -1536,7 +1583,11 @@ bridgeRoute.patch('/tasks/:id', async (c) => {
   if (assigneeChanged && existing.assigneeId) void unassignNotice(existing.assigneeId, existing.id)
   tasksChanged(scope.projectId, [row!.assigneeId, row!.createdById, existing.assigneeId, existing.createdById])
   const who = row!.assigneeId ? await db.query.users.findFirst({ where: eq(users.id, row!.assigneeId) }) : null
-  return c.json({ ...taskView(row!, who), ...(b.attachmentIds !== undefined ? { attachments } : {}) })
+  return c.json({
+    ...taskView(row!, who),
+    ...(b.attachmentIds !== undefined ? { attachments } : {}),
+    ...(b.resourceIds !== undefined ? { resources } : {}),
+  })
 })
 
 bridgeRoute.delete('/tasks/:id', async (c) => {
@@ -4087,7 +4138,7 @@ bridgeRoute.get('/resources', async (c) => {
   })
 })
 
-const RESOURCE_FIELDS = ['name', 'url', 'description', 'project'] as const
+const RESOURCE_FIELDS = ['name', 'url', 'description', 'secrets', 'viewers', 'project'] as const
 
 /**
  * Значок сайта — фоном, как и в интерфейсе: чужая сеть может думать
@@ -4116,9 +4167,6 @@ bridgeRoute.post('/resources', async (c) => {
   if (denied) return c.json(denied, 403)
 
   const b = (await c.req.json().catch(() => ({}))) as Record<string, unknown>
-  if ('secrets' in b) {
-    return c.json({ error: 'Secrets cannot be created through the bridge: the value would pass through an external model. A person adds them in the app.' }, 400)
-  }
   const bad = unknownFields(b, RESOURCE_FIELDS)
   if (bad) return c.json({ error: bad }, 400)
 
@@ -4139,6 +4187,46 @@ bridgeRoute.post('/resources', async (c) => {
       createdById: id.userId,
     })
     .returning()
+
+  // Секреты под ресурсом. Значения шифруются тем же ключом, что и введённые
+  // человеком, — хранилище одно, разницы между источниками нет.
+  const incoming = Array.isArray(b.secrets) ? (b.secrets as unknown[]).slice(0, 20) : []
+  const secrets = incoming
+    .map((x) => (x as { label?: unknown; value?: unknown }))
+    .filter((x) => typeof x.value === 'string' && (x.value as string).length)
+    .map((x) => ({
+      resourceId: row!.id,
+      label: typeof x.label === 'string' ? x.label.slice(0, 120) : '',
+      valueEncrypted: encrypt((x.value as string).slice(0, 10_000)),
+    }))
+  if (secrets.length) await db.insert(resourceSecrets).values(secrets)
+
+  /**
+   * Кто видит секреты. Через мост — НИКТО, кроме автора, пока ассистент не
+   * назовёт людей явно.
+   *
+   * Умолчание здесь обратное интерфейсу намеренно: человек в приложении видит
+   * форму с тегами команды и снимает лишних глазами, а ассистент отдаёт запрос
+   * вслепую. Тихо раздать пароль всему проекту, потому что поле забыли, —
+   * ровно та ошибка, которую нельзя отменить.
+   */
+  const viewers = Array.isArray(b.viewers)
+    ? (b.viewers as unknown[]).filter((x): x is string => typeof x === 'string' && x !== id.userId).slice(0, 200)
+    : []
+  if (viewers.length) {
+    // Только участники этого проекта: чужой id доступа не даёт.
+    const inProject = await db
+      .select({ userId: projectMembers.userId })
+      .from(projectMembers)
+      .where(and(eq(projectMembers.projectId, scope.projectId), inArray(projectMembers.userId, viewers)))
+    if (inProject.length) {
+      await db
+        .insert(resourceViewers)
+        .values(inProject.map((m) => ({ resourceId: row!.id, userId: m.userId })))
+        .onConflictDoNothing()
+    }
+  }
+
   if (link) grabIcon(row!.id, link)
   await db.insert(credentialAccessLog).values({
     projectId: scope.projectId,
@@ -4147,7 +4235,22 @@ bridgeRoute.post('/resources', async (c) => {
     credentialId: row!.id,
     credentialName: name,
   })
-  return c.json({ id: row!.id, name: row!.name, url: row!.url }, 201)
+  return c.json(
+    {
+      id: row!.id,
+      name: row!.name,
+      url: row!.url,
+      secrets: secrets.length,
+      // Возвращаем список явно: ассистент должен видеть, что доступ узкий, и
+      // сказать об этом человеку, а не решить, что «сохранил — значит доступно».
+      viewers: await db
+        .select({ userId: resourceViewers.userId })
+        .from(resourceViewers)
+        .where(eq(resourceViewers.resourceId, row!.id))
+        .then((rows) => rows.map((r) => r.userId)),
+    },
+    201,
+  )
 })
 
 bridgeRoute.patch('/resources/:id', async (c) => {
