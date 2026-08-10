@@ -761,6 +761,24 @@ carry the answer.
 
   Only the author changes "viewers" later; resources.manage is not enough.
 
+  CHECK THE PERSON CAN SEE RESOURCES AT ALL before listing them. Two different
+  gates guard a secret, and the first one is older than your list:
+
+    resources: none   they do not see the resources tab — sharing a secret with
+                      them changes nothing, they cannot reach the card
+    resources: read   they can open a resource and reveal secrets shared
+                      with them  <- the minimum for "viewers" to mean anything
+    resources: write  they can also create and edit resources
+
+  GET /x/members reports each person's levels. Listing someone with "none"
+  is not refused, it is simply useless: you will report the access as granted
+  and they will still see nothing.
+
+  If they genuinely need it and you own or administer the project, raise their
+  level first — PATCH /x/members/<userId> {"permissions":{"resources":"read"}} —
+  and say that you did. If you do not manage the team, do not quietly skip
+  them: name who is missing access and who can grant it.
+
   Reading a value is one secret at a time, through the app or
   POST /x/resources/<id>/secrets/<secretId>/reveal, and every read is audited.
 
@@ -968,6 +986,13 @@ ${endpointCatalog('?project=<id>')}
          its author. Name the people who need it in "viewers" (user ids from
          GET /x/members), or the human you made it for will not be able to
          open it. Changing "viewers" later is allowed only to the author.
+         Before listing someone, check their "resources" level in
+         GET /x/members: with "none" they never reach the card, and sharing a
+         secret with them changes nothing — you would report access that does
+         not exist. Owners and admins can raise it with
+         PATCH /x/members/<userId> {"permissions":{"resources":"read"}};
+         everyone else should name who is missing access rather than skip them
+         quietly.
 
   POST   /x/disconnect                  close this tunnel when you are done
 
