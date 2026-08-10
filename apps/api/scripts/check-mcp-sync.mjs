@@ -43,7 +43,11 @@ for (const m of bridge.matchAll(/bridgeRoute\.(get|post|patch|delete|put)\('([^'
 const called = new Map()
 for (const file of ['index.ts']) {
   const src = readFileSync(join(mcpDir, file), 'utf8')
-  const re = /call(?:<[^>]*>)?\([^,]+,\s*'(GET|POST|PATCH|DELETE)',\s*(`[^`]+`|'[^']+')/g
+  // Аргумент scope сам содержит запятые и скобки — `{ ...(await need()),
+  // projectId: project }`. Поэтому пропускаем всё до метода лениво, а не
+  // «до первой запятой»: на этом проверка молча теряла 14 вызовов из 16 и
+  // при этом рапортовала об успехе.
+  const re = /call(?:<[^>]*>)?\(.*?,\s*'(GET|POST|PATCH|DELETE)',\s*(`[^`]+`|'[^']+')/g
   for (const m of src.matchAll(re)) {
     const raw = m[2].slice(1, -1)
     const skeleton = raw.replace(/\$\{[^}]+\}/g, '<>').replace(/\/$/, '')
