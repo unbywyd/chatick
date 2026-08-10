@@ -9,6 +9,7 @@ import {
   View,
 } from 'react-native'
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
+import { KeyboardStickyView } from 'react-native-keyboard-controller'
 import { useTranslation } from 'react-i18next'
 import { api, type Project, type RunningEntry } from '../lib/api'
 import { projectToken, RulesRequired } from '../lib/project-token'
@@ -172,57 +173,63 @@ function PickerSheet({
   return (
     <Modal visible={open} animationType="slide" transparent onRequestClose={onClose}>
       <Pressable style={s.backdrop} onPress={onClose} />
-      <View style={[s.sheet, { paddingBottom: insets.bottom + 16 }]}>
-        <View style={s.grabber} />
-        <Txt style={s.sheetTitle}>{t('mobile.whatWorkingOn')}</Txt>
+      {/* Шторка прижата к низу экрана, поэтому клавиатура накрывает её целиком
+          вместе с полем ввода — под edge-to-edge окно само уже не поднимается.
+          KeyboardAwareScrollView здесь не годится: прокручивать нечего, нужно
+          сдвинуть саму шторку. offset closed:0 — в покое ничего не двигаем. */}
+      <KeyboardStickyView offset={{ closed: 0, opened: 0 }}>
+        <View style={[s.sheet, { paddingBottom: insets.bottom + 16 }]}>
+          <View style={s.grabber} />
+          <Txt style={s.sheetTitle}>{t('mobile.whatWorkingOn')}</Txt>
 
-        <TextInput
-          ref={inputRef}
-          style={[s.field, { textAlign }]}
-          value={what}
-          onChangeText={setWhat}
-          placeholder={t('mobile.descriptionOptional')}
-          placeholderTextColor={theme.muted}
-          maxLength={500}
-        />
+          <TextInput
+            ref={inputRef}
+            style={[s.field, { textAlign }]}
+            value={what}
+            onChangeText={setWhat}
+            placeholder={t('mobile.descriptionOptional')}
+            placeholderTextColor={theme.muted}
+            maxLength={500}
+          />
 
-        {mine.length > 6 ? (
-          <View style={s.searchRow}>
-            <IconSearch size={17} color={theme.muted} style={s.searchIcon} />
-            <TextInput
-              style={[s.field, s.searchField]}
-              value={q}
-              onChangeText={setQ}
-              placeholder={t('projSwitch.search')}
-              placeholderTextColor={theme.muted}
-            />
-          </View>
-        ) : null}
+          {mine.length > 6 ? (
+            <View style={s.searchRow}>
+              <IconSearch size={17} color={theme.muted} style={s.searchIcon} />
+              <TextInput
+                style={[s.field, s.searchField, { textAlign }]}
+                value={q}
+                onChangeText={setQ}
+                placeholder={t('projSwitch.search')}
+                placeholderTextColor={theme.muted}
+              />
+            </View>
+          ) : null}
 
-        {error ? <Txt style={s.error}>{error}</Txt> : null}
+          {error ? <Txt style={s.error}>{error}</Txt> : null}
 
-        <ScrollView style={s.list} keyboardShouldPersistTaps="handled">
-          {found.length === 0 ? (
-            <Txt style={s.empty}>
-              {mine.length === 0 ? t('mobile.notMemberAnywhere') : t('mobile.nothingFound')}
-            </Txt>
-          ) : (
-            found.map((p) => (
-              <Pressable key={p.id} style={s.item} disabled={busy} onPress={() => onPick(p, what.trim())}>
-                <Avatar name={p.name} logoUrl={p.logoUrl ?? null} color={p.color} size={36} />
-                <Txt auto style={s.itemName} numberOfLines={1}>
-                  {p.name}
-                </Txt>
-                {busy ? (
-                  <ActivityIndicator size="small" color={theme.muted} />
-                ) : (
-                  <IconPlay size={14} color={theme.brand} />
-                )}
-              </Pressable>
-            ))
-          )}
-        </ScrollView>
-      </View>
+          <ScrollView style={s.list} keyboardShouldPersistTaps="handled">
+            {found.length === 0 ? (
+              <Txt style={s.empty}>
+                {mine.length === 0 ? t('mobile.notMemberAnywhere') : t('mobile.nothingFound')}
+              </Txt>
+            ) : (
+              found.map((p) => (
+                <Pressable key={p.id} style={s.item} disabled={busy} onPress={() => onPick(p, what.trim())}>
+                  <Avatar name={p.name} logoUrl={p.logoUrl ?? null} color={p.color} size={36} />
+                  <Txt auto style={s.itemName} numberOfLines={1}>
+                    {p.name}
+                  </Txt>
+                  {busy ? (
+                    <ActivityIndicator size="small" color={theme.muted} />
+                  ) : (
+                    <IconPlay size={14} color={theme.brand} />
+                  )}
+                </Pressable>
+              ))
+            )}
+          </ScrollView>
+        </View>
+      </KeyboardStickyView>
     </Modal>
   )
 }

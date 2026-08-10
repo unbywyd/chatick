@@ -2,6 +2,7 @@ import { useCallback, useEffect, useState } from 'react'
 import { ActivityIndicator, StyleSheet, Text, View } from 'react-native'
 import { StatusBar } from 'expo-status-bar'
 import { SafeAreaProvider } from 'react-native-safe-area-context'
+import { KeyboardProvider } from 'react-native-keyboard-controller'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { useTranslation } from 'react-i18next'
 import { api, getToken, setToken, type CompaniesResponse, type Company, type Me } from './src/lib/api'
@@ -123,13 +124,19 @@ function App() {
   const { i18n: instance } = useTranslation()
   return (
     <SafeAreaProvider>
-      <QueryClientProvider client={qc}>
-        <StatusBar style="light" />
-        {/* Направление всего дерева — из языка приложения. */}
-        <DirectionProvider lang={instance.language ?? 'en'}>
-          <Root />
-        </DirectionProvider>
-      </QueryClientProvider>
+      {/* Без этого провайдера компоненты клавиатуры молча ничего не делают.
+          Клавиатура нужна именно так: под edge-to-edge (включён в
+          gradle.properties) Android 15 больше не двигает окно сам, и поле
+          ввода внутри ScrollView или Modal остаётся под клавиатурой. */}
+      <KeyboardProvider>
+        <QueryClientProvider client={qc}>
+          <StatusBar style="light" />
+          {/* Направление всего дерева — из языка приложения. */}
+          <DirectionProvider lang={instance.language ?? 'en'}>
+            <Root />
+          </DirectionProvider>
+        </QueryClientProvider>
+      </KeyboardProvider>
     </SafeAreaProvider>
   )
 }

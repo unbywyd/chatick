@@ -180,6 +180,50 @@ describe('textAlign задаётся явно и из языка', () => {
   })
 })
 
+describe('клавиатура: под edge-to-edge окно само не поднимается', () => {
+  it('KeyboardProvider обёрнут вокруг дерева', () => {
+    // Без него компоненты клавиатуры молча ничего не делают.
+    const app = readFileSync(join(SRC, '..', 'App.tsx'), 'utf8')
+    expect(app).toMatch(/<KeyboardProvider>/)
+  })
+
+  it('edge-to-edge действительно включён — иначе правило не про нас', () => {
+    const props = readFileSync(join(SRC, '..', 'android', 'gradle.properties'), 'utf8')
+    expect(props).toMatch(/edgeToEdgeEnabled=true/)
+  })
+
+  it('экран с полем ввода в прокрутке использует KeyboardAwareScrollView', () => {
+    // Обычный ScrollView оставляет поле под клавиатурой: измерено, что из
+    // всех обёрток работает только эта.
+    const picker = files.find((f) => f.path.endsWith('CompanyPickerScreen.tsx'))!.code
+    expect(picker).toMatch(/KeyboardAwareScrollView/)
+    expect(stripComments(picker)).not.toMatch(/<ScrollView/)
+  })
+
+  it('шторка, прижатая к низу, сдвигается вместе с клавиатурой', () => {
+    // TextInput внутри Modal — самый провальный случай в измеренной матрице.
+    const timer = files.find((f) => f.path.endsWith('TimerButton.tsx'))!.code
+    expect(timer).toMatch(/KeyboardStickyView/)
+  })
+})
+
+describe('изоляция значений внутри строки', () => {
+  it('есть помощник с настоящими символами изоляции', () => {
+    const fmt = files.find((f) => f.path.endsWith(join('lib', 'format.ts')))!.code
+    // U+2066 LRI и U+2069 PDI. textAlign фрагмент внутри строки не спасает.
+    expect(fmt).toMatch(/⁦|⁦/)
+    expect(fmt).toMatch(/⁩|⁩/)
+    expect(fmt).toMatch(/export const ltrValue/)
+  })
+
+  it('роль и имя автора изолированы в точке подстановки', () => {
+    const picker = files.find((f) => f.path.endsWith('CompanyPickerScreen.tsx'))!.code
+    const home = files.find((f) => f.path.endsWith('HomeScreen.tsx'))!.code
+    expect(picker).toMatch(/ltrValue\(c\.myRole\)/)
+    expect(home).toMatch(/ltrValue\(last\.author\)/)
+  })
+})
+
 describe('иконки: рисованные, а не глифы', () => {
   it('в интерфейсе нет эмодзи и типографских стрелок', () => {
     // Эмодзи рисует система: он цветной, разный на Android и iOS и не

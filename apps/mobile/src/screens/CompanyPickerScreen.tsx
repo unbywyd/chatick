@@ -1,12 +1,6 @@
 import { useState } from 'react'
-import {
-  ActivityIndicator,
-  Pressable,
-  ScrollView,
-  StyleSheet,
-  TextInput,
-  View,
-} from 'react-native'
+import { ActivityIndicator, Pressable, StyleSheet, TextInput, View } from 'react-native'
+import { KeyboardAwareScrollView } from 'react-native-keyboard-controller'
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
 import { useTranslation } from 'react-i18next'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
@@ -16,6 +10,7 @@ import { Avatar } from '../components/Avatar'
 import { Txt } from '../components/Txt'
 import { LanguagePicker } from '../components/LanguagePicker'
 import { useDirection } from '../lib/direction'
+import { ltrValue } from '../lib/format'
 import { IconChevronRight, IconLogOut, IconPlus } from '../components/icons'
 import { theme } from '../theme'
 
@@ -90,9 +85,15 @@ export function CompanyPickerScreen({
   const showForm = creating || firstRun
 
   return (
-    <ScrollView
+    // Поле «название компании» лежит в прокрутке: под edge-to-edge Android
+    // больше не поднимает окно сам, и обычный ScrollView оставил бы поле под
+    // клавиатурой. Нижний отступ считаем ЗДЕСЬ и только здесь — второй раз
+    // прибавленный inset даёт тихую дыру вместо перекрытия.
+    <KeyboardAwareScrollView
       style={s.root}
       contentContainerStyle={[s.content, { paddingTop: insets.top + 24, paddingBottom: insets.bottom + 32 }]}
+      keyboardShouldPersistTaps="handled"
+      bottomOffset={16}
     >
       <View style={s.head}>
         <LogoMark size={30} />
@@ -127,7 +128,7 @@ export function CompanyPickerScreen({
                 <Txt auto style={s.rowName} numberOfLines={1}>
                   {i.company.name}
                 </Txt>
-                <Txt style={s.rowMeta}>{i.role}</Txt>
+                <Txt style={s.rowMeta}>{ltrValue(i.role)}</Txt>
               </View>
               <Pressable style={s.acceptBtn} disabled={accept.isPending} onPress={() => accept.mutate(i.token)}>
                 <Txt style={s.acceptText}>{accept.isPending ? '…' : t('start.accept')}</Txt>
@@ -148,7 +149,11 @@ export function CompanyPickerScreen({
                   {c.name}
                 </Txt>
                 <Txt style={s.rowMeta}>
-                  {(c.isOwner ? t('mobile.ownCompany') : c.myRole) +
+                  {/* Роль приходит с сервера латиницей («admin»), а строка
+                      вокруг может быть ивритской. Изолируем значение в точке
+                      подстановки: без этого латинский кусок и число меняются
+                      местами прямо внутри строки. */}
+                  {(c.isOwner ? t('mobile.ownCompany') : ltrValue(c.myRole)) +
                     ' · ' +
                     (c.projectsCount === 0
                       ? t('mobile.noProjects')
@@ -205,7 +210,7 @@ export function CompanyPickerScreen({
           <Txt style={s.ghostText}>{t('mobile.createOwnCompany')}</Txt>
         </Pressable>
       ) : null}
-    </ScrollView>
+    </KeyboardAwareScrollView>
   )
 }
 

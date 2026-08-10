@@ -16,7 +16,7 @@ import { Avatar } from '../components/Avatar'
 import { Txt } from '../components/Txt'
 import { TimerButton } from '../components/TimerButton'
 import { NotificationCarousel } from '../components/NotificationCarousel'
-import { ago, formatHours } from '../lib/format'
+import { ago, formatHours, ltrValue } from '../lib/format'
 import { IconBell, IconChevronRight, IconPlus } from '../components/icons'
 
 // Главный экран (SPEC §4.4).
@@ -196,7 +196,10 @@ function ProjectRow({ project, unread }: { project: Project; unread: number }) {
           {project.name}
         </Txt>
         <Txt auto style={s.rowLast} numberOfLines={1}>
-          {last ? `${last.author}: ${last.text}` : t('mobile.noMessages')}
+          {/* Имя автора и текст пишут разные люди на разных языках. Имя
+              изолируем: латинское имя перед ивритским сообщением иначе
+              перескакивает в конец строки. */}
+          {last ? `${ltrValue(last.author)}: ${last.text}` : t('mobile.noMessages')}
         </Txt>
       </View>
       <View style={s.rowRight}>
