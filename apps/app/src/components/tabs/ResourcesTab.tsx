@@ -128,8 +128,28 @@ export function ResourcesTab({ projectId, isAdmin }: { projectId: string; isAdmi
             }}
             // Прямая ссылка подсвечивает нужный ресурс: список бывает длинным,
             // и «вот он, где-то здесь» — плохой ответ на присланную ссылку.
+            //
+            // Карточка открывается по клику. Раньше открыть ресурс можно было
+            // только через кнопку карандаша, хотя строка выглядела как обычный
+            // кликабельный элемент списка: у ссылки внутри даже стоял
+            // stopPropagation — защита от клика, которого не существовало.
+            // Человек жал по названию, ничего не происходило, и описание с
+            // секретами оставалось недостижимым.
+            onClick={() => setEditing(r)}
+            role="button"
+            tabIndex={0}
+            onKeyDown={(e) => {
+              // С клавиатуры — так же: Enter и пробел на элементе с role=button
+              // обязаны его открывать, иначе список недоступен без мыши.
+              if (e.key === 'Enter' || e.key === ' ') {
+                e.preventDefault()
+                setEditing(r)
+              }
+            }}
             className={cn(
-              'group rounded-lg border bg-card px-3 py-2.5 transition-colors',
+              'group cursor-pointer rounded-lg border bg-card px-3 py-2.5 transition-colors',
+              'hover:border-brand/40 hover:bg-accent/40',
+              'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring',
               resourceId === r.id && 'border-brand ring-1 ring-brand',
             )}
           >
@@ -166,21 +186,48 @@ export function ResourcesTab({ projectId, isAdmin }: { projectId: string; isAdmi
                 </span>
               </span>
               {r.messageId && (
-                <Button variant="ghost" size="icon" title={t('files.jumpToChat')} onClick={() => navigate({ search: `?msg=${r.messageId}` })}>
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  title={t('files.jumpToChat')}
+                  onClick={(e) => {
+                    e.stopPropagation()
+                    navigate({ search: `?msg=${r.messageId}` })
+                  }}
+                >
                   <MessagesSquare className="size-4" />
                 </Button>
               )}
-              <Button variant="ghost" size="icon" title={t('tasks.share')} onClick={() => setSharing(r)}>
+              {/* Кнопки внутри карточки останавливают всплытие: без этого
+                  «поделиться» и «удалить» заодно открывали бы форму. */}
+              <Button
+                variant="ghost"
+                size="icon"
+                title={t('tasks.share')}
+                onClick={(e) => {
+                  e.stopPropagation()
+                  setSharing(r)
+                }}
+              >
                 <Share2 className="size-4" />
               </Button>
-              <Button variant="ghost" size="icon" title={t('about.edit')} onClick={() => setEditing(r)}>
+              <Button
+                variant="ghost"
+                size="icon"
+                title={t('about.edit')}
+                onClick={(e) => {
+                  e.stopPropagation()
+                  setEditing(r)
+                }}
+              >
                 <Pencil className="size-4" />
               </Button>
               <Button
                 variant="destructive"
                 size="icon"
                 title={t('files.delete')}
-                onClick={async () => {
+                onClick={async (e) => {
+                  e.stopPropagation()
                   if (await confirm({ title: t('resources.deleteConfirm', { name: r.name }), destructive: true, confirmLabel: t('files.delete') }))
                     remove.mutate(r.id)
                 }}
