@@ -733,13 +733,16 @@ carry the answer.
 
 ## Resources
 
-  GET    /x/resources          links and credentials metadata
-  POST   /x/resources          {"name"?, "url"?, "description"?}
+  GET    /x/resources          links and secrets metadata; "canSeeSecrets" says
+                               whether the secrets under each one are open to you
+  POST   /x/resources          {"name"?,"url"?,"description"?,"secrets"?,"viewers"?}
   PATCH  /x/resources/<id>     same fields; pass "url": null to drop the link
 
-  Those three are the whole body — no other field is accepted, and an unknown
-  one is refused with 400 listing what is allowed rather than dropped. The
-  project goes in the query (?project=<id>) like everywhere else.
+  An unknown field is refused with 400 listing what is allowed, rather than
+  dropped. The project goes in the query (?project=<id>) like everywhere else.
+
+  "secrets" is [{"label","value"}]. On PATCH they are ADDED, not replaced: a
+  list sent short would otherwise wipe someone else's key.
 
   This is where project links belong — designs, dashboards, repositories,
   staging environments. Put a link here rather than in a note: notes are a
