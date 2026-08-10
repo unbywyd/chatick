@@ -179,7 +179,7 @@
     "search": "Search…",
     "mine": "My tasks",
     "due": "Due date",
-    "unassigned": "Unassigned",
+    "unassigned": "Nobody",
     "statusLabel": "Status",
     "priorityLabel": "Priority",
     "assigneeLabel": "Assignee",
@@ -275,7 +275,14 @@
     "addInSprint": "Add a task…",
     "add": "Add",
     "refsPlaceholder": "12 or 4 - 3",
-    "refsHint": "Your own numbers: design screens, contract clauses. Enter adds one; “4 - 3” stays a single number."
+    "refsHint": "Your own numbers: design screens, contract clauses. Enter adds one; “4 - 3” stays a single number.",
+    "selectOne": "Select {{number}}",
+    "selectedCount": "{{count}} selected",
+    "clearSelection": "Clear",
+    "bulkDone": "Updated {{count}}",
+    "bulkDeleted": "Deleted {{count}}",
+    "bulkPartial": "{{ok}} done, {{failed}} failed",
+    "bulkDeleteConfirm": "Delete {{count}} tasks?"
   },
   "files": {
     "search": "Search files…",

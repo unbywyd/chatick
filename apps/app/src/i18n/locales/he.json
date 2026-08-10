@@ -179,7 +179,7 @@
     "search": "חיפוש…",
     "mine": "המשימות שלי",
     "due": "תאריך יעד",
-    "unassigned": "לא הוקצה",
+    "unassigned": "אף אחד",
     "statusLabel": "סטטוס",
     "priorityLabel": "עדיפות",
     "assigneeLabel": "אחראי",
@@ -275,7 +275,14 @@
     "addInSprint": "להוסיף משימה…",
     "add": "להוסיף",
     "refsPlaceholder": "12 או 4 - 3",
-    "refsHint": "מספרים משלכם: מסכים בעיצוב, סעיפי חוזה. Enter מוסיף; «4 - 3» נשאר מספר אחד."
+    "refsHint": "מספרים משלכם: מסכים בעיצוב, סעיפי חוזה. Enter מוסיף; «4 - 3» נשאר מספר אחד.",
+    "selectOne": "בחירת {{number}}",
+    "selectedCount": "נבחרו: {{count}}",
+    "clearSelection": "ניקוי",
+    "bulkDone": "עודכנו: {{count}}",
+    "bulkDeleted": "נמחקו: {{count}}",
+    "bulkPartial": "הצליחו {{ok}}, נכשלו {{failed}}",
+    "bulkDeleteConfirm": "למחוק {{count}} משימות?"
   },
   "files": {
     "search": "חיפוש קבצים…",

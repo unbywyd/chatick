@@ -3,7 +3,7 @@ import { useNavigate, useParams, useSearchParams } from 'react-router-dom'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { useTranslation } from 'react-i18next'
 import { toast } from 'sonner'
-import { CalendarDays, Download, FileSpreadsheet, Flag, LayoutList, Link2, MoreHorizontal, Paperclip, Plus, Search, Table2, Timer, Upload, User, X } from 'lucide-react'
+import { CalendarDays, ChevronDown, Download, FileSpreadsheet, Flag, LayoutList, Link2, MoreHorizontal, Paperclip, Plus, Search, Table2, Timer, Trash2, Upload, User, X } from 'lucide-react'
 import { api, previewUrl } from '@/lib/api'
 import { cn } from '@/lib/utils'
 import { Input } from '@/components/ui/input'
@@ -25,6 +25,7 @@ import { TaskContextMenu } from './tasks/TaskContextMenu'
 import { TaskRefs } from './tasks/TaskRefs'
 import { useTaskTimer } from '@/hooks/useTaskTimer'
 import { exportTasksToExcel, downloadImportTemplate, parseTasksFromExcel } from './tasks/taskExcel'
+import { useConfirm } from '@/components/ui/confirm'
 import { STATUSES, PRIORITIES, STATUS_ICON, STATUS_COLOR, PRIORITY_COLOR, fmtEstimate, type Task, type TaskGroup, type Member, type Status, type Priority } from './tasks/types'
 import { StatusBadge } from './tasks/StatusBadge'
 import { TaskBlockedMark } from './tasks/TaskBlockedMark'
@@ -63,6 +64,51 @@ export function TasksTab({ projectId, meId }: { projectId: string; meId?: string
     )
   const [dragId, setDragId] = useState<string | null>(null)
   const [dropHint, setDropHint] = useState<{ status: Status; beforeId: string | null } | null>(null)
+  /**
+   * Выбранные задачи для массового действия.
+   *
+   * Только в списочном виде: в таблице колонок и так под завязку, и ещё одна
+   * ради галочки вытеснила бы что-то полезное.
+   */
+  const confirm = useConfirm()
+  const [selected, setSelected] = useState<Set<string>>(new Set())
+  // Якорь для shift-выделения: от какой строки тянуть диапазон.
+  const lastPickedRef = useRef<string | null>(null)
+
+  /**
+   * Отметить задачу. С shift — весь диапазон от прошлой отмеченной.
+   *
+   * Диапазон считаем по тому порядку, в каком задачи ВИДНЫ на экране, а не по
+   * какому-то внутреннему: человек тянет мышью сверху вниз и ждёт ровно то,
+   * что выделил глазами.
+   */
+  const toggleSelect = (id: string, shift: boolean) => {
+    setSelected((prev) => {
+      const next = new Set(prev)
+      const anchorId = lastPickedRef.current
+      if (shift && anchorId && anchorId !== id) {
+        const order = visibleOrder()
+        const a = order.indexOf(anchorId)
+        const b = order.indexOf(id)
+        if (a !== -1 && b !== -1) {
+          const [from, to] = a < b ? [a, b] : [b, a]
+          for (const tid of order.slice(from, to + 1)) next.add(tid)
+          lastPickedRef.current = id
+          return next
+        }
+      }
+      if (next.has(id)) next.delete(id)
+      else next.add(id)
+      lastPickedRef.current = id
+      return next
+    })
+  }
+
+  const clearSelection = () => {
+    setSelected(new Set())
+    lastPickedRef.current = null
+  }
+
   const [view, setView] = useState<'list' | 'table'>(() => (localStorage.getItem('tasksView') as 'list' | 'table') || 'list')
   const setViewPersist = (v: 'list' | 'table') => {
     setView(v)
@@ -307,6 +353,61 @@ export function TasksTab({ projectId, meId }: { projectId: string; meId?: string
       .map((s) => ({ status: s, tasks: filtered.filter((task) => task.status === s) }))
       .filter((g) => g.tasks.length > 0 || g.status === 'todo')
   }, [filtered, statusFilter, showDone])
+
+  /**
+   * Порядок задач, как они видны на экране: группы сверху вниз, внутри —
+   * свой порядок. Нужен для shift-выделения: человек тянет мышью по тому,
+   * что видит, а не по внутреннему списку.
+   */
+  const visibleOrder = () => groups.flatMap((g) => g.tasks.map((t) => t.id))
+
+  /**
+   * Массовое действие над выбранными задачами.
+   *
+   * Запросы идут по одному, а не одним bulk: такая ручка есть только в мосту,
+   * а веб ходит в обычный REST. Для десятков задач это нормально, и главное —
+   * частичный успех виден: три из пяти прошли, две упали, и человеку скажут
+   * именно это, а не «что-то пошло не так».
+   */
+  const bulk = useMutation({
+    mutationFn: async (body: Record<string, unknown>) => {
+      const ids = picked
+      const results = await Promise.allSettled(
+        ids.map((id) => api(`/api/v1/tasks/${id}`, { method: 'PATCH', body: JSON.stringify(body) }, 'project')),
+      )
+      return { ok: results.filter((r) => r.status === 'fulfilled').length, failed: results.filter((r) => r.status === 'rejected').length }
+    },
+    onSuccess: ({ ok, failed }) => {
+      qc.invalidateQueries({ queryKey: ['tasks', projectId] })
+      clearSelection()
+      if (failed) toast.error(t('tasks.bulkPartial', { ok, failed }))
+      else toast.success(t('tasks.bulkDone', { count: ok }))
+    },
+    onError: (e) => toast.error(e instanceof Error ? e.message : String(e)),
+  })
+
+  const bulkDelete = useMutation({
+    mutationFn: async () => {
+      const results = await Promise.allSettled(
+        picked.map((id) => api(`/api/v1/tasks/${id}`, { method: 'DELETE' }, 'project')),
+      )
+      return { ok: results.filter((r) => r.status === 'fulfilled').length, failed: results.filter((r) => r.status === 'rejected').length }
+    },
+    onSuccess: ({ ok, failed }) => {
+      qc.invalidateQueries({ queryKey: ['tasks', projectId] })
+      clearSelection()
+      if (failed) toast.error(t('tasks.bulkPartial', { ok, failed }))
+      else toast.success(t('tasks.bulkDeleted', { count: ok }))
+    },
+    onError: (e) => toast.error(e instanceof Error ? e.message : String(e)),
+  })
+
+
+  // Выбранные задачи, которых больше не видно (сменился фильтр, задачу
+  // удалили), убираем сами: иначе «Удалить 5» относится к трём на экране и
+  // двум невидимым, и человек не знает, что именно удаляет.
+  const visibleIds = useMemo(() => new Set(visibleOrder()), [groups])
+  const picked = useMemo(() => [...selected].filter((id) => visibleIds.has(id)), [selected, visibleIds])
 
   const doneCount = (tasksQ.data ?? []).filter((task) => task.status === 'done').length
   const openTask = tasksQ.data?.find((task) => task.id === openTaskId) ?? null
@@ -712,6 +813,81 @@ export function TasksTab({ projectId, meId }: { projectId: string; meId?: string
           )}
 
           {/* Списочный вид: по статусам */}
+          {/* Панель массовых действий. Появляется только когда что-то выбрано
+              и только в списочном виде — в таблице колонок и так под завязку.
+
+              Держится наверху списка, а не всплывает снизу: выбор идёт сверху
+              вниз, и рука уже там. */}
+          {view === 'list' && picked.length > 0 && (
+            <div className="sticky top-0 z-10 mt-5 flex flex-wrap items-center gap-2 rounded-lg border bg-card px-3 py-2 shadow-sm">
+              <span className="text-sm font-medium tabular-nums">
+                {t('tasks.selectedCount', { count: picked.length })}
+              </span>
+
+              {/* Статус */}
+              <DropdownMenu>
+                <DropdownMenuTrigger asChild>
+                  <Button variant="outline" size="sm" disabled={bulk.isPending}>
+                    {t('tasks.statusLabel')}
+                    <ChevronDown className="size-3.5" />
+                  </Button>
+                </DropdownMenuTrigger>
+                <DropdownMenuContent align="start">
+                  {STATUSES.map((st) => (
+                    <DropdownMenuItem key={st} onClick={() => bulk.mutate({ status: st })}>
+                      {t(`tasks.status.${st}`)}
+                    </DropdownMenuItem>
+                  ))}
+                </DropdownMenuContent>
+              </DropdownMenu>
+
+              {/* Исполнитель */}
+              <DropdownMenu>
+                <DropdownMenuTrigger asChild>
+                  <Button variant="outline" size="sm" disabled={bulk.isPending}>
+                    {t('tasks.assigneeLabel')}
+                    <ChevronDown className="size-3.5" />
+                  </Button>
+                </DropdownMenuTrigger>
+                <DropdownMenuContent align="start" className="max-h-72 overflow-y-auto">
+                  <DropdownMenuItem onClick={() => bulk.mutate({ assigneeId: null })}>
+                    {t('tasks.unassigned')}
+                  </DropdownMenuItem>
+                  {(membersQ.data ?? []).map((m) => (
+                    <DropdownMenuItem key={m.user.id} onClick={() => bulk.mutate({ assigneeId: m.user.id })}>
+                      {m.user.name}
+                    </DropdownMenuItem>
+                  ))}
+                </DropdownMenuContent>
+              </DropdownMenu>
+
+              {/* Удаление — последним и с подтверждением: единственное
+                  действие здесь, которое нельзя отменить одним кликом. */}
+              <Button
+                variant="destructive"
+                size="sm"
+                disabled={bulkDelete.isPending}
+                onClick={async () => {
+                  if (
+                    await confirm({
+                      title: t('tasks.bulkDeleteConfirm', { count: picked.length }),
+                      destructive: true,
+                      confirmLabel: t('files.delete'),
+                    })
+                  )
+                    bulkDelete.mutate()
+                }}
+              >
+                <Trash2 className="size-3.5" />
+                {t('files.delete')}
+              </Button>
+
+              <button className="ms-auto text-sm text-muted-foreground hover:text-foreground" onClick={clearSelection}>
+                {t('tasks.clearSelection')}
+              </button>
+            </div>
+          )}
+
           {view === 'list' && (
           <div className="mt-5 space-y-6">
             {tasksQ.isLoading && <p className="text-sm text-muted-foreground">…</p>}
@@ -748,6 +924,9 @@ export function TasksTab({ projectId, meId }: { projectId: string; meId?: string
                         highlighted={highlight === task.id}
                         canEdit={canEditTask(task)}
                         meId={meId}
+                        selected={selected.has(task.id)}
+                        selecting={picked.length > 0}
+                        onToggleSelect={toggleSelect}
                         dragging={dragId === task.id}
                         dropBefore={dropHint?.status === status && dropHint.beforeId === task.id}
                         onOpen={() => setOpenTaskId(task.id)}
@@ -816,6 +995,9 @@ function TaskRow({
   highlighted,
   canEdit,
   meId,
+  selected,
+  selecting,
+  onToggleSelect,
   dragging,
   dropBefore,
   onOpen,
@@ -835,6 +1017,12 @@ function TaskRow({
   /** Только что вернулись из этой задачи — подсвечиваем на пару секунд. */
   highlighted?: boolean
   canEdit: boolean
+  /** Выбрана ли задача для массового действия. */
+  selected: boolean
+  /** Хоть что-то выбрано: тогда чекбоксы видны всегда, а не только при наведении. */
+  selecting: boolean
+  /** shift — выделить диапазон от прошлой отмеченной. */
+  onToggleSelect: (id: string, shift: boolean) => void
   meId?: string
   dragging: boolean
   dropBefore: boolean
@@ -893,6 +1081,31 @@ function TaskRow({
       )}
       onClick={onOpen}
     >
+      {/* Чекбокс появляется при наведении или когда выбор уже начат: в
+          спокойном списке ряд пустых квадратов только шумит, а как только
+          отмечена первая задача — они нужны все сразу. */}
+      <label
+        className={cn(
+          'grid size-5 shrink-0 place-items-center transition-opacity',
+          selecting || selected ? 'opacity-100' : 'opacity-0 group-hover:opacity-100 focus-within:opacity-100',
+        )}
+        onClick={(e) => e.stopPropagation()}
+      >
+        <input
+          type="checkbox"
+          checked={selected}
+          // Клик по чекбоксу не должен открывать задачу — этим занимается
+          // строка целиком.
+          onChange={() => {}}
+          onClick={(e) => {
+            e.stopPropagation()
+            onToggleSelect(task.id, (e as unknown as { shiftKey: boolean }).shiftKey)
+          }}
+          className="size-4 cursor-pointer accent-brand"
+          aria-label={t('tasks.selectOne', { number: task.number })}
+        />
+      </label>
+
       <DropdownMenu>
         <DropdownMenuTrigger asChild>
           <button title={t(`tasks.status.${task.status}`)} className="shrink-0" onClick={(e) => e.stopPropagation()}>

@@ -180,7 +180,7 @@
     "search": "Поиск…",
     "mine": "Мои задачи",
     "due": "Дедлайн",
-    "unassigned": "Не назначено",
+    "unassigned": "Никто",
     "statusLabel": "Статус",
     "priorityLabel": "Приоритет",
     "assigneeLabel": "Исполнитель",
@@ -276,7 +276,14 @@
     "addInSprint": "Добавить задачу…",
     "add": "Добавить",
     "refsPlaceholder": "12 или 4 - 3",
-    "refsHint": "Свои номера: экраны в макете, пункты договора. Enter добавляет; «4 - 3» — один номер."
+    "refsHint": "Свои номера: экраны в макете, пункты договора. Enter добавляет; «4 - 3» — один номер.",
+    "selectOne": "Выбрать {{number}}",
+    "selectedCount": "Выбрано: {{count}}",
+    "clearSelection": "Снять",
+    "bulkDone": "Изменено: {{count}}",
+    "bulkDeleted": "Удалено: {{count}}",
+    "bulkPartial": "Готово {{ok}}, не удалось {{failed}}",
+    "bulkDeleteConfirm": "Удалить задач: {{count}}?"
   },
   "files": {
     "search": "Поиск файлов…",
