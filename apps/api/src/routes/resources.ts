@@ -138,6 +138,20 @@ resourcesRoute.get('/', async (c) => {
   )
 })
 
+/**
+ * Что мне здесь можно.
+ *
+ * Отдельно от списка намеренно: список бывает пустым — и это ровно тот момент,
+ * когда человек жмёт «Добавить ресурс». Признак внутри строк в этом случае не
+ * пришёл бы ни разу, кнопка осталась бы видна, и отказ пришёл бы уже после
+ * заполненной формы.
+ */
+resourcesRoute.get('/permissions', async (c) => {
+  const { projectId, sub } = c.get('auth')
+  if (!(await hasPermission(projectId, sub, 'credentials.read'))) return c.json({ error: 'Forbidden' }, 403)
+  return c.json({ canManage: await hasPermission(projectId, sub, 'credentials.manage') })
+})
+
 // Детали одного ресурса + список секретов (метаданные, значения скрыты)
 resourcesRoute.get('/:id', async (c) => {
   const { projectId, sub } = c.get('auth')

@@ -380,7 +380,10 @@
     "addViewer": "הוספת אדם",
     "authorAlwaysSees": "את הסודות שלכם אתם רואים תמיד.",
     "onlyYou": "כרגע — אף אחד אחר.",
-    "onlyAuthor": "רק מי שהוסיף"
+    "onlyAuthor": "רק מי שהוסיף",
+    "noAccessToResources": "אין גישה למשאבים",
+    "needManageHint": "אפשר לצפות במשאבים אך לא ליצור או לערוך. ההרשאות ניתנות בצוות הפרויקט.",
+    "openTeam": "פתיחת הצוות"
   },
   "creds": {
     "search": "חיפוש סודות…",

@@ -81,6 +81,15 @@ export function ResourcesTab({ projectId, isAdmin }: { projectId: string; isAdmi
 
   const list = useQuery({ queryKey: ['resources', projectId], queryFn: () => api<ResourceRow[]>('/api/v1/resources', {}, 'project') })
 
+  // Можно ли мне заводить ресурсы. Отдельным запросом, а не признаком в
+  // строках: список бывает пустым — и это ровно тот момент, когда человек
+  // жмёт «Добавить ресурс» и упирается в 403 после заполненной формы.
+  const perms = useQuery({
+    queryKey: ['resource-permissions', projectId],
+    queryFn: () => api<{ canManage: boolean }>('/api/v1/resources/permissions', {}, 'project'),
+  })
+  const canManage = perms.data?.canManage ?? false
+
   const filtered = useMemo(() => {
     const rows = list.data ?? []
     const needle = q.trim().toLowerCase()
@@ -107,13 +116,30 @@ export function ResourcesTab({ projectId, isAdmin }: { projectId: string; isAdmi
             {t('creds.audit')}
           </Button>
         )}
-        <Button variant="brand" onClick={() => setEditing('new')}>
-          <Plus className="size-4" />
-          {t('resources.add')}
-        </Button>
+        {/* Кнопки нет без права: форма открылась бы, человек заполнил бы её
+            целиком и получил 403 на сохранении. Отказ должен быть виден до
+            работы, а не после неё. */}
+        {canManage && (
+          <Button variant="brand" onClick={() => setEditing('new')}>
+            <Plus className="size-4" />
+            {t('resources.add')}
+          </Button>
+        )}
       </div>
 
       <p className="mt-3 text-xs text-muted-foreground">{t('resources.note')}</p>
+
+      {/* Права на ресурсы живут в команде проекта, и человек, упёршийся в
+          «нельзя», должен знать, куда идти. Ссылка ведёт туда же, где их
+          выдают, — а не в общий раздел настроек. */}
+      {!perms.isLoading && !canManage && (
+        <p className="mt-1 text-xs text-muted-foreground">
+          {t('resources.needManageHint')}{' '}
+          <button className="underline hover:text-foreground" onClick={() => navigate(`/c/${companyId}/p/${projectId}/team`)}>
+            {t('resources.openTeam')}
+          </button>
+        </p>
+      )}
 
       {showAudit && isAdmin && <AuditLog projectId={projectId} onClose={() => setShowAudit(false)} />}
       {editing && (
@@ -358,7 +384,10 @@ function ResourceForm({ projectId, editing, onClose }: { projectId: string; edit
   // Команда проекта: из кого выбирать зрителей.
   const team = useQuery({
     queryKey: ['project-members', projectId],
-    queryFn: () => api<{ user: { id: string; name: string; email: string; avatarUrl: string | null } }[]>(`/api/v1/projects/${projectId}/members`),
+    queryFn: () =>
+      api<{ user: { id: string; name: string; email: string; avatarUrl: string | null }; permissions: Record<string, boolean> }[]>(
+        `/api/v1/projects/${projectId}/members`,
+      ),
   })
 
   const detail = useQuery({
@@ -376,11 +405,19 @@ function ResourceForm({ projectId, editing, onClose }: { projectId: string; edit
     if (detail.data && viewers === null) setViewers(detail.data.viewers)
   }, [detail.data, viewers])
 
+  // Кого можно назначить зрителем.
+  //
+  // Право «читать ресурсы» — условие более раннее, чем список зрителей: без
+  // него человек не увидит даже карточку, и открытый ему секрет остался бы
+  // недостижимым. Такие люди остаются в списке видимыми, но выбрать их нельзя
+  // и рядом написано почему — иначе ищущий коллегу решит, что того нет в
+  // проекте.
   const people: Person[] = (team.data ?? []).map((m) => ({
     id: m.user.id,
     name: m.user.name,
     email: m.user.email,
     avatarUrl: m.user.avatarUrl,
+    disabledReason: m.permissions?.['resources.read'] ? undefined : t('resources.noAccessToResources'),
   }))
 
   // Автор ресурса видит секреты всегда — его в списке не показываем и снять
@@ -391,7 +428,8 @@ function ResourceForm({ projectId, editing, onClose }: { projectId: string; edit
   // Новый ресурс: по умолчанию видит вся команда — так же, как решает сервер,
   // когда список не прислали. Показываем это сразу тегами, чтобы человек
   // видел, кому открывает, и снимал лишних, а не узнавал постфактум.
-  const effectiveViewers = viewers ?? (editing ? [] : selectable.map((p) => p.id))
+  const effectiveViewers =
+    viewers ?? (editing ? [] : selectable.filter((p) => !p.disabledReason).map((p) => p.id))
 
   // Список правит только автор. Новый ресурс — автор я, значит можно.
   const canEditViewers = !editing || (me.data?.id != null && detail.data?.authorId === me.data.id)
@@ -562,7 +600,12 @@ function ResourceForm({ projectId, editing, onClose }: { projectId: string; edit
 
               Менять список может только автор — остальным показываем его
               как есть, чтобы было видно, у кого просить доступ. */}
-          {(hasSecret || (detail.data?.secretCount ?? 0) > 0) && (
+          {/* Появляется, как только СТРОКА секрета добавлена, а не когда в неё
+              что-то напечатали: человек жмёт «добавить секрет», вводит пароль
+              и тут же должен видеть, кому он открывается. Условие по
+              заполненному значению прятало блок ровно в тот момент, когда о
+              доступе и думают. */}
+          {(newSecrets.length > 0 || (detail.data?.secretCount ?? 0) > 0) && (
             <div className="mt-3 border-t pt-3">
               <p className="mb-1.5 flex items-center gap-1.5 text-xs font-medium text-muted-foreground">
                 <Lock className="size-3.5" />

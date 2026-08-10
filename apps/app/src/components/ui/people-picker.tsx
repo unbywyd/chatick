@@ -8,7 +8,20 @@ import { cn } from '@/lib/utils'
 // Выбор людей: поиск + чипсы. Ряд кнопок со всеми участниками годится на трёх
 // человек и разваливается на двадцати.
 
-export type Person = { id: string; name: string; avatarUrl?: string | null; email?: string }
+export type Person = {
+  id: string
+  name: string
+  avatarUrl?: string | null
+  email?: string
+  /**
+   * Причина, по которой человека нельзя выбрать. Он остаётся в списке и
+   * виден в поиске — просто выбрать нельзя, и написано почему.
+   *
+   * Убрать его совсем было бы хуже: человек ищет коллегу, не находит и решает,
+   * что тот не в проекте. Причина на месте отвечает на вопрос сразу.
+   */
+  disabledReason?: string
+}
 
 export function PeoplePicker({
   people,
@@ -111,7 +124,7 @@ export function PeoplePicker({
               onChange={(e) => setQ(e.target.value)}
               onKeyDown={(e) => {
                 // Enter выбирает первого в списке — набрал три буквы и дальше
-                if (e.key === 'Enter' && matches[0]) {
+                if (e.key === 'Enter' && matches[0] && !matches[0].disabledReason) {
                   e.preventDefault()
                   add(matches[0].id)
                 }
@@ -138,14 +151,22 @@ export function PeoplePicker({
               <button
                 key={p.id}
                 type="button"
+                disabled={Boolean(p.disabledReason)}
                 onClick={() => add(p.id)}
                 className={cn(
-                  'flex w-full items-center gap-2 rounded-sm px-1.5 py-1.5 text-start text-sm transition-colors hover:bg-accent',
+                  'flex w-full items-center gap-2 rounded-sm px-1.5 py-1.5 text-start text-sm transition-colors',
+                  p.disabledReason ? 'cursor-not-allowed opacity-60' : 'hover:bg-accent',
                   single && value.includes(p.id) && 'bg-accent font-medium',
                 )}
               >
                 <Avatar name={p.name} src={p.avatarUrl} size={20} />
                 <span className="min-w-0 flex-1 truncate">{p.name}</span>
+                {/* Причина прямо в строке, а не подсказкой при наведении:
+                    иначе человек жмёт по имени, ничего не происходит, и
+                    остаётся гадать, сломано оно или так задумано. */}
+                {p.disabledReason && (
+                  <span className="shrink-0 text-xs text-muted-foreground">{p.disabledReason}</span>
+                )}
               </button>
             ))}
             {matches.length === 0 && (

@@ -380,7 +380,10 @@
     "addViewer": "Add a person",
     "authorAlwaysSees": "You always see your own secrets.",
     "onlyYou": "Right now nobody else can.",
-    "onlyAuthor": "Only the person who added it"
+    "onlyAuthor": "Only the person who added it",
+    "noAccessToResources": "no access to resources",
+    "needManageHint": "You can view resources but not add or edit them. Access is granted in the project team.",
+    "openTeam": "Open the team"
   },
   "creds": {
     "search": "Search credentials…",
