@@ -34,12 +34,34 @@ describe('POST /x/resources', () => {
     expect(body).toMatch(/projectId: scope\.projectId/)
   })
 
-  it('секреты отвергает явно — молчаливый пропуск хуже отказа', () => {
-    expect(body).toMatch(/'secrets' in b/)
-    expect(body).toMatch(/400/)
-    // Значение не должно попасть в базу ни при каком раскладе.
-    expect(body, 'секреты не пишем через мост').not.toMatch(/resourceSecrets/)
-    expect(body, 'шифровать через мост нечего').not.toMatch(/encrypt\(/)
+  it('секреты пишет зашифрованными, а не как есть', () => {
+    // Запрет на секреты через мост снят: ассистент с доступом к терминалу и
+    // так может отправить что угодно, а heroku config:set никто не запрещает.
+    // Но хранилище одно и правило одно — в базу только шифротекст.
+    expect(body).toMatch(/resourceSecrets/)
+    expect(body).toMatch(/valueEncrypted: encrypt\(/)
+  })
+
+  it('через мост секреты по умолчанию не видит никто, кроме автора', () => {
+    // Умолчание обратное интерфейсу намеренно: человек видит форму с тегами
+    // команды и снимает лишних глазами, ассистент отдаёт запрос вслепую.
+    // Тихо раздать пароль всему проекту из-за забытого поля нельзя отменить.
+    expect(body).toMatch(/Array\.isArray\(b\.viewers\)/)
+    // Никакого «взять всех участников», если список не назвали.
+    const beforeViewers = body.slice(0, body.indexOf('const viewers'))
+    expect(beforeViewers).not.toMatch(/projectMembers/)
+  })
+
+  it('в зрители пускает только участников этого проекта', () => {
+    // Чужой id не должен давать доступ к секрету.
+    expect(body).toMatch(/eq\(projectMembers\.projectId, scope\.projectId\)/)
+    expect(body).toMatch(/inArray\(projectMembers\.userId, viewers\)/)
+  })
+
+  it('автор в список зрителей не попадает', () => {
+    // Он видит всегда по created_by_id; запись о нём можно было бы снять и
+    // оставить секрет без единственного владельца.
+    expect(body).toMatch(/x !== id\.userId/)
   })
 
   it('чужие поля не проглатывает', () => {
