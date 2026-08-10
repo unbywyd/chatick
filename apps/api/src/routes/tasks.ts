@@ -79,14 +79,28 @@ export async function notifyTask(
       preview: task.title,
     })
   }
-  if (opts.statusChanged && task.assigneeId) {
+  // Смена статуса касается двоих: исполнителя и того, кто задачу поставил.
+  //
+  // Раньше уведомляли только исполнителя, и типичный случай выпадал целиком:
+  // я поставил задачу Талю, Таль перевёл её в ревью — и я об этом не узнаю,
+  // хотя ревью ждут именно от меня. Заказчик работы молча оставался в
+  // неведении о её ходе.
+  //
+  // notify сам выбрасывает актора и повторы, поэтому список можно собирать
+  // прямолинейно: сменил статус исполнитель — уйдёт автору, сменил автор —
+  // уйдёт исполнителю, сменил кто-то третий — обоим.
+  const statusRecipients = [task.assigneeId, task.createdById].filter((id): id is string => Boolean(id))
+  if (opts.statusChanged && statusRecipients.length) {
     await notify({
       projectId,
       event: 'task_status',
-      recipientIds: [task.assigneeId],
+      recipientIds: statusRecipients,
       actorId,
       actorName,
-      dedupeKey: `task_status:${task.id}:${task.status}:${task.assigneeId}`,
+      // Ключ без получателя: notify дописывает id адресата сам. Прежний
+      // вариант с assigneeId внутри давал бы его дважды, и автор с
+      // исполнителем перестали бы различаться при дедупе.
+      dedupeKey: `task_status:${task.id}:${task.status}`,
       entityType: 'task',
       entityId: task.id,
       link,
