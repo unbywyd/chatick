@@ -64,32 +64,37 @@ async function alive(token: string): Promise<boolean> {
 }
 
 /**
- * Спросить доступ у запущенного приложения.
+ * Попросить приложение одобрить код — вместо того чтобы человек его набирал.
  *
- * Возвращает null, если приложения нет — это не ошибка, а обычный случай:
- * дальше сработает device flow.
+ * Токен приложение НЕ отдаёт, и это правильнее, чем казалось сначала: код уже
+ * выпущен сервером на наше имя, приложение лишь подтверждает его от лица
+ * вошедшего человека — тем же вызовом, что и кнопка «одобрить» на экране
+ * подключения. Значит нет второго пути выдачи токена, который пришлось бы
+ * защищать отдельно, и токен по-прежнему забираем только мы.
+ *
+ * Возвращает false, если приложения нет или человек отказал: это обычный
+ * случай, а не ошибка — код тогда вводят руками.
  */
-async function askDesktop(): Promise<Stored | null> {
+async function askDesktopToApprove(userCode: string): Promise<boolean> {
   try {
-    // Нет файла — приложение не запущено. Это обычный случай, а не поломка:
-    // дальше сработает device flow.
+    // Нет файла — приложение не запущено.
     const meta = JSON.parse(readFileSync(PORT_FILE, 'utf8')) as { port?: number; secret?: string }
-    if (!meta.port || !meta.secret) return null
+    if (!meta.port || !meta.secret) return false
 
     const res = await fetch(`http://127.0.0.1:${meta.port}/grant`, {
       method: 'POST',
       headers: { 'content-type': 'application/json', 'x-chatick-secret': meta.secret },
-      body: JSON.stringify({ client: 'Claude Code' }),
-      // Человек должен успеть нажать кнопку, но и висеть вечно нельзя.
+      body: JSON.stringify({ client: 'Claude Code', code: userCode }),
+      // Человек должен успеть выбрать проект и нажать кнопку, но и висеть
+      // вечно нельзя.
       signal: AbortSignal.timeout(120_000),
     })
-    if (!res.ok) return null
-    const data = (await res.json()) as { token?: string; user?: { id: string; name: string }; projectId?: string | null }
-    if (!data.token) return null
-    return { token: data.token, user: data.user, projectId: data.projectId ?? null, savedAt: new Date().toISOString() }
+    if (!res.ok) return false
+    const data = (await res.json()) as { approved?: boolean }
+    return data.approved === true
   } catch {
-    // Приложение не запущено, отказало или человек закрыл окно.
-    return null
+    // Приложение не запущено, отказало, окно закрыли.
+    return false
   }
 }
 
@@ -143,9 +148,32 @@ export async function currentScope(): Promise<Scope | null> {
   return null
 }
 
-/** Подключиться: сначала приложение, потом — вызов вернёт null и решает вызывающий. */
+/**
+ * Подключиться через установленное приложение.
+ *
+ * Порядок: берём код у сервера, просим приложение одобрить его, забираем
+ * токен. Человек при этом видит окно с выбором проекта и жмёт кнопку — код
+ * ему набирать не приходится, хотя формально это тот же device flow.
+ *
+ * null означает «не вышло»: приложения нет, оно отказало или человек закрыл
+ * окно. Вызывающий тогда показывает код обычным способом.
+ */
 export async function connectViaDesktop(): Promise<Scope | null> {
-  const granted = await askDesktop()
+  // Файл порта проверяем ДО того, как просить код: иначе на каждой попытке
+  // подключения без приложения сервер выпускал бы код в никуда.
+  try {
+    const meta = JSON.parse(readFileSync(PORT_FILE, 'utf8')) as { port?: number }
+    if (!meta.port) return null
+  } catch {
+    return null
+  }
+
+  const started = await startDeviceFlow()
+  const approved = await askDesktopToApprove(started.userCode)
+  if (!approved) return null
+
+  // Код одобрен — токен уже ждёт нас.
+  const granted = await waitForApproval(started.deviceCode, 15_000)
   if (!granted) return null
   save(granted)
   memory = { token: granted.token, projectId: granted.projectId }

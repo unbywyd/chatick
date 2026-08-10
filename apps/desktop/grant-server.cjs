@@ -5,15 +5,17 @@ const os = require('node:os')
 const crypto = require('node:crypto')
 
 /**
- * Локальная ручка выдачи доступа ассистенту.
+ * Локальная ручка одобрения доступа ассистенту.
  *
- * Зачем: без неё каждая сессия Claude начинается с ввода кода в браузере. У
- * кого приложение уже открыто, у того сессия и права — спрашивать код значит
- * заставлять человека доказывать то, что и так известно.
+ * Зачем: без неё каждая сессия Claude начинается с того, что человек читает
+ * код из чата и вводит его в браузере. У кого приложение открыто, у того
+ * сессия и права уже есть — просить код значит заставлять подтверждать то,
+ * что и так известно.
  *
- * Что здесь НЕ решается: подтверждение. Оно остаётся за веб-слоем, где живут
- * сессия и роли, — тем же путём, которым панель подтверждает код руками. Этот
- * сервер только принимает просьбу и передаёт её дальше.
+ * Токен отсюда НЕ выдаётся. Ассистент получает код у сервера сам, а
+ * приложение лишь одобряет его от лица вошедшего человека — тем же вызовом,
+ * что и кнопка «одобрить» на экране подключения. Второго пути выдачи токена
+ * не появляется, и защищать отдельно нечего.
  *
  * Ничего не ломает, если его нет: MCP при отказе молча уходит на device flow.
  * Поэтому все ошибки здесь — это «нет», а не исключение наружу.
@@ -57,8 +59,9 @@ function clearPortFile() {
 }
 
 /**
- * @param onRequest вызывается, когда ассистент просит доступ. Должен показать
- *   человеку окно и вернуть токен либо null, если тот отказался.
+ * @param onRequest вызывается, когда ассистент просит одобрить код. Должен
+ *   показать человеку окно и ответить через resolve(): true — одобрил,
+ *   false — отказался.
  */
 function start(onRequest) {
   if (server) return
@@ -90,12 +93,16 @@ function start(onRequest) {
     })
     req.on('end', async () => {
       let client = 'An assistant'
+      let code = ''
       try {
         const parsed = JSON.parse(raw || '{}')
         if (typeof parsed.client === 'string') client = parsed.client.slice(0, 80)
+        if (typeof parsed.code === 'string') code = parsed.code.slice(0, 40)
       } catch {
-        // Тело не разобралось — не повод отказывать, имя просто останется общим.
+        // Тело не разобралось — не повод отказывать, имя останется общим.
       }
+      // Без кода одобрять нечего: это не наш клиент.
+      if (!code) return reply(400, { error: 'code is required' })
 
       const id = crypto.randomUUID()
       const done = new Promise((resolve) => pending.set(id, resolve))
@@ -108,17 +115,17 @@ function start(onRequest) {
       }, 120_000)
 
       try {
-        onRequest({ id, client })
+        onRequest({ id, client, code })
       } catch {
         clearTimeout(timer)
         pending.delete(id)
         return reply(500, { error: 'app is not ready' })
       }
 
-      const result = await done
+      const approved = await done
       clearTimeout(timer)
-      if (!result) return reply(403, { error: 'declined' })
-      reply(200, result)
+      if (!approved) return reply(403, { error: 'declined' })
+      reply(200, { approved: true })
     })
   })
 
@@ -141,7 +148,7 @@ function start(onRequest) {
   server.listen(PREFERRED_PORT, '127.0.0.1')
 }
 
-/** Ответ человека: токен — согласие, null — отказ. */
+/** Ответ человека: true — одобрил, false — отказался или закрыл окно. */
 function resolve(id, result) {
   const fn = pending.get(id)
   if (!fn) return

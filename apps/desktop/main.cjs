@@ -542,15 +542,16 @@ function flushPending() {
  *
  * Подтверждение остаётся в веб-слое: там сессия и роли. Здесь только приём
  * просьбы и передача ответа — тем же путём, что подтверждение кода из панели.
+ * Токен через главный процесс не проходит вовсе.
  *
  * Если сервер не поднялся (занят порт и запасной тоже, нет прав, отключена
  * сеть) — приложение работает как работало, а ассистент пойдёт через код.
  */
 function startGrantServer() {
   try {
-    grantServer.start(({ id, client }) => {
+    grantServer.start(({ id, client, code }) => {
       showWindow()
-      send('connect:grant-request', { id, client })
+      send('connect:grant-request', { id, client, code })
     })
   } catch (e) {
     console.error('[desktop] grant server not started:', e)
@@ -666,10 +667,10 @@ function registerIpc() {
   ipcMain.on('panel:revoke-connection', (_e, id) => send('connect:revoke', id))
   ipcMain.on('connect:result', (_e, payload) => panel?.webContents.send('panel:connect', payload))
 
-  // Ответ человека на просьбу ассистента: токен — согласие, null — отказ.
-  // Веб отдаёт уже готовый токен: только он знает, чем закончилось одобрение.
+  // Ответ человека: одобрил код или отказался. Токен сюда не попадает — за
+  // ним ассистент идёт к серверу сам, как и в обычном device flow.
   ipcMain.on('connect:grant-result', (_e, payload) => {
-    grantServer.resolve(payload?.id, payload?.token ? { token: payload.token, user: payload.user, projectId: payload.projectId ?? null } : null)
+    grantServer.resolve(payload?.id, payload?.approved === true)
   })
 }
 
