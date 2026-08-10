@@ -746,10 +746,24 @@ carry the answer.
   stream, resources are the list people open when they need the link again.
   Give either a url or a name; with only a url the name is taken from it.
 
-  Secret VALUES are never exposed through this bridge and cannot be written
-  through it either: a value sent this way would pass through an external model
-  and stay in its history. A person adds and edits secrets in the app. Sending
-  "secrets" in the body is refused with 400, not silently dropped.
+  Secrets live UNDER a resource and have their own audience. The link and the
+  description are visible to the whole project; each secret is visible only to
+  the people in "viewers", plus whoever created the resource. Do not list the
+  author — they always see their own.
+
+  A resource you create through this bridge starts shared with NOBODY but its
+  author. Name the people who need it in "viewers" (ids from GET /x/members),
+  or the person you made it for will not be able to open it — and say out loud
+  who you gave it to, because they cannot see that from the task.
+
+  Only the author changes "viewers" later; resources.manage is not enough.
+
+  Reading a value is one secret at a time, through the app or
+  POST /x/resources/<id>/secrets/<secretId>/reveal, and every read is audited.
+
+  Do not go looking for secrets to store. Write down what the human handed you
+  for that purpose — never values you found in a .env, a log or an earlier
+  message, and never a value you were not asked to keep.
 
   Deleting a resource is left to humans — it takes its secrets with it.
 

@@ -4132,9 +4132,32 @@ bridgeRoute.get('/resources', async (c) => {
   const rows = await db.query.credentials.findMany({
     where: and(eq(credentials.projectId, scope.projectId), isNull(credentials.deletedAt)),
   })
+  // Открыты ли мне секреты каждого ресурса — одним запросом на весь список,
+  // а не по одному на строку.
+  const ids = rows.map((r: typeof credentials.$inferSelect) => r.id)
+  const shared = new Set(
+    ids.length
+      ? (
+          await db
+            .select({ resourceId: resourceViewers.resourceId })
+            .from(resourceViewers)
+            .where(and(inArray(resourceViewers.resourceId, ids), eq(resourceViewers.userId, id.userId)))
+        ).map((r) => r.resourceId)
+      : [],
+  )
+
   return c.json({
-    items: rows.map((r: typeof credentials.$inferSelect) => ({ id: r.id, name: r.name, url: r.url, description: r.description })),
-    note: 'Secret values are never exposed through the bridge.',
+    items: rows.map((r: typeof credentials.$inferSelect) => ({
+      id: r.id,
+      name: r.name,
+      url: r.url,
+      description: r.description,
+      // Секреты под ресурсом открыты не всем: автору — всегда, остальным — по
+      // списку. Ассистент должен видеть это ДО того, как пообещает человеку
+      // доступ, которого у того нет.
+      canSeeSecrets: r.createdById === id.userId || shared.has(r.id),
+    })),
+    note: 'Secret values are read one at a time and only by people the resource is shared with.',
   })
 })
 
@@ -4266,18 +4289,64 @@ bridgeRoute.patch('/resources/:id', async (c) => {
   if (!existing) return c.json({ error: 'Resource not found' }, 404)
 
   const b = (await c.req.json().catch(() => ({}))) as Record<string, unknown>
-  if ('secrets' in b) {
-    return c.json({ error: 'Secrets cannot be changed through the bridge: the value would pass through an external model. A person edits them in the app.' }, 400)
-  }
   const bad = unknownFields(b, RESOURCE_FIELDS)
   if (bad) return c.json({ error: bad }, 400)
+
+  /**
+   * Список зрителей меняет только автор — тот, кто эти секреты положил.
+   *
+   * Права resources.manage тут мало: администратор ведает ресурсами проекта,
+   * но раздавать чужой пароль от имени владельца он не должен. Правило то же,
+   * что и в приложении, и держится оно здесь отдельно: мост и REST — разные
+   * двери к одной комнате.
+   */
+  if (b.viewers !== undefined) {
+    if (existing.createdById !== id.userId) {
+      return c.json({ error: 'Only the person who created the resource can change who sees its secrets' }, 403)
+    }
+    const wanted = Array.isArray(b.viewers)
+      ? (b.viewers as unknown[]).filter((x): x is string => typeof x === 'string' && x !== id.userId).slice(0, 200)
+      : []
+    // Только участники этого проекта: чужой id доступа не даёт.
+    const inProject = wanted.length
+      ? await db
+          .select({ userId: projectMembers.userId })
+          .from(projectMembers)
+          .where(and(eq(projectMembers.projectId, scope.projectId), inArray(projectMembers.userId, wanted)))
+      : []
+    await db.delete(resourceViewers).where(eq(resourceViewers.resourceId, existing.id))
+    if (inProject.length) {
+      await db
+        .insert(resourceViewers)
+        .values(inProject.map((m) => ({ resourceId: existing.id, userId: m.userId })))
+        .onConflictDoNothing()
+    }
+  }
+
+  // Новые секреты ДОБАВЛЯЮТСЯ, а не заменяют прежние: PATCH со списком легко
+  // отправить неполным, и тихо стереть чужой ключ — не та цена за опечатку.
+  // Удаление отдельной ручкой, осознанным действием.
+  const incoming = Array.isArray(b.secrets) ? (b.secrets as unknown[]).slice(0, 20) : []
+  const newSecrets = incoming
+    .map((x) => x as { label?: unknown; value?: unknown })
+    .filter((x) => typeof x.value === 'string' && (x.value as string).length)
+    .map((x) => ({
+      resourceId: existing.id,
+      label: typeof x.label === 'string' ? x.label.slice(0, 120) : '',
+      valueEncrypted: encrypt((x.value as string).slice(0, 10_000)),
+    }))
+  if (newSecrets.length) await db.insert(resourceSecrets).values(newSecrets)
 
   const patch: Partial<typeof credentials.$inferInsert> = {}
   const link = b.url === undefined ? existing.url : typeof b.url === 'string' && b.url.trim() ? b.url.trim().slice(0, 2000) : null
   if (typeof b.name === 'string') patch.name = b.name.trim().slice(0, 200)
   if (b.url !== undefined) patch.url = link
   if (typeof b.description === 'string') patch.description = b.description.slice(0, 5000)
-  if (!Object.keys(patch).length) return c.json({ error: `Nothing to change. Allowed: ${RESOURCE_FIELDS.join(', ')}.` }, 400)
+  // Правка одних зрителей или добавление секрета — тоже изменение: без этой
+  // оговорки запрос «дай Талю доступ» падал бы с «Nothing to change».
+  if (!Object.keys(patch).length && b.viewers === undefined && !newSecrets.length) {
+    return c.json({ error: `Nothing to change. Allowed: ${RESOURCE_FIELDS.join(', ')}.` }, 400)
+  }
 
   // Имя стёрли или его и не было — берём из ссылки.
   const nextName = patch.name ?? existing.name
@@ -4290,7 +4359,11 @@ bridgeRoute.patch('/resources/:id', async (c) => {
     if (link) grabIcon(existing.id, link)
   }
 
-  await db.update(credentials).set(patch).where(eq(credentials.id, existing.id))
+  // Пустой set() — ошибка драйвера, а не безобидный no-op: запрос «дай Талю
+  // доступ» не меняет полей самого ресурса, и обновлять там нечего.
+  if (Object.keys(patch).length) {
+    await db.update(credentials).set(patch).where(eq(credentials.id, existing.id))
+  }
   await db.insert(credentialAccessLog).values({
     projectId: scope.projectId,
     userId: id.userId,
@@ -4298,7 +4371,18 @@ bridgeRoute.patch('/resources/:id', async (c) => {
     credentialId: existing.id,
     credentialName: patch.name ?? existing.name,
   })
-  return c.json({ ok: true, id: existing.id })
+  return c.json({
+    ok: true,
+    id: existing.id,
+    ...(newSecrets.length ? { secretsAdded: newSecrets.length } : {}),
+    // Возвращаем список всегда: ассистент должен видеть, кому открыт доступ,
+    // и сказать это человеку, а не решить, что «сохранил — значит доступно».
+    viewers: await db
+      .select({ userId: resourceViewers.userId })
+      .from(resourceViewers)
+      .where(eq(resourceViewers.resourceId, existing.id))
+      .then((rows) => rows.map((r) => r.userId)),
+  })
 })
 
 // --- Файлы ------------------------------------------------------------------
