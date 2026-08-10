@@ -134,8 +134,20 @@ describe('PATCH /x/resources/:id', () => {
 })
 
 describe('удаление ресурсов остаётся людям', () => {
-  it('ручки нет: ресурс уносит с собой свои секреты', () => {
-    expect(src).not.toMatch(/bridgeRoute\.delete\('\/resources/)
+  it('ресурс целиком через мост не удаляется — он уносит с собой все секреты', () => {
+    // Точный путь, а не любой /resources: удаление ОДНОГО секрета разрешено
+    // (см. ниже) — иначе ассистент не может исправить собственную ошибку.
+    expect(src).not.toMatch(/bridgeRoute\.delete\('\/resources\/:id'/)
+  })
+
+  it('один секрет убрать можно — это отмена своей же ошибки', () => {
+    // PATCH секреты только добавляет; без этой ручки ассистент, ошибившийся
+    // меткой, оставлял мусор, который приходилось чистить человеку.
+    expect(src).toMatch(/bridgeRoute\.delete\('\/resources\/:id\/secrets\/:secretId'/)
+    const body = handler('delete', '/resources/:id/secrets/:secretId')
+    // Удаляется ровно названный секрет и только внутри своего ресурса.
+    expect(body).toMatch(/eq\(resourceSecrets\.resourceId, existing\.id\)/)
+    expect(body).toMatch(/credentialAccessLog/)
   })
 })
 

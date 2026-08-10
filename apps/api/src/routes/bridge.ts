@@ -4385,6 +4385,47 @@ bridgeRoute.patch('/resources/:id', async (c) => {
   })
 })
 
+/**
+ * Убрать один секрет из ресурса.
+ *
+ * PATCH секреты только ДОБАВЛЯЕТ — чтобы неполный список не стёр чужой ключ.
+ * Из-за этого ассистент, ошибившийся меткой или значением, не мог исправить
+ * собственную ошибку: добавить второй умел, убрать первый — нет. Ресурс
+ * обрастал мусором, а человеку оставалось чистить руками.
+ *
+ * Удаляется ровно один названный секрет: ни списком, ни «всё сразу». Сам
+ * ресурс остаётся — его удаление по-прежнему решение человека.
+ */
+bridgeRoute.delete('/resources/:id/secrets/:secretId', async (c) => {
+  const id = auth(c as never)
+  const scope = await resolveProject(c as never)
+  if ('error' in scope) return c.json({ error: scope.error }, scope.status)
+  const denied = await require(c as never, 'resources.manage', scope.projectId)
+  if (denied) return c.json(denied, 403)
+
+  const existing = await db.query.credentials.findFirst({
+    where: and(eq(credentials.id, c.req.param('id')), eq(credentials.projectId, scope.projectId), isNull(credentials.deletedAt)),
+  })
+  if (!existing) return c.json({ error: 'Resource not found' }, 404)
+
+  const secretId = c.req.param('secretId')
+  const secret = await db.query.resourceSecrets.findFirst({
+    where: and(eq(resourceSecrets.id, secretId), eq(resourceSecrets.resourceId, existing.id)),
+    columns: { id: true, label: true },
+  })
+  if (!secret) return c.json({ error: 'Secret not found on this resource' }, 404)
+
+  await db.delete(resourceSecrets).where(eq(resourceSecrets.id, secret.id))
+  await db.insert(credentialAccessLog).values({
+    projectId: scope.projectId,
+    userId: id.userId,
+    action: 'update',
+    credentialId: existing.id,
+    credentialName: existing.name,
+  })
+  return c.json({ ok: true, removed: { id: secret.id, label: secret.label } })
+})
+
 // --- Файлы ------------------------------------------------------------------
 
 bridgeRoute.get('/files', async (c) => {

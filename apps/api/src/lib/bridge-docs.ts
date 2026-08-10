@@ -744,6 +744,11 @@ carry the answer.
   "secrets" is [{"label","value"}]. On PATCH they are ADDED, not replaced: a
   list sent short would otherwise wipe someone else's key.
 
+  DELETE /x/resources/<id>/secrets/<secretId>  remove one secret
+  Because PATCH only adds, this is how you undo your own mistake — a wrong
+  label, a value pasted twice. It takes exactly one named secret; the resource
+  itself stays, deleting that is still a human's call.
+
   This is where project links belong — designs, dashboards, repositories,
   staging environments. Put a link here rather than in a note: notes are a
   stream, resources are the list people open when they need the link again.
@@ -993,6 +998,9 @@ ${endpointCatalog('?project=<id>')}
          PATCH /x/members/<userId> {"permissions":{"resources":"read"}};
          everyone else should name who is missing access rather than skip them
          quietly.
+  DELETE /x/resources/<id>/secrets/<secretId>?project=<id>
+         Remove one secret. PATCH only adds, so this is how a wrong label or a
+         duplicated value gets undone without leaving the resource littered.
 
   POST   /x/disconnect                  close this tunnel when you are done
 
