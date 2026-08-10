@@ -18,8 +18,16 @@ import { apiBase, type Scope } from './bridge.js'
  */
 
 const TOKEN_FILE = join(homedir(), '.chatick', 'mcp-token.json')
-/** Порт, на котором десктоп слушает просьбы о доступе. */
-const DESKTOP_PORT = Number(process.env.CHATICK_DESKTOP_PORT ?? 17325)
+
+/**
+ * Где слушает десктоп — читаем из файла, а не берём жёсткий номер.
+ *
+ * Порт 17325 может быть занят: чужим сервисом, второй копией приложения,
+ * зависшим процессом. Приложение в таком случае берёт любой свободный и
+ * пишет его сюда вместе с секретом. Жёсткое число означало бы, что выдача
+ * доступа тихо перестаёт работать ровно у того, у кого порт занят.
+ */
+const PORT_FILE = join(homedir(), '.chatick', 'desktop-port.json')
 
 type Stored = { token: string; user?: { id: string; name: string }; projectId?: string | null; savedAt: string }
 
@@ -63,9 +71,14 @@ async function alive(token: string): Promise<boolean> {
  */
 async function askDesktop(): Promise<Stored | null> {
   try {
-    const res = await fetch(`http://127.0.0.1:${DESKTOP_PORT}/grant`, {
+    // Нет файла — приложение не запущено. Это обычный случай, а не поломка:
+    // дальше сработает device flow.
+    const meta = JSON.parse(readFileSync(PORT_FILE, 'utf8')) as { port?: number; secret?: string }
+    if (!meta.port || !meta.secret) return null
+
+    const res = await fetch(`http://127.0.0.1:${meta.port}/grant`, {
       method: 'POST',
-      headers: { 'content-type': 'application/json' },
+      headers: { 'content-type': 'application/json', 'x-chatick-secret': meta.secret },
       body: JSON.stringify({ client: 'Claude Code' }),
       // Человек должен успеть нажать кнопку, но и висеть вечно нельзя.
       signal: AbortSignal.timeout(120_000),

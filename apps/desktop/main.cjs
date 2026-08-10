@@ -1,4 +1,5 @@
 const { app, BrowserWindow, Tray, Menu, Notification, globalShortcut, shell, ipcMain, nativeImage } = require('electron')
+const grantServer = require('./grant-server.cjs')
 const { autoUpdater } = require('electron-updater')
 const path = require('node:path')
 const fs = require('node:fs')
@@ -532,6 +533,30 @@ function flushPending() {
   for (const { channel, payload } of pending.splice(0)) win.webContents.send(channel, payload)
 }
 
+/**
+ * Локальная выдача доступа ассистенту.
+ *
+ * Приложение уже вошло в аккаунт — значит человеку незачем вводить код,
+ * подтверждая то, что и так известно. Ассистент стучится сюда, окно
+ * поднимается, человек выбирает проект или компанию и жмёт кнопку.
+ *
+ * Подтверждение остаётся в веб-слое: там сессия и роли. Здесь только приём
+ * просьбы и передача ответа — тем же путём, что подтверждение кода из панели.
+ *
+ * Если сервер не поднялся (занят порт и запасной тоже, нет прав, отключена
+ * сеть) — приложение работает как работало, а ассистент пойдёт через код.
+ */
+function startGrantServer() {
+  try {
+    grantServer.start(({ id, client }) => {
+      showWindow()
+      send('connect:grant-request', { id, client })
+    })
+  } catch (e) {
+    console.error('[desktop] grant server not started:', e)
+  }
+}
+
 /** IPC регистрируется после whenReady: раньше ipcMain ещё не существует. */
 function registerIpc() {
   ipcMain.on('state:update', (_e, next) => {
@@ -640,6 +665,12 @@ function registerIpc() {
   ipcMain.on('panel:task-status', (_e, payload) => send('task:status', payload))
   ipcMain.on('panel:revoke-connection', (_e, id) => send('connect:revoke', id))
   ipcMain.on('connect:result', (_e, payload) => panel?.webContents.send('panel:connect', payload))
+
+  // Ответ человека на просьбу ассистента: токен — согласие, null — отказ.
+  // Веб отдаёт уже готовый токен: только он знает, чем закончилось одобрение.
+  ipcMain.on('connect:grant-result', (_e, payload) => {
+    grantServer.resolve(payload?.id, payload?.token ? { token: payload.token, user: payload.user, projectId: payload.projectId ?? null } : null)
+  })
 }
 
 // --- горячие клавиши ----------------------------------------------------------
@@ -712,6 +743,7 @@ function setupUpdates() {
     // они уже верные — незачем показывать пустые, пока окно просыпается.
     restoreState()
     registerIpc()
+    startGrantServer()
     createWindow()
     createTray()
     registerShortcuts()
@@ -736,6 +768,10 @@ app.on('before-quit', () => {
 
 app.on('will-quit', () => {
   globalShortcut.unregisterAll()
+  // Файл с портом переживает падение приложения и вводит MCP в заблуждение:
+  // он стучится в мёртвый порт и ждёт таймаута вместо того, чтобы сразу
+  // предложить код.
+  grantServer.stop()
 })
 
 // Окно живёт в трее — закрытие последнего окна не гасит приложение.

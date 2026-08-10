@@ -38,6 +38,18 @@ contextBridge.exposeInMainWorld('chatickDesktop', {
   /** Ответ панели на её же запрос про код подключения. */
   connectResult: (payload) => ipcRenderer.send('connect:result', payload),
 
+  /**
+   * Ассистент просит доступ через установленное приложение — без кода.
+   * Веб показывает окно выбора (проект или компания) и отвечает токеном
+   * либо null, если человек отказался.
+   */
+  onGrantRequest: (fn) => {
+    const handler = (_e, payload) => fn(payload)
+    ipcRenderer.on('connect:grant-request', handler)
+    return () => ipcRenderer.off('connect:grant-request', handler)
+  },
+  grantResult: (payload) => ipcRenderer.send('connect:grant-result', payload),
+
   onConnectCheck: (fn) => {
     const handler = (_e, code) => fn(code)
     ipcRenderer.on('connect:check', handler)
