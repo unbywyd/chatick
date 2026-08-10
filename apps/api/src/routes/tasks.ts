@@ -4,7 +4,7 @@ import { z } from 'zod'
 import { and, asc, desc, eq, inArray, isNull, sql } from 'drizzle-orm'
 import { companyOf, projectPath } from '../lib/links.js'
 import { db } from '../db/client.js'
-import { files, projects, taskBlockers, taskChecklist, taskComments, taskGroups, taskNotes, tasks, users } from '../db/schema.js'
+import { credentials, files, projects, taskBlockers, taskChecklist, taskComments, taskGroups, taskNotes, taskResources, tasks, users } from '../db/schema.js'
 import { requireProject, type ProjectEnv } from '../auth.js'
 import { hasPermission, ownsOrManages } from './projects.js'
 import { improveTask, validateTask, generateTaskNotes } from '../lib/llm.js'
@@ -176,12 +176,39 @@ tasksRoute.get('/', async (c) => {
     .leftJoin(users, eq(users.id, tasks.assigneeId))
     .where(and(eq(tasks.projectId, projectId), sql`${tasks.deletedAt} is null`))
     .orderBy(asc(tasks.sortOrder), desc(tasks.createdAt))
+
+  // Привязанные ресурсы — одним запросом на весь список, а не по одному на
+  // задачу: доски бывают в сотню строк.
+  //
+  // Только имя и ссылка. Есть ли под ресурсом секреты и кому они открыты —
+  // решает сам ресурс; задача лишь показывает, что доступ где-то лежит.
+  const taskIds = rows.map((r) => r.task.id)
+  const resourceRows = taskIds.length
+    ? await db
+        .select({
+          taskId: taskResources.taskId,
+          id: credentials.id,
+          name: credentials.name,
+          url: credentials.url,
+        })
+        .from(taskResources)
+        .innerJoin(credentials, eq(credentials.id, taskResources.resourceId))
+        .where(and(inArray(taskResources.taskId, taskIds), isNull(credentials.deletedAt)))
+    : []
+  const byTask = new Map<string, { id: string; name: string; url: string | null }[]>()
+  for (const r of resourceRows) {
+    const list = byTask.get(r.taskId) ?? []
+    list.push({ id: r.id, name: r.name, url: r.url })
+    byTask.set(r.taskId, list)
+  }
+
   return c.json(
     rows.map((r) => ({
       ...serialize(r.task, r.assignee),
       attachmentsCount: r.attachmentsCount,
       blockedBy: r.blockedBy,
       blocking: r.blocking,
+      resources: byTask.get(r.task.id) ?? [],
     })),
   )
 })

@@ -16,6 +16,7 @@ import {
   Trash2,
   X,
   Share2,
+  Lock,
 } from 'lucide-react'
 import { useNavigate, useParams, useSearchParams } from 'react-router-dom'
 import { ShareDialog } from '@/components/ShareDialog'
@@ -24,6 +25,7 @@ import { cn } from '@/lib/utils'
 import { Input } from '@/components/ui/input'
 import { Button } from '@/components/ui/button'
 import { DragHandle } from '@/components/ui/drag-handle'
+import { PeoplePicker, type Person } from '@/components/ui/people-picker'
 import { useConfirm } from '@/components/ui/confirm'
 import { DbConnections } from './DbConnections'
 
@@ -37,10 +39,23 @@ type ResourceRow = {
   source: 'manual' | 'chat'
   messageId: string | null
   secretCount: number
+  /** Секреты под ресурсом открыты мне: автор или в списке зрителей. */
+  canSeeSecrets: boolean
   creator: { id: string; name: string } | null
   createdAt: string
 }
-type ResourceDetail = { id: string; name: string; url: string | null; description: string; secrets: { id: string; label: string }[] }
+type ResourceDetail = {
+  id: string
+  name: string
+  url: string | null
+  description: string
+  canSeeSecrets: boolean
+  secretCount: number
+  secrets: { id: string; label: string }[]
+  /** Кому открыты секреты. Автора здесь нет — он видит всегда. */
+  viewers: string[]
+  authorId: string | null
+}
 
 // Таб «Ресурсы» (SPEC §8.1): ссылка + описание + опциональные секреты
 export function ResourcesTab({ projectId, isAdmin }: { projectId: string; isAdmin: boolean }) {
@@ -182,7 +197,18 @@ export function ResourcesTab({ projectId, isAdmin }: { projectId: string; isAdmi
                       {r.url}
                     </a>
                   )}
-                  {r.secretCount > 0 && <span className="inline-flex items-center gap-0.5"><KeyRound className="size-3" />{r.secretCount}</span>}
+                  {/* Замок вместо ключа, когда секреты закрыты: число видно
+                      всем — оно говорит, что тут есть доступы, — а вот
+                      открыть их может не каждый. */}
+                  {r.secretCount > 0 && (
+                    <span
+                      className={cn('inline-flex items-center gap-0.5', !r.canSeeSecrets && 'text-muted-foreground/70')}
+                      title={r.canSeeSecrets ? undefined : t('resources.secretsLocked')}
+                    >
+                      {r.canSeeSecrets ? <KeyRound className="size-3" /> : <Lock className="size-3" />}
+                      {r.secretCount}
+                    </span>
+                  )}
                 </span>
               </span>
               {r.messageId && (
@@ -270,6 +296,13 @@ function ResourceForm({ projectId, editing, onClose }: { projectId: string; edit
   const [description, setDescription] = useState(editing?.description ?? '')
   // новые секреты для добавления
   const [newSecrets, setNewSecrets] = useState<{ label: string; value: string }[]>([])
+  /**
+   * Кому видны секреты. null — «ещё не трогали»: для нового ресурса это значит
+   * «вся команда» (умолчание сервера), для существующего — то, что придёт в
+   * деталях. Отличать «не трогали» от «сняли всех» обязательно: пустой массив
+   * это осознанный выбор оставить секрет себе.
+   */
+  const [viewers, setViewers] = useState<string[] | null>(null)
   // Имя правят редко — прячем поле, пока не попросят.
   const [renaming, setRenaming] = useState(Boolean(editing?.name))
 
@@ -322,21 +355,84 @@ function ResourceForm({ projectId, editing, onClose }: { projectId: string; edit
   const previewIcon = iconQ.data ?? editing?.icon ?? null
 
   // детали (существующие секреты) при редактировании
+  // Команда проекта: из кого выбирать зрителей.
+  const team = useQuery({
+    queryKey: ['project-members', projectId],
+    queryFn: () => api<{ user: { id: string; name: string; email: string; avatarUrl: string | null } }[]>(`/api/v1/projects/${projectId}/members`),
+  })
+
   const detail = useQuery({
     queryKey: ['resource', editing?.id],
     enabled: Boolean(editing),
     queryFn: () => api<ResourceDetail>(`/api/v1/resources/${editing!.id}`, {}, 'project'),
   })
 
+  // Кто я: автор видит секреты всегда и только он меняет список зрителей.
+  const me = useQuery({ queryKey: ['me'], queryFn: () => api<{ id: string }>('/api/v1/auth/me') })
+
+  // Зрители существующего ресурса приходят в деталях. Ставим один раз: иначе
+  // каждый перезапрос затирал бы то, что человек уже наменял в форме.
+  useEffect(() => {
+    if (detail.data && viewers === null) setViewers(detail.data.viewers)
+  }, [detail.data, viewers])
+
+  const people: Person[] = (team.data ?? []).map((m) => ({
+    id: m.user.id,
+    name: m.user.name,
+    email: m.user.email,
+    avatarUrl: m.user.avatarUrl,
+  }))
+
+  // Автор ресурса видит секреты всегда — его в списке не показываем и снять
+  // нельзя. Для нового ресурса автор — я.
+  const authorId = detail.data?.authorId ?? me.data?.id ?? null
+  const selectable = people.filter((p) => p.id !== authorId)
+
+  // Новый ресурс: по умолчанию видит вся команда — так же, как решает сервер,
+  // когда список не прислали. Показываем это сразу тегами, чтобы человек
+  // видел, кому открывает, и снимал лишних, а не узнавал постфактум.
+  const effectiveViewers = viewers ?? (editing ? [] : selectable.map((p) => p.id))
+
+  // Список правит только автор. Новый ресурс — автор я, значит можно.
+  const canEditViewers = !editing || (me.data?.id != null && detail.data?.authorId === me.data.id)
+
   const save = useMutation({
     mutationFn: async () => {
       if (editing) {
-        await api(`/api/v1/resources/${editing.id}`, { method: 'PATCH', body: JSON.stringify({ name, url: normalized || null, description }) }, 'project')
+        await api(
+          `/api/v1/resources/${editing.id}`,
+          {
+            method: 'PATCH',
+            // viewers только если их трогали: PATCH со списком разрешён лишь
+            // автору, и отправлять его всегда значило бы ловить 403 на
+            // безобидной правке описания чужого ресурса.
+            body: JSON.stringify({
+              name,
+              url: normalized || null,
+              description,
+              ...(viewers !== null ? { viewers } : {}),
+            }),
+          },
+          'project',
+        )
         for (const s of newSecrets.filter((s) => s.value)) {
           await api(`/api/v1/resources/${editing.id}/secrets`, { method: 'POST', body: JSON.stringify(s) }, 'project')
         }
       } else {
-        await api('/api/v1/resources', { method: 'POST', body: JSON.stringify({ name, url: normalized || null, description, secrets: newSecrets.filter((s) => s.value) }) }, 'project')
+        await api(
+          '/api/v1/resources',
+          {
+            method: 'POST',
+            body: JSON.stringify({
+              name,
+              url: normalized || null,
+              description,
+              secrets: newSecrets.filter((s) => s.value),
+              viewers: effectiveViewers,
+            }),
+          },
+          'project',
+        )
       }
     },
     onSuccess: () => {
@@ -459,6 +555,44 @@ function ResourceForm({ projectId, editing, onClose }: { projectId: string; edit
           <Button variant="ghost" size="sm" className="mt-1" onClick={() => setNewSecrets((p) => [...p, { label: '', value: '' }])}>
             <Plus className="size-3.5" /> {t('resources.addSecret')}
           </Button>
+
+          {/* Кому видны секреты. Показываем только когда они есть: у голой
+              ссылки прятать нечего, а лишний выбор в форме заставляет думать
+              над вопросом, которого нет.
+
+              Менять список может только автор — остальным показываем его
+              как есть, чтобы было видно, у кого просить доступ. */}
+          {(hasSecret || (detail.data?.secretCount ?? 0) > 0) && (
+            <div className="mt-3 border-t pt-3">
+              <p className="mb-1.5 flex items-center gap-1.5 text-xs font-medium text-muted-foreground">
+                <Lock className="size-3.5" />
+                {t('resources.whoSeesSecrets')}
+              </p>
+              {canEditViewers ? (
+                <>
+                  <PeoplePicker
+                    people={selectable}
+                    value={effectiveViewers}
+                    onChange={setViewers}
+                    placeholder={t('resources.addViewer')}
+                  />
+                  <p className="mt-1.5 text-xs text-muted-foreground">
+                    {t('resources.authorAlwaysSees')}
+                    {effectiveViewers.length === 0 && ` ${t('resources.onlyYou')}`}
+                  </p>
+                </>
+              ) : (
+                <p className="text-xs text-muted-foreground">
+                  {detail.data?.viewers.length
+                    ? people
+                        .filter((p) => detail.data!.viewers.includes(p.id))
+                        .map((p) => p.name)
+                        .join(', ')
+                    : t('resources.onlyAuthor')}
+                </p>
+              )}
+            </div>
+          )}
         </div>
 
         <div className="flex items-center justify-end gap-2 border-t pt-3">

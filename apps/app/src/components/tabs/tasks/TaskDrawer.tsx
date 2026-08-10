@@ -1021,6 +1021,28 @@ export function TaskDrawer({
 
           {attachmentsSection}
 
+          {/* Ресурсы задачи: стенд, ключ, база. Ссылкой на сам ресурс, а не
+              копией доступов в описании — право решать, кто видит секрет,
+              остаётся за ресурсом, и отозвать его можно. */}
+          {(task.resources?.length ?? 0) > 0 && (
+            <section className="space-y-2">
+              <h4 className="text-xs font-medium text-muted-foreground">{t('resources.title')}</h4>
+              <ul className="space-y-1">
+                {task.resources!.map((r) => (
+                  <li key={r.id}>
+                    <button
+                      className="flex w-full items-center gap-2 rounded-md border px-2 py-1.5 text-start text-sm transition-colors hover:border-brand hover:text-brand"
+                      onClick={() => navigate(`/c/${companyId}/p/${routeProjectId}/resources/${r.id}`)}
+                    >
+                      <ExternalLink className="size-3.5 shrink-0 text-muted-foreground" />
+                      <span className="truncate">{r.name || r.url}</span>
+                    </button>
+                  </li>
+                ))}
+              </ul>
+            </section>
+          )}
+
           {/* Связь с чатом: файлы из переписки → переход к сообщению */}
           {chatFiles.length > 0 && (
             <section className="space-y-2">

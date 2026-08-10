@@ -374,7 +374,13 @@
     "deleteSecretConfirm": "Delete this secret?",
     "deleteConfirm": "Delete resource “{{name}}”?",
     "empty": "No resources yet",
-    "note": "A resource is a link + description with optional secrets. The AI can save links/credentials shared in chat here automatically."
+    "note": "A resource is a link + description with optional secrets. The AI can save links/credentials shared in chat here automatically.",
+    "secretsLocked": "The secrets here are not shared with you",
+    "whoSeesSecrets": "Who can see the secrets",
+    "addViewer": "Add a person",
+    "authorAlwaysSees": "You always see your own secrets.",
+    "onlyYou": "Right now nobody else can.",
+    "onlyAuthor": "Only the person who added it"
   },
   "creds": {
     "search": "Search credentials…",
@@ -426,6 +432,12 @@
     "empty": "No special rules — be respectful and stay on topic.",
     "accept": "I agree",
     "decline": "Cancel"
+  },
+  "notFound": {
+    "title": "This page does not exist",
+    "text": "The link is out of date or the address has a typo. Check the address or go back to your projects.",
+    "cta": "To projects",
+    "ctaLogin": "Sign in"
   },
   "project": {
     "switch": "To company",

@@ -26,6 +26,11 @@ export type Task = {
   blockedBy?: number
   /** Сколько задач ждут её — насколько она держит проект. */
   blocking?: number
+  /**
+   * Ресурсы задачи: стенд, ключ, база. Только имя и ссылка — есть ли под
+   * ресурсом секреты и кому они открыты, решает сам ресурс.
+   */
+  resources?: { id: string; name: string; url: string | null }[]
 }
 
 export type TaskGroup = {
