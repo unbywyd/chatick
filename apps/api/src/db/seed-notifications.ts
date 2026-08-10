@@ -21,6 +21,7 @@
  */
 import { and, eq, inArray } from 'drizzle-orm'
 import { db } from './client.js'
+import { projectPath } from '../lib/links.js'
 import { companies, notifications, projectMembers, projects, tasks, users } from './schema.js'
 
 const email = process.argv[2] ?? 'unbywyd@gmail.com'
@@ -43,7 +44,7 @@ async function main() {
   // Только те демо-проекты, где человек состоит: уведомление из проекта, куда
   // нет доступа, откроется ошибкой — хуже, чем его отсутствие.
   const mine = await db
-    .select({ id: projects.id, name: projects.name })
+    .select({ id: projects.id, name: projects.name, companyId: projects.companyId })
     .from(projects)
     .innerJoin(projectMembers, and(eq(projectMembers.projectId, projects.id), eq(projectMembers.userId, me.id)))
     .where(inArray(projects.companyId, demoCompanies.map((c) => c.id)))
@@ -87,7 +88,7 @@ async function main() {
       title: `${actor(0)?.name ?? 'Someone'} mentioned you`,
       body: 'Can you take a look at the staging build before the release?',
       summary: 'Asks you to check the staging build before the release.',
-      link: `/p/${project.id}/chat`,
+      link: projectPath(project.companyId, project.id, '/chat'),
       entityType: 'message',
       createdAt: minutesAgo(12),
     })
@@ -103,7 +104,7 @@ async function main() {
         title: `${actor(1)?.name ?? 'Someone'} assigned you a task`,
         body: `${projectTasks[0].number}: ${projectTasks[0].title}`,
         summary: `You are now responsible for ${projectTasks[0].number}.`,
-        link: `/p/${project.id}/tasks/${projectTasks[0].id}`,
+        link: projectPath(project.companyId, project.id, `/tasks/${projectTasks[0]!.id}`),
         entityType: 'task',
         entityId: projectTasks[0].id,
         createdAt: minutesAgo(48),
@@ -117,7 +118,7 @@ async function main() {
         actorId: actor(2)?.id ?? null,
         title: `New comment on ${projectTasks[1].number}`,
         body: 'Retested after the fix — works on my side now.',
-        link: `/p/${project.id}/tasks/${projectTasks[1].id}`,
+        link: projectPath(project.companyId, project.id, `/tasks/${projectTasks[1]!.id}`),
         entityType: 'task',
         entityId: projectTasks[1].id,
         createdAt: minutesAgo(140),
@@ -131,7 +132,7 @@ async function main() {
         actorId: actor(3)?.id ?? null,
         title: `${projectTasks[2].number} moved to review`,
         body: projectTasks[2].title,
-        link: `/p/${project.id}/tasks/${projectTasks[2].id}`,
+        link: projectPath(project.companyId, project.id, `/tasks/${projectTasks[2]!.id}`),
         entityType: 'task',
         entityId: projectTasks[2].id,
         // Прочитанное — чтобы было видно оба состояния списка, а не только
@@ -149,7 +150,7 @@ async function main() {
       title: `${actor(4)?.name ?? 'Someone'} mentioned you in a note`,
       body: 'Two different refund windows — support says 14 days, terms say 30.',
       summary: 'Wants your call on which refund window is correct.',
-      link: `/p/${project.id}/notes`,
+      link: projectPath(project.companyId, project.id, '/notes'),
       entityType: 'note',
       createdAt: minutesAgo(1500),
     })

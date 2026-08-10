@@ -137,7 +137,7 @@ type NotifyParams = {
   actorName?: string
   /** ключ дедупа (без него дедуп по event+project+recipient — раз в вызов) */
   dedupeKey?: string
-  /** относительный путь для ссылки «Открыть», напр. `/p/<id>?msg=<id>` */
+  /** относительный путь для ссылки «Открыть», напр. `/c/<company>/p/<id>?msg=<id>` — собирайте его projectPath (SPEC §8.45) */
   link?: string
   /** превью-текст (сообщение/комментарий/заголовок задачи) */
   preview?: string

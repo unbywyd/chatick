@@ -1,5 +1,6 @@
 import { and, eq, isNull, desc } from 'drizzle-orm'
 import { db } from './client.js'
+import { projectPath } from '../lib/links.js'
 import { messages, notifications, projectMembers, projects, tasks, users } from './schema.js'
 
 /**
@@ -90,7 +91,9 @@ async function main() {
     // человек читает про одно, попадает в другое и считает это ошибкой.
     let entityType: string | null = null
     let entityId: string | null = null
-    let link = `/p/${project.id}/chat`
+    // Адрес проекта включает компанию (SPEC §8.45): без неё маршрута нет и
+    // клик по уведомлению открывает пустую страницу.
+    let link = projectPath(project.companyId, project.id, '/chat')
     let body = draft.body
     let summary = draft.summary
 
@@ -102,7 +105,7 @@ async function main() {
       if (msg) {
         entityType = 'message'
         entityId = msg.id
-        link = `/p/${project.id}/chat?msg=${msg.id}`
+        link = projectPath(project.companyId, project.id, `/chat?msg=${msg.id}`)
       }
     } else {
       const task = await db.query.tasks.findFirst({
@@ -112,7 +115,7 @@ async function main() {
       if (task) {
         entityType = 'task'
         entityId = task.id
-        link = `/p/${project.id}/tasks/${task.id}`
+        link = projectPath(project.companyId, project.id, `/tasks/${task.id}`)
         // Пишем про ту задачу, куда ведём, а не про абстрактную.
         body = draft.body.replace('{task}', `${task.number} «${task.title}»`)
         summary = draft.summary.replace('{task}', task.title)

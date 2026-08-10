@@ -65,12 +65,24 @@ export async function sendAddedToProjectMail(p: { to: string; locale?: string | 
   const lang = mailLang(p.locale)
   const s = ADDED[lang]
   const v = { project: p.projectName }
-  await send(p.to, fmt(s.subject, v), {
-    lang,
-    title: fmt(s.title, v),
-    paragraphs: [fmt(s.body, v)],
-    action: { label: s.cta, url: `${appUrl()}/#/p/${p.projectId}` },
-  })
+  // Адрес проекта включает компанию (SPEC §8.45). Здесь оставался старый
+  // формат `/#/p/<id>` — такого маршрута во фронте нет, и человек, пришедший
+  // из письма, открывал белый экран: роутер не находит путь и не рисует
+  // ничего. Собираем адрес общим projectUrl, как во всех остальных письмах.
+  const companyId = (await companyOf(p.projectId)) ?? ''
+  await send(
+    p.to,
+    fmt(s.subject, v),
+    {
+      lang,
+      title: fmt(s.title, v),
+      paragraphs: [fmt(s.body, v)],
+      action: { label: s.cta, url: projectUrl(appUrl(), companyId, p.projectId) },
+    },
+    // С почты компании, а не с нашей: письмо про их проект «от Chatick»
+    // читается как чужое. Остальные письма о проекте уже уходят так.
+    { projectId: p.projectId },
+  )
 }
 
 // --- Исключён из проекта -------------------------------------------------

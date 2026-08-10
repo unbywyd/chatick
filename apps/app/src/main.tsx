@@ -1,9 +1,12 @@
 import { StrictMode } from 'react'
 import { createRoot } from 'react-dom/client'
-import { HashRouter, Routes, Route, Navigate, useParams } from 'react-router-dom'
+import { HashRouter, Routes, Route, Navigate, useParams, useNavigate } from 'react-router-dom'
+import { useTranslation } from 'react-i18next'
+import { Compass } from 'lucide-react'
 import { QueryClient, QueryClientProvider, useQuery } from '@tanstack/react-query'
 import { Toaster } from 'sonner'
-import { api } from '@/lib/api'
+import { api, getSessionToken } from '@/lib/api'
+import { Button } from '@/components/ui/button'
 import './index.css'
 import './i18n'
 import { useDesktopSync, usePresence } from './hooks/useDesktop'
@@ -44,6 +47,61 @@ function DesktopSync() {
   // Системные уведомления — и в браузере, и в Electron.
   useSystemNotifications()
   return null
+}
+
+/**
+ * Старый адрес проекта `/p/:id` — без компании (до SPEC §8.45).
+ *
+ * Письма с такими ссылками уже разосланы и лежат в почтовых ящиках; починка
+ * генератора спасает только будущие. Здесь узнаём компанию по проекту и
+ * уводим на нынешний адрес — человек из письма попадает туда, куда шёл.
+ *
+ * Не нашли (нет доступа, проект удалён) — на список проектов: там ему хотя бы
+ * объяснят, а белый экран не объясняет ничего.
+ */
+function LegacyProjectRedirect() {
+  const { id } = useParams()
+  const { data, isError } = useQuery({
+    queryKey: ['legacy-project', id],
+    queryFn: () => api<{ companyId: string }>(`/api/v1/projects/${id}`),
+    enabled: Boolean(id),
+    retry: false,
+  })
+  if (isError) return <Navigate to="/start" replace />
+  if (!data) return null
+  return <Navigate to={`/c/${data.companyId}/p/${id}`} replace />
+}
+
+/**
+ * Адрес, которого нет.
+ *
+ * Роутер, не найдя маршрут, не рисует НИЧЕГО — человек видит белый экран и
+ * решает, что сломался продукт. Так выглядела ссылка из старого письма, но
+ * причин попасть сюда больше: опечатка в адресе, ссылка на удалённое, старая
+ * закладка.
+ *
+ * Кнопка ведёт туда, где человек точно не застрянет: вошедшего — к проектам,
+ * остальных — на вход. Отправлять незалогиненного «к проектам» значит показать
+ * ему форму входа под заголовком «страница не найдена».
+ */
+function NotFoundScreen() {
+  const { t } = useTranslation()
+  const navigate = useNavigate()
+  const signedIn = Boolean(getSessionToken())
+  return (
+    <div className="grid h-dvh place-items-center p-6 text-center">
+      <div className="max-w-sm">
+        <span className="mx-auto grid size-14 place-items-center rounded-2xl bg-secondary text-muted-foreground">
+          <Compass className="size-7" />
+        </span>
+        <h2 className="mt-4 text-base font-semibold">{t('notFound.title')}</h2>
+        <p className="mt-2 text-sm text-muted-foreground">{t('notFound.text')}</p>
+        <Button variant="brand" className="mt-5" onClick={() => navigate(signedIn ? '/start' : '/login')}>
+          {signedIn ? t('notFound.cta') : t('notFound.ctaLogin')}
+        </Button>
+      </div>
+    </div>
+  )
 }
 
 // Обёртки: тянут контекст layout'а (Outlet) и параметры URL
@@ -158,6 +216,12 @@ createRoot(document.getElementById('root')!).render(
               {/* Компания в адресе: контекст известен до загрузки проекта.
                   Пока он грузился, шапка подставляла первую компанию из
                   списка — человек видел чужое название над своим проектом. */}
+              {/* Старый адрес проекта, без компании.
+                  Такие ссылки разосланы в письмах «вас добавили в проект» и
+                  живут в чужих почтовых ящиках вечно — маршрут убрать нельзя,
+                  иначе человек снова получит белый экран. Узнаём компанию и
+                  переводим на нынешний адрес. */}
+              <Route path="/p/:id" element={<LegacyProjectRedirect />} />
               <Route path="/c/:companyId/p/:id" element={<ProjectLayout />}>
                 {/* чат — такая же вкладка проекта, с собственным URL */}
                 <Route index element={<Navigate to="chat" replace />} />
@@ -183,6 +247,10 @@ createRoot(document.getElementById('root')!).render(
                 {/* горячие клавиши — страница настройки, из меню профиля */}
                 <Route path="shortcuts" element={<ShortcutsTab />} />
               </Route>
+              {/* Всё остальное. Без этого неизвестный адрес давал пустой
+                  экран: роутер не находит маршрут и не рисует ничего, а
+                  человек видит белую страницу вместо объяснения. */}
+              <Route path="*" element={<NotFoundScreen />} />
             </Routes>
           </HashRouter>
         </ConfirmProvider>
