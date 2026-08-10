@@ -592,7 +592,15 @@
     .text-brand {
       color: var(--brand-ink);
     }
-    .border-brand {
+    /* Наведение — отдельным классом: Tailwind генерирует для hover: свой
+       селектор, и правило выше его не покрывало. Ссылка в покое читалась
+       (brand-ink), а под курсором уходила в яркий лайм с контрастом 1.23:1 —
+       то есть пропадала ровно в тот момент, когда на неё смотрят. */
+    .hover\:text-brand:hover {
+      color: var(--brand-ink);
+    }
+    .border-brand,
+    .hover\:border-brand:hover {
       border-color: var(--brand-ink);
     }
     /* полупрозрачные лаймовые подложки на белом сливаются с фоном */
