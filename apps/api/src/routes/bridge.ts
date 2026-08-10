@@ -1544,7 +1544,13 @@ bridgeRoute.patch('/tasks/:id', async (c) => {
     patch.assigneeId = resolved
   }
 
-  if (!Object.keys(patch).length) return c.json({ error: 'Nothing to update' }, 400)
+  // Вложения и ресурсы живут не в полях задачи, а в своих таблицах — но это
+  // такое же изменение. Без этой оговорки запрос «привяжи ресурс к задаче»
+  // отвергался с «Nothing to update»: поле разрешено, в списке допустимых
+  // есть, а ручка считала тело пустым.
+  if (!Object.keys(patch).length && b.attachmentIds === undefined && b.resourceIds === undefined) {
+    return c.json({ error: 'Nothing to update' }, 400)
+  }
 
   // Права — по тому, ЧТО меняют, как и в вебе: передвинуть карточку по доске
   // может любой, кто видит задачи; переписывать её — только tasks.edit.
@@ -1562,7 +1568,11 @@ bridgeRoute.patch('/tasks/:id', async (c) => {
     return c.json({ error: 'Forbidden: you can only edit tasks you created or that are assigned to you' }, 403)
   }
 
-  const [row] = await db.update(tasks).set(patch).where(eq(tasks.id, taskId)).returning()
+  // Пустой set() — ошибка драйвера, а не безобидный no-op: запрос, меняющий
+  // только вложения или ресурсы, не трогает полей самой задачи.
+  const [row] = Object.keys(patch).length
+    ? await db.update(tasks).set(patch).where(eq(tasks.id, taskId)).returning()
+    : [existing]
   void logActivity({
     projectId: scope.projectId,
     actorId: id.userId,
