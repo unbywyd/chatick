@@ -522,7 +522,20 @@
         if (!p || (state.companies || []).length < 2) return ''
         return (state.companies || []).find((c) => c.id === p.companyId)?.name || ''
       }
-      const openProjectLink = (id) => `/p/${id}/chat`
+      // Путь в проект. Компания в адресе обязательна: маршрут в приложении —
+      // /c/<companyId>/p/<projectId>. Без неё ссылка не совпадала ни с одним
+      // маршрутом, и клик по проекту открывал ЧЁРНЫЙ ЭКРАН — пустой роутер.
+      //
+      // Берём companyId из самого проекта, а если его нет (проект пришёл из
+      // уведомления одной лишь парой id+имя) — ищем в общем списке.
+      const openProjectLink = (id) => {
+        const p = projectById(id)
+        const companyId = p?.companyId
+        // Компанию не нашли — ведём на стартовый экран, а не в никуда: там
+        // проект хотя бы можно выбрать руками.
+        if (!companyId) return '/start'
+        return `/c/${companyId}/p/${id}/chat`
+      }
       const refocus = (id) => {
         const el = $(id)
         if (el) { el.focus(); el.setSelectionRange(el.value.length, el.value.length) }
