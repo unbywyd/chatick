@@ -1,4 +1,4 @@
-import { StrictMode } from 'react'
+import { StrictMode, useEffect, useState } from 'react'
 import { createRoot } from 'react-dom/client'
 import { HashRouter, Routes, Route, Navigate, useParams, useNavigate } from 'react-router-dom'
 import { useTranslation } from 'react-i18next'
@@ -10,6 +10,7 @@ import { Button } from '@/components/ui/button'
 import './index.css'
 import './i18n'
 import { useDesktopSync, usePresence } from './hooks/useDesktop'
+import { GrantRequestDialog, type GrantRequest } from '@/components/GrantRequestDialog'
 import { useSystemNotifications } from './hooks/useSystemNotifications'
 import { UpdateBanner } from './components/UpdateBanner'
 import { NotifyPermissionPrompt } from './components/NotifyPermissionPrompt'
@@ -46,7 +47,31 @@ function DesktopSync() {
   usePresence()
   // Системные уведомления — и в браузере, и в Electron.
   useSystemNotifications()
-  return null
+
+  /**
+   * Просьба ассистента одобрить его код.
+   *
+   * Живёт здесь, а не на экране подключения: просьба приходит когда угодно, а
+   * человек в этот момент смотрит на задачи или чат. Экран, до которого надо
+   * дойти самому, означал бы, что ассистент ждёт таймаута.
+   */
+  const [grant, setGrant] = useState<GrantRequest | null>(null)
+  useEffect(() => {
+    const bridge = window.chatickDesktop
+    if (!bridge?.onGrantRequest) return
+    return bridge.onGrantRequest((p) => setGrant(p))
+  }, [])
+
+  if (!grant) return null
+  return (
+    <GrantRequestDialog
+      request={grant}
+      onDone={(approved) => {
+        window.chatickDesktop?.grantResult?.({ id: grant.id, approved })
+        setGrant(null)
+      }}
+    />
+  )
 }
 
 /**

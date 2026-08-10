@@ -30,6 +30,13 @@ type DesktopBridge = {
   onTaskTimer: (fn: (taskId: string) => void) => () => void
   onStateRefresh: (fn: () => void) => () => void
   onConnectRefresh: (fn: () => void) => () => void
+  /**
+   * Ассистент просит одобрить свой код через установленное приложение —
+   * человеку не надо переписывать код из чата. Токен здесь не участвует:
+   * ассистент забирает его у сервера сам, как в обычном device flow.
+   */
+  onGrantRequest?: (fn: (p: { id: string; client: string; code: string }) => void) => () => void
+  grantResult?: (payload: { id: string; approved: boolean }) => void
   onOpenAbout: (fn: () => void) => () => void
   onConnectRevoke: (fn: (id: string) => void) => () => void
 }

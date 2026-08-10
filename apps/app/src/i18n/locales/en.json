@@ -962,7 +962,7 @@
     "companySubtitle": "The assistant will be able to work in every project of this company that you are a member of — it picks the project itself.",
     "requestsCompanyAccess": "is asking for access to all projects in {{company}}.",
     "companyScopeNote": "It acts as you, only in projects you belong to, and every action is recorded in the project history under your name.",
-    "wholeCompany": "Whole company",
+    "wholeCompany": "whole company",
     "waitingForAi": "Waiting for your AI to connect…",
     "search": "Search projects…",
     "nothingFound": "Nothing found",
@@ -973,7 +973,11 @@
     "masterTitle": "Master access: all my projects",
     "masterNote": "Every company and project I belong to, including future ones. Grants nothing extra — the assistant works with my own permissions.",
     "wholeCompanyShort": "whole company",
-    "allProjects": "all my projects"
+    "allProjects": "all my projects",
+    "grantTitle": "{{client}} is asking for access",
+    "grantSubtitle": "It sent a code — approve it here instead of typing it in.",
+    "grantWhere": "Where should it work?",
+    "noTargets": "No projects available"
   },
   "backup": {
     "title": "Export & import",
