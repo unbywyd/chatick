@@ -104,6 +104,36 @@ export function TasksTab({ projectId, meId }: { projectId: string; meId?: string
     })
   }
 
+  /**
+   * Отметить или снять всю группу разом.
+   *
+   * При восьмидесяти задачах в колонке отмечать по одной бессмысленно, а
+   * shift-диапазон требует сначала найти первую и последнюю. Чекбокс в
+   * заголовке — там, куда человек и так смотрит, читая название группы.
+   */
+  const toggleGroup = (ids: string[], on: boolean) => {
+    setSelected((prev) => {
+      const next = new Set(prev)
+      for (const id of ids) {
+        if (on) next.add(id)
+        else next.delete(id)
+      }
+      return next
+    })
+    lastPickedRef.current = null
+  }
+
+  /**
+   * Инверсия: снять отмеченное, отметить остальное — по тому, что сейчас
+   * видно. Быстрый способ сказать «все, кроме этих трёх», не кликая по
+   * восьмидесяти.
+   */
+  const invertSelection = () => {
+    const order = visibleOrder()
+    setSelected((prev) => new Set(order.filter((id) => !prev.has(id))))
+    lastPickedRef.current = null
+  }
+
   const clearSelection = () => {
     setSelected(new Set())
     lastPickedRef.current = null
@@ -882,9 +912,23 @@ export function TasksTab({ projectId, meId }: { projectId: string; meId?: string
                 {t('files.delete')}
               </Button>
 
-              <button className="ms-auto text-sm text-muted-foreground hover:text-foreground" onClick={clearSelection}>
-                {t('tasks.clearSelection')}
-              </button>
+              <div className="ms-auto flex items-center gap-3 text-sm">
+                {/* Выбрать всё видимое — по тому, что прошло фильтры, а не по
+                    всем задачам проекта: иначе «выбрано 120» относилось бы к
+                    тому, чего на экране нет. */}
+                <button
+                  className="text-muted-foreground hover:text-foreground"
+                  onClick={() => setSelected(new Set(visibleOrder()))}
+                >
+                  {t('tasks.selectAll')}
+                </button>
+                <button className="text-muted-foreground hover:text-foreground" onClick={invertSelection}>
+                  {t('tasks.invertSelection')}
+                </button>
+                <button className="text-muted-foreground hover:text-foreground" onClick={clearSelection}>
+                  {t('tasks.clearSelection')}
+                </button>
+              </div>
             </div>
           )}
 
@@ -906,6 +950,30 @@ export function TasksTab({ projectId, meId }: { projectId: string; meId?: string
                   }}
                 >
                   <h3 className="mb-2 flex items-center gap-2 text-sm font-semibold text-muted-foreground">
+                    {/* Выбор всей группы. Появляется при наведении на
+                        заголовок или когда выбор уже начат — как и чекбоксы
+                        строк: в спокойном списке он был бы лишним шумом. */}
+                    <label
+                      className={cn(
+                        'grid size-5 shrink-0 place-items-center transition-opacity',
+                        picked.length > 0 ? 'opacity-100' : 'opacity-0 hover:opacity-100 focus-within:opacity-100',
+                      )}
+                    >
+                      <input
+                        type="checkbox"
+                        // Наполовину — когда отмечена часть группы: иначе
+                        // галочка врёт, будто выбрано всё.
+                        ref={(el) => {
+                          if (!el) return
+                          const inGroup = list.filter((x) => selected.has(x.id)).length
+                          el.indeterminate = inGroup > 0 && inGroup < list.length
+                        }}
+                        checked={list.length > 0 && list.every((x) => selected.has(x.id))}
+                        onChange={(e) => toggleGroup(list.map((x) => x.id), e.target.checked)}
+                        className="size-4 cursor-pointer accent-brand"
+                        aria-label={t('tasks.selectGroup')}
+                      />
+                    </label>
                     <StatusBadge status={status} />
                     <span className="tabular-nums">({list.length})</span>
                   </h3>

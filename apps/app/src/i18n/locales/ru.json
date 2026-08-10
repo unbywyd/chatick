@@ -283,7 +283,10 @@
     "bulkDone": "Изменено: {{count}}",
     "bulkDeleted": "Удалено: {{count}}",
     "bulkPartial": "Готово {{ok}}, не удалось {{failed}}",
-    "bulkDeleteConfirm": "Удалить задач: {{count}}?"
+    "bulkDeleteConfirm": "Удалить задач: {{count}}?",
+    "selectGroup": "Выбрать всю группу",
+    "selectAll": "Выбрать все",
+    "invertSelection": "Инвертировать"
   },
   "files": {
     "search": "Поиск файлов…",

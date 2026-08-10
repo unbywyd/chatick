@@ -282,7 +282,10 @@
     "bulkDone": "עודכנו: {{count}}",
     "bulkDeleted": "נמחקו: {{count}}",
     "bulkPartial": "הצליחו {{ok}}, נכשלו {{failed}}",
-    "bulkDeleteConfirm": "למחוק {{count}} משימות?"
+    "bulkDeleteConfirm": "למחוק {{count}} משימות?",
+    "selectGroup": "בחירת כל הקבוצה",
+    "selectAll": "בחירת הכול",
+    "invertSelection": "היפוך בחירה"
   },
   "files": {
     "search": "חיפוש קבצים…",

@@ -282,7 +282,10 @@
     "bulkDone": "Updated {{count}}",
     "bulkDeleted": "Deleted {{count}}",
     "bulkPartial": "{{ok}} done, {{failed}} failed",
-    "bulkDeleteConfirm": "Delete {{count}} tasks?"
+    "bulkDeleteConfirm": "Delete {{count}} tasks?",
+    "selectGroup": "Select the whole group",
+    "selectAll": "Select all",
+    "invertSelection": "Invert"
   },
   "files": {
     "search": "Search files…",
