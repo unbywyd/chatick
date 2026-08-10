@@ -34,6 +34,7 @@ export function GrantRequestDialog({
 }) {
   const { t } = useTranslation()
   const [target, setTarget] = useState('')
+  const [query, setQuery] = useState('')
   const [busy, setBusy] = useState(false)
 
   const companies = useQuery({
@@ -63,21 +64,38 @@ export function GrantRequestDialog({
   // Компании и проекты — как на экране подключения. Компания это не «больше
   // прав»: туннель открывает ровно те проекты, где человек состоит, и с его
   // же правами, что проверяется на каждом запросе.
-  const targets = [
+  //
+  // Компанию подписываем ВСЕГДА, а не только при нескольких. Рядом стоит
+  // строка «вся компания», и без подписи не видно, относятся ли проекты
+  // к ней же: человек выдаёт доступ, не понимая границ.
+  const allTargets = [
     ...myCompanies.map((c) => ({ key: `c:${c.id}`, name: c.name, sub: null as string | null, whole: true })),
     ...myProjects.map((p) => ({
       key: `p:${p.id}`,
       name: p.name,
-      sub: myCompanies.length > 1 ? (companyNames.get((p as { companyId?: string }).companyId ?? '') ?? null) : null,
+      sub: companyNames.get((p as { companyId?: string }).companyId ?? '') ?? null,
       whole: false,
     })),
   ]
 
+  // Список прокручиваемый, но прокруткой ищут плохо: на десятках проектов
+  // нужный ищется глазами по всему списку. Поиск появляется тогда, когда
+  // начинает быть нужен, и не мозолит глаза при трёх проектах.
+  const needsSearch = allTargets.length > 7
+  const needle = query.trim().toLowerCase()
+  const targets = needle
+    ? allTargets.filter((x) => `${x.name} ${x.sub ?? ''}`.toLowerCase().includes(needle))
+    : allTargets
+
   // Одна цель — выбирать не из чего, ставим сразу: лишний клик по
   // единственной кнопке ничего не решает.
+  //
+  // Считаем по полному списку, а не по отфильтрованному: иначе запрос,
+  // сузивший список до одной строки, выбирал бы её молча — человек нажал бы
+  // «Разрешить», не заметив, что выбрано.
   useEffect(() => {
-    if (!target && targets.length === 1) setTarget(targets[0]!.key)
-  }, [target, targets])
+    if (!target && allTargets.length === 1) setTarget(allTargets[0]!.key)
+  }, [target, allTargets])
 
   const approve = async () => {
     if (!target) return
@@ -118,8 +136,23 @@ export function GrantRequestDialog({
         </div>
 
         <p className="mt-4 text-sm font-medium">{t('connect.grantWhere')}</p>
+        {needsSearch && (
+          <input
+            autoFocus
+            value={query}
+            onChange={(e) => setQuery(e.target.value)}
+            placeholder={t('connect.grantSearch')}
+            className="mt-2 w-full rounded-md border bg-background px-2.5 py-1.5 text-sm outline-none focus:border-brand"
+          />
+        )}
         <div className="mt-2 max-h-64 space-y-1 overflow-y-auto">
-          {targets.length === 0 && <p className="text-sm text-muted-foreground">{t('connect.noTargets')}</p>}
+          {targets.length === 0 && (
+            // «Ничего не найдено» и «нет доступных проектов» — разные вещи:
+            // второе при непустом поиске было бы прямой неправдой.
+            <p className="text-sm text-muted-foreground">
+              {needle ? t('connect.grantNoMatch') : t('connect.noTargets')}
+            </p>
+          )}
           {targets.map((x) => (
             <button
               key={x.key}

@@ -189,19 +189,33 @@ export function OverviewTab({
                 stroke="currentColor"
                 opacity={0.5}
               />
+              {/*
+                Названия проектов бывают двуязычными и длинными — «פשוט לגעת -
+                Simply Touch (רון דגן & עמית נוה)». Recharts переносит такие на
+                три строки, они наезжают на соседние и обрезаются сверху.
+                Расширять ось бессмысленно: она съест сам график, а название
+                всё равно не влезет. Поэтому одна строка с многоточием, а
+                целиком имя показывает подсказка.
+              */}
               <YAxis
                 type="category"
                 dataKey="name"
-                width={130}
+                width={140}
                 tickLine={false}
                 axisLine={false}
                 className="text-[10px]"
                 stroke="currentColor"
                 opacity={0.7}
+                interval={0}
+                tick={{ width: 132 }}
+                tickFormatter={(name: string) => (name.length > 22 ? `${name.slice(0, 21)}…` : name)}
               />
               <Tooltip
                 cursor={{ fill: 'currentColor', opacity: 0.06 }}
                 contentStyle={CHART_STYLE}
+                // Метка обрезана — подсказка обязана давать полное имя, иначе
+                // два похожих проекта не различить.
+                labelFormatter={(_l, p) => (p?.[0]?.payload as { name?: string } | undefined)?.name ?? ''}
                 formatter={(m) => [formatDuration(Number(m)), t('time.total')]}
               />
               <Bar dataKey="minutes" radius={[0, 4, 4, 0]} maxBarSize={28}>

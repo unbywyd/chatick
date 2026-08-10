@@ -978,7 +978,9 @@
     "grantTitle": "{{client}} מבקש גישה",
     "grantSubtitle": "הקוד נשלח — אשרו כאן, אין צורך להקליד אותו.",
     "grantWhere": "היכן הוא יעבוד?",
-    "noTargets": "אין פרויקטים זמינים"
+    "noTargets": "אין פרויקטים זמינים",
+    "grantSearch": "חיפוש",
+    "grantNoMatch": "לא נמצאו תוצאות"
   },
   "backup": {
     "title": "ייצוא וייבוא",

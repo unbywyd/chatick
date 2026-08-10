@@ -977,7 +977,9 @@
     "grantTitle": "{{client}} is asking for access",
     "grantSubtitle": "It sent a code — approve it here instead of typing it in.",
     "grantWhere": "Where should it work?",
-    "noTargets": "No projects available"
+    "noTargets": "No projects available",
+    "grantSearch": "Search",
+    "grantNoMatch": "Nothing matches"
   },
   "backup": {
     "title": "Export & import",
