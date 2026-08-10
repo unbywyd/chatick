@@ -556,6 +556,11 @@ ${endpointCatalog('')}
   POST   /x/documents          {"title","content"}   content is HTML
   PATCH  /x/documents/<id>     {"title?","content?"}
   POST   /x/documents/<id>/append  {"content"}       safe for long docs
+
+  Writing answers with "totalChars" — the length AFTER the write. Compare it
+  with what you sent: {id, title} alone looks like success whatever happened,
+  and reporting a saved document that still holds the old text is worse than
+  reporting a failure.
   DELETE /x/documents/<id>
   GET    /x/documents/<id>/versions                    who changed it and when
   POST   /x/documents/<id>/versions/<versionId>/restore
@@ -944,6 +949,8 @@ ${endpointCatalog('?project=<id>')}
 
   GET / POST / PATCH / DELETE  /x/documents...?project=<id>
   POST   /x/documents/<id>/append?project=<id>
+         Writing answers with "totalChars" — the length after the write.
+         Check it against what you sent instead of trusting {id, title}.
   GET / POST  /x/messages?project=<id>   POST takes {"text","replyToId?","attachmentIds?"}
   GET    /x/messages/<messageId>/context?project=<id>   conversation around a message
   DELETE /x/messages/<id>?project=<id>   author removes their own, admin any
