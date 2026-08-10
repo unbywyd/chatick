@@ -40,6 +40,11 @@ function endpointCatalog(q: string): string {
          appears in a path. Use the number: it is what the human says out
          loud, it survives you losing whatever id map you kept, and it is
          what the reply shows you.
+
+         Every task in a reply carries "url" — the ready link to open it.
+         Give the human THAT, never one you assembled yourself: the address
+         format has changed once already, and a guessed /#/p/<id> opens a
+         blank screen.
   POST   /x/tasks${q}              {"title","description?","assignee?","status?","priority?","estimateMinutes?","sprintId?","attachmentIds?","resourceIds?","refs?"}
   PATCH  /x/tasks/<id>${q}         any subset of the same fields
   PATCH  /x/tasks/bulk${q}         {"tasks":["TASK-4","TASK-7"], "set":{...}, "refs":{"TASK-4":"19.1"}}

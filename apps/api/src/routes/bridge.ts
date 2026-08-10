@@ -53,7 +53,7 @@ import { createShare, revokeShare, type ShareEntityType } from './shares.js'
 import { notifyChatMentions } from './messages.js'
 import { notify, extractMentions } from '../lib/notify.js'
 import { notifyTask, unassignNotice, dependentsOf, blockersOf } from './tasks.js'
-import { projectPath, companyOf } from '../lib/links.js'
+import { projectPath, projectUrl, companyOf } from '../lib/links.js'
 import { htmlToText, sanitizeHtml } from '../lib/sanitize-html.js'
 import { richText } from '../lib/markdown.js'
 import { normalizeRefs } from '../lib/task-refs.js'
@@ -351,7 +351,9 @@ bridgeRoute.post('/projects', async (c) => {
     )
   }
 
-  const body = (await c.req.json().catch(() => ({}))) as Record<string, unknown>
+  const parsed_body = await readJson(c as never)
+  if ('error' in parsed_body) return c.json(parsed_body, 400)
+  const body = parsed_body.body as Record<string, unknown>
   const name = typeof body.name === 'string' ? body.name.trim() : ''
   if (!name) return c.json({ error: 'name is required' }, 400)
   const about = typeof body.about === 'string' ? body.about.slice(0, 5000) : ''
@@ -413,7 +415,9 @@ bridgeRoute.patch('/projects/:id', async (c) => {
     return c.json({ error: 'Only project owners/admins and company managers can change settings' }, 403)
   }
 
-  const body = (await c.req.json().catch(() => ({}))) as Record<string, unknown>
+  const parsed_body = await readJson(c as never)
+  if ('error' in parsed_body) return c.json(parsed_body, 400)
+  const body = parsed_body.body as Record<string, unknown>
   const patch: Record<string, unknown> = {}
   if (typeof body.name === 'string' && body.name.trim()) patch.name = body.name.trim().slice(0, 120)
   if (typeof body.about === 'string') patch.about = body.about.slice(0, 5000)
@@ -679,7 +683,9 @@ bridgeRoute.get('/inbox', async (c) => {
 
 bridgeRoute.post('/inbox/read', async (c) => {
   const id = auth(c as never)
-  const b = (await c.req.json().catch(() => ({}))) as Record<string, unknown>
+  const parsed_b = await readJson(c as never)
+  if ('error' in parsed_b) return c.json(parsed_b, 400)
+  const b = parsed_b.body as Record<string, unknown>
   const ids = Array.isArray(b.ids) ? (b.ids as unknown[]).map(String) : []
   const all = b.all === true
 
@@ -913,6 +919,50 @@ async function linkResources(resourceIds: unknown, projectId: string, taskId: st
   return rows
 }
 
+/**
+ * Разобрать тело запроса, назвав ошибку разбора ошибкой разбора.
+ *
+ * Раньше повсюду стояло `c.req.json().catch(() => ({}))`: сломанный JSON молча
+ * превращался в пустой объект, и дальше валидация честно сообщала «title is
+ * required». Ассистент шёл искать проблему в title, а дело было в одном
+ * обратном слэше — например, в ивритском «מאשר\\ת», где он ломает строку.
+ * Двадцать минут поисков не в том месте.
+ *
+ * Возвращает либо тело, либо готовый ответ с позицией, на которой парсер
+ * споткнулся: по ней видно, какой символ виноват.
+ */
+async function readJson(c: {
+  req: { text: () => Promise<string> }
+}): Promise<{ body: Record<string, unknown> } | { error: string; hint: string }> {
+  const raw = await c.req.text().catch(() => '')
+  if (!raw.trim()) return { body: {} }
+  try {
+    const parsed = JSON.parse(raw) as unknown
+    if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) {
+      return { error: 'Body must be a JSON object', hint: `Got ${Array.isArray(parsed) ? 'an array' : typeof parsed}.` }
+    }
+    return { body: parsed as Record<string, unknown> }
+  } catch (e) {
+    const message = e instanceof Error ? e.message : String(e)
+    // Позиция из сообщения движка + кусок текста вокруг неё: «ошибка на 47»
+    // без самого текста заставляет считать символы руками.
+    //
+    // Позицию сообщают не все версии V8 — в новых её в тексте нет. Тогда
+    // показываем начало тела: даже оно полезнее пустоты, потому что чаще
+    // всего ломается первая же строка с экранированием.
+    const at = /position (\d+)/.exec(message)?.[1]
+    const near = at
+      ? raw.slice(Math.max(0, Number(at) - 30), Number(at) + 30)
+      : raw.slice(0, 120)
+    return {
+      error: `Invalid JSON: ${message}`,
+      hint: near
+        ? `Near: …${near}… — a backslash or an unescaped quote is the usual cause; in JSON a literal \\ must be written \\\\.`
+        : 'A backslash or an unescaped quote is the usual cause; in JSON a literal \\ must be written \\\\.',
+    }
+  }
+}
+
 function unknownFields(body: Record<string, unknown>, allowed: readonly string[]): string | null {
   const extra = Object.keys(body).filter((k) => !allowed.includes(k))
   if (!extra.length) return null
@@ -1049,9 +1099,24 @@ const taskView = (
   assignee?: { id: string; name: string } | null,
   attachments?: ReturnType<typeof fileView>[],
   deps?: { openBlockers: number; blocking: number },
+  /**
+   * Компания проекта — только чтобы собрать ссылку. Приходит параметром, а не
+   * запросом внутри: taskView зовут на каждую строку списка, и запрос на
+   * компанию превратился бы в полсотни одинаковых.
+   */
+  companyId?: string | null,
 ) => ({
   id: t.id,
   number: t.number,
+  /**
+   * Готовая ссылка на задачу.
+   *
+   * Раньше в ответе был только id, и клиент собирал адрес сам — угадывая
+   * формат. Угадывали неверно: /#/p/<id> без компании выглядит правдоподобно,
+   * а такого маршрута нет, и человек из ссылки попадал на белый экран. Отдать
+   * готовый URL дешевле, чем чинить каждого клиента отдельно.
+   */
+  ...(companyId ? { url: projectUrl(env.APP_URL, companyId, t.projectId, `/tasks/${t.id}`) } : {}),
   title: t.title,
   description: t.description,
   status: t.status,
@@ -1182,8 +1247,11 @@ bridgeRoute.get('/tasks', async (c) => {
     new Map(rows.map((r) => [r.t.id, r.t.description])),
   )
   const deps = await depCounts(rows.map((r) => r.t.id))
+  // Компания — один раз на весь список: она у всех задач одна, а внутри
+  // taskView запрос повторился бы на каждую строку.
+  const listCompanyId = await companyOf(scope.projectId)
   return c.json({
-    items: rows.map((r) => taskView(r.t, r.u, byTask.get(r.t.id), deps.get(r.t.id))),
+    items: rows.map((r) => taskView(r.t, r.u, byTask.get(r.t.id), deps.get(r.t.id), listCompanyId)),
     count: rows.length,
     total,
     // Явный признак, а не «сравни два числа сам»: пропустить его труднее.
@@ -1207,7 +1275,9 @@ bridgeRoute.patch('/tasks/bulk', async (c) => {
   const scope = await resolveProject(c as never)
   if ('error' in scope) return c.json({ error: scope.error }, scope.status)
 
-  const b = (await c.req.json().catch(() => ({}))) as Record<string, unknown>
+  const parsed_b = await readJson(c as never)
+  if ('error' in parsed_b) return c.json(parsed_b, 400)
+  const b = parsed_b.body as Record<string, unknown>
   const bad = unknownFields(b, BULK_FIELDS)
   if (bad) return c.json({ error: bad }, 400)
 
@@ -1277,6 +1347,8 @@ bridgeRoute.patch('/tasks/bulk', async (c) => {
     byKey.set(r.number.toUpperCase(), r)
   }
 
+  // Одна на всю пачку: задачи из одного проекта.
+  const bulkCompanyId = await companyOf(scope.projectId)
   const updated: ReturnType<typeof taskView>[] = []
   const failed: { task: string; error: string }[] = []
   const touched = new Set<string | null>()
@@ -1324,7 +1396,7 @@ bridgeRoute.patch('/tasks/bulk', async (c) => {
     for (const u of [row!.assigneeId, row!.createdById, existing.assigneeId, existing.createdById]) touched.add(u)
 
     const who = row!.assigneeId ? await db.query.users.findFirst({ where: eq(users.id, row!.assigneeId) }) : null
-    updated.push(taskView(row!, who))
+    updated.push(taskView(row!, who, undefined, undefined, bulkCompanyId))
   }
 
   // Список обновляем один раз на всю партию, а не на каждую задачу.
@@ -1356,7 +1428,9 @@ bridgeRoute.delete('/tasks/bulk', async (c) => {
   const scope = await resolveProject(c as never)
   if ('error' in scope) return c.json({ error: scope.error }, scope.status)
 
-  const b = (await c.req.json().catch(() => ({}))) as Record<string, unknown>
+  const parsed_b = await readJson(c as never)
+  if ('error' in parsed_b) return c.json(parsed_b, 400)
+  const b = parsed_b.body as Record<string, unknown>
   const bad = unknownFields(b, ['tasks', 'project'])
   if (bad) return c.json({ error: bad }, 400)
 
@@ -1450,7 +1524,7 @@ bridgeRoute.get('/tasks/:id', async (c) => {
     scope.projectId,
     new Map([[row[0]!.t.id, row[0]!.t.description]]),
   )
-  return c.json(taskView(row[0]!.t, row[0]!.u, attached.get(row[0]!.t.id)))
+  return c.json(taskView(row[0]!.t, row[0]!.u, attached.get(row[0]!.t.id), undefined, await companyOf(scope.projectId)))
 })
 
 bridgeRoute.post('/tasks', async (c) => {
@@ -1460,7 +1534,9 @@ bridgeRoute.post('/tasks', async (c) => {
   const denied = await require(c as never, 'tasks.create', scope.projectId)
   if (denied) return c.json(denied, 403)
 
-  const b = (await c.req.json().catch(() => ({}))) as Record<string, unknown>
+  const parsed_b = await readJson(c as never)
+  if ('error' in parsed_b) return c.json(parsed_b, 400)
+  const b = parsed_b.body as Record<string, unknown>
   const bad = unknownFields(b, TASK_FIELDS)
   if (bad) return c.json({ error: bad }, 400)
 
@@ -1514,7 +1590,7 @@ bridgeRoute.post('/tasks', async (c) => {
   tasksChanged(scope.projectId, [row!.assigneeId, row!.createdById])
   // подтягиваем исполнителя, чтобы агент сразу видел, на кого задача ушла
   const who = row!.assigneeId ? await db.query.users.findFirst({ where: eq(users.id, row!.assigneeId) }) : null
-  return c.json({ ...taskView(row!, who), attachments }, 201)
+  return c.json({ ...taskView(row!, who, undefined, undefined, await companyOf(scope.projectId)), attachments }, 201)
 })
 
 bridgeRoute.patch('/tasks/:id', async (c) => {
@@ -1526,7 +1602,9 @@ bridgeRoute.patch('/tasks/:id', async (c) => {
   if (!existing) return c.json({ error: 'Not found' }, 404)
   const taskId = existing.id
 
-  const b = (await c.req.json().catch(() => ({}))) as Record<string, unknown>
+  const parsed_b = await readJson(c as never)
+  if ('error' in parsed_b) return c.json(parsed_b, 400)
+  const b = parsed_b.body as Record<string, unknown>
   const bad = unknownFields(b, TASK_FIELDS)
   if (bad) return c.json({ error: bad }, 400)
 
@@ -1594,7 +1672,7 @@ bridgeRoute.patch('/tasks/:id', async (c) => {
   tasksChanged(scope.projectId, [row!.assigneeId, row!.createdById, existing.assigneeId, existing.createdById])
   const who = row!.assigneeId ? await db.query.users.findFirst({ where: eq(users.id, row!.assigneeId) }) : null
   return c.json({
-    ...taskView(row!, who),
+    ...taskView(row!, who, undefined, undefined, await companyOf(scope.projectId)),
     ...(b.attachmentIds !== undefined ? { attachments } : {}),
     ...(b.resourceIds !== undefined ? { resources } : {}),
   })
@@ -1861,7 +1939,9 @@ bridgeRoute.post('/db/:id/read', async (c) => {
   const denied = await require(c as never, 'resources.read', scope.projectId)
   if (denied) return c.json(denied, 403)
 
-  const b = (await c.req.json().catch(() => ({}))) as Record<string, unknown>
+  const parsed_b = await readJson(c as never)
+  if ('error' in parsed_b) return c.json(parsed_b, 400)
+  const b = parsed_b.body as Record<string, unknown>
   const bad = unknownFields(b, ['sql', 'limit', 'project'])
   if (bad) return c.json({ error: bad }, 400)
   const sqlText = typeof b.sql === 'string' ? b.sql.trim() : ''
@@ -2029,7 +2109,9 @@ bridgeRoute.post('/tasks/:id/blockers', async (c) => {
   const denied = await require(c as never, 'tasks.edit', scope.projectId)
   if (denied) return c.json(denied, 403)
 
-  const b = (await c.req.json().catch(() => ({}))) as Record<string, unknown>
+  const parsed_b = await readJson(c as never)
+  if ('error' in parsed_b) return c.json(parsed_b, 400)
+  const b = parsed_b.body as Record<string, unknown>
   const bad = unknownFields(b, ['tasks', 'side', 'project'])
   if (bad) return c.json({ error: bad }, 400)
 
@@ -2151,7 +2233,9 @@ bridgeRoute.post('/tasks/:id/checklist', async (c) => {
     return c.json({ error: 'Forbidden: you can only edit tasks you created or that are assigned to you' }, 403)
   }
 
-  const body = (await c.req.json().catch(() => ({}))) as { items?: unknown; text?: unknown; note?: unknown }
+  const parsed_body = await readJson(c as never)
+  if ('error' in parsed_body) return c.json(parsed_body, 400)
+  const body = parsed_body.body as { items?: unknown; text?: unknown; note?: unknown }
   // Списком за раз: вопросы к задаче обычно задают пачкой, а не по одному.
   const incoming = Array.isArray(body.items)
     ? body.items
@@ -2200,7 +2284,9 @@ bridgeRoute.patch('/tasks/:id/checklist/:itemId', async (c) => {
   })
   if (!existing) return c.json({ error: 'Checklist item not found' }, 404)
 
-  const b = (await c.req.json().catch(() => ({}))) as { text?: unknown; note?: unknown; done?: unknown }
+  const parsed_b = await readJson(c as never)
+  if ('error' in parsed_b) return c.json(parsed_b, 400)
+  const b = parsed_b.body as { text?: unknown; note?: unknown; done?: unknown }
   const patch: Record<string, unknown> = { updatedAt: new Date() }
   if (typeof b.text === 'string' && b.text.trim()) patch.text = b.text.trim().slice(0, 500)
   if (typeof b.note === 'string') patch.note = richText(b.note.slice(0, 4000))
@@ -2306,7 +2392,9 @@ bridgeRoute.post('/tasks/:id/comments', async (c) => {
   if ('error' in scope) return c.json({ error: scope.error }, scope.status)
   const denied = await require(c as never, 'tasks.read', scope.projectId)
   if (denied) return c.json(denied, 403)
-  const b = (await c.req.json().catch(() => ({}))) as Record<string, unknown>
+  const parsed_b = await readJson(c as never)
+  if ('error' in parsed_b) return c.json(parsed_b, 400)
+  const b = parsed_b.body as Record<string, unknown>
   const bad = unknownFields(b, COMMENT_FIELDS)
   if (bad) return c.json({ error: bad }, 400)
   const text = typeof b.text === 'string' ? b.text.trim() : ''
@@ -2415,7 +2503,9 @@ bridgeRoute.patch('/tasks/:id/comments/:commentId', async (c) => {
   const denied = await require(c as never, 'tasks.read', scope.projectId)
   if (denied) return c.json(denied, 403)
 
-  const b = (await c.req.json().catch(() => ({}))) as Record<string, unknown>
+  const parsed_b = await readJson(c as never)
+  if ('error' in parsed_b) return c.json(parsed_b, 400)
+  const b = parsed_b.body as Record<string, unknown>
   const bad = unknownFields(b, ['text'] as const)
   if (bad) return c.json({ error: bad }, 400)
   const text = typeof b.text === 'string' ? b.text.trim() : ''
@@ -2559,7 +2649,9 @@ bridgeRoute.post('/members', async (c) => {
   const project = await db.query.projects.findFirst({ where: eq(projects.id, scope.projectId) })
   if (!project) return c.json({ error: 'Project not found' }, 404)
 
-  const body = (await c.req.json().catch(() => ({}))) as {
+  const parsed_body = await readJson(c as never)
+  if ('error' in parsed_body) return c.json(parsed_body, 400)
+  const body = parsed_body.body as {
     userId?: string
     email?: string
     role?: string
@@ -2680,7 +2772,9 @@ bridgeRoute.patch('/members/:userId', async (c) => {
   if (!target) return c.json({ error: 'Not a project member' }, 404)
   if (target.role === 'owner') return c.json({ error: 'Project owner cannot be changed' }, 400)
 
-  const body = (await c.req.json().catch(() => ({}))) as {
+  const parsed_body = await readJson(c as never)
+  if ('error' in parsed_body) return c.json(parsed_body, 400)
+  const body = parsed_body.body as {
     role?: string
     permissions?: Record<string, string>
     jobTitle?: string
@@ -2764,7 +2858,9 @@ bridgeRoute.post('/sprints', async (c) => {
   if ('error' in scope) return c.json({ error: scope.error }, scope.status)
   const denied = await require(c as never, 'tasks.create', scope.projectId)
   if (denied) return c.json(denied, 403)
-  const b = (await c.req.json().catch(() => ({}))) as Record<string, unknown>
+  const parsed_b = await readJson(c as never)
+  if ('error' in parsed_b) return c.json(parsed_b, 400)
+  const b = parsed_b.body as Record<string, unknown>
   const name = typeof b.name === 'string' ? b.name.trim() : ''
   if (!name) return c.json({ error: 'name is required' }, 400)
   const [row] = await db
@@ -2794,7 +2890,9 @@ bridgeRoute.patch('/sprints/:id', async (c) => {
   })
   if (!group) return c.json({ error: 'Not found' }, 404)
 
-  const b = (await c.req.json().catch(() => ({}))) as Record<string, unknown>
+  const parsed_b = await readJson(c as never)
+  if ('error' in parsed_b) return c.json(parsed_b, 400)
+  const b = parsed_b.body as Record<string, unknown>
   const bad = unknownFields(b, ['name', 'color'])
   if (bad) return c.json({ error: bad }, 400)
 
@@ -2927,7 +3025,9 @@ bridgeRoute.post('/time/start', async (c) => {
   const scope = await resolveProject(c as never)
   if ('error' in scope) return c.json({ error: scope.error }, scope.status)
 
-  const b = (await c.req.json().catch(() => ({}))) as Record<string, unknown>
+  const parsed_b = await readJson(c as never)
+  if ('error' in parsed_b) return c.json(parsed_b, 400)
+  const b = parsed_b.body as Record<string, unknown>
   const cfg = await timeConfigForProject(scope.projectId)
 
   // Лимит считает ЧЕЛОВЕКА, а не проект. Пока условие включало projectId,
@@ -2997,7 +3097,9 @@ bridgeRoute.post('/time/stop', async (c) => {
   const scope = await resolveProject(c as never)
   if ('error' in scope) return c.json({ error: scope.error }, scope.status)
 
-  const b = (await c.req.json().catch(() => ({}))) as Record<string, unknown>
+  const parsed_b = await readJson(c as never)
+  if ('error' in parsed_b) return c.json(parsed_b, 400)
+  const b = parsed_b.body as Record<string, unknown>
   // Свой таймер ищем во всех проектах: забытый в соседнем проекте иначе не
   // остановить — ассистент получал «таймер не запущен», а часы шли.
   const running = await db
@@ -3048,7 +3150,9 @@ bridgeRoute.post('/time', async (c) => {
   const scope = await resolveProject(c as never)
   if ('error' in scope) return c.json({ error: scope.error }, scope.status)
 
-  const b = (await c.req.json().catch(() => ({}))) as Record<string, unknown>
+  const parsed_b = await readJson(c as never)
+  if ('error' in parsed_b) return c.json(parsed_b, 400)
+  const b = parsed_b.body as Record<string, unknown>
   const started = new Date(String(b.startedAt ?? ''))
   let ended = new Date(String(b.endedAt ?? ''))
   if (Number.isNaN(started.getTime()) || Number.isNaN(ended.getTime())) {
@@ -3170,7 +3274,9 @@ bridgeRoute.patch('/time/:id', async (c) => {
   if (entry.userId !== id.userId && !(await hasPermission(scope.projectId, id.userId, 'tasks.edit')))
     return c.json({ error: 'That entry belongs to someone else' }, 403)
 
-  const b = (await c.req.json().catch(() => ({}))) as Record<string, unknown>
+  const parsed_b = await readJson(c as never)
+  if ('error' in parsed_b) return c.json(parsed_b, 400)
+  const b = parsed_b.body as Record<string, unknown>
   const bad = unknownFields(b, TIME_PATCH_FIELDS)
   if (bad) return c.json({ error: bad }, 400)
 
@@ -3256,7 +3362,9 @@ bridgeRoute.post('/time/resume', async (c) => {
   const scope = await resolveProject(c as never)
   if ('error' in scope) return c.json({ error: scope.error }, scope.status)
 
-  const b = (await c.req.json().catch(() => ({}))) as Record<string, unknown>
+  const parsed_b = await readJson(c as never)
+  if ('error' in parsed_b) return c.json(parsed_b, 400)
+  const b = parsed_b.body as Record<string, unknown>
   const cfg = await timeConfigForProject(scope.projectId)
 
   const running = await db
@@ -3456,7 +3564,9 @@ bridgeRoute.post('/notes', async (c) => {
   const denied = await require(c as never, 'notes.write', scope.projectId)
   if (denied) return c.json(denied, 403)
 
-  const b = (await c.req.json().catch(() => ({}))) as Record<string, unknown>
+  const parsed_b = await readJson(c as never)
+  if ('error' in parsed_b) return c.json(parsed_b, 400)
+  const b = parsed_b.body as Record<string, unknown>
   const type = String(b.type ?? 'note')
   if (!(NOTE_TYPES as readonly string[]).includes(type)) {
     return c.json({ error: `type must be one of: ${NOTE_TYPES.join(', ')}` }, 400)
@@ -3502,7 +3612,9 @@ bridgeRoute.patch('/notes/:id', async (c) => {
     return c.json({ error: 'Forbidden: you can only edit notes you wrote' }, 403)
   }
 
-  const b = (await c.req.json().catch(() => ({}))) as Record<string, unknown>
+  const parsed_b = await readJson(c as never)
+  if ('error' in parsed_b) return c.json(parsed_b, 400)
+  const b = parsed_b.body as Record<string, unknown>
   const patch: Partial<typeof notes.$inferInsert> = { updatedAt: new Date() }
   if (typeof b.type === 'string') {
     if (!(NOTE_TYPES as readonly string[]).includes(b.type)) {
@@ -3559,7 +3671,9 @@ bridgeRoute.post('/notes/:id/task', async (c) => {
   const denied = (await require(c as never, 'notes.read', scope.projectId)) ?? (await require(c as never, 'tasks.create', scope.projectId))
   if (denied) return c.json(denied, 403)
 
-  const b = (await c.req.json().catch(() => ({}))) as Record<string, unknown>
+  const parsed_b = await readJson(c as never)
+  if ('error' in parsed_b) return c.json(parsed_b, 400)
+  const b = parsed_b.body as Record<string, unknown>
   const res = await noteToTask(scope.projectId, id.userId, c.req.param('id'), {
     title: typeof b.title === 'string' ? b.title : undefined,
     assigneeId: typeof b.assigneeId === 'string' ? b.assigneeId : null,
@@ -3659,7 +3773,9 @@ bridgeRoute.post('/documents', async (c) => {
   if ('error' in scope) return c.json({ error: scope.error }, scope.status)
   const denied = await require(c as never, 'documents.write', scope.projectId)
   if (denied) return c.json(denied, 403)
-  const b = (await c.req.json().catch(() => ({}))) as Record<string, unknown>
+  const parsed_b = await readJson(c as never)
+  if ('error' in parsed_b) return c.json(parsed_b, 400)
+  const b = parsed_b.body as Record<string, unknown>
   const title = typeof b.title === 'string' ? b.title.trim() : ''
   if (!title) return c.json({ error: 'title is required' }, 400)
   const [row] = await db
@@ -3681,7 +3797,7 @@ bridgeRoute.post('/documents', async (c) => {
     entityLabel: row!.title,
   })
   broadcast(scope.projectId, 'documents_changed', {})
-  return c.json({ id: row!.id, title: row!.title }, 201)
+  return c.json({ id: row!.id, title: row!.title, totalChars: row!.content.length }, 201)
 })
 
 bridgeRoute.patch('/documents/:id', async (c) => {
@@ -3696,7 +3812,9 @@ bridgeRoute.patch('/documents/:id', async (c) => {
   })
   if (!d) return c.json({ error: 'Not found' }, 404)
 
-  const b = (await c.req.json().catch(() => ({}))) as Record<string, unknown>
+  const parsed_b = await readJson(c as never)
+  if ('error' in parsed_b) return c.json(parsed_b, 400)
+  const b = parsed_b.body as Record<string, unknown>
   const patch: Record<string, unknown> = { updatedById: id.userId }
   if (typeof b.title === 'string') patch.title = b.title.slice(0, 300)
   if (typeof b.content === 'string') patch.content = richText(b.content).slice(0, 500_000)
@@ -3716,7 +3834,11 @@ bridgeRoute.patch('/documents/:id', async (c) => {
     entityLabel: row!.title,
   })
   broadcast(scope.projectId, 'documents_changed', { id: docId })
-  return c.json({ id: row!.id, title: row!.title })
+  // totalChars, как и в /append: без него ответ «id + title» выглядит успехом
+  // при любом исходе, и записался ли текст на самом деле, узнать нечем —
+  // отдельным GET и то не сразу. Ассистент докладывает о сохранённом
+  // документе, а там прежнее содержимое.
+  return c.json({ id: row!.id, title: row!.title, totalChars: row!.content.length })
 })
 
 bridgeRoute.post('/documents/:id/append', async (c) => {
@@ -3730,7 +3852,9 @@ bridgeRoute.post('/documents/:id/append', async (c) => {
     where: and(eq(documents.id, docId), eq(documents.projectId, scope.projectId), isNull(documents.deletedAt)),
   })
   if (!d) return c.json({ error: 'Not found' }, 404)
-  const b = (await c.req.json().catch(() => ({}))) as Record<string, unknown>
+  const parsed_b = await readJson(c as never)
+  if ('error' in parsed_b) return c.json(parsed_b, 400)
+  const b = parsed_b.body as Record<string, unknown>
   const add = typeof b.content === 'string' ? richText(b.content) : ''
   if (!add) return c.json({ error: 'content is required' }, 400)
 
@@ -4016,7 +4140,9 @@ bridgeRoute.post('/messages', async (c) => {
   const id = auth(c as never)
   const scope = await resolveProject(c as never)
   if ('error' in scope) return c.json({ error: scope.error }, scope.status)
-  const b = (await c.req.json().catch(() => ({}))) as Record<string, unknown>
+  const parsed_b = await readJson(c as never)
+  if ('error' in parsed_b) return c.json(parsed_b, 400)
+  const b = parsed_b.body as Record<string, unknown>
   const text = typeof b.text === 'string' ? b.text.trim() : ''
   // вложения: как в задачах — сначала POST /x/files, потом их id сюда
   const attachmentIds = Array.isArray(b.attachmentIds)
@@ -4199,7 +4325,9 @@ bridgeRoute.post('/resources', async (c) => {
   const denied = await require(c as never, 'resources.manage', scope.projectId)
   if (denied) return c.json(denied, 403)
 
-  const b = (await c.req.json().catch(() => ({}))) as Record<string, unknown>
+  const parsed_b = await readJson(c as never)
+  if ('error' in parsed_b) return c.json(parsed_b, 400)
+  const b = parsed_b.body as Record<string, unknown>
   const bad = unknownFields(b, RESOURCE_FIELDS)
   if (bad) return c.json({ error: bad }, 400)
 
@@ -4298,7 +4426,9 @@ bridgeRoute.patch('/resources/:id', async (c) => {
   })
   if (!existing) return c.json({ error: 'Resource not found' }, 404)
 
-  const b = (await c.req.json().catch(() => ({}))) as Record<string, unknown>
+  const parsed_b = await readJson(c as never)
+  if ('error' in parsed_b) return c.json(parsed_b, 400)
+  const b = parsed_b.body as Record<string, unknown>
   const bad = unknownFields(b, RESOURCE_FIELDS)
   if (bad) return c.json({ error: bad }, 400)
 
