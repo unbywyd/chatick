@@ -441,7 +441,11 @@
     cursor: pointer; /* клик выделяет, двойной — открывает */
   }
   .mention {
-    color: var(--brand);
+    /* --brand-ink, а не --brand: заливка всегда яркий лайм (0.92 светлоты), и
+       такой же текст на ней сливался с подложкой — на светлой теме упоминание
+       читалось как размытое пятно. Ink тёмный на светлой теме и яркий на
+       тёмной, то есть контраст держится в обеих. */
+    color: var(--brand-ink);
     background: color-mix(in oklab, var(--brand) 12%, transparent);
     border-radius: 6px;
     padding: 0.05em 0.3em;
