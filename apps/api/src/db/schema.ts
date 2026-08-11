@@ -1217,6 +1217,45 @@ export const bridgeSessions = pgTable(
 
 export const shareEntity = pgEnum('share_entity', ['file', 'document', 'note', 'resource', 'message', 'task'])
 
+/**
+ * Короткие ссылки: chatick.com/t-AbC12 вместо адреса на 90 символов.
+ *
+ * Это НЕ публикация. Ссылка только ведёт на длинный адрес, а дальше работают
+ * обычные права: у кого нет доступа к проекту, тот попадёт на вход. Публичный
+ * доступ — отдельный механизм (shares), с отзывом и сроком; смешивать их
+ * нельзя, иначе «поделиться с коллегой» однажды означало бы «открыть всем».
+ *
+ * Код не выводится из id сущности: по «t-AbC12» нельзя ни угадать соседнюю
+ * задачу, ни восстановить внутренний идентификатор.
+ *
+ * Тип хранится рядом с кодом, а не кодируется в нём: префикс в адресе — для
+ * человека («t-» читается как задача»), а разбирает ссылку всё равно эта
+ * таблица. Так добавление нового вида сущности не ломает уже выданные ссылки.
+ */
+export const shortLinks = pgTable(
+  'short_links',
+  {
+    id: id(),
+    // Код без префикса: «AbC12». Префикс живёт в адресе и в entityType.
+    code: text('code').notNull().unique(),
+    entityType: text('entity_type').notNull(),
+    entityId: text('entity_id').notNull(),
+    // Проект — для сборки длинного адреса и для зачистки: удалили проект,
+    // ссылки ушли вместе с ним, а не остались вести в никуда.
+    projectId: text('project_id')
+      .notNull()
+      .references(() => projects.id, { onDelete: 'cascade' }),
+    createdById: text('created_by_id').references(() => users.id, { onDelete: 'set null' }),
+    createdAt: createdAt(),
+  },
+  (t) => [
+    // Одна ссылка на сущность: вторая означала бы, что у одной задачи два
+    // «коротких адреса», и в переписке они выглядели бы как разные задачи.
+    uniqueIndex('short_links_entity_idx').on(t.entityType, t.entityId),
+    index('short_links_project_idx').on(t.projectId),
+  ],
+)
+
 export const shares = pgTable(
   'shares',
   {

@@ -70,7 +70,23 @@ export function ShareDialog({
   // WhatsApp все ссылки выглядят одинаково: «Chatick, app.chatick.com».
   // /link отдаёт теги с именем и логотипом проекта, а человека тут же
   // переводит на тот же самый адрес в приложении.
-  const appUrl = previewUrl(appPath)
+  const longUrl = previewUrl(appPath)
+
+  // Короткая ссылка — то же самое, но 19 символов вместо 90: chatick.com/t-AbC12.
+  // Длинную такую в чат не пошлёшь, она переносится по строкам и ломается на «#».
+  //
+  // Доступа она не открывает: адрес назначения тот же, дальше решают права.
+  // Публичный доступ — соседняя секция, и путать их нельзя.
+  const shortQ = useQuery({
+    queryKey: ['short-link', type, id],
+    queryFn: () => api<{ url: string | null }>(`/api/v1/shares/short/${type}/${id}`),
+    // Код выдаётся один раз и не меняется — перезапрашивать нечего.
+    staleTime: Infinity,
+    retry: false,
+  })
+  // Пока код едет — показываем длинную ссылку, а не пустое поле: копировать
+  // будет нечего, и человек решит, что диалог сломан.
+  const appUrl = shortQ.data?.url ?? longUrl
   // Ссылка ведёт на СТРАНИЦУ, а не на JSON: /s/:slug у API — это данные для
   // неё, и присылать человеку голый ответ сервера было бы издевательством.
   const publicUrl = share ? `${window.location.origin}/#/s/${share.slug}` : ''

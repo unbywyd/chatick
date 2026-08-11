@@ -1,7 +1,8 @@
 import { Hono, type Context } from 'hono'
 import { eq } from 'drizzle-orm'
 import { db } from '../db/client.js'
-import { companies, projects } from '../db/schema.js'
+import { companies, credentials, files, notes, projects, tasks } from '../db/schema.js'
+import { parseShortPath, resolveShortCode } from '../lib/short-links.js'
 
 /**
  * Превью ссылки на проект для мессенджеров (Open Graph).
@@ -51,6 +52,79 @@ const TABS: Record<string, string> = {
 linkPreviewRoute.get('/c/:companyId/p/:projectId', render)
 linkPreviewRoute.get('/c/:companyId/p/:projectId/*', render)
 
+/**
+ * Короткая ссылка: /t-AbC12.
+ *
+ * Отдаёт то же превью, что и длинная, — иначе ради компактности пришлось бы
+ * терять название задачи в мессенджере, а это половина смысла ссылки.
+ *
+ * Доступ не выдаётся: адрес назначения обычный, и дальше решают права.
+ */
+linkPreviewRoute.get('/:short{[a-z]-[2-9a-zA-Z]{4,12}}', async (c) => {
+  const parsed = parseShortPath(c.req.param('short'))
+  if (!parsed) return c.notFound()
+
+  const link = await resolveShortCode(parsed.type, parsed.code)
+  // Ссылки нет или сущность удалили вместе с проектом — ведём в приложение,
+  // а не показываем 404: человек хотя бы попадёт туда, где сможет искать.
+  if (!link) return renderCard(c, null, null, `${APP()}/`)
+
+  const project = await db.query.projects.findFirst({ where: eq(projects.id, link.projectId) })
+  if (!project) return renderCard(c, null, null, `${APP()}/`)
+
+  const title = await titleOf(link.entityType, link.entityId)
+  const path = `/c/${project.companyId}/p/${project.id}/${TAB_OF[link.entityType] ?? 'tasks'}/${link.entityId}`
+  // Та же ступенька, что у длинной ссылки: логотип проекта, иначе компании,
+  // иначе значок приложения.
+  const company = await db.query.companies.findFirst({ where: eq(companies.id, project.companyId) })
+  const image = project.logoKey
+    ? `${API()}/api/v1/projects/${project.id}/logo`
+    : company?.logoKey
+      ? `${API()}/api/v1/companies/${company.id}/logo`
+      : `${APP()}/logo.png`
+  return renderCard(c, project, title, `${APP()}/#${path}`, undefined, image)
+})
+
+/** Куда ведёт сущность внутри проекта. */
+const TAB_OF: Record<string, string> = {
+  task: 'tasks',
+  file: 'files',
+  note: 'notes',
+  resource: 'resources',
+  message: 'chat',
+  document: 'docs',
+}
+
+/**
+ * Название сущности для превью.
+ *
+ * Ровно столько, сколько уже раскрывает длинная ссылка: имя. Ни описания, ни
+ * исполнителей, ни статуса — превью читают серверы мессенджеров без чьей-либо
+ * сессии, и всё лишнее здесь утекает всем, кому переслали ссылку.
+ */
+async function titleOf(type: string, id: string): Promise<string | null> {
+  switch (type) {
+    case 'task': {
+      const r = await db.query.tasks.findFirst({ where: eq(tasks.id, id) })
+      return r ? `${r.number} ${r.title}` : null
+    }
+    case 'file': {
+      const r = await db.query.files.findFirst({ where: eq(files.id, id) })
+      return r?.name ?? null
+    }
+    case 'note': {
+      const r = await db.query.notes.findFirst({ where: eq(notes.id, id) })
+      return r?.title ?? null
+    }
+    case 'resource': {
+      const r = await db.query.credentials.findFirst({ where: eq(credentials.id, id) })
+      return r?.name ?? null
+    }
+    default:
+      return null
+  }
+}
+
 async function render(c: Context) {
   const projectId = c.req.param('projectId') ?? ''
   const project = projectId
@@ -92,9 +166,35 @@ async function render(c: Context) {
   // превью, а по нажатию открывается приложение на нужном месте.
   const target = `${APP()}/#${appPath}`
 
+  return renderCard(c, project ?? null, null, target, subtitle, image)
+}
+
+/**
+ * Одна карточка на оба вида ссылок — длинную и короткую.
+ *
+ * Разметка превью раньше жила только в render(). Короткая ссылка со своей
+ * копией означала бы, что теги однажды разойдутся, а заметно это станет лишь
+ * в чужом мессенджере, где мы ничего не увидим.
+ */
+function renderCard(
+  c: Context,
+  project: { id: string; name: string; companyId: string; logoKey: string | null } | null,
+  entityTitle: string | null,
+  target: string,
+  subtitleOverride?: string,
+  imageOverride?: string,
+) {
+  // Название сущности впереди: в списке ссылок человек ищет задачу, а не
+  // проект — проект уходит в подпись.
+  const title = entityTitle || project?.name || 'Chatick'
+  const subtitle =
+    subtitleOverride ?? (entityTitle && project ? project.name : project ? 'Project workspace' : 'Team chat and project workspace')
+
+  // Картинку выбирает вызывающий: у длинной ссылки есть ступенька «логотип
+  // компании», без которой превью почти всегда показывало бы значок Chatick.
+  const image = imageOverride ?? (project?.logoKey ? `${API()}/api/v1/projects/${project.id}/logo` : `${APP()}/logo.png`)
+
   c.header('Content-Type', 'text/html; charset=utf-8')
-  // Превью мессенджеры кэшируют надолго; час — компромисс между «имя проекта
-  // переименовали» и лишними запросами к нам.
   c.header('Cache-Control', 'public, max-age=3600')
   return c.body(`<!doctype html>
 <html lang="en">

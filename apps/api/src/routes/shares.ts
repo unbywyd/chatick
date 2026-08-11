@@ -8,6 +8,13 @@ import { requireSession, type SessionEnv } from '../auth.js'
 import { getObjectStream, resolveStorage } from '../lib/s3.js'
 import { sanitizeHtml } from '../lib/sanitize-html.js'
 import { canCreateProjects, companyRoleOf, hasPermission, projectRoleOf, type ProjectPermission } from './projects.js'
+import { shortCodeFor } from '../lib/short-links.js'
+
+/**
+ * Домен коротких ссылок. Короткая ссылка на app.chatick.com не короче
+ * длинной — весь смысл в голом домене.
+ */
+const SHORT_BASE = () => (process.env.SHORT_LINK_BASE || 'https://chatick.com').replace(/\/$/, '')
 
 // Публичный доступ по ссылке (SPEC §8.34).
 //
@@ -132,6 +139,34 @@ export async function canPublish(projectId: string, userId: string, authorId: st
   if (!project) return false
   return canCreateProjects(await companyRoleOf(project.companyId, userId))
 }
+
+/**
+ * Короткая ссылка на сущность: chatick.com/t-AbC12.
+ *
+ * Не публикация: доступ по ней тот же, что и по длинному адресу. Поэтому и
+ * права здесь — на чтение, а не на публикацию: кто вправе открыть задачу,
+ * тот вправе дать коллеге ссылку на неё.
+ *
+ * Отдельный путь от POST /:type/:id — тот открывает доступ наружу, и путать
+ * их нельзя ни в коде, ни в интерфейсе.
+ */
+sharesRoute.get('/short/:type/:id', async (c) => {
+  const { sub } = c.get('session')
+  const type = c.req.param('type') as Entity
+  const id = c.req.param('id')
+
+  const found = await locate(type, id)
+  if (!found) return c.json({ error: 'Not found' }, 404)
+
+  const perm = READ_PERMISSION[type]
+  const allowed = perm ? await hasPermission(found.projectId, sub, perm) : Boolean(await projectRoleOf(found.projectId, sub))
+  if (!allowed) return c.json({ error: 'Forbidden' }, 403)
+
+  const path = await shortCodeFor(type, id, found.projectId, sub)
+  // Кода не вышло — отдаём null, а не ошибку: интерфейс покажет длинную
+  // ссылку, и человек всё равно поделится задачей.
+  return c.json({ url: path ? `${SHORT_BASE()}/${path}` : null })
+})
 
 /** Текущая публичная ссылка сущности — чтобы диалог знал, что показывать. */
 sharesRoute.get('/:type/:id', async (c) => {
