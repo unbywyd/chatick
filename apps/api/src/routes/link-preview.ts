@@ -27,6 +27,26 @@ export const linkPreviewRoute = new Hono()
 const APP = () => (process.env.APP_PUBLIC_URL || 'https://app.chatick.com').replace(/\/$/, '')
 const API = () => (process.env.API_PUBLIC_URL || 'https://api.chatick.com').replace(/\/$/, '')
 
+
+/**
+ * Язык страницы перехода — по заголовку браузера.
+ *
+ * Своей сессии здесь нет и быть не может: по короткой ссылке приходят и те,
+ * кто не входил. Accept-Language — единственное, что о человеке известно.
+ */
+function labels(c: Context) {
+  const raw = (c.req.header('accept-language') || '').toLowerCase()
+  const lang = raw.startsWith('he') || raw.includes(',he') ? 'he' : raw.startsWith('ru') || raw.includes(',ru') ? 'ru' : 'en'
+  return {
+    open: { en: 'Open', ru: 'Открыть', he: 'פתחו' }[lang],
+    hint: {
+      en: 'Redirecting you now…',
+      ru: 'Сейчас переведём…',
+      he: 'מעבירים אתכם…',
+    }[lang],
+  }
+}
+
 const esc = (s: string) =>
   s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;')
 
@@ -193,6 +213,7 @@ function renderCard(
   // Картинку выбирает вызывающий: у длинной ссылки есть ступенька «логотип
   // компании», без которой превью почти всегда показывало бы значок Chatick.
   const image = imageOverride ?? (project?.logoKey ? `${API()}/api/v1/projects/${project.id}/logo` : `${APP()}/logo.png`)
+  const { open: OPEN_LABEL, hint: REDIRECT_HINT } = labels(c)
 
   c.header('Content-Type', 'text/html; charset=utf-8')
   c.header('Cache-Control', 'public, max-age=3600')
@@ -215,11 +236,57 @@ function renderCard(
 <meta http-equiv="refresh" content="0; url=${esc(target)}">
 <link rel="canonical" href="${esc(target)}">
 </head>
+<style>
+  /* Страницу видно долю секунды, но видно всегда — по короткой ссылке человек
+     проходит именно здесь. Голая синяя ссылка на белом фоне читалась как
+     сломанная страница, а не как переход. */
+  :root { color-scheme: dark }
+  * { box-sizing: border-box }
+  body {
+    margin: 0; min-height: 100vh; display: grid; place-items: center; padding: 24px;
+    background: #0e0f0c; color: #f4f5f0;
+    font: 15px/1.5 ui-sans-serif, system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
+  }
+  .card { width: 100%; max-width: 420px; text-align: center }
+  .logo { width: 46px; height: 46px; margin: 0 auto 18px }
+  /* Название задачи бывает на иврите вперемешку с латиницей — направление
+     отдаём браузеру, иначе строка рассыпается. */
+  .name {
+    margin: 0 0 6px; font-size: 17px; font-weight: 700; unicode-bidi: plaintext;
+    overflow-wrap: anywhere;
+  }
+  .sub { margin: 0 0 22px; color: #8a8f7e; font-size: 13.5px; unicode-bidi: plaintext }
+  .spin {
+    width: 22px; height: 22px; margin: 0 auto 18px; border-radius: 50%;
+    border: 2px solid rgba(255,255,255,.14); border-top-color: #d4f228;
+    animation: sp .7s linear infinite;
+  }
+  @keyframes sp { to { transform: rotate(360deg) } }
+  /* Анимация — украшение, а не смысл: тем, кто просил её отключить, крутиться
+     не будет, а страница всё равно уедет сама. */
+  @media (prefers-reduced-motion: reduce) { .spin { animation: none } }
+  .go {
+    display: inline-flex; align-items: center; justify-content: center;
+    min-height: 42px; padding: 10px 22px; border-radius: 999px;
+    background: #d4f228; color: #1c2003; font-weight: 700; text-decoration: none;
+  }
+  .hint { margin-top: 14px; font-size: 12.5px; color: #8a8f7e }
+</style>
+</head>
 <body>
-<!-- Человек сюда почти не попадает: мессенджер читает теги и ведёт по ссылке
-     сам. Но если попал — редирект и обычная ссылка на случай, если он
-     отключён. -->
-<a href="${esc(target)}">${esc(title)}</a>
+<div class="card">
+  <svg class="logo" viewBox="0 0 48 48" fill="none" aria-hidden="true">
+    <path d="M24 4C12.4 4 3 12.7 3 23.5c0 5.4 2.4 10.3 6.2 13.8L8 44l8.4-3.2c2.4.7 4.9 1.2 7.6 1.2 11.6 0 21-8.7 21-19.5S35.6 4 24 4Z" stroke="#f4f5f0" stroke-width="4" stroke-linejoin="round"/>
+    <path d="M15 24.5 21 30l12-12" stroke="#d4f228" stroke-width="5.5" stroke-linecap="round" stroke-linejoin="round"/>
+  </svg>
+  <div class="spin"></div>
+  <p class="name">${esc(title)}</p>
+  <p class="sub">${esc(subtitle)}</p>
+  <!-- Кнопка не запасной вариант, а основной путь для тех, у кого скрипты
+       отключены: без неё они упрутся в страницу, которая никуда не ведёт. -->
+  <a class="go" href="${esc(target)}">${esc(OPEN_LABEL)}</a>
+  <p class="hint">${esc(REDIRECT_HINT)}</p>
+</div>
 <script>location.replace(${JSON.stringify(target)})</script>
 </body>
 </html>`)
