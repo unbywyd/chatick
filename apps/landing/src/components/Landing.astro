@@ -19,6 +19,8 @@ const appUrl = `${APP_URL}/?lng=${locale}`
 const API_URL = 'https://api.chatick.com'
 const SUPPORT = 'support@chatick.com'
 const GITHUB = 'https://github.com/unbywyd/chatick'
+/** Скил живёт отдельно от основного репозитория: его ставят себе, а не читают. */
+const SKILL_REPO = 'https://github.com/unbywyd/claude-skill-chatick'
 // Сайты заказчика и его студии разработки — блок «кто за этим стоит»
 const SITE_STARTPLAN = 'https://startplan.co.uk/'
 const SITE_ANYAPP = 'https://any-app.com/'
@@ -108,6 +110,15 @@ const MARK_ANYAPP = asset('anyapp-logo-twotone-dark.svg')
         </svg>
         <span>{t.ask.copyApi}</span>
       </button>
+      {/* Скил — то, с чего разработчик начинает, поэтому ссылка на него стоит
+          в шапке рядом с «Начать». Ведёт на секцию, а не сразу на GitHub:
+          сначала видно, что это и зачем, и только потом репозиторий. */}
+      <a class="nav-skill" href="#skill">
+        <svg viewBox="0 0 16 16" width="15" height="15" fill="currentColor" aria-hidden="true">
+          <path d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27s1.36.09 2 .27c1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.01 8.01 0 0 0 16 8c0-4.42-3.58-8-8-8Z" />
+        </svg>
+        <span>{t.nav.skill}</span>
+      </a>
       <a class="btn btn-sm" href={appUrl}>{t.nav.start}</a>
     </div>
   </div>
@@ -192,6 +203,66 @@ const MARK_ANYAPP = asset('anyapp-logo-twotone-dark.svg')
           {t.numbers.steps.map((s) => <li>{s}</li>)}
         </ol>
       </div>
+    </div>
+  </section>
+
+  {/* Скил идёт до загрузки приложения: он и есть то, ради чего сюда приходят
+      разработчики, а приложение — лишь способ подключаться в одну кнопку.
+      Команды показаны целиком, с кнопкой копирования: разработчик вставляет
+      их к себе, и заставлять его переписывать путь руками — верный способ
+      получить опечатку. */}
+  <section class="section section-soft" id="skill">
+    <div class="container">
+      <p class="tag">{t.skill.tag}</p>
+      <h2>{t.skill.title}</h2>
+      <p class="section-sub">{t.skill.subtitle}</p>
+
+      <div class="skill-grid">
+        <ol class="skill-steps">
+          {
+            t.skill.steps.map((step) => (
+              <li>
+                {/* Шаг с командой копируется, обычный текст — нет: копировать
+                    «Перезапустите Claude Code» незачем. */}
+                {step.startsWith('git ') || step.startsWith('node ') ? (
+                  <button class="skill-cmd doc-copy" data-copy-text={step} data-copied={t.ask.copied} title={t.ask.copyCmd}>
+                    <code>{step}</code>
+                    <svg viewBox="0 0 24 24" width="15" height="15" fill="none" aria-hidden="true">
+                      <rect x="9" y="9" width="12" height="12" rx="2.5" stroke="currentColor" stroke-width="2" />
+                      <path d="M5 15V5.5A2.5 2.5 0 0 1 7.5 3H15" stroke="currentColor" stroke-width="2" stroke-linecap="round" />
+                    </svg>
+                  </button>
+                ) : (
+                  <span class="skill-plain">{step}</span>
+                )}
+              </li>
+            ))
+          }
+        </ol>
+
+        <ul class="skill-points">
+          {
+            t.skill.points.map((point) => (
+              <li>
+                <svg viewBox="0 0 24 24" width="16" height="16" fill="none" aria-hidden="true">
+                  <path d="m5 13 4 4L19 7" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" />
+                </svg>
+                {point}
+              </li>
+            ))
+          }
+        </ul>
+      </div>
+
+      <div class="skill-cta">
+        <a class="btn" href={SKILL_REPO} target="_blank" rel="noopener">
+          <svg viewBox="0 0 16 16" width="17" height="17" fill="currentColor" aria-hidden="true">
+            <path d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27s1.36.09 2 .27c1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.01 8.01 0 0 0 16 8c0-4.42-3.58-8-8-8Z" />
+          </svg>
+          {t.skill.cta}
+        </a>
+      </div>
+      <p class="note skill-note">{t.skill.ctaNote}</p>
     </div>
   </section>
 
@@ -2186,6 +2257,135 @@ const MARK_ANYAPP = asset('anyapp-logo-twotone-dark.svg')
   }
 
   /* --- Шапка: полоса «никакой привязки» ------------------------------------ */
+  /* --- секция скила --- */
+  .skill-grid {
+    margin: 26px auto 0;
+    /* Та же ширина, что у .section-sub и .integrate-list: иначе левый край
+       уезжает относительно заголовка и читается как случайный сдвиг. */
+    max-width: 660px;
+    display: grid;
+    gap: 22px;
+    text-align: start;
+  }
+  .skill-steps {
+    margin: 0;
+    padding-inline-start: 22px;
+    display: grid;
+    gap: 10px;
+    color: var(--fg-muted);
+    font-size: 15px;
+  }
+  .skill-steps li::marker {
+    color: var(--lime);
+    font-weight: 700;
+  }
+  .skill-plain {
+    line-height: 1.6;
+  }
+  /* Команда — кнопка копирования во всю ширину: разработчик вставляет её к
+     себе, и переписывать длинный путь руками означало бы опечатку. */
+  .skill-cmd {
+    width: 100%;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 9px 12px;
+    border: 1px solid var(--border);
+    border-radius: 9px;
+    background: var(--bg);
+    color: var(--fg);
+    cursor: pointer;
+    text-align: start;
+    transition:
+      border-color 0.15s,
+      background 0.15s;
+  }
+  .skill-cmd:hover {
+    border-color: var(--lime);
+    background: var(--bg-soft);
+  }
+  .skill-cmd code {
+    flex: 1;
+    min-width: 0;
+    font-size: 12.5px;
+    line-height: 1.5;
+    /* Команда длинная: на узком экране переносим, а не режем и не заставляем
+       страницу ехать вбок. */
+    overflow-wrap: anywhere;
+    /* Команда — всегда слева направо, даже на иврите: путь с латиницей и
+       слэшами в RTL иначе рассыпается. */
+    direction: ltr;
+    text-align: left;
+  }
+  .skill-cmd svg {
+    flex: none;
+    color: var(--fg-muted);
+    /* Длинная команда переносится на две строки, и значок, выровненный по
+       центру блока, повисает между ними. Прижимаем к первой строке. */
+    align-self: start;
+    margin-top: 2px;
+  }
+  .skill-points {
+    list-style: none;
+    margin: 0;
+    padding: 0;
+    display: grid;
+    gap: 12px;
+  }
+  .skill-points li {
+    display: flex;
+    align-items: start;
+    gap: 10px;
+    font-size: 15px;
+    line-height: 1.6;
+    color: var(--fg-muted);
+  }
+  .skill-points svg {
+    flex: none;
+    margin-top: 4px;
+    color: var(--lime);
+  }
+  .skill-cta {
+    margin-top: 26px;
+    display: flex;
+    justify-content: center;
+  }
+  .skill-note {
+    margin-top: 12px;
+    text-align: center;
+  }
+  /* Ссылка в шапке: тише кнопки «Начать», но заметнее языков. */
+  .nav-skill {
+    display: inline-flex;
+    align-items: center;
+    gap: 7px;
+    padding: 6px 10px;
+    border-radius: 8px;
+    color: var(--fg-muted);
+    font-size: 14px;
+    font-weight: 600;
+    text-decoration: none;
+    transition:
+      color 0.15s,
+      background 0.15s;
+  }
+  .nav-skill:hover {
+    color: var(--fg);
+    background: var(--bg-soft);
+  }
+  /* На узких экранах шапка и так переполнена — прячем текст, оставляя значок,
+     а на совсем узких убираем целиком: секция всё равно вторая на странице. */
+  @media (max-width: 900px) {
+    .nav-skill span {
+      display: none;
+    }
+  }
+  @media (max-width: 560px) {
+    .nav-skill {
+      display: none;
+    }
+  }
+
   .integrate-list {
     list-style: none;
     margin: 26px auto 0;

@@ -10,7 +10,19 @@ type Feature = { title: string; text: string }
 
 type Dict = {
   meta: { title: string; description: string }
-  nav: { start: string }
+  nav: { start: string; skill: string }
+  /** Скил для Claude Code: главный способ начать работать голосом, а не мышью */
+  skill: {
+    tag: string
+    title: string
+    subtitle: string
+    /** Шаги установки: клон, установщик, перезапуск */
+    steps: string[]
+    cta: string
+    ctaNote: string
+    /** Что человек получит после установки */
+    points: string[]
+  }
   /** Честное предупреждение: продукт ещё сырой */
   beta: { badge: string; note: string; warn: string }
   hero: {
@@ -121,6 +133,8 @@ type Dict = {
     copyAi: string
     copyApi: string
     copied: string
+    /** Подсказка на кнопке с командой — до нажатия, а не после */
+    copyCmd: string
     hint: string
   }
   how: { title: string; steps: Feature[] }
@@ -210,7 +224,25 @@ export const dict: Record<LocaleCode, Dict> = {
       description:
         'Built for developers: connect Claude Code and let it run tasks, read the project history, answer in chat and see who did what. Plus files, collaborative docs, time tracking and backups.',
     },
-    nav: { start: 'Get started' },
+    nav: { start: 'Get started', skill: 'Claude Code' },
+    skill: {
+      tag: 'Claude Code',
+      title: 'Install the skill to get started',
+      subtitle:
+        'The skill teaches Claude to work inside Chatick: take tasks, move statuses, tick checklists and report in comments. With the desktop app running, connecting is one button — no code to copy.',
+      steps: [
+        'git clone https://github.com/unbywyd/claude-skill-chatick.git ~/.claude/skills/chatick',
+        'node ~/.claude/skills/chatick/scripts/install.mjs',
+        'Restart Claude Code',
+      ],
+      cta: 'Skill on GitHub',
+      ctaNote: 'The second command installs the MCP server. Skip it and the skill still works — you just type a code every session.',
+      points: [
+        '“What is on me today?” instead of hunting the board',
+        'Task, estimate and status straight from the conversation',
+        'Every result lands in a task comment',
+      ],
+    },
     beta: { badge: 'Beta', note: 'Chatick is in beta: it works, it is used daily, and things still change and occasionally break.', warn: 'Beta software. Expect rough edges, and please report anything broken — every report is read.' },
     hero: {
       title1: 'Where your',
@@ -361,6 +393,7 @@ export const dict: Record<LocaleCode, Dict> = {
       prompt: PROMPT.en,
       copy: 'Copy prompt',
       copyAi: 'For AI',
+      copyCmd: 'Copy the command',
       copyApi: 'For integration',
       copied: 'Copied — now paste it into your AI',
       hint: 'The link goes to a plain-text page written for AI, not for humans.',
@@ -482,7 +515,25 @@ export const dict: Record<LocaleCode, Dict> = {
       description:
         'Сделано для разработчиков: подключите Claude Code, и он ведёт задачи, читает всю историю проекта, отвечает в чате и видит, кто что делал. Плюс файлы, совместные документы, трекер времени и бэкапы.',
     },
-    nav: { start: 'Начать' },
+    nav: { start: 'Начать', skill: 'Claude Code' },
+    skill: {
+      tag: 'Claude Code',
+      title: 'Поставьте скил — и можно начинать',
+      subtitle:
+        'Скил учит Claude работать внутри Chatick: брать задачи, менять статусы, отмечать чеклисты и отписываться в комментариях. Если открыто приложение — подключение в одну кнопку, код вводить не нужно.',
+      steps: [
+        'git clone https://github.com/unbywyd/claude-skill-chatick.git ~/.claude/skills/chatick',
+        'node ~/.claude/skills/chatick/scripts/install.mjs',
+        'Перезапустите Claude Code',
+      ],
+      cta: 'Скил на GitHub',
+      ctaNote: 'Вторая команда ставит MCP-сервер. Без неё скил тоже работает — просто код придётся вводить каждый раз.',
+      points: [
+        '«Что на мне сегодня?» — вместо поисков по доске',
+        'Задача, оценка и статус — прямо из разговора',
+        'Каждый результат попадает в комментарий к задаче',
+      ],
+    },
     beta: { badge: 'Бета', note: 'Chatick в бете: он работает и используется каждый день, но всё ещё меняется и иногда ломается.', warn: 'Бета-версия. Возможны шероховатости — пишите о поломках, каждое сообщение читают.' },
     hero: {
       title1: 'Место, где ваш',
@@ -635,6 +686,7 @@ export const dict: Record<LocaleCode, Dict> = {
       prompt: PROMPT.ru,
       copy: 'Скопировать промпт',
       copyAi: 'Для ИИ',
+      copyCmd: 'Скопировать команду',
       copyApi: 'Для интеграции',
       copied: 'Скопировано — вставьте в свой ИИ',
       hint: 'Ссылка ведёт на текстовую страницу, написанную для ИИ, а не для людей.',
@@ -756,7 +808,25 @@ export const dict: Record<LocaleCode, Dict> = {
       description:
         'נבנה למפתחים: חברו את Claude Code והוא מנהל משימות, קורא את כל היסטוריית הפרויקט, עונה בצ׳אט ורואה מי עשה מה. בנוסף קבצים, מסמכים משותפים, מעקב זמן וגיבויים.',
     },
-    nav: { start: 'להתחיל' },
+    nav: { start: 'להתחיל', skill: 'Claude Code' },
+    skill: {
+      tag: 'Claude Code',
+      title: 'התקינו את הסקיל — וזה מתחיל לעבוד',
+      subtitle:
+        'הסקיל מלמד את Claude לעבוד בתוך Chatick: לקחת משימות, לשנות סטטוסים, לסמן צ׳קליסטים ולדווח בתגובות. עם האפליקציה פתוחה — חיבור בלחיצה אחת, בלי קוד להעתיק.',
+      steps: [
+        'git clone https://github.com/unbywyd/claude-skill-chatick.git ~/.claude/skills/chatick',
+        'node ~/.claude/skills/chatick/scripts/install.mjs',
+        'הפעילו מחדש את Claude Code',
+      ],
+      cta: 'לסקיל ב־GitHub',
+      ctaNote: 'הפקודה השנייה מתקינה את שרת ה־MCP. בלעדיה הסקיל עדיין עובד — רק צריך להקליד קוד בכל פעם.',
+      points: [
+        '«מה עליי היום?» — במקום לחפש בלוח',
+        'משימה, הערכת זמן וסטטוס — מתוך השיחה',
+        'כל תוצאה נרשמת בתגובה למשימה',
+      ],
+    },
     beta: { badge: 'בטא', note: 'Chatick בגרסת בטא: הוא עובד ומשמש מדי יום, אך עדיין משתנה ולעיתים נשבר.', warn: 'גרסת בטא. ייתכנו תקלות — דווחו עליהן, כל דיווח נקרא.' },
     hero: {
       title1: 'המקום שבו',
@@ -909,6 +979,7 @@ export const dict: Record<LocaleCode, Dict> = {
       prompt: PROMPT.he,
       copy: 'העתקת הפרומפט',
       copyAi: 'ל-AI',
+      copyCmd: 'העתיקו את הפקודה',
       copyApi: 'לאינטגרציה',
       copied: 'הועתק — הדביקו ב-AI שלכם',
       hint: 'הקישור מוביל לדף טקסט שנכתב עבור AI, לא עבור בני אדם.',
