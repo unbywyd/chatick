@@ -7,7 +7,7 @@ import { credentials, files, messages, notes, projects, shares, tasks, users } f
 import { requireSession, type SessionEnv } from '../auth.js'
 import { getObjectStream, resolveStorage } from '../lib/s3.js'
 import { sanitizeHtml } from '../lib/sanitize-html.js'
-import { hasPermission, projectRoleOf, type ProjectPermission } from './projects.js'
+import { canCreateProjects, companyRoleOf, hasPermission, projectRoleOf, type ProjectPermission } from './projects.js'
 
 // Публичный доступ по ссылке (SPEC §8.34).
 //
@@ -35,28 +35,33 @@ const READ_PERMISSION: Record<Entity, ProjectPermission | null> = {
   task: 'tasks.read',
 }
 
-/** Находит сущность и её проект — заодно проверяя, что она вообще существует. */
-async function locate(type: Entity, id: string): Promise<{ projectId: string; title: string } | null> {
+/**
+ * Находит сущность и её проект — заодно проверяя, что она вообще существует.
+ *
+ * Возвращает и автора: своим человек вправе делиться сам, и поле для этого у
+ * каждой сущности своё (uploadedById, authorId, createdById).
+ */
+export async function locate(type: Entity, id: string): Promise<{ projectId: string; title: string; authorId: string | null } | null> {
   switch (type) {
     case 'file': {
       const r = await db.query.files.findFirst({ where: and(eq(files.id, id), isNull(files.deletedAt)) })
-      return r ? { projectId: r.projectId, title: r.name } : null
+      return r ? { projectId: r.projectId, title: r.name, authorId: r.uploadedById } : null
     }
     case 'note': {
       const r = await db.query.notes.findFirst({ where: and(eq(notes.id, id), isNull(notes.deletedAt)) })
-      return r ? { projectId: r.projectId, title: r.title } : null
+      return r ? { projectId: r.projectId, title: r.title, authorId: r.authorId } : null
     }
     case 'resource': {
       const r = await db.query.credentials.findFirst({ where: and(eq(credentials.id, id), isNull(credentials.deletedAt)) })
-      return r ? { projectId: r.projectId, title: r.name } : null
+      return r ? { projectId: r.projectId, title: r.name, authorId: r.createdById } : null
     }
     case 'message': {
       const r = await db.query.messages.findFirst({ where: eq(messages.id, id) })
-      return r ? { projectId: r.projectId, title: r.text.slice(0, 80) } : null
+      return r ? { projectId: r.projectId, title: r.text.slice(0, 80), authorId: r.authorId } : null
     }
     case 'task': {
       const r = await db.query.tasks.findFirst({ where: and(eq(tasks.id, id), isNull(tasks.deletedAt)) })
-      return r ? { projectId: r.projectId, title: `${r.number} ${r.title}` } : null
+      return r ? { projectId: r.projectId, title: `${r.number} ${r.title}`, authorId: r.createdById } : null
     }
   }
 }
@@ -96,6 +101,38 @@ export async function revokeShare(type: Entity, entityId: string) {
 
 sharesRoute.use('/*', requireSession)
 
+/**
+ * Кто вправе выносить наружу и забирать обратно.
+ *
+ * Три случая, и каждый — про ответственность за то, что публикуется.
+ *
+ * 1. Начальство проекта: owner и admin отвечают за видимость целиком.
+ *
+ * 2. Админ компании. Роль в проекте — не вся правда о человеке: владелец
+ *    компании может числиться в проекте обычным участником, потому что его
+ *    добавили исполнителем, а не начальником. Проверка только по
+ *    projectMembers отказывала ему публиковать что-либо в собственном
+ *    проекте — и, что хуже, отозвать уже созданную им ссылку.
+ *
+ * 3. Автор — своим. Свою задачу, свой файл, свою заметку человек выносит
+ *    наружу сам: это его работа, и спрашивать разрешения показать её
+ *    заказчику неуместно. Запрет означал бы, что участник не может поделиться
+ *    даже тем, что сам же и создал.
+ *
+ * Прав это не добавляет никому: всё перечисленное человек и так видит и
+ * меняет. Речь только о том, кто решает вынести это за пределы проекта.
+ */
+export async function canPublish(projectId: string, userId: string, authorId: string | null): Promise<boolean> {
+  if (authorId && authorId === userId) return true
+
+  const member = await projectRoleOf(projectId, userId)
+  if (member?.role === 'owner' || member?.role === 'admin') return true
+
+  const project = await db.query.projects.findFirst({ where: eq(projects.id, projectId) })
+  if (!project) return false
+  return canCreateProjects(await companyRoleOf(project.companyId, userId))
+}
+
 /** Текущая публичная ссылка сущности — чтобы диалог знал, что показывать. */
 sharesRoute.get('/:type/:id', async (c) => {
   const { sub } = c.get('session')
@@ -128,11 +165,10 @@ sharesRoute.post('/:type/:id', async (c) => {
   const found = await locate(type, id)
   if (!found) return c.json({ error: 'Not found' }, 404)
 
-  // Публичный доступ раздают те, кто отвечает за проект: обычный участник
-  // может читать, но выносить наружу — уже решение о видимости.
-  const member = await projectRoleOf(found.projectId, sub)
-  if (!(member?.role === 'owner' || member?.role === 'admin')) {
-    return c.json({ error: 'Only project owners and admins can publish links' }, 403)
+  // Кто вправе — см. canPublish: автор своим, начальство проекта и админ
+  // компании чем угодно в нём.
+  if (!(await canPublish(found.projectId, sub, found.authorId))) {
+    return c.json({ error: 'Only the author, project owners and admins can publish links' }, 403)
   }
 
   const body = (await c.req.json().catch(() => ({}))) as Record<string, unknown>
@@ -166,8 +202,7 @@ sharesRoute.delete('/:type/:id', async (c) => {
 
   const found = await locate(type, id)
   if (!found) return c.json({ error: 'Not found' }, 404)
-  const member = await projectRoleOf(found.projectId, sub)
-  if (!(member?.role === 'owner' || member?.role === 'admin')) {
+  if (!(await canPublish(found.projectId, sub, found.authorId))) {
     return c.json({ error: 'Forbidden' }, 403)
   }
 

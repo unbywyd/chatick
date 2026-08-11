@@ -49,7 +49,7 @@ import { sendInviteMail } from '../lib/mail-invite.js'
 import { createNote, noteToTask, NOTE_TYPES, type NoteType } from './notes.js'
 import { readTimeConfig, maybeTranslate, timeConfigForProject } from './time.js'
 import { readPresence } from './auth.js'
-import { createShare, revokeShare, type ShareEntityType } from './shares.js'
+import { canPublish, createShare, locate, revokeShare, type ShareEntityType } from './shares.js'
 import { notifyChatMentions } from './messages.js'
 import { notify, extractMentions } from '../lib/notify.js'
 import { notifyTask, unassignNotice, dependentsOf, blockersOf } from './tasks.js'
@@ -461,10 +461,13 @@ bridgeRoute.post('/shares/:type/:id', async (c) => {
     return c.json({ error: 'Unsupported entity', hint: 'file | note | resource | message | task' }, 400)
   }
 
-  // Публикуют наружу владелец и админ проекта — то же правило, что в интерфейсе.
-  const member = await projectRoleOf(scope.projectId, id.userId)
-  if (!(member?.role === 'owner' || member?.role === 'admin')) {
-    return c.json({ error: 'Only project owners and admins can publish links' }, 403)
+  // Ровно та же проверка, что в интерфейсе, — вызовом, а не копией правила:
+  // разъехавшись, они дали бы ассистенту и человеку разные ответы на один
+  // и тот же вопрос.
+  const target = await locate(type as ShareEntityType, entityId)
+  if (!target || target.projectId !== scope.projectId) return c.json({ error: 'Not found' }, 404)
+  if (!(await canPublish(scope.projectId, id.userId, target.authorId))) {
+    return c.json({ error: 'Only the author, project owners and admins can publish links' }, 403)
   }
 
   const share = await createShare(type as ShareEntityType, entityId, scope.projectId, id.userId)
