@@ -310,14 +310,18 @@ tasks, files, documents, resources).
 
 You are NOT connected yet. Connect first, then re-read the authenticated guide.
 
-## Before you print a code: the chatick MCP server
+## Before you print a code: check your tool list
 
-If the \`chatick\` MCP server is available to you, call \`chatick_connect\` and
-skip this whole section. Where the human has the desktop app running it raises
-an approval window — they press a button instead of copying a code out of the
-chat — and where it is not running it performs exactly the flow below.
+Look for a tool named \`chatick_connect\` in your own tool list. One look — no
+command, no file to read. MCP tools are either there or they are not.
 
-The steps here are for working without that server, over plain curl.
+- Present → call it and stop reading here. It handles the desktop app and the
+  code flow itself; where the app runs, the human just presses a button.
+- Absent → the server is not configured in this session. Use the curl flow
+  below and say so in one line, rather than asking the human whether MCP is
+  available: they cannot see your tool list, and you can.
+
+The steps here are for the second case only.
 
 ## How to connect (device flow — no secrets in chat history)
 
