@@ -1522,7 +1522,8 @@
     "time": "זמן",
     "ai": "AI ודואר",
     "integration": "אינטגרציות",
-    "danger": "אזור מסוכן"
+    "danger": "אזור מסוכן",
+    "backup": "גיבויים"
   },
   "summary": {
     "planned": "מתוכנן",

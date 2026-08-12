@@ -27,14 +27,33 @@ type Notification = {
   link: string
   readAt: string | null
   actor: { id: string; name: string; avatarUrl: string | null } | null
+  /** Имя проекта: на уровне компании карточки идут вперемешку. */
+  projectName?: string
 }
 type Inbox = { unreadTotal: number; items: Notification[] }
 
-export function ProjectInbox({ projectId }: { projectId: string }) {
+/**
+ * Полоса «что меня касается».
+ *
+ * Одна и та же и внутри проекта, и на странице компании: projectId=null
+ * означает «все проекты», и тогда на карточке появляется имя проекта.
+ * Второй такой же компонент со своей вёрсткой разошёлся бы с этим на первой
+ * же правке — а человек читал бы одни и те же уведомления по-разному.
+ */
+export function ProjectInbox({
+  projectId,
+  companyId: companyIdProp,
+}: {
+  /** null — показываем всё, что касается человека, из любого проекта. */
+  projectId: string | null
+  /** Нужен, когда компонент стоит вне проекта: там его нет в адресе. */
+  companyId?: string
+}) {
   const { t } = useTranslation()
   const navigate = useNavigate()
   // Полоса живёт внутри проекта — компания известна из адреса.
-  const { companyId } = useParams()
+  const params = useParams()
+  const companyId = companyIdProp ?? params.companyId
   const qc = useQueryClient()
 
   const inbox = useQuery({
@@ -44,7 +63,7 @@ export function ProjectInbox({ projectId }: { projectId: string }) {
   })
 
   const markRead = useMutation({
-    mutationFn: (body: { ids?: string[]; projectId?: string }) =>
+    mutationFn: (body: { ids?: string[]; projectId?: string; all?: boolean }) =>
       api('/api/v1/inbox/read', { method: 'POST', body: JSON.stringify(body) }),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ['inbox'] })
@@ -55,8 +74,9 @@ export function ProjectInbox({ projectId }: { projectId: string }) {
     },
   })
 
-  // Только этот проект: человек открыл его, чужие дела здесь — шум.
-  const items = (inbox.data?.items ?? []).filter((n) => n.projectId === projectId && !n.readAt)
+  // Внутри проекта — только он: человек открыл его, чужие дела здесь шум.
+  // На уровне компании — всё, ради того и заходят: «что меня касается».
+  const items = (inbox.data?.items ?? []).filter((n) => (projectId ? n.projectId === projectId : true) && !n.readAt)
   if (!items.length) return null
 
   // Сначала переход, потом пометка: карточка не должна исчезать раньше, чем
@@ -76,7 +96,7 @@ export function ProjectInbox({ projectId }: { projectId: string }) {
           variant="ghost"
           size="sm"
           className="h-6 gap-1 px-2 text-xs text-muted-foreground"
-          onClick={() => markRead.mutate({ projectId })}
+          onClick={() => markRead.mutate(projectId ? { projectId } : { all: true })}
         >
           <Check className="size-3" />
           {t('inbox.markAllRead')}
@@ -105,6 +125,12 @@ export function ProjectInbox({ projectId }: { projectId: string }) {
                 <span className="mt-0.5 line-clamp-2 break-all text-[11px] leading-snug text-muted-foreground">
                   {n.body}
                 </span>
+                {/* Имя проекта — только вне проекта: внутри него это очевидно,
+                    а на странице компании карточки идут вперемешку, и без
+                    подписи непонятно, куда ведёт клик. */}
+                {!projectId && n.projectName && (
+                  <span className="mt-1 line-clamp-1 text-[10px] font-medium text-brand-ink">{n.projectName}</span>
+                )}
               </span>
             </button>
             {/* Прочитать, не открывая: не всё требует перехода. */}

@@ -116,6 +116,15 @@ export function OverviewTab({
 
   const doneShare = totals?.tasksTotal ? Math.round((totals.tasksDone / totals.tasksTotal) * 100) : 0
 
+  /**
+   * Для графика — только проекты, где время есть.
+   *
+   * Пустой столбик не отвечает на вопрос «куда уходит время»: он занимает
+   * строку и говорит «никуда». Список ниже показывает ВСЕ проекты — это его
+   * работа, там ноль часов у нового проекта осмыслен.
+   */
+  const withTime = (d?.projects ?? []).filter((p) => p.minutes > 0)
+
   return (
     <div className="space-y-5">
       {/* Период сверху: цифры без указания срока читаются как «за всё время»,
@@ -296,8 +305,13 @@ export function OverviewTab({
         {/* Куда уходит время: столбики в цветах проектов — узнаются с одного взгляда */}
         <section className="rounded-lg border bg-card p-4">
           <h2 className="mb-3 text-sm font-semibold">{t('overview.byProject')}</h2>
-          <ChartBox height={Math.max(160, d.projects.length * 44)}>
-            <BarChart data={d.projects} layout="vertical" margin={{ top: 0, right: 8, bottom: 0, left: 0 }}>
+          {/* Ни одного проекта со временем — пустая рамка с осями отвечает
+              хуже, чем строчка текста. */}
+          {!withTime.length ? (
+            <p className="py-8 text-center text-sm text-muted-foreground">{t('time.noData')}</p>
+          ) : (
+          <ChartBox height={Math.max(160, withTime.length * 44)}>
+            <BarChart data={withTime} layout="vertical" margin={{ top: 0, right: 8, bottom: 0, left: 0 }}>
               <CartesianGrid horizontal={false} strokeDasharray="3 3" className="stroke-border" />
               <XAxis
                 type="number"
@@ -356,12 +370,13 @@ export function OverviewTab({
                   if (id) onOpenProject?.(id)
                 }}
               >
-                {d.projects.map((p) => (
+                {withTime.map((p) => (
                   <Cell key={p.id} fill={p.color || 'var(--brand)'} />
                 ))}
               </Bar>
             </BarChart>
           </ChartBox>
+          )}
         </section>
 
         {/* Кто тянет: распределение нагрузки между людьми */}

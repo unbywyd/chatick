@@ -1522,7 +1522,8 @@
     "time": "Time",
     "ai": "AI & mail",
     "integration": "Integrations",
-    "danger": "Danger zone"
+    "danger": "Danger zone",
+    "backup": "Backups"
   },
   "summary": {
     "planned": "Planned",

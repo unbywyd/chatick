@@ -37,6 +37,7 @@ import { TeamTab } from '@/components/company/TeamTab'
 import { NotificationBell } from '@/components/NotificationBell'
 import { OnboardingWizard } from '@/components/OnboardingWizard'
 import { CompanyTimeTab } from '@/components/company/CompanyTimeTab'
+import { ProjectInbox } from '@/components/ProjectInbox'
 import { MyRecentTime } from '@/components/company/MyRecentTime'
 import { CompanyTimeSettings } from '@/components/company/CompanyTimeSettings'
 import { OverviewTab } from '@/components/company/OverviewTab'
@@ -178,7 +179,11 @@ export function StartScreen() {
       {/* шире, чем раньше: карточки проектов идут в две колонки */}
       {/* Прокрутка на всю ширину окна: ограниченный по ширине контейнер
           рисовал полосу посреди экрана. Содержимое центрируется внутри. */}
-      <main className="min-h-0 flex-1 overflow-y-auto">
+      {/* scrollbar-gutter: место под полосу прокрутки резервируется ВСЕГДА.
+          Без него короткие вкладки (обзор, команда) полосы не имеют, длинные
+          (проекты, настройки) имеют — и при переключении вся страница вместе
+          с табами прыгает вправо на её ширину. */}
+      <main className="min-h-0 flex-1 overflow-y-auto [scrollbar-gutter:stable]">
         <div className="mx-auto w-full max-w-6xl px-6 py-8">
         {!companyId ? (
           <CompanyPicker
@@ -422,8 +427,14 @@ function CompanyHome({
   const navigate = useNavigate()
   // таб компании — из URL: /start/:companyId/:companyTab (settings адресуем — на него ведёт чат без LLM)
   const { companyTab } = useParams()
-  const tab = (['overview', 'projects', 'team', 'time', 'connect', 'backup', 'settings'] as const).includes(companyTab as never)
-    ? (companyTab as 'overview' | 'projects' | 'team' | 'time' | 'connect' | 'backup' | 'settings')
+  // Старые ссылки на /backup ведут в настройки, где он теперь и живёт:
+  // адрес мог быть в закладке или в переписке.
+  useEffect(() => {
+    if (companyTab === 'backup') navigate(`/start/${company.id}/settings?s=backup`, { replace: true })
+  }, [companyTab, company.id, navigate])
+
+  const tab = (['overview', 'projects', 'team', 'time', 'connect', 'settings'] as const).includes(companyTab as never)
+    ? (companyTab as 'overview' | 'projects' | 'team' | 'time' | 'connect' | 'settings')
     : 'overview'
   const canManage = company.myRole === 'admin' || company.myRole === 'manager'
   const isAdmin = company.myRole === 'admin'
@@ -471,13 +482,19 @@ function CompanyHome({
   }
   // доступ ко всей компании выдают те, кто ей управляет; бэкап — только админ
   const tabs = isAdmin
-    ? (['overview', 'projects', 'team', 'time', 'connect', 'backup', 'settings'] as const)
+    ? (['overview', 'projects', 'team', 'time', 'connect', 'settings'] as const)
     : canManage
       ? (['overview', 'projects', 'team', 'time', 'connect', 'settings'] as const)
       : (['overview', 'projects', 'team', 'settings'] as const)
 
   return (
     <div className="space-y-6">
+      {/* Что меня касается — до всего остального.
+          Человек заходит на страницу компании и первым делом хочет знать, не
+          ждёт ли его что-то. Полоса та же, что внутри проекта, только с именем
+          проекта на карточке: здесь они вперемешку. */}
+      <ProjectInbox projectId={null} companyId={company.id} />
+
       {/* Липкие табы: страница компании длинная (сводка, графики, списки), и
           переключиться, не прокрутив её обратно наверх, было нельзя.
           Фон обязателен — иначе содержимое просвечивает сквозь них при
@@ -534,8 +551,6 @@ function CompanyHome({
         </>
       ) : tab === 'connect' && canManage ? (
         <CompanyConnectTab company={company} />
-      ) : tab === 'backup' && isAdmin ? (
-        <BackupTab company={company} />
       ) : (
         <CompanySettings company={company} isAdmin={isAdmin} onDeleteCompany={onDeleteCompany} />
       )}
@@ -552,7 +567,7 @@ function CompanyHome({
 // вкладкам, и вкладка живёт в адресе (?s=…): ссылкой на конкретную настройку
 // делятся, а возврат из соседнего экрана не сбрасывает на первую.
 
-const SETTINGS_TABS = ['company', 'time', 'ai', 'integration', 'danger'] as const
+const SETTINGS_TABS = ['company', 'time', 'ai', 'integration', 'backup', 'danger'] as const
 type SettingsTab = (typeof SETTINGS_TABS)[number]
 
 function CompanySettings({
@@ -609,6 +624,9 @@ function CompanySettings({
       )}
 
       {tab === 'time' && <CompanyTimeSettings companyId={company.id} />}
+      {/* Бэкап переехал сюда из верхнего ряда: его открывают раз в месяц, а
+          место в главном меню занимал наравне с ежедневным. */}
+      {tab === 'backup' && <BackupTab company={company} />}
 
       {tab === 'ai' && (
         <>

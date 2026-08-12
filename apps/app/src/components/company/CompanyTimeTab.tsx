@@ -2,9 +2,11 @@ import { useMemo, useState } from 'react'
 import { useSearchParams } from 'react-router-dom'
 import { useQuery } from '@tanstack/react-query'
 import { useTranslation } from 'react-i18next'
+import { useNavigate } from 'react-router-dom'
 import { toast } from 'sonner'
 import { Download, Search, X } from 'lucide-react'
 import { api } from '@/lib/api'
+import { cn } from '@/lib/utils'
 import { ProjectBadge } from '@/components/ui/project-badge'
 import { Avatar } from '@/components/ui/avatar'
 import { Button } from '@/components/ui/button'
@@ -36,6 +38,7 @@ const BOM = '\ufeff'
 type Member = { user: { id: string; name: string; email: string; avatarUrl: string | null } }
 
 export function CompanyTimeTab({ companyId }: { companyId: string }) {
+  const navigate = useNavigate()
   const { t, i18n } = useTranslation()
   // Фильтры живут в адресе: ссылку на отчёт можно переслать, а переход с
   // обзора не теряется — начальное состояние useState срабатывает только при
@@ -280,15 +283,26 @@ export function CompanyTimeTab({ companyId }: { companyId: string }) {
               </p>
 
               {/* разбивка по проектам: на какой проект списывать часы */}
-              <ul className="mt-2 space-y-0.5 border-s ps-3 text-xs">
-                {/* Значок проекта: без него это просто столбик текста, а
-                    названия здесь длинные и на трёх языках — глазами по ним
-                    не пройти. Цвет узнаётся раньше, чем прочитано имя. */}
-                {p.projects.map((pr) => (
-                  <li key={pr.id} className="flex items-center gap-2">
-                    <ProjectBadge name={pr.name} color={pr.color} logoUrl={pr.logoUrl} size={14} />
-                    <span className="min-w-0 flex-1 truncate text-muted-foreground">{pr.name}</span>
-                    <span className="font-mono tabular-nums text-muted-foreground">{formatDuration(pr.minutes)}</span>
+              {/* Полосы через строку: без них глаз не связывает имя слева с
+                  числом справа — на широкой строке они расходятся, и человек
+                  ведёт пальцем по экрану. Плюс воздуха: попадать в строку
+                  мышью должно быть легко.
+
+                  Строка целиком ведёт на ВРЕМЯ проекта, а не на проект: сюда
+                  приходят разбираться с часами, и лишний переход по вкладкам
+                  внутри проекта — работа, которую можно не делать. */}
+              <ul className="mt-2 overflow-hidden rounded-md border text-xs">
+                {p.projects.map((pr, i) => (
+                  <li key={pr.id} className={cn(i % 2 === 1 && 'bg-muted/40')}>
+                    <button
+                      onClick={() => navigate(`/c/${companyId}/p/${pr.id}/time`)}
+                      title={pr.name}
+                      className="flex w-full items-center gap-2 px-2 py-1.5 text-start transition-colors hover:bg-accent"
+                    >
+                      <ProjectBadge name={pr.name} color={pr.color} logoUrl={pr.logoUrl} size={14} />
+                      <span className="min-w-0 flex-1 truncate">{pr.name}</span>
+                      <span className="font-mono tabular-nums text-muted-foreground">{formatDuration(pr.minutes)}</span>
+                    </button>
                   </li>
                 ))}
               </ul>
