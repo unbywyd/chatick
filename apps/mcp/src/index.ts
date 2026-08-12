@@ -201,6 +201,10 @@ server.registerTool(
       version: z.string().min(1).describe('"1.4.0" — as the team calls it'),
       buildType: z.enum(['ios', 'android', 'web', 'backend', 'desktop', 'other']),
       status: z.string().optional().describe('Stage key; omit to start at the first one'),
+      buildProfile: z
+        .enum(['development', 'preview', 'production'])
+        .optional()
+        .describe('What it is built WITH (eas build --profile) — not the same as the stage, which is where it got to'),
       referenceUrl: z.string().optional().describe('Where the build lives: Expo, GitHub, store'),
       notes: z.string().optional().describe("What's new — for the team"),
       comment: z.string().optional().describe('First line of the history'),
@@ -209,6 +213,34 @@ server.registerTool(
   async ({ project, ...body }) => {
     try {
       return json(await call({ ...(await need()), projectId: project }, 'POST', '/releases', body))
+    } catch (e) {
+      return fail(e)
+    }
+  },
+)
+
+server.registerTool(
+  'chatick_release_request',
+  {
+    title: 'Ask someone for a build',
+    description:
+      'The usual case: a manager does not "create a version", they ASK a person to build one. This makes the task, ' +
+      'the version and the link between them in ONE call — three separate calls can break in the middle and leave a ' +
+      'task with no version. The assignee is notified like for any other task. Use chatick_release_create instead ' +
+      'only to register something that is ALREADY built, when there is nobody to ask.',
+    inputSchema: {
+      project: z.string(),
+      version: z.string().min(1).describe('"1.4.0" — as the team calls it'),
+      buildType: z.enum(['ios', 'android', 'web', 'backend', 'desktop', 'other']),
+      assignee: z.string().optional().describe('"me" or a user id from chatick_members'),
+      comment: z.string().optional().describe('What exactly is needed — goes into the task and the history'),
+      buildProfile: z.enum(['development', 'preview', 'production']).optional().describe('What it is built WITH'),
+      estimateMinutes: z.number().int().positive().optional(),
+    },
+  },
+  async ({ project, ...body }) => {
+    try {
+      return json(await call({ ...(await need()), projectId: project }, 'POST', '/releases/request', body))
     } catch (e) {
       return fail(e)
     }

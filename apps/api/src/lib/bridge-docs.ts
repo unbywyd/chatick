@@ -266,8 +266,22 @@ function endpointCatalog(q: string): string {
 
   GET    /x/releases${q}                   what shipped and where, plus "live"
   GET    /x/releases/<id>${q}              one version with its stage history
-  POST   /x/releases${q}           {"version","buildType","status?","referenceUrl?","notes?","comment?"}
+  POST   /x/releases/request${q}   {"version","buildType","assignee?","comment?","buildProfile?","estimateMinutes?"}
+  POST   /x/releases${q}           {"version","buildType","status?","referenceUrl?","notes?","comment?","buildProfile?"}
   POST   /x/releases/<id>/stage${q} {"status","comment"}   comment REQUIRED
+
+  /x/releases/request is the one you usually want. A manager does not "create a
+  version" — they ASK someone to build one. It creates the TASK (with the
+  assignee, who gets notified), the VERSION, and the link between them in a
+  single call. Doing it as three calls risks breaking in the middle and leaving
+  a task with no version. POST /x/releases without /request is for registering
+  something ALREADY built, when there is nobody to ask.
+
+  "buildProfile" is what it was built WITH — development | preview | production
+  (eas build --profile). It is NOT the stage: the stage says where the build
+  got to, the profile says how it was made. The same production build passes
+  through TestFlight and then the store; a preview build may never leave the
+  first stage. Optional, and for web or backend usually pointless.
 
   Versions answer the question people currently ask out loud: "which version is
   in production". The list reply carries "live" — the version that reached

@@ -3123,6 +3123,7 @@ bridgeRoute.get('/releases', async (c) => {
       statusLabel: buildType(r.buildType)?.stages.find((st) => st.key === r.status)?.label ?? r.status,
       isLive: isLiveStage(r.buildType, r.status),
       owner: u ? { id: u.id, name: u.name } : null,
+      buildProfile: r.buildProfile,
       referenceUrl: r.referenceUrl,
       notes: r.notes,
       releasedAt: r.releasedAt,
@@ -3161,6 +3162,7 @@ bridgeRoute.get('/releases/:id', async (c) => {
     buildType: row.buildType,
     status: row.status,
     isLive: isLiveStage(row.buildType, row.status),
+    buildProfile: row.buildProfile,
     referenceUrl: row.referenceUrl,
     notes: row.notes,
     releasedAt: row.releasedAt,
@@ -3176,7 +3178,8 @@ bridgeRoute.get('/releases/:id', async (c) => {
   })
 })
 
-const RELEASE_FIELDS = ['version', 'buildType', 'status', 'referenceUrl', 'notes', 'comment', 'project'] as const
+const RELEASE_FIELDS = ['version', 'buildType', 'status', 'referenceUrl', 'notes', 'comment', 'buildProfile', 'project'] as const
+const REQUEST_FIELDS = ['version', 'buildType', 'assignee', 'comment', 'referenceUrl', 'buildProfile', 'estimateMinutes', 'project'] as const
 
 bridgeRoute.post('/releases', async (c) => {
   const ready = await releasesReady(c as never, 'releases.manage')
@@ -3207,6 +3210,7 @@ bridgeRoute.post('/releases', async (c) => {
       buildType: type,
       status,
       ownerId: auth(c as never).userId,
+      buildProfile: typeof b.buildProfile === 'string' ? b.buildProfile.slice(0, 50) : null,
       referenceUrl: typeof b.referenceUrl === 'string' ? b.referenceUrl.slice(0, 2000) : null,
       notes: typeof b.notes === 'string' ? b.notes.slice(0, 5000) : null,
       releasedAt: isLiveStage(type, status) ? new Date() : null,
@@ -3222,6 +3226,124 @@ bridgeRoute.post('/releases', async (c) => {
   })
   broadcast(ready.projectId, 'releases_changed', {})
   return c.json({ id: row!.id, version: row!.version, buildType: row!.buildType, status: row!.status }, 201)
+})
+
+/**
+ * «Запросить сборку» через мост: задача + версия + связь, одним вызовом.
+ *
+ * Ровно то же, что делает кнопка в интерфейсе. Ассистенту это нужнее, чем
+ * человеку: «попроси Артёма собрать прод-билд 1.4» — обычная просьба, и без
+ * этой ручки она распадалась бы на три вызова, между которыми бывает обрыв.
+ * Тогда остаётся задача без версии — то самое полусостояние, которое потом
+ * приходится разбирать руками.
+ *
+ * Права нужны обе: releases.manage — завести версию, tasks.create — поручить
+ * работу. Иначе ассистент раздавал бы поручения от имени человека, который на
+ * это не уполномочен.
+ */
+bridgeRoute.post('/releases/request', async (c) => {
+  const ready = await releasesReady(c as never, 'releases.manage')
+  if ('error' in ready) return c.json({ error: ready.error }, ready.status)
+  const id = auth(c as never)
+  if (!(await hasPermission(ready.projectId, id.userId, 'tasks.create'))) {
+    return c.json({ error: 'Forbidden: tasks.create is required to ask someone for a build' }, 403)
+  }
+  const parsed = await readJson(c as never)
+  if ('error' in parsed) return c.json(parsed, 400)
+  const b = parsed.body as Record<string, unknown>
+  const bad = unknownFields(b, REQUEST_FIELDS)
+  if (bad) return c.json({ error: bad }, 400)
+
+  const version = typeof b.version === 'string' ? b.version.trim() : ''
+  const type = typeof b.buildType === 'string' ? b.buildType : ''
+  if (!version) return c.json({ error: 'version is required' }, 400)
+  if (!buildType(type)) {
+    return c.json({ error: `Unknown buildType "${type}". Use one of: ${BUILD_TYPES.map((t) => t.key).join(', ')}` }, 400)
+  }
+
+  // Исполнителя разрешаем тем же способом, что и у задач: «me», имя или id.
+  // Иначе ассистенту пришлось бы держать две разные привычки для соседних
+  // ручек, и он спотыкался бы ровно на этом.
+  const assigneeId = b.assignee !== undefined ? await resolveAssignee(id, ready.projectId, b.assignee) : null
+  if (assigneeId === undefined) return c.json({ error: `Unknown assignee: ${String(b.assignee)}` }, 400)
+
+  const comment = typeof b.comment === 'string' ? b.comment.trim() : ''
+  const status = firstStage(type)!
+  const label = buildType(type)!.label
+
+  const [{ next, minSort }] = (await db
+    .select({
+      next: sql<number>`coalesce(max(cast(substring(${tasks.number} from 6) as int)), 0) + 1`,
+      minSort: sql<number>`coalesce(min(${tasks.sortOrder}), 0)`,
+    })
+    .from(tasks)
+    .where(eq(tasks.projectId, ready.projectId))) as [{ next: number; minSort: number }]
+
+  const [task] = await db
+    .insert(tasks)
+    .values({
+      projectId: ready.projectId,
+      number: `TASK-${next}`,
+      sortOrder: minSort - 1,
+      title: `${label} ${version}`,
+      description: comment ? richText(comment) : '',
+      status: 'todo',
+      priority: 'normal',
+      assigneeId: assigneeId ?? null,
+      createdById: id.userId,
+      estimateMinutes: typeof b.estimateMinutes === 'number' ? String(Math.max(0, Math.round(b.estimateMinutes))) : null,
+    })
+    .returning()
+
+  const [release] = await db
+    .insert(releases)
+    .values({
+      projectId: ready.projectId,
+      version,
+      buildType: type,
+      status,
+      ownerId: id.userId,
+      buildProfile: typeof b.buildProfile === 'string' ? b.buildProfile.slice(0, 50) : null,
+      referenceUrl: typeof b.referenceUrl === 'string' ? b.referenceUrl.slice(0, 2000) : null,
+      notes: comment || null,
+    })
+    .returning()
+
+  await db.insert(releaseEvents).values({
+    releaseId: release!.id,
+    status,
+    fromStatus: null,
+    comment: comment || `@requested:${task!.number}`,
+    actorId: id.userId,
+  })
+  await db.insert(taskReleases).values({ taskId: task!.id, releaseId: release!.id })
+
+  // Человек узнаёт о поручении так же, как о любой другой задаче.
+  if (task!.assigneeId) void notifyTask(ready.projectId, id.userId, task!, { assigneeChanged: true, mentions: false })
+  broadcast(ready.projectId, 'releases_changed', {})
+  tasksChanged(ready.projectId, [task!.assigneeId, id.userId])
+
+  const companyId = await companyOf(ready.projectId)
+  return c.json(
+    {
+      task: {
+        id: task!.id,
+        number: task!.number,
+        title: task!.title,
+        ...(companyId ? { url: projectUrl(env.APP_URL, companyId, ready.projectId, `/tasks/${task!.id}`) } : {}),
+      },
+      release: {
+        id: release!.id,
+        version: release!.version,
+        buildType: release!.buildType,
+        status: release!.status,
+        ...(companyId
+          ? { url: projectUrl(env.APP_URL, companyId, ready.projectId, `/releases/${release!.id}`) }
+          : {}),
+      },
+    },
+    201,
+  )
 })
 
 bridgeRoute.post('/releases/:id/stage', async (c) => {
