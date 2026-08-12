@@ -2,9 +2,10 @@ import { Hono } from 'hono'
 import { zValidator } from '@hono/zod-validator'
 import { z } from 'zod'
 import { and, asc, desc, eq, inArray, isNull, sql } from 'drizzle-orm'
+import { buildType, isLiveStage } from '../lib/release-stages.js'
 import { companyOf, projectPath } from '../lib/links.js'
 import { db } from '../db/client.js'
-import { credentials, files, projects, taskBlockers, taskChecklist, taskComments, taskGroups, taskNotes, taskResources, tasks, users } from '../db/schema.js'
+import { credentials, files, projects, taskBlockers, taskChecklist, taskComments, taskGroups, taskNotes, taskResources, tasks, users, taskReleases, releases } from '../db/schema.js'
 import { requireProject, type ProjectEnv } from '../auth.js'
 import { hasPermission, ownsOrManages } from './projects.js'
 import { improveTask, validateTask, generateTaskNotes } from '../lib/llm.js'
@@ -216,6 +217,34 @@ tasksRoute.get('/', async (c) => {
     byTask.set(r.taskId, list)
   }
 
+  // Версии задачи — со стадией.
+  //
+  // Стадия здесь не украшение: «эта задача уедет в 1.4» без ответа на «а где
+  // сейчас 1.4» заставляет открывать вкладку версий ради одного слова.
+  const releaseRows = taskIds.length
+    ? await db
+        .select({ taskId: taskReleases.taskId, r: releases })
+        .from(taskReleases)
+        .innerJoin(releases, eq(releases.id, taskReleases.releaseId))
+        .where(inArray(taskReleases.taskId, taskIds))
+    : []
+  const releasesByTask = new Map<
+    string,
+    { id: string; version: string; buildType: string; status: string; statusLabel: string; isLive: boolean }[]
+  >()
+  for (const row of releaseRows) {
+    const list = releasesByTask.get(row.taskId) ?? []
+    list.push({
+      id: row.r.id,
+      version: row.r.version,
+      buildType: row.r.buildType,
+      status: row.r.status,
+      statusLabel: buildType(row.r.buildType)?.stages.find((s) => s.key === row.r.status)?.label ?? row.r.status,
+      isLive: isLiveStage(row.r.buildType, row.r.status),
+    })
+    releasesByTask.set(row.taskId, list)
+  }
+
   return c.json(
     rows.map((r) => ({
       ...serialize(r.task, r.assignee),
@@ -223,6 +252,7 @@ tasksRoute.get('/', async (c) => {
       blockedBy: r.blockedBy,
       blocking: r.blocking,
       resources: byTask.get(r.task.id) ?? [],
+      releases: releasesByTask.get(r.task.id) ?? [],
     })),
   )
 })

@@ -31,6 +31,20 @@ export type Task = {
    * ресурсом секреты и кому они открыты, решает сам ресурс.
    */
   resources?: { id: string; name: string; url: string | null }[]
+  /**
+   * Версии, в которых уезжает задача, — со стадией.
+   *
+   * Стадия здесь не украшение: «уедет в 1.4» без ответа «а где сейчас 1.4»
+   * заставляет открывать вкладку версий ради одного слова.
+   */
+  releases?: {
+    id: string
+    version: string
+    buildType: string
+    status: string
+    statusLabel: string
+    isLive: boolean
+  }[]
 }
 
 export type TaskGroup = {

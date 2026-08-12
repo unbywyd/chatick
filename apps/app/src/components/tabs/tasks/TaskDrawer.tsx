@@ -20,6 +20,7 @@ import {
   User,
   X,
   Check,
+  Package,
 } from 'lucide-react'
 import { api, API_URL, getProjectToken } from '@/lib/api'
 import { cn } from '@/lib/utils'
@@ -1050,6 +1051,41 @@ export function TaskDrawer({
                           {r.url}
                         </span>
                       )}
+                    </button>
+                  </li>
+                ))}
+              </ul>
+            </section>
+          )}
+
+          {/* Версии, в которых уезжает задача.
+              Стадия рядом — за ней и приходят: «а 1.4 уже в проде?» иначе
+              стоит одного перехода на вкладку версий и обратно. */}
+          {(task.releases?.length ?? 0) > 0 && (
+            <section className="space-y-2">
+              <h4 className="text-xs font-medium text-muted-foreground">{t('tabs.releases')}</h4>
+              <ul className="space-y-1">
+                {task.releases!.map((r) => (
+                  <li key={r.id}>
+                    <button
+                      className="flex w-full items-center gap-2 rounded-md border px-2 py-1.5 text-start text-sm transition-colors hover:border-brand hover:text-brand"
+                      onClick={() => navigate(`/c/${companyId}/p/${routeProjectId}/releases`)}
+                    >
+                      <Package className="size-3.5 shrink-0 text-muted-foreground" />
+                      <span className="truncate font-medium">{r.version}</span>
+                      <span className="shrink-0 text-xs text-muted-foreground">{r.buildType}</span>
+                      <span
+                        className={cn(
+                          'ms-auto shrink-0 rounded px-1.5 py-0.5 text-[11px]',
+                          // Доехавшую версию видно с одного взгляда: ради этого
+                          // ответа на страницу и заходят.
+                          r.isLive
+                            ? 'bg-brand font-medium text-brand-foreground'
+                            : 'bg-muted text-muted-foreground',
+                        )}
+                      >
+                        {r.statusLabel}
+                      </span>
                     </button>
                   </li>
                 ))}
