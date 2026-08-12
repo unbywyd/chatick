@@ -157,7 +157,9 @@ export function memoryTools(projectId: string, actorUserId: string): { tools: To
     {
       name: 'create_task',
       description:
-        "Create a task. You can set assignee (by member name or email), due date, time estimate, priority, status and sprint. Requires the author's tasks.create permission.",
+        "Create a task. You can set assignee (by member name or email), due date, time estimate, priority, status and sprint. " +
+        'To pull someone into the description, write @[Their Name](<userId>) — plain "@Name" is text and notifies nobody. ' +
+        "The assignee is notified by being assigned; mention others only when they specifically need to see it. Requires the author's tasks.create permission.",
       parameters: {
         type: 'object',
         properties: {
@@ -358,10 +360,15 @@ export function memoryTools(projectId: string, actorUserId: string): { tools: To
     {
       name: 'add_task_comment',
       description:
-        'Add a comment to a task (by number) ON BEHALF OF THE USER. Use when the user wants to record a note/update on a task rather than post to chat. Requires tasks.read.',
+        'Add a comment to a task (by number) ON BEHALF OF THE USER. Use when the user wants to record a note/update on a task rather than post to chat. ' +
+        'TO ADDRESS SOMEONE, write @[Their Name](<userId>) — take the id from the team context. Plain "@Name" is just text and notifies nobody, so the person never learns you wrote to them. ' +
+        'The task author and assignee are notified about any new comment anyway — mention them only when you actually need that specific person to act. Requires tasks.read.',
       parameters: {
         type: 'object',
-        properties: { number: { type: 'string' }, body: { type: 'string' } },
+        properties: {
+          number: { type: 'string' },
+          body: { type: 'string', description: 'Comment text. Mentions must be @[Name](userId) to notify.' },
+        },
         required: ['number', 'body'],
       },
     },

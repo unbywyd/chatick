@@ -222,6 +222,8 @@ server.registerTool(
     description:
       'Creates a task. estimateMinutes is required here even though the API allows omitting it: without an estimate ' +
       'nobody can plan a sprint, and the number never gets added later. Write in the language the project speaks. ' +
+      'To pull someone into the description write @[Name](userId) — a plain @name is text and notifies nobody. ' +
+      'The assignee already learns of the assignment; mention others only when they specifically need to see it. ' +
       'The reply carries a ready "url" — give the human that one, never a link you assembled.',
     inputSchema: {
       project: z.string(),

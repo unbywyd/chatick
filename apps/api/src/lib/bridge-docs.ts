@@ -228,6 +228,11 @@ function endpointCatalog(q: string): string {
   just text. The task's author and assignee, and the person you replied to,
   are told about a new comment anyway, so do not mention them for that alone.
 
+  The same markup works in a task DESCRIPTION and notifies the same way, so
+  you can pull someone in when you create the task rather than commenting
+  right after. The assignee already learns of the assignment — mention others
+  only when they specifically need to see it.
+
   Attaching files. Upload with POST /x/files first, then pass the returned ids
   as "attachmentIds" (up to 10). A screenshot of the failure often IS the
   answer, and no amount of text replaces it. The file also lands in the task's
