@@ -15,6 +15,14 @@ export type Stage = {
   /** Подписи: интерфейс переводит по ключу, здесь — запасной вариант. */
   label: string
   /**
+   * Одна строка о том, что стадия означает на самом деле.
+   *
+   * «Internal track» и «TestFlight» — слова из документации магазинов, и
+   * человеку вне мобильной разработки они не говорят ничего. Без пояснения
+   * лестница выглядит набором терминов, а выбирать по ней приходится.
+   */
+  hint?: string
+  /**
    * Эта стадия означает «доехало до людей».
    *
    * Нужна сводке наверху страницы: без явной пометки система не знает, какая
@@ -41,46 +49,46 @@ export const BUILD_TYPES: BuildType[] = [
     key: 'ios',
     label: 'iOS',
     stages: [
-      { key: 'building', label: 'Building' },
-      { key: 'testflight', label: 'TestFlight' },
-      { key: 'in_review', label: 'Waiting for Apple review' },
-      { key: 'released', label: 'App Store', live: true },
+      { key: 'building', label: 'Building', hint: 'Сборка идёт' },
+      { key: 'testflight', label: 'TestFlight', hint: 'Доступна тестировщикам, в магазине не видна' },
+      { key: 'in_review', label: 'Waiting for Apple review', hint: 'Отправлена в Apple, ждём проверки' },
+      { key: 'released', label: 'App Store', live: true, hint: 'Опубликована, доступна всем' },
     ],
   },
   {
     key: 'android',
     label: 'Android',
     stages: [
-      { key: 'building', label: 'Building' },
-      { key: 'internal', label: 'Internal track' },
-      { key: 'released', label: 'Google Play', live: true },
+      { key: 'building', label: 'Building', hint: 'Сборка идёт' },
+      { key: 'internal', label: 'Internal track', hint: 'Внутренний канал Google Play: только свои тестировщики, в магазине не видна' },
+      { key: 'released', label: 'Google Play', live: true, hint: 'Опубликована, доступна всем' },
     ],
   },
   {
     key: 'web',
     label: 'Web',
     stages: [
-      { key: 'building', label: 'Building' },
-      { key: 'staging', label: 'Staging' },
-      { key: 'released', label: 'Production', live: true },
+      { key: 'building', label: 'Building', hint: 'Сборка идёт' },
+      { key: 'staging', label: 'Staging', hint: 'Выкачено на тестовый стенд' },
+      { key: 'released', label: 'Production', live: true, hint: 'Выкачено в прод' },
     ],
   },
   {
     key: 'backend',
     label: 'Backend',
     stages: [
-      { key: 'building', label: 'Building' },
-      { key: 'staging', label: 'Staging' },
-      { key: 'released', label: 'Production', live: true },
+      { key: 'building', label: 'Building', hint: 'Сборка идёт' },
+      { key: 'staging', label: 'Staging', hint: 'Выкачено на тестовый стенд' },
+      { key: 'released', label: 'Production', live: true, hint: 'Выкачено в прод' },
     ],
   },
   {
     key: 'desktop',
     label: 'Desktop',
     stages: [
-      { key: 'building', label: 'Building' },
-      { key: 'beta', label: 'Beta' },
-      { key: 'released', label: 'Released', live: true },
+      { key: 'building', label: 'Building', hint: 'Сборка идёт' },
+      { key: 'beta', label: 'Beta', hint: 'Бета-канал: обновление получают только подписавшиеся' },
+      { key: 'released', label: 'Released', live: true, hint: 'Обновление уходит всем' },
     ],
   },
   {
@@ -94,8 +102,8 @@ export const BUILD_TYPES: BuildType[] = [
     key: 'other',
     label: 'Other',
     stages: [
-      { key: 'building', label: 'In progress' },
-      { key: 'released', label: 'Released', live: true },
+      { key: 'building', label: 'In progress', hint: 'В работе' },
+      { key: 'released', label: 'Released', live: true, hint: 'Готово и доступно' },
     ],
   },
 ]

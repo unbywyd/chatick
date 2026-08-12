@@ -1623,6 +1623,7 @@
     "releasedAt": "שוחרר",
     "search": "חיפוש לפי גרסה, משימה, הערות",
     "allTypes": "הכול",
-    "nothingFound": "לא נמצא דבר"
+    "nothingFound": "לא נמצא דבר",
+    "changeStage": "שינוי שלב"
   }
 }

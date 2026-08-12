@@ -39,7 +39,7 @@ import { PeoplePicker } from '@/components/ui/people-picker'
 // проде». Поэтому сводка стоит первой и читается без прокрутки, а список —
 // уже под ней.
 
-type Stage = { key: string; label: string; live?: boolean }
+type Stage = { key: string; label: string; live?: boolean; hint?: string }
 type BuildTypeDef = { key: string; label: string; stages: Stage[] }
 
 type Release = {
@@ -421,7 +421,11 @@ function ReleasesTable({
                     <DropdownMenuTrigger asChild>
                       <button
                         disabled={!canManage}
-                        className="inline-flex w-full items-center px-2 py-1.5 text-start hover:bg-accent/60 disabled:opacity-70"
+                        title={canManage ? t('releases.changeStage') : undefined}
+                        className={cn(
+                          'inline-flex w-full items-center gap-1 px-2 py-1.5 text-start',
+                          canManage ? 'cursor-pointer hover:bg-accent/60' : 'cursor-default',
+                        )}
                       >
                         <span
                           className={cn(
@@ -431,6 +435,10 @@ function ReleasesTable({
                         >
                           {r.statusLabel}
                         </span>
+                        {/* Стрелка — единственное, что отличает «просто ярлык»
+                            от «нажми меня». Без неё стадию не пробуют менять:
+                            бейдж выглядит подписью, а не кнопкой. */}
+                        {canManage && <ChevronDown className="size-3 shrink-0 text-muted-foreground" />}
                       </button>
                     </DropdownMenuTrigger>
                     <DropdownMenuContent align="start">
@@ -440,7 +448,13 @@ function ReleasesTable({
                           checked={s.key === r.status}
                           onSelect={() => s.key !== r.status && onStage(r, s.key)}
                         >
-                          {s.label}
+                          {/* Пояснение рядом: «Internal track» и «TestFlight» —
+                              слова из документации магазинов, и выбирать по ним
+                              вслепую приходится тому, кто их не знает. */}
+                          <span className="flex flex-col items-start">
+                            <span>{s.label}</span>
+                            {s.hint && <span className="text-[11px] text-muted-foreground">{s.hint}</span>}
+                          </span>
                         </DropdownMenuCheckItem>
                       ))}
                     </DropdownMenuContent>
