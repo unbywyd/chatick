@@ -94,12 +94,15 @@ export function ProjectInbox({ projectId }: { projectId: string }) {
             <button onClick={() => open(n)} className="flex min-w-0 flex-1 items-start gap-2 text-start">
               <Avatar name={n.actor?.name ?? 'AI'} src={n.actor?.avatarUrl} size={24} />
               <span className="min-w-0 flex-1">
-                <span className="line-clamp-1 block text-xs font-medium break-words">{n.summary || n.title}</span>
-                {/* break-words обязателен, иначе line-clamp бессилен: обрезать
-                    он умеет только строки, а ссылка на фигму — одно слово без
-                    пробелов, шире карточки. Карточка вытягивалась на восемь
-                    строк и ломала всю ленту. */}
-                <span className="mt-0.5 line-clamp-2 block break-words text-[11px] leading-snug text-muted-foreground">
+                {/* Ни block, ни truncate рядом с line-clamp: оба ставят свой
+                    display и отменяют -webkit-box, на котором line-clamp
+                    держится. Карточка тогда растёт без предела.
+
+                    break-words — вторая половина: обрезать line-clamp умеет
+                    только строки, а ссылка на фигму это одно слово без
+                    пробелов, шире карточки, и рвать его браузеру негде. */}
+                <span className="line-clamp-1 break-all text-xs font-medium">{n.summary || n.title}</span>
+                <span className="mt-0.5 line-clamp-2 break-all text-[11px] leading-snug text-muted-foreground">
                   {n.body}
                 </span>
               </span>

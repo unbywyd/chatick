@@ -111,10 +111,10 @@ export function InboxScreen() {
               <Avatar name={n.actor?.name ?? 'AI'} src={n.actor?.avatarUrl} size={32} className="mt-0.5" />
               <span className="min-w-0 flex-1">
                 {/* если ИИ понял суть запроса — показываем её, а не «X упомянул вас» */}
-                <span className="line-clamp-2 block break-words text-sm font-medium">{n.summary || n.title}</span>
-                {/* break-words: длинная ссылка — одно слово шире колонки, и
-                    без переноса line-clamp её не обрежет (см. ProjectInbox). */}
-                <span className="mt-0.5 line-clamp-2 block break-words text-xs text-muted-foreground">
+                {/* Без block: он отменяет -webkit-box, и line-clamp перестаёт
+                    работать. Подробности — в ProjectInbox. */}
+                <span className="line-clamp-2 break-all text-sm font-medium">{n.summary || n.title}</span>
+                <span className="mt-0.5 line-clamp-2 break-all text-xs text-muted-foreground">
                   {n.summary ? n.title : n.body}
                 </span>
                 <span className="mt-1 flex items-center gap-2 text-[11px] text-muted-foreground">
