@@ -1651,11 +1651,6 @@
   },
   "myTime": {
     "title": "השעות האחרונות שלי",
-    "when": "מתי",
-    "project": "פרויקט",
-    "what": "מה",
-    "duration": "משך",
-    "running": "פועל",
-    "deleteConfirm": "למחוק את רישום הזמן?"
+    "project": "פרויקט"
   }
 }

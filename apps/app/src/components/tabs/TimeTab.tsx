@@ -2,7 +2,26 @@ import { useMemo, useState } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { useTranslation } from 'react-i18next'
 import { toast } from 'sonner'
-import { BarChart3, CalendarDays, CalendarRange, Clock, Download, Plus, Search, Trash2, User, X } from 'lucide-react'
+import {
+  BarChart3,
+  CalendarDays,
+  CalendarRange,
+  Clock,
+  Download,
+  FolderOpen,
+  Plus,
+  Search,
+  Trash2,
+  User,
+  X,
+} from 'lucide-react'
+import { ProjectBadge } from '@/components/ui/project-badge'
+import {
+  DropdownMenu,
+  DropdownMenuTrigger,
+  DropdownMenuContent,
+  DropdownMenuCheckItem,
+} from '@/components/ui/dropdown-menu'
 import { api } from '@/lib/api'
 import { cn } from '@/lib/utils'
 import { Avatar } from '@/components/ui/avatar'
@@ -41,6 +60,11 @@ type Entry = {
   running: boolean
   minutes: number | null
   autoStopped: boolean
+  /** Есть только в списке компании: там записи из разных проектов. */
+  projectId?: string
+  projectName?: string
+  projectColor?: string | null
+  projectLogoUrl?: string | null
 }
 type Member = { user: { id: string; name: string; email: string; avatarUrl: string | null } }
 type TaskLite = { id: string; number: string; title: string }
@@ -382,7 +406,26 @@ function StatsView({ projectId, weekStart }: { projectId: string; weekStart: num
 
 // --- Список записей по дням ---------------------------------------------------
 
-function EntryList({ projectId, items, loading }: { projectId: string; items: Entry[]; loading: boolean }) {
+/**
+ * Список записей по дням — общий для страницы проекта и страницы компании.
+ *
+ * Экспортируется, чтобы «мои часы» на уровне компании выглядели ТАК ЖЕ:
+ * группировка по дню, итог за день, правка на месте. Второй список с теми же
+ * данными, но своей вёрсткой, разошёлся бы с этим на первой же правке.
+ */
+export function EntryList({
+  projectId,
+  items,
+  loading,
+  projects,
+}: {
+  /** null — список на уровне компании: правим по сессии, без проектного токена. */
+  projectId: string | null
+  items: Entry[]
+  loading: boolean
+  /** Куда можно перенести запись. Задан — показываем колонку проекта. */
+  projects?: { id: string; name: string; color?: string | null; logoUrl?: string | null }[]
+}) {
   const { t, i18n } = useTranslation()
 
   // группируем по дню начала: день — единица, которой человек мыслит
@@ -416,7 +459,7 @@ function EntryList({ projectId, items, loading }: { projectId: string; items: En
             </div>
             <ul className="divide-y rounded-lg border bg-card">
               {list.map((e) => (
-                <EntryRow key={e.id} projectId={projectId} entry={e} />
+                <EntryRow key={e.id} projectId={projectId} entry={e} projects={projects} />
               ))}
             </ul>
           </div>
@@ -426,7 +469,15 @@ function EntryList({ projectId, items, loading }: { projectId: string; items: En
   )
 }
 
-function EntryRow({ projectId, entry }: { projectId: string; entry: Entry }) {
+function EntryRow({
+  projectId,
+  entry,
+  projects,
+}: {
+  projectId: string | null
+  entry: Entry
+  projects?: { id: string; name: string; color?: string | null; logoUrl?: string | null }[]
+}) {
   const { t } = useTranslation()
   const qc = useQueryClient()
   const confirm = useConfirm()
@@ -436,7 +487,20 @@ function EntryRow({ projectId, entry }: { projectId: string; entry: Entry }) {
     qc.invalidateQueries({ queryKey: ['time-entries', projectId] })
     qc.invalidateQueries({ queryKey: ['time-running', projectId] })
     qc.invalidateQueries({ queryKey: ['time-summary', projectId] })
+    // Список компании и сводка под ним считают те же записи.
+    qc.invalidateQueries({ queryKey: ['my-time-recent'] })
+    qc.invalidateQueries({ queryKey: ['company-time'] })
   }
+
+  /**
+   * Куда слать правку.
+   *
+   * На странице проекта — проектным токеном, как раньше. На странице компании
+   * его нет вовсе, поэтому там своя ручка по сессии: она правит только СВОИ
+   * записи, и этого для того экрана достаточно.
+   */
+  const patchUrl = projectId ? `/api/v1/time/${entry.id}` : `/api/v1/my/time/${entry.id}`
+  const scope = projectId ? ('project' as const) : ('session' as const)
 
   // Короткая подсветка вместо тоста: правок времени много, и на каждую
   // всплывашку смотреть невыносимо — но и молчать нельзя, человек должен
@@ -444,7 +508,7 @@ function EntryRow({ projectId, entry }: { projectId: string; entry: Entry }) {
   const [saved, setSaved] = useState(false)
   const patch = useMutation({
     mutationFn: (body: Record<string, unknown>) =>
-      api(`/api/v1/time/${entry.id}`, { method: 'PATCH', body: JSON.stringify(body) }, 'project'),
+      api(patchUrl, { method: 'PATCH', body: JSON.stringify(body) }, scope),
     onSuccess: () => {
       refresh()
       setSaved(true)
@@ -453,7 +517,7 @@ function EntryRow({ projectId, entry }: { projectId: string; entry: Entry }) {
     onError: onErr,
   })
   const remove = useMutation({
-    mutationFn: () => api(`/api/v1/time/${entry.id}`, { method: 'DELETE' }, 'project'),
+    mutationFn: () => api(patchUrl, { method: 'DELETE' }, scope),
     onSuccess: refresh,
     onError: onErr,
   })
@@ -477,11 +541,20 @@ function EntryRow({ projectId, entry }: { projectId: string; entry: Entry }) {
         />
         {/* задачу цепляют задним числом чаще, чем при старте: сначала работаешь,
             потом вспоминаешь, к чему это относилось */}
-        <TaskPicker
-          projectId={projectId}
-          value={entry.task}
-          onChange={(taskId) => patch.mutate({ taskId })}
-        />
+        {projectId ? (
+          <TaskPicker projectId={projectId} value={entry.task} onChange={(taskId) => patch.mutate({ taskId })} />
+        ) : projects ? (
+          /* На уровне компании вместо задачи — проект: там задачи разных
+             проектов вперемешку, и выбирать её не из чего. Зато смена проекта
+             здесь и есть «перекинуть часы». Связь с задачей при переносе рвёт
+             сервер: она осталась в прежнем проекте. */
+          <ProjectCell
+            value={entry.projectId ?? ''}
+            projects={projects}
+            taskNumber={entry.task?.number}
+            onChange={(id) => patch.mutate({ projectId: id })}
+          />
+        ) : null}
       </div>
 
       {/* время правится на месте: 9, 930, 9:30 */}
@@ -827,6 +900,57 @@ function ManualEntryForm({ projectId, onDone }: { projectId: string; onDone: () 
 }
 
 /** Привязка задачи к записи: поиск по номеру и названию, снять — «без задачи». */
+/**
+ * Проект записи — выпадающим списком прямо в строке.
+ *
+ * Выглядит как TaskPicker по соседству: то же место, тот же размер, тот же
+ * приглушённый вид. Человек читает строку одинаково на обеих страницах.
+ */
+function ProjectCell({
+  value,
+  projects,
+  taskNumber,
+  onChange,
+}: {
+  value: string
+  projects: { id: string; name: string; color?: string | null; logoUrl?: string | null }[]
+  taskNumber?: string
+  onChange: (id: string) => void
+}) {
+  const { t } = useTranslation()
+  const current = projects.find((p) => p.id === value)
+  return (
+    <span className="flex items-center gap-1.5">
+      <DropdownMenu>
+        <DropdownMenuTrigger asChild>
+          <button className="inline-flex max-w-52 items-center gap-1.5 rounded px-1 py-0.5 text-xs text-muted-foreground transition-colors hover:bg-accent hover:text-foreground">
+            {/* Значок, а не папка: в списке из одиннадцати проектов их узнают
+                по цвету и логотипу, а названия читают. */}
+            {current ? (
+              <ProjectBadge name={current.name} color={current.color} logoUrl={current.logoUrl} size={14} />
+            ) : (
+              <FolderOpen className="size-3 shrink-0" />
+            )}
+            <span className="truncate">{current?.name ?? t('myTime.project')}</span>
+          </button>
+        </DropdownMenuTrigger>
+        <DropdownMenuContent align="start" className="max-h-72 overflow-y-auto">
+          {projects.map((p) => (
+            <DropdownMenuCheckItem key={p.id} checked={p.id === value} onSelect={() => p.id !== value && onChange(p.id)}>
+              <span className="flex items-center gap-2">
+                <ProjectBadge name={p.name} color={p.color} logoUrl={p.logoUrl} size={16} />
+                <span className="truncate">{p.name}</span>
+              </span>
+            </DropdownMenuCheckItem>
+          ))}
+        </DropdownMenuContent>
+      </DropdownMenu>
+      {/* Задачу показываем, но не даём менять: её список — про один проект. */}
+      {taskNumber && <span className="shrink-0 text-[11px] text-muted-foreground">{taskNumber}</span>}
+    </span>
+  )
+}
+
 function TaskPicker({
   projectId,
   value,

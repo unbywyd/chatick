@@ -393,21 +393,36 @@ timeMineRoute.get('/recent', async (c) => {
 
   // Куда можно перенести: проекты, где человек состоит. Предлагать чужие
   // бессмысленно — ручка правки их всё равно отвергнет.
+  // Значок проекта — логотип, иначе цвет. По названиям проекты в длинном
+  // списке не различают: их читают, а значок узнают.
   const mine = await db
-    .select({ id: projects.id, name: projects.name, companyId: projects.companyId })
+    .select({
+      id: projects.id,
+      name: projects.name,
+      companyId: projects.companyId,
+      color: projects.color,
+      logoUrl: projects.logoUrl,
+    })
     .from(projectMembers)
     .innerJoin(projects, eq(projects.id, projectMembers.projectId))
     .where(eq(projectMembers.userId, sub))
 
   return c.json({
+    // Поля те же, что у списка записей проекта: список рисует один и тот же
+    // компонент, и расхождение полей означает «то же самое, но не работает».
     items: rows.map(({ e, p, t }) => ({
       id: e.id,
+      userId: e.userId,
+      user: null,
       projectId: e.projectId,
       projectName: p.name,
+      projectColor: p.color,
+      projectLogoUrl: p.logoUrl,
       task: t ? { id: t.id, number: t.number, title: t.title } : null,
       description: e.description,
       startedAt: e.startedAt,
       endedAt: e.endedAt,
+      running: !e.endedAt,
       minutes: e.endedAt ? Math.round((e.endedAt.getTime() - e.startedAt.getTime()) / 60000) : null,
       autoStopped: e.autoStopped,
     })),

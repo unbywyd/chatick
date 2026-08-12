@@ -1651,11 +1651,6 @@
   },
   "myTime": {
     "title": "My recent hours",
-    "when": "When",
-    "project": "Project",
-    "what": "What",
-    "duration": "Duration",
-    "running": "running",
-    "deleteConfirm": "Delete this time entry?"
+    "project": "Project"
   }
 }
