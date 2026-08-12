@@ -1624,6 +1624,9 @@
     "search": "חיפוש לפי גרסה, משימה, הערות",
     "allTypes": "הכול",
     "nothingFound": "לא נמצא דבר",
-    "changeStage": "שינוי שלב"
+    "changeStage": "שינוי שלב",
+    "copyLink": "העתקת קישור",
+    "notFound": "הגרסה לא נמצאה",
+    "createdAt": "נוצרה"
   }
 }

@@ -48,6 +48,7 @@ export const SHORT_PREFIX: Record<string, string> = {
   message: 'm',
   document: 'd',
   project: 'p',
+  release: 'v',
 }
 
 const BY_PREFIX = new Map(Object.entries(SHORT_PREFIX).map(([type, p]) => [p, type]))

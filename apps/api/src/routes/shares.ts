@@ -3,7 +3,7 @@ import { Hono } from 'hono'
 import { and, eq, isNull, or, sql } from 'drizzle-orm'
 import { nanoid } from 'nanoid'
 import { db } from '../db/client.js'
-import { credentials, files, messages, notes, projects, shares, tasks, users } from '../db/schema.js'
+import { credentials, files, messages, notes, projects, shares, tasks, users, releases } from '../db/schema.js'
 import { requireSession, type SessionEnv } from '../auth.js'
 import { getObjectStream, resolveStorage } from '../lib/s3.js'
 import { sanitizeHtml } from '../lib/sanitize-html.js'
@@ -159,6 +159,25 @@ sharesRoute.get('/short/:type/:id', async (c) => {
   const path = await shortCodeFor(type, id, found.projectId, sub)
   // Кода не вышло — отдаём null, а не ошибку: интерфейс покажет длинную
   // ссылку, и человек всё равно поделится задачей.
+  return c.json({ url: path ? `${SHORT_BASE()}/${path}` : null })
+})
+
+/**
+ * Короткая ссылка на ВЕРСИЮ.
+ *
+ * Отдельной ручкой, а не через общий /short/:type/:id: там тип — enum в базе
+ * (таблица shares), и версия в него не входит. Публиковать версию наружу мы и
+ * не собираемся: короткая ссылка доступа не открывает, она лишь заменяет
+ * девяностосимвольный адрес, а права проверяются при открытии.
+ */
+sharesRoute.get('/short-release/:id', async (c) => {
+  const { sub } = c.get('session')
+  const id = c.req.param('id')
+  const row = await db.query.releases.findFirst({ where: eq(releases.id, id) })
+  if (!row) return c.json({ error: 'Not found' }, 404)
+  if (!(await hasPermission(row.projectId, sub, 'releases.read'))) return c.json({ error: 'Forbidden' }, 403)
+
+  const path = await shortCodeFor('release', id, row.projectId, sub)
   return c.json({ url: path ? `${SHORT_BASE()}/${path}` : null })
 })
 

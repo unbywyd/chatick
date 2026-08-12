@@ -1,7 +1,7 @@
 import { Hono, type Context } from 'hono'
 import { eq } from 'drizzle-orm'
 import { db } from '../db/client.js'
-import { companies, credentials, files, notes, projects, tasks } from '../db/schema.js'
+import { companies, credentials, files, notes, projects, tasks, releases } from '../db/schema.js'
 import { parseShortPath, resolveShortCode } from '../lib/short-links.js'
 
 /**
@@ -113,6 +113,7 @@ const TAB_OF: Record<string, string> = {
   resource: 'resources',
   message: 'chat',
   document: 'docs',
+  release: 'releases',
 }
 
 /**
@@ -139,6 +140,12 @@ async function titleOf(type: string, id: string): Promise<string | null> {
     case 'resource': {
       const r = await db.query.credentials.findFirst({ where: eq(credentials.id, id) })
       return r?.name ?? null
+    }
+    case 'release': {
+      const r = await db.query.releases.findFirst({ where: eq(releases.id, id) })
+      // Тип сборки в заголовке: «1.4.0» без платформы ничего не говорит, а
+      // версий с одним номером на iOS и Android бывает две.
+      return r ? `${r.version} (${r.buildType})` : null
     }
     default:
       return null

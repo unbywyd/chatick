@@ -1624,6 +1624,9 @@
     "search": "Search version, task, notes",
     "allTypes": "All",
     "nothingFound": "Nothing found",
-    "changeStage": "Change stage"
+    "changeStage": "Change stage",
+    "copyLink": "Copy link",
+    "notFound": "Release not found",
+    "createdAt": "Created"
   }
 }

@@ -34,6 +34,7 @@ import { AiUsageTab } from './components/tabs/AiUsageTab'
 import { HistoryTab } from './components/tabs/HistoryTab'
 import { DocumentsTab } from './components/tabs/DocumentsTab'
 import { ReleasesTab } from './components/tabs/ReleasesTab'
+import { ReleasePage as ReleaseDetailsTab } from './components/tabs/ReleasePage'
 import { NotesTab } from './components/tabs/NotesTab'
 import { TimeTab } from './components/tabs/TimeTab'
 import { ShortcutsTab } from './components/tabs/ShortcutsTab'
@@ -215,6 +216,13 @@ function NotesPage() {
   return id ? <NotesTab projectId={id} /> : null
 }
 
+function ReleaseDetailsPage() {
+  const { project } = useProjectCtx()
+  const { id } = useParams()
+  const canManage = project?.myRole === 'owner' || project?.myRole === 'admin'
+  return id ? <ReleaseDetailsTab projectId={id} canManage={canManage} /> : null
+}
+
 function ReleasesPage() {
   const { project } = useProjectCtx()
   const { id } = useParams()
@@ -300,6 +308,9 @@ createRoot(document.getElementById('root')!).render(
                 <Route path="notes/:noteId?" element={<NotesPage />} />
                 {/* вкладка есть, только если функция включена в проекте */}
                 <Route path="releases" element={<ReleasesPage />} />
+                {/* Отдельная страница версии: у ленты стадий должен быть свой
+                    адрес — иначе ею нельзя поделиться. */}
+                <Route path="releases/:releaseId" element={<ReleaseDetailsPage />} />
                 {/* трекинг — страница проекта, но НЕ вкладка: попадают из сайдбара */}
                 <Route path="time" element={<TimePage />} />
                 {/* горячие клавиши — страница настройки, из меню профиля */}

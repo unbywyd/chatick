@@ -73,7 +73,6 @@ export function ReleasesTab({ projectId, canManage }: { projectId: string; canMa
   const qc = useQueryClient()
   const [creating, setCreating] = useState(false)
   const [asking, setAsking] = useState(false)
-  const [openId, setOpenId] = useState<string | null>(null)
   const [staging, setStaging] = useState<{ release: Release; status: string } | null>(null)
   // Фильтры: по типу сборки и по строке. Полсотни версий на четырёх
   // платформах — это уже список, в котором ищут, а не читают подряд.
@@ -149,7 +148,7 @@ export function ReleasesTab({ projectId, canManage }: { projectId: string; canMa
               {Object.entries(list.data!.live).map(([type, info]) => (
                 <button
                   key={type}
-                  onClick={() => setOpenId(info.id)}
+                  onClick={() => navigate(`/c/${companyId}/p/${projectId}/releases/${info.id}`)}
                   className="text-start transition-opacity hover:opacity-70"
                 >
                   <div className="text-[11px] text-muted-foreground">{byType.get(type)?.label ?? type}</div>
@@ -227,7 +226,7 @@ export function ReleasesTab({ projectId, canManage }: { projectId: string; canMa
             buildTypes={types.data?.buildTypes ?? []}
             canManage={canManage}
             locale={i18n.language}
-            onOpen={setOpenId}
+            onOpen={(id) => navigate(`/c/${companyId}/p/${projectId}/releases/${id}`)}
             onOpenTask={(taskId) => navigate(`/c/${companyId}/p/${projectId}/tasks/${taskId}`)}
             onStage={(release, status) => setStaging({ release, status })}
             onPatch={(id, patch) => patchRelease.mutate({ id, patch })}
@@ -272,15 +271,6 @@ export function ReleasesTab({ projectId, canManage }: { projectId: string; canMa
             setStaging(null)
             void qc.invalidateQueries({ queryKey: ['releases', projectId] })
           }}
-        />
-      )}
-      {openId && (
-        <DetailsDialog
-          projectId={projectId}
-          releaseId={openId}
-          canManage={canManage}
-          buildTypes={types.data?.buildTypes ?? []}
-          onClose={() => setOpenId(null)}
         />
       )}
     </div>
@@ -482,28 +472,21 @@ function ReleasesTable({
                 <td className="px-2 py-1.5 align-middle">
                   {r.owner && <Avatar name={r.owner.name} src={r.owner.avatarUrl} size={22} />}
                 </td>
+                {/* Только переход по ссылке. Правка переехала на страницу
+                    версии: в таблице столбца ссылки нет, и карандаш здесь
+                    правил вслепую — результата было не увидеть. */}
                 <td className="px-2 py-1.5 align-middle">
-                  <div className="flex items-center gap-1">
-                    {r.referenceUrl && (
-                      <a
-                        href={r.referenceUrl}
-                        target="_blank"
-                        rel="noreferrer noopener"
-                        title={r.referenceUrl}
-                        className="text-muted-foreground hover:text-foreground"
-                      >
-                        <ExternalLink className="size-3.5" />
-                      </a>
-                    )}
-                    {canManage && (
-                      <EditField
-                        title={t('releases.reference')}
-                        value={r.referenceUrl ?? ''}
-                        placeholder="https://…"
-                        onSave={(v) => onPatch(r.id, { referenceUrl: v.trim() || null })}
-                      />
-                    )}
-                  </div>
+                  {r.referenceUrl && (
+                    <a
+                      href={r.referenceUrl}
+                      target="_blank"
+                      rel="noreferrer noopener"
+                      title={r.referenceUrl}
+                      className="text-muted-foreground hover:text-foreground"
+                    >
+                      <ExternalLink className="size-3.5" />
+                    </a>
+                  )}
                 </td>
               </tr>
             )
@@ -848,157 +831,6 @@ function CreateDialog({
           {t('releases.create')}
         </Button>
       </div>
-    </Overlay>
-  )
-}
-
-function DetailsDialog({
-  projectId,
-  releaseId,
-  canManage,
-  buildTypes,
-  onClose,
-}: {
-  projectId: string
-  releaseId: string
-  canManage: boolean
-  buildTypes: BuildTypeDef[]
-  onClose: () => void
-}) {
-  const { t, i18n } = useTranslation()
-  const qc = useQueryClient()
-  const [nextStage, setNextStage] = useState('')
-  const [comment, setComment] = useState('')
-
-  const one = useQuery({
-    queryKey: ['release', releaseId],
-    queryFn: () => api<Release & { events: ReleaseEvent[] }>(`/api/v1/releases/${releaseId}`, {}, 'project'),
-  })
-
-  const stages = buildTypes.find((b) => b.key === one.data?.buildType)?.stages ?? []
-
-  const move = useMutation({
-    mutationFn: () =>
-      api<Release>(
-        `/api/v1/releases/${releaseId}/stage`,
-        { method: 'POST', body: JSON.stringify({ status: nextStage, comment: comment.trim() }) },
-        'project',
-      ),
-    onSuccess: () => {
-      setNextStage('')
-      setComment('')
-      void qc.invalidateQueries({ queryKey: ['release', releaseId] })
-      void qc.invalidateQueries({ queryKey: ['releases', projectId] })
-    },
-    onError: (e: { message?: string }) => toast.error(e.message || t('common.error')),
-  })
-
-  return (
-    <Overlay onClose={onClose} title={one.data ? `${one.data.version} · ${one.data.buildTypeLabel}` : '…'}>
-      {one.isLoading || !one.data ? (
-        <div className="py-8 text-center text-sm text-muted-foreground">{t('common.loading')}</div>
-      ) : (
-        <div className="space-y-4">
-          <div className="flex flex-wrap items-center gap-2">
-            <span
-              className={cn(
-                'rounded px-2 py-0.5 text-xs',
-                one.data.isLive ? 'bg-brand font-medium text-brand-foreground' : 'bg-muted text-muted-foreground',
-              )}
-            >
-              {one.data.statusLabel}
-            </span>
-            {one.data.referenceUrl && (
-              <a
-                href={one.data.referenceUrl}
-                target="_blank"
-                rel="noreferrer noopener"
-                className="inline-flex items-center gap-1 text-xs text-brand-ink hover:underline"
-              >
-                <ExternalLink className="size-3" />
-                {t('releases.reference')}
-              </a>
-            )}
-          </div>
-
-          {one.data.notes && <p className="whitespace-pre-wrap break-words text-sm">{one.data.notes}</p>}
-
-          {one.data.tasks.length > 0 && (
-            <div>
-              <div className="mb-1 text-xs font-semibold text-muted-foreground">{t('releases.linkedTasks')}</div>
-              <div className="space-y-1">
-                {one.data.tasks.map((task) => (
-                  <div key={task.id} className="flex items-center gap-2 text-sm">
-                    <span className="shrink-0 rounded bg-secondary px-1.5 py-0.5 text-[11px]">{task.number}</span>
-                    <span className="line-clamp-1 break-all">{task.title}</span>
-                  </div>
-                ))}
-              </div>
-            </div>
-          )}
-
-          {/* Смена стадии. Комментарий обязателен — кнопка до него не активна:
-              иначе человек упрётся в отказ сервера уже после нажатия. */}
-          {canManage && (
-            <div className="rounded-lg border p-3">
-              <div className="mb-2 text-xs font-semibold text-muted-foreground">{t('releases.moveStage')}</div>
-              <div className="space-y-2">
-                <Select value={nextStage} onValueChange={setNextStage}>
-                  <SelectTrigger>
-                    <SelectValue placeholder={t('releases.pickStage')} />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {stages
-                      .filter((s) => s.key !== one.data!.status)
-                      .map((s) => (
-                        <SelectItem key={s.key} value={s.key}>
-                          {s.label}
-                        </SelectItem>
-                      ))}
-                  </SelectContent>
-                </Select>
-                <Input
-                  value={comment}
-                  onChange={(e) => setComment(e.target.value)}
-                  placeholder={t('releases.commentRequired')}
-                />
-                <Button
-                  size="sm"
-                  className="w-full"
-                  disabled={!nextStage || !comment.trim() || move.isPending}
-                  onClick={() => move.mutate()}
-                >
-                  {t('releases.moveStage')}
-                </Button>
-              </div>
-            </div>
-          )}
-
-          <div>
-            <div className="mb-2 text-xs font-semibold text-muted-foreground">{t('releases.history')}</div>
-            <div className="space-y-2">
-              {one.data.events.map((e) => (
-                <div key={e.id} className="flex gap-2 text-xs">
-                  {e.actor && <Avatar name={e.actor.name} src={e.actor.avatarUrl} size={20} />}
-                  <div className="min-w-0 flex-1">
-                    <div className="flex flex-wrap items-center gap-1 text-muted-foreground">
-                      {e.fromStatus && (
-                        <>
-                          <span>{stages.find((s) => s.key === e.fromStatus)?.label ?? e.fromStatus}</span>
-                          <ArrowRight className="size-3" />
-                        </>
-                      )}
-                      <span className="font-medium text-foreground">{e.statusLabel}</span>
-                      <span>· {new Date(e.createdAt).toLocaleString(i18n.language)}</span>
-                    </div>
-                    <div className="break-words">{e.comment}</div>
-                  </div>
-                </div>
-              ))}
-            </div>
-          </div>
-        </div>
-      )}
     </Overlay>
   )
 }
