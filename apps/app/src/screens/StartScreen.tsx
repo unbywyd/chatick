@@ -62,7 +62,16 @@ export function StartScreen() {
   const qc = useQueryClient()
   // компания и таб — из URL: /start/:companyId/:companyTab (адресуемо, SPEC)
   const { companyId = null } = useParams()
+  const [searchParams] = useSearchParams()
   const setCompanyId = (id: string | null) => navigate(id ? `/start/${id}` : '/start')
+  /**
+   * Явное «хочу завести компанию».
+   *
+   * Без него клик по кнопке уводил на /start, а эффект ниже тут же возвращал
+   * обратно: у человека с ОДНОЙ компанией /start сам себя перенаправляет на
+   * неё. Со стороны — «страница мигнула и ничего не произошло».
+   */
+  const goCreate = () => navigate('/start?new=1')
 
   useEffect(() => {
     if (!getSessionToken()) {
@@ -77,11 +86,17 @@ export function StartScreen() {
     queryFn: () => api<{ companies: Company[]; invites: CompanyInvite[] }>('/api/v1/companies'),
   })
 
+  // Единственную компанию открываем сразу — выбирать не из чего. Но НЕ когда
+  // человек сам попросил экран создания: иначе кнопка «создать» бесконечно
+  // возвращала бы его в ту самую компанию, из которой он ушёл.
+  const wantsNew = searchParams.get('new') === '1'
   useEffect(() => {
     const list = companiesQ.data?.companies
-    if (list && list.length === 1 && !companyId) navigate(`/start/${list[0]!.id}`, { replace: true })
+    if (list && list.length === 1 && !companyId && !wantsNew) {
+      navigate(`/start/${list[0]!.id}`, { replace: true })
+    }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [companiesQ.data, companyId])
+  }, [companiesQ.data, companyId, wantsNew])
 
   useEffect(() => {
     if (me.error) {
@@ -134,7 +149,7 @@ export function StartScreen() {
                 companies={companiesQ.data?.companies ?? []}
                 current={company}
                 onSelect={setCompanyId}
-                onCreate={() => setCompanyId(null)}
+                onCreate={goCreate}
                 onLeave={setLeaving}
               />
             </>
@@ -191,7 +206,7 @@ export function StartScreen() {
               </span>
               <h2 className="mt-4 text-base font-semibold">{t('start.companyGoneTitle')}</h2>
               <p className="mt-2 text-sm text-muted-foreground">{t('start.companyGoneText')}</p>
-              <Button variant="brand" className="mt-5" onClick={() => setCompanyId(null)}>
+              <Button variant="brand" className="mt-5" onClick={goCreate}>
                 {t('start.companyGoneCta')}
               </Button>
             </div>
