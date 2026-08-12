@@ -1,7 +1,7 @@
 import { useState } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import { useTranslation } from 'react-i18next'
-import { AlertTriangle, CheckCircle2, Clock, Download, FolderKanban, MessageSquare, Users } from 'lucide-react'
+import { AlertTriangle, CheckCircle2, Clock, Download, FolderKanban, Lock, MessageSquare, Users } from 'lucide-react'
 import {
   Area,
   AreaChart,
@@ -34,6 +34,10 @@ type ProjectStat = {
   overdue: number
   progress: number
   members: number
+  /** Я в команде этого проекта. Нет — содержимое закрыто, войти не выйдет. */
+  isMember: boolean
+  /** К кому идти за доступом. Приходит только для чужих проектов. */
+  leads: { id: string; name: string; avatarUrl: string | null }[]
   minutes: number
   /** За всё время — чтобы часы за период не читались как «часов нет». */
   totalMinutes: number
@@ -75,6 +79,7 @@ export function OverviewTab({
 
   // По умолчанию — текущий месяц: за него смотрят и по нему платят.
   const [period, setPeriod] = useState<Period>(() => resolvePreset('thisMonth'))
+  const [projectQuery, setProjectQuery] = useState('')
 
   const q = useQuery({
     queryKey: ['company-overview', companyId, period.from, period.to],
@@ -86,6 +91,12 @@ export function OverviewTab({
 
   const d = q.data
   const totals = d?.totals
+  // Фильтруем только список; график остаётся полным — на нём смотрят
+  // распределение целиком, и «отфильтрованное время» вводило бы в заблуждение.
+  const needle = projectQuery.trim().toLowerCase()
+  const shownProjects = needle
+    ? (d?.projects ?? []).filter((p) => p.name.toLowerCase().includes(needle))
+    : (d?.projects ?? [])
 
   if (q.isLoading) return <p className="py-16 text-center text-sm text-muted-foreground">…</p>
   if (!d || !d.projects.length) {
@@ -218,7 +229,19 @@ export function OverviewTab({
                 labelFormatter={(_l, p) => (p?.[0]?.payload as { name?: string } | undefined)?.name ?? ''}
                 formatter={(m) => [formatDuration(Number(m)), t('time.total')]}
               />
-              <Bar dataKey="minutes" radius={[0, 4, 4, 0]} maxBarSize={28}>
+              {/* Столбик ведёт в проект — как и строка списка ниже. Человек
+                  видит на графике, куда ушло время, и логично тычет туда же;
+                  требовать после этого найти проект в списке — лишний шаг. */}
+              <Bar
+                dataKey="minutes"
+                radius={[0, 4, 4, 0]}
+                maxBarSize={28}
+                cursor={onOpenProject ? 'pointer' : undefined}
+                onClick={(data: unknown) => {
+                  const id = (data as { payload?: { id?: string } })?.payload?.id
+                  if (id) onOpenProject?.(id)
+                }}
+              >
                 {d.projects.map((p) => (
                   <Cell key={p.id} fill={p.color || 'var(--brand)'} />
                 ))}
@@ -267,9 +290,25 @@ export function OverviewTab({
 
       {/* Проекты таблицей: прогресс, просрочка, часы и активность рядом */}
       <section className="rounded-lg border bg-card p-4">
-        <h2 className="mb-3 text-sm font-semibold">{t('overview.projects')}</h2>
+        {/* Поиск появляется, когда список перестаёт читаться с одного взгляда.
+            При пяти проектах поле только мешает, при двадцати — без него
+            нужный ищут глазами по всей странице. */}
+        <div className="mb-3 flex items-center gap-3">
+          <h2 className="text-sm font-semibold">{t('overview.projects')}</h2>
+          {d.projects.length > 7 && (
+            <input
+              value={projectQuery}
+              onChange={(e) => setProjectQuery(e.target.value)}
+              placeholder={t('overview.findProject')}
+              className="ms-auto w-40 rounded-md border bg-background px-2.5 py-1 text-xs outline-none transition-colors focus:border-brand sm:w-56"
+            />
+          )}
+        </div>
         <ul className="space-y-2">
-          {d.projects.map((p) => (
+          {shownProjects.length === 0 && (
+            <li className="py-6 text-center text-sm text-muted-foreground">{t('overview.noProjectMatch')}</li>
+          )}
+          {shownProjects.map((p) => (
             // Строка кликается целиком: на обзоре видно, где что происходит,
             // и уходить за этим в список проектов — лишний шаг.
             <li
@@ -284,6 +323,23 @@ export function OverviewTab({
               <div className="min-w-0 flex-1">
                 <div className="flex items-baseline gap-2">
                   <span className="truncate text-sm font-medium">{p.name}</span>
+                  {/* Замок — заранее видно, что внутрь не пустят: без него
+                      человек кликает и упирается в отказ, гадая, что сломалось. */}
+                  {!p.isMember && (
+                    <span
+                      className="flex shrink-0 items-center gap-1 text-[10px] text-muted-foreground"
+                      title={
+                        p.leads.length
+                          ? t('overview.askForAccess', { names: p.leads.map((l) => l.name).join(', ') })
+                          : t('overview.notMember')
+                      }
+                    >
+                      <Lock className="size-3" />
+                      {/* Имя того, кого просить: замок без адресата оставляет
+                          человека с вопросом «а к кому идти». */}
+                      {p.leads[0] && <span className="hidden max-w-28 truncate sm:inline">{p.leads[0].name}</span>}
+                    </span>
+                  )}
                   {p.overdue > 0 && (
                     <span className="shrink-0 text-[10px] text-amber-500">
                       {t('overview.overdueShort', { count: p.overdue })}

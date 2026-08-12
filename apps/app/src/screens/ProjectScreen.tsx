@@ -2,7 +2,7 @@ import { useCallback, useEffect, useRef, useState } from 'react'
 import { NavLink, Outlet, useLocation, useNavigate, useOutletContext, useParams, useSearchParams } from 'react-router-dom'
 import { useQuery } from '@tanstack/react-query'
 import { useTranslation } from 'react-i18next'
-import { ArrowLeft, ExternalLink, MessagesSquare, X, FolderX } from 'lucide-react'
+import { ArrowLeft, ExternalLink, Lock, MessagesSquare, X, FolderX } from 'lucide-react'
 import { api, getSessionToken, setReturnTo, type Me } from '@/lib/api'
 import { cn } from '@/lib/utils'
 import { useProjectToken } from '@/hooks/useProjectToken'
@@ -196,7 +196,7 @@ export function ProjectLayout() {
         {/* Проекта нет — чат ни к чему: он продолжал бы опрашивать сервер и
             держать сокет ради того, чего больше не существует. */}
         <div className="min-h-0 flex-1">
-          {token.status === 'gone' ? null : <ChatPanel
+          {token.status === 'gone' || token.status === 'notMember' ? null : <ChatPanel
             ref={chatRef}
             onOpenSidebar={() => setSidebarOpen(true)}
             onOpenWork={() => navigate(`${base}/tasks`)}
@@ -286,6 +286,21 @@ export function ProjectLayout() {
                 <p className="mt-2 text-sm text-muted-foreground">{token.message}</p>
                 <Button variant="outline" className="mt-4" onClick={() => navigate('/start')}>
                   {t('connect.back')}
+                </Button>
+              </div>
+            </div>
+          ) : token.status === 'notMember' ? (
+            // Проект жив — человека просто нет в его команде. Говорим об этом
+            // прямо: «проекта больше нет» отправляло выяснять, кто что удалил.
+            <div className="grid h-full place-items-center p-6 text-center">
+              <div className="max-w-sm">
+                <span className="mx-auto grid size-14 place-items-center rounded-2xl bg-secondary text-muted-foreground">
+                  <Lock className="size-7" />
+                </span>
+                <h2 className="mt-4 text-base font-semibold">{t('project.notMemberTitle')}</h2>
+                <p className="mt-2 text-sm text-muted-foreground">{t('project.notMemberText')}</p>
+                <Button variant="brand" className="mt-5" onClick={() => navigate('/start')}>
+                  {t('project.goneCta')}
                 </Button>
               </div>
             </div>

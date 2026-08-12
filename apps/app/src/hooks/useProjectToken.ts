@@ -12,6 +12,14 @@ type State =
   | { status: 'needRules'; chatRules: string; projectName: string }
   /** проекта больше нет: удалили, пока человек был внутри */
   | { status: 'gone' }
+  /**
+   * Проект существует, но человек не в его команде.
+   *
+   * Отдельно от 'gone': 404 значит «удалён», 403 — «не пустили». Раньше оба
+   * показывали «проекта больше нет», и админ компании, зашедший в чужой
+   * проект, шёл выяснять, кто что удалил.
+   */
+  | { status: 'notMember' }
   | { status: 'error'; message: string }
 
 /** Декодирует projectId из текущего project-токена, не проверяя подпись. */
@@ -56,7 +64,7 @@ export function useProjectToken(projectId: string | undefined): State & { accept
       // которое надо объяснить словами.
       if (err.status === 404 || err.status === 403) {
         setProjectToken(null)
-        setState({ status: 'gone' })
+        setState({ status: err.status === 403 ? 'notMember' : 'gone' })
         return
       }
       if (err.status === 428 && err.body?.needRulesAccept) {
@@ -86,7 +94,7 @@ export function useProjectToken(projectId: string | undefined): State & { accept
         if (wanted.current !== projectId) return
         if (err.status === 404 || err.status === 403) {
           setProjectToken(null)
-          setState({ status: 'gone' })
+          setState({ status: err.status === 403 ? 'notMember' : 'gone' })
         }
       })
       return

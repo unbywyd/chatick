@@ -276,11 +276,40 @@ companiesRoute.get('/:companyId/overview', async (c) => {
   const timeMap = byId(timeRows)
   const msgMap = byId(msgRows)
 
+  // Где я сам состою — чтобы на обзоре было видно, куда я войду, а куда нет.
+  // Одним запросом на весь список, а не по проекту в цикле.
+  const myMemberships = await db
+    .select({ projectId: projectMembers.projectId })
+    .from(projectMembers)
+    .where(and(inArray(projectMembers.projectId, ids), eq(projectMembers.userId, sub)))
+  const mine = new Set(myMemberships.map((m) => m.projectId))
+
+  // К кому идти за доступом. Поля «создатель» у проекта нет, и роль owner
+  // на практике почти не проставлена — 10 проектов из 11 без неё. Поэтому
+  // адресат это админы проекта: они есть везде и как раз решают, кого пускать.
+  const leadRows = await db
+    .select({ projectId: projectMembers.projectId, id: users.id, name: users.name, avatarUrl: users.avatarUrl, role: projectMembers.role })
+    .from(projectMembers)
+    .innerJoin(users, eq(users.id, projectMembers.userId))
+    .where(and(inArray(projectMembers.projectId, ids), inArray(projectMembers.role, ['owner', 'admin'])))
+  const leadMap = new Map<string, { id: string; name: string; avatarUrl: string | null }[]>()
+  for (const r of leadRows) {
+    // Владелец вперёд: если он есть, спрашивать надо его.
+    const list = leadMap.get(r.projectId) ?? []
+    if (r.role === 'owner') list.unshift({ id: r.id, name: r.name, avatarUrl: r.avatarUrl })
+    else list.push({ id: r.id, name: r.name, avatarUrl: r.avatarUrl })
+    leadMap.set(r.projectId, list)
+  }
+
   const list = projectRows.map((p) => {
     const t = taskMap.get(p.id)
     return {
       id: p.id,
       name: p.name,
+      // Я в команде? Нет — содержимое проекта закрыто, и это видно заранее.
+      isMember: mine.has(p.id),
+      // Кого просить о доступе — показываем только тем, кто не в команде.
+      leads: mine.has(p.id) ? [] : (leadMap.get(p.id) ?? []).slice(0, 3),
       color: p.color,
       logoUrl: p.logoUrl,
       tasksTotal: t?.total ?? 0,
