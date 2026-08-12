@@ -918,10 +918,15 @@ function ProjectCell({
   onChange: (id: string) => void
 }) {
   const { t } = useTranslation()
+  const [q, setQ] = useState('')
   const current = projects.find((p) => p.id === value)
+  const matches = useMemo(() => {
+    const needle = q.trim().toLowerCase()
+    return needle ? projects.filter((p) => p.name.toLowerCase().includes(needle)) : projects
+  }, [projects, q])
   return (
     <span className="flex items-center gap-1.5">
-      <DropdownMenu>
+      <DropdownMenu onOpenChange={(open) => open && setQ('')}>
         <DropdownMenuTrigger asChild>
           <button className="inline-flex max-w-52 items-center gap-1.5 rounded px-1 py-0.5 text-xs text-muted-foreground transition-colors hover:bg-accent hover:text-foreground">
             {/* Значок, а не папка: в списке из одиннадцати проектов их узнают
@@ -934,15 +939,35 @@ function ProjectCell({
             <span className="truncate">{current?.name ?? t('myTime.project')}</span>
           </button>
         </DropdownMenuTrigger>
-        <DropdownMenuContent align="start" className="max-h-72 overflow-y-auto">
-          {projects.map((p) => (
-            <DropdownMenuCheckItem key={p.id} checked={p.id === value} onSelect={() => p.id !== value && onChange(p.id)}>
-              <span className="flex items-center gap-2">
-                <ProjectBadge name={p.name} color={p.color} logoUrl={p.logoUrl} size={16} />
-                <span className="truncate">{p.name}</span>
-              </span>
-            </DropdownMenuCheckItem>
-          ))}
+        <DropdownMenuContent align="start" className="w-64 p-0">
+          {/* Поиск обязателен: проектов бывает десяток и больше, и в таком
+              списке нужный ищут глазами сверху вниз. */}
+          <div className="border-b p-1.5">
+            <Input
+              value={q}
+              onChange={(e) => setQ(e.target.value)}
+              placeholder={t('sidebar.search')}
+              className="h-7 text-xs"
+              onKeyDown={(e) => e.stopPropagation()}
+            />
+          </div>
+          <div className="max-h-64 overflow-y-auto p-1">
+            {matches.map((p) => (
+              <DropdownMenuCheckItem
+                key={p.id}
+                checked={p.id === value}
+                onSelect={() => p.id !== value && onChange(p.id)}
+              >
+                <span className="flex items-center gap-2">
+                  <ProjectBadge name={p.name} color={p.color} logoUrl={p.logoUrl} size={16} />
+                  <span className="truncate">{p.name}</span>
+                </span>
+              </DropdownMenuCheckItem>
+            ))}
+            {!matches.length && (
+              <p className="px-2 py-3 text-center text-xs text-muted-foreground">{t('time.empty')}</p>
+            )}
+          </div>
         </DropdownMenuContent>
       </DropdownMenu>
       {/* Задачу показываем, но не даём менять: её список — про один проект. */}

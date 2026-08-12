@@ -4,7 +4,7 @@ import { useMediaQuery } from '@/hooks/useMediaQuery'
 import { useNavigate, useParams } from 'react-router-dom'
 import { useQuery } from '@tanstack/react-query'
 import { useTranslation } from 'react-i18next'
-import { PanelLeftClose, PanelLeftOpen, Plus, Search } from 'lucide-react'
+import { PanelLeftClose, PanelLeftOpen, Search } from 'lucide-react'
 import { api, type Company, type Me, type ProjectListItem } from '@/lib/api'
 import { cn } from '@/lib/utils'
 import { ProfileMenu } from '@/components/ProfileMenu'
@@ -12,7 +12,6 @@ import { NotificationBell } from '@/components/NotificationBell'
 import { TimerControl } from '@/components/time/TimerControl'
 import { ProjectBadge } from '@/components/ui/project-badge'
 import { Input } from '@/components/ui/input'
-import { CompanyBrand } from '@/components/CompanyBrand'
 
 // Постоянный список проектов = список чатов (SPEC §8.29).
 // Не отдельная страница, а колонка: клик меняет правую часть, список остаётся.
@@ -149,12 +148,14 @@ export function ProjectSidebar({
         </ul>
 
         <div className="flex flex-col items-center gap-2 border-t p-2">
+          {/* В свёрнутом сайдбаре вернуться в компанию было нечем: шапка с её
+              названием видна только развёрнутым. Логотип и есть эта дверь. */}
           <button
-            onClick={() => navigate(`/start/${company?.id ?? ''}/projects`)}
-            title={t('sidebar.newProject')}
-            className="grid size-8 place-items-center rounded-md text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
+            onClick={() => navigate(`/start/${company?.id ?? ''}`)}
+            title={company?.name ?? t('sidebar.companySettings')}
+            className="rounded-md p-0.5 opacity-80 transition-opacity hover:opacity-100"
           >
-            <Plus className="size-4" />
+            <ProjectBadge name={company?.name ?? '?'} logoUrl={company?.logoUrl} size={28} />
           </button>
           {/* колокольчик и профиль живут только здесь: в навбаре проекта они
               дублировались, а сайдбар виден на любой вкладке */}
@@ -167,17 +168,17 @@ export function ProjectSidebar({
 
   return (
     <div className="flex h-full min-h-0 flex-col bg-card/40">
-      {/* Шапка: логотип и название компании — они же вход в её настройки.
-          Раньше здесь стоял наш логотип, а имя компании дублировалось справа:
-          человек внутри своей компании видел чужой бренд и своё имя дважды. */}
-      <div className="flex items-center gap-2 border-b px-3 py-2.5">
-        <button
-          onClick={() => navigate(`/start/${company?.id ?? ''}`)}
-          className="flex min-w-0 flex-1 items-center rounded-md px-1 py-1 transition-colors hover:bg-accent"
-          title={t('sidebar.companySettings')}
-        >
-          <CompanyBrand name={company?.name} logoUrl={company?.logoUrl} />
-        </button>
+      {/* Наверху — таймер: его трогают чаще всего остального в сайдбаре, и
+          место у самого края самое дешёвое по движению мыши.
+          Компания переехала вниз: туда возвращаются, а не работают в ней. */}
+      <div className="flex items-center gap-2 border-b px-2 py-2">
+        {activeId ? (
+          <div className="min-w-0 flex-1">
+            <TimerControl collapsed={false} />
+          </div>
+        ) : (
+          <span className="min-w-0 flex-1 truncate px-1 text-sm font-medium">{company?.name}</span>
+        )}
         <button
           onClick={toggleCollapsed}
           title={t('sidebar.collapse')}
@@ -198,12 +199,6 @@ export function ProjectSidebar({
           />
         </div>
       </div>
-
-      {activeId && (
-        <div className="border-b px-2 pb-2">
-          <TimerControl collapsed={false} />
-        </div>
-      )}
 
       <ul className="min-h-0 flex-1 overflow-y-auto px-1 pb-2">
         {projects.isLoading && <p className="px-3 py-2 text-sm text-muted-foreground">…</p>}
@@ -268,14 +263,19 @@ export function ProjectSidebar({
         )}
       </ul>
 
-      {/* Низ: новый проект + профиль — как в WhatsApp Desktop */}
+      {/* Низ: возврат в компанию + профиль.
+          Раньше здесь была кнопка «Новый проект». Она вела не туда, где
+          создают проект, а на список проектов компании, и у человека без
+          права на создание упиралась в отказ. Возврат в компанию — то, что
+          отсюда действительно нужно, и в свёрнутом виде его не было вовсе. */}
       <div className="flex items-center gap-2 border-t p-2">
         <button
-          onClick={() => navigate(`/start/${company?.id ?? ''}/projects`)}
-          className="flex flex-1 items-center gap-2 rounded-md px-2 py-1.5 text-xs text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
+          onClick={() => navigate(`/start/${company?.id ?? ''}`)}
+          title={t('sidebar.companySettings')}
+          className="flex min-w-0 flex-1 items-center gap-2 rounded-md px-2 py-1.5 text-xs text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
         >
-          <Plus className="size-3.5" />
-          {t('sidebar.newProject')}
+          <ProjectBadge name={company?.name ?? '?'} logoUrl={company?.logoUrl} size={18} />
+          <span className="truncate">{company?.name ?? t('sidebar.companySettings')}</span>
         </button>
         {/* тот же аватар, что в шапке, ведёт себя одинаково: открывает меню
             профиля. Раньше отсюда уводило на /connect — разное поведение у

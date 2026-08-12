@@ -516,10 +516,12 @@ function CompanyHome({
         <TeamTab company={company} meId={meId} />
       ) : tab === 'time' && canManage ? (
         <>
-          {/* Свои записи — сверху и отдельной секцией: они про «поправь мою
-              строку», а сводка ниже про «сколько потрачено». Разные вопросы. */}
-          <MyRecentTime />
+          {/* Сводка сверху: за ней сюда и приходят — «сколько потрачено» и
+              выгрузка. Свои записи ниже: они про «поправь мою строку», это
+              разбор, а не чтение, и ради него не должно прокручиваться
+              главное. */}
           <CompanyTimeTab companyId={company.id} />
+          <MyRecentTime />
         </>
       ) : tab === 'connect' && canManage ? (
         <CompanyConnectTab company={company} />

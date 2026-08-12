@@ -4,7 +4,7 @@ import { Clock } from 'lucide-react'
 import { api } from '@/lib/api'
 import { EntryList } from '@/components/tabs/TimeTab'
 
-// Мои последние записи — на странице компании, над общей статистикой.
+// Мои последние записи — на странице компании, под общей сводкой.
 //
 // Список тот же самый, что на странице проекта: тот же компонент, та же
 // группировка по дням с итогом за день, та же правка на месте. Своя вёрстка
@@ -45,7 +45,7 @@ export function MyRecentTime() {
   if (!recent.isLoading && !recent.data?.items.length) return null
 
   return (
-    <section className="mb-6">
+    <section className="mt-8">
       <h2 className="mb-2 flex items-center gap-1.5 text-sm font-semibold">
         <Clock className="size-4" />
         {t('myTime.title')}
