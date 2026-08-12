@@ -259,10 +259,14 @@ function CompanyPicker({
   if (loading) return <p className="text-center text-sm text-muted-foreground">…</p>
 
   const companies = data?.companies ?? []
-  // Своя компания — та, где человек админ: он её и завёл. В остальных он по
-  // приглашению, и права там чужие.
-  const ownCompanies = companies.filter((c) => c.myRole === 'admin')
-  const guestCompanies = companies.filter((c) => c.myRole !== 'admin')
+  // Своя компания — та, которую человек ЗАВЁЛ, а не та, где он админ.
+  //
+  // Админом делают и в чужой: позвали и повысили. Роль говорит о правах внутри
+  // пространства, а не о том, чьё оно. По той же путанице кнопка «создать
+  // компанию» вела в пустоту — сервер считает по createdById (isOwner), и
+  // интерфейс должен считать так же.
+  const ownCompanies = companies.filter((c) => c.isOwner)
+  const guestCompanies = companies.filter((c) => !c.isOwner)
   const invites = data?.invites ?? []
 
   // Первый вход: ни компаний, ни приглашений — ведём визардом, а не пустым
@@ -354,7 +358,12 @@ function CompanyPicker({
       {/* Своя компания одна: если она уже есть, форму не показываем — сервер
           всё равно откажет, а предлагать неисполнимое незачем. Участвовать в
           чужих можно в скольких угодно, туда попадают по приглашению. */}
-      {!companies.some((c) => c.myRole === 'admin') && (
+      {/* Условие ОДНО с кнопкой в переключателе компаний (CompanySwitcher):
+          там она показывается тому, у кого нет СВОЕЙ компании (isOwner), а
+          здесь форма пряталась от любого, кто где-то админ. Признаки разные,
+          и человек-админ-но-не-владелец видел кнопку, жал её, попадал сюда — а
+          формы нет. Со стороны это выглядит как «кнопка не работает». */}
+      {!companies.some((c) => c.isOwner) && (
         <section className="space-y-2">
           <h2 className="text-sm font-semibold text-muted-foreground">
             {companies.length ? t('start.orCreateCompany') : t('start.createFirstCompany')}
