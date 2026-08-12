@@ -4,7 +4,7 @@ import { LogoMark } from '@/components/Logo'
 // Логотип компании вместо нашего (SPEC §8.40).
 //
 // Внутри своей компании человек должен видеть её, а не гостить в чужом
-// продукте. Логотип и название — компании; «on Chatick» остаётся мелкой
+// продукте. Логотип и название — компании; наш бренд остаётся мелкой
 // подписью.
 //
 // Подпись убирать нельзя, и это не про тщеславие: человек должен понимать, в
@@ -49,10 +49,10 @@ export function CompanyBrand({
       ) : (
         <LogoMark />
       )}
-      <span className="flex min-w-0 flex-col leading-none">
-        <span className="truncate text-sm font-bold tracking-tight">{name}</span>
-        <span className="mt-0.5 text-[10px] font-medium text-muted-foreground">on Chatick</span>
-      </span>
+      {/* Только имя компании. «on Chatick» здесь лишнее: человек и так внутри
+          Chatick, а в узком футере сайдбара эта строка забирала половину
+          места у того, ради чего блок и нужен. */}
+      <span className="min-w-0 truncate text-sm font-bold tracking-tight">{name}</span>
     </span>
   )
 }

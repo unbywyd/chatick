@@ -483,7 +483,11 @@ function CompanyHome({
           Фон обязателен — иначе содержимое просвечивает сквозь них при
           прокрутке. -mx-6/px-6 компенсируют отступ страницы, чтобы полоска
           снизу шла от края до края. */}
-      <nav className="sticky top-0 z-20 -mx-6 -mt-8 flex gap-1 overflow-x-auto border-b bg-background px-6 pb-0 pt-8">
+      {/* overflow-x-auto здесь НЕЛЬЗЯ: он создаёт и вертикальную прокрутку, а
+          вместе с pt-8 внутри неё появляется что прокручивать — у полосы табов
+          вырастал собственный скролл. Узкий экран разруливаем переносом
+          (flex-wrap), а не прокруткой: табов немного. */}
+      <nav className="sticky top-0 z-20 -mx-6 -mt-8 flex flex-wrap gap-1 border-b bg-background px-6 pb-0 pt-8">
         {tabs.map((key) => (
           <button
             key={key}

@@ -319,17 +319,19 @@ export function OverviewTab({
               <YAxis
                 type="category"
                 dataKey="name"
-                width={220}
+                width={260}
                 tickLine={false}
                 axisLine={false}
-                className="text-[10px]"
+                className="text-[9px]"
                 stroke="currentColor"
                 opacity={0.7}
                 interval={0}
-                tick={{ width: 132 }}
-                // Обрезаем позже: график во всю ширину, места под подпись
-                // вдвое больше, чем было в половинной колонке.
-                tickFormatter={(name: string) => (name.length > 34 ? `${name.slice(0, 33)}…` : name)}
+                // width тика ДОЛЖЕН совпадать с шириной оси: иначе подпись
+                // переносилась по 132px внутри 220px слота — три-четыре строки,
+                // наезжающие на соседние. Одна строка и многоточие, остальное
+                // показывает подсказка.
+                tick={{ width: 250 }}
+                tickFormatter={(name: string) => (name.length > 42 ? `${name.slice(0, 41)}…` : name)}
               />
               <Tooltip
                 cursor={{ fill: 'currentColor', opacity: 0.06 }}
