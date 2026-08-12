@@ -24,7 +24,20 @@ import {
 // модалке, которую закрывают одним кликом мимо, этому тесно. Плюс страницей
 // можно поделиться — у окна нет своего адреса.
 
-type Stage = { key: string; label: string; live?: boolean; hint?: string }
+type StageTone = 'neutral' | 'testing' | 'waiting' | 'live'
+type Stage = { key: string; label: string; live?: boolean; hint?: string; tone?: StageTone }
+
+/** Те же цвета, что в списке: тон приходит с сервера, один на всю систему. */
+const STAGE_TONE: Record<StageTone, string> = {
+  neutral: 'bg-muted text-muted-foreground',
+  testing: 'bg-sky-100 text-sky-800 dark:bg-sky-950 dark:text-sky-200',
+  waiting: 'bg-amber-100 text-amber-900 dark:bg-amber-950 dark:text-amber-200',
+  live: 'bg-brand font-medium text-brand-foreground',
+}
+function toneOf(stages: Stage[], key: string, isLive = false): string {
+  const tone = stages.find((s) => s.key === key)?.tone
+  return STAGE_TONE[tone ?? (isLive ? 'live' : 'neutral')]
+}
 
 /** Те же три профиля, что и в диалогах: список один, чтобы не разошёлся. */
 const BUILD_PROFILES = ['development', 'preview', 'production'] as const
@@ -165,12 +178,7 @@ export function ReleasePage({ projectId, canManage }: { projectId: string; canMa
       <div className="mb-4 flex flex-wrap items-center gap-2">
         <h1 className="text-xl font-semibold">{r.version}</h1>
         <span className="rounded bg-secondary px-1.5 py-0.5 text-xs text-secondary-foreground">{r.buildTypeLabel}</span>
-        <span
-          className={cn(
-            'rounded px-2 py-0.5 text-xs',
-            r.isLive ? 'bg-brand font-medium text-brand-foreground' : 'bg-muted text-muted-foreground',
-          )}
-        >
+        <span className={cn('rounded px-2 py-0.5 text-xs', toneOf(stages, r.status, r.isLive))}>
           {stageLabel(r.status, r.statusLabel)}
         </span>
         <div className="ms-auto flex items-center gap-2">
@@ -196,10 +204,10 @@ export function ReleasePage({ projectId, canManage }: { projectId: string; canMa
                 title={s.hint}
                 className={cn(
                   'rounded px-2 py-0.5 text-xs',
+                  // Текущая — своим цветом; пройденные приглушены, будущие
+                  // бледные: по дорожке видно и путь, и где мы на нём.
                   here
-                    ? s.live
-                      ? 'bg-brand font-medium text-brand-foreground'
-                      : 'bg-primary font-medium text-primary-foreground'
+                    ? cn('font-medium', toneOf(stages, s.key, s.live))
                     : done
                       ? 'bg-muted text-foreground'
                       : 'text-muted-foreground',

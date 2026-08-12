@@ -40,7 +40,28 @@ import { PeoplePicker } from '@/components/ui/people-picker'
 // проде». Поэтому сводка стоит первой и читается без прокрутки, а список —
 // уже под ней.
 
-type Stage = { key: string; label: string; live?: boolean; hint?: string }
+type StageTone = 'neutral' | 'testing' | 'waiting' | 'live'
+type Stage = { key: string; label: string; live?: boolean; hint?: string; tone?: StageTone }
+
+/**
+ * Цвет стадии. Тон приходит с сервера — там он один на всю систему, чтобы
+ * «ждём проверки» не оказалось жёлтым в списке и серым на странице.
+ *
+ * Смысл цветов: серый — идёт работа, синий — у тестировщиков, жёлтый — ждём
+ * не себя (магазин проверяет), зелёный — доехало до людей.
+ */
+const STAGE_TONE: Record<StageTone, string> = {
+  neutral: 'bg-muted text-muted-foreground',
+  testing: 'bg-sky-100 text-sky-800 dark:bg-sky-950 dark:text-sky-200',
+  waiting: 'bg-amber-100 text-amber-900 dark:bg-amber-950 dark:text-amber-200',
+  live: 'bg-brand font-medium text-brand-foreground',
+}
+
+/** Тон стадии по её ключу: сервер знает лестницу, клиент — только цвета. */
+function toneOf(stages: Stage[], key: string, isLive: boolean): string {
+  const tone = stages.find((s) => s.key === key)?.tone
+  return STAGE_TONE[tone ?? (isLive ? 'live' : 'neutral')]
+}
 
 /**
  * Профили сборки. Ровно те, что у Expo по умолчанию.
@@ -478,12 +499,7 @@ function ReleasesTable({
                           canManage ? 'cursor-pointer hover:bg-accent/60' : 'cursor-default',
                         )}
                       >
-                        <span
-                          className={cn(
-                            'rounded px-1.5 py-0.5 text-[11px]',
-                            r.isLive ? 'bg-brand font-medium text-brand-foreground' : 'bg-muted text-muted-foreground',
-                          )}
-                        >
+                        <span className={cn('rounded px-1.5 py-0.5 text-[11px]', toneOf(stages, r.status, r.isLive))}>
                           {stageLabel(r.status, r.statusLabel)}
                         </span>
                         {/* Стрелка — единственное, что отличает «просто ярлык»

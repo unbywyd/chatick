@@ -1649,7 +1649,7 @@
     "stage": {
       "building": "Собирается",
       "testflight": "TestFlight",
-      "in_review": "Ждём проверки Apple",
+      "in_review": "Ждём проверки магазина",
       "released": "Опубликована",
       "internal": "Внутренний трек",
       "staging": "Тестовый стенд",

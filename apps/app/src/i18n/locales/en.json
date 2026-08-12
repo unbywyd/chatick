@@ -1631,7 +1631,7 @@
     "stage": {
       "building": "Building",
       "testflight": "TestFlight",
-      "in_review": "Waiting for Apple review",
+      "in_review": "Waiting for store review",
       "released": "Released",
       "internal": "Internal track",
       "staging": "Staging",

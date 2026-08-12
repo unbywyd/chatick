@@ -48,6 +48,26 @@ describe('лестницы стадий', () => {
     for (const t of BUILD_TYPES) expect(firstStage(t.key)).toBeTruthy()
   })
 
+  it('у каждой стадии есть цвет', () => {
+    // Без тона стадия рисуется серой, и «ждём проверки магазина» перестаёт
+    // отличаться от «собирается» — а это разные новости. Забыть тон у новой
+    // стадии легко: она просто не покрасится, и никто не заметит.
+    for (const t of BUILD_TYPES) {
+      for (const s of t.stages) {
+        expect(s.tone, `${t.key}/${s.key} без тона`).toBeTruthy()
+      }
+    }
+  })
+
+  it('у мобильных есть стадия ожидания магазина', () => {
+    // И Apple, и Google проверяют сборку. Без этой ступени «отправили и ждём»
+    // некуда поставить, и версия висит в «тестировщиках», хотя ждут уже не их.
+    for (const key of ['ios', 'android']) {
+      const stages = buildType(key)!.stages
+      expect(stages.some((s) => s.tone === 'waiting'), `${key} без ожидания`).toBe(true)
+    }
+  })
+
   it('конечная стадия распознаётся, промежуточная — нет', () => {
     expect(isLiveStage('ios', 'released')).toBe(true)
     expect(isLiveStage('ios', 'testflight')).toBe(false)
