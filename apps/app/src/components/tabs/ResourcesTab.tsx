@@ -215,11 +215,11 @@ export function ResourcesTab({ projectId, isAdmin }: { projectId: string; isAdmi
               <span className="min-w-0 flex-1">
                 <span className="flex items-center gap-1.5 truncate text-sm font-medium">
                   {r.name}
-                  {r.source === 'chat' && <span className="rounded bg-brand/15 px-1 text-[10px] text-brand">{t('files.source.chat')}</span>}
+                  {r.source === 'chat' && <span className="rounded bg-brand/15 px-1 text-[10px] text-brand-ink">{t('files.source.chat')}</span>}
                 </span>
                 <span className="flex items-center gap-2 truncate text-xs text-muted-foreground">
                   {r.url && (
-                    <a href={r.url} target="_blank" rel="noreferrer" className="truncate text-brand hover:underline" onClick={(e) => e.stopPropagation()}>
+                    <a href={r.url} target="_blank" rel="noreferrer" className="truncate text-brand-ink hover:underline" onClick={(e) => e.stopPropagation()}>
                       {r.url}
                     </a>
                   )}

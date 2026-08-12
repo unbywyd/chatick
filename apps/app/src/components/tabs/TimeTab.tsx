@@ -502,13 +502,13 @@ function EntryRow({ projectId, entry }: { projectId: string; entry: Entry }) {
             onCommit={(minutes) => patch.mutate({ endedAt: resolveEnd(start, minutes, offset).toISOString() })}
           />
           {offset > 0 && (
-            <span className="absolute -end-3 -top-1 text-[9px] text-brand" title={t('time.nextDay')}>
+            <span className="absolute -end-3 -top-1 text-[9px] text-brand-ink" title={t('time.nextDay')}>
               +{offset}
             </span>
           )}
         </span>
       ) : (
-        <span className="w-12 text-center text-xs text-brand">{t('time.running')}</span>
+        <span className="w-12 text-center text-xs text-brand-ink">{t('time.running')}</span>
       )}
 
       {/* Дата — отдельной кнопкой: время набирают часто, дату меняют редко,
@@ -542,7 +542,7 @@ function EntryRow({ projectId, entry }: { projectId: string; entry: Entry }) {
           <span className="block font-mono text-base tabular-nums">—</span>
         )}
         {saved && (
-          <span className="absolute -bottom-3 end-0 text-[9px] font-sans text-brand">{t('time.saved')}</span>
+          <span className="absolute -bottom-3 end-0 text-[9px] font-sans text-brand-ink">{t('time.saved')}</span>
         )}
       </span>
 
@@ -709,7 +709,7 @@ function DateCell({
             'grid size-7 shrink-0 place-items-center rounded-md transition-colors',
             'text-muted-foreground hover:bg-accent hover:text-foreground',
             // Переход через полночь — не мелочь: пометку видно и без наведения.
-            offset > 0 && 'text-brand',
+            offset > 0 && 'text-brand-ink',
           )}
         >
           <CalendarDays className="size-[18px]" />

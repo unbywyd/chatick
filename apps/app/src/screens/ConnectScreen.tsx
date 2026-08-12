@@ -492,12 +492,12 @@ function TargetRow({
         active ? 'border-brand bg-accent' : 'hover:bg-secondary',
       )}
     >
-      <span className={cn('shrink-0', active ? 'text-brand' : 'text-muted-foreground')}>{icon}</span>
+      <span className={cn('shrink-0', active ? 'text-brand-ink' : 'text-muted-foreground')}>{icon}</span>
       <span className="min-w-0 flex-1">
         <span className="block truncate text-sm leading-tight">{title}</span>
         {note && <span className="block truncate text-[11px] leading-tight text-muted-foreground">{note}</span>}
       </span>
-      {active && <Check className="size-3.5 shrink-0 text-brand" />}
+      {active && <Check className="size-3.5 shrink-0 text-brand-ink" />}
     </button>
   )
 }

@@ -165,7 +165,7 @@ export function ProfileMenu({
                   onKeyDownCapture={(e) => e.stopPropagation()}
                   className="h-7 w-full rounded border bg-background px-2 text-sm outline-none focus:ring-2 focus:ring-ring"
                 />
-                <button onClick={saveName} className="text-brand"><Check className="size-4" /></button>
+                <button onClick={saveName} className="text-brand-ink"><Check className="size-4" /></button>
                 <button onClick={() => setEditing(false)} className="text-muted-foreground"><X className="size-4" /></button>
               </div>
             ) : (

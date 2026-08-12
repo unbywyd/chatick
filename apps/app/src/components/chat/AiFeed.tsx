@@ -56,7 +56,7 @@ export function AiFeed({ messages, thinking }: { messages: ChatMessage[]; thinki
       })}
       {thinking && (
         <p className="flex items-center gap-2 text-xs text-muted-foreground">
-          <Loader2 className="size-3.5 animate-spin text-brand" />
+          <Loader2 className="size-3.5 animate-spin text-brand-ink" />
           {t('sandbox.aiThinking')}
         </p>
       )}

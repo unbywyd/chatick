@@ -451,7 +451,7 @@ export function NotesTab({ projectId }: { projectId: string }) {
                             navigate(`/c/${companyId}/p/${projectId}/tasks/${n.task!.id}`)
                           }}
                           title={t('journal.openTask', { number: n.task.number })}
-                          className="inline-flex max-w-[22rem] items-center gap-1 rounded bg-brand/10 px-1.5 py-0.5 text-brand hover:bg-brand/20"
+                          className="inline-flex max-w-[22rem] items-center gap-1 rounded bg-brand/10 px-1.5 py-0.5 text-brand-ink hover:bg-brand/20"
                         >
                           <CheckSquare className="size-3 shrink-0" />
                           <span className="font-medium">{n.task.number}</span>
@@ -494,7 +494,7 @@ export function NotesTab({ projectId }: { projectId: string }) {
                               n.task ? navigate(`/c/${companyId}/p/${projectId}/tasks/${n.task.id}`) : toTask.mutate(n.id)
                             }
                           >
-                            <CheckSquare className={cn('size-3.5', n.task && 'text-brand')} />
+                            <CheckSquare className={cn('size-3.5', n.task && 'text-brand-ink')} />
                           </Button>
                           <Button
                             variant="ghost"

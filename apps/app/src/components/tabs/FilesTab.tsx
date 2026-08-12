@@ -357,7 +357,7 @@ export function FilesTab({ projectId, isAdmin = false }: { projectId: string; is
       {selectMode && (
         <div className="mt-3 flex items-center gap-2 rounded-lg border bg-card p-2">
           <Button variant="ghost" size="sm" onClick={toggleAll}>
-            {allSelected ? <CheckSquare className="size-4 text-brand" /> : <Square className="size-4" />}
+            {allSelected ? <CheckSquare className="size-4 text-brand-ink" /> : <Square className="size-4" />}
             {t('files.selectAll')}
           </Button>
           <span className="text-xs text-muted-foreground">{t('files.selectedCount', { count: selected.size })}</span>
@@ -381,7 +381,7 @@ export function FilesTab({ projectId, isAdmin = false }: { projectId: string; is
         <div className={cn('mt-4 flex flex-col items-center gap-3 rounded-lg border-2 border-dashed p-6 text-center text-sm transition-colors', dragOver ? 'border-brand bg-accent text-foreground' : 'text-muted-foreground', uploading.length > 0 && 'border-brand/50')}>
           {uploading.length > 0 ? (
             <span className="inline-flex items-center gap-2">
-              <Loader2 className="size-4 animate-spin text-brand" />
+              <Loader2 className="size-4 animate-spin text-brand-ink" />
               {t('files.uploading', { count: uploading.length })}
             </span>
           ) : (
@@ -503,7 +503,7 @@ function FileCard({
       {!selectMode && <DragHandle className="-ms-1" />}
       {selectMode && (
         <span className="shrink-0">
-          {selected ? <CheckSquare className="size-5 text-brand" /> : <Square className="size-5 text-muted-foreground" />}
+          {selected ? <CheckSquare className="size-5 text-brand-ink" /> : <Square className="size-5 text-muted-foreground" />}
         </span>
       )}
       {isImg ? (
@@ -518,7 +518,7 @@ function FileCard({
       <span className="min-w-0 flex-1">
         <span className="block truncate text-sm font-medium">{file.name}</span>
         <span className="flex items-center gap-1.5 truncate text-xs text-muted-foreground">
-          {file.messageId && <span className="rounded bg-brand/15 px-1 text-[10px] text-brand">{t('files.source.chat')}</span>}
+          {file.messageId && <span className="rounded bg-brand/15 px-1 text-[10px] text-brand-ink">{t('files.source.chat')}</span>}
           {file.taskNumber && <span className="rounded bg-secondary px-1 text-[10px]">{file.taskNumber}</span>}
           <span className="truncate">
             {fmtSize(file.size)}

@@ -496,7 +496,7 @@ export function TaskDrawer({
   const aiAdvice = aiCheck && (
     <div className="space-y-2 rounded-lg border border-brand/40 bg-brand/5 p-3">
       <div className="flex items-center gap-1.5 text-sm font-medium">
-        <Sparkles className="size-4 text-brand" />
+        <Sparkles className="size-4 text-brand-ink" />
         {t('tasks.aiAdvice')}
       </div>
       <p className="whitespace-pre-wrap text-sm text-muted-foreground">{aiCheck.advice}</p>
@@ -591,7 +591,7 @@ export function TaskDrawer({
                           когда сама строка выглядит как ссылка, — лишний шаг. */}
                       {canPreviewInline(a) ? (
                         <button
-                          className="min-w-0 flex-1 truncate text-start text-sm transition-colors hover:text-brand"
+                          className="min-w-0 flex-1 truncate text-start text-sm transition-colors hover:text-brand-ink"
                           onClick={() => open(a)}
                           title={t('tasks.preview')}
                         >
@@ -638,7 +638,7 @@ export function TaskDrawer({
               )}
               {uploading > 0 && (
                 <p className="flex items-center justify-center gap-2 p-2 text-xs text-muted-foreground">
-                  <Loader2 className="size-3.5 animate-spin text-brand" />
+                  <Loader2 className="size-3.5 animate-spin text-brand-ink" />
                   {t('files.uploading', { count: uploading })}
                 </p>
               )}
@@ -1034,7 +1034,7 @@ export function TaskDrawer({
                 {task.resources!.map((r) => (
                   <li key={r.id}>
                     <button
-                      className="group/res flex w-full items-center gap-2 rounded-md border px-2 py-1.5 text-start text-sm transition-colors hover:border-brand hover:text-brand"
+                      className="group/res flex w-full items-center gap-2 rounded-md border px-2 py-1.5 text-start text-sm transition-colors hover:border-brand hover:text-brand-ink"
                       onClick={() => navigate(`/c/${companyId}/p/${routeProjectId}/resources/${r.id}`)}
                       // Куда ведёт — видно до клика: у ресурса с именем сам
                       // адрес в строке не показан, и «Access test resource»
@@ -1068,7 +1068,7 @@ export function TaskDrawer({
                 {task.releases!.map((r) => (
                   <li key={r.id}>
                     <button
-                      className="flex w-full items-center gap-2 rounded-md border px-2 py-1.5 text-start text-sm transition-colors hover:border-brand hover:text-brand"
+                      className="flex w-full items-center gap-2 rounded-md border px-2 py-1.5 text-start text-sm transition-colors hover:border-brand hover:text-brand-ink"
                       onClick={() => navigate(`/c/${companyId}/p/${routeProjectId}/releases`)}
                     >
                       <Package className="size-3.5 shrink-0 text-muted-foreground" />

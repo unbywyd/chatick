@@ -60,7 +60,7 @@ export function UpdateBanner() {
       <Button
         size="sm"
         variant="outline"
-        className="h-7 cursor-pointer border-brand-foreground bg-transparent text-brand-foreground hover:bg-brand-foreground hover:text-brand"
+        className="h-7 cursor-pointer border-brand-foreground bg-transparent text-brand-foreground hover:bg-brand-foreground hover:text-brand-ink"
         onClick={() => window.location.reload()}
       >
         {t('update.reload')}

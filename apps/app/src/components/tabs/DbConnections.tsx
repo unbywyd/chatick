@@ -96,7 +96,7 @@ export function DbConnections({ projectId }: { projectId: string }) {
             <span
               className={cn(
                 'shrink-0 rounded px-1.5 py-0.5 text-[11px] tabular-nums',
-                c.tablesReadable ? 'bg-brand/15 text-brand' : 'bg-secondary text-muted-foreground',
+                c.tablesReadable ? 'bg-brand/15 text-brand-ink' : 'bg-secondary text-muted-foreground',
               )}
               title={t('db.readableHint')}
             >
@@ -185,7 +185,7 @@ function AddForm({ projectId, outboundIp, onDone }: { projectId: string; outboun
           }}
           className="ms-auto rounded p-0.5 text-muted-foreground hover:text-foreground"
         >
-          {copied ? <Check className="size-3 text-brand" /> : <Copy className="size-3" />}
+          {copied ? <Check className="size-3 text-brand-ink" /> : <Copy className="size-3" />}
         </button>
       </div>
 

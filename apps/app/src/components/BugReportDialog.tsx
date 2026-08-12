@@ -86,7 +86,7 @@ export function BugReportDialog({ me, onClose }: { me?: Me; onClose: () => void 
       >
         {done ? (
           <div className="grid justify-items-center gap-3 py-8 text-center">
-            <span className="grid size-14 place-items-center rounded-full bg-brand/15 text-brand">
+            <span className="grid size-14 place-items-center rounded-full bg-brand/15 text-brand-ink">
               <Check className="size-7" />
             </span>
             <p className="text-sm">{t('bug.sent')}</p>

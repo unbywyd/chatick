@@ -166,7 +166,7 @@ function FilterChip({
       onClick={onClick}
       className={cn(
         'cursor-pointer rounded-full border px-2.5 py-1 text-xs transition-colors',
-        active ? 'border-brand bg-brand/10 text-brand' : 'text-muted-foreground hover:bg-accent',
+        active ? 'border-brand bg-brand/10 text-brand-ink' : 'text-muted-foreground hover:bg-accent',
       )}
     >
       {children}

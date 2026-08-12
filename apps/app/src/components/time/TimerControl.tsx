@@ -161,7 +161,7 @@ export function TimerControl({ collapsed }: { collapsed: boolean }) {
           <>
             <button
               onClick={() => navigate(timePath(first.projectId))}
-              className={cn('font-mono text-[10px] tabular-nums', elsewhere ? 'text-amber-500' : 'text-brand')}
+              className={cn('font-mono text-[10px] tabular-nums', elsewhere ? 'text-amber-500' : 'text-brand-ink')}
               title={elsewhere ? t('time.runningIn', { project: elsewhere }) : t('time.openPage')}
             >
               {formatElapsed(elapsed)}
@@ -197,7 +197,7 @@ export function TimerControl({ collapsed }: { collapsed: boolean }) {
 
       {first ? (
         <div className="min-w-0 flex-1 leading-tight">
-          <span className={cn('block font-mono text-xs tabular-nums', elsewhere ? 'text-amber-500' : 'text-brand')}>
+          <span className={cn('block font-mono text-xs tabular-nums', elsewhere ? 'text-amber-500' : 'text-brand-ink')}>
             {formatElapsed(elapsed)}
             {count > 1 && <span className="ms-1 text-[10px] text-muted-foreground">+{count - 1}</span>}
           </span>

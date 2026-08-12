@@ -98,7 +98,7 @@ export function LanguagePicker({
                   onClick={() => pick(l.code)}
                   className={cn(
                     'flex w-full cursor-pointer items-center justify-between gap-2 rounded px-2 py-1.5 text-start text-sm',
-                    l.code === value ? 'text-brand' : 'hover:bg-accent',
+                    l.code === value ? 'text-brand-ink' : 'hover:bg-accent',
                   )}
                 >
                   <span className="truncate">

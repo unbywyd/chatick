@@ -65,7 +65,7 @@ export function InviteScreen() {
             </>
           ) : accept.isSuccess ? (
             <>
-              <CheckCircle2 className="mx-auto size-10 text-brand" />
+              <CheckCircle2 className="mx-auto size-10 text-brand-ink" />
               <h1 className="mt-3 text-lg font-semibold">{t('invite.accepted')}</h1>
             </>
           ) : (

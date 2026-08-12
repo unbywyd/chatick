@@ -290,7 +290,7 @@ export function ProjectSettingsForm({
                   value.aiConfig.mode === key ? 'border-brand bg-accent' : 'hover:bg-accent/50',
                 )}
               >
-                <Icon className={cn('size-4', value.aiConfig.mode === key ? 'text-brand' : 'text-muted-foreground')} />
+                <Icon className={cn('size-4', value.aiConfig.mode === key ? 'text-brand-ink' : 'text-muted-foreground')} />
                 <p className="mt-2 text-sm font-medium">{t(`aiMode.${key}.title`)}</p>
                 <p className="mt-0.5 text-xs leading-snug text-muted-foreground">{t(`aiMode.${key}.desc`)}</p>
               </button>

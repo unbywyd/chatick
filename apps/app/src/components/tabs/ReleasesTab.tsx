@@ -413,7 +413,7 @@ function ReleasesTable({
               >
                 <td className="px-2 py-1.5 align-middle">
                   <div className="flex items-center gap-1">
-                    <span className="font-semibold group-hover/row:text-brand">{r.version}</span>
+                    <span className="font-semibold group-hover/row:text-brand-ink">{r.version}</span>
                     {canManage && (
                       <EditField
                         title={t('releases.version')}
@@ -517,7 +517,7 @@ function ReleasesTable({
                     )}
                     {/* Шеврон в конце строки: без него строка выглядит как
                         данные, а не как переход, и в неё не тыкают. */}
-                    <ChevronRight className="size-4 shrink-0 text-muted-foreground/60 group-hover/row:text-brand" />
+                    <ChevronRight className="size-4 shrink-0 text-muted-foreground/60 group-hover/row:text-brand-ink" />
                   </div>
                 </td>
               </tr>

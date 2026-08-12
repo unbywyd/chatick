@@ -42,7 +42,7 @@ export function ContextMenuCheckItem({
 }: React.ComponentProps<typeof ContextMenuPrimitive.Item> & { checked?: boolean }) {
   return (
     <ContextMenuItem {...props}>
-      <span className="grid size-4 place-items-center">{checked && <Check className="size-3.5 text-brand" />}</span>
+      <span className="grid size-4 place-items-center">{checked && <Check className="size-3.5 text-brand-ink" />}</span>
       {children}
     </ContextMenuItem>
   )

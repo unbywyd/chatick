@@ -61,7 +61,7 @@ export function TaskContextMenu({
         {onStartTimer && task.status !== 'done' && (
           <>
             <ContextMenuItem onSelect={onStartTimer}>
-              <Play className="size-4 text-brand" />
+              <Play className="size-4 text-brand-ink" />
               {t('time.startOnTask')}
             </ContextMenuItem>
             <ContextMenuSeparator />
@@ -71,7 +71,7 @@ export function TaskContextMenu({
         {/* Быстрое «Готово» / статусы */}
         {canEdit && task.status !== 'done' && (
           <ContextMenuItem onSelect={() => onPatch({ status: 'done' })}>
-            <CheckCircle className="size-4 text-brand" />
+            <CheckCircle className="size-4 text-brand-ink" />
             {t('tasks.markDone')}
           </ContextMenuItem>
         )}

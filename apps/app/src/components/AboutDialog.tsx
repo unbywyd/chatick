@@ -52,7 +52,7 @@ export function AboutDialog({ me, onClose }: { me?: Me; onClose: () => void }) {
                 href={about.data.website}
                 target="_blank"
                 rel="noreferrer"
-                className="mt-3 inline-flex items-center gap-1.5 text-sm text-brand hover:underline"
+                className="mt-3 inline-flex items-center gap-1.5 text-sm text-brand-ink hover:underline"
               >
                 <ExternalLink className="size-3.5" />
                 {about.data.website.replace(/^https?:\/\//, '')}

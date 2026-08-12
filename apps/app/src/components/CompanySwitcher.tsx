@@ -71,7 +71,7 @@ export function CompanySwitcher({
             )}
             <span className="min-w-0 flex-1 truncate">{c.name}</span>
             <span className="text-[10px] text-muted-foreground">{t(`roles.${c.myRole}`)}</span>
-            {c.id === current.id && <Check className="size-3.5 text-brand" />}
+            {c.id === current.id && <Check className="size-3.5 text-brand-ink" />}
           </DropdownMenuItem>
         ))}
 

@@ -51,7 +51,7 @@ export function BlockerFilter({
       label: t('blockers.filterBlocking'),
       on: 'bg-orange-500/15 text-orange-600 dark:text-orange-400',
     },
-    { key: 'free' as const, Icon: CircleDashed, label: t('blockers.filterFree'), on: 'bg-brand/15 text-brand' },
+    { key: 'free' as const, Icon: CircleDashed, label: t('blockers.filterFree'), on: 'bg-brand/15 text-brand-ink' },
   ]
 
   return (

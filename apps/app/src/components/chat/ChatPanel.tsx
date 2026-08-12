@@ -449,7 +449,7 @@ export function ChatPanel({
                 <DropdownMenuTrigger asChild>
                   <button
                     title={t('chat.onlineNow', { count: online.length })}
-                    className="inline-flex cursor-pointer items-center gap-1.5 rounded-full border border-brand/40 bg-brand/10 px-2 py-1 text-xs font-semibold text-brand transition-colors hover:bg-brand/20"
+                    className="inline-flex cursor-pointer items-center gap-1.5 rounded-full border border-brand/40 bg-brand/10 px-2 py-1 text-xs font-semibold text-brand-ink transition-colors hover:bg-brand/20"
                   >
                     <span className="size-1.5 rounded-full bg-brand" />
                     {online.length}
@@ -541,7 +541,7 @@ export function ChatPanel({
                 кликабельны — начать разговор проще, когда есть с чего. */}
             {feed.length === 0 && !history.isLoading && (
               <div className="mx-auto max-w-sm px-4 pt-10 text-center">
-                <span className="mx-auto grid size-14 place-items-center rounded-2xl bg-brand/10 text-brand">
+                <span className="mx-auto grid size-14 place-items-center rounded-2xl bg-brand/10 text-brand-ink">
                   <MessagesSquare className="size-7" />
                 </span>
                 <h3 className="mt-4 text-base font-semibold">{t('chat.emptyTitle')}</h3>
@@ -713,9 +713,9 @@ export function ChatPanel({
             писать, человек уже не помнит, к чему это относится. */}
         {replyTo && !isAi && (
           <div className="mb-1.5 flex items-start gap-2 rounded-md border-s-2 border-brand bg-muted/50 px-2 py-1.5">
-            <Reply className="mt-0.5 size-3.5 shrink-0 text-brand" />
+            <Reply className="mt-0.5 size-3.5 shrink-0 text-brand-ink" />
             <div className="min-w-0 flex-1">
-              <p className="text-[11px] font-medium text-brand">{replyTo.author?.name ?? 'AI'}</p>
+              <p className="text-[11px] font-medium text-brand-ink">{replyTo.author?.name ?? 'AI'}</p>
               <p className="line-clamp-1 text-[11px] text-muted-foreground">{stripMentionMarkup(replyTo.text)}</p>
             </div>
             <button
@@ -953,7 +953,7 @@ function MessageRow({
           <p className="mb-0.5 flex items-baseline gap-2">
             {/* Длинное имя ужимается, а не разваливает строку на две: узнают
                 его по началу, а целиком оно есть в подсказке. */}
-            <span title={isAi ? 'AI' : message.author!.name} className={cn('min-w-0 truncate text-xs font-semibold', isAi && 'text-brand')}>
+            <span title={isAi ? 'AI' : message.author!.name} className={cn('min-w-0 truncate text-xs font-semibold', isAi && 'text-brand-ink')}>
               {isAi ? 'AI' : message.author!.name}
             </span>
             <span className="shrink-0 text-[10px] text-muted-foreground">{time}</span>
@@ -997,7 +997,7 @@ function MessageRow({
             className="mb-1 flex w-full max-w-md items-start gap-2 rounded-md border-s-2 border-brand bg-muted/50 px-2 py-1 text-start transition-colors hover:bg-muted"
           >
             <span className="min-w-0 flex-1">
-              <span className="block text-[11px] font-medium text-brand">{replyTo.author?.name ?? 'AI'}</span>
+              <span className="block text-[11px] font-medium text-brand-ink">{replyTo.author?.name ?? 'AI'}</span>
               <span className="line-clamp-1 text-[11px] text-muted-foreground">{stripMentionMarkup(replyTo.text)}</span>
             </span>
           </button>
@@ -1039,13 +1039,13 @@ function MessageTaskPins({ pins }: { pins: NonNullable<ChatMessage['taskPins']> 
           title={p.title}
         >
           {p.kind === 'note' ? (
-            <NotebookPen className="size-3.5 shrink-0 text-brand" />
+            <NotebookPen className="size-3.5 shrink-0 text-brand-ink" />
           ) : p.kind === 'document' ? (
-            <FileText className="size-3.5 shrink-0 text-brand" />
+            <FileText className="size-3.5 shrink-0 text-brand-ink" />
           ) : p.kind === 'resource' ? (
-            <KeyRound className="size-3.5 shrink-0 text-brand" />
+            <KeyRound className="size-3.5 shrink-0 text-brand-ink" />
           ) : (
-            <CheckSquare className="size-3.5 shrink-0 text-brand" />
+            <CheckSquare className="size-3.5 shrink-0 text-brand-ink" />
           )}
           <span className="truncate">
             {p.number && <span className="font-medium">{p.number} </span>}
@@ -1338,7 +1338,7 @@ function ModeButton({ active, onClick, icon, label }: { active: boolean; onClick
       aria-pressed={active}
       className={cn(
         'flex cursor-pointer items-center gap-1.5 rounded-md px-2.5 py-1 text-xs font-medium transition-colors',
-        active ? 'bg-brand/15 text-brand' : 'text-muted-foreground hover:bg-accent hover:text-foreground',
+        active ? 'bg-brand/15 text-brand-ink' : 'text-muted-foreground hover:bg-accent hover:text-foreground',
       )}
     >
       {icon}

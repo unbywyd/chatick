@@ -142,7 +142,7 @@ function ComboButton({
       onClick={capturing ? onCancel : onStart}
       className={cn(
         'inline-flex min-w-28 cursor-pointer items-center justify-center gap-1.5 rounded-md border px-2.5 py-1.5 font-mono text-xs',
-        capturing ? 'border-brand text-brand' : 'bg-secondary hover:bg-accent',
+        capturing ? 'border-brand text-brand-ink' : 'bg-secondary hover:bg-accent',
       )}
     >
       {capturing ? (

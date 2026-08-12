@@ -14,7 +14,7 @@ type Note = { id: string; kind: NoteKind; body: string; createdAt: string }
 const KIND: Record<NoteKind, { icon: typeof Info; className: string; dot: string }> = {
   fact: { icon: Info, className: 'border-sky-500/30 bg-sky-500/5', dot: 'text-sky-500' },
   issue: { icon: AlertTriangle, className: 'border-orange-500/30 bg-orange-500/5', dot: 'text-orange-500' },
-  recommendation: { icon: Lightbulb, className: 'border-brand/30 bg-brand/5', dot: 'text-brand' },
+  recommendation: { icon: Lightbulb, className: 'border-brand/30 bg-brand/5', dot: 'text-brand-ink' },
   rebuttal: { icon: XCircle, className: 'border-destructive/30 bg-destructive/5', dot: 'text-destructive' },
 }
 
@@ -56,7 +56,7 @@ export function TaskNotes({ taskId, canEdit, notesPending }: { taskId: string; c
     <section className="space-y-2">
       <div className="flex items-center justify-between">
         <h3 className="flex items-center gap-1.5 text-sm font-semibold">
-          <Sparkles className="size-3.5 text-brand" />
+          <Sparkles className="size-3.5 text-brand-ink" />
           {t('notes.title')}
         </h3>
         {canEdit && (
@@ -69,7 +69,7 @@ export function TaskNotes({ taskId, canEdit, notesPending }: { taskId: string; c
 
       {loading && (
         <p className="flex items-center gap-2 text-xs text-muted-foreground">
-          <Loader2 className="size-3.5 animate-spin text-brand" />
+          <Loader2 className="size-3.5 animate-spin text-brand-ink" />
           {t('notes.generating')}
         </p>
       )}

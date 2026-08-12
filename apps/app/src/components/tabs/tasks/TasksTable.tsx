@@ -596,7 +596,7 @@ function GroupTable({
                 style={{ width: `${pct}%` }}
               />
             </span>
-            <span className={cn('text-xs tabular-nums', pct === 100 ? 'text-brand' : 'text-muted-foreground')}>
+            <span className={cn('text-xs tabular-nums', pct === 100 ? 'text-brand-ink' : 'text-muted-foreground')}>
               {doneCount}/{tasks.length}
             </span>
           </span>

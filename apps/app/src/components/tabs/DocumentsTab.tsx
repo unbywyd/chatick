@@ -156,7 +156,7 @@ export function DocumentsTab({ projectId, meId }: { projectId: string; meId?: st
                 <FileText className="mt-0.5 size-4 shrink-0 text-muted-foreground" />
                 {/* место под меню, чтобы длинный заголовок не уезжал под него */}
                 <span className="min-w-0 flex-1 truncate pe-6 text-sm font-medium">{d.title}</span>
-                {d.publicSlug && <Globe className="mt-0.5 size-3 shrink-0 text-brand" />}
+                {d.publicSlug && <Globe className="mt-0.5 size-3 shrink-0 text-brand-ink" />}
               </span>
               {d.preview && <span className="line-clamp-3 flex-1 text-xs text-muted-foreground">{d.preview}</span>}
               <span className="mt-auto flex items-center gap-2 text-xs text-muted-foreground">
@@ -523,7 +523,7 @@ function DocHistory({
                   if (await confirm({ title: t('docs.restoreConfirm', { version: v.version }), confirmLabel: t('docs.restore') }))
                     restore.mutate(v.id)
                 }}
-                className="mt-1 flex items-center gap-1 text-[11px] text-muted-foreground hover:text-brand"
+                className="mt-1 flex items-center gap-1 text-[11px] text-muted-foreground hover:text-brand-ink"
               >
                 <RotateCcw className="size-3" />
                 {t('docs.restore')}

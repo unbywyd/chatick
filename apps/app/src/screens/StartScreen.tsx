@@ -290,7 +290,7 @@ function CompanyPicker({
           {invites.map((inv) => (
             <div key={inv.id} className="flex items-center justify-between rounded-lg border bg-card p-3">
               <div className="flex items-center gap-3">
-                <Mail className="size-4 text-brand" />
+                <Mail className="size-4 text-brand-ink" />
                 <div>
                   <p className="text-sm font-medium">{inv.company.name}</p>
                   <p className="text-xs text-muted-foreground">{t(`roles.${inv.role}`)}</p>

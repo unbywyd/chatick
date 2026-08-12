@@ -362,7 +362,7 @@ export function Composer({
     >
       {/* Подсказка при наведении */}
       {dropActive && (
-        <div className="pointer-events-none border-b bg-accent/50 px-3 py-2 text-center text-xs font-medium text-brand">
+        <div className="pointer-events-none border-b bg-accent/50 px-3 py-2 text-center text-xs font-medium text-brand-ink">
           {t('composer.dropHere')}
         </div>
       )}
@@ -378,13 +378,13 @@ export function Composer({
               {/* Иконка по типу: чипсы стоят рядом, и «задача» на документе
                   сбивает с толку сильнее, чем отсутствие иконки вообще. */}
               {p.kind === 'task' ? (
-                <CheckSquare className="size-3 shrink-0 text-brand" />
+                <CheckSquare className="size-3 shrink-0 text-brand-ink" />
               ) : p.kind === 'note' ? (
-                <NotebookPen className="size-3 shrink-0 text-brand" />
+                <NotebookPen className="size-3 shrink-0 text-brand-ink" />
               ) : p.kind === 'document' ? (
-                <FileText className="size-3 shrink-0 text-brand" />
+                <FileText className="size-3 shrink-0 text-brand-ink" />
               ) : (
-                <KeyRound className="size-3 shrink-0 text-brand" />
+                <KeyRound className="size-3 shrink-0 text-brand-ink" />
               )}
               <span className="truncate">
                 {p.number && <span className="font-medium">{p.number} </span>}
@@ -416,7 +416,7 @@ export function Composer({
           ))}
           {uploading > 0 && (
             <span className="inline-flex items-center gap-1.5 rounded-full border px-2 py-1 text-xs text-muted-foreground">
-              <Loader2 className="size-3 animate-spin text-brand" />
+              <Loader2 className="size-3 animate-spin text-brand-ink" />
             </span>
           )}
         </div>
@@ -456,7 +456,7 @@ export function Composer({
               title={t('chat.attach')}
               className={cn(
                 'rounded-md p-2 transition-colors disabled:opacity-40',
-                keepOriginal ? 'text-brand' : 'text-muted-foreground hover:text-foreground',
+                keepOriginal ? 'text-brand-ink' : 'text-muted-foreground hover:text-foreground',
               )}
             >
               <Paperclip className="size-4" />
@@ -475,9 +475,9 @@ export function Composer({
             {/* Режим, а не действие: включил — и следующие картинки уходят
                 без сжатия, пока не выключишь. */}
             <DropdownMenuItem onSelect={() => setKeepOriginal((v) => !v)}>
-              <ImageIcon className={cn('size-3.5', keepOriginal && 'text-brand')} />
+              <ImageIcon className={cn('size-3.5', keepOriginal && 'text-brand-ink')} />
               <span className="flex-1">{t('chat.keepOriginal')}</span>
-              {keepOriginal && <Check className="size-3.5 text-brand" />}
+              {keepOriginal && <Check className="size-3.5 text-brand-ink" />}
             </DropdownMenuItem>
           </DropdownMenuContent>
         </DropdownMenu>

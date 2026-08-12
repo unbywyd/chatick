@@ -43,7 +43,7 @@ export function ClipboardBanner({
         type="button"
         onClick={load}
         className={cn(
-          'inline-flex items-center gap-1.5 rounded-md border bg-background px-2.5 py-1.5 text-xs text-foreground transition-colors hover:border-brand hover:text-brand',
+          'inline-flex items-center gap-1.5 rounded-md border bg-background px-2.5 py-1.5 text-xs text-foreground transition-colors hover:border-brand hover:text-brand-ink',
           className,
         )}
         title={t('clipboard.paste')}

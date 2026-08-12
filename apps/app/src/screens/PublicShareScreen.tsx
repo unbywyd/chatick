@@ -107,7 +107,7 @@ export function PublicShareScreen() {
               href={data.resource.url}
               target="_blank"
               rel="noreferrer"
-              className="inline-flex items-center gap-1.5 text-sm text-brand hover:underline"
+              className="inline-flex items-center gap-1.5 text-sm text-brand-ink hover:underline"
             >
               <Link2 className="size-3.5" />
               {data.resource.url}

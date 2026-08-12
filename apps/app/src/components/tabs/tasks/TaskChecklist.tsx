@@ -199,7 +199,7 @@ export function TaskChecklist({ taskId, canEdit }: { taskId: string; canEdit: bo
               style={{ width: `${pct}%` }}
             />
           </div>
-          <span className={cn('shrink-0 text-xs tabular-nums', pct === 100 ? 'text-brand' : 'text-muted-foreground')}>
+          <span className={cn('shrink-0 text-xs tabular-nums', pct === 100 ? 'text-brand-ink' : 'text-muted-foreground')}>
             {pct}%
           </span>
         </div>
@@ -418,7 +418,7 @@ function Row({
             title={t('checklist.copy')}
             className={cn(
               'grid size-6 place-items-center rounded transition-opacity hover:bg-secondary focus-visible:opacity-100',
-              copied ? 'text-brand opacity-100' : 'text-muted-foreground opacity-0 group-hover:opacity-100',
+              copied ? 'text-brand-ink opacity-100' : 'text-muted-foreground opacity-0 group-hover:opacity-100',
             )}
           >
             {copied ? <Check className="size-3.5" /> : <Copy className="size-3.5" />}

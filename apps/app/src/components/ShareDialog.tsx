@@ -117,7 +117,7 @@ export function ShareDialog({
           <div className="mt-2 flex gap-2">
             <code className="min-w-0 flex-1 truncate rounded-md border bg-secondary px-3 py-2 text-xs">{appUrl}</code>
             <Button variant="outline" size="sm" onClick={() => copy(appUrl, 'app')}>
-              {copied === 'app' ? <Check className="size-3.5 text-brand" /> : <Copy className="size-3.5" />}
+              {copied === 'app' ? <Check className="size-3.5 text-brand-ink" /> : <Copy className="size-3.5" />}
               {copied === 'app' ? t('connect.copied') : t('connect.copy')}
             </Button>
           </div>
@@ -137,7 +137,7 @@ export function ShareDialog({
                   {publicUrl}
                 </code>
                 <Button variant="outline" size="sm" onClick={() => copy(publicUrl, 'public')}>
-                  {copied === 'public' ? <Check className="size-3.5 text-brand" /> : <Copy className="size-3.5" />}
+                  {copied === 'public' ? <Check className="size-3.5 text-brand-ink" /> : <Copy className="size-3.5" />}
                   {copied === 'public' ? t('connect.copied') : t('connect.copy')}
                 </Button>
               </div>

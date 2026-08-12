@@ -345,7 +345,7 @@ createRoot(document.getElementById('root')!).render(
               actionButton: 'ms-auto rounded-md bg-primary px-2 py-1 text-xs font-medium text-primary-foreground',
               cancelButton: 'ms-auto rounded-md bg-secondary px-2 py-1 text-xs font-medium',
               closeButton: 'border-border bg-card text-muted-foreground',
-              success: '[&_[data-icon]]:text-brand',
+              success: '[&_[data-icon]]:text-brand-ink',
               error: 'border-destructive/40 [&_[data-icon]]:text-destructive',
               warning: '[&_[data-icon]]:text-amber-500',
               info: '[&_[data-icon]]:text-muted-foreground',

@@ -244,7 +244,7 @@ export function TaskComments({
                       <button
                         key={f.id}
                         onClick={() => setViewing({ id: f.id, name: f.name, mime: f.mime })}
-                        className="inline-flex items-center gap-1.5 rounded border py-0.5 pe-1.5 ps-1 text-xs transition-colors hover:border-brand hover:text-brand"
+                        className="inline-flex items-center gap-1.5 rounded border py-0.5 pe-1.5 ps-1 text-xs transition-colors hover:border-brand hover:text-brand-ink"
                       >
                         {/* Превью вместо скрепки: по имени вроде
                             «354881888_6f937116-….webp» не понять, что внутри. */}

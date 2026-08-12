@@ -56,7 +56,7 @@ function deadlineTone(days: number): string {
   if (days < 0) return 'border-destructive/40 bg-destructive/10 text-destructive'
   if (days <= 2) return 'border-orange-500/40 bg-orange-500/10 text-orange-600 dark:text-orange-400'
   if (days <= 7) return 'border-yellow-500/40 bg-yellow-500/10 text-yellow-700 dark:text-yellow-400'
-  return 'border-brand/40 bg-brand/10 text-brand'
+  return 'border-brand/40 bg-brand/10 text-brand-ink'
 }
 
 export function ProjectSummary({ projectId, canEdit }: { projectId: string; canEdit: boolean }) {
@@ -120,7 +120,7 @@ export function ProjectSummary({ projectId, canEdit }: { projectId: string; canE
               title={t('summary.vsDoneHint')}
               className={cn(
                 'rounded px-1',
-                spent > plannedDone ? 'bg-orange-500/15 text-orange-600 dark:text-orange-400' : 'bg-brand/15 text-brand',
+                spent > plannedDone ? 'bg-orange-500/15 text-orange-600 dark:text-orange-400' : 'bg-brand/15 text-brand-ink',
               )}
             >
               {t(spent > plannedDone ? 'summary.slowerBy' : 'summary.fasterBy', {

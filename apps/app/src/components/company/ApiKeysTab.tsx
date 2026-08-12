@@ -99,7 +99,7 @@ export function ApiKeysTab({ companyId, isAdmin }: { companyId: string; isAdmin:
       {fresh && (
         <div className="rounded-xl border border-brand bg-brand/5 p-4">
           <p className="flex items-center gap-2 text-sm font-semibold">
-            <TriangleAlert className="size-4 text-brand" />
+            <TriangleAlert className="size-4 text-brand-ink" />
             {t('apiKeys.onceTitle')}
           </p>
           <p className="mt-1 text-sm text-muted-foreground">{t('apiKeys.onceHint')}</p>

@@ -205,7 +205,7 @@ export function SandboxOverlay({
                 <div key={item.id} className={cn('rounded-lg border p-3', item.approved ? 'border-brand bg-accent/60' : 'bg-card')}>
                   <div className="mb-1.5 flex items-center justify-between gap-2">
                     <p className="flex items-center gap-1.5 text-[10px] font-medium uppercase tracking-wide text-muted-foreground">
-                      {item.approved && <Check className="size-3 text-brand" />}
+                      {item.approved && <Check className="size-3 text-brand-ink" />}
                       {item.approved ? t('sandbox.approvedSuggestion') : t('sandbox.suggestion')}
                     </p>
                     <Button
@@ -254,7 +254,7 @@ export function SandboxOverlay({
             )}
             {(reply.isPending && !streamingText) || sandbox.isLoading ? (
               <p className="flex items-center gap-2 text-xs text-muted-foreground">
-                <Loader2 className="size-3.5 animate-spin text-brand" />
+                <Loader2 className="size-3.5 animate-spin text-brand-ink" />
                 {t('sandbox.aiThinking')}
               </p>
             ) : null}
@@ -327,7 +327,7 @@ function TaskProposal({ messageId, item }: { messageId: string; item: SandboxIte
   return (
     <div className="rounded-lg border border-brand/40 bg-card p-3">
       <p className="mb-2 flex items-center gap-1.5 text-[10px] font-medium uppercase tracking-wide text-muted-foreground">
-        <ListTodo className="size-3.5 text-brand" />
+        <ListTodo className="size-3.5 text-brand-ink" />
         {item.applied ? t('sandbox.tasksCreated') : t('sandbox.tasksProposed')}
       </p>
 

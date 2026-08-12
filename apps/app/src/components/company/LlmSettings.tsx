@@ -91,7 +91,7 @@ export function LlmSettings({ companyId, isAdmin }: { companyId: string; isAdmin
     <div className="space-y-5">
       <div className="flex items-start gap-3">
         <span className="grid size-10 shrink-0 place-items-center rounded-lg bg-secondary">
-          <BrainCircuit className="size-5 text-brand" />
+          <BrainCircuit className="size-5 text-brand-ink" />
         </span>
         <div>
           <h2 className="text-base font-bold">{t('llm.title')}</h2>
@@ -103,7 +103,7 @@ export function LlmSettings({ companyId, isAdmin }: { companyId: string; isAdmin
       <div className="flex items-center gap-2 rounded-lg border bg-card px-3 py-2.5 text-sm">
         {status.data?.configured ? (
           <>
-            <Check className="size-4 text-brand" />
+            <Check className="size-4 text-brand-ink" />
             <span>
               {t('llm.configured')}: <b>{status.data.providers.find((p) => p.id === status.data!.provider)?.label}</b>
               {' · '}

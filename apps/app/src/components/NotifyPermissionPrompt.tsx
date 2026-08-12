@@ -52,7 +52,7 @@ export function NotifyPermissionPrompt() {
   return (
     <div className="fixed inset-x-0 bottom-0 z-50 flex justify-center p-3">
       <div className="flex w-full max-w-md items-center gap-3 rounded-xl border bg-card p-3 shadow-lg">
-        <span className="grid size-9 shrink-0 place-items-center rounded-full bg-brand/15 text-brand">
+        <span className="grid size-9 shrink-0 place-items-center rounded-full bg-brand/15 text-brand-ink">
           <Bell className="size-4" />
         </span>
         <div className="min-w-0 flex-1">

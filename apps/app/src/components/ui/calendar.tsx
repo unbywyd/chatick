@@ -49,7 +49,7 @@ export function Calendar({
         // Сегодня — жирным и цветом. Цвет задаём кнопке, чтобы выделение выше
         // его перебивало: у выбранного сегодняшнего дня иначе остаётся
         // брендовый текст на брендовом фоне, то есть нечитаемый.
-        today: 'font-bold [&>button]:text-brand',
+        today: 'font-bold [&>button]:text-brand-ink',
         outside: 'text-muted-foreground/40',
       }}
       components={{

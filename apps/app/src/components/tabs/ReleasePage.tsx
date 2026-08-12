@@ -275,7 +275,7 @@ export function ReleasePage({ projectId, canManage }: { projectId: string; canMa
               <button
                 key={task.id}
                 onClick={() => navigate(`/c/${companyId}/p/${routeProjectId}/tasks/${task.id}`)}
-                className="flex w-full items-center gap-2 rounded-md border px-2 py-1.5 text-start text-sm transition-colors hover:border-brand hover:text-brand"
+                className="flex w-full items-center gap-2 rounded-md border px-2 py-1.5 text-start text-sm transition-colors hover:border-brand hover:text-brand-ink"
               >
                 <span className="shrink-0 rounded bg-secondary px-1.5 py-0.5 text-[11px] text-secondary-foreground">
                   {task.number}

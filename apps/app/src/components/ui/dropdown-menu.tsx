@@ -62,7 +62,7 @@ export function DropdownMenuCheckItem({
 }: React.ComponentProps<typeof DropdownMenuPrimitive.Item> & { checked?: boolean }) {
   return (
     <DropdownMenuItem {...props}>
-      <span className="grid size-4 place-items-center">{checked && <Check className="size-3.5 text-brand" />}</span>
+      <span className="grid size-4 place-items-center">{checked && <Check className="size-3.5 text-brand-ink" />}</span>
       {children}
     </DropdownMenuItem>
   )

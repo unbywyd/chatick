@@ -90,7 +90,7 @@ export function WebhooksSettings({ companyId, isAdmin }: { companyId: string; is
       {fresh && (
         <div className="mt-3 rounded-lg border border-brand bg-brand/5 p-3">
           <p className="flex items-center gap-2 text-sm font-semibold">
-            <TriangleAlert className="size-4 text-brand" />
+            <TriangleAlert className="size-4 text-brand-ink" />
             {t('webhooks.secretOnce')}
           </p>
           <p className="mt-1 text-xs text-muted-foreground">{t('webhooks.secretHint')}</p>

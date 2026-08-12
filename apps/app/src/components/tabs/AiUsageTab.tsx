@@ -98,7 +98,7 @@ export function AiUsageTab({ projectId, isAdmin }: { projectId: string; isAdmin:
                 <div className="flex flex-wrap items-center gap-2 font-medium">
                   {t(`ai.sourceOpt.${s}.label`)}
                   {active && (
-                    <span className="rounded-full bg-brand/15 px-2 py-0.5 text-[10px] font-semibold text-brand">
+                    <span className="rounded-full bg-brand/15 px-2 py-0.5 text-[10px] font-semibold text-brand-ink">
                       {t('ai.activeNow')}
                     </span>
                   )}
@@ -276,7 +276,7 @@ function PriceRowEditor({ row, onSave }: { row: PriceRow; onSave: (inp: number |
     <tr className="border-b last:border-0">
       <td className="px-2 py-1.5 font-mono text-xs">
         {row.model}
-        {row.custom && <span className="ms-1 rounded bg-brand/15 px-1 text-[10px] text-brand">custom</span>}
+        {row.custom && <span className="ms-1 rounded bg-brand/15 px-1 text-[10px] text-brand-ink">custom</span>}
       </td>
       <td className="px-2 py-1.5 text-end">
         <input value={inp} onChange={(e) => setInp(e.target.value)} placeholder={row.hasDefault ? '' : '—'} className="w-20 rounded border bg-background px-1.5 py-0.5 text-end text-xs" />
@@ -289,7 +289,7 @@ function PriceRowEditor({ row, onSave }: { row: PriceRow; onSave: (inp: number |
           <button
             title={t('ai.save')}
             onClick={() => onSave(inp === '' ? null : Number(inp), out === '' ? null : Number(out))}
-            className="text-xs text-brand hover:underline"
+            className="text-xs text-brand-ink hover:underline"
           >
             {t('ai.save')}
           </button>
