@@ -907,7 +907,8 @@
     "seeAll": "Все уведомления",
     "filterAll": "Все",
     "filterUnread": "Непрочитанные",
-    "allProjects": "Все проекты"
+    "allProjects": "Все проекты",
+    "here": "Вас касается здесь"
   },
   "docs": {
     "title": "Документы",

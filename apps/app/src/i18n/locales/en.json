@@ -901,7 +901,8 @@
     "seeAll": "All notifications",
     "filterAll": "All",
     "filterUnread": "Unread",
-    "allProjects": "All projects"
+    "allProjects": "All projects",
+    "here": "Concerns you here"
   },
   "docs": {
     "title": "Documents",

@@ -3,6 +3,7 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { useTranslation } from 'react-i18next'
 import { Check, X } from 'lucide-react'
 import { api } from '@/lib/api'
+import { cn } from '@/lib/utils'
 import { Avatar } from '@/components/ui/avatar'
 import { Button } from '@/components/ui/button'
 // Формат адреса один на всё приложение: своя копия здесь уже расходилась
@@ -87,10 +88,15 @@ export function ProjectInbox({
   }
 
   return (
-    <div className="border-b bg-brand/5">
+    <div className={cn(projectId ? 'border-b' : 'rounded-lg border bg-card')}>
       <div className="flex items-center justify-between gap-3 px-3 pt-2">
-        <span className="text-xs font-semibold text-muted-foreground">
-          {t('inbox.hereTitle', { count: items.length })}
+        <span className="flex items-center gap-1.5 text-xs font-semibold text-muted-foreground">
+          {t('inbox.here')}
+          {/* Число баджем, а не в тексте: его ищут глазами первым, и в строке
+              «Вас касается здесь: 5» пятёрка теряется среди слов. */}
+          <span className="grid min-w-4 place-items-center rounded-full bg-brand px-1 text-[10px] font-bold leading-4 text-brand-foreground">
+            {items.length}
+          </span>
         </span>
         <Button
           variant="ghost"
@@ -104,8 +110,13 @@ export function ProjectInbox({
       </div>
 
       {/* Горизонтальная лента: уведомлений обычно немного, а вертикальный
-          список отодвинул бы работу вниз. */}
-      <div className="flex gap-2 overflow-x-auto px-3 pb-2 pt-1.5">
+          список отодвинул бы работу вниз.
+
+          pb-3 вместо pb-2 — под полосу прокрутки: она рисуется поверх нижнего
+          края карточек и срезала их, а на узкой полосе за неё ещё и не
+          ухватиться. touch-pan-x — чтобы на трекпаде и тачскрине лента
+          листалась вбок, а не пыталась прокрутить страницу. */}
+      <div className="flex touch-pan-x gap-2 overflow-x-auto overscroll-x-contain px-3 pb-3 pt-1.5">
         {items.map((n) => (
           <div
             key={n.id}
