@@ -1,4 +1,5 @@
 import { and, eq, inArray, isNull } from 'drizzle-orm'
+import { htmlToText } from './sanitize-html.js'
 import { db } from '../db/client.js'
 import { users, projects, projectMembers, notificationOptOuts, notificationLog, notifications } from '../db/schema.js'
 import { sendToUserAnywhere } from '../ws.js'
@@ -179,7 +180,9 @@ export async function notify(params: NotifyParams): Promise<void> {
 
     const recipients = await db.query.users.findMany({ where: inArray(users.id, targets) })
     const actorName = params.actorName || 'Someone'
-    const previewText = params.preview ? stripMentions(params.preview) : ''
+    // Сначала теги, потом упоминания: разметка обрамляет их снаружи, и в
+    // обратном порядке @[…](…) внутри <strong> осталось бы неразобранным.
+    const previewText = params.preview ? stripMentions(htmlToText(params.preview)) : ''
 
     for (const user of recipients) {
       // дедуп: один и тот же dedupeKey не создаём повторно
