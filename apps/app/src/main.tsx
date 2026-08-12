@@ -39,7 +39,28 @@ import { ShortcutsTab } from './components/tabs/ShortcutsTab'
 import { ImageViewer } from './components/ImageViewer'
 
 // HashRouter — единый роутинг для веба и Electron (file://) без доп. настроек.
-const queryClient = new QueryClient()
+const queryClient = new QueryClient({
+  defaultOptions: {
+    queries: {
+      /**
+       * Не повторять то, что не станет лучше от повтора.
+       *
+       * По умолчанию react-query бьётся трижды с нарастающей задержкой. Для
+       * упавшей сети это разумно, для 401 — нет: токена не появится оттого,
+       * что мы спросили ещё раз. Человек, открывший ссылку без входа, получал
+       * 18 запросов вместо 9, красную простыню в консоли и восемь секунд
+       * «загрузки» вместо мгновенного экрана входа (замерено по HAR).
+       *
+       * 5xx и обрыв связи по-прежнему повторяем дважды — там повтор помогает.
+       */
+      retry: (count, error) => {
+        const status = (error as { status?: number } | null)?.status
+        if (status && status >= 400 && status < 500) return false
+        return count < 2
+      },
+    },
+  },
+})
 
 /** Хук требует роутер, поэтому вызываем его из компонента внутри HashRouter. */
 function DesktopSync() {
