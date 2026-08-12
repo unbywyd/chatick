@@ -10,6 +10,7 @@ import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Select, SelectTrigger, SelectValue, SelectContent, SelectItem } from '@/components/ui/select'
 import { Combobox } from '@/components/ui/combobox'
+import { PeoplePicker } from '@/components/ui/people-picker'
 
 // Версии проекта (SPEC §8.46).
 //
@@ -290,11 +291,20 @@ function RequestDialog({
       <div className="space-y-3">
         <div>
           <label className="mb-1 block text-xs text-muted-foreground">{t('releases.whoBuilds')}</label>
-          <Combobox
-            options={(members.data ?? []).map((m) => ({ value: m.user.id, label: m.user.name }))}
-            value={assigneeId}
-            onChange={setAssigneeId}
+          {/* PeoplePicker, а не Combobox: человека узнают по лицу быстрее, чем
+              по строке, и в списке из двадцати это разница между «нашёл» и
+              «прочитал двадцать имён». Поиск здесь тоже есть. */}
+          <PeoplePicker
+            people={(members.data ?? []).map((m) => ({
+              id: m.user.id,
+              name: m.user.name,
+              avatarUrl: m.user.avatarUrl,
+            }))}
+            value={assigneeId ? [assigneeId] : []}
+            onChange={(ids) => setAssigneeId(ids[0] ?? '')}
             placeholder={t('releases.pickPerson')}
+            single
+            clearLabel={t('releases.noAssignee')}
           />
         </div>
         <div>

@@ -1615,6 +1615,7 @@
     "whatToDo": "What is needed",
     "whatToDoHint": "e.g. production build for the store",
     "requestExplain": "This creates a task for that person and a version, linked together. They will be notified.",
-    "requested": "Requested — task {{task}}"
+    "requested": "Requested — task {{task}}",
+    "noAssignee": "No assignee"
   }
 }
