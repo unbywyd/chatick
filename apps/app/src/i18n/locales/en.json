@@ -347,7 +347,8 @@
       "files": "Files",
       "resources": "Resources",
       "documents": "Documents",
-      "notes": "Notes"
+      "notes": "Notes",
+      "releases": "Releases"
     },
     "level": {
       "none": {

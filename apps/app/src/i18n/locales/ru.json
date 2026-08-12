@@ -348,7 +348,8 @@
       "files": "Файлы",
       "resources": "Ресурсы",
       "documents": "Документы",
-      "notes": "Заметки"
+      "notes": "Заметки",
+      "releases": "Версии"
     },
     "level": {
       "none": {

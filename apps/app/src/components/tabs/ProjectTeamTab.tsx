@@ -12,8 +12,16 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { useConfirm } from '@/components/ui/confirm'
 
 // Таб «Команда» проекта: участники + доменные права инлайн + добавление из компании (SPEC §3.2, §4.3, §8)
-const DOMAINS = ['tasks', 'files', 'resources', 'documents', 'notes'] as const
+const DOMAINS = ['tasks', 'files', 'resources', 'documents', 'notes', 'releases'] as const
 type Domain = (typeof DOMAINS)[number]
+
+/**
+ * Домены, которых нет, пока функция не включена.
+ *
+ * Право на выключенную функцию раздать можно, но человек прочитает это как
+ * «версии в проекте есть», пойдёт их искать и не найдёт вкладки.
+ */
+const FEATURE_DOMAINS: Partial<Record<Domain, string>> = { releases: 'releases' }
 const LEVELS = ['none', 'read', 'write', 'crud'] as const
 type Level = (typeof LEVELS)[number]
 
@@ -51,6 +59,17 @@ export function ProjectTeamTab({
   const canChangeMembers = canEdit && !managedExternally
   const { t } = useTranslation()
   const qc = useQueryClient()
+
+  // Какие функции включены: домен прав на выключенную функцию не показываем.
+  const features = useQuery({
+    queryKey: ['project-features', projectId],
+    queryFn: () => api<{ features: string[] }>(`/api/v1/projects/${projectId}/features`),
+    staleTime: 5 * 60_000,
+  })
+  const visibleDomains = DOMAINS.filter((d) => {
+    const feature = FEATURE_DOMAINS[d]
+    return !feature || (features.data?.features ?? []).includes(feature)
+  })
   const confirm = useConfirm()
   const [q, setQ] = useState('')
   const [adding, setAdding] = useState(false)
@@ -245,7 +264,7 @@ export function ProjectTeamTab({
                     canEdit={canEdit}
                     onSave={(jobTitle, responsibility) => setProfile.mutate({ userId: m.user.id, jobTitle, responsibility })}
                   />
-                  {DOMAINS.map((d) => (
+                  {visibleDomains.map((d) => (
                     <div key={d} className="flex items-center justify-between gap-3">
                       <span className="text-sm font-medium">{t(`perms.domain.${d}`)}</span>
                       <div className="inline-flex overflow-hidden rounded-md border">

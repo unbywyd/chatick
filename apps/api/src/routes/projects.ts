@@ -167,13 +167,17 @@ const ACTION_REQUIREMENT: Record<ProjectPermission, [PermissionDomain, Permissio
 }
 
 const levelSchema = z.enum(PERMISSION_LEVELS)
-const domainPermissionsSchema = z.object({
-  tasks: levelSchema,
-  files: levelSchema,
-  resources: levelSchema,
-  documents: levelSchema,
-  notes: levelSchema,
-})
+/**
+ * Схема собирается ИЗ списка доменов, а не повторяет его руками.
+ *
+ * Ровно на этом уже споткнулись: домен releases появился в PERMISSION_DOMAINS
+ * и в правах по умолчанию, а здесь его забыли — zod молча выбрасывал
+ * незнакомое поле, ручка отвечала ok:true, и уровень не менялся. Сбой без
+ * единой ошибки: интерфейс показывал успех, база оставалась прежней.
+ */
+const domainPermissionsSchema = z.object(
+  Object.fromEntries(PERMISSION_DOMAINS.map((d) => [d, levelSchema])) as Record<PermissionDomain, typeof levelSchema>,
+)
 // PATCH принимает частичный набор доменных уровней
 const permissionsSchema = domainPermissionsSchema.partial()
 

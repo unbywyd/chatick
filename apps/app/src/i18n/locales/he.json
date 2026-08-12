@@ -347,7 +347,8 @@
       "files": "קבצים",
       "resources": "משאבים",
       "documents": "מסמכים",
-      "notes": "הערות"
+      "notes": "הערות",
+      "releases": "גרסאות"
     },
     "level": {
       "none": {
