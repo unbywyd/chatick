@@ -9,6 +9,7 @@ import { Avatar } from '@/components/ui/avatar'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Select, SelectTrigger, SelectValue, SelectContent, SelectItem } from '@/components/ui/select'
+import { Combobox } from '@/components/ui/combobox'
 
 // Версии проекта (SPEC §8.46).
 //
@@ -53,11 +54,11 @@ export function ReleasesTab({ projectId, canManage }: { projectId: string; canMa
 
   const list = useQuery({
     queryKey: ['releases', projectId],
-    queryFn: () => api<{ items: Release[]; live: Record<string, { version: string; id: string }> }>('/releases', {}, 'project'),
+    queryFn: () => api<{ items: Release[]; live: Record<string, { version: string; id: string }> }>('/api/v1/releases', {}, 'project'),
   })
   const types = useQuery({
     queryKey: ['release-build-types', projectId],
-    queryFn: () => api<{ buildTypes: BuildTypeDef[] }>('/releases/build-types', {}, 'project'),
+    queryFn: () => api<{ buildTypes: BuildTypeDef[] }>('/api/v1/releases/build-types', {}, 'project'),
     // Лестницы зашиты в код сервера и между запросами не меняются.
     staleTime: Infinity,
   })
@@ -102,6 +103,13 @@ export function ReleasesTab({ projectId, canManage }: { projectId: string; canMa
 
         {list.isLoading ? (
           <div className="py-10 text-center text-sm text-muted-foreground">{t('common.loading')}</div>
+        ) : list.isError ? (
+          /* Ошибку не выдаём за пустоту: «версий пока нет» на упавшем запросе
+             читается как факт о проекте, и человек идёт заводить вторую
+             версию поверх существующей. */
+          <div className="py-10 text-center text-sm text-muted-foreground">
+            {(list.error as { message?: string } | null)?.message || t('common.error')}
+          </div>
         ) : !list.data?.items.length ? (
           <div className="py-10 text-center">
             <Package className="mx-auto mb-2 size-8 text-muted-foreground/40" />
@@ -218,7 +226,7 @@ function CreateDialog({
   const create = useMutation({
     mutationFn: () =>
       api<Release>(
-        '/releases',
+        '/api/v1/releases',
         {
           method: 'POST',
           body: JSON.stringify({
@@ -243,25 +251,26 @@ function CreateDialog({
         </div>
         <div>
           <label className="mb-1 block text-xs text-muted-foreground">{t('releases.buildType')}</label>
-          <Select value={type} onValueChange={setType}>
-            <SelectTrigger>
-              <SelectValue />
-            </SelectTrigger>
-            <SelectContent>
-              {buildTypes.map((b) => (
-                <SelectItem key={b.key} value={b.key}>
-                  {b.label}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
+          {/* Combobox, а не Select: типов сборки со временем станет больше, а
+              искать в длинном списке глазами — то же, чего мы избегаем на
+              остальных экранах. Поиск встроен и включается сам. */}
+          <Combobox
+            options={buildTypes.map((b) => ({ value: b.key, label: b.label, hint: b.stages.map((st) => st.label).join(' → ') }))}
+            value={type}
+            onChange={setType}
+            placeholder={t('releases.buildTypePick')}
+          />
         </div>
         <div>
-          <label className="mb-1 block text-xs text-muted-foreground">{t('releases.reference')}</label>
+          <label className="mb-1 block text-xs text-muted-foreground">
+            {t('releases.reference')} <span className="text-muted-foreground/70">{t('releases.optional')}</span>
+          </label>
           <Input value={referenceUrl} onChange={(e) => setReferenceUrl(e.target.value)} placeholder="https://…" />
         </div>
         <div>
-          <label className="mb-1 block text-xs text-muted-foreground">{t('releases.notes')}</label>
+          <label className="mb-1 block text-xs text-muted-foreground">
+            {t('releases.notes')} <span className="text-muted-foreground/70">{t('releases.optional')}</span>
+          </label>
           <Input value={notes} onChange={(e) => setNotes(e.target.value)} placeholder={t('releases.notesHint')} />
         </div>
       </div>
@@ -297,7 +306,7 @@ function DetailsDialog({
 
   const one = useQuery({
     queryKey: ['release', releaseId],
-    queryFn: () => api<Release & { events: ReleaseEvent[] }>(`/releases/${releaseId}`, {}, 'project'),
+    queryFn: () => api<Release & { events: ReleaseEvent[] }>(`/api/v1/releases/${releaseId}`, {}, 'project'),
   })
 
   const stages = buildTypes.find((b) => b.key === one.data?.buildType)?.stages ?? []
@@ -305,7 +314,7 @@ function DetailsDialog({
   const move = useMutation({
     mutationFn: () =>
       api<Release>(
-        `/releases/${releaseId}/stage`,
+        `/api/v1/releases/${releaseId}/stage`,
         { method: 'POST', body: JSON.stringify({ status: nextStage, comment: comment.trim() }) },
         'project',
       ),

@@ -1606,6 +1606,8 @@
     "moveStage": "העברה לשלב",
     "pickStage": "בחרו שלב",
     "commentRequired": "מה קרה — חובה",
-    "history": "היסטוריית שלבים"
+    "history": "היסטוריית שלבים",
+    "optional": "— לא חובה",
+    "buildTypePick": "בחרו סוג"
   }
 }

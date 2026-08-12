@@ -1606,6 +1606,8 @@
     "moveStage": "Move to stage",
     "pickStage": "Pick a stage",
     "commentRequired": "What happened — required",
-    "history": "Stage history"
+    "history": "Stage history",
+    "optional": "— optional",
+    "buildTypePick": "Pick a type"
   }
 }
