@@ -1627,6 +1627,24 @@
     "changeStage": "Change stage",
     "copyLink": "Copy link",
     "notFound": "Release not found",
-    "createdAt": "Created"
+    "createdAt": "Created",
+    "stage": {
+      "building": "Building",
+      "testflight": "TestFlight",
+      "in_review": "Waiting for Apple review",
+      "released": "Released",
+      "internal": "Internal track",
+      "staging": "Staging",
+      "beta": "Beta"
+    },
+    "eventCreated": "Version created",
+    "eventRequested": "Requested — {{task}}",
+    "buildProfile": "Build profile",
+    "profilePick": "Pick a profile",
+    "profile": {
+      "development": "Development",
+      "preview": "Preview",
+      "production": "Production"
+    }
   }
 }

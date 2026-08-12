@@ -29,6 +29,7 @@ type ReleaseDetails = {
   statusLabel: string
   isLive: boolean
   owner: { id: string; name: string; avatarUrl: string | null } | null
+  buildProfile: string | null
   referenceUrl: string | null
   notes: string | null
   releasedAt: string | null
@@ -45,8 +46,33 @@ type ReleaseDetails = {
   }[]
 }
 
+/**
+ * Подпись стадии на языке интерфейса.
+ *
+ * Сервер присылает английскую — она годится как запасная, но человеку,
+ * работающему на иврите, «Waiting for Apple review» ничего не объясняет.
+ * Ключи общие для всех платформ: building у всех одинаков.
+ */
+function useStageLabel() {
+  const { t } = useTranslation()
+  return (key: string, fallback: string) => t(`releases.stage.${key}`, { defaultValue: fallback })
+}
+
+/** Служебные комментарии ленты сервер хранит ключом: переводим их здесь. */
+function useEventComment() {
+  const { t } = useTranslation()
+  return (raw: string) => {
+    if (raw === '@created') return t('releases.eventCreated')
+    const req = /^@requested:(.+)$/.exec(raw)
+    if (req) return t('releases.eventRequested', { task: req[1] })
+    return raw
+  }
+}
+
 export function ReleasePage({ projectId, canManage }: { projectId: string; canManage: boolean }) {
   const { t, i18n } = useTranslation()
+  const stageLabel = useStageLabel()
+  const eventComment = useEventComment()
   const { companyId, id: routeProjectId, releaseId } = useParams()
   const navigate = useNavigate()
   const qc = useQueryClient()
@@ -136,7 +162,7 @@ export function ReleasePage({ projectId, canManage }: { projectId: string; canMa
             r.isLive ? 'bg-brand font-medium text-brand-foreground' : 'bg-muted text-muted-foreground',
           )}
         >
-          {r.statusLabel}
+          {stageLabel(r.status, r.statusLabel)}
         </span>
         <div className="ms-auto flex items-center gap-2">
           <Button size="sm" variant="outline" className="gap-1" onClick={() => share.mutate()}>
@@ -170,7 +196,7 @@ export function ReleasePage({ projectId, canManage }: { projectId: string; canMa
                       : 'text-muted-foreground',
                 )}
               >
-                {s.label}
+                {stageLabel(s.key, s.label)}
               </span>
             </span>
           )
@@ -203,6 +229,21 @@ export function ReleasePage({ projectId, canManage }: { projectId: string; canMa
                 value={r.referenceUrl ?? ''}
                 placeholder="https://…"
                 onSave={(v) => patch.mutate({ referenceUrl: v.trim() || null })}
+              />
+            )}
+          </div>
+        </Row>
+        <Row label={t('releases.buildProfile')}>
+          <div className="flex items-center gap-2">
+            <span className={cn(!r.buildProfile && 'text-muted-foreground')}>
+              {r.buildProfile ? t(`releases.profile.${r.buildProfile}`, { defaultValue: r.buildProfile }) : '—'}
+            </span>
+            {canManage && (
+              <EditPopover
+                title={t('releases.buildProfile')}
+                value={r.buildProfile ?? ''}
+                placeholder="production"
+                onSave={(v) => patch.mutate({ buildProfile: v.trim() || null })}
               />
             )}
           </div>
@@ -254,7 +295,7 @@ export function ReleasePage({ projectId, canManage }: { projectId: string; canMa
               <Combobox
                 options={stages
                   .filter((s) => s.key !== r.status)
-                  .map((s) => ({ value: s.key, label: s.label, hint: s.hint }))}
+                  .map((s) => ({ value: s.key, label: stageLabel(s.key, s.label), hint: s.hint }))}
                 value={nextStage}
                 onChange={setNextStage}
                 placeholder={t('releases.pickStage')}
@@ -286,11 +327,11 @@ export function ReleasePage({ projectId, canManage }: { projectId: string; canMa
               <div className="flex flex-wrap items-center gap-1 text-xs text-muted-foreground">
                 {e.fromStatus && (
                   <>
-                    <span>{stages.find((s) => s.key === e.fromStatus)?.label ?? e.fromStatus}</span>
+                    <span>{stageLabel(e.fromStatus, stages.find((s) => s.key === e.fromStatus)?.label ?? e.fromStatus)}</span>
                     <ArrowRight className="size-3" />
                   </>
                 )}
-                <span className="font-medium text-foreground">{e.statusLabel}</span>
+                <span className="font-medium text-foreground">{stageLabel(e.status, e.statusLabel)}</span>
                 <span>· {new Date(e.createdAt).toLocaleString(i18n.language)}</span>
                 {e.actor && (
                   <span className="inline-flex items-center gap-1">
@@ -299,7 +340,7 @@ export function ReleasePage({ projectId, canManage }: { projectId: string; canMa
                   </span>
                 )}
               </div>
-              <p className="whitespace-pre-wrap break-words text-sm">{e.comment}</p>
+              <p className="whitespace-pre-wrap break-words text-sm">{eventComment(e.comment)}</p>
             </li>
           ))}
         </ol>

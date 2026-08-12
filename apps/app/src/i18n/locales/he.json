@@ -1627,6 +1627,24 @@
     "changeStage": "שינוי שלב",
     "copyLink": "העתקת קישור",
     "notFound": "הגרסה לא נמצאה",
-    "createdAt": "נוצרה"
+    "createdAt": "נוצרה",
+    "stage": {
+      "building": "בבנייה",
+      "testflight": "TestFlight",
+      "in_review": "ממתין לבדיקת Apple",
+      "released": "שוחררה",
+      "internal": "ערוץ פנימי",
+      "staging": "סביבת בדיקות",
+      "beta": "בטא"
+    },
+    "eventCreated": "הגרסה נוצרה",
+    "eventRequested": "התבקשה — {{task}}",
+    "buildProfile": "פרופיל בנייה",
+    "profilePick": "בחרו פרופיל",
+    "profile": {
+      "development": "Development",
+      "preview": "Preview",
+      "production": "Production"
+    }
   }
 }

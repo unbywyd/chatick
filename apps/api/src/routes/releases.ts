@@ -57,6 +57,7 @@ const serialize = (
   isLive: isLiveStage(r.buildType, r.status),
   /** Автор версии. Кому поручено — только в связанной задаче, второго поля нет. */
   owner: owner ?? null,
+  buildProfile: r.buildProfile,
   referenceUrl: r.referenceUrl,
   notes: r.notes,
   releasedAt: r.releasedAt,
@@ -165,6 +166,8 @@ const createSchema = z.object({
   status: z.string().max(50).optional(),
   referenceUrl: z.string().url().max(2000).nullable().optional(),
   notes: z.string().max(5000).nullable().optional(),
+  /** Чем собрано: development | preview | production или своё. */
+  buildProfile: z.string().max(50).nullable().optional(),
   /** Комментарий к созданию — попадает в ленту первой записью. */
   comment: z.string().max(2000).optional(),
 })
@@ -193,6 +196,7 @@ releasesRoute.post('/', zValidator('json', createSchema), async (c) => {
       ownerId: g.sub,
       referenceUrl: b.referenceUrl ?? null,
       notes: b.notes ?? null,
+      buildProfile: b.buildProfile ?? null,
       // Версия может родиться сразу выкаченной — тогда дата ставится сразу.
       releasedAt: isLiveStage(b.buildType, status) ? new Date() : null,
     })
@@ -202,7 +206,9 @@ releasesRoute.post('/', zValidator('json', createSchema), async (c) => {
     releaseId: row!.id,
     status,
     fromStatus: null,
-    comment: b.comment?.trim() || 'Version created',
+    // Ключ, а не текст: строка ложится в базу навсегда, а язык у читателя
+    // свой. Интерфейс переведёт по нему, старые записи останутся читаемыми.
+    comment: b.comment?.trim() || '@created',
     actorId: g.sub,
   })
 
@@ -224,6 +230,7 @@ const updateSchema = z.object({
   version: z.string().min(1).max(50).optional(),
   referenceUrl: z.string().url().max(2000).nullable().optional(),
   notes: z.string().max(5000).nullable().optional(),
+  buildProfile: z.string().max(50).nullable().optional(),
 })
 
 releasesRoute.patch('/:id', zValidator('json', updateSchema), async (c) => {
@@ -240,6 +247,7 @@ releasesRoute.patch('/:id', zValidator('json', updateSchema), async (c) => {
   if (b.version !== undefined) patch.version = b.version.trim()
   if (b.referenceUrl !== undefined) patch.referenceUrl = b.referenceUrl
   if (b.notes !== undefined) patch.notes = b.notes
+  if (b.buildProfile !== undefined) patch.buildProfile = b.buildProfile
   if (Object.keys(patch).length === 1) return c.json({ error: 'Nothing to update' }, 400)
 
   const [row] = await db.update(releases).set(patch).where(eq(releases.id, existing.id)).returning()
@@ -336,6 +344,7 @@ const requestSchema = z.object({
   /** Что именно нужно: попадёт и в описание задачи, и в первую запись истории. */
   comment: z.string().max(2000).optional(),
   referenceUrl: z.string().url().max(2000).nullable().optional(),
+  buildProfile: z.string().max(50).nullable().optional(),
   estimateMinutes: z.number().int().positive().optional(),
 })
 
@@ -397,6 +406,7 @@ releasesRoute.post('/request', zValidator('json', requestSchema), async (c) => {
       status,
       ownerId: g.sub,
       referenceUrl: b.referenceUrl ?? null,
+      buildProfile: b.buildProfile ?? null,
       notes: b.comment?.trim() || null,
     })
     .returning()
@@ -405,7 +415,7 @@ releasesRoute.post('/request', zValidator('json', requestSchema), async (c) => {
     releaseId: release!.id,
     status,
     fromStatus: null,
-    comment: b.comment?.trim() || `Requested: ${task!.number}`,
+    comment: b.comment?.trim() || `@requested:${task!.number}`,
     actorId: g.sub,
   })
   await db.insert(taskReleases).values({ taskId: task!.id, releaseId: release!.id })

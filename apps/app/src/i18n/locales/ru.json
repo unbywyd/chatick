@@ -1645,6 +1645,24 @@
     "changeStage": "Сменить стадию",
     "copyLink": "Скопировать ссылку",
     "notFound": "Версия не найдена",
-    "createdAt": "Заведена"
+    "createdAt": "Заведена",
+    "stage": {
+      "building": "Собирается",
+      "testflight": "TestFlight",
+      "in_review": "Ждём проверки Apple",
+      "released": "Опубликована",
+      "internal": "Внутренний трек",
+      "staging": "Тестовый стенд",
+      "beta": "Бета"
+    },
+    "eventCreated": "Версия заведена",
+    "eventRequested": "Запрошена — {{task}}",
+    "buildProfile": "Профиль сборки",
+    "profilePick": "Выберите профиль",
+    "profile": {
+      "development": "Development (дев-сборка)",
+      "preview": "Preview (превью)",
+      "production": "Production (прод)"
+    }
   }
 }

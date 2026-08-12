@@ -6,6 +6,7 @@ import {
   ArrowRight,
   ChevronDown,
   ChevronUp,
+  ChevronRight,
   ChevronsUpDown,
   ExternalLink,
   Package,
@@ -40,6 +41,14 @@ import { PeoplePicker } from '@/components/ui/people-picker'
 // уже под ней.
 
 type Stage = { key: string; label: string; live?: boolean; hint?: string }
+
+/**
+ * Профили сборки. Ровно те, что у Expo по умолчанию.
+ *
+ * Отдельно от стадии: профиль отвечает «чем собрали», стадия — «куда доехало».
+ * Одна и та же production-сборка проходит и TestFlight, и магазин.
+ */
+const BUILD_PROFILES = ['development', 'preview', 'production'] as const
 type BuildTypeDef = { key: string; label: string; stages: Stage[] }
 
 type Release = {
@@ -51,6 +60,7 @@ type Release = {
   statusLabel: string
   isLive: boolean
   owner: { id: string; name: string; avatarUrl: string | null } | null
+  buildProfile: string | null
   referenceUrl: string | null
   notes: string | null
   releasedAt: string | null
@@ -277,7 +287,7 @@ export function ReleasesTab({ projectId, canManage }: { projectId: string; canMa
   )
 }
 
-type SortKey = 'version' | 'buildType' | 'status' | 'owner' | 'released' | 'tasks'
+type SortKey = 'version' | 'buildType' | 'profile' | 'status' | 'owner' | 'released' | 'tasks'
 type SortDir = 'asc' | 'desc'
 
 /**
@@ -307,6 +317,9 @@ function ReleasesTable({
   onPatch: (id: string, patch: Record<string, unknown>) => void
 }) {
   const { t } = useTranslation()
+  // Та же подпись, что на странице версии: сервер отдаёт английскую, интерфейс
+  // переводит по ключу стадии.
+  const stageLabel = (key: string, fallback: string) => t(`releases.stage.${key}`, { defaultValue: fallback })
   const [sort, setSort] = useState<{ key: SortKey; dir: SortDir } | null>(null)
 
   const toggleSort = (key: SortKey) =>
@@ -325,6 +338,9 @@ function ReleasesTable({
           break
         case 'buildType':
           d = a.buildTypeLabel.localeCompare(b.buildTypeLabel)
+          break
+        case 'profile':
+          d = (a.buildProfile ?? '').localeCompare(b.buildProfile ?? '')
           break
         case 'status':
           // По месту в лестнице своей платформы: «дальше уехало» — вот порядок,
@@ -348,6 +364,7 @@ function ReleasesTable({
   const cols: { key: SortKey; label: string; className?: string }[] = [
     { key: 'version', label: t('releases.version') },
     { key: 'buildType', label: t('releases.buildType') },
+    { key: 'profile', label: t('releases.buildProfile'), className: 'hidden md:table-cell' },
     { key: 'status', label: t('releases.status') },
     { key: 'tasks', label: t('releases.linkedTasks') },
     { key: 'released', label: t('releases.releasedAt'), className: 'hidden sm:table-cell' },
@@ -385,12 +402,18 @@ function ReleasesTable({
           {sorted.map((r) => {
             const stages = buildTypes.find((b) => b.key === r.buildType)?.stages ?? []
             return (
-              <tr key={r.id} className="group/row border-b last:border-0 hover:bg-accent/40">
+              /* Строка целиком ведёт на версию: попадать в один короткий
+                 номер мышью неудобно, а по строке промахнуться нельзя.
+                 Ячейки со своими действиями (стадия, задачи, ссылка) гасят
+                 всплытие сами — иначе клик по ним уводил бы со страницы. */
+              <tr
+                key={r.id}
+                onClick={() => onOpen(r.id)}
+                className="group/row cursor-pointer border-b last:border-0 hover:bg-accent/40"
+              >
                 <td className="px-2 py-1.5 align-middle">
                   <div className="flex items-center gap-1">
-                    <button className="font-semibold hover:text-brand" onClick={() => onOpen(r.id)}>
-                      {r.version}
-                    </button>
+                    <span className="font-semibold group-hover/row:text-brand">{r.version}</span>
                     {canManage && (
                       <EditField
                         title={t('releases.version')}
@@ -402,6 +425,9 @@ function ReleasesTable({
                 </td>
                 <td className="whitespace-nowrap px-2 py-1.5 align-middle text-xs text-muted-foreground">
                   {r.buildTypeLabel}
+                </td>
+                <td className="hidden whitespace-nowrap px-2 py-1.5 align-middle text-xs text-muted-foreground md:table-cell">
+                  {r.buildProfile ? t(`releases.profile.${r.buildProfile}`, { defaultValue: r.buildProfile }) : '—'}
                 </td>
                 {/* Стадия правится на месте, но через окно с комментарием:
                     он обязателен, и молча сменить стадию нельзя — иначе
@@ -423,7 +449,7 @@ function ReleasesTable({
                             r.isLive ? 'bg-brand font-medium text-brand-foreground' : 'bg-muted text-muted-foreground',
                           )}
                         >
-                          {r.statusLabel}
+                          {stageLabel(r.status, r.statusLabel)}
                         </span>
                         {/* Стрелка — единственное, что отличает «просто ярлык»
                             от «нажми меня». Без неё стадию не пробуют менять:
@@ -442,7 +468,7 @@ function ReleasesTable({
                               слова из документации магазинов, и выбирать по ним
                               вслепую приходится тому, кто их не знает. */}
                           <span className="flex flex-col items-start">
-                            <span>{s.label}</span>
+                            <span>{stageLabel(s.key, s.label)}</span>
                             {s.hint && <span className="text-[11px] text-muted-foreground">{s.hint}</span>}
                           </span>
                         </DropdownMenuCheckItem>
@@ -476,17 +502,23 @@ function ReleasesTable({
                     версии: в таблице столбца ссылки нет, и карандаш здесь
                     правил вслепую — результата было не увидеть. */}
                 <td className="px-2 py-1.5 align-middle">
-                  {r.referenceUrl && (
-                    <a
-                      href={r.referenceUrl}
-                      target="_blank"
-                      rel="noreferrer noopener"
-                      title={r.referenceUrl}
-                      className="text-muted-foreground hover:text-foreground"
-                    >
-                      <ExternalLink className="size-3.5" />
-                    </a>
-                  )}
+                  <div className="flex items-center justify-end gap-2">
+                    {r.referenceUrl && (
+                      <a
+                        href={r.referenceUrl}
+                        target="_blank"
+                        rel="noreferrer noopener"
+                        title={r.referenceUrl}
+                        onClick={(e) => e.stopPropagation()}
+                        className="text-muted-foreground hover:text-foreground"
+                      >
+                        <ExternalLink className="size-3.5" />
+                      </a>
+                    )}
+                    {/* Шеврон в конце строки: без него строка выглядит как
+                        данные, а не как переход, и в неё не тыкают. */}
+                    <ChevronRight className="size-4 shrink-0 text-muted-foreground/60 group-hover/row:text-brand" />
+                  </div>
                 </td>
               </tr>
             )
@@ -656,6 +688,7 @@ function RequestDialog({
   const [version, setVersion] = useState('')
   const [type, setType] = useState('')
   const [assigneeId, setAssigneeId] = useState('')
+  const [profile, setProfile] = useState('')
   const [comment, setComment] = useState('')
 
   const members = useQuery({
@@ -676,6 +709,7 @@ function RequestDialog({
             version: version.trim(),
             buildType: type,
             assigneeId: assigneeId || null,
+            buildProfile: profile || null,
             comment: comment.trim() || undefined,
           }),
         },
@@ -729,6 +763,22 @@ function RequestDialog({
         </div>
         <div>
           <label className="mb-1 block text-xs text-muted-foreground">
+            {t('releases.buildProfile')} <span className="text-muted-foreground/70">{t('releases.optional')}</span>
+          </label>
+          {/* Просят обычно конкретный профиль: «собери прод-билд» — это он и
+              есть, и без поля это уезжает в свободный текст. */}
+          <Combobox
+            options={BUILD_PROFILES.map((p) => ({
+              value: p,
+              label: t(`releases.profile.${p}`, { defaultValue: p }),
+            }))}
+            value={profile}
+            onChange={setProfile}
+            placeholder={t('releases.profilePick')}
+          />
+        </div>
+        <div>
+          <label className="mb-1 block text-xs text-muted-foreground">
             {t('releases.whatToDo')} <span className="text-muted-foreground/70">{t('releases.optional')}</span>
           </label>
           <Input
@@ -770,6 +820,7 @@ function CreateDialog({
   const [version, setVersion] = useState('')
   const [type, setType] = useState(buildTypes[0]?.key ?? 'other')
   const [referenceUrl, setReferenceUrl] = useState('')
+  const [profile, setProfile] = useState('')
   const [notes, setNotes] = useState('')
 
   const create = useMutation({
@@ -782,6 +833,7 @@ function CreateDialog({
             version: version.trim(),
             buildType: type,
             referenceUrl: referenceUrl.trim() || null,
+            buildProfile: profile || null,
             notes: notes.trim() || null,
           }),
         },
@@ -808,6 +860,20 @@ function CreateDialog({
             value={type}
             onChange={setType}
             placeholder={t('releases.buildTypePick')}
+          />
+        </div>
+        <div>
+          <label className="mb-1 block text-xs text-muted-foreground">
+            {t('releases.buildProfile')} <span className="text-muted-foreground/70">{t('releases.optional')}</span>
+          </label>
+          <Combobox
+            options={BUILD_PROFILES.map((p) => ({
+              value: p,
+              label: t(`releases.profile.${p}`, { defaultValue: p }),
+            }))}
+            value={profile}
+            onChange={setProfile}
+            placeholder={t('releases.profilePick')}
           />
         </div>
         <div>
