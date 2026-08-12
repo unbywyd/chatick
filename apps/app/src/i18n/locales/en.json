@@ -115,7 +115,8 @@
       "rules": "Rules",
       "time": "Time",
       "storage": "Storage",
-      "danger": "Danger zone"
+      "danger": "Danger zone",
+      "features": "Features"
     },
     "improveTasks": "Improve tasks with AI",
     "improveTasksHint": "New tasks are translated into the project language and lightly polished — meaning unchanged",
@@ -153,7 +154,11 @@
     "languageNotFound": "No such language",
     "storageTitle": "Where this project keeps files",
     "storageHint": "By default files go to the company storage. Override it here if this project needs its own bucket.",
-    "storageSetup": "Configure storage"
+    "storageSetup": "Configure storage",
+    "featureReleases": "Releases",
+    "featureReleasesHint": "The Releases tab: what shipped and where, so nobody has to ask \"which version is live\"",
+    "featureReleasesOffHint": "Turning it off hides the tab but keeps the data — the history stays",
+    "featuresAdminOnly": "Only the project owner or an admin can change features"
   },
   "aiMode": {
     "observer": {
@@ -628,7 +633,8 @@
     "documents": "Documents",
     "chat": "Chat",
     "notes": "Notes",
-    "settings": "Settings"
+    "settings": "Settings",
+    "releases": "Releases"
   },
   "notif": {
     "title": "Notifications",
@@ -1094,7 +1100,9 @@
     "save": "Save",
     "cancel": "Cancel",
     "dragToChat": "Drag into chat",
-    "loading": "Loading…"
+    "loading": "Loading…",
+    "error": "Something went wrong",
+    "saved": "Saved"
   },
   "people": {
     "add": "Add people…",
@@ -1582,5 +1590,21 @@
     "doneSelecting": "Done",
     "readyHint": "{{count}} tables open — the assistant can read them",
     "noneSelectedHint": "Nothing selected — reading is not possible yet"
+  },
+  "releases": {
+    "title": "Releases",
+    "create": "New release",
+    "liveNow": "Live now",
+    "empty": "No releases yet",
+    "version": "Version",
+    "buildType": "Build type",
+    "reference": "Build link",
+    "notes": "What's new",
+    "notesHint": "Briefly, for the team",
+    "linkedTasks": "Linked tasks",
+    "moveStage": "Move to stage",
+    "pickStage": "Pick a stage",
+    "commentRequired": "What happened — required",
+    "history": "Stage history"
   }
 }

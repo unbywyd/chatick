@@ -78,7 +78,7 @@ const MODES: { key: AiMode; icon: typeof Eye }[] = [
 // необратимой кнопки дотягивались мимоходом.
 // Настройки времени переехали в компанию: пояс и правила таймера — свойства
 // организации, а не отдельной работы. Наследуются, задавать здесь нечего.
-const FORM_TABS = ['general', 'ai', 'rules', 'danger'] as const
+const FORM_TABS = ['general', 'ai', 'rules', 'features', 'danger'] as const
 type FormTab = (typeof FORM_TABS)[number]
 
 // Настройки проекта — поля растут, разбито табами: Основное / ИИ / Правила
@@ -351,6 +351,8 @@ export function ProjectSettingsForm({
         </Field>
       )}
 
+      {tab === 'features' && projectId && <FeaturesSection projectId={projectId} />}
+
       {tab === 'danger' && (
         <DangerZone>
           {/* Отвязка от внешней системы: связь создавалась снаружи и снаружи же
@@ -430,5 +432,55 @@ function ToggleRow({
       </span>
       <Switch checked={checked} onCheckedChange={onChange} />
     </label>
+  )
+}
+
+/**
+ * Дополнительные возможности проекта.
+ *
+ * Живёт отдельным компонентом, потому что состояние здесь не из формы: тумблер
+ * применяется сразу, без «Сохранить». Смешав его с остальными полями, мы бы
+ * получили вкладку, где половина изменений уже применена, а половина ждёт
+ * кнопки — и никак этого не показывали.
+ */
+function FeaturesSection({ projectId }: { projectId: string }) {
+  const { t } = useTranslation()
+  const qc = useQueryClient()
+
+  const state = useQuery({
+    queryKey: ['project-features', projectId],
+    queryFn: () => api<{ features: string[]; canManage: boolean }>(`/api/v1/projects/${projectId}/features`),
+  })
+
+  const toggle = useMutation({
+    mutationFn: (enabled: boolean) =>
+      api(`/api/v1/projects/${projectId}/features`, {
+        method: 'POST',
+        body: JSON.stringify({ feature: 'releases', enabled }),
+      }),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['project-features', projectId] })
+      toast.success(t('common.saved'))
+    },
+    onError: (e) => toast.error(e instanceof Error ? e.message : String(e)),
+  })
+
+  if (state.isLoading) return <p className="text-sm text-muted-foreground">{t('common.loading')}</p>
+
+  const on = state.data?.features.includes('releases') ?? false
+
+  return (
+    <div className="space-y-4">
+      <ToggleRow
+        label={t('projectForm.featureReleases')}
+        hint={t('projectForm.featureReleasesHint')}
+        checked={on}
+        onChange={(v) => toggle.mutate(v)}
+      />
+      {!state.data?.canManage && <p className="text-xs text-muted-foreground">{t('projectForm.featuresAdminOnly')}</p>}
+      {/* Выключение прячет вкладку, но НЕ трогает данные: случайный клик не
+          должен стирать историю релизов. */}
+      {on && <p className="text-xs text-muted-foreground">{t('projectForm.featureReleasesOffHint')}</p>}
+    </div>
   )
 }

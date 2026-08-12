@@ -37,6 +37,14 @@ import { useShortcuts } from '@/hooks/useShortcuts'
 // вкладка, и просмотр деталей проекта отдельно от формы не нужен.
 const WORK_TABS = ['tasks', 'files', 'documents', 'notes', 'resources', 'history'] as const
 
+/**
+ * Вкладки, которые включаются в проекте отдельно.
+ *
+ * Ставится перед «История»: версии — рабочий раздел, а история читается редко
+ * и живёт в конце ряда.
+ */
+const OPTIONAL_TABS: Record<string, string> = { releases: 'releases' }
+
 export type ProjectDetails = {
   /** Состав команды ведётся во внешней системе: видно, но не правится. */
   membersViaApiOnly?: boolean
@@ -119,6 +127,15 @@ export function ProjectLayout() {
     enabled: Boolean(id) && token.status === 'ready',
   })
   const me = useQuery({ queryKey: ['me'], queryFn: () => api<Me>('/api/v1/auth/me') })
+
+  // Что включено в проекте: от этого зависит состав вкладок. Список короткий и
+  // почти не меняется, поэтому не перезапрашиваем его на каждом переходе.
+  const features = useQuery({
+    queryKey: ['project-features', id],
+    queryFn: () => api<{ features: string[]; canManage: boolean }>(`/api/v1/projects/${id}/features`),
+    enabled: Boolean(id) && token.status === 'ready',
+    staleTime: 5 * 60_000,
+  })
 
   // Проект требует принять правила чата до первого входа (SPEC §4.2)
   if (token.status === 'needRules') {
@@ -254,6 +271,24 @@ export function ProjectLayout() {
                 {t(`tabs.${key}`)}
               </NavLink>
             ))}
+            {(features.data?.features ?? []).map((f) =>
+              OPTIONAL_TABS[f] ? (
+                <NavLink
+                  key={f}
+                  to={`${base}/${OPTIONAL_TABS[f]}`}
+                  className={({ isActive }) =>
+                    cn(
+                      'shrink-0 rounded-md px-3 py-1.5 text-sm transition-colors',
+                      isActive
+                        ? 'bg-primary text-primary-foreground'
+                        : 'text-muted-foreground hover:bg-accent hover:text-accent-foreground',
+                    )
+                  }
+                >
+                  {t(`tabs.${OPTIONAL_TABS[f]}`)}
+                </NavLink>
+              ) : null,
+            )}
           </div>
 
           {/* Переход во внешнюю систему — только когда он настроен. Кнопка,

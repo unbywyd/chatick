@@ -115,7 +115,8 @@
       "rules": "כללים",
       "time": "זמן",
       "storage": "אחסון",
-      "danger": "אזור מסוכן"
+      "danger": "אזור מסוכן",
+      "features": "תכונות"
     },
     "improveTasks": "לשפר משימות עם AI",
     "improveTasksHint": "משימות חדשות מתורגמות לשפת הפרויקט ומלוטשות קלות — המשמעות לא משתנה",
@@ -153,7 +154,11 @@
     "languageNotFound": "אין שפה כזו",
     "storageTitle": "היכן הפרויקט שומר קבצים",
     "storageHint": "כברירת מחדל — האחסון של החברה. שנו זאת אם הפרויקט צריך דלי משלו.",
-    "storageSetup": "הגדרת אחסון"
+    "storageSetup": "הגדרת אחסון",
+    "featureReleases": "גרסאות",
+    "featureReleasesHint": "לשונית «גרסאות»: מה שוחרר ולאן, כדי שלא ישאלו בעל פה איזו גרסה בייצור",
+    "featureReleasesOffHint": "כיבוי יסתיר את הלשונית אך הנתונים יישארו — ההיסטוריה לא תאבד",
+    "featuresAdminOnly": "רק בעלים או מנהל הפרויקט יכולים לשנות תכונות"
   },
   "aiMode": {
     "observer": {
@@ -629,7 +634,8 @@
     "documents": "מסמכים",
     "chat": "צ׳אט",
     "notes": "הערות",
-    "settings": "הגדרות"
+    "settings": "הגדרות",
+    "releases": "גרסאות"
   },
   "notif": {
     "title": "התראות",
@@ -1095,7 +1101,9 @@
     "save": "שמירה",
     "cancel": "ביטול",
     "dragToChat": "גררו לצ׳אט",
-    "loading": "טוען…"
+    "loading": "טוען…",
+    "error": "משהו השתבש",
+    "saved": "נשמר"
   },
   "people": {
     "add": "הוספת אנשים…",
@@ -1582,5 +1590,21 @@
     "doneSelecting": "סיום",
     "readyHint": "{{count}} טבלאות פתוחות — העוזר יוכל לקרוא אותן",
     "noneSelectedHint": "לא נבחר דבר — אין מה לקרוא"
+  },
+  "releases": {
+    "title": "גרסאות",
+    "create": "גרסה חדשה",
+    "liveNow": "כרגע אצל המשתמשים",
+    "empty": "אין עדיין גרסאות",
+    "version": "גרסה",
+    "buildType": "סוג בנייה",
+    "reference": "קישור לבנייה",
+    "notes": "מה חדש",
+    "notesHint": "בקצרה, לצוות",
+    "linkedTasks": "משימות מקושרות",
+    "moveStage": "העברה לשלב",
+    "pickStage": "בחרו שלב",
+    "commentRequired": "מה קרה — חובה",
+    "history": "היסטוריית שלבים"
   }
 }

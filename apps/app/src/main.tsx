@@ -33,6 +33,7 @@ import { NotificationsTab } from './components/tabs/NotificationsTab'
 import { AiUsageTab } from './components/tabs/AiUsageTab'
 import { HistoryTab } from './components/tabs/HistoryTab'
 import { DocumentsTab } from './components/tabs/DocumentsTab'
+import { ReleasesTab } from './components/tabs/ReleasesTab'
 import { NotesTab } from './components/tabs/NotesTab'
 import { TimeTab } from './components/tabs/TimeTab'
 import { ShortcutsTab } from './components/tabs/ShortcutsTab'
@@ -214,6 +215,15 @@ function NotesPage() {
   return id ? <NotesTab projectId={id} /> : null
 }
 
+function ReleasesPage() {
+  const { project } = useProjectCtx()
+  const { id } = useParams()
+  // Заводить версии и двигать стадии — дело начальства проекта; смотреть может
+  // любой участник, за этим на вкладку и приходят.
+  const canManage = project?.myRole === 'owner' || project?.myRole === 'admin'
+  return id ? <ReleasesTab projectId={id} canManage={canManage} /> : null
+}
+
 function DocumentsPage() {
   const { meId } = useProjectCtx()
   const { id } = useParams()
@@ -288,6 +298,8 @@ createRoot(document.getElementById('root')!).render(
                 <Route path="history" element={<HistoryPage />} />
                 <Route path="documents/:documentId?" element={<DocumentsPage />} />
                 <Route path="notes/:noteId?" element={<NotesPage />} />
+                {/* вкладка есть, только если функция включена в проекте */}
+                <Route path="releases" element={<ReleasesPage />} />
                 {/* трекинг — страница проекта, но НЕ вкладка: попадают из сайдбара */}
                 <Route path="time" element={<TimePage />} />
                 {/* горячие клавиши — страница настройки, из меню профиля */}
