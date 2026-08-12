@@ -264,6 +264,40 @@ function endpointCatalog(q: string): string {
   Deleting a comment is permanent — unlike a task, it is not recoverable.
   Prefer editing when the point is to correct something.
 
+  GET    /x/releases${q}                   what shipped and where, plus "live"
+  GET    /x/releases/<id>${q}              one version with its stage history
+  POST   /x/releases${q}           {"version","buildType","status?","referenceUrl?","notes?","comment?"}
+  POST   /x/releases/<id>/stage${q} {"status","comment"}   comment REQUIRED
+
+  Versions answer the question people currently ask out loud: "which version is
+  in production". The list reply carries "live" — the version that reached
+  people, per build type — so you never have to work it out from the list
+  yourself.
+
+  buildType is one of ios | android | web | backend | desktop | other, and each
+  has its OWN ladder of stages: iOS goes building → testflight → in_review →
+  released, Android has no review step, web and backend go through staging. The
+  reply carries "buildTypes" with every ladder, so read it instead of guessing
+  a stage name — a wrong one is rejected with the allowed list.
+
+  Moving a stage REQUIRES a comment. This is not ceremony: "why has 1.4 been
+  sitting in Apple review for a week" is the same kind of question as "what is
+  in production", and it has no answer if each transition overwrites the last
+  without saying anything. Write what actually happened.
+
+  There is no DELETE. A version is a fact — it was built and it went somewhere.
+  Erasing it erases the answer to "what was in production that Tuesday". Close
+  a wrong one by moving its stage and saying so.
+
+  Releases are OFF by default. If the project has not enabled them, every one
+  of these returns 404 with an explanation — do not report that as a bug, tell
+  the human a project owner or admin turns them on in project settings.
+
+  Tasks link to versions from the TASK side: pass "releaseIds" to POST or PATCH
+  /x/tasks. GET of a single task returns "releases" with each version's current
+  stage, so "what is this task shipping in" needs no second call. The link is
+  optional both ways — a version lives without a task, a task without a version.
+
   GET    /x/sprints${q}                    id, name, color, taskCount
   POST   /x/sprints${q}            {"name","startsAt?","endsAt?"}
   PATCH  /x/sprints/<id>${q}       {"name?","color?"}

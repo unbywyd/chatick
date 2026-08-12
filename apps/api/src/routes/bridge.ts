@@ -21,6 +21,9 @@ import {
   resourceSecrets, resourceViewers,
   taskBlockers, taskChecklist, taskResources,
   taskComments,
+  taskReleases,
+  releases,
+  releaseEvents,
   taskGroups,
   tasks,
   timeEntries,
@@ -62,6 +65,8 @@ import { encrypt } from '../lib/crypto.js'
 import { membersLockedForProject, MEMBERS_LOCKED } from '../lib/members-locked.js'
 import { broadcast, sendToUserAnywhere, tasksChanged } from '../ws.js'
 import { shortUrlFor } from '../lib/short-links.js'
+import { BUILD_TYPES, buildType, firstStage, isLiveStage, isValidStage } from '../lib/release-stages.js'
+import { isFeatureEnabled } from '../lib/features.js'
 import { env } from '../env.js'
 
 // Мост для внешнего ИИ (SPEC §8.27). Всё выполняется ОТ ИМЕНИ пользователя,
@@ -911,6 +916,9 @@ const TASK_FIELDS = [
   // Ресурсы к задаче: «вот стенд, вот ключ». Ссылкой, а не копией в описании —
   // иначе доступы расползаются по тексту, который читают все.
   'resourceIds',
+  // Версии, к которым относится задача. Связь необязательна с обеих сторон:
+  // версия живёт без задачи, задача без версии.
+  'releaseIds',
   // project передают в query, но в теле он безобиден и приходит по привычке
   'project',
 ] as const
@@ -964,6 +972,51 @@ async function attachToTask(fileIds: unknown, projectId: string, userId: string,
  * относится, и 400 на такое означало бы отказ во всей операции из-за одной
  * опечатки в списке.
  */
+/**
+ * Версии, к которым относится задача.
+ *
+ * Добавляется со стороны ЗАДАЧИ, как ресурсы: «подними 1.4 в Google Play» —
+ * это работа, у неё есть исполнитель и срок, а у версии их нет. В ручках
+ * версий обратной опции нет намеренно, чтобы связь заводилась в одном месте.
+ *
+ * Чужие id молча отбрасываются, а не роняют запрос: одна устаревшая ссылка не
+ * должна отменять правку всей задачи.
+ */
+async function linkReleases(releaseIds: unknown, projectId: string, taskId: string) {
+  const ids = Array.isArray(releaseIds)
+    ? (releaseIds as unknown[]).filter((x): x is string => typeof x === 'string').slice(0, 20)
+    : []
+  await db.delete(taskReleases).where(eq(taskReleases.taskId, taskId))
+  if (ids.length) {
+    const mine = await db
+      .select({ id: releases.id })
+      .from(releases)
+      .where(and(inArray(releases.id, ids), eq(releases.projectId, projectId)))
+    if (mine.length) {
+      await db.insert(taskReleases).values(mine.map((r) => ({ taskId, releaseId: r.id }))).onConflictDoNothing()
+    }
+  }
+  return releasesOfTask(taskId)
+}
+
+/** Версии задачи со статусом — чтобы не переходить внутрь за одним словом. */
+async function releasesOfTask(taskId: string) {
+  const rows = await db
+    .select({ r: releases })
+    .from(taskReleases)
+    .innerJoin(releases, eq(releases.id, taskReleases.releaseId))
+    .where(eq(taskReleases.taskId, taskId))
+  return rows.map(({ r }) => ({
+    id: r.id,
+    version: r.version,
+    buildType: r.buildType,
+    status: r.status,
+    statusLabel: buildType(r.buildType)?.stages.find((st) => st.key === r.status)?.label ?? r.status,
+    isLive: isLiveStage(r.buildType, r.status),
+    referenceUrl: r.referenceUrl,
+  }))
+}
+
 async function linkResources(resourceIds: unknown, projectId: string, taskId: string) {
   const ids = Array.isArray(resourceIds)
     ? (resourceIds as unknown[]).filter((x): x is string => typeof x === 'string').slice(0, 20)
@@ -1656,8 +1709,12 @@ bridgeRoute.get('/tasks/:id', async (c) => {
     scope.projectId,
     new Map([[row[0]!.t.id, row[0]!.t.description]]),
   )
-  return c.json(
-    taskView(
+  // Версии показываем всегда, а не по запросу: «к какой версии эта задача» —
+  // вопрос того же ряда, что и «кто исполнитель», и ради него незачем делать
+  // второй запрос.
+  const linkedReleases = await releasesOfTask(row[0]!.t.id)
+  return c.json({
+    ...taskView(
       row[0]!.t,
       row[0]!.u,
       attached.get(row[0]!.t.id),
@@ -1665,7 +1722,8 @@ bridgeRoute.get('/tasks/:id', async (c) => {
       await companyOf(scope.projectId),
       await shortUrlFor('task', row[0]!.t.id, scope.projectId, id.userId),
     ),
-  )
+    ...(linkedReleases.length ? { releases: linkedReleases } : {}),
+  })
 })
 
 bridgeRoute.post('/tasks', async (c) => {
@@ -1725,6 +1783,7 @@ bridgeRoute.post('/tasks', async (c) => {
   })
   const attachments = await attachToTask(b.attachmentIds, scope.projectId, id.userId, row!.id)
   const resources = b.resourceIds !== undefined ? await linkResources(b.resourceIds, scope.projectId, row!.id) : []
+  const taskReleaseList = b.releaseIds !== undefined ? await linkReleases(b.releaseIds, scope.projectId, row!.id) : []
   // Назначение через мост затрагивает человека ровно так же, как из интерфейса:
   // раньше задача сваливалась на него молча.
   void notifyTask(scope.projectId, id.userId, row!, { assigneeChanged: Boolean(row!.assigneeId), mentions: true })
@@ -1742,6 +1801,7 @@ bridgeRoute.post('/tasks', async (c) => {
         await shortUrlFor('task', row!.id, scope.projectId, id.userId),
       ),
       attachments,
+      ...(b.releaseIds !== undefined ? { releases: taskReleaseList } : {}),
     },
     201,
   )
@@ -1780,7 +1840,12 @@ bridgeRoute.patch('/tasks/:id', async (c) => {
   // такое же изменение. Без этой оговорки запрос «привяжи ресурс к задаче»
   // отвергался с «Nothing to update»: поле разрешено, в списке допустимых
   // есть, а ручка считала тело пустым.
-  if (!Object.keys(patch).length && b.attachmentIds === undefined && b.resourceIds === undefined) {
+  if (
+    !Object.keys(patch).length &&
+    b.attachmentIds === undefined &&
+    b.resourceIds === undefined &&
+    b.releaseIds === undefined
+  ) {
     return c.json({ error: 'Nothing to update' }, 400)
   }
 
@@ -1815,6 +1880,7 @@ bridgeRoute.patch('/tasks/:id', async (c) => {
   })
   const attachments = await attachToTask(b.attachmentIds, scope.projectId, id.userId, row!.id)
   const resources = b.resourceIds !== undefined ? await linkResources(b.resourceIds, scope.projectId, row!.id) : []
+  const taskReleaseList = b.releaseIds !== undefined ? await linkReleases(b.releaseIds, scope.projectId, row!.id) : []
   // Те же уведомления, что из интерфейса: назначили — сказали, сняли — убрали.
   const assigneeChanged = patch.assigneeId !== undefined && patch.assigneeId !== existing.assigneeId
   void notifyTask(scope.projectId, id.userId, row!, {
@@ -1836,6 +1902,7 @@ bridgeRoute.patch('/tasks/:id', async (c) => {
     ),
     ...(b.attachmentIds !== undefined ? { attachments } : {}),
     ...(b.resourceIds !== undefined ? { resources } : {}),
+    ...(b.releaseIds !== undefined ? { releases: taskReleaseList } : {}),
   })
 })
 
@@ -2996,6 +3063,210 @@ bridgeRoute.patch('/members/:userId', async (c) => {
   })
 
   return c.json({ ok: true, userId, role, permissions: domains })
+})
+
+/**
+ * Версии проекта через мост (SPEC §8.46).
+ *
+ * Функция включается в проекте отдельно, поэтому каждая ручка начинается с
+ * проверки: спрятанная вкладка ничего не защищает — мост её просто не видит.
+ *
+ * Удаления нет, как и в REST. Версия это факт: она была собрана и куда-то
+ * уехала, и стереть её значит стереть ответ на «что было в проде тогда-то».
+ */
+async function releasesReady(
+  c: Ctx,
+  need: 'releases.read' | 'releases.manage',
+): Promise<{ projectId: string } | { error: string; status: 403 | 404 | 400 }> {
+  const scope = await resolveProject(c)
+  if ('error' in scope) return scope
+  if (!(await isFeatureEnabled(scope.projectId, 'releases'))) {
+    return {
+      error: 'Releases are turned off for this project. A project owner or admin can enable them in project settings.',
+      status: 404,
+    }
+  }
+  if (!(await hasPermission(scope.projectId, auth(c).userId, need))) {
+    return { error: `Forbidden: ${need} is required`, status: 403 }
+  }
+  return { projectId: scope.projectId }
+}
+
+bridgeRoute.get('/releases', async (c) => {
+  const ready = await releasesReady(c as never, 'releases.read')
+  if ('error' in ready) return c.json({ error: ready.error }, ready.status)
+
+  const rows = await db
+    .select({ r: releases, u: users })
+    .from(releases)
+    .leftJoin(users, eq(users.id, releases.ownerId))
+    .where(eq(releases.projectId, ready.projectId))
+    .orderBy(desc(releases.createdAt))
+    .limit(100)
+
+  // «Что сейчас в проде» — ради этого вопроса всё и затевалось, поэтому ответ
+  // приходит вместе со списком, а не собирается агентом из него.
+  const live: Record<string, { version: string; id: string }> = {}
+  for (const { r } of rows) {
+    if (isLiveStage(r.buildType, r.status) && !live[r.buildType]) {
+      live[r.buildType] = { version: r.version, id: r.id }
+    }
+  }
+
+  return c.json({
+    items: rows.map(({ r, u }) => ({
+      id: r.id,
+      version: r.version,
+      buildType: r.buildType,
+      status: r.status,
+      statusLabel: buildType(r.buildType)?.stages.find((st) => st.key === r.status)?.label ?? r.status,
+      isLive: isLiveStage(r.buildType, r.status),
+      owner: u ? { id: u.id, name: u.name } : null,
+      referenceUrl: r.referenceUrl,
+      notes: r.notes,
+      releasedAt: r.releasedAt,
+      createdAt: r.createdAt,
+    })),
+    live,
+    buildTypes: BUILD_TYPES.map((t) => ({ key: t.key, label: t.label, stages: t.stages })),
+  })
+})
+
+bridgeRoute.get('/releases/:id', async (c) => {
+  const ready = await releasesReady(c as never, 'releases.read')
+  if ('error' in ready) return c.json({ error: ready.error }, ready.status)
+
+  const row = await db.query.releases.findFirst({
+    where: and(eq(releases.id, c.req.param('id')), eq(releases.projectId, ready.projectId)),
+  })
+  if (!row) return c.json({ error: 'Not found' }, 404)
+
+  const events = await db
+    .select({ e: releaseEvents, u: users })
+    .from(releaseEvents)
+    .leftJoin(users, eq(users.id, releaseEvents.actorId))
+    .where(eq(releaseEvents.releaseId, row.id))
+    .orderBy(desc(releaseEvents.createdAt))
+
+  const linked = await db
+    .select({ t: tasks })
+    .from(taskReleases)
+    .innerJoin(tasks, eq(tasks.id, taskReleases.taskId))
+    .where(eq(taskReleases.releaseId, row.id))
+
+  return c.json({
+    id: row.id,
+    version: row.version,
+    buildType: row.buildType,
+    status: row.status,
+    isLive: isLiveStage(row.buildType, row.status),
+    referenceUrl: row.referenceUrl,
+    notes: row.notes,
+    releasedAt: row.releasedAt,
+    stages: buildType(row.buildType)?.stages ?? [],
+    tasks: linked.map(({ t }) => ({ id: t.id, number: t.number, title: t.title, status: t.status })),
+    events: events.map(({ e, u }) => ({
+      status: e.status,
+      fromStatus: e.fromStatus,
+      comment: e.comment,
+      actor: u ? { id: u.id, name: u.name } : null,
+      createdAt: e.createdAt,
+    })),
+  })
+})
+
+const RELEASE_FIELDS = ['version', 'buildType', 'status', 'referenceUrl', 'notes', 'comment', 'project'] as const
+
+bridgeRoute.post('/releases', async (c) => {
+  const ready = await releasesReady(c as never, 'releases.manage')
+  if ('error' in ready) return c.json({ error: ready.error }, ready.status)
+  const parsed = await readJson(c as never)
+  if ('error' in parsed) return c.json(parsed, 400)
+  const b = parsed.body as Record<string, unknown>
+  const bad = unknownFields(b, RELEASE_FIELDS)
+  if (bad) return c.json({ error: bad }, 400)
+
+  const version = typeof b.version === 'string' ? b.version.trim() : ''
+  const type = typeof b.buildType === 'string' ? b.buildType : ''
+  if (!version) return c.json({ error: 'version is required' }, 400)
+  if (!buildType(type)) {
+    return c.json({ error: `Unknown buildType "${type}". Use one of: ${BUILD_TYPES.map((t) => t.key).join(', ')}` }, 400)
+  }
+  const status = typeof b.status === 'string' && b.status ? b.status : firstStage(type)!
+  if (!isValidStage(type, status)) {
+    const allowed = buildType(type)!.stages.map((st) => st.key).join(', ')
+    return c.json({ error: `Unknown status "${status}" for ${type}. Allowed: ${allowed}` }, 400)
+  }
+
+  const [row] = await db
+    .insert(releases)
+    .values({
+      projectId: ready.projectId,
+      version,
+      buildType: type,
+      status,
+      ownerId: auth(c as never).userId,
+      referenceUrl: typeof b.referenceUrl === 'string' ? b.referenceUrl.slice(0, 2000) : null,
+      notes: typeof b.notes === 'string' ? b.notes.slice(0, 5000) : null,
+      releasedAt: isLiveStage(type, status) ? new Date() : null,
+    })
+    .returning()
+
+  await db.insert(releaseEvents).values({
+    releaseId: row!.id,
+    status,
+    fromStatus: null,
+    comment: typeof b.comment === 'string' && b.comment.trim() ? b.comment.trim() : 'Version created',
+    actorId: auth(c as never).userId,
+  })
+  broadcast(ready.projectId, 'releases_changed', {})
+  return c.json({ id: row!.id, version: row!.version, buildType: row!.buildType, status: row!.status }, 201)
+})
+
+bridgeRoute.post('/releases/:id/stage', async (c) => {
+  const ready = await releasesReady(c as never, 'releases.manage')
+  if ('error' in ready) return c.json({ error: ready.error }, ready.status)
+  const parsed = await readJson(c as never)
+  if ('error' in parsed) return c.json(parsed, 400)
+  const b = parsed.body as Record<string, unknown>
+
+  const existing = await db.query.releases.findFirst({
+    where: and(eq(releases.id, c.req.param('id')), eq(releases.projectId, ready.projectId)),
+  })
+  if (!existing) return c.json({ error: 'Not found' }, 404)
+
+  const status = typeof b.status === 'string' ? b.status : ''
+  const comment = typeof b.comment === 'string' ? b.comment.trim() : ''
+  if (!isValidStage(existing.buildType, status)) {
+    const allowed = buildType(existing.buildType)?.stages.map((st) => st.key).join(', ') ?? ''
+    return c.json({ error: `Unknown status "${status}" for ${existing.buildType}. Allowed: ${allowed}` }, 400)
+  }
+  // Комментарий обязателен: пустой переход не объясняет ничего, а спросить
+  // задним числом уже не у кого — человек не вспомнит, почему две недели назад
+  // откатил сборку.
+  if (!comment) return c.json({ error: 'comment is required: say what happened, it is the point of the history' }, 400)
+  if (status === existing.status) return c.json({ error: 'The version is already at this stage' }, 400)
+
+  const nowLive = isLiveStage(existing.buildType, status)
+  await db
+    .update(releases)
+    .set({
+      status,
+      updatedAt: new Date(),
+      // Дата выката ставится один раз: откат и повторный выход не переписывают
+      // момент, когда версия впервые доехала до людей.
+      releasedAt: nowLive && !existing.releasedAt ? new Date() : existing.releasedAt,
+    })
+    .where(eq(releases.id, existing.id))
+  await db.insert(releaseEvents).values({
+    releaseId: existing.id,
+    status,
+    fromStatus: existing.status,
+    comment,
+    actorId: auth(c as never).userId,
+  })
+  broadcast(ready.projectId, 'releases_changed', {})
+  return c.json({ id: existing.id, version: existing.version, from: existing.status, status })
 })
 
 bridgeRoute.get('/sprints', async (c) => {

@@ -168,6 +168,80 @@ server.registerTool(
 )
 
 server.registerTool(
+  'chatick_releases',
+  {
+    title: 'What shipped and where',
+    description:
+      'Versions of a project with their current stage. The reply carries "live" — what reached people, per build type: ' +
+      'that is the answer to "which version is in production", and you do not have to work it out from the list. ' +
+      'It also carries "buildTypes" with every stage ladder, because each platform has its own (iOS has an Apple ' +
+      'review step, Android does not). Returns 404 when the project has not enabled releases — that is a setting, ' +
+      'not a bug.',
+    inputSchema: { project: z.string() },
+  },
+  async ({ project }) => {
+    try {
+      return json(await call({ ...(await need()), projectId: project }, 'GET', '/releases'))
+    } catch (e) {
+      return fail(e)
+    }
+  },
+)
+
+server.registerTool(
+  'chatick_release_create',
+  {
+    title: 'Register a version',
+    description:
+      'Record a build: version string, buildType (ios | android | web | backend | desktop | other) and optionally the ' +
+      'stage it starts at. Without a status it starts at the first stage of that ladder. referenceUrl is where the ' +
+      'build actually lives — Expo, GitHub, the store listing. Requires releases.manage.',
+    inputSchema: {
+      project: z.string(),
+      version: z.string().min(1).describe('"1.4.0" — as the team calls it'),
+      buildType: z.enum(['ios', 'android', 'web', 'backend', 'desktop', 'other']),
+      status: z.string().optional().describe('Stage key; omit to start at the first one'),
+      referenceUrl: z.string().optional().describe('Where the build lives: Expo, GitHub, store'),
+      notes: z.string().optional().describe("What's new — for the team"),
+      comment: z.string().optional().describe('First line of the history'),
+    },
+  },
+  async ({ project, ...body }) => {
+    try {
+      return json(await call({ ...(await need()), projectId: project }, 'POST', '/releases', body))
+    } catch (e) {
+      return fail(e)
+    }
+  },
+)
+
+server.registerTool(
+  'chatick_release_stage',
+  {
+    title: 'Move a version to another stage',
+    description:
+      'Advance or roll back a version, e.g. testflight -> in_review -> released. The comment is REQUIRED and is the ' +
+      'point of the whole thing: "why has 1.4 been in Apple review for a week" has no answer if each transition ' +
+      'overwrites the last silently. Read chatick_releases first for the valid stage keys of this build type.',
+    inputSchema: {
+      project: z.string(),
+      release: z.string().describe('Release id from chatick_releases'),
+      status: z.string().describe('Stage key from that build type ladder'),
+      comment: z.string().min(1).describe('What actually happened — required'),
+    },
+  },
+  async ({ project, release, ...body }) => {
+    try {
+      return json(
+        await call({ ...(await need()), projectId: project }, 'POST', `/releases/${encodeURIComponent(release)}/stage`, body),
+      )
+    } catch (e) {
+      return fail(e)
+    }
+  },
+)
+
+server.registerTool(
   'chatick_projects',
   { title: 'Projects I can reach', description: 'Id, name and my permission level per project.', inputSchema: {} },
   async () => {
@@ -261,6 +335,7 @@ server.registerTool(
       estimateMinutes: z.number().int().positive().describe('Rough is fine; a guess beats nothing'),
       priority: z.enum(['low', 'normal', 'high', 'urgent']).optional(),
       resourceIds: z.array(z.string()).optional().describe('Resources this task needs — link them, never paste secrets'),
+      releaseIds: z.array(z.string()).optional().describe('Versions this task ships in — ids from chatick_releases'),
     },
   },
   async ({ project, ...body }) => {
@@ -287,6 +362,7 @@ server.registerTool(
       estimateMinutes: z.number().int().positive().optional(),
       priority: z.enum(['low', 'normal', 'high', 'urgent']).optional(),
       resourceIds: z.array(z.string()).optional(),
+      releaseIds: z.array(z.string()).optional().describe('Versions this task ships in — ids from chatick_releases'),
     },
   },
   async ({ project, task, ...body }) => {
