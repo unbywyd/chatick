@@ -2,7 +2,28 @@ import { useMemo, useState } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { useTranslation } from 'react-i18next'
 import { toast } from 'sonner'
-import { ArrowRight, ExternalLink, Package, Plus, Rocket, Send, X } from 'lucide-react'
+import {
+  ArrowRight,
+  ChevronDown,
+  ChevronUp,
+  ChevronsUpDown,
+  ExternalLink,
+  Package,
+  Pencil,
+  Plus,
+  Rocket,
+  Search,
+  Send,
+  X,
+} from 'lucide-react'
+import { useNavigate, useParams } from 'react-router-dom'
+import { Popover, PopoverTrigger, PopoverContent } from '@/components/ui/popover'
+import {
+  DropdownMenu,
+  DropdownMenuTrigger,
+  DropdownMenuContent,
+  DropdownMenuCheckItem,
+} from '@/components/ui/dropdown-menu'
 import { api } from '@/lib/api'
 import { cn } from '@/lib/utils'
 import { Avatar } from '@/components/ui/avatar'
@@ -53,6 +74,13 @@ export function ReleasesTab({ projectId, canManage }: { projectId: string; canMa
   const [creating, setCreating] = useState(false)
   const [asking, setAsking] = useState(false)
   const [openId, setOpenId] = useState<string | null>(null)
+  const [staging, setStaging] = useState<{ release: Release; status: string } | null>(null)
+  // Фильтры: по типу сборки и по строке. Полсотни версий на четырёх
+  // платформах — это уже список, в котором ищут, а не читают подряд.
+  const [typeFilter, setTypeFilter] = useState('')
+  const [q, setQ] = useState('')
+  const navigate = useNavigate()
+  const { companyId } = useParams()
 
   const list = useQuery({
     queryKey: ['releases', projectId],
@@ -66,6 +94,27 @@ export function ReleasesTab({ projectId, canManage }: { projectId: string; canMa
   })
 
   const byType = useMemo(() => new Map((types.data?.buildTypes ?? []).map((b) => [b.key, b])), [types.data])
+
+  const filtered = useMemo(() => {
+    const needle = q.trim().toLowerCase()
+    return (list.data?.items ?? []).filter((r) => {
+      if (typeFilter && r.buildType !== typeFilter) return false
+      if (!needle) return true
+      // Ищем и по заметкам: «что вошло в 1.4» вспоминают словами, а не номером.
+      return (
+        r.version.toLowerCase().includes(needle) ||
+        (r.notes ?? '').toLowerCase().includes(needle) ||
+        r.tasks.some((t) => t.number.toLowerCase().includes(needle))
+      )
+    })
+  }, [list.data, typeFilter, q])
+
+  const patchRelease = useMutation({
+    mutationFn: ({ id, patch }: { id: string; patch: Record<string, unknown> }) =>
+      api(`/api/v1/releases/${id}`, { method: 'PATCH', body: JSON.stringify(patch) }, 'project'),
+    onSuccess: () => void qc.invalidateQueries({ queryKey: ['releases', projectId] }),
+    onError: (e: { message?: string }) => toast.error(e.message || t('common.error')),
+  })
 
   return (
     <div className="flex h-full min-h-0 flex-col">
@@ -111,6 +160,49 @@ export function ReleasesTab({ projectId, canManage }: { projectId: string; canMa
           </div>
         )}
 
+        {/* Фильтры показываем, когда есть что фильтровать: на трёх версиях
+            панель занимает место и не помогает. */}
+        {(list.data?.items.length ?? 0) > 5 && (
+          <div className="mb-3 flex flex-wrap items-center gap-2">
+            <div className="relative min-w-48 flex-1">
+              <Search className="pointer-events-none absolute start-2 top-1/2 size-3.5 -translate-y-1/2 text-muted-foreground" />
+              <Input
+                value={q}
+                onChange={(e) => setQ(e.target.value)}
+                placeholder={t('releases.search')}
+                className="h-8 ps-7 text-sm"
+              />
+            </div>
+            <div className="inline-flex overflow-hidden rounded-md border">
+              <button
+                onClick={() => setTypeFilter('')}
+                className={cn(
+                  'px-2 py-1 text-xs transition-colors',
+                  !typeFilter ? 'bg-primary text-primary-foreground' : 'hover:bg-accent',
+                )}
+              >
+                {t('releases.allTypes')}
+              </button>
+              {/* Только те типы, что реально встречаются: кнопка на пустой
+                  фильтр обещает результат, которого нет. */}
+              {(types.data?.buildTypes ?? [])
+                .filter((b) => (list.data?.items ?? []).some((r) => r.buildType === b.key))
+                .map((b) => (
+                  <button
+                    key={b.key}
+                    onClick={() => setTypeFilter(typeFilter === b.key ? '' : b.key)}
+                    className={cn(
+                      'border-s px-2 py-1 text-xs transition-colors',
+                      typeFilter === b.key ? 'bg-primary text-primary-foreground' : 'hover:bg-accent',
+                    )}
+                  >
+                    {b.label}
+                  </button>
+                ))}
+            </div>
+          </div>
+        )}
+
         {list.isLoading ? (
           <div className="py-10 text-center text-sm text-muted-foreground">{t('common.loading')}</div>
         ) : list.isError ? (
@@ -120,17 +212,26 @@ export function ReleasesTab({ projectId, canManage }: { projectId: string; canMa
           <div className="py-10 text-center text-sm text-muted-foreground">
             {(list.error as { message?: string } | null)?.message || t('common.error')}
           </div>
+        ) : !filtered.length && list.data?.items.length ? (
+          /* Отфильтровали в ноль — это не «версий нет»: иначе человек решит,
+             что их и не заводили, и пойдёт создавать дубль. */
+          <div className="py-10 text-center text-sm text-muted-foreground">{t('releases.nothingFound')}</div>
         ) : !list.data?.items.length ? (
           <div className="py-10 text-center">
             <Package className="mx-auto mb-2 size-8 text-muted-foreground/40" />
             <div className="text-sm text-muted-foreground">{t('releases.empty')}</div>
           </div>
         ) : (
-          <div className="space-y-2">
-            {list.data.items.map((r) => (
-              <ReleaseRow key={r.id} release={r} onOpen={() => setOpenId(r.id)} locale={i18n.language} />
-            ))}
-          </div>
+          <ReleasesTable
+            items={filtered}
+            buildTypes={types.data?.buildTypes ?? []}
+            canManage={canManage}
+            locale={i18n.language}
+            onOpen={setOpenId}
+            onOpenTask={(taskId) => navigate(`/c/${companyId}/p/${projectId}/tasks/${taskId}`)}
+            onStage={(release, status) => setStaging({ release, status })}
+            onPatch={(id, patch) => patchRelease.mutate({ id, patch })}
+          />
         )}
       </div>
 
@@ -156,6 +257,23 @@ export function ReleasesTab({ projectId, canManage }: { projectId: string; canMa
           }}
         />
       )}
+      {staging && (
+        <StagePrompt
+          release={staging.release}
+          status={staging.status}
+          statusLabel={
+            (types.data?.buildTypes ?? [])
+              .find((b) => b.key === staging.release.buildType)
+              ?.stages.find((st) => st.key === staging.status)?.label ?? staging.status
+          }
+          projectId={projectId}
+          onClose={() => setStaging(null)}
+          onDone={() => {
+            setStaging(null)
+            void qc.invalidateQueries({ queryKey: ['releases', projectId] })
+          }}
+        />
+      )}
       {openId && (
         <DetailsDialog
           projectId={projectId}
@@ -169,75 +287,363 @@ export function ReleasesTab({ projectId, canManage }: { projectId: string; canMa
   )
 }
 
-function ReleaseRow({ release: r, onOpen, locale }: { release: Release; onOpen: () => void; locale: string }) {
-  const { t } = useTranslation()
-  return (
-    <div className="flex items-center gap-3 rounded-lg border bg-card p-3 transition-colors hover:border-brand/50">
-      <button onClick={onOpen} className="flex min-w-0 flex-1 items-center gap-3 text-start">
-        <div className="min-w-0">
-          <div className="flex items-center gap-2">
-            <span className="text-sm font-semibold">{r.version}</span>
-            <span className="rounded bg-secondary px-1.5 py-0.5 text-[11px] text-secondary-foreground">
-              {r.buildTypeLabel}
-            </span>
-            <span
-              className={cn(
-                'rounded px-1.5 py-0.5 text-[11px]',
-                // Конечная стадия выделена: на ней держится ответ «что в проде».
-                r.isLive ? 'bg-brand text-brand-foreground font-medium' : 'bg-muted text-muted-foreground',
-              )}
-            >
-              {r.statusLabel}
-            </span>
-          </div>
-          {r.notes && <div className="mt-0.5 line-clamp-1 break-all text-xs text-muted-foreground">{r.notes}</div>}
-          {/* Связанные задачи: видно, что закрывать, без перехода внутрь. */}
-          {r.tasks.length > 0 && (
-            <div className="mt-1 flex flex-wrap gap-1">
-              {r.tasks.map((task) => (
-                <span key={task.id} className="rounded bg-secondary px-1.5 py-0.5 text-[10px] text-secondary-foreground">
-                  {task.number}
-                </span>
-              ))}
-            </div>
-          )}
-        </div>
-      </button>
+type SortKey = 'version' | 'buildType' | 'status' | 'owner' | 'released' | 'tasks'
+type SortDir = 'asc' | 'desc'
 
-      <div className="flex shrink-0 items-center gap-2">
-        {r.releasedAt && (
-          <span className="hidden text-[11px] text-muted-foreground sm:inline">
-            {new Date(r.releasedAt).toLocaleDateString(locale)}
-          </span>
-        )}
-        {r.referenceUrl && (
-          <a
-            href={r.referenceUrl}
-            target="_blank"
-            rel="noreferrer noopener"
-            title={t('releases.reference')}
-            className="rounded p-1 text-muted-foreground hover:bg-accent hover:text-foreground"
-          >
-            <ExternalLink className="size-3.5" />
-          </a>
-        )}
-        {r.owner && <Avatar name={r.owner.name} src={r.owner.avatarUrl} size={22} />}
-      </div>
+/**
+ * Список версий таблицей, как задачи.
+ *
+ * Карточками он и читался хуже, и не давал главного: сравнить версии между
+ * собой. «Что где сейчас» — вопрос про столбец, а не про десять карточек,
+ * каждую из которых надо прочитать целиком.
+ */
+function ReleasesTable({
+  items,
+  buildTypes,
+  canManage,
+  locale,
+  onOpen,
+  onOpenTask,
+  onStage,
+  onPatch,
+}: {
+  items: Release[]
+  buildTypes: BuildTypeDef[]
+  canManage: boolean
+  locale: string
+  onOpen: (id: string) => void
+  onOpenTask: (taskId: string) => void
+  onStage: (release: Release, status: string) => void
+  onPatch: (id: string, patch: Record<string, unknown>) => void
+}) {
+  const { t } = useTranslation()
+  const [sort, setSort] = useState<{ key: SortKey; dir: SortDir } | null>(null)
+
+  const toggleSort = (key: SortKey) =>
+    setSort((s) => (s?.key === key ? (s.dir === 'asc' ? { key, dir: 'desc' } : null) : { key, dir: 'asc' }))
+
+  const sorted = useMemo(() => {
+    // Без сортировки — как пришло с сервера: новые сверху.
+    if (!sort) return items
+    const dir = sort.dir === 'asc' ? 1 : -1
+    return [...items].sort((a, b) => {
+      let d = 0
+      switch (sort.key) {
+        case 'version':
+          // Численно по частям: «1.10» больше «1.9», а по алфавиту — наоборот.
+          d = compareVersions(a.version, b.version)
+          break
+        case 'buildType':
+          d = a.buildTypeLabel.localeCompare(b.buildTypeLabel)
+          break
+        case 'status':
+          // По месту в лестнице своей платформы: «дальше уехало» — вот порядок,
+          // который человек имеет в виду, а не алфавит ключей.
+          d = stageIndex(buildTypes, a) - stageIndex(buildTypes, b)
+          break
+        case 'owner':
+          d = (a.owner?.name ?? '').localeCompare(b.owner?.name ?? '')
+          break
+        case 'released':
+          d = new Date(a.releasedAt ?? 0).getTime() - new Date(b.releasedAt ?? 0).getTime()
+          break
+        case 'tasks':
+          d = a.tasks.length - b.tasks.length
+          break
+      }
+      return d * dir
+    })
+  }, [items, sort, buildTypes])
+
+  const cols: { key: SortKey; label: string; className?: string }[] = [
+    { key: 'version', label: t('releases.version') },
+    { key: 'buildType', label: t('releases.buildType') },
+    { key: 'status', label: t('releases.status') },
+    { key: 'tasks', label: t('releases.linkedTasks') },
+    { key: 'released', label: t('releases.releasedAt'), className: 'hidden sm:table-cell' },
+    { key: 'owner', label: t('releases.owner'), className: 'w-10' },
+  ]
+
+  return (
+    <div className="overflow-x-auto rounded-lg border">
+      <table className="w-full min-w-[720px] text-sm">
+        <thead>
+          <tr className="border-b bg-muted/40 text-xs text-muted-foreground">
+            {cols.map((col) => (
+              <th key={col.key} className={cn('px-2 py-1.5 text-start font-medium', col.className)}>
+                <button
+                  className="inline-flex items-center gap-1 whitespace-nowrap hover:text-foreground"
+                  onClick={() => toggleSort(col.key)}
+                >
+                  {col.label}
+                  {sort?.key === col.key ? (
+                    sort.dir === 'asc' ? (
+                      <ChevronUp className="size-3" />
+                    ) : (
+                      <ChevronDown className="size-3" />
+                    )
+                  ) : (
+                    <ChevronsUpDown className="size-3 opacity-40" />
+                  )}
+                </button>
+              </th>
+            ))}
+            <th className="w-8" />
+          </tr>
+        </thead>
+        <tbody>
+          {sorted.map((r) => {
+            const stages = buildTypes.find((b) => b.key === r.buildType)?.stages ?? []
+            return (
+              <tr key={r.id} className="group/row border-b last:border-0 hover:bg-accent/40">
+                <td className="px-2 py-1.5 align-middle">
+                  <div className="flex items-center gap-1">
+                    <button className="font-semibold hover:text-brand" onClick={() => onOpen(r.id)}>
+                      {r.version}
+                    </button>
+                    {canManage && (
+                      <EditField
+                        title={t('releases.version')}
+                        value={r.version}
+                        onSave={(v) => onPatch(r.id, { version: v })}
+                      />
+                    )}
+                  </div>
+                </td>
+                <td className="whitespace-nowrap px-2 py-1.5 align-middle text-xs text-muted-foreground">
+                  {r.buildTypeLabel}
+                </td>
+                {/* Стадия правится на месте, но через окно с комментарием:
+                    он обязателен, и молча сменить стадию нельзя — иначе
+                    пропадёт ответ на «почему версия неделю висит». */}
+                <td className="whitespace-nowrap align-middle">
+                  <DropdownMenu>
+                    <DropdownMenuTrigger asChild>
+                      <button
+                        disabled={!canManage}
+                        className="inline-flex w-full items-center px-2 py-1.5 text-start hover:bg-accent/60 disabled:opacity-70"
+                      >
+                        <span
+                          className={cn(
+                            'rounded px-1.5 py-0.5 text-[11px]',
+                            r.isLive ? 'bg-brand font-medium text-brand-foreground' : 'bg-muted text-muted-foreground',
+                          )}
+                        >
+                          {r.statusLabel}
+                        </span>
+                      </button>
+                    </DropdownMenuTrigger>
+                    <DropdownMenuContent align="start">
+                      {stages.map((s) => (
+                        <DropdownMenuCheckItem
+                          key={s.key}
+                          checked={s.key === r.status}
+                          onSelect={() => s.key !== r.status && onStage(r, s.key)}
+                        >
+                          {s.label}
+                        </DropdownMenuCheckItem>
+                      ))}
+                    </DropdownMenuContent>
+                  </DropdownMenu>
+                </td>
+                {/* Задачи кликабельны: связь без перехода — просто надпись. */}
+                <td className="px-2 py-1.5 align-middle">
+                  <div className="flex flex-wrap gap-1">
+                    {r.tasks.map((task) => (
+                      <button
+                        key={task.id}
+                        onClick={() => onOpenTask(task.id)}
+                        title={task.title}
+                        className="rounded bg-secondary px-1.5 py-0.5 text-[10px] text-secondary-foreground hover:bg-brand hover:text-brand-foreground"
+                      >
+                        {task.number}
+                      </button>
+                    ))}
+                    {!r.tasks.length && <span className="text-xs text-muted-foreground">—</span>}
+                  </div>
+                </td>
+                <td className="hidden whitespace-nowrap px-2 py-1.5 align-middle text-xs text-muted-foreground sm:table-cell">
+                  {r.releasedAt ? new Date(r.releasedAt).toLocaleDateString(locale) : '—'}
+                </td>
+                <td className="px-2 py-1.5 align-middle">
+                  {r.owner && <Avatar name={r.owner.name} src={r.owner.avatarUrl} size={22} />}
+                </td>
+                <td className="px-2 py-1.5 align-middle">
+                  <div className="flex items-center gap-1">
+                    {r.referenceUrl && (
+                      <a
+                        href={r.referenceUrl}
+                        target="_blank"
+                        rel="noreferrer noopener"
+                        title={r.referenceUrl}
+                        className="text-muted-foreground hover:text-foreground"
+                      >
+                        <ExternalLink className="size-3.5" />
+                      </a>
+                    )}
+                    {canManage && (
+                      <EditField
+                        title={t('releases.reference')}
+                        value={r.referenceUrl ?? ''}
+                        placeholder="https://…"
+                        onSave={(v) => onPatch(r.id, { referenceUrl: v.trim() || null })}
+                      />
+                    )}
+                  </div>
+                </td>
+              </tr>
+            )
+          })}
+        </tbody>
+      </table>
     </div>
   )
 }
 
+/** «1.10.0» больше «1.9.0»: сравниваем числами по частям, а не строкой. */
+function compareVersions(a: string, b: string): number {
+  const pa = a.split(/[.\-+]/)
+  const pb = b.split(/[.\-+]/)
+  for (let i = 0; i < Math.max(pa.length, pb.length); i++) {
+    const na = parseInt(pa[i] ?? '', 10)
+    const nb = parseInt(pb[i] ?? '', 10)
+    if (Number.isNaN(na) || Number.isNaN(nb)) {
+      const d = (pa[i] ?? '').localeCompare(pb[i] ?? '')
+      if (d) return d
+    } else if (na !== nb) return na - nb
+  }
+  return 0
+}
+
+/** Насколько далеко версия уехала по своей лестнице. */
+function stageIndex(buildTypes: BuildTypeDef[], r: Release): number {
+  const stages = buildTypes.find((b) => b.key === r.buildType)?.stages ?? []
+  const i = stages.findIndex((s) => s.key === r.status)
+  return i < 0 ? 0 : i
+}
+
 /**
- * «Запросить сборку» — то, чем менеджер пользуется чаще всего.
+ * Смена стадии из списка: стадию уже выбрали, осталось объяснить почему.
  *
- * Он не «создаёт версию»: он просит человека собрать билд. Поэтому здесь
- * спрашивают исполнителя, а в «Новой версии» — нет: там регистрируют то, что
- * уже собрано.
- *
- * Одним запросом на сервер: задача, версия и связь между ними появляются
- * вместе или не появляются вовсе. Три отдельных вызова оставляли бы
- * полусостояния — задача есть, версии нет.
+ * Отдельным окном, а не сразу: комментарий обязателен на сервере, и без него
+ * человек получил бы отказ уже после нажатия.
  */
+function StagePrompt({
+  release,
+  status,
+  statusLabel,
+  onClose,
+  onDone,
+  projectId,
+}: {
+  release: Release
+  status: string
+  statusLabel: string
+  projectId: string
+  onClose: () => void
+  onDone: () => void
+}) {
+  const { t } = useTranslation()
+  const [comment, setComment] = useState('')
+  const move = useMutation({
+    mutationFn: () =>
+      api(
+        `/api/v1/releases/${release.id}/stage`,
+        { method: 'POST', body: JSON.stringify({ status, comment: comment.trim() }) },
+        'project',
+      ),
+    onSuccess: onDone,
+    onError: (e: { message?: string }) => toast.error(e.message || t('common.error')),
+  })
+
+  return (
+    <Overlay onClose={onClose} title={`${release.version} → ${statusLabel}`}>
+      <label className="mb-1 block text-xs text-muted-foreground">{t('releases.commentRequired')}</label>
+      <Input value={comment} onChange={(e) => setComment(e.target.value)} autoFocus />
+      <div className="mt-4 flex justify-end gap-2">
+        <Button variant="ghost" onClick={onClose}>
+          {t('common.cancel')}
+        </Button>
+        <Button disabled={!comment.trim() || move.isPending} onClick={() => move.mutate()}>
+          {t('releases.moveStage')}
+        </Button>
+      </div>
+    </Overlay>
+  )
+}
+
+/**
+ * Правка одного поля в поповере, а не инлайн-полем в ячейке.
+ *
+ * По той же причине, что у номеров задачи: поле, раскрывающееся прямо в узкой
+ * колонке, раздвигает строку и уводит соседние ячейки, а попасть по нему
+ * мышью почти нечем.
+ */
+function EditField({
+  title,
+  value,
+  placeholder,
+  onSave,
+}: {
+  title: string
+  value: string
+  placeholder?: string
+  onSave: (next: string) => void
+}) {
+  const { t } = useTranslation()
+  const [open, setOpen] = useState(false)
+  const [draft, setDraft] = useState(value)
+
+  return (
+    <Popover
+      open={open}
+      onOpenChange={(o) => {
+        setOpen(o)
+        if (o) setDraft(value)
+      }}
+    >
+      <PopoverTrigger asChild>
+        <button
+          title={t('common.edit')}
+          className="shrink-0 text-muted-foreground opacity-0 transition-opacity hover:text-foreground group-hover/row:opacity-100"
+        >
+          <Pencil className="size-3" />
+        </button>
+      </PopoverTrigger>
+      <PopoverContent className="w-64 p-2" align="start">
+        <label className="mb-1 block text-xs text-muted-foreground">{title}</label>
+        <Input
+          value={draft}
+          placeholder={placeholder}
+          autoFocus
+          onChange={(e) => setDraft(e.target.value)}
+          onKeyDown={(e) => {
+            if (e.key === 'Enter') {
+              onSave(draft)
+              setOpen(false)
+            }
+            if (e.key === 'Escape') setOpen(false)
+          }}
+        />
+        <div className="mt-2 flex justify-end gap-1">
+          <Button size="sm" variant="ghost" onClick={() => setOpen(false)}>
+            {t('common.cancel')}
+          </Button>
+          <Button
+            size="sm"
+            onClick={() => {
+              onSave(draft)
+              setOpen(false)
+            }}
+          >
+            {t('common.save')}
+          </Button>
+        </div>
+      </PopoverContent>
+    </Popover>
+  )
+}
+
 function RequestDialog({
   projectId,
   buildTypes,

@@ -1103,7 +1103,8 @@
     "dragToChat": "Drag into chat",
     "loading": "Loading…",
     "error": "Something went wrong",
-    "saved": "Saved"
+    "saved": "Saved",
+    "edit": "Edit"
   },
   "people": {
     "add": "Add people…",
@@ -1616,6 +1617,12 @@
     "whatToDoHint": "e.g. production build for the store",
     "requestExplain": "This creates a task for that person and a version, linked together. They will be notified.",
     "requested": "Requested — task {{task}}",
-    "noAssignee": "No assignee"
+    "noAssignee": "No assignee",
+    "status": "Stage",
+    "owner": "Author",
+    "releasedAt": "Shipped",
+    "search": "Search version, task, notes",
+    "allTypes": "All",
+    "nothingFound": "Nothing found"
   }
 }
