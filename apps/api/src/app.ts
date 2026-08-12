@@ -21,6 +21,7 @@ import { inboxRoute } from './routes/inbox.js'
 import { reviewsRoute } from './routes/reviews.js'
 import { documentsRoute, documentsPublicRoute } from './routes/documents.js'
 import { notesRoute } from './routes/notes.js'
+import { releasesRoute } from './routes/releases.js'
 import { timeRoute, timeMineRoute, timeCompanyRoute } from './routes/time.js'
 import { bridgeRoute } from './routes/bridge.js'
 import { backupRoute } from './routes/backup.js'
@@ -59,6 +60,7 @@ app.route('/api/v1/inbox', inboxRoute)
 app.route('/api/v1/reviews', reviewsRoute)
 app.route('/api/v1/documents', documentsRoute)
 app.route('/api/v1/notes', notesRoute)
+app.route('/api/v1/releases', releasesRoute)
 // Сводка по компании — по сессии: проектного токена на этом экране нет.
 app.route('/api/v1/time', timeCompanyRoute)
 app.route('/api/v1/time', timeRoute)
