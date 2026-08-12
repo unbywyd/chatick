@@ -1,5 +1,6 @@
 import { and, asc, desc, eq, gt, gte, ilike, inArray, isNotNull, isNull, lte, or, sql } from 'drizzle-orm'
 import { companyOf, projectPath } from './links.js'
+import { shortUrlFor } from './short-links.js'
 import { db } from '../db/client.js'
 import { chatSummaries, credentials, documents, files, messages, notes, projectMembers, projects, resourceSecrets, taskComments, taskGroups, taskBlockers, dbConnections, dbTablePolicies, tasks, timeEntries, users } from '../db/schema.js'
 import { dependentsOf } from '../routes/tasks.js'
@@ -151,7 +152,9 @@ export function memoryTools(projectId: string, actorUserId: string): { tools: To
     },
     {
       name: 'get_task',
-      description: 'Get one task with full description by its number (e.g. TASK-5).',
+      description:
+        'Get one task with full description by its number (e.g. TASK-5). The reply includes a short link ' +
+        '(chatick.com/t-AbC12) — give the human that one when they ask where the task is, never a link you built yourself.',
       parameters: { type: 'object', properties: { number: { type: 'string' } }, required: ['number'] },
     },
     {
@@ -159,7 +162,8 @@ export function memoryTools(projectId: string, actorUserId: string): { tools: To
       description:
         "Create a task. You can set assignee (by member name or email), due date, time estimate, priority, status and sprint. " +
         'To pull someone into the description, write @[Their Name](<userId>) — plain "@Name" is text and notifies nobody. ' +
-        "The assignee is notified by being assigned; mention others only when they specifically need to see it. Requires the author's tasks.create permission.",
+        "The assignee is notified by being assigned; mention others only when they specifically need to see it. " +
+        'The reply carries a short link to the new task — pass it on as is. Requires the author\'s tasks.create permission.',
       parameters: {
         type: 'object',
         properties: {
@@ -718,8 +722,12 @@ export function memoryTools(projectId: string, actorUserId: string): { tools: To
     return { rows }
   }
 
-  /** Создание одной задачи — общий код для create_task и create_tasks. */
-  async function createOneTask(args: Record<string, unknown>): Promise<string> {
+  /**
+   * Создание одной задачи — общий код для create_task и create_tasks.
+   *
+   * Возвращает и номер, и id: номер человек читает, а по id собирается ссылка.
+   */
+  async function createOneTask(args: Record<string, unknown>): Promise<{ number: string; id: string }> {
     const [{ next, minSort }] = (await db
       .select({
         next: sql<number>`coalesce(max(cast(substring(${tasks.number} from 6) as int)), 0) + 1`,
@@ -748,7 +756,7 @@ export function memoryTools(projectId: string, actorUserId: string): { tools: To
       })
       .returning()
     await notifyTaskChange(projectId, actorUserId, row!, { assigned: Boolean(assigneeId), mentions: true })
-    return row!.number
+    return { number: row!.number, id: row!.id }
   }
 
   // разрешить исполнителя по имени/email → userId (или null для «none»/пусто)
@@ -964,15 +972,19 @@ export function memoryTools(projectId: string, actorUserId: string): { tools: To
     get_task: async (args) => {
       const t = await findTask(String(args.number ?? ''))
       if (!t) return 'Task not found.'
-      return `${t.number} [${t.status}/${t.priority}] "${t.title}"\n${t.description || '(no description)'}`
+      const link = await shortUrlFor('task', t.id, projectId, actorUserId)
+      return `${t.number} [${t.status}/${t.priority}] "${t.title}"${link ? `\n${link}` : ''}\n${t.description || '(no description)'}`
     },
     create_task: async (args) => {
       if (!(await hasPermission(projectId, actorUserId, 'tasks.create')))
         return 'PERMISSION DENIED: the author does not have the tasks.create permission. Politely refuse.'
       if (!String(args.title ?? '').trim()) return 'A title is required.'
-      const number = await createOneTask(args)
+      const created = await createOneTask(args)
       broadcast(projectId, 'tasks_changed', {})
-      return `Created ${number}: "${String(args.title).slice(0, 80)}".`
+      // Ссылку отдаём сразу: без неё ассистент на просьбу «дай ссылку»
+      // собирает адрес сам и промахивается — такого маршрута нет.
+      const link = await shortUrlFor('task', created.id, projectId, actorUserId)
+      return `Created ${created.number}: "${String(args.title).slice(0, 80)}".${link ? ` Link: ${link}` : ''}`
     },
     update_task: async (args) => {
       const t = await findTask(String(args.number ?? ''))
@@ -1052,7 +1064,9 @@ export function memoryTools(projectId: string, actorUserId: string): { tools: To
         }
         try {
           const created = await createOneTask(item)
-          done.push(created)
+          // Только номер: ссылка на каждую из полусотни задач — полсотни
+          // записей в базе ради того, что никто не просил.
+          done.push(created.number)
         } catch (e) {
           failed.push(`${title}: ${e instanceof Error ? e.message : String(e)}`)
         }

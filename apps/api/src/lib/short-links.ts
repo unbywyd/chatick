@@ -52,6 +52,32 @@ export const SHORT_PREFIX: Record<string, string> = {
 
 const BY_PREFIX = new Map(Object.entries(SHORT_PREFIX).map(([type, p]) => [p, type]))
 
+/**
+ * Домен коротких ссылок. Короткая ссылка на app.chatick.com не короче
+ * длинной — весь смысл в голом домене.
+ */
+export const SHORT_BASE = () => (process.env.SHORT_LINK_BASE || 'https://chatick.com').replace(/\/$/, '')
+
+/**
+ * Готовый короткий адрес сущности — то, что можно отдать человеку как есть.
+ *
+ * Отдельно от shortCodeFor, потому что зовут это в основном ассистенты, а им
+ * нужен не код, а ссылка целиком: агент, получивший «t-AbC12», допишет домен
+ * сам и ошибётся. Ошибку никто не заметит, пока человек не откроет ссылку.
+ *
+ * null вместо ошибки: ссылка — приятное дополнение к ответу, и уронить из-за
+ * неё создание задачи было бы обменом не в ту сторону.
+ */
+export async function shortUrlFor(
+  entityType: string,
+  entityId: string,
+  projectId: string,
+  userId: string | null,
+): Promise<string | null> {
+  const path = await shortCodeFor(entityType, entityId, projectId, userId)
+  return path ? `${SHORT_BASE()}/${path}` : null
+}
+
 /** Разбирает «t-AbC12» на тип и код. null — не наш формат. */
 export function parseShortPath(raw: string): { type: string; code: string } | null {
   const m = /^([a-z])-([2-9a-zA-Z]{4,12})$/.exec(raw.trim())

@@ -203,7 +203,9 @@ server.registerTool(
   'chatick_task',
   {
     title: 'Read one task',
-    description: 'A task with its description, attachments and dependency counts. Accepts the number ("TASK-81") or the id.',
+    description:
+      'A task with its description, attachments and dependency counts. Accepts the number ("TASK-81") or the id. ' +
+      'Includes "shortUrl" — the link to give a person when they ask where the task is.',
     inputSchema: { project: z.string(), task: z.string().describe('TASK-81 or the id') },
   },
   async ({ project, task }) => {
@@ -224,7 +226,8 @@ server.registerTool(
       'nobody can plan a sprint, and the number never gets added later. Write in the language the project speaks. ' +
       'To pull someone into the description write @[Name](userId) — a plain @name is text and notifies nobody. ' +
       'The assignee already learns of the assignment; mention others only when they specifically need to see it. ' +
-      'The reply carries a ready "url" — give the human that one, never a link you assembled.',
+      'The reply carries ready links — never assemble one yourself. Prefer "shortUrl" (chatick.com/t-AbC12) when sending ' +
+      'the task to a person: the long "url" is 90 characters, wraps badly in chat and breaks card layouts.',
     inputSchema: {
       project: z.string(),
       title: z.string().min(1),

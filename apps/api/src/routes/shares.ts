@@ -8,13 +8,7 @@ import { requireSession, type SessionEnv } from '../auth.js'
 import { getObjectStream, resolveStorage } from '../lib/s3.js'
 import { sanitizeHtml } from '../lib/sanitize-html.js'
 import { canCreateProjects, companyRoleOf, hasPermission, projectRoleOf, type ProjectPermission } from './projects.js'
-import { shortCodeFor } from '../lib/short-links.js'
-
-/**
- * Домен коротких ссылок. Короткая ссылка на app.chatick.com не короче
- * длинной — весь смысл в голом домене.
- */
-const SHORT_BASE = () => (process.env.SHORT_LINK_BASE || 'https://chatick.com').replace(/\/$/, '')
+import { shortCodeFor, SHORT_BASE } from '../lib/short-links.js'
 
 // Публичный доступ по ссылке (SPEC §8.34).
 //

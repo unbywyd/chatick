@@ -61,6 +61,7 @@ import { fetchSiteIcon, nameFromUrl } from '../lib/site-icon.js'
 import { encrypt } from '../lib/crypto.js'
 import { membersLockedForProject, MEMBERS_LOCKED } from '../lib/members-locked.js'
 import { broadcast, sendToUserAnywhere, tasksChanged } from '../ws.js'
+import { shortUrlFor } from '../lib/short-links.js'
 import { env } from '../env.js'
 
 // Мост для внешнего ИИ (SPEC §8.27). Всё выполняется ОТ ИМЕНИ пользователя,
@@ -1108,6 +1109,16 @@ const taskView = (
    * компанию превратился бы в полсотни одинаковых.
    */
   companyId?: string | null,
+  /**
+   * Короткая ссылка — chatick.com/t-AbC12.
+   *
+   * Приходит параметром по той же причине, что и companyId, только строже:
+   * получить её — это запрос в базу, а при первом обращении ещё и вставка.
+   * В списке из полусотни задач это полсотни ссылок, которые никто не просил.
+   * Поэтому её передают только там, где ответ про одну задачу, — то есть
+   * там, где агент и правда собирается дать её человеку.
+   */
+  shortUrl?: string | null,
 ) => ({
   id: t.id,
   number: t.number,
@@ -1120,6 +1131,7 @@ const taskView = (
    * готовый URL дешевле, чем чинить каждого клиента отдельно.
    */
   ...(companyId ? { url: projectUrl(env.APP_URL, companyId, t.projectId, `/tasks/${t.id}`) } : {}),
+  ...(shortUrl ? { shortUrl } : {}),
   title: t.title,
   description: t.description,
   status: t.status,
@@ -1527,7 +1539,16 @@ bridgeRoute.get('/tasks/:id', async (c) => {
     scope.projectId,
     new Map([[row[0]!.t.id, row[0]!.t.description]]),
   )
-  return c.json(taskView(row[0]!.t, row[0]!.u, attached.get(row[0]!.t.id), undefined, await companyOf(scope.projectId)))
+  return c.json(
+    taskView(
+      row[0]!.t,
+      row[0]!.u,
+      attached.get(row[0]!.t.id),
+      undefined,
+      await companyOf(scope.projectId),
+      await shortUrlFor('task', row[0]!.t.id, scope.projectId, id.userId),
+    ),
+  )
 })
 
 bridgeRoute.post('/tasks', async (c) => {
@@ -1593,7 +1614,20 @@ bridgeRoute.post('/tasks', async (c) => {
   tasksChanged(scope.projectId, [row!.assigneeId, row!.createdById])
   // подтягиваем исполнителя, чтобы агент сразу видел, на кого задача ушла
   const who = row!.assigneeId ? await db.query.users.findFirst({ where: eq(users.id, row!.assigneeId) }) : null
-  return c.json({ ...taskView(row!, who, undefined, undefined, await companyOf(scope.projectId)), attachments }, 201)
+  return c.json(
+    {
+      ...taskView(
+        row!,
+        who,
+        undefined,
+        undefined,
+        await companyOf(scope.projectId),
+        await shortUrlFor('task', row!.id, scope.projectId, id.userId),
+      ),
+      attachments,
+    },
+    201,
+  )
 })
 
 bridgeRoute.patch('/tasks/:id', async (c) => {
@@ -1675,7 +1709,14 @@ bridgeRoute.patch('/tasks/:id', async (c) => {
   tasksChanged(scope.projectId, [row!.assigneeId, row!.createdById, existing.assigneeId, existing.createdById])
   const who = row!.assigneeId ? await db.query.users.findFirst({ where: eq(users.id, row!.assigneeId) }) : null
   return c.json({
-    ...taskView(row!, who, undefined, undefined, await companyOf(scope.projectId)),
+    ...taskView(
+      row!,
+      who,
+      undefined,
+      undefined,
+      await companyOf(scope.projectId),
+      await shortUrlFor('task', row!.id, scope.projectId, id.userId),
+    ),
     ...(b.attachmentIds !== undefined ? { attachments } : {}),
     ...(b.resourceIds !== undefined ? { resources } : {}),
   })

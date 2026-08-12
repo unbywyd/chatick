@@ -45,6 +45,13 @@ function endpointCatalog(q: string): string {
          Give the human THAT, never one you assembled yourself: the address
          format has changed once already, and a guessed /#/p/<id> opens a
          blank screen.
+
+         Replies about ONE task (GET/POST/PATCH of a single task) also carry
+         "shortUrl" — chatick.com/t-AbC12. Prefer it when writing to a person:
+         "url" is 90 characters with two ids and a "#", it wraps across lines
+         in chat and stretches message cards out of shape. Both open the same
+         task and neither grants access: rights are checked on arrival.
+         Lists omit "shortUrl" — ask for the single task when you need it.
   POST   /x/tasks${q}              {"title","description?","assignee?","status?","priority?","estimateMinutes?","sprintId?","attachmentIds?","resourceIds?","refs?"}
   PATCH  /x/tasks/<id>${q}         any subset of the same fields
   PATCH  /x/tasks/bulk${q}         {"tasks":["TASK-4","TASK-7"], "set":{...}, "refs":{"TASK-4":"19.1"}}
