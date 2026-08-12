@@ -35,6 +35,11 @@ function endpointCatalog(q: string): string {
          "blocking" (tasks waiting for it). openBlockers > 0 means the work
          cannot start yet — do not propose it as the next thing to do, and do
          not assign someone to it without saying what it is waiting for.
+         brief also carries "commentCount", "lastCommentAt" and
+         "unansweredMention": the last is true when this person was mentioned
+         in the comments and has not written since. That is "where was I asked
+         something and never replied" — visible from the list itself, instead
+         of reading the comments of every task one by one to find out.
   GET    /x/tasks/<id>${q}
          <id> is the task NUMBER ("TASK-81") or its id — everywhere a task
          appears in a path. Use the number: it is what the human says out
@@ -1004,10 +1009,20 @@ ${endpointCatalog('?project=<id>')}
          ?scope=company searches notes shared across the whole company — check
          it before debugging something that may already have been solved.
 
+  GET    /x/mentions                    where THIS PERSON was asked, ACROSS ALL projects
+         Mentions in comments, chat and notes, plus tasks assigned to them.
+         CHECK THIS BEFORE /x/inbox. "Someone closed their own task" and "a
+         person asked me a question and is waiting" are events of different
+         weight, and in one shared list the second drowns in the first — a
+         question sitting in a comment took three calls to find.
+         ?unread=0 includes answered ones, ?since=<ISO> only newer ones.
+
   GET    /x/inbox                       what concerns this person, ACROSS ALL projects
   POST   /x/inbox/read                  {"ids":[...]} or {"all":true}
-         Each item has whatIsAsked (AI-written), project.id, entityType/entityId.
-         Start every "check what's waiting for me" request here.
+         Each item has whatIsAsked (AI-written), project.id, entityType/entityId
+         and a ready "url". Start every "check what's waiting for me" here.
+         ?since=<ISO> asks only for what arrived after a moment you already saw,
+         instead of pulling the last thirty and eyeballing them for new ones.
 
   POST   /x/projects                    {"name","about?","chatRules?"} — new project
   PATCH  /x/projects/<id>               {"name"?,"about"?,"chatRules"?,"color"?}

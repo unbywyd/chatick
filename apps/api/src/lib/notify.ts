@@ -20,15 +20,37 @@ export type NotificationEvent =
   | 'note_reminder'
   | 'timer_running'
 
-/** Извлекает id упомянутых пользователей из разметки `@[Label](id)`. */
+/**
+ * Извлекает id упомянутых пользователей.
+ *
+ * Форматов ДВА, и это не избыточность:
+ *
+ * - `@[Label](id)` — так пишут ассистенты через мост, обычным текстом;
+ * - `<span data-type="mention" data-id="…">` — так сохраняет редактор в вебе.
+ *
+ * Долгое время распознавался только первый. Из-за этого ни одно упоминание,
+ * поставленное человеком из интерфейса, никого не уведомляло: люди ставили
+ * @Имя, видели его на экране подсвеченным и ждали ответа, которого не будет.
+ * Тихо — ошибки нигде не возникало, просто список получателей выходил пустым.
+ */
 export function extractMentions(text: string): string[] {
   const ids = new Set<string>()
-  const re = /@\[[^\]]*\]\(([^)]+)\)/g
-  let m: RegExpExecArray | null
-  while ((m = re.exec(text))) {
-    const id = (m[1] ?? '').trim()
+  const add = (raw: string | undefined) => {
+    const id = (raw ?? '').trim()
     if (id && id !== 'ai') ids.add(id) // @ai — это диспетчер, не пользователь
   }
+
+  const markdown = /@\[[^\]]*\]\(([^)]+)\)/g
+  let m: RegExpExecArray | null
+  while ((m = markdown.exec(text))) add(m[1])
+
+  // Атрибуты у разных редакторов идут в разном порядке, поэтому ищем data-id
+  // внутри тега со data-type="mention", а не по жёсткой строке целиком.
+  const span = /<span\b[^>]*\bdata-type=["']mention["'][^>]*>/gi
+  while ((m = span.exec(text))) {
+    add(/\bdata-id=["']([^"']+)["']/i.exec(m[0])?.[1])
+  }
+
   return [...ids]
 }
 

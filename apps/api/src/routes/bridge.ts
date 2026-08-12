@@ -645,6 +645,64 @@ bridgeRoute.get('/context', async (c) => {
 // Ради сценария «Клауд, проверь что там»: агент читает адресованное человеку,
 // доходит до исходного сообщения и отвечает, не открывая интерфейс.
 
+/**
+ * События, где к человеку обратились лично.
+ *
+ * Отдельно от общей ленты, потому что вес разный: «кто-то закрыл свою задачу»
+ * и «человек задал вопрос и ждёт ответа» — не одно и то же, а в общем списке
+ * второе тонет среди первого. Именно так и вышло: вопрос в комментарии
+ * пришлось искать тремя запросами, потому что в ленте он лежал наравне с
+ * чужими статусами.
+ */
+const MENTION_EVENTS = ['chat_mention', 'task_mention', 'comment_mention', 'note_mention', 'task_assigned'] as const
+
+bridgeRoute.get('/mentions', async (c) => {
+  const id = auth(c as never)
+  const onlyUnread = c.req.query('unread') !== '0'
+  const limit = Math.min(100, Math.max(1, Number(c.req.query('limit')) || 30))
+
+  const conds = [eq(notifications.userId, id.userId), inArray(notifications.event, MENTION_EVENTS as never)]
+  if (id.projectId) conds.push(eq(notifications.projectId, id.projectId))
+  if (onlyUnread) conds.push(isNull(notifications.readAt))
+  const since = parseSince(c.req.query('since'))
+  if (since) conds.push(gt(notifications.createdAt, since))
+
+  const rows = await db
+    .select({ n: notifications, actor: users, project: projects })
+    .from(notifications)
+    .leftJoin(users, eq(users.id, notifications.actorId))
+    .innerJoin(projects, eq(projects.id, notifications.projectId))
+    .where(and(...conds))
+    .orderBy(desc(notifications.createdAt))
+    .limit(limit)
+
+  return c.json({
+    items: rows.map((r) => ({
+      id: r.n.id,
+      event: r.n.event,
+      title: r.n.title,
+      whatIsAsked: r.n.summary,
+      body: r.n.body,
+      from: r.actor ? { id: r.actor.id, name: r.actor.name } : { id: 'ai', name: 'AI' },
+      project: { id: r.project.id, name: r.project.name },
+      entityType: r.n.entityType,
+      entityId: r.n.entityId,
+      url: `${APP()}/#${r.n.link}`,
+      unread: !r.n.readAt,
+      createdAt: r.n.createdAt,
+    })),
+    hint:
+      'These are the things addressed to YOU personally — answer them first. For entityType="task" the entityId is the task id: read it with GET /x/tasks/<id> and reply with POST /x/tasks/<id>/comments. Mark handled ones read with POST /x/inbox/read.',
+  })
+})
+
+/** `since` для лент: ISO-строка. Мусор игнорируем, а не отвечаем ошибкой. */
+function parseSince(raw: string | undefined): Date | null {
+  if (!raw) return null
+  const d = new Date(raw)
+  return Number.isNaN(d.getTime()) ? null : d
+}
+
 bridgeRoute.get('/inbox', async (c) => {
   const id = auth(c as never)
   const onlyUnread = c.req.query('unread') !== '0'
@@ -654,6 +712,10 @@ bridgeRoute.get('/inbox', async (c) => {
   const conds = [eq(notifications.userId, id.userId)]
   if (id.projectId) conds.push(eq(notifications.projectId, id.projectId))
   if (onlyUnread) conds.push(isNull(notifications.readAt))
+  // «что нового с момента X» — чтобы не тянуть последние тридцать и не искать
+  // в них глазами незнакомое.
+  const since = parseSince(c.req.query('since'))
+  if (since) conds.push(gt(notifications.createdAt, since))
 
   const rows = await db
     .select({ n: notifications, actor: users, project: projects })
@@ -677,11 +739,12 @@ bridgeRoute.get('/inbox', async (c) => {
       // по этим полям агент дотягивается до сути: сообщение, задача, комментарий
       entityType: r.n.entityType,
       entityId: r.n.entityId,
+      url: `${APP()}/#${r.n.link}`,
       unread: !r.n.readAt,
       createdAt: r.n.createdAt,
     })),
     hint:
-      'For entityType="message" call GET /x/messages/<entityId>/context to see the surrounding conversation, then reply with POST /x/messages (replyToId=<entityId>). Mark handled ones read with POST /x/inbox/read.',
+      'For entityType="message" call GET /x/messages/<entityId>/context to see the surrounding conversation, then reply with POST /x/messages (replyToId=<entityId>). Mark handled ones read with POST /x/inbox/read. Things addressed to you personally are also available on their own at GET /x/mentions — check that first, it is a short list. Pass since=<ISO> here to ask only for what is new.',
   })
 })
 
@@ -1152,6 +1215,51 @@ const taskView = (
 })
 
 /** Счётчики зависимостей одним запросом на весь список. */
+/**
+ * Что происходило в комментариях: сколько их, когда последний и — главное —
+ * ждёт ли меня там вопрос.
+ *
+ * `unansweredMention` истинно, когда меня упомянули, и после этого упоминания
+ * я ничего не написал. Без этого поля «где меня спросили» выясняется чтением
+ * комментариев по каждой задаче отдельно: три запроса вместо одного, и то
+ * лишь если догадаться, в какую задачу смотреть.
+ *
+ * Одним запросом на весь список: по запросу на задачу это возвращало бы
+ * полсотни обращений к базе на каждый показ списка.
+ */
+async function commentActivity(
+  taskIds: string[],
+  userId: string,
+): Promise<Map<string, { count: number; lastAt: Date | null; unanswered: boolean }>> {
+  const out = new Map<string, { count: number; lastAt: Date | null; unanswered: boolean }>()
+  if (!taskIds.length) return out
+
+  const rows = await db
+    .select({
+      taskId: taskComments.taskId,
+      authorId: taskComments.authorId,
+      body: taskComments.body,
+      createdAt: taskComments.createdAt,
+    })
+    .from(taskComments)
+    .where(inArray(taskComments.taskId, taskIds))
+    .orderBy(asc(taskComments.createdAt))
+
+  for (const row of rows) {
+    const cur = out.get(row.taskId) ?? { count: 0, lastAt: null as Date | null, unanswered: false }
+    cur.count += 1
+    cur.lastAt = row.createdAt
+    if (row.authorId === userId) {
+      // Ответил — вопрос снят, даже если упоминание было раньше в той же ленте.
+      cur.unanswered = false
+    } else if (extractMentions(row.body).includes(userId)) {
+      cur.unanswered = true
+    }
+    out.set(row.taskId, cur)
+  }
+  return out
+}
+
 async function depCounts(taskIds: string[]): Promise<Map<string, { openBlockers: number; blocking: number }>> {
   const out = new Map<string, { openBlockers: number; blocking: number }>()
   if (!taskIds.length) return out
@@ -1234,6 +1342,10 @@ bridgeRoute.get('/tasks', async (c) => {
   // и вытесняют оттуда то, ради чего ассистента позвали.
   if (c.req.query('fields') === 'brief') {
     const briefDeps = await depCounts(rows.map((r) => r.t.id))
+    const chatter = await commentActivity(
+      rows.map((r) => r.t.id),
+      id.userId,
+    )
     return c.json({
       items: rows.map((r) => ({
         id: r.t.id,
@@ -1248,6 +1360,11 @@ bridgeRoute.get('/tasks', async (c) => {
         // выбирают, за что браться.
         openBlockers: briefDeps.get(r.t.id)?.openBlockers ?? 0,
         blocking: briefDeps.get(r.t.id)?.blocking ?? 0,
+        // Где шла беседа — видно из списка, без чтения каждой задачи подряд.
+        commentCount: chatter.get(r.t.id)?.count ?? 0,
+        lastCommentAt: chatter.get(r.t.id)?.lastAt ?? null,
+        // Главное поле: здесь спросили меня, и я ещё не ответил.
+        unansweredMention: chatter.get(r.t.id)?.unanswered ?? false,
       })),
       count: rows.length,
       total,
@@ -2526,7 +2643,15 @@ bridgeRoute.post('/tasks/:id/comments', async (c) => {
     })
 
   broadcast(scope.projectId, 'task_comments_changed', { taskId })
-  return c.json({ id: row!.id, replyTo: row!.replyToId || undefined, attachments, createdAt: row!.createdAt }, 201)
+  // Возвращаем и сам текст — тем, что реально записалось.
+  //
+  // Раньше в ответе были только id и дата, и проверить, доехали ли иврит с
+  // разметкой без искажений, можно было лишь повторным чтением. Кодировка
+  // ломалась на этом пути не раз, и ловилось это через раз.
+  return c.json(
+    { id: row!.id, text: row!.body, replyTo: row!.replyToId || undefined, attachments, createdAt: row!.createdAt },
+    201,
+  )
 })
 
 /** Комментарий этого проекта — или отказ. Общая часть правки и удаления. */

@@ -125,17 +125,42 @@ server.registerTool(
 // --- Что на мне --------------------------------------------------------------
 
 server.registerTool(
+  'chatick_mentions',
+  {
+    title: 'Where I was asked personally',
+    description:
+      'Only the things addressed to this person directly — mentions in comments, chat and notes, plus tasks assigned ' +
+      'to them. CHECK THIS FIRST, before chatick_inbox: "someone closed their own task" and "a person asked me a ' +
+      'question and is waiting" carry different weight, and in one shared list the second drowns in the first. ' +
+      'Every item carries a ready url.',
+    inputSchema: {
+      unread: z.boolean().optional().describe('Only unanswered ones (default true)'),
+      since: z.string().optional().describe('ISO timestamp — only what came after it'),
+    },
+  },
+  async ({ unread, since }) => {
+    try {
+      return json(await call(await need(), 'GET', '/mentions', undefined, { unread: unread === false ? '0' : undefined, since }))
+    } catch (e) {
+      return fail(e)
+    }
+  },
+)
+
+server.registerTool(
   'chatick_inbox',
   {
     title: 'What concerns me right now',
     description:
       'Everything waiting for this person, across every project. Each item carries whatIsAsked — one sentence written ' +
-      'for you. Start here for "what is on my plate" rather than listing tasks project by project.',
-    inputSchema: {},
+      'for you, and a ready url. Start here for "what is on my plate" rather than listing tasks project by project — ' +
+      'but for "did anyone ask ME something" use chatick_mentions, which is a much shorter list. ' +
+      'Pass since to ask only for what arrived after a moment you already saw.',
+    inputSchema: { since: z.string().optional().describe('ISO timestamp — only what came after it') },
   },
-  async () => {
+  async ({ since }) => {
     try {
-      return json(await call(await need(), 'GET', '/inbox'))
+      return json(await call(await need(), 'GET', '/inbox', undefined, { since }))
     } catch (e) {
       return fail(e)
     }

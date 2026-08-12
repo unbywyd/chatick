@@ -57,8 +57,8 @@ export function NotificationBell({ currentProjectId }: { currentProjectId?: stri
           )}
         </button>
       </DropdownMenuTrigger>
-      <DropdownMenuContent align="end" className="max-h-[70vh] w-80 overflow-y-auto p-0">
-        <div className="flex items-center justify-between border-b px-3 py-2">
+      <DropdownMenuContent align="end" className="flex max-h-[70vh] w-80 flex-col p-0">
+        <div className="flex shrink-0 items-center justify-between border-b px-3 py-2">
           <span className="text-sm font-semibold">{t('inbox.title')}</span>
           {unread > 0 && (
             <button onClick={() => markRead.mutate({ all: true })} className="text-xs text-muted-foreground hover:text-foreground">
@@ -67,6 +67,11 @@ export function NotificationBell({ currentProjectId }: { currentProjectId?: stri
           )}
         </div>
 
+        {/* Прокручивается только список. Раньше скроллилась вся панель, и
+            «Смотреть все» уезжало под сотню непрочитанных: ссылка на страницу
+            со всей историей была, но добраться до неё можно было лишь
+            пролистав всё, ради чего на страницу и идут. */}
+        <div className="min-h-0 flex-1 overflow-y-auto">
         {groups.length === 0 && <p className="px-3 py-6 text-center text-sm text-muted-foreground">{t('inbox.empty')}</p>}
 
         {groups.map((g) => (
@@ -110,11 +115,12 @@ export function NotificationBell({ currentProjectId }: { currentProjectId?: stri
             </ul>
           </div>
         ))}
+        </div>
 
         {/* Модалка показывает только непрочитанное — за историей отсюда */}
         <button
           onClick={() => navigate('/inbox')}
-          className="w-full cursor-pointer border-t px-3 py-2 text-center text-xs text-muted-foreground hover:bg-accent hover:text-foreground"
+          className="w-full shrink-0 cursor-pointer border-t px-3 py-2 text-center text-xs font-medium text-muted-foreground hover:bg-accent hover:text-foreground"
         >
           {t('inbox.seeAll')}
         </button>
