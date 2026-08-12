@@ -130,7 +130,13 @@ export function memoryTools(projectId: string, actorUserId: string): { tools: To
     },
     {
       name: 'search_messages',
-      description: 'Full-text search across the ENTIRE raw chat history. Use for facts not in summaries.',
+      description: 'Full-text search across the ENTIRE raw GROUP chat history. Use for facts not in summaries.',
+      parameters: { type: 'object', properties: { query: { type: 'string' } }, required: ['query'] },
+    },
+    {
+      name: 'search_my_dialog',
+      description:
+        'Search THIS user\'s own past conversation with you (not the group chat). Only recent turns are included in the prompt, so use this when they refer to something discussed earlier — a decision, a name, a number — instead of guessing or saying you do not remember.',
       parameters: { type: 'object', properties: { query: { type: 'string' } }, required: ['query'] },
     },
     {
@@ -855,11 +861,58 @@ export function memoryTools(projectId: string, actorUserId: string): { tools: To
         .select({ msg: messages, author: users })
         .from(messages)
         .leftJoin(users, eq(users.id, messages.authorId))
-        .where(and(eq(messages.projectId, projectId), eq(messages.status, 'delivered'), ilike(messages.text, `%${q}%`)))
+        // Только групповой чат. Без фильтра по mode поиск доставал и личные
+        // диалоги людей с ассистентом — включая ЧУЖИЕ: инструмент описан как
+        // «вся история чата», и подразумевался общий чат, а mode='ai' туда
+        // попадал молча. Свою переписку с ассистентом ищет search_my_dialog.
+        .where(
+          and(
+            eq(messages.projectId, projectId),
+            eq(messages.mode, 'group'),
+            eq(messages.status, 'delivered'),
+            ilike(messages.text, `%${q}%`),
+          ),
+        )
         .orderBy(desc(messages.createdAt))
         .limit(20)
       if (!rows.length) return 'Nothing found.'
       return rows.map((r) => `[${r.msg.createdAt.toISOString().slice(0, 16)}] ${r.author?.name ?? 'AI'}: ${r.msg.text.slice(0, 300)}`).join('\n')
+    },
+    /**
+     * Поиск по собственному диалогу с ассистентом.
+     *
+     * В промпт уходит только недавняя часть переписки — остальное человек
+     * дотягивает через этот инструмент, вместо того чтобы платить за всю
+     * историю в каждом запросе.
+     *
+     * Строго свой диалог: те же две стороны, что и при его сборке (автор —
+     * я, либо ответ адресован мне). Чужие переписки с ассистентом сюда не
+     * попадают, даже внутри одного проекта.
+     */
+    search_my_dialog: async (args) => {
+      const q = String(args.query ?? '').trim()
+      if (!q) return 'Empty query.'
+      if (!actorUserId) return 'Not available.'
+      const rows = await db
+        .select({ msg: messages })
+        .from(messages)
+        .where(
+          and(
+            eq(messages.projectId, projectId),
+            eq(messages.mode, 'ai'),
+            sql`(${messages.authorId} = ${actorUserId} or ${messages.recipientId} = ${actorUserId})`,
+            ilike(messages.text, `%${q}%`),
+          ),
+        )
+        .orderBy(desc(messages.createdAt))
+        .limit(20)
+      if (!rows.length) return 'Nothing found in your earlier conversation.'
+      return rows
+        .map(
+          (r) =>
+            `[${r.msg.createdAt.toISOString().slice(0, 16)}] ${r.msg.authorId === actorUserId ? 'User' : 'You'}: ${r.msg.text.slice(0, 300)}`,
+        )
+        .join('\n')
     },
     list_files: async (args) => {
       const q = typeof args.query === 'string' ? args.query.trim() : ''

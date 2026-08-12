@@ -234,6 +234,15 @@ export async function completeWithTools(
      */
     images?: { mediaType: string; base64: string }[]
     user: string
+    /**
+     * Предыдущие ходы разговора — обычными ролями, а не склейкой в текст.
+     *
+     * Раньше история впечатывалась в opts.user одной строкой («OUR
+     * CONVERSATION SO FAR: …»). Модель хуже различала, где чья реплика, и —
+     * главное — ломался кеш промпта: запрос был уникален целиком, и вся
+     * история оплачивалась заново при каждом сообщении.
+     */
+    history?: { role: 'user' | 'assistant'; text: string }[]
     tools: ToolDef[]
     handlers: Record<string, ToolHandler>
     maxTokens?: number
@@ -288,7 +297,10 @@ export async function completeWithTools(
             { type: 'text', text: opts.user },
           ]
         : opts.user
-      const msgs: unknown[] = [{ role: 'user', content: userContent }]
+      const msgs: unknown[] = [
+        ...(opts.history ?? []).map((h) => ({ role: h.role, content: h.text })),
+        { role: 'user', content: userContent },
+      ]
       for (let i = 0; i < maxIter; i++) {
         const res = await fetch(`${p.baseUrl}/messages`, {
           method: 'POST',
@@ -364,6 +376,7 @@ export async function completeWithTools(
       : opts.user
     const msgs: unknown[] = [
       { role: 'system', content: opts.system },
+      ...(opts.history ?? []).map((h) => ({ role: h.role, content: h.text })),
       { role: 'user', content: openaiUser },
     ]
     for (let i = 0; i < maxIter; i++) {

@@ -102,8 +102,12 @@ export async function aiChatReply(
   const team = await buildTeamContext(projectId) // кто за что отвечает (SPEC §8.12)
   const { tools, handlers } = memoryTools(projectId, userId)
 
-  // контекст = история ЭТОГО ai-диалога (не групповой чат — его ИИ читает сам через read_chat)
-  const dialog = await db
+  // Контекст = история ЭТОГО ai-диалога (групповой чат ИИ читает сам, read_chat).
+  //
+  // Берём с запасом по количеству, а отбираем по ОБЪЁМУ: limit(20) считал
+  // штуки, и одно вставленное в чат простыней сообщение выносило остальные
+  // двадцать. Бюджет держит запрос предсказуемым по цене.
+  const raw = await db
     .select({ msg: messages })
     .from(messages)
     .where(
@@ -115,11 +119,24 @@ export async function aiChatReply(
       ),
     )
     .orderBy(desc(messages.createdAt))
-    .limit(20)
-  const dialogText = dialog
-    .reverse()
-    .map((r) => `${r.msg.authorId ? user?.name ?? 'User' : 'You'}: ${r.msg.text}`)
-    .join('\n')
+    .limit(40)
+
+  // ~6000 символов ≈ 2000 токенов на иврите и кириллице. Остальное человек
+  // дотягивает инструментом search_my_dialog — платим за это только когда
+  // действительно нужно, а не в каждом запросе.
+  const HISTORY_BUDGET = 6000
+  const MAX_ONE = 1500
+  const history: { role: 'user' | 'assistant'; text: string }[] = []
+  let used = 0
+  for (const r of raw) {
+    // Слишком длинную реплику усекаем с пометкой: молча обрезать хуже — модель
+    // считает, что видела всё, и уверенно отвечает по половине текста.
+    const full = r.msg.text ?? ''
+    const text = full.length > MAX_ONE ? `${full.slice(0, MAX_ONE)}… [truncated, use search_my_dialog for the full text]` : full
+    if (used + text.length > HISTORY_BUDGET) break
+    used += text.length
+    history.unshift({ role: r.msg.authorId === userId ? 'user' : 'assistant', text })
+  }
 
   return completeWithTools(cfg, {
     system: [
@@ -150,7 +167,8 @@ export async function aiChatReply(
       `CRITICAL: all PROJECT ARTIFACTS you create or edit — task titles & descriptions, resource names & descriptions, comments, sprint names — MUST be written in the project language (${lang}), regardless of the language the user asked in. Translate the user's intent into ${lang} for these. This applies to what you WRITE INTO the project, not to the reply you give the person.`,
       team,
       project.chatRules ? `Chat rules: "${project.chatRules}"` : '',
-      'Tools: read_chat, summaries & full-history search; files (list_files, attach_file_to_task, delete_file); task CRUD — create/update_task edit ANY task field (title, description, assignee, due date, estimate, priority, status, sprint); review_task (AI critique); sprints (list_sprints, create_sprint); task comments (add_task_comment writes ON BEHALF OF the user; list_task_comments reads them); resources (list/create/update/delete_resource, add_resource_secret); documents (list_documents, read_document, create_document, update_document, append_to_document, delete_document); project journal — list_notes/read_note search solutions, decisions and contradictions (scope=company searches the whole company), create_note/update_note write them ON BEHALF OF the user when asked to save or record something, note_to_task turns a note into a task; time tracking — start_timer/stop_timer/list_timers run the user\'s timer, log_time records work after the fact, time_report answers \"how much did I work\".',
+      'Your view of THIS conversation is limited to the recent turns. When the user refers to something discussed earlier and you do not see it — search_my_dialog finds it in your past conversation with them. Do not claim you do not remember without searching first.',
+      'Tools: read_chat, summaries & full-history search; search_my_dialog (your earlier turns with this person); files (list_files, attach_file_to_task, delete_file); task CRUD — create/update_task edit ANY task field (title, description, assignee, due date, estimate, priority, status, sprint); review_task (AI critique); sprints (list_sprints, create_sprint); task comments (add_task_comment writes ON BEHALF OF the user; list_task_comments reads them); resources (list/create/update/delete_resource, add_resource_secret); documents (list_documents, read_document, create_document, update_document, append_to_document, delete_document); project journal — list_notes/read_note search solutions, decisions and contradictions (scope=company searches the whole company), create_note/update_note write them ON BEHALF OF the user when asked to save or record something, note_to_task turns a note into a task; time tracking — start_timer/stop_timer/list_timers run the user\'s timer, log_time records work after the fact, time_report answers \"how much did I work\".',
       // Оформление ответа.
       //
       // Модель по умолчанию пишет сплошным текстом или, наоборот, вываливает
@@ -192,7 +210,10 @@ export async function aiChatReply(
     ]
       .filter(Boolean)
       .join('\n'),
-    user: `${dialogText ? `OUR CONVERSATION SO FAR:\n${dialogText}\n\n` : ''}USER'S MESSAGE:\n${userMessage}`,
+    // Только новое сообщение: предыдущие ходы уходят отдельными ролями в
+    // history, а не впечатываются сюда текстом.
+    user: userMessage,
+    history,
     tools,
     handlers,
     maxTokens: 1500,
