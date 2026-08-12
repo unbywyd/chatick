@@ -924,6 +924,101 @@ export const resourceViewers = pgTable(
  * значит рассыпать секреты по тексту, который читают все; ссылка на ресурс
  * оставляет право решать за самим ресурсом.
  */
+/**
+ * Что включено в проекте.
+ *
+ * Версии нужны не каждому: в проекте без релизов лишняя вкладка — шум.
+ * Отдельная таблица, а не колонка у проекта: функций со временем станет
+ * больше, и колонка на каждую превратила бы projects в свалку флагов.
+ */
+export const projectFeatures = pgTable(
+  'project_features',
+  {
+    id: id(),
+    projectId: text('project_id')
+      .notNull()
+      .references(() => projects.id, { onDelete: 'cascade' }),
+    /** Ключ функции: пока только 'releases'. Строка, а не енам — добавлять без миграции. */
+    feature: text('feature').notNull(),
+    enabledById: text('enabled_by_id').references(() => users.id, { onDelete: 'set null' }),
+    createdAt: createdAt(),
+  },
+  (t) => [uniqueIndex('project_features_unique').on(t.projectId, t.feature)],
+)
+
+/**
+ * Версии проекта: что и куда выкачено.
+ *
+ * Отвечает на вопрос, который сейчас задают голосом: «какая версия в проде».
+ *
+ * Статус НЕ синхронизируется со статусом задачи. У задачи свои четыре
+ * состояния, у версии — путь до магазина, и совпадают они только случайно:
+ * «review» у задачи это «команда смотрит», а не «Apple смотрит», и «done»
+ * наступает раньше, чем версия доедет до людей.
+ */
+export const releases = pgTable(
+  'releases',
+  {
+    id: id(),
+    projectId: text('project_id')
+      .notNull()
+      .references(() => projects.id, { onDelete: 'cascade' }),
+    /** «1.4.0» — как называет её команда, а не как пронумеровал сборщик. */
+    version: text('version').notNull(),
+    /** Ключ из BUILD_TYPES: ios | android | web | backend | desktop | other. */
+    buildType: text('build_type').notNull(),
+    /** Ключ стадии из набора этого типа сборки. */
+    status: text('status').notNull(),
+    /**
+     * АВТОР версии, не исполнитель.
+     *
+     * Кому поручено — живёт в связанной задаче и только там. Второе поле
+     * «ответственный» разошлось бы с первым при первом же переназначении.
+     */
+    ownerId: text('owner_id').references(() => users.id, { onDelete: 'set null' }),
+    /** Ссылка на сборку: Expo, GitHub, магазин — что угодно. Необязательна. */
+    referenceUrl: text('reference_url'),
+    /** Что нового — для команды, не для магазина. */
+    notes: text('notes'),
+    /** Когда доехало до людей: проставляется при переходе на конечную стадию. */
+    releasedAt: timestamp('released_at', { withTimezone: true }),
+    createdAt: createdAt(),
+    updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [
+    index('releases_project_idx').on(t.projectId),
+    // Сводка «что сейчас в проде» ходит именно так: проект + тип сборки.
+    index('releases_project_type_idx').on(t.projectId, t.buildType),
+  ],
+)
+
+/**
+ * Связь версии с задачами — необязательная с обеих сторон.
+ *
+ * Версия живёт без задачи: собрал и залил за две минуты, заводить под это
+ * задачу — бюрократия. Задача живёт без версии. А «подними в Google Play» на
+ * другого человека — уже настоящая задача, и таких у одной версии бывает
+ * несколько.
+ */
+export const taskReleases = pgTable(
+  'task_releases',
+  {
+    id: id(),
+    taskId: text('task_id')
+      .notNull()
+      .references(() => tasks.id, { onDelete: 'cascade' }),
+    releaseId: text('release_id')
+      .notNull()
+      .references(() => releases.id, { onDelete: 'cascade' }),
+    createdAt: createdAt(),
+  },
+  (t) => [
+    index('task_releases_task_idx').on(t.taskId),
+    index('task_releases_release_idx').on(t.releaseId),
+    uniqueIndex('task_releases_unique').on(t.taskId, t.releaseId),
+  ],
+)
+
 export const taskResources = pgTable(
   'task_resources',
   {

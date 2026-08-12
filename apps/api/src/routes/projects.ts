@@ -106,7 +106,7 @@ export const PROJECT_COLORS = [
   '#64748b', // slate
 ] as const
 
-export const PERMISSION_DOMAINS = ['tasks', 'files', 'resources', 'documents', 'notes'] as const
+export const PERMISSION_DOMAINS = ['tasks', 'files', 'resources', 'documents', 'notes', 'releases'] as const
 export type PermissionDomain = (typeof PERMISSION_DOMAINS)[number]
 
 // none < read < write < crud. write = создавать/менять свои, crud = + удалять/чужое.
@@ -134,6 +134,8 @@ export const PROJECT_PERMISSIONS = [
   'notes.read',
   'notes.write',
   'notes.delete',
+  'releases.read', // видеть вкладку и сводку «что сейчас в проде»
+  'releases.manage', // заводить версии и двигать стадии
   // legacy-алиасы (совместимость со старым кодом/данными)
   'credentials.read',
   'credentials.manage',
@@ -142,6 +144,8 @@ export type ProjectPermission = (typeof PROJECT_PERMISSIONS)[number]
 
 // действие → [домен, минимальный уровень]
 const ACTION_REQUIREMENT: Record<ProjectPermission, [PermissionDomain, PermissionLevel]> = {
+  'releases.read': ['releases', 'read'],
+  'releases.manage': ['releases', 'write'],
   'tasks.read': ['tasks', 'read'],
   'tasks.changeStatus': ['tasks', 'read'], // менять статус может любой с доступом на чтение задач
   'tasks.create': ['tasks', 'write'],
@@ -182,8 +186,13 @@ export function defaultDomainPermissions(role: 'owner' | 'admin' | 'member'): Do
   //
   // Уровень write даёт править ЛЮБУЮ задачу проекта; ограничение «чужое не
   // трогать» живёт отдельно, в canManageOwn: право и владение — разные вещи.
-  if (role === 'member') return { tasks: 'write', files: 'write', resources: 'read', documents: 'write', notes: 'write' }
-  return { tasks: 'crud', files: 'crud', resources: 'crud', documents: 'crud', notes: 'crud' }
+  //
+  // Версии участник ВИДИТ, но не двигает: «какая версия в проде» — вопрос,
+  // ради которого всё делалось, и закрывать ответ от команды бессмысленно.
+  // А выкатка и смена стадии — ответственность, её дают явно.
+  if (role === 'member')
+    return { tasks: 'write', files: 'write', resources: 'read', documents: 'write', notes: 'write', releases: 'read' }
+  return { tasks: 'crud', files: 'crud', resources: 'crud', documents: 'crud', notes: 'crud', releases: 'crud' }
 }
 
 /**
@@ -505,6 +514,51 @@ export async function projectRoleOf(projectId: string, userId: string) {
 }
 
 // Детали проекта (участник или company admin/manager)
+/**
+ * Что включено в проекте. Читают все участники: интерфейс по этому списку
+ * решает, показывать ли вкладку.
+ */
+projectsRoute.get('/:projectId/features', async (c) => {
+  const { sub } = c.get('session')
+  const projectId = c.req.param('projectId')
+  const project = await db.query.projects.findFirst({ where: eq(projects.id, projectId) })
+  if (!project) return c.json({ error: 'Not found' }, 404)
+
+  const membership = await projectRoleOf(projectId, sub)
+  const companyRole = await companyRoleOf(project.companyId, sub)
+  if (!membership && !canCreateProjects(companyRole)) return c.json({ error: 'Forbidden' }, 403)
+
+  const { enabledFeatures } = await import('../lib/features.js')
+  // canManage отдаём отдельно: список бывает пустым ровно тогда, когда кнопка
+  // и нужна, и по одному списку интерфейс не понял бы, показывать ли тумблер.
+  const canManage =
+    membership?.role === 'owner' || membership?.role === 'admin' || canCreateProjects(companyRole)
+  return c.json({ features: await enabledFeatures(projectId), canManage })
+})
+
+/** Включить или выключить функцию. Решение о составе проекта — за его начальством. */
+projectsRoute.post('/:projectId/features', async (c) => {
+  const { sub } = c.get('session')
+  const projectId = c.req.param('projectId')
+  const project = await db.query.projects.findFirst({ where: eq(projects.id, projectId) })
+  if (!project) return c.json({ error: 'Not found' }, 404)
+
+  // Та же тройка, что и везде: начальство проекта либо админ компании —
+  // роль в проекте не вся правда о человеке.
+  const membership = await projectRoleOf(projectId, sub)
+  const companyRole = await companyRoleOf(project.companyId, sub)
+  const allowed = membership?.role === 'owner' || membership?.role === 'admin' || canCreateProjects(companyRole)
+  if (!allowed) return c.json({ error: 'Only project owners and admins can change features' }, 403)
+
+  const body = (await c.req.json().catch(() => ({}))) as Record<string, unknown>
+  const feature = String(body.feature ?? '')
+  if (feature !== 'releases') return c.json({ error: 'Unknown feature' }, 400)
+
+  const { setFeature, enabledFeatures } = await import('../lib/features.js')
+  await setFeature(projectId, 'releases', body.enabled === true, sub)
+  return c.json({ features: await enabledFeatures(projectId) })
+})
+
 projectsRoute.get('/:projectId', async (c) => {
   const { sub } = c.get('session')
   const projectId = c.req.param('projectId')
