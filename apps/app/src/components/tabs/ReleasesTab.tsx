@@ -426,13 +426,48 @@ function ReleasesTable({
                 <td className="whitespace-nowrap px-2 py-1.5 align-middle text-xs text-muted-foreground">
                   {r.buildTypeLabel}
                 </td>
-                <td className="hidden whitespace-nowrap px-2 py-1.5 align-middle text-xs text-muted-foreground md:table-cell">
-                  {r.buildProfile ? t(`releases.profile.${r.buildProfile}`, { defaultValue: r.buildProfile }) : '—'}
+                {/* Профиль правится на месте: он меняется чаще, чем номер
+                    версии, и ради него ходить на страницу незачем. */}
+                <td className="hidden whitespace-nowrap align-middle md:table-cell" onClick={(e) => e.stopPropagation()}>
+                  <DropdownMenu>
+                    <DropdownMenuTrigger asChild>
+                      <button
+                        disabled={!canManage}
+                        title={canManage ? t('releases.buildProfile') : undefined}
+                        className={cn(
+                          'inline-flex w-full items-center gap-1 px-2 py-1.5 text-start text-xs text-muted-foreground',
+                          canManage ? 'cursor-pointer hover:bg-accent/60' : 'cursor-default',
+                        )}
+                      >
+                        {r.buildProfile
+                          ? t(`releases.profile.${r.buildProfile}`, { defaultValue: r.buildProfile })
+                          : '—'}
+                        {canManage && <ChevronDown className="size-3 shrink-0" />}
+                      </button>
+                    </DropdownMenuTrigger>
+                    <DropdownMenuContent align="start">
+                      {BUILD_PROFILES.map((p) => (
+                        <DropdownMenuCheckItem
+                          key={p}
+                          checked={p === r.buildProfile}
+                          onSelect={() => onPatch(r.id, { buildProfile: p })}
+                        >
+                          {t(`releases.profile.${p}`, { defaultValue: p })}
+                        </DropdownMenuCheckItem>
+                      ))}
+                      <DropdownMenuCheckItem
+                        checked={!r.buildProfile}
+                        onSelect={() => onPatch(r.id, { buildProfile: null })}
+                      >
+                        {t('releases.profileNone')}
+                      </DropdownMenuCheckItem>
+                    </DropdownMenuContent>
+                  </DropdownMenu>
                 </td>
                 {/* Стадия правится на месте, но через окно с комментарием:
                     он обязателен, и молча сменить стадию нельзя — иначе
                     пропадёт ответ на «почему версия неделю висит». */}
-                <td className="whitespace-nowrap align-middle">
+                <td className="whitespace-nowrap align-middle" onClick={(e) => e.stopPropagation()}>
                   <DropdownMenu>
                     <DropdownMenuTrigger asChild>
                       <button
@@ -477,7 +512,7 @@ function ReleasesTable({
                   </DropdownMenu>
                 </td>
                 {/* Задачи кликабельны: связь без перехода — просто надпись. */}
-                <td className="px-2 py-1.5 align-middle">
+                <td className="px-2 py-1.5 align-middle" onClick={(e) => e.stopPropagation()}>
                   <div className="flex flex-wrap gap-1">
                     {r.tasks.map((task) => (
                       <button
@@ -634,6 +669,9 @@ function EditField({
       <PopoverTrigger asChild>
         <button
           title={t('common.edit')}
+          // Карандаш гасит клик сам: строка целиком ведёт на версию, и правка
+          // номера не должна уводить со списка.
+          onClick={(e) => e.stopPropagation()}
           className="shrink-0 text-muted-foreground opacity-0 transition-opacity hover:text-foreground group-hover/row:opacity-100"
         >
           <Pencil className="size-3" />

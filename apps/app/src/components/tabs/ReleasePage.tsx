@@ -10,6 +10,12 @@ import { Avatar } from '@/components/ui/avatar'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Combobox } from '@/components/ui/combobox'
+import {
+  DropdownMenu,
+  DropdownMenuTrigger,
+  DropdownMenuContent,
+  DropdownMenuCheckItem,
+} from '@/components/ui/dropdown-menu'
 
 // Страница версии: что это, где сейчас и как сюда пришло.
 //
@@ -19,6 +25,9 @@ import { Combobox } from '@/components/ui/combobox'
 // можно поделиться — у окна нет своего адреса.
 
 type Stage = { key: string; label: string; live?: boolean; hint?: string }
+
+/** Те же три профиля, что и в диалогах: список один, чтобы не разошёлся. */
+const BUILD_PROFILES = ['development', 'preview', 'production'] as const
 
 type ReleaseDetails = {
   id: string
@@ -238,17 +247,31 @@ export function ReleasePage({ projectId, canManage }: { projectId: string; canMa
             <span className={cn(!r.buildProfile && 'text-muted-foreground')}>
               {r.buildProfile ? t(`releases.profile.${r.buildProfile}`, { defaultValue: r.buildProfile }) : '—'}
             </span>
+            {/* Список, а не свободный ввод: профилей ровно три, и «prod»
+                вместо «production» разошлось бы со столбцом в таблице. */}
             {canManage && (
-              <EditPopover
-                title={t('releases.buildProfile')}
+              <EditChoice
                 value={r.buildProfile ?? ''}
-                placeholder="production"
-                onSave={(v) => patch.mutate({ buildProfile: v.trim() || null })}
+                options={BUILD_PROFILES.map((p) => ({
+                  value: p,
+                  label: t(`releases.profile.${p}`, { defaultValue: p }),
+                }))}
+                clearLabel={t('releases.profileNone')}
+                onSave={(v) => patch.mutate({ buildProfile: v || null })}
               />
             )}
           </div>
         </Row>
-        <Row label={t('releases.owner')}>{r.owner?.name ?? '—'}</Row>
+        <Row label={t('releases.owner')}>
+          {r.owner ? (
+            <span className="inline-flex items-center gap-1.5">
+              <Avatar name={r.owner.name} src={r.owner.avatarUrl} size={20} />
+              <span className="truncate">{r.owner.name}</span>
+            </span>
+          ) : (
+            '—'
+          )}
+        </Row>
       </dl>
 
       <section className="mb-4 rounded-lg border p-3">
@@ -353,7 +376,9 @@ function Row({ label, children }: { label: string; children: React.ReactNode }) 
   return (
     <div className="flex min-w-0 flex-col">
       <dt className="text-xs text-muted-foreground">{label}</dt>
-      <dd className="min-w-0 truncate">{children}</dd>
+      {/* Без truncate на самом dd: overflow:hidden срезает кольцо фокуса у
+          поля, которое здесь раскрывается. Длинный текст обрезаем внутри. */}
+      <dd className="min-w-0">{children}</dd>
     </div>
   )
 }
@@ -417,5 +442,46 @@ function EditPopover({
         {t('common.cancel')}
       </Button>
     </span>
+  )
+}
+
+/**
+ * Выбор из готового списка прямо в строке.
+ *
+ * Отдельно от EditPopover: там свободный текст (ссылка, заметки), здесь —
+ * закрытый набор. Ввод руками означал бы «prod» у одного и «production» у
+ * другого, а по этому полю потом сортируют и фильтруют.
+ */
+function EditChoice({
+  value,
+  options,
+  clearLabel,
+  onSave,
+}: {
+  value: string
+  options: { value: string; label: string }[]
+  clearLabel: string
+  onSave: (next: string) => void
+}) {
+  const { t } = useTranslation()
+  const [open, setOpen] = useState(false)
+  return (
+    <DropdownMenu open={open} onOpenChange={setOpen}>
+      <DropdownMenuTrigger asChild>
+        <button title={t('common.edit')} className="shrink-0 text-muted-foreground hover:text-foreground">
+          <Pencil className="size-3" />
+        </button>
+      </DropdownMenuTrigger>
+      <DropdownMenuContent align="start">
+        {options.map((o) => (
+          <DropdownMenuCheckItem key={o.value} checked={o.value === value} onSelect={() => onSave(o.value)}>
+            {o.label}
+          </DropdownMenuCheckItem>
+        ))}
+        <DropdownMenuCheckItem checked={!value} onSelect={() => onSave('')}>
+          {clearLabel}
+        </DropdownMenuCheckItem>
+      </DropdownMenuContent>
+    </DropdownMenu>
   )
 }

@@ -1645,6 +1645,7 @@
       "development": "Development",
       "preview": "Preview",
       "production": "Production"
-    }
+    },
+    "profileNone": "Not set"
   }
 }
