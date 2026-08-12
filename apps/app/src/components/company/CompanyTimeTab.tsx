@@ -5,6 +5,7 @@ import { useTranslation } from 'react-i18next'
 import { toast } from 'sonner'
 import { Download, Search, X } from 'lucide-react'
 import { api } from '@/lib/api'
+import { ProjectBadge } from '@/components/ui/project-badge'
 import { Avatar } from '@/components/ui/avatar'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -22,7 +23,7 @@ type Person = {
   name: string
   avatarUrl: string | null
   minutes: number
-  projects: { id: string; name: string; minutes: number }[]
+  projects: { id: string; name: string; minutes: number; color: string | null; logoUrl: string | null }[]
   days: { day: string; minutes: number }[]
   /** рабочих дней в периоде — по ним, а не по календарным, считается среднее */
   daysWorked: number
@@ -280,8 +281,12 @@ export function CompanyTimeTab({ companyId }: { companyId: string }) {
 
               {/* разбивка по проектам: на какой проект списывать часы */}
               <ul className="mt-2 space-y-0.5 border-s ps-3 text-xs">
+                {/* Значок проекта: без него это просто столбик текста, а
+                    названия здесь длинные и на трёх языках — глазами по ним
+                    не пройти. Цвет узнаётся раньше, чем прочитано имя. */}
                 {p.projects.map((pr) => (
                   <li key={pr.id} className="flex items-center gap-2">
+                    <ProjectBadge name={pr.name} color={pr.color} logoUrl={pr.logoUrl} size={14} />
                     <span className="min-w-0 flex-1 truncate text-muted-foreground">{pr.name}</span>
                     <span className="font-mono tabular-nums text-muted-foreground">{formatDuration(pr.minutes)}</span>
                   </li>

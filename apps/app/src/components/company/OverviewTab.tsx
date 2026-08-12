@@ -63,7 +63,18 @@ const CHART_STYLE = {
   border: '1px solid var(--border)',
   borderRadius: '0.5rem',
   fontSize: '0.75rem',
+  color: 'var(--popover-foreground)',
 }
+
+/**
+ * Цвет текста внутри подсказки.
+ *
+ * Recharts красит значение в цвет самого столбика, а столбики у нас лаймовые:
+ * на белой подложке подсказки контраст 1.2 — цифру не прочитать. Столбик и так
+ * виден рядом, цвет в тексте ничего не добавляет.
+ */
+const CHART_ITEM_STYLE = { color: 'var(--popover-foreground)' }
+const CHART_LABEL_STYLE = { color: 'var(--muted-foreground)' }
 
 export function OverviewTab({
   companyId,
@@ -132,171 +143,6 @@ export function OverviewTab({
         <Metric icon={Users} label={t('overview.people')} value={String(totals?.people ?? 0)} />
       </div>
 
-      {/* Ритм: по неделям видно, набирает компания обороты или затухает */}
-      <section className="rounded-lg border bg-card p-4">
-        <h2 className="mb-3 text-sm font-semibold">{t('overview.rhythm')}</h2>
-        {d.weeks.length === 0 ? (
-          <p className="py-8 text-center text-sm text-muted-foreground">{t('time.noData')}</p>
-        ) : (
-          <ChartBox height={180}>
-            <AreaChart data={d.weeks} margin={{ top: 8, right: 8, bottom: 0, left: 0 }}>
-              <defs>
-                <linearGradient id="rhythm" x1="0" y1="0" x2="0" y2="1">
-                  <stop offset="0%" stopColor="var(--brand)" stopOpacity={0.5} />
-                  <stop offset="100%" stopColor="var(--brand)" stopOpacity={0.05} />
-                </linearGradient>
-              </defs>
-              <CartesianGrid vertical={false} strokeDasharray="3 3" className="stroke-border" />
-              <XAxis
-                dataKey="week"
-                tickFormatter={(w: string) => `${w.slice(8)}.${w.slice(5, 7)}`}
-                tickLine={false}
-                axisLine={false}
-                className="text-[10px]"
-                stroke="currentColor"
-                opacity={0.5}
-              />
-              <YAxis
-                tickFormatter={(m: number) => String(Math.round(m / 60))}
-                tickLine={false}
-                axisLine={false}
-                width={32}
-                allowDecimals={false}
-                className="text-[10px]"
-                stroke="currentColor"
-                opacity={0.5}
-              />
-              <Tooltip
-                contentStyle={CHART_STYLE}
-                labelFormatter={(w) =>
-                  t('overview.weekOf', {
-                    date: new Date(`${String(w)}T00:00:00`).toLocaleDateString(i18n.language, {
-                      day: 'numeric',
-                      month: 'long',
-                    }),
-                  })
-                }
-                formatter={(m) => [formatDuration(Number(m)), t('time.total')]}
-              />
-              <Area type="monotone" dataKey="minutes" stroke="var(--brand)" strokeWidth={2} fill="url(#rhythm)" />
-            </AreaChart>
-          </ChartBox>
-        )}
-      </section>
-
-      {/* Обе секции во всю ширину, а не в две колонки.
-          Столбики здесь горизонтальные, и подпись — это название проекта или
-          имя человека: в половинной колонке они обрезаются, и график перестаёт
-          отвечать на свой же вопрос «куда уходит время». */}
-      <div className="grid gap-4">
-        {/* Куда уходит время: столбики в цветах проектов — узнаются с одного взгляда */}
-        <section className="rounded-lg border bg-card p-4">
-          <h2 className="mb-3 text-sm font-semibold">{t('overview.byProject')}</h2>
-          <ChartBox height={Math.max(160, d.projects.length * 44)}>
-            <BarChart data={d.projects} layout="vertical" margin={{ top: 0, right: 8, bottom: 0, left: 0 }}>
-              <CartesianGrid horizontal={false} strokeDasharray="3 3" className="stroke-border" />
-              <XAxis
-                type="number"
-                tickFormatter={(m: number) => String(Math.round(m / 60))}
-                tickLine={false}
-                axisLine={false}
-                className="text-[10px]"
-                stroke="currentColor"
-                opacity={0.5}
-              />
-              {/*
-                Названия проектов бывают двуязычными и длинными — «פשוט לגעת -
-                Simply Touch (רון דגן & עמית נוה)». Recharts переносит такие на
-                три строки, они наезжают на соседние и обрезаются сверху.
-                Расширять ось бессмысленно: она съест сам график, а название
-                всё равно не влезет. Поэтому одна строка с многоточием, а
-                целиком имя показывает подсказка.
-              */}
-              <YAxis
-                type="category"
-                dataKey="name"
-                width={220}
-                tickLine={false}
-                axisLine={false}
-                className="text-[10px]"
-                stroke="currentColor"
-                opacity={0.7}
-                interval={0}
-                tick={{ width: 132 }}
-                // Обрезаем позже: график во всю ширину, места под подпись
-                // вдвое больше, чем было в половинной колонке.
-                tickFormatter={(name: string) => (name.length > 34 ? `${name.slice(0, 33)}…` : name)}
-              />
-              <Tooltip
-                cursor={{ fill: 'currentColor', opacity: 0.06 }}
-                contentStyle={CHART_STYLE}
-                // Метка обрезана — подсказка обязана давать полное имя, иначе
-                // два похожих проекта не различить.
-                labelFormatter={(_l, p) => (p?.[0]?.payload as { name?: string } | undefined)?.name ?? ''}
-                formatter={(m) => [formatDuration(Number(m)), t('time.total')]}
-              />
-              {/* Столбик ведёт в проект — как и строка списка ниже. Человек
-                  видит на графике, куда ушло время, и логично тычет туда же;
-                  требовать после этого найти проект в списке — лишний шаг. */}
-              <Bar
-                dataKey="minutes"
-                radius={[0, 4, 4, 0]}
-                maxBarSize={28}
-                cursor={onOpenProject ? 'pointer' : undefined}
-                onClick={(data: unknown) => {
-                  const id = (data as { payload?: { id?: string } })?.payload?.id
-                  if (id) onOpenProject?.(id)
-                }}
-              >
-                {d.projects.map((p) => (
-                  <Cell key={p.id} fill={p.color || 'var(--brand)'} />
-                ))}
-              </Bar>
-            </BarChart>
-          </ChartBox>
-        </section>
-
-        {/* Кто тянет: распределение нагрузки между людьми */}
-        <section className="rounded-lg border bg-card p-4">
-          <h2 className="mb-3 text-sm font-semibold">{t('overview.byPerson')}</h2>
-          {!d.topPeople.length ? (
-            <p className="py-8 text-center text-sm text-muted-foreground">{t('time.noData')}</p>
-          ) : (
-            <ul className="space-y-2">
-              {d.topPeople.map((p) => {
-                const max = Math.max(1, ...d.topPeople.map((x) => x.minutes))
-                return (
-                  <li key={p.userId} className="flex items-center gap-3">
-                    <Avatar name={p.name} src={p.avatarUrl} size={24} />
-                    {/* Шире, чем было: секция теперь во всю ширину, и резать
-                        имя на 32 символах больше незачем. */}
-                    <span className="w-48 shrink-0 truncate text-sm">{p.name}</span>
-                    <span className="h-2 flex-1 overflow-hidden rounded-full bg-secondary">
-                      <span className="block h-full rounded-full bg-brand" style={{ width: `${(p.minutes / max) * 100}%` }} />
-                    </span>
-                    <span className="w-16 shrink-0 text-end font-mono text-sm tabular-nums">
-                      {formatDuration(p.minutes)}
-                    </span>
-                    {/* Отчёт за тот же период, что на экране: собирать его
-                        заново на другой вкладке — лишняя работа. */}
-                    {onOpenReport && (
-                      <button
-                        onClick={() => onOpenReport(p.userId, period)}
-                        title={t('overview.reportFor', { name: p.name })}
-                        className="shrink-0 rounded p-1 text-muted-foreground hover:bg-accent hover:text-foreground"
-                      >
-                        <Download className="size-3.5" />
-                      </button>
-                    )}
-                  </li>
-                )
-              })}
-            </ul>
-          )}
-        </section>
-      </div>
-
-      {/* Проекты таблицей: прогресс, просрочка, часы и активность рядом */}
       <section className="rounded-lg border bg-card p-4">
         {/* Поиск появляется, когда список перестаёт читаться с одного взгляда.
             При пяти проектах поле только мешает, при двадцати — без него
@@ -387,6 +233,176 @@ export function OverviewTab({
           ))}
         </ul>
       </section>
+
+      {/* Ритм: по неделям видно, набирает компания обороты или затухает */}
+      <section className="rounded-lg border bg-card p-4">
+        <h2 className="mb-3 text-sm font-semibold">{t('overview.rhythm')}</h2>
+        {d.weeks.length === 0 ? (
+          <p className="py-8 text-center text-sm text-muted-foreground">{t('time.noData')}</p>
+        ) : (
+          <ChartBox height={180}>
+            <AreaChart data={d.weeks} margin={{ top: 8, right: 8, bottom: 0, left: 0 }}>
+              <defs>
+                <linearGradient id="rhythm" x1="0" y1="0" x2="0" y2="1">
+                  <stop offset="0%" stopColor="var(--brand)" stopOpacity={0.5} />
+                  <stop offset="100%" stopColor="var(--brand)" stopOpacity={0.05} />
+                </linearGradient>
+              </defs>
+              <CartesianGrid vertical={false} strokeDasharray="3 3" className="stroke-border" />
+              <XAxis
+                dataKey="week"
+                tickFormatter={(w: string) => `${w.slice(8)}.${w.slice(5, 7)}`}
+                tickLine={false}
+                axisLine={false}
+                className="text-[10px]"
+                stroke="currentColor"
+                opacity={0.5}
+              />
+              <YAxis
+                tickFormatter={(m: number) => String(Math.round(m / 60))}
+                tickLine={false}
+                axisLine={false}
+                width={32}
+                allowDecimals={false}
+                className="text-[10px]"
+                stroke="currentColor"
+                opacity={0.5}
+              />
+              <Tooltip
+                contentStyle={CHART_STYLE}
+                itemStyle={CHART_ITEM_STYLE}
+                labelStyle={CHART_LABEL_STYLE}
+                labelFormatter={(w) =>
+                  t('overview.weekOf', {
+                    date: new Date(`${String(w)}T00:00:00`).toLocaleDateString(i18n.language, {
+                      day: 'numeric',
+                      month: 'long',
+                    }),
+                  })
+                }
+                formatter={(m) => [formatDuration(Number(m)), t('time.total')]}
+              />
+              <Area type="monotone" dataKey="minutes" stroke="var(--brand)" strokeWidth={2} fill="url(#rhythm)" />
+            </AreaChart>
+          </ChartBox>
+        )}
+      </section>
+
+      {/* Обе секции во всю ширину, а не в две колонки.
+          Столбики здесь горизонтальные, и подпись — это название проекта или
+          имя человека: в половинной колонке они обрезаются, и график перестаёт
+          отвечать на свой же вопрос «куда уходит время». */}
+      <div className="grid gap-4">
+        {/* Куда уходит время: столбики в цветах проектов — узнаются с одного взгляда */}
+        <section className="rounded-lg border bg-card p-4">
+          <h2 className="mb-3 text-sm font-semibold">{t('overview.byProject')}</h2>
+          <ChartBox height={Math.max(160, d.projects.length * 44)}>
+            <BarChart data={d.projects} layout="vertical" margin={{ top: 0, right: 8, bottom: 0, left: 0 }}>
+              <CartesianGrid horizontal={false} strokeDasharray="3 3" className="stroke-border" />
+              <XAxis
+                type="number"
+                tickFormatter={(m: number) => String(Math.round(m / 60))}
+                tickLine={false}
+                axisLine={false}
+                className="text-[10px]"
+                stroke="currentColor"
+                opacity={0.5}
+              />
+              {/*
+                Названия проектов бывают двуязычными и длинными — «פשוט לגעת -
+                Simply Touch (רון דגן & עמית נוה)». Recharts переносит такие на
+                три строки, они наезжают на соседние и обрезаются сверху.
+                Расширять ось бессмысленно: она съест сам график, а название
+                всё равно не влезет. Поэтому одна строка с многоточием, а
+                целиком имя показывает подсказка.
+              */}
+              <YAxis
+                type="category"
+                dataKey="name"
+                width={220}
+                tickLine={false}
+                axisLine={false}
+                className="text-[10px]"
+                stroke="currentColor"
+                opacity={0.7}
+                interval={0}
+                tick={{ width: 132 }}
+                // Обрезаем позже: график во всю ширину, места под подпись
+                // вдвое больше, чем было в половинной колонке.
+                tickFormatter={(name: string) => (name.length > 34 ? `${name.slice(0, 33)}…` : name)}
+              />
+              <Tooltip
+                cursor={{ fill: 'currentColor', opacity: 0.06 }}
+                contentStyle={CHART_STYLE}
+                itemStyle={CHART_ITEM_STYLE}
+                labelStyle={CHART_LABEL_STYLE}
+                // Метка обрезана — подсказка обязана давать полное имя, иначе
+                // два похожих проекта не различить.
+                labelFormatter={(_l, p) => (p?.[0]?.payload as { name?: string } | undefined)?.name ?? ''}
+                formatter={(m) => [formatDuration(Number(m)), t('time.total')]}
+              />
+              {/* Столбик ведёт в проект — как и строка списка ниже. Человек
+                  видит на графике, куда ушло время, и логично тычет туда же;
+                  требовать после этого найти проект в списке — лишний шаг. */}
+              <Bar
+                dataKey="minutes"
+                radius={[0, 4, 4, 0]}
+                maxBarSize={28}
+                cursor={onOpenProject ? 'pointer' : undefined}
+                onClick={(data: unknown) => {
+                  const id = (data as { payload?: { id?: string } })?.payload?.id
+                  if (id) onOpenProject?.(id)
+                }}
+              >
+                {d.projects.map((p) => (
+                  <Cell key={p.id} fill={p.color || 'var(--brand)'} />
+                ))}
+              </Bar>
+            </BarChart>
+          </ChartBox>
+        </section>
+
+        {/* Кто тянет: распределение нагрузки между людьми */}
+        <section className="rounded-lg border bg-card p-4">
+          <h2 className="mb-3 text-sm font-semibold">{t('overview.byPerson')}</h2>
+          {!d.topPeople.length ? (
+            <p className="py-8 text-center text-sm text-muted-foreground">{t('time.noData')}</p>
+          ) : (
+            <ul className="space-y-2">
+              {d.topPeople.map((p) => {
+                const max = Math.max(1, ...d.topPeople.map((x) => x.minutes))
+                return (
+                  <li key={p.userId} className="flex items-center gap-3">
+                    <Avatar name={p.name} src={p.avatarUrl} size={24} />
+                    {/* Шире, чем было: секция теперь во всю ширину, и резать
+                        имя на 32 символах больше незачем. */}
+                    <span className="w-48 shrink-0 truncate text-sm">{p.name}</span>
+                    <span className="h-2 flex-1 overflow-hidden rounded-full bg-secondary">
+                      <span className="block h-full rounded-full bg-brand" style={{ width: `${(p.minutes / max) * 100}%` }} />
+                    </span>
+                    <span className="w-16 shrink-0 text-end font-mono text-sm tabular-nums">
+                      {formatDuration(p.minutes)}
+                    </span>
+                    {/* Отчёт за тот же период, что на экране: собирать его
+                        заново на другой вкладке — лишняя работа. */}
+                    {onOpenReport && (
+                      <button
+                        onClick={() => onOpenReport(p.userId, period)}
+                        title={t('overview.reportFor', { name: p.name })}
+                        className="shrink-0 rounded p-1 text-muted-foreground hover:bg-accent hover:text-foreground"
+                      >
+                        <Download className="size-3.5" />
+                      </button>
+                    )}
+                  </li>
+                )
+              })}
+            </ul>
+          )}
+        </section>
+      </div>
+
+      {/* Проекты таблицей: прогресс, просрочка, часы и активность рядом */}
     </div>
   )
 }

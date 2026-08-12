@@ -478,7 +478,12 @@ function CompanyHome({
 
   return (
     <div className="space-y-6">
-      <nav className="flex gap-1 border-b pb-0">
+      {/* Липкие табы: страница компании длинная (сводка, графики, списки), и
+          переключиться, не прокрутив её обратно наверх, было нельзя.
+          Фон обязателен — иначе содержимое просвечивает сквозь них при
+          прокрутке. -mx-6/px-6 компенсируют отступ страницы, чтобы полоска
+          снизу шла от края до края. */}
+      <nav className="sticky top-0 z-20 -mx-6 -mt-8 flex gap-1 overflow-x-auto border-b bg-background px-6 pb-0 pt-8">
         {tabs.map((key) => (
           <button
             key={key}

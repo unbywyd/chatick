@@ -63,6 +63,10 @@ timeCompanyRoute.get(
         avatarUrl: users.avatarUrl,
         projectId: projects.id,
         projectName: projects.name,
+        // Значок проекта: в разбивке по людям проекты различают по цвету, а
+        // не вчитываясь в длинные названия на трёх языках.
+        projectColor: projects.color,
+        projectLogoUrl: projects.logoUrl,
         minutes,
         entries: sql<number>`count(*)::int`,
       })
@@ -117,11 +121,17 @@ timeCompanyRoute.get(
     }
 
     // сворачиваем в людей с разбивкой по проектам: так читают отчёт
-    const byUser = new Map<string, { userId: string; name: string; avatarUrl: string | null; minutes: number; projects: { id: string; name: string; minutes: number }[] }>()
+    const byUser = new Map<string, { userId: string; name: string; avatarUrl: string | null; minutes: number; projects: { id: string; name: string; minutes: number; color: string | null; logoUrl: string | null }[] }>()
     for (const r of rows) {
       const entry = byUser.get(r.userId) ?? { userId: r.userId, name: r.userName, avatarUrl: r.avatarUrl, minutes: 0, projects: [] }
       entry.minutes += r.minutes
-      entry.projects.push({ id: r.projectId, name: r.projectName, minutes: r.minutes })
+      entry.projects.push({
+        id: r.projectId,
+        name: r.projectName,
+        minutes: r.minutes,
+        color: r.projectColor,
+        logoUrl: r.projectLogoUrl,
+      })
       byUser.set(r.userId, entry)
     }
 

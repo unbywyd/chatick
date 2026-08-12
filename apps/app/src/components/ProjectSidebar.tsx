@@ -11,6 +11,7 @@ import { ProfileMenu } from '@/components/ProfileMenu'
 import { NotificationBell } from '@/components/NotificationBell'
 import { TimerControl } from '@/components/time/TimerControl'
 import { ProjectBadge } from '@/components/ui/project-badge'
+import { CompanyBrand } from '@/components/CompanyBrand'
 import { Input } from '@/components/ui/input'
 
 // Постоянный список проектов = список чатов (SPEC §8.29).
@@ -153,9 +154,15 @@ export function ProjectSidebar({
           <button
             onClick={() => navigate(`/start/${company?.id ?? ''}`)}
             title={company?.name ?? t('sidebar.companySettings')}
-            className="rounded-md p-0.5 opacity-80 transition-opacity hover:opacity-100"
+            className="grid size-9 place-items-center overflow-hidden rounded-md transition-opacity hover:opacity-80"
           >
-            <ProjectBadge name={company?.name ?? '?'} logoUrl={company?.logoUrl} size={28} />
+            {company?.logoUrl ? (
+              <img src={company.logoUrl} alt="" className="no-zoom size-9 rounded-md object-cover" />
+            ) : (
+              <span className="grid size-9 place-items-center rounded-md bg-secondary text-sm font-semibold text-secondary-foreground">
+                {(company?.name ?? '?').trim().charAt(0).toUpperCase()}
+              </span>
+            )}
           </button>
           {/* колокольчик и профиль живут только здесь: в навбаре проекта они
               дублировались, а сайдбар виден на любой вкладке */}
@@ -171,14 +178,19 @@ export function ProjectSidebar({
       {/* Наверху — таймер: его трогают чаще всего остального в сайдбаре, и
           место у самого края самое дешёвое по движению мыши.
           Компания переехала вниз: туда возвращаются, а не работают в ней. */}
+      {/* Поиск в самой шапке, рядом с кнопкой сворачивания. Таймер — строкой
+          ниже, ровно там же, где кнопка «плей» в свёрнутом сайдбаре: при
+          переключении режимов она остаётся на одной линии и не прыгает. */}
       <div className="flex items-center gap-2 border-b px-2 py-2">
-        {activeId ? (
-          <div className="min-w-0 flex-1">
-            <TimerControl collapsed={false} />
-          </div>
-        ) : (
-          <span className="min-w-0 flex-1 truncate px-1 text-sm font-medium">{company?.name}</span>
-        )}
+        <div className="relative min-w-0 flex-1">
+          <Search className="pointer-events-none absolute start-2.5 top-1/2 size-3.5 -translate-y-1/2 text-muted-foreground" />
+          <Input
+            value={q}
+            onChange={(e) => setQ(e.target.value)}
+            placeholder={t('sidebar.search')}
+            className="h-8 ps-8 text-sm"
+          />
+        </div>
         <button
           onClick={toggleCollapsed}
           title={t('sidebar.collapse')}
@@ -188,17 +200,11 @@ export function ProjectSidebar({
         </button>
       </div>
 
-      <div className="p-2">
-        <div className="relative">
-          <Search className="pointer-events-none absolute start-2.5 top-1/2 size-3.5 -translate-y-1/2 text-muted-foreground" />
-          <Input
-            value={q}
-            onChange={(e) => setQ(e.target.value)}
-            placeholder={t('sidebar.search')}
-            className="h-8 ps-8 text-sm"
-          />
+      {activeId && (
+        <div className="border-b px-2 py-2">
+          <TimerControl collapsed={false} />
         </div>
-      </div>
+      )}
 
       <ul className="min-h-0 flex-1 overflow-y-auto px-1 pb-2">
         {projects.isLoading && <p className="px-3 py-2 text-sm text-muted-foreground">…</p>}
@@ -269,13 +275,14 @@ export function ProjectSidebar({
           права на создание упиралась в отказ. Возврат в компанию — то, что
           отсюда действительно нужно, и в свёрнутом виде его не было вовсе. */}
       <div className="flex items-center gap-2 border-t p-2">
+        {/* CompanyBrand, а не мелкий круглый значок: логотип и название —
+            это лицо компании, и люди хотят видеть их, а не кружок 18px. */}
         <button
           onClick={() => navigate(`/start/${company?.id ?? ''}`)}
           title={t('sidebar.companySettings')}
-          className="flex min-w-0 flex-1 items-center gap-2 rounded-md px-2 py-1.5 text-xs text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
+          className="flex min-w-0 flex-1 items-center rounded-md px-2 py-1.5 transition-colors hover:bg-accent"
         >
-          <ProjectBadge name={company?.name ?? '?'} logoUrl={company?.logoUrl} size={18} />
-          <span className="truncate">{company?.name ?? t('sidebar.companySettings')}</span>
+          <CompanyBrand name={company?.name} logoUrl={company?.logoUrl} />
         </button>
         {/* тот же аватар, что в шапке, ведёт себя одинаково: открывает меню
             профиля. Раньше отсюда уводило на /connect — разное поведение у

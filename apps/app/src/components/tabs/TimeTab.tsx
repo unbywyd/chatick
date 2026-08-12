@@ -20,7 +20,7 @@ import {
   DropdownMenu,
   DropdownMenuTrigger,
   DropdownMenuContent,
-  DropdownMenuCheckItem,
+  DropdownMenuItem,
 } from '@/components/ui/dropdown-menu'
 import { api } from '@/lib/api'
 import { cn } from '@/lib/utils'
@@ -368,7 +368,12 @@ function StatsView({ projectId, weekStart }: { projectId: string; weekStart: num
                   border: '1px solid var(--border)',
                   borderRadius: '0.5rem',
                   fontSize: '0.75rem',
+                  color: 'var(--popover-foreground)',
                 }}
+                // Recharts красит значение в цвет столбика, а он лаймовый: на
+                // белой подложке подсказки это контраст 1.2, цифру не прочесть.
+                itemStyle={{ color: 'var(--popover-foreground)' }}
+                labelStyle={{ color: 'var(--muted-foreground)' }}
                 labelFormatter={(day) =>
                   new Date(`${String(day)}T00:00:00`).toLocaleDateString(lang, { day: 'numeric', month: 'long' })
                 }
@@ -925,10 +930,13 @@ function ProjectCell({
     return needle ? projects.filter((p) => p.name.toLowerCase().includes(needle)) : projects
   }, [projects, q])
   return (
-    <span className="flex items-center gap-1.5">
+    <span className="flex min-w-0 items-center gap-1.5">
       <DropdownMenu onOpenChange={(open) => open && setQ('')}>
         <DropdownMenuTrigger asChild>
-          <button className="inline-flex max-w-52 items-center gap-1.5 rounded px-1 py-0.5 text-xs text-muted-foreground transition-colors hover:bg-accent hover:text-foreground">
+          {/* Ширина ФИКСИРОВАННАЯ, а не по содержимому: у проектов названия
+              разной длины, и колонка ездила от строки к строке — глазами по
+              такому списку не пройти. */}
+          <button className="inline-flex w-52 items-center gap-1.5 rounded px-1 py-0.5 text-start text-xs text-muted-foreground transition-colors hover:bg-accent hover:text-foreground">
             {/* Значок, а не папка: в списке из одиннадцати проектов их узнают
                 по цвету и логотипу, а названия читают. */}
             {current ? (
@@ -952,17 +960,18 @@ function ProjectCell({
             />
           </div>
           <div className="max-h-64 overflow-y-auto p-1">
+            {/* Обычный пункт, а не CheckItem: тот резервирует слева место под
+                галочку, и строки с ней и без неё начинались по-разному —
+                значки уезжали лесенкой. Выбранный виден подсветкой. */}
             {matches.map((p) => (
-              <DropdownMenuCheckItem
+              <DropdownMenuItem
                 key={p.id}
-                checked={p.id === value}
                 onSelect={() => p.id !== value && onChange(p.id)}
+                className={cn('gap-2', p.id === value && 'bg-accent font-medium')}
               >
-                <span className="flex items-center gap-2">
-                  <ProjectBadge name={p.name} color={p.color} logoUrl={p.logoUrl} size={16} />
-                  <span className="truncate">{p.name}</span>
-                </span>
-              </DropdownMenuCheckItem>
+                <ProjectBadge name={p.name} color={p.color} logoUrl={p.logoUrl} size={16} />
+                <span className="truncate">{p.name}</span>
+              </DropdownMenuItem>
             ))}
             {!matches.length && (
               <p className="px-2 py-3 text-center text-xs text-muted-foreground">{t('time.empty')}</p>
