@@ -1608,6 +1608,13 @@
     "commentRequired": "מה קרה — חובה",
     "history": "היסטוריית שלבים",
     "optional": "— לא חובה",
-    "buildTypePick": "בחרו סוג"
+    "buildTypePick": "בחרו סוג",
+    "request": "בקשת בנייה",
+    "whoBuilds": "מי בונה",
+    "pickPerson": "בחרו אדם",
+    "whatToDo": "מה נדרש",
+    "whatToDoHint": "למשל בילד פרודקשן לחנות",
+    "requestExplain": "ייווצרו משימה לאותו אדם וגרסה, מקושרות זו לזו. הוא יקבל התראה.",
+    "requested": "הבקשה נשלחה — משימה {{task}}"
   }
 }

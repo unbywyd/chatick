@@ -2,7 +2,7 @@ import { useMemo, useState } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { useTranslation } from 'react-i18next'
 import { toast } from 'sonner'
-import { ArrowRight, ExternalLink, Package, Plus, Rocket, X } from 'lucide-react'
+import { ArrowRight, ExternalLink, Package, Plus, Rocket, Send, X } from 'lucide-react'
 import { api } from '@/lib/api'
 import { cn } from '@/lib/utils'
 import { Avatar } from '@/components/ui/avatar'
@@ -50,6 +50,7 @@ export function ReleasesTab({ projectId, canManage }: { projectId: string; canMa
   const { t, i18n } = useTranslation()
   const qc = useQueryClient()
   const [creating, setCreating] = useState(false)
+  const [asking, setAsking] = useState(false)
   const [openId, setOpenId] = useState<string | null>(null)
 
   const list = useQuery({
@@ -70,10 +71,18 @@ export function ReleasesTab({ projectId, canManage }: { projectId: string; canMa
       <div className="flex items-center justify-between gap-3 border-b px-4 py-2">
         <h2 className="text-sm font-semibold">{t('releases.title')}</h2>
         {canManage && (
-          <Button size="sm" className="gap-1" onClick={() => setCreating(true)}>
-            <Plus className="size-3.5" />
-            {t('releases.create')}
-          </Button>
+          <div className="flex items-center gap-2">
+            {/* Запросить — первым и заметнее: менеджер приходит сюда просить
+                сборку, а регистрировать уже собранное — дело более редкое. */}
+            <Button size="sm" className="gap-1" onClick={() => setAsking(true)}>
+              <Send className="size-3.5" />
+              {t('releases.request')}
+            </Button>
+            <Button size="sm" variant="outline" className="gap-1" onClick={() => setCreating(true)}>
+              <Plus className="size-3.5" />
+              {t('releases.create')}
+            </Button>
+          </div>
         )}
       </div>
 
@@ -124,6 +133,17 @@ export function ReleasesTab({ projectId, canManage }: { projectId: string; canMa
         )}
       </div>
 
+      {asking && (
+        <RequestDialog
+          projectId={projectId}
+          buildTypes={types.data?.buildTypes ?? []}
+          onClose={() => setAsking(false)}
+          onDone={() => {
+            setAsking(false)
+            void qc.invalidateQueries({ queryKey: ['releases', projectId] })
+          }}
+        />
+      )}
       {creating && (
         <CreateDialog
           projectId={projectId}
@@ -203,6 +223,122 @@ function ReleaseRow({ release: r, onOpen, locale }: { release: Release; onOpen: 
         {r.owner && <Avatar name={r.owner.name} src={r.owner.avatarUrl} size={22} />}
       </div>
     </div>
+  )
+}
+
+/**
+ * «Запросить сборку» — то, чем менеджер пользуется чаще всего.
+ *
+ * Он не «создаёт версию»: он просит человека собрать билд. Поэтому здесь
+ * спрашивают исполнителя, а в «Новой версии» — нет: там регистрируют то, что
+ * уже собрано.
+ *
+ * Одним запросом на сервер: задача, версия и связь между ними появляются
+ * вместе или не появляются вовсе. Три отдельных вызова оставляли бы
+ * полусостояния — задача есть, версии нет.
+ */
+function RequestDialog({
+  projectId,
+  buildTypes,
+  onClose,
+  onDone,
+}: {
+  projectId: string
+  buildTypes: BuildTypeDef[]
+  onClose: () => void
+  onDone: () => void
+}) {
+  const { t } = useTranslation()
+  const [version, setVersion] = useState('')
+  const [type, setType] = useState('')
+  const [assigneeId, setAssigneeId] = useState('')
+  const [comment, setComment] = useState('')
+
+  const members = useQuery({
+    queryKey: ['project-members', projectId],
+    queryFn: () =>
+      api<{ user: { id: string; name: string; avatarUrl: string | null } }[]>(
+        `/api/v1/projects/${projectId}/members`,
+      ),
+  })
+
+  const ask = useMutation({
+    mutationFn: () =>
+      api<{ task: { number: string }; release: { version: string } }>(
+        '/api/v1/releases/request',
+        {
+          method: 'POST',
+          body: JSON.stringify({
+            version: version.trim(),
+            buildType: type,
+            assigneeId: assigneeId || null,
+            comment: comment.trim() || undefined,
+          }),
+        },
+        'project',
+      ),
+    onSuccess: (r) => {
+      // Говорим номер задачи: именно по нему человек потом ищет поручение.
+      toast.success(t('releases.requested', { task: r.task.number }))
+      onDone()
+    },
+    onError: (e: { message?: string }) => toast.error(e.message || t('common.error')),
+  })
+
+  return (
+    <Overlay onClose={onClose} title={t('releases.request')}>
+      <div className="space-y-3">
+        <div>
+          <label className="mb-1 block text-xs text-muted-foreground">{t('releases.whoBuilds')}</label>
+          <Combobox
+            options={(members.data ?? []).map((m) => ({ value: m.user.id, label: m.user.name }))}
+            value={assigneeId}
+            onChange={setAssigneeId}
+            placeholder={t('releases.pickPerson')}
+          />
+        </div>
+        <div>
+          <label className="mb-1 block text-xs text-muted-foreground">{t('releases.buildType')}</label>
+          <Combobox
+            options={buildTypes.map((b) => ({
+              value: b.key,
+              label: b.label,
+              hint: b.stages.map((st) => st.label).join(' → '),
+            }))}
+            value={type}
+            onChange={setType}
+            placeholder={t('releases.buildTypePick')}
+          />
+        </div>
+        <div>
+          <label className="mb-1 block text-xs text-muted-foreground">{t('releases.version')}</label>
+          <Input value={version} onChange={(e) => setVersion(e.target.value)} placeholder="1.4.0" />
+        </div>
+        <div>
+          <label className="mb-1 block text-xs text-muted-foreground">
+            {t('releases.whatToDo')} <span className="text-muted-foreground/70">{t('releases.optional')}</span>
+          </label>
+          <Input
+            value={comment}
+            onChange={(e) => setComment(e.target.value)}
+            placeholder={t('releases.whatToDoHint')}
+          />
+        </div>
+        {/* Что произойдёт — сказано до нажатия: действие создаёт две сущности
+            сразу, и человек вправе знать это заранее, а не обнаружить после. */}
+        <p className="rounded-md bg-muted/50 px-2 py-1.5 text-xs text-muted-foreground">
+          {t('releases.requestExplain')}
+        </p>
+      </div>
+      <div className="mt-4 flex justify-end gap-2">
+        <Button variant="ghost" onClick={onClose}>
+          {t('common.cancel')}
+        </Button>
+        <Button disabled={!version.trim() || !type || ask.isPending} onClick={() => ask.mutate()}>
+          {t('releases.request')}
+        </Button>
+      </div>
+    </Overlay>
   )
 }
 

@@ -58,7 +58,7 @@ describe('ручки версий', () => {
   it('каждая ручка проходит через общую проверку', () => {
     // Забытая проверка в одной ручке открывает чужие релизы, и по коду самой
     // ручки этого не видно — потому проверка одна на всех.
-    const handlers = src.match(/releasesRoute\.(get|post|patch)\(/g) ?? []
+    const handlers = src.match(/releasesRoute\.(get|post|patch|delete)\(/g) ?? []
     const guards = src.match(/await guard\(/g) ?? []
     expect(handlers.length).toBeGreaterThan(0)
     expect(guards.length).toBe(handlers.length)
@@ -80,8 +80,14 @@ describe('ручки версий', () => {
     expect(stage).toMatch(/comment: z\.string\(\)\.min\(1\)/)
   })
 
-  it('ручки удаления нет — версия это факт, а не запись', () => {
-    expect(src).not.toMatch(/releasesRoute\.delete\(/)
+  it('удалить можно связь, но не саму версию', () => {
+    // Версия — факт: она была собрана и куда-то уехала. Связь с задачей —
+    // всего лишь связь, её снятие ничего не стирает.
+    const deletes = src.match(/releasesRoute\.delete\('([^']+)'/g) ?? []
+    expect(deletes.length).toBeGreaterThan(0)
+    for (const d of deletes) {
+      expect(d, `удаление ${d} затрагивает саму версию`).toMatch(/\/tasks\//)
+    }
   })
 
   it('дата выката не переписывается повторным выходом', () => {

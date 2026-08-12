@@ -1608,6 +1608,13 @@
     "commentRequired": "What happened — required",
     "history": "Stage history",
     "optional": "— optional",
-    "buildTypePick": "Pick a type"
+    "buildTypePick": "Pick a type",
+    "request": "Request a build",
+    "whoBuilds": "Who builds it",
+    "pickPerson": "Pick a person",
+    "whatToDo": "What is needed",
+    "whatToDoHint": "e.g. production build for the store",
+    "requestExplain": "This creates a task for that person and a version, linked together. They will be notified.",
+    "requested": "Requested — task {{task}}"
   }
 }

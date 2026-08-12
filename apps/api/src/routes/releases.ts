@@ -1,15 +1,17 @@
 import { Hono } from 'hono'
 import { zValidator } from '@hono/zod-validator'
 import { z } from 'zod'
-import { and, desc, eq, inArray } from 'drizzle-orm'
+import { and, desc, eq, ilike, inArray, or, sql } from 'drizzle-orm'
 import { db } from '../db/client.js'
-import { releases, releaseEvents, taskReleases, tasks, users } from '../db/schema.js'
+import { releases, releaseEvents, taskReleases, tasks, users, projectMembers } from '../db/schema.js'
 import { requireProject, type ProjectEnv } from '../auth.js'
 import { hasPermission } from './projects.js'
 import { isFeatureEnabled } from '../lib/features.js'
 import { BUILD_TYPES, buildType, firstStage, isLiveStage, isValidStage } from '../lib/release-stages.js'
 import { logActivity } from '../lib/audit.js'
-import { broadcast } from '../ws.js'
+import { sanitizeHtml } from '../lib/sanitize-html.js'
+import { notifyTask } from './tasks.js'
+import { broadcast, tasksChanged } from '../ws.js'
 
 /**
  * Версии проекта (SPEC §8.46): что и куда выкачено.
@@ -307,6 +309,215 @@ releasesRoute.post('/:id/stage', zValidator('json', stageSchema), async (c) => {
 
   const owner = row!.ownerId ? await db.query.users.findFirst({ where: eq(users.id, row!.ownerId) }) : null
   return c.json(serialize(row!, owner))
+})
+
+
+
+/**
+ * «Запросить сборку»: задача + версия + связь между ними, одним действием.
+ *
+ * Зачем ручка, а не три вызова из интерфейса: между ними бывает обрыв, и
+ * тогда остаётся полусостояние — задача поставлена, версии нет, или наоборот.
+ * Здесь либо всё, либо ничего.
+ *
+ * Зачем вообще: менеджер не «создаёт версию» — он ПРОСИТ человека собрать
+ * билд. Версия у этой просьбы появляется сразу, чтобы было куда двигать
+ * стадию, а задача несёт исполнителя и срок, которых у версии нет.
+ *
+ * Права нужны обе: releases.manage — завести версию, tasks.create — поручить
+ * работу. Одного мало: иначе получилось бы, что человек раздаёт задачи, не
+ * имея на это права, просто зайдя с другой вкладки.
+ */
+const requestSchema = z.object({
+  version: z.string().min(1).max(50),
+  buildType: z.string().min(1).max(50),
+  /** Кому поручаем. Пусто — задача без исполнителя, так тоже бывает. */
+  assigneeId: z.string().nullable().optional(),
+  /** Что именно нужно: попадёт и в описание задачи, и в первую запись истории. */
+  comment: z.string().max(2000).optional(),
+  referenceUrl: z.string().url().max(2000).nullable().optional(),
+  estimateMinutes: z.number().int().positive().optional(),
+})
+
+releasesRoute.post('/request', zValidator('json', requestSchema), async (c) => {
+  const g = await guard(c as never, 'releases.manage')
+  if ('error' in g) return c.json({ error: g.error }, g.status)
+  if (!(await hasPermission(g.projectId, g.sub, 'tasks.create'))) {
+    return c.json({ error: 'Forbidden: tasks.create is required to ask someone for a build' }, 403)
+  }
+
+  const b = c.req.valid('json')
+  if (!buildType(b.buildType)) {
+    return c.json({ error: `Unknown buildType: ${b.buildType}` }, 400)
+  }
+  const status = firstStage(b.buildType)!
+
+  // Исполнитель обязан быть участником проекта: поручить работу человеку,
+  // который не увидит задачу, — то же самое, что не поручить никому.
+  if (b.assigneeId) {
+    const member = await db.query.projectMembers.findFirst({
+      where: and(eq(projectMembers.projectId, g.projectId), eq(projectMembers.userId, b.assigneeId)),
+    })
+    if (!member) return c.json({ error: 'The assignee is not a member of this project' }, 400)
+  }
+
+  const label = buildType(b.buildType)!.label
+  const [{ next, minSort }] = (await db
+    .select({
+      next: sql<number>`coalesce(max(cast(substring(${tasks.number} from 6) as int)), 0) + 1`,
+      minSort: sql<number>`coalesce(min(${tasks.sortOrder}), 0)`,
+    })
+    .from(tasks)
+    .where(eq(tasks.projectId, g.projectId))) as [{ next: number; minSort: number }]
+
+  const [task] = await db
+    .insert(tasks)
+    .values({
+      projectId: g.projectId,
+      number: `TASK-${next}`,
+      sortOrder: minSort - 1,
+      // Название говорит, что просят, а не «версия 1.4»: задача живёт в общем
+      // списке, и там «1.4» без глагола ничего не значит.
+      title: `${label} ${b.version}`,
+      description: b.comment?.trim() ? sanitizeHtml(`<p>${b.comment.trim()}</p>`) : '',
+      status: 'todo',
+      priority: 'normal',
+      assigneeId: b.assigneeId ?? null,
+      createdById: g.sub,
+      estimateMinutes: b.estimateMinutes ? String(b.estimateMinutes) : null,
+    })
+    .returning()
+
+  const [release] = await db
+    .insert(releases)
+    .values({
+      projectId: g.projectId,
+      version: b.version.trim(),
+      buildType: b.buildType,
+      status,
+      ownerId: g.sub,
+      referenceUrl: b.referenceUrl ?? null,
+      notes: b.comment?.trim() || null,
+    })
+    .returning()
+
+  await db.insert(releaseEvents).values({
+    releaseId: release!.id,
+    status,
+    fromStatus: null,
+    comment: b.comment?.trim() || `Requested: ${task!.number}`,
+    actorId: g.sub,
+  })
+  await db.insert(taskReleases).values({ taskId: task!.id, releaseId: release!.id })
+
+  void logActivity({
+    projectId: g.projectId,
+    actorId: g.sub,
+    action: 'create',
+    entityType: 'release',
+    entityId: release!.id,
+    entityLabel: `${release!.version} (${release!.buildType}) ← ${task!.number}`,
+  })
+  // Человек узнаёт о поручении так же, как о любой другой задаче.
+  if (task!.assigneeId) {
+    void notifyTask(g.projectId, g.sub, task!, { assigneeChanged: true, mentions: false })
+  }
+  broadcast(g.projectId, 'releases_changed', {})
+  tasksChanged(g.projectId, [task!.assigneeId, g.sub])
+
+  return c.json(
+    {
+      task: { id: task!.id, number: task!.number, title: task!.title },
+      release: { id: release!.id, version: release!.version, buildType: release!.buildType, status: release!.status },
+    },
+    201,
+  )
+})
+
+/**
+ * Привязка задач к версии.
+ *
+ * Живёт на маршруте версий, а не задач, потому что право здесь тоже про
+ * версии: кто ведёт релизы, тот и решает, что в них уезжает. Требовать ради
+ * этого tasks.edit значило бы, что связать задачу с версией нельзя, не имея
+ * права переписывать саму задачу.
+ *
+ * Задача — это запрос на работу: «собери прод-билд» с исполнителем и сроком.
+ * Версия — то, что из этой работы получилось. Поэтому связь и нужна: у версии
+ * нет исполнителя, а у задачи нет стадии выката.
+ */
+releasesRoute.get('/:id/task-candidates', async (c) => {
+  const g = await guard(c as never, 'releases.manage')
+  if ('error' in g) return c.json({ error: g.error }, g.status)
+
+  const q = (c.req.query('q') ?? '').trim()
+  const linked = await db
+    .select({ taskId: taskReleases.taskId })
+    .from(taskReleases)
+    .where(eq(taskReleases.releaseId, c.req.param('id')))
+  const already = new Set(linked.map((l) => l.taskId))
+
+  const rows = await db
+    .select({ t: tasks })
+    .from(tasks)
+    .where(
+      and(
+        eq(tasks.projectId, g.projectId),
+        sql`${tasks.deletedAt} is null`,
+        q ? or(ilike(tasks.title, `%${q}%`), ilike(tasks.number, `%${q}%`))! : undefined,
+      ),
+    )
+    .orderBy(desc(tasks.updatedAt))
+    .limit(50)
+
+  return c.json({
+    items: rows
+      .filter((r) => !already.has(r.t.id))
+      .map((r) => ({ id: r.t.id, number: r.t.number, title: r.t.title, status: r.t.status })),
+  })
+})
+
+releasesRoute.post('/:id/tasks', zValidator('json', z.object({ taskId: z.string().min(1) })), async (c) => {
+  const g = await guard(c as never, 'releases.manage')
+  if ('error' in g) return c.json({ error: g.error }, g.status)
+
+  const releaseId = c.req.param('id')
+  const release = await db.query.releases.findFirst({
+    where: and(eq(releases.id, releaseId), eq(releases.projectId, g.projectId)),
+  })
+  if (!release) return c.json({ error: 'Not found' }, 404)
+
+  // Задача обязана быть из этого же проекта: иначе версия одного проекта
+  // потянула бы за собой работу из чужого.
+  const { taskId } = c.req.valid('json')
+  const task = await db.query.tasks.findFirst({
+    where: and(eq(tasks.id, taskId), eq(tasks.projectId, g.projectId)),
+  })
+  if (!task) return c.json({ error: 'Task not found in this project' }, 404)
+
+  await db.insert(taskReleases).values({ taskId, releaseId }).onConflictDoNothing()
+  broadcast(g.projectId, 'releases_changed', {})
+  tasksChanged(g.projectId, [task.assigneeId, task.createdById])
+  return c.json({ ok: true, task: { id: task.id, number: task.number, title: task.title, status: task.status } })
+})
+
+releasesRoute.delete('/:id/tasks/:taskId', async (c) => {
+  const g = await guard(c as never, 'releases.manage')
+  if ('error' in g) return c.json({ error: g.error }, g.status)
+
+  const releaseId = c.req.param('id')
+  const release = await db.query.releases.findFirst({
+    where: and(eq(releases.id, releaseId), eq(releases.projectId, g.projectId)),
+  })
+  if (!release) return c.json({ error: 'Not found' }, 404)
+
+  // Снятие связи не трогает ни задачу, ни версию — они живут дальше каждая
+  // своей жизнью. Это и есть смысл необязательной связи.
+  await db
+    .delete(taskReleases)
+    .where(and(eq(taskReleases.releaseId, releaseId), eq(taskReleases.taskId, c.req.param('taskId'))))
+  broadcast(g.projectId, 'releases_changed', {})
+  return c.json({ ok: true })
 })
 
 /**
