@@ -1105,7 +1105,8 @@
     "loading": "טוען…",
     "error": "משהו השתבש",
     "saved": "נשמר",
-    "edit": "עריכה"
+    "edit": "עריכה",
+    "delete": "מחיקה"
   },
   "people": {
     "add": "הוספת אנשים…",
@@ -1647,5 +1648,14 @@
       "production": "Production"
     },
     "profileNone": "לא צוין"
+  },
+  "myTime": {
+    "title": "השעות האחרונות שלי",
+    "when": "מתי",
+    "project": "פרויקט",
+    "what": "מה",
+    "duration": "משך",
+    "running": "פועל",
+    "deleteConfirm": "למחוק את רישום הזמן?"
   }
 }

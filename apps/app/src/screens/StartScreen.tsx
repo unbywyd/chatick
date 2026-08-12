@@ -37,6 +37,7 @@ import { TeamTab } from '@/components/company/TeamTab'
 import { NotificationBell } from '@/components/NotificationBell'
 import { OnboardingWizard } from '@/components/OnboardingWizard'
 import { CompanyTimeTab } from '@/components/company/CompanyTimeTab'
+import { MyRecentTime } from '@/components/company/MyRecentTime'
 import { CompanyTimeSettings } from '@/components/company/CompanyTimeSettings'
 import { OverviewTab } from '@/components/company/OverviewTab'
 import { LlmSettings } from '@/components/company/LlmSettings'
@@ -514,7 +515,12 @@ function CompanyHome({
       ) : tab === 'team' ? (
         <TeamTab company={company} meId={meId} />
       ) : tab === 'time' && canManage ? (
-        <CompanyTimeTab companyId={company.id} />
+        <>
+          {/* Свои записи — сверху и отдельной секцией: они про «поправь мою
+              строку», а сводка ниже про «сколько потрачено». Разные вопросы. */}
+          <MyRecentTime />
+          <CompanyTimeTab companyId={company.id} />
+        </>
       ) : tab === 'connect' && canManage ? (
         <CompanyConnectTab company={company} />
       ) : tab === 'backup' && isAdmin ? (

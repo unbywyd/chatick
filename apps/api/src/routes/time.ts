@@ -368,6 +368,114 @@ timeMineRoute.get('/running', async (c) => {
  * только по проектам, где он руководит. Без прав параметр игнорируется молча —
  * подделанный запрос не отдаёт чужие часы и не сообщает, что попытка замечена.
  */
+/**
+ * Мои последние записи — по сессии, без проектного токена.
+ *
+ * Страница компании стоит над проектами, и проектного токена на ней нет. Из-за
+ * этого поправить свои часы можно было только зайдя в конкретный проект, а
+ * перенести время между проектами — вообще никак, только руками в базе.
+ *
+ * Только СВОИ записи: чужие часы правит начальство проекта, и делает это у
+ * себя, где видит контекст. Здесь человек разбирает собственный день.
+ */
+timeMineRoute.get('/recent', async (c) => {
+  const { sub } = c.get('session')
+  const limit = Math.min(50, Math.max(1, Number(c.req.query('limit')) || 10))
+
+  const rows = await db
+    .select({ e: timeEntries, p: projects, t: tasks })
+    .from(timeEntries)
+    .innerJoin(projects, eq(projects.id, timeEntries.projectId))
+    .leftJoin(tasks, eq(tasks.id, timeEntries.taskId))
+    .where(eq(timeEntries.userId, sub))
+    .orderBy(desc(timeEntries.startedAt))
+    .limit(limit)
+
+  // Куда можно перенести: проекты, где человек состоит. Предлагать чужие
+  // бессмысленно — ручка правки их всё равно отвергнет.
+  const mine = await db
+    .select({ id: projects.id, name: projects.name, companyId: projects.companyId })
+    .from(projectMembers)
+    .innerJoin(projects, eq(projects.id, projectMembers.projectId))
+    .where(eq(projectMembers.userId, sub))
+
+  return c.json({
+    items: rows.map(({ e, p, t }) => ({
+      id: e.id,
+      projectId: e.projectId,
+      projectName: p.name,
+      task: t ? { id: t.id, number: t.number, title: t.title } : null,
+      description: e.description,
+      startedAt: e.startedAt,
+      endedAt: e.endedAt,
+      minutes: e.endedAt ? Math.round((e.endedAt.getTime() - e.startedAt.getTime()) / 60000) : null,
+      autoStopped: e.autoStopped,
+    })),
+    projects: mine,
+  })
+})
+
+const minePatchSchema = z.object({
+  projectId: z.string().optional(),
+  description: z.string().max(500).optional(),
+  startedAt: z.string().optional(),
+  endedAt: z.string().nullable().optional(),
+})
+
+timeMineRoute.patch('/:id', zValidator('json', minePatchSchema), async (c) => {
+  const { sub } = c.get('session')
+  const entry = await db.query.timeEntries.findFirst({ where: eq(timeEntries.id, c.req.param('id')) })
+  if (!entry) return c.json({ error: 'Not found' }, 404)
+  // Здесь правят ТОЛЬКО своё — без исключений для начальства: этот экран про
+  // собственный день, а чужие часы правят в проекте, где виден контекст.
+  if (entry.userId !== sub) return c.json({ error: 'Forbidden' }, 403)
+
+  const b = c.req.valid('json')
+  const patch: Partial<typeof timeEntries.$inferInsert> = { updatedAt: new Date() }
+
+  if (b.projectId && b.projectId !== entry.projectId) {
+    // Переносить можно только туда, где человек состоит.
+    if (!(await projectRoleOf(b.projectId, sub))) {
+      return c.json({ error: 'You are not a member of that project' }, 403)
+    }
+    patch.projectId = b.projectId
+    // Задача осталась в прежнем проекте — связь рвём, иначе запись указывала
+    // бы на задачу чужого проекта, и в отчёте появился бы висячий номер.
+    patch.taskId = null
+  }
+  if (b.description !== undefined) patch.description = b.description
+  if (b.startedAt) patch.startedAt = new Date(b.startedAt)
+  if (b.endedAt !== undefined) {
+    patch.endedAt = b.endedAt ? new Date(b.endedAt) : null
+    // Ручная правка снимает пометку автостопа: время подтверждено человеком.
+    if (b.endedAt) patch.autoStopped = false
+  }
+
+  const started = patch.startedAt ?? entry.startedAt
+  const ended = patch.endedAt !== undefined ? patch.endedAt : entry.endedAt
+  if (ended && ended.getTime() < started.getTime()) {
+    return c.json({ error: 'The end cannot be earlier than the start' }, 400)
+  }
+
+  const [row] = await db.update(timeEntries).set(patch).where(eq(timeEntries.id, entry.id)).returning()
+  return c.json({
+    id: row!.id,
+    projectId: row!.projectId,
+    description: row!.description,
+    startedAt: row!.startedAt,
+    endedAt: row!.endedAt,
+  })
+})
+
+timeMineRoute.delete('/:id', async (c) => {
+  const { sub } = c.get('session')
+  const entry = await db.query.timeEntries.findFirst({ where: eq(timeEntries.id, c.req.param('id')) })
+  if (!entry) return c.json({ error: 'Not found' }, 404)
+  if (entry.userId !== sub) return c.json({ error: 'Forbidden' }, 403)
+  await db.delete(timeEntries).where(eq(timeEntries.id, entry.id))
+  return c.json({ ok: true })
+})
+
 timeMineRoute.get(
   '/summary',
   zValidator(
