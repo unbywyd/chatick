@@ -184,7 +184,11 @@ export function OverviewTab({
         )}
       </section>
 
-      <div className="grid gap-4 lg:grid-cols-2">
+      {/* Обе секции во всю ширину, а не в две колонки.
+          Столбики здесь горизонтальные, и подпись — это название проекта или
+          имя человека: в половинной колонке они обрезаются, и график перестаёт
+          отвечать на свой же вопрос «куда уходит время». */}
+      <div className="grid gap-4">
         {/* Куда уходит время: столбики в цветах проектов — узнаются с одного взгляда */}
         <section className="rounded-lg border bg-card p-4">
           <h2 className="mb-3 text-sm font-semibold">{t('overview.byProject')}</h2>
@@ -211,7 +215,7 @@ export function OverviewTab({
               <YAxis
                 type="category"
                 dataKey="name"
-                width={140}
+                width={220}
                 tickLine={false}
                 axisLine={false}
                 className="text-[10px]"
@@ -219,7 +223,9 @@ export function OverviewTab({
                 opacity={0.7}
                 interval={0}
                 tick={{ width: 132 }}
-                tickFormatter={(name: string) => (name.length > 22 ? `${name.slice(0, 21)}…` : name)}
+                // Обрезаем позже: график во всю ширину, места под подпись
+                // вдвое больше, чем было в половинной колонке.
+                tickFormatter={(name: string) => (name.length > 34 ? `${name.slice(0, 33)}…` : name)}
               />
               <Tooltip
                 cursor={{ fill: 'currentColor', opacity: 0.06 }}
@@ -262,7 +268,9 @@ export function OverviewTab({
                 return (
                   <li key={p.userId} className="flex items-center gap-3">
                     <Avatar name={p.name} src={p.avatarUrl} size={24} />
-                    <span className="w-32 shrink-0 truncate text-sm">{p.name}</span>
+                    {/* Шире, чем было: секция теперь во всю ширину, и резать
+                        имя на 32 символах больше незачем. */}
+                    <span className="w-48 shrink-0 truncate text-sm">{p.name}</span>
                     <span className="h-2 flex-1 overflow-hidden rounded-full bg-secondary">
                       <span className="block h-full rounded-full bg-brand" style={{ width: `${(p.minutes / max) * 100}%` }} />
                     </span>
