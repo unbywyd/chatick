@@ -9,6 +9,8 @@ import { hasPermission } from './projects.js'
 import { isFeatureEnabled } from '../lib/features.js'
 import { BUILD_TYPES, buildType, firstStage, isLiveStage, isValidStage } from '../lib/release-stages.js'
 import { logActivity } from '../lib/audit.js'
+import { notify } from '../lib/notify.js'
+import { companyOf, projectPath } from '../lib/links.js'
 import { sanitizeHtml } from '../lib/sanitize-html.js'
 import { notifyTask } from './tasks.js'
 import { broadcast, tasksChanged } from '../ws.js'
@@ -158,6 +160,56 @@ releasesRoute.get('/:id', async (c) => {
     })),
   })
 })
+
+
+/**
+ * Кого касается смена стадии версии.
+ *
+ * Автор — он её завёл и хочет знать, что с ней стало: «залил в TestFlight»,
+ * «прошли ревью» — ответ на вопрос, который иначе задают голосом.
+ *
+ * Исполнители связанных задач — по правилу «только затронутым»: они делают
+ * работу, ради которой версия и существует.
+ *
+ * Тому, кто сам двигает стадию, не уходит ничего: notify() исключает актора из
+ * получателей, отдельной проверки не нужно.
+ */
+export async function notifyReleaseStage(
+  projectId: string,
+  actorId: string,
+  release: typeof releases.$inferSelect,
+  toStatus: string,
+) {
+  const linked = await db
+    .select({ t: tasks })
+    .from(taskReleases)
+    .innerJoin(tasks, eq(tasks.id, taskReleases.taskId))
+    .where(eq(taskReleases.releaseId, release.id))
+
+  const recipients = [release.ownerId, ...linked.map((l) => l.t.assigneeId)].filter(
+    (x): x is string => Boolean(x),
+  )
+  if (!recipients.length) return
+
+  const actor = await db.query.users.findFirst({ where: eq(users.id, actorId) })
+  const label = buildType(release.buildType)?.stages.find((s) => s.key === toStatus)?.label ?? toStatus
+  const companyId = await companyOf(projectId)
+  void notify({
+    projectId,
+    event: 'release_status',
+    recipientIds: recipients,
+    actorId,
+    actorName: actor?.name || 'Someone',
+    // Один переход — одно уведомление: без стадии в ключе повторный проход по
+    // той же лестнице молча схлопнулся бы в дубль.
+    dedupeKey: `release_status:${release.id}:${toStatus}`,
+    link: companyId ? projectPath(companyId, projectId, `/releases/${release.id}`) : '',
+    preview: release.notes ?? '',
+    vars: { ref: `${release.version} (${release.buildType})`, status: label },
+    entityType: 'release',
+    entityId: release.id,
+  })
+}
 
 const createSchema = z.object({
   version: z.string().min(1).max(50),
@@ -313,6 +365,7 @@ releasesRoute.post('/:id/stage', zValidator('json', stageSchema), async (c) => {
     entityId: existing.id,
     entityLabel: `${existing.version} ${existing.status} → ${b.status}`,
   })
+  void notifyReleaseStage(g.projectId, g.sub, existing, b.status)
   broadcast(g.projectId, 'releases_changed', {})
 
   const owner = row!.ownerId ? await db.query.users.findFirst({ where: eq(users.id, row!.ownerId) }) : null

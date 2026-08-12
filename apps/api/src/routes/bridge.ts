@@ -67,6 +67,7 @@ import { broadcast, sendToUserAnywhere, tasksChanged } from '../ws.js'
 import { shortUrlFor } from '../lib/short-links.js'
 import { BUILD_TYPES, buildType, firstStage, isLiveStage, isValidStage } from '../lib/release-stages.js'
 import { isFeatureEnabled } from '../lib/features.js'
+import { notifyReleaseStage } from './releases.js'
 import { env } from '../env.js'
 
 // Мост для внешнего ИИ (SPEC §8.27). Всё выполняется ОТ ИМЕНИ пользователя,
@@ -3266,6 +3267,9 @@ bridgeRoute.post('/releases/:id/stage', async (c) => {
     actorId: auth(c as never).userId,
   })
   broadcast(ready.projectId, 'releases_changed', {})
+  // Через мост стадию двигает ассистент от имени человека — уведомление такое
+  // же, как из интерфейса: автору версии и исполнителям связанных задач.
+  void notifyReleaseStage(ready.projectId, auth(c as never).userId, existing, status)
   return c.json({ id: existing.id, version: existing.version, from: existing.status, status })
 })
 

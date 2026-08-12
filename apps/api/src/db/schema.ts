@@ -1134,6 +1134,7 @@ export const notificationEvent = pgEnum('notification_event', [
   'note_mention', // тебя упомянули в заметке проекта
   'note_reminder', // наступила дата напоминания в заметке
   'timer_running', // таймер идёт слишком долго — не забыли ли выключить
+  'release_status', // версия сдвинулась по стадиям — автору и тем, кого это касается
 ])
 
 // Подписки: строка = (user, project, event) отключён. По умолчанию всё включено;

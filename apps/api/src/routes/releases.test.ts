@@ -94,3 +94,32 @@ describe('ручки версий', () => {
     expect(src).toMatch(/!existing\.releasedAt/)
   })
 })
+
+describe('уведомления о смене стадии', () => {
+  it('шлём автору версии и исполнителям связанных задач', () => {
+    // Автор завёл версию и хочет знать, что с ней стало; исполнители делают
+    // работу, ради которой она существует. Остальным это шум.
+    const fn = src.slice(src.indexOf('export async function notifyReleaseStage'))
+    expect(fn).toMatch(/release\.ownerId/)
+    expect(fn).toMatch(/assigneeId/)
+  })
+
+  it('себе не шлём — за это отвечает notify(), а не своя проверка', () => {
+    // notify() исключает actorId из получателей. Дублировать это условие здесь
+    // значило бы завести второе место, где правило можно поменять наполовину.
+    const fn = src.slice(src.indexOf('export async function notifyReleaseStage'))
+    expect(fn).toMatch(/actorId,/)
+    expect(fn).not.toMatch(/!==\s*actorId/)
+  })
+
+  it('ключ дедупа включает стадию', () => {
+    // Иначе повторный проход по той же лестнице схлопнулся бы в дубль и
+    // человек не узнал бы о втором переходе.
+    expect(src).toMatch(/dedupeKey: `release_status:\$\{release\.id\}:\$\{toStatus\}`/)
+  })
+
+  it('смена стадии через мост уведомляет так же, как из интерфейса', () => {
+    const bridge = readFileSync(join(import.meta.dirname, 'bridge.ts'), 'utf8')
+    expect(bridge).toMatch(/notifyReleaseStage\(/)
+  })
+})

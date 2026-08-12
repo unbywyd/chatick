@@ -280,6 +280,11 @@ function endpointCatalog(q: string): string {
   reply carries "buildTypes" with every ladder, so read it instead of guessing
   a stage name — a wrong one is rejected with the allowed list.
 
+  Moving a stage notifies the person who CREATED the version, and whoever is
+  assigned to the linked tasks — not the whole project. They asked for the
+  build or are shipping it; everyone else does not need the noise. Nothing is
+  sent to whoever made the change.
+
   Moving a stage REQUIRES a comment. This is not ceremony: "why has 1.4 been
   sitting in Apple review for a week" is the same kind of question as "what is
   in production", and it has no answer if each transition overwrites the last
