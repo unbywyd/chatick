@@ -65,6 +65,37 @@ export function parseSupportLogin(raw: string): { email: string; support: boolea
   return { email, support: true }
 }
 
+/**
+ * Демо-аккаунт для рецензентов магазинов: код постоянный и письмо не уходит.
+ *
+ * Рецензент Microsoft (и Apple) видит форму входа, вводит адрес — и упирается
+ * в код, который ушёл на чужой ящик. Подачу за это отклоняют. Дать ему
+ * настоящую почту с паролем — значит выложить рабочий ящик в чужие руки;
+ * фиксированный код на один заранее известный аккаунт безопаснее.
+ *
+ * Оба значения обязаны быть в env: одно без другого механизм не включает.
+ * Сравнение адреса — строгое равенство, никаких «начинается с» и суффиксов.
+ */
+export function isDemoLogin(email: string): boolean {
+  const demo = env.DEMO_LOGIN_EMAIL?.trim().toLowerCase()
+  const code = env.DEMO_LOGIN_CODE?.trim()
+  if (!demo || !code) return false
+  return keyOf(email) === demo
+}
+
+/**
+ * Демо-код верен? Только для демо-аккаунта — для всех остальных всегда нет.
+ *
+ * timingSafeEqual, как и для обычных кодов: ручка публичная, а код здесь
+ * постоянный, и подобрать его по времени ответа было бы делом одной ночи.
+ */
+export function verifyDemoCode(email: string, code: string): boolean {
+  if (!isDemoLogin(email)) return false
+  const given = Buffer.from(code.trim())
+  const want = Buffer.from(env.DEMO_LOGIN_CODE!.trim())
+  return given.length === want.length && timingSafeEqual(given, want)
+}
+
 export type SendResult = { ok: true; expiresInSec: number } | { ok: false; retryInSec: number }
 
 /**

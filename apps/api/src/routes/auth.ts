@@ -11,7 +11,7 @@ import { signSessionToken, requireSession, type SessionEnv } from '../auth.js'
 import { env } from '../env.js'
 import { s3Client, s3Bucket, getObjectStream, S3_KEY_PREFIX } from '../lib/s3.js'
 import { notifySignup } from '../lib/admin-alert.js'
-import { sendLoginCode, verifyLoginCode, parseSupportLogin } from '../lib/otp.js'
+import { sendLoginCode, verifyLoginCode, parseSupportLogin, isDemoLogin, verifyDemoCode } from '../lib/otp.js'
 import { consumeEnterToken } from '../lib/enter-link.js'
 import { adoptAvatar } from '../lib/avatar.js'
 
@@ -211,6 +211,11 @@ auth.post('/otp/request', async (c) => {
   const answer = { sent: true, expiresInSec: 600 }
   if (!user) return c.json(answer)
 
+  // Демо-аккаунт магазинов: код постоянный, письма нет. Отвечаем тем же
+  // «отправлено» — рецензент увидит привычный экран ввода кода, а лишнее
+  // письмо ушло бы на ящик, который никто не читает.
+  if (isDemoLogin(email)) return c.json(answer)
+
   const res = await sendLoginCode(email, user.locale, support)
   if (!res.ok) return c.json({ error: 'Too soon', retryInSec: res.retryInSec }, 429)
 
@@ -240,9 +245,16 @@ auth.post('/otp/verify', async (c) => {
   const code = typeof body.code === 'string' ? body.code : ''
   if (!email || !code) return c.json({ error: 'Email and code required' }, 400)
 
-  const result = verifyLoginCode(email, code)
-  if (result === 'too-many') return c.json({ error: 'Too many attempts. Request a new code.' }, 429)
-  if (result !== 'ok') return c.json({ error: 'Wrong or expired code' }, 401)
+  // Демо-аккаунт магазинов идёт в обход одноразовых кодов: своего в памяти у
+  // него нет и не появится. Ответ на неверный код — тот же, что у всех:
+  // отличать демо-аккаунт снаружи незачем.
+  if (isDemoLogin(email)) {
+    if (!verifyDemoCode(email, code)) return c.json({ error: 'Wrong or expired code' }, 401)
+  } else {
+    const result = verifyLoginCode(email, code)
+    if (result === 'too-many') return c.json({ error: 'Too many attempts. Request a new code.' }, 429)
+    if (result !== 'ok') return c.json({ error: 'Wrong or expired code' }, 401)
+  }
 
   const user = await db.query.users.findFirst({ where: eq(users.email, email) })
   // Код верен, а человека нет — такое бывает, если его удалили, пока письмо
