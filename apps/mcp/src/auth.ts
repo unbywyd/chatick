@@ -29,9 +29,28 @@ const TOKEN_FILE = join(homedir(), '.chatick', 'mcp-token.json')
  */
 const PORT_FILE = join(homedir(), '.chatick', 'desktop-port.json')
 
-type Stored = { token: string; user?: { id: string; name: string }; projectId?: string | null; savedAt: string }
+type Stored = {
+  token: string
+  user?: { id: string; name: string }
+  projectId?: string | null
+  /** Что открыл человек. Старые файлы поля не имеют — тогда решаем по projectId. */
+  kind?: 'project' | 'company' | 'all'
+  savedAt: string
+}
 
 let memory: Scope | null = null
+
+/**
+ * Область по сохранённому токену.
+ *
+ * Файлы, записанные до появления мастер-доступа, поля не имеют — для них
+ * работает старое правило: есть проект значит проектный туннель, нет —
+ * компанейский. Мастером такой токен не назовётся, и это верно: мастер-доступ
+ * тогда ещё не выдавался.
+ */
+function kindOf(s: Stored): 'project' | 'company' | 'all' {
+  return s.kind ?? (s.projectId ? 'project' : 'company')
+}
 
 function load(): Stored | null {
   try {
@@ -121,12 +140,21 @@ export async function waitForApproval(deviceCode: string, maxMs = 300_000): Prom
       headers: { 'content-type': 'application/json' },
       body: JSON.stringify({ deviceCode }),
     })
-    const data = (await res.json()) as { status: string; token?: string; user?: { id: string; name: string }; project?: { id: string } | null }
+    const data = (await res.json()) as {
+      status: string
+      token?: string
+      user?: { id: string; name: string }
+      project?: { id: string } | null
+      scope?: 'project' | 'company' | 'all'
+    }
     if (data.status === 'approved' && data.token) {
       return {
         token: data.token,
         user: data.user,
         projectId: data.project?.id ?? null,
+        // Старый сервер поля не пришлёт — тогда как раньше: есть проект
+        // значит проектный туннель, нет — компанейский.
+        kind: data.scope ?? (data.project?.id ? 'project' : 'company'),
         savedAt: new Date().toISOString(),
       }
     }
@@ -142,7 +170,7 @@ export async function currentScope(): Promise<Scope | null> {
   if (memory && (await alive(memory.token))) return memory
   const stored = load()
   if (stored && (await alive(stored.token))) {
-    memory = { token: stored.token, projectId: stored.projectId }
+    memory = { token: stored.token, projectId: stored.projectId, kind: kindOf(stored) }
     return memory
   }
   return null
@@ -176,14 +204,14 @@ export async function connectViaDesktop(): Promise<Scope | null> {
   const granted = await waitForApproval(started.deviceCode, 15_000)
   if (!granted) return null
   save(granted)
-  memory = { token: granted.token, projectId: granted.projectId }
+  memory = { token: granted.token, projectId: granted.projectId, kind: kindOf(granted) }
   return memory
 }
 
 /** Записать токен, полученный device flow. */
 export function acceptToken(stored: Stored): Scope {
   save(stored)
-  memory = { token: stored.token, projectId: stored.projectId }
+  memory = { token: stored.token, projectId: stored.projectId, kind: kindOf(stored) }
   return memory
 }
 

@@ -116,6 +116,12 @@ bridgeRoute.post('/device/poll', async (c) => {
     token: r.token,
     user: r.identity.user,
     project: r.identity.project,
+    company: r.identity.company,
+    // Область словом, а не догадкой по пустым полям: мастер-туннель и
+    // компанейский оба приходят без project, и без этого признака клиент
+    // называет мастер «доступом к компании» — то есть занижает то, что человек
+    // на самом деле открыл.
+    scope: r.identity.scopeAll ? 'all' : r.identity.companyId ? 'company' : 'project',
     // Срок сразу при выдаче: не «когда-нибудь протухнет», а конкретный момент,
     // на который клиент может смотреть до начала долгой работы.
     expiresAt: r.identity.expiresAt?.toISOString(),

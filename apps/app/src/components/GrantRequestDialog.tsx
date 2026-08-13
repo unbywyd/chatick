@@ -36,6 +36,7 @@ export function GrantRequestDialog({
   const [target, setTarget] = useState('')
   const [query, setQuery] = useState('')
   const [busy, setBusy] = useState(false)
+  const [masterMode, setMasterMode] = useState(false)
 
   const companies = useQuery({
     queryKey: ['companies'],
@@ -98,16 +99,24 @@ export function GrantRequestDialog({
   }, [target, allTargets])
 
   const approve = async () => {
-    if (!target) return
+    if (!target && !masterMode) return
     setBusy(true)
     try {
       await api('/api/v1/auth/bridge/approve', {
         method: 'POST',
         // Ключ несёт вид цели: «c:» — компания, «p:» — проект. Префикс надо
         // снять, иначе сервер ищет проект с таким id.
+        //
+        // Мастер-доступ идёт первым: при нём выбранная цель уже не значит
+        // ничего, и отправить её вместе с ним — значит сузить то, что человек
+        // осознанно открыл целиком.
         body: JSON.stringify({
           code: request.code,
-          ...(target.startsWith('c:') ? { companyId: target.slice(2) } : { projectId: target.replace(/^p:/, '') }),
+          ...(masterMode
+            ? { all: true }
+            : target.startsWith('c:')
+              ? { companyId: target.slice(2) }
+              : { projectId: target.replace(/^p:/, '') }),
         }),
       })
       toast.success(t('connect.approved'))
@@ -135,17 +144,34 @@ export function GrantRequestDialog({
           </div>
         </div>
 
-        <p className="mt-4 text-sm font-medium">{t('connect.grantWhere')}</p>
-        {needsSearch && (
+        {/* Мастер-доступ. Отдельным тумблером, а не строкой в списке: это не
+            «ещё одна цель», а решение другого рода — открыть всё сразу,
+            включая компании, куда позовут позже. */}
+        <label className="mt-4 flex cursor-pointer items-start gap-2.5 rounded-lg border bg-background p-2.5">
           <input
-            autoFocus
-            value={query}
-            onChange={(e) => setQuery(e.target.value)}
-            placeholder={t('connect.grantSearch')}
-            className="mt-2 w-full rounded-md border bg-background px-2.5 py-1.5 text-sm outline-none focus:border-brand"
+            type="checkbox"
+            checked={masterMode}
+            onChange={(e) => setMasterMode(e.target.checked)}
+            className="mt-0.5 size-4 accent-brand"
           />
-        )}
-        <div className="mt-2 max-h-64 space-y-1 overflow-y-auto">
+          <span className="min-w-0">
+            <span className="block text-sm font-medium">{t('connect.masterTitle')}</span>
+            <span className="block text-xs text-muted-foreground">{t('connect.masterNote')}</span>
+          </span>
+        </label>
+
+        <div className={cn('mt-4', masterMode && 'pointer-events-none opacity-40')}>
+          <p className="text-sm font-medium">{t('connect.grantWhere')}</p>
+          {needsSearch && (
+            <input
+              autoFocus
+              value={query}
+              onChange={(e) => setQuery(e.target.value)}
+              placeholder={t('connect.grantSearch')}
+              className="mt-2 w-full rounded-md border bg-background px-2.5 py-1.5 text-sm outline-none focus:border-brand"
+            />
+          )}
+          <div className="mt-2 max-h-64 space-y-1 overflow-y-auto">
           {targets.length === 0 && (
             // «Ничего не найдено» и «нет доступных проектов» — разные вещи:
             // второе при непустом поиске было бы прямой неправдой.
@@ -172,13 +198,14 @@ export function GrantRequestDialog({
               {x.whole && <span className="shrink-0 text-xs text-muted-foreground">{t('connect.wholeCompany')}</span>}
             </button>
           ))}
+          </div>
         </div>
 
         <div className="mt-5 flex items-center justify-end gap-2">
           <Button variant="ghost" onClick={() => onDone(false)} disabled={busy}>
             {t('connect.deny')}
           </Button>
-          <Button variant="brand" onClick={approve} disabled={!target || busy}>
+          <Button variant="brand" onClick={approve} disabled={(!target && !masterMode) || busy}>
             {t('connect.allow')}
           </Button>
         </div>

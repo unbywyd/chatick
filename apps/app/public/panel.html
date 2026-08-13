@@ -884,6 +884,16 @@
         const grantable = (state.companies || []).filter((c) => c.canGrantCompany)
         const companyNames = new Map((state.companies || []).map((c) => [c.id, c.name]))
         const targets = [
+          // Мастер-доступ — первой строкой и отдельной группой: это не «ещё
+          // одна цель», а решение другого рода, открыть всё сразу, включая
+          // компании, куда позовут позже. В плоском списке панели тумблер
+          // разместить негде, поэтому выделяем группой и подписью.
+          {
+            key: 'a:all',
+            name: T('connectMasterTitle', 'All my projects'),
+            sub: T('connectMasterNote', 'every company and project, including future ones'),
+            color: null,
+          },
           ...grantable.map((c) => ({
             key: `c:${c.id}`,
             name: c.name,
@@ -899,7 +909,12 @@
             sub: companyNames.size > 1 ? companyNames.get(p.companyId) || null : null,
           })),
         ]
-        if (!connect.target && targets.length) connect.target = targets[0].key
+        // Автовыбор — НИКОГДА не мастер-строка: она стоит первой, и человек
+        // нажал бы «Разрешить», молча открыв всё. Берём первую обычную цель.
+        if (!connect.target) {
+          const first = targets.find((x) => x.key[0] !== 'a')
+          if (first) connect.target = first.key
+        }
 
         // Поиск: с десятком проектов в двух компаниях список превращается в
         // простыню, и кнопку «Разрешить» приходится искать прокруткой.
@@ -918,9 +933,11 @@
                   ${x.sub ? `<span class="pick-sub">${escape(x.sub)}</span>` : ''}
                 </span>
               </button>`
+        const groupMaster = shown.filter((x) => x.key[0] === 'a')
         const groupCompanies = shown.filter((x) => x.key[0] === 'c')
         const groupProjects = shown.filter((x) => x.key[0] === 'p')
         const picker =
+          groupMaster.map(row).join('') +
           (groupCompanies.length
             ? `<div class="pick-group">${T('connectGroupCompanies', 'Companies')}</div>` +
               groupCompanies.map(row).join('')
@@ -936,7 +953,7 @@
               <div class="conn">
                 <div class="conn-body">
                   <div class="conn-name">${escape(c.clientName)}</div>
-                  <div class="conn-where">${escape(c.where)}${c.scope === 'company' ? ` · ${T('connectWholeCompany', 'whole company')}` : ''}</div>
+                  <div class="conn-where">${escape(c.where)}${c.scope === 'all' ? ` · ${T('connectMasterBadge', 'master access')}` : c.scope === 'company' ? ` · ${T('connectWholeCompany', 'whole company')}` : ''}</div>
                 </div>
                 <button class="conn-kill" data-revoke="${escape(c.id)}">${T('connectRevoke', 'Revoke')}</button>
               </div>`,
@@ -1081,7 +1098,10 @@
             connect.busy = true
             connect.msg = null
             refreshConnect()
-            window.panel.approveCode(connect.code, kind === 'c' ? { companyId: id } : { projectId: id })
+            window.panel.approveCode(
+              connect.code,
+              kind === 'a' ? { all: true } : kind === 'c' ? { companyId: id } : { projectId: id },
+            )
           }
         }
 

@@ -23,7 +23,15 @@ export class BridgeError extends Error {
   }
 }
 
-export type Scope = { token: string; projectId?: string | null }
+/**
+ * Что открыл человек.
+ *
+ * `kind` — не украшение для текста, а разные способы работать: при 'project'
+ * проект уже выбран, при 'company' его дописывают из компании, при 'all' его
+ * надо спросить у человека или взять из /x/projects. Без этого признака
+ * мастер-туннель неотличим от компанейского — оба приходят без projectId.
+ */
+export type Scope = { token: string; projectId?: string | null; kind?: 'project' | 'company' | 'all' }
 
 /**
  * Вызов ручки моста.

@@ -41,6 +41,20 @@ async function need(): Promise<Scope> {
   return scope
 }
 
+/**
+ * Область доступа словами — для ответа человеку.
+ *
+ * Раньше здесь было «есть проект или нет», и мастер-туннель назывался
+ * «company-wide»: модель считала, что открыта одна компания, и не искала
+ * проекты в остальных. Разница между «вся компания» и «все компании» для
+ * работы существенная, поэтому она названа прямо.
+ */
+function scopeWords(s: Scope): string {
+  if (s.kind === 'all') return '(master access: every company and project you are in)'
+  if (s.projectId) return '(one project)'
+  return '(one whole company)'
+}
+
 /** Ошибку моста показываем как есть: там уже есть и причина, и подсказка. */
 function fail(e: unknown): ReturnType<typeof text> {
   if (e instanceof BridgeError) {
@@ -64,18 +78,12 @@ server.registerTool(
   async () => {
     const existing = await currentScope()
     if (existing) {
-      return text(
-        `Already connected${existing.projectId ? ' (project scope)' : ' (company-wide)'}. ` +
-          'Nothing to do — go ahead with the work.',
-      )
+      return text(`Already connected ${scopeWords(existing)}. Nothing to do — go ahead with the work.`)
     }
 
     const viaApp = await connectViaDesktop()
     if (viaApp) {
-      return text(
-        `Connected through the Chatick desktop app${viaApp.projectId ? ' (project scope)' : ' (company-wide)'}. ` +
-          'No code was needed.',
-      )
+      return text(`Connected through the Chatick desktop app ${scopeWords(viaApp)}. No code was needed.`)
     }
 
     // Приложение не отозвалось — обычный случай, а не поломка.
@@ -107,7 +115,7 @@ server.registerTool(
     if (!granted) return text('Not approved: the human declined, or the code expired. Start again with chatick_connect.')
     const scope = acceptToken(granted)
     return text(
-      `Connected as ${granted.user?.name ?? 'the human'}${scope.projectId ? ' (project scope)' : ' (company-wide)'}. ` +
+      `Connected as ${granted.user?.name ?? 'the human'} ${scopeWords(scope)}. ` +
         'The token is saved, so next time no code will be needed.',
     )
   },

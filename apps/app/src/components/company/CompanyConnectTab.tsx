@@ -25,6 +25,7 @@ export function CompanyConnectTab({ company }: { company: Company }) {
   const qc = useQueryClient()
   const [code, setCode] = useState('')
   const [copied, setCopied] = useState(false)
+  const [masterMode, setMasterMode] = useState(false)
 
   const inviteLine = `${t('connect.pastePrefix')} ${API_URL.replace(/\/$/, '')}/x`
 
@@ -33,7 +34,12 @@ export function CompanyConnectTab({ company }: { company: Company }) {
     queryFn: () => api<{ items: BridgeSession[] }>('/api/v1/auth/bridge/sessions'),
     refetchInterval: 10_000,
   })
-  const companySessions = (sessions.data?.items ?? []).filter((s) => s.company?.id === company.id)
+  // Мастер-туннели показываем здесь же, хотя они не привязаны к компании:
+  // выдать их можно с этой вкладки, и не показать значило бы, что закрыть их
+  // отсюда нельзя — человек ищет забытое подключение там, где его открывал.
+  const companySessions = (sessions.data?.items ?? []).filter(
+    (s) => s.scope === 'all' || s.company?.id === company.id,
+  )
 
   const pending = useQuery({
     queryKey: ['bridge-code', code],
@@ -46,11 +52,15 @@ export function CompanyConnectTab({ company }: { company: Company }) {
     mutationFn: () =>
       api('/api/v1/auth/bridge/approve', {
         method: 'POST',
-        body: JSON.stringify({ code: code.trim(), companyId: company.id }),
+        body: JSON.stringify({
+          code: code.trim(),
+          ...(masterMode ? { all: true } : { companyId: company.id }),
+        }),
       }),
     onSuccess: () => {
       toast.success(t('connect.approved'))
       setCode('')
+      setMasterMode(false)
       qc.invalidateQueries({ queryKey: ['bridge-sessions'] })
     },
     onError: (e: unknown) => toast.error(e instanceof Error ? e.message : String(e)),
@@ -121,6 +131,24 @@ export function CompanyConnectTab({ company }: { company: Company }) {
               <b>{pending.data.clientName}</b> {t('connect.requestsCompanyAccess', { company: company.name })}
             </p>
             <p className="text-xs text-muted-foreground">{t('connect.companyScopeNote')}</p>
+
+            {/* Мастер-доступ. Вкладка про одну компанию, поэтому по умолчанию
+                выдаётся она — но человек с несколькими компаниями чаще хочет
+                открыть всё сразу, и гнать его за этим на отдельный экран
+                значит прятать нужное. */}
+            <label className="flex cursor-pointer items-start gap-2.5 rounded-lg border bg-card p-2.5">
+              <input
+                type="checkbox"
+                checked={masterMode}
+                onChange={(e) => setMasterMode(e.target.checked)}
+                className="mt-0.5 size-4 accent-brand"
+              />
+              <span className="min-w-0">
+                <span className="block text-sm font-medium">{t('connect.masterTitle')}</span>
+                <span className="block text-xs text-muted-foreground">{t('connect.masterNote')}</span>
+              </span>
+            </label>
+
             <div className="flex gap-2">
               <Button variant="brand" size="sm" disabled={approve.isPending} onClick={() => approve.mutate()}>
                 <Check className="size-3.5" />
@@ -153,7 +181,7 @@ export function CompanyConnectTab({ company }: { company: Company }) {
               <span className="min-w-0 flex-1">
                 <span className="block truncate text-sm font-medium">{s.clientName}</span>
                 <span className="block text-xs text-muted-foreground">
-                  {t('connect.wholeCompany')} · {t('connect.lastUsed')}{' '}
+                  {s.scope === 'all' ? t('connect.allProjects') : t('connect.wholeCompany')} · {t('connect.lastUsed')}{' '}
                   {new Date(s.lastUsedAt).toLocaleString(i18n.language, { hour: '2-digit', minute: '2-digit' })}
                 </span>
               </span>

@@ -24,7 +24,9 @@ type DesktopBridge = {
   /** Ответ панели про введённый код подключения. */
   connectResult: (payload: ConnectResult) => void
   onConnectCheck: (fn: (code: string) => void) => () => void
-  onConnectApprove: (fn: (p: { code: string; projectId?: string; companyId?: string }) => void) => () => void
+  onConnectApprove: (
+    fn: (p: { code: string; projectId?: string; companyId?: string; all?: boolean }) => void,
+  ) => () => void
   onSetProject: (fn: (id: string) => void) => () => void
   onTaskStatus: (fn: (p: { taskId: string; status: string }) => void) => () => void
   onTaskTimer: (fn: (taskId: string) => void) => () => void
@@ -423,6 +425,9 @@ export function useDesktopSync() {
         connectGroupCompanies: t('connect.groupCompanies'),
         connectGroupProjects: t('connect.groupProjects'),
         connectAllProjectsOf: t('connect.allProjectsOf'),
+        connectMasterTitle: t('connect.masterTitle'),
+        connectMasterNote: t('connect.masterNote'),
+        connectMasterBadge: t('connect.allProjects'),
         connectSearch: t('connect.search'),
         connectNothingFound: t('connect.nothingFound'),
         pickProject: t('desktop.pickProject'),
@@ -536,10 +541,12 @@ export function useDesktopSync() {
       }
     })
 
-    const offApprove = bridge.onConnectApprove(async ({ code, projectId, companyId: cid }) => {
+    const offApprove = bridge.onConnectApprove(async ({ code, projectId, companyId: cid, all }) => {
       try {
-        // Либо проект, либо вся компания — сервер сам проверит роль.
-        const target = cid ? { companyId: cid } : { projectId }
+        // Проект, вся компания или все проекты человека — сервер сам проверит
+        // роль. Мастер-доступ первым: при нём остальные поля уже не значат
+        // ничего, и отправить их вместе значило бы сузить выданное.
+        const target = all ? { all: true } : cid ? { companyId: cid } : { projectId }
         await api('/api/v1/auth/bridge/approve', { method: 'POST', body: JSON.stringify({ code, ...target }) })
         bridge.connectResult({ step: 'approved', code })
         qc.invalidateQueries({ queryKey: ['bridge-sessions'] })

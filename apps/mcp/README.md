@@ -32,6 +32,28 @@ assistant collects it from the server, exactly as in the code flow. So the
 desktop path adds no second way to obtain access, only a shorter way to consent
 to the existing one.
 
+## How much you open
+
+Three choices, and they are yours — the assistant asks for a code, never for a
+scope. It cannot widen what you granted.
+
+| Choice | What the assistant sees |
+|---|---|
+| **One project** | that project only |
+| **A whole company** | every project in it you are a member of |
+| **All my projects** | every company and project you belong to, including ones you join later |
+
+The last one is the master scope, offered as a separate switch rather than
+another row in the list: it is a different kind of decision, and it covers
+companies that do not exist yet.
+
+None of them grants anything beyond your own access. Every call still checks
+your membership and permissions in that particular project, so an assistant on
+a master tunnel can do exactly what you can do, and nothing more.
+
+Open tunnels are listed in the app under a company's **Connect** tab and in the
+tray panel, with the scope written next to each. Close any of them there.
+
 ### When the window does not appear
 
 The app writes `~/.chatick/desktop-port.json` when it starts; the server reads
