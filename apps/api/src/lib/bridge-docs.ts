@@ -318,6 +318,24 @@ function endpointCatalog(q: string): string {
   of these returns 404 with an explanation — do not report that as a bug, tell
   the human a project owner or admin turns them on in project settings.
 
+  GET    /x/integrations/expo${q}  is Expo connected? returns the ready command
+  POST   /x/integrations/expo${q}  connect it; returns the ready command
+
+  Connecting Expo means EAS reports every build to Chatick by itself: the
+  version appears with links to the artifact and to the build logs, and moves
+  off "building" on its own. The developer never opens Chatick for it.
+
+  POST returns a ready `command` — give it to the human to run IN THE APP
+  FOLDER. Several apps (client, provider) each need it run in their own folder;
+  the same secret works for all of them, they are told apart by build name.
+
+  Calling POST twice is safe: it returns the SAME secret, not a new one, so a
+  second call cannot silently break an already configured webhook.
+
+  What arrives automatically is only the build itself. TestFlight, store review
+  and release are still marked by a human — EAS knows nothing about the stores,
+  so do not promise the human that those will update on their own.
+
   Tasks link to versions from the TASK side: pass "releaseIds" to POST or PATCH
   /x/tasks. GET of a single task returns "releases" with each version's current
   stage, so "what is this task shipping in" needs no second call. The link is

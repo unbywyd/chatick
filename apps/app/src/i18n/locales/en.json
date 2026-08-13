@@ -1656,5 +1656,25 @@
   "myTime": {
     "title": "My recent hours",
     "project": "Project"
+  },
+  "expo": {
+    "title": "Expo integration",
+    "connect": "Connect Expo",
+    "connected": "Expo connected",
+    "connectHint": "EAS builds will show up here on their own",
+    "connectedHint": "Webhook setup and connection status",
+    "what": "Once connected, EAS tells Chatick about every build: the version appears with links to the artifact and to the build logs. The developer never has to come here.",
+    "step1": "1. Run this in the app folder",
+    "step1Hint": "The command already carries this project's URL and secret. Each app (client, provider) needs its own command in its own folder.",
+    "step2": "2. Build as usual",
+    "step2Hint": "eas build — the version shows up here seconds after the build finishes.",
+    "scope": "Only the build itself arrives automatically: \"building\" → \"built\", plus links. TestFlight, review and release are still marked by you — EAS knows nothing about the stores.",
+    "copy": "Copy",
+    "lastEvent": "Last build: {{when}}",
+    "noEventsYet": "No builds received yet",
+    "disconnect": "Disconnect",
+    "disconnectConfirm": "Disconnect the Expo integration?",
+    "disconnectHint": "Versions stay where they are. Remove the webhook on the Expo side separately: eas webhook:delete",
+    "openBuild": "Open the build in Expo"
   }
 }

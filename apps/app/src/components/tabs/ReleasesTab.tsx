@@ -32,6 +32,7 @@ import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Select, SelectTrigger, SelectValue, SelectContent, SelectItem } from '@/components/ui/select'
 import { Combobox } from '@/components/ui/combobox'
+import { ExpoIntegration, ExpoMark } from '@/components/tabs/ExpoIntegration'
 import { PeoplePicker } from '@/components/ui/people-picker'
 
 // Версии проекта (SPEC §8.46).
@@ -84,6 +85,7 @@ type Release = {
   owner: { id: string; name: string; avatarUrl: string | null } | null
   buildProfile: string | null
   referenceUrl: string | null
+  buildPageUrl: string | null
   notes: string | null
   releasedAt: string | null
   tasks: { id: string; number: string; title: string; status: string }[]
@@ -155,6 +157,8 @@ export function ReleasesTab({ projectId, canManage }: { projectId: string; canMa
     <div className="flex h-full min-h-0 flex-col">
       <div className="flex items-center justify-between gap-3 border-b px-4 py-2">
         <h2 className="text-sm font-semibold">{t('releases.title')}</h2>
+        <div className="flex items-center gap-2">
+          <ExpoIntegration projectId={projectId} canManage={canManage} />
         {canManage && (
           <div className="flex items-center gap-2">
             {/* Запросить — первым и заметнее: менеджер приходит сюда просить
@@ -169,6 +173,7 @@ export function ReleasesTab({ projectId, canManage }: { projectId: string; canMa
             </Button>
           </div>
         )}
+        </div>
       </div>
 
       <div className="min-h-0 flex-1 overflow-y-auto p-4">
@@ -571,6 +576,21 @@ function ReleasesTable({
                     правил вслепую — результата было не увидеть. */}
                 <td className="px-2 py-1.5 align-middle">
                   <div className="flex items-center justify-end gap-2">
+                    {/* Страница сборки в EAS: логи и статус. Отдельно от
+                        артефакта — когда сборка упала, скачивать нечего, а
+                        логи и есть то единственное, что нужно. */}
+                    {r.buildPageUrl && (
+                      <a
+                        href={r.buildPageUrl}
+                        target="_blank"
+                        rel="noreferrer noopener"
+                        title={t('expo.openBuild')}
+                        onClick={(e) => e.stopPropagation()}
+                        className="text-muted-foreground hover:text-foreground"
+                      >
+                        <ExpoMark className="size-3.5" />
+                      </a>
+                    )}
                     {r.referenceUrl && (
                       <a
                         href={r.referenceUrl}

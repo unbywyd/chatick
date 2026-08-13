@@ -23,6 +23,7 @@ import {
   taskComments,
   taskReleases,
   releases,
+  projectIntegrations,
   releaseEvents,
   taskGroups,
   tasks,
@@ -67,6 +68,7 @@ import { broadcast, sendToUserAnywhere, tasksChanged } from '../ws.js'
 import { shortUrlFor } from '../lib/short-links.js'
 import { BUILD_TYPES, buildType, firstStage, isLiveStage, isValidStage } from '../lib/release-stages.js'
 import { isFeatureEnabled } from '../lib/features.js'
+import { randomBytes } from 'node:crypto'
 import { notifyReleaseStage } from './releases.js'
 import { env } from '../env.js'
 
@@ -3396,6 +3398,55 @@ bridgeRoute.post('/releases/:id/stage', async (c) => {
   // же, как из интерфейса: автору версии и исполнителям связанных задач.
   void notifyReleaseStage(ready.projectId, auth(c as never).userId, existing, status)
   return c.json({ id: existing.id, version: existing.version, from: existing.status, status })
+})
+
+/**
+ * Интеграция с Expo через мост.
+ *
+ * Ассистенту это нужно чаще, чем человеку: «подключи Expo» — просьба на одну
+ * строку, а вручную это поход в интерфейс, копирование секрета и команда в
+ * терминале. Ручка отдаёт готовую команду — её остаётся выполнить в папке
+ * приложения.
+ */
+bridgeRoute.get('/integrations/expo', async (c) => {
+  const ready = await releasesReady(c as never, 'releases.manage')
+  if ('error' in ready) return c.json({ error: ready.error }, ready.status)
+  const row = await db.query.projectIntegrations.findFirst({
+    where: and(eq(projectIntegrations.projectId, ready.projectId), eq(projectIntegrations.kind, 'expo')),
+  })
+  if (!row) return c.json({ connected: false })
+  const url = `${(process.env.API_PUBLIC_URL || 'https://api.chatick.com').replace(/\/$/, '')}/hooks/expo/${row.secret}`
+  return c.json({
+    connected: true,
+    url,
+    command: `eas webhook:create --event BUILD --url ${url} --secret ${row.secret}`,
+    lastEventAt: row.lastEventAt,
+  })
+})
+
+bridgeRoute.post('/integrations/expo', async (c) => {
+  const ready = await releasesReady(c as never, 'releases.manage')
+  if ('error' in ready) return c.json({ error: ready.error }, ready.status)
+  const id = auth(c as never)
+
+  const existing = await db.query.projectIntegrations.findFirst({
+    where: and(eq(projectIntegrations.projectId, ready.projectId), eq(projectIntegrations.kind, 'expo')),
+  })
+  // Повторный вызов возвращает тот же секрет: иначе ассистент, позвавший ручку
+  // дважды, тихо сломал бы уже настроенный вебхук.
+  const secret = existing?.secret ?? randomBytes(24).toString('base64url').slice(0, 32)
+  if (!existing) {
+    await db
+      .insert(projectIntegrations)
+      .values({ projectId: ready.projectId, kind: 'expo', secret, createdById: id.userId })
+  }
+  const url = `${(process.env.API_PUBLIC_URL || 'https://api.chatick.com').replace(/\/$/, '')}/hooks/expo/${secret}`
+  return c.json({
+    connected: true,
+    url,
+    command: `eas webhook:create --event BUILD --url ${url} --secret ${secret}`,
+    next: 'Run the command in the app folder. For several apps (client, provider) run it in each one.',
+  })
 })
 
 bridgeRoute.get('/sprints', async (c) => {

@@ -1004,6 +1004,14 @@ export const releases = pgTable(
     buildProfile: text('build_profile'),
     /** Ссылка на сборку: Expo, GitHub, магазин — что угодно. Необязательна. */
     referenceUrl: text('reference_url'),
+    /**
+     * Страница сборки в системе сборки (EAS build details).
+     *
+     * Отдельно от referenceUrl, потому что отвечают на разное: referenceUrl —
+     * «скачать артефакт», а это — «посмотреть логи, статус, кто запустил».
+     * Когда сборка падает, нужна именно вторая, а артефакта нет вовсе.
+     */
+    buildPageUrl: text('build_page_url'),
     /** Что нового — для команды, не для магазина. */
     notes: text('notes'),
     /** Когда доехало до людей: проставляется при переходе на конечную стадию. */
@@ -1030,6 +1038,41 @@ export const releases = pgTable(
  * задним числом уже не у кого: человек не вспомнит, почему две недели назад
  * откатил сборку.
  */
+/**
+ * Интеграция проекта с Expo (EAS).
+ *
+ * Одна на проект: у команды один аккаунт Expo, а разные приложения внутри
+ * различаются именем сборки, которое приходит в самом вебхуке.
+ *
+ * Секрет хранится, чтобы проверять подпись входящих: EAS подписывает тело
+ * HMAC-SHA1 и шлёт в заголовке expo-signature. Без проверки ручка принимала бы
+ * что угодно от кого угодно — а она двигает стадии релизов.
+ */
+export const projectIntegrations = pgTable(
+  'project_integrations',
+  {
+    id: id(),
+    projectId: text('project_id')
+      .notNull()
+      .references(() => projects.id, { onDelete: 'cascade' }),
+    /** Пока только 'expo'. Строка, а не енам: следующая не потребует миграции. */
+    kind: text('kind').notNull(),
+    /**
+     * Секрет вебхука. Его же человек указывает в eas webhook:create.
+     *
+     * Лежит открытым намеренно: это не пароль от чего-либо, а общий секрет для
+     * проверки подписи, и показать его нужно тому, кто настраивает интеграцию.
+     * Права на чтение — те же, что на управление релизами.
+     */
+    secret: text('secret').notNull(),
+    /** Когда последний раз приходил вебхук: видно, живая связь или нет. */
+    lastEventAt: timestamp('last_event_at', { withTimezone: true }),
+    createdById: text('created_by_id').references(() => users.id, { onDelete: 'set null' }),
+    createdAt: createdAt(),
+  },
+  (t) => [uniqueIndex('project_integrations_unique').on(t.projectId, t.kind)],
+)
+
 export const releaseEvents = pgTable(
   'release_events',
   {

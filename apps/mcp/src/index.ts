@@ -253,6 +253,27 @@ server.registerTool(
 )
 
 server.registerTool(
+  'chatick_expo_connect',
+  {
+    title: 'Connect Expo (EAS) to a project',
+    description:
+      'Makes EAS report every build to Chatick by itself: the version appears with links to the artifact and the ' +
+      'build logs, and moves off "building" on its own. Returns a ready `command` — give it to the human to run IN ' +
+      'THE APP FOLDER. Several apps (client, provider) each need it in their own folder; one secret covers all, they ' +
+      'are told apart by build name. Calling it twice is safe: same secret, so it cannot break a configured webhook. ' +
+      'Only the BUILD arrives automatically — TestFlight, review and release are still marked by a human.',
+    inputSchema: { project: z.string() },
+  },
+  async ({ project }) => {
+    try {
+      return json(await call({ ...(await need()), projectId: project }, 'POST', '/integrations/expo'))
+    } catch (e) {
+      return fail(e)
+    }
+  },
+)
+
+server.registerTool(
   'chatick_release_stage',
   {
     title: 'Move a version to another stage',

@@ -22,6 +22,7 @@ import { reviewsRoute } from './routes/reviews.js'
 import { documentsRoute, documentsPublicRoute } from './routes/documents.js'
 import { notesRoute } from './routes/notes.js'
 import { releasesRoute } from './routes/releases.js'
+import { integrationsRoute, expoHookRoute } from './routes/integrations.js'
 import { timeRoute, timeMineRoute, timeCompanyRoute } from './routes/time.js'
 import { bridgeRoute } from './routes/bridge.js'
 import { backupRoute } from './routes/backup.js'
@@ -61,6 +62,9 @@ app.route('/api/v1/reviews', reviewsRoute)
 app.route('/api/v1/documents', documentsRoute)
 app.route('/api/v1/notes', notesRoute)
 app.route('/api/v1/releases', releasesRoute)
+app.route('/api/v1/integrations', integrationsRoute)
+// Вебхуки внешних систем: без сессии, подлинность по подписи.
+app.route('/hooks', expoHookRoute)
 // Сводка по компании — по сессии: проектного токена на этом экране нет.
 app.route('/api/v1/time', timeCompanyRoute)
 app.route('/api/v1/time', timeRoute)
