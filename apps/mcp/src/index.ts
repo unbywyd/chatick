@@ -642,5 +642,46 @@ server.registerTool(
   },
 )
 
+server.registerTool(
+  'chatick_report',
+  {
+    title: 'Tell the Chatick team what got in your way',
+    description:
+      'Report a gap in Chatick itself: an endpoint that does not exist, behaviour that contradicts the guide, a feature ' +
+      'the person asked for and does not have, or documentation that is wrong. Send it when you actually hit the wall ' +
+      'while doing something — not as a wishlist. It is read by a human and is NOT implemented automatically, so never ' +
+      'promise the person a fix or a date. This is about Chatick, never about the person own project or their team.',
+    inputSchema: {
+      kind: z
+        .enum(['missing', 'bug', 'request', 'docs'])
+        .describe('missing — no endpoint for it; bug — behaved unlike the guide; request — person asked for it; docs — guide is wrong'),
+      body: z.string().describe('What happened, in your own words. At least a sentence or two.'),
+      context: z
+        .string()
+        .optional()
+        .describe('What you were trying to do. Without it a missing-endpoint report cannot be acted on.'),
+    },
+  },
+  async ({ kind, body, context }) => {
+    try {
+      const scope = await need()
+      // Проект не передаём: репорт к нему не привязан, и на туннеле без
+      // выбранного проекта это была бы единственная причина отказа.
+      const res = await call<{ id: string; note?: string }>({ token: scope.token }, 'POST', '/report', {
+        kind,
+        body,
+        context,
+        client: 'Claude Code (MCP)',
+      })
+      return text(
+        `Sent to the Chatick team (${res.id}). It is read by a human, not implemented automatically — ` +
+          'tell the person it was passed on, and do not promise a fix or a date.',
+      )
+    } catch (e) {
+      return fail(e)
+    }
+  },
+)
+
 const transport = new StdioServerTransport()
 await server.connect(transport)

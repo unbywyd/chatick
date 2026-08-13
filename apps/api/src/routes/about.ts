@@ -174,6 +174,75 @@ async function notifyAdmins(
 }
 
 /**
+ * Разбор входящего: список и пометка «сделано».
+ *
+ * Только для админов платформы — здесь чужие обращения с почтой и текстом.
+ * Проверяем users.isAdmin, а не роль в проекте: роль владельца в своей
+ * компании к чужим обращениям отношения не имеет.
+ */
+async function platformAdmin(c: { req: { header: (k: string) => string | undefined } }) {
+  const token = c.req.header('authorization')?.replace(/^Bearer\s+/i, '')
+  const payload = token ? await verifyToken(token) : null
+  if (payload?.typ !== 'session') return null
+  const me = await db.query.users.findFirst({ where: eq(users.id, payload.sub) })
+  return me?.isAdmin ? me : null
+}
+
+aboutRoute.get('/feedback', async (c) => {
+  const me = await platformAdmin(c as never)
+  if (!me) return c.json({ error: 'Forbidden' }, 403)
+
+  const status = c.req.query('status')
+  const source = c.req.query('source')
+  const rows = await db
+    .select()
+    .from(feedback)
+    .where(
+      sql`true
+        ${status ? sql`and ${feedback.status} = ${status}` : sql``}
+        ${source ? sql`and ${feedback.source} = ${source}` : sql``}`,
+    )
+    .orderBy(sql`${feedback.createdAt} desc`)
+    .limit(200)
+
+  return c.json({
+    items: rows.map((r) => ({
+      id: r.id,
+      topic: r.topic,
+      status: r.status,
+      source: r.source,
+      body: r.body,
+      name: r.name,
+      email: r.email,
+      // meta несёт вид репорта и что пытались сделать — без этого репорт
+      // ассистента невозможно разобрать.
+      meta: r.meta ? (JSON.parse(r.meta) as unknown) : null,
+      hasScreenshot: Boolean(r.screenshotKey),
+      createdAt: r.createdAt,
+    })),
+  })
+})
+
+aboutRoute.patch('/feedback/:id', async (c) => {
+  const me = await platformAdmin(c as never)
+  if (!me) return c.json({ error: 'Forbidden' }, 403)
+
+  const body = (await c.req.json().catch(() => ({}))) as Record<string, unknown>
+  const status = String(body.status ?? '')
+  if (!['new', 'read', 'answered', 'done'].includes(status)) {
+    return c.json({ error: 'status must be one of: new, read, answered, done' }, 400)
+  }
+
+  const [row] = await db
+    .update(feedback)
+    .set({ status: status as 'new' | 'read' | 'answered' | 'done' })
+    .where(eq(feedback.id, c.req.param('id')))
+    .returning()
+  if (!row) return c.json({ error: 'Not found' }, 404)
+  return c.json({ ok: true, id: row.id, status: row.status })
+})
+
+/**
  * Скриншот обращения. Бакет приватный, поэтому раздаём прокси — по прямой
  * ссылке из письма, которую открывает тот, кто разбирает обращения.
  */

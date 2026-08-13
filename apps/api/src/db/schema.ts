@@ -1484,7 +1484,10 @@ export const shares = pgTable(
 // --- Обратная связь и настройки площадки (SPEC §8.35) -----------------------
 
 export const feedbackTopic = pgEnum('feedback_topic', ['question', 'bug', 'feature', 'billing', 'other'])
-export const feedbackStatus = pgEnum('feedback_status', ['new', 'read', 'answered'])
+// «Сделано» — отдельно от «ответили»: на просьбу можно ответить и не сделать,
+// а внедрённое улучшение не всегда требует ответа. Без этого различия список
+// улучшений неотличим от списка вопросов, на которые уже написали.
+export const feedbackStatus = pgEnum('feedback_status', ['new', 'read', 'answered', 'done'])
 
 /**
  * Обращения из формы «Связаться с нами».
@@ -1505,6 +1508,14 @@ export const feedback = pgTable(
     name: text('name').notNull().default(''),
     userId: text('user_id').references(() => users.id, { onDelete: 'set null' }),
     status: feedbackStatus('status').notNull().default('new'),
+    /**
+     * Кто отправил: человек через форму или ассистент через мост.
+     *
+     * Отдельным полем, а не догадкой по тексту: репорты ассистента читают
+     * иначе. Он видит, чего не хватило в API, но не видит, насколько это
+     * больно человеку — и пишет чаще, чем человек стал бы.
+     */
+    source: text('source').notNull().default('human'),
     // Откуда пришли и с чего: помогает воспроизвести жалобу на интерфейс.
     meta: text('meta'),
     // Скриншот в хранилище платформы. Один снимок экрана заменяет три письма

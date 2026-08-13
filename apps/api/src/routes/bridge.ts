@@ -68,6 +68,7 @@ import { broadcast, sendToUserAnywhere, tasksChanged } from '../ws.js'
 import { shortUrlFor } from '../lib/short-links.js'
 import { BUILD_TYPES, buildType, firstStage, isLiveStage, isValidStage } from '../lib/release-stages.js'
 import { isFeatureEnabled } from '../lib/features.js'
+import { REPORT_KINDS, submitAssistantReport, type ReportKind } from '../lib/assistant-report.js'
 import { randomBytes } from 'node:crypto'
 import { notifyReleaseStage } from './releases.js'
 import { env } from '../env.js'
@@ -332,6 +333,49 @@ bridgeRoute.get('/companies', async (c) => {
           .map((n) => `"${n}"`)
           .join(', ')} — never pick by name alone; ask the person which one, or infer it from the project they mean.`
       : 'Pass ?project=<id> from these lists on every project-scoped call.',
+  })
+})
+
+/**
+ * Репорт разработчикам Chatick: чего не хватило, что сломалось, о чём попросил
+ * человек.
+ *
+ * Проект НЕ обязателен, и это важно: самые ценные репорты приходят как раз
+ * оттуда, где ассистент не смог ничего сделать — нужной ручки нет, и выбирать
+ * проект не в чем.
+ *
+ * Отдельная ручка, а не задача в проекте: это обращение к нам, а не работа
+ * команды. Класть его в чужой проект значило бы засорять людям доску тем, что
+ * им чинить нечем.
+ */
+bridgeRoute.post('/report', async (c) => {
+  const id = auth(c as never)
+
+  const parsed = await readJson(c as never)
+  if ('error' in parsed) return c.json(parsed, 400)
+  const b = parsed.body as Record<string, unknown>
+
+  const kind = String(b.kind ?? 'missing')
+  if (!(REPORT_KINDS as readonly string[]).includes(kind)) {
+    return c.json({ error: `kind must be one of: ${REPORT_KINDS.join(', ')}` }, 400)
+  }
+
+  const res = await submitAssistantReport({
+    kind: kind as ReportKind,
+    body: String(b.body ?? ''),
+    context: typeof b.context === 'string' ? b.context : undefined,
+    user: id.user,
+    projectId: id.projectId,
+    clientName: typeof b.client === 'string' ? b.client : undefined,
+  })
+  if (!res.ok) return c.json({ error: res.error }, res.status)
+
+  return c.json({
+    ok: true,
+    id: res.id,
+    // Ответ говорит, что будет дальше: иначе ассистент обещает человеку
+    // больше, чем есть — «передал разработчикам» звучит как «починят завтра».
+    note: 'Sent to the Chatick team. It is read, not auto-implemented — do not promise the person a fix or a date.',
   })
 })
 
