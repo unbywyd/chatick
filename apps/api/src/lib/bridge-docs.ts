@@ -325,7 +325,7 @@ function endpointCatalog(q: string): string {
   version appears with links to the artifact and to the build logs, and moves
   off "building" on its own. The developer never opens Chatick for it.
 
-  POST returns a ready `command` — give it to the human to run IN THE APP
+  POST returns a ready "command" — give it to the human to run IN THE APP
   FOLDER. Several apps (client, provider) each need it run in their own folder;
   the same secret works for all of them, they are told apart by build name.
 
