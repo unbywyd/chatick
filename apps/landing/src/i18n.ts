@@ -22,6 +22,21 @@ type Dict = {
     ctaNote: string
     /** Что человек получит после установки */
     points: string[]
+    /**
+     * Что даёт MCP-сервер.
+     *
+     * Раньше он был одной фразой под кнопкой — «вторая команда ставит
+     * MCP-сервер», — и решающий не понимал, зачем это его команде. А это как
+     * раз то, чем Chatick отличается: ассистент работает внутри проекта, а не
+     * в отдельном чате, и работа остаётся видимой команде.
+     */
+    mcp: {
+      title: string
+      subtitle: string
+      /** Три вещи: работа в проекте, доступ выдаёт человек, всё под его именем */
+      items: { title: string; text: string }[]
+      note: string
+    }
   }
   /** Честное предупреждение: продукт ещё сырой */
   beta: { badge: string; note: string; warn: string }
@@ -242,6 +257,26 @@ export const dict: Record<LocaleCode, Dict> = {
         'Task, estimate and status straight from the conversation',
         'Every result lands in a task comment',
       ],
+      mcp: {
+        title: 'The assistant works inside the project, not next to it',
+        subtitle:
+          'That second command installs the MCP server — the part that connects your coding assistant to the workspace itself. Without it the skill still works; you just retype a code every session.',
+        items: [
+          {
+            title: 'It works where the team can see',
+            text: 'It picks up tasks, moves them along and reports back in comments. The work lands in the project history instead of disappearing into a chat window nobody else reads.',
+          },
+          {
+            title: 'You decide how much it sees',
+            text: 'One project, a whole company, or everything you belong to. It never grants more than your own access — every call checks your permissions — and you can close the tunnel in one click.',
+          },
+          {
+            title: 'Everything is signed with your name',
+            text: 'Whatever the assistant does, the history records it as done by you, through an assistant. Six months later it is still clear who changed what and why.',
+          },
+        ],
+        note: 'With the desktop app running, approving takes one button — no code to copy at all.',
+      },
     },
     beta: { badge: 'Beta', note: 'Chatick is in beta: it works, it is used daily, and things still change and occasionally break.', warn: 'Beta software. Expect rough edges, and please report anything broken — every report is read.' },
     hero: {
@@ -533,6 +568,26 @@ export const dict: Record<LocaleCode, Dict> = {
         'Задача, оценка и статус — прямо из разговора',
         'Каждый результат попадает в комментарий к задаче',
       ],
+      mcp: {
+        title: 'Ассистент работает внутри проекта, а не рядом с ним',
+        subtitle:
+          'Вторая команда ставит MCP-сервер — то, что связывает вашего ассистента с самим рабочим пространством. Без него скил тоже работает, просто код придётся вводить каждый раз.',
+        items: [
+          {
+            title: 'Работа видна команде',
+            text: 'Ассистент берёт задачи, двигает статусы и отчитывается в комментариях. Сделанное остаётся в истории проекта, а не растворяется в переписке, которую больше никто не читает.',
+          },
+          {
+            title: 'Сколько открыть — решаете вы',
+            text: 'Один проект, вся компания или всё сразу. Больше ваших прав ассистент не получит — они проверяются на каждом запросе, — а туннель закрывается в один клик.',
+          },
+          {
+            title: 'Всё подписано вашим именем',
+            text: 'Что бы ассистент ни сделал, история запишет это на вас, с пометкой «через ассистента». Через полгода по-прежнему понятно, кто что менял и зачем.',
+          },
+        ],
+        note: 'Если установлено приложение, подтверждение — одна кнопка: код вводить не придётся вовсе.',
+      },
     },
     beta: { badge: 'Бета', note: 'Chatick в бете: он работает и используется каждый день, но всё ещё меняется и иногда ломается.', warn: 'Бета-версия. Возможны шероховатости — пишите о поломках, каждое сообщение читают.' },
     hero: {
@@ -826,6 +881,26 @@ export const dict: Record<LocaleCode, Dict> = {
         'משימה, הערכת זמן וסטטוס — מתוך השיחה',
         'כל תוצאה נרשמת בתגובה למשימה',
       ],
+      mcp: {
+        title: 'העוזר עובד בתוך הפרויקט, לא לידו',
+        subtitle:
+          'הפקודה השנייה מתקינה את שרת ה־MCP — החלק שמחבר את עוזר הקוד שלכם לסביבת העבודה עצמה. בלעדיו הסקיל עדיין עובד, רק צריך להקליד קוד בכל פעם.',
+        items: [
+          {
+            title: 'העבודה גלויה לצוות',
+            text: 'העוזר לוקח משימות, מקדם סטטוסים ומדווח בתגובות. מה שנעשה נשאר בהיסטוריית הפרויקט, ולא נעלם בשיחה שאף אחד אחר לא קורא.',
+          },
+          {
+            title: 'אתם מחליטים כמה לפתוח',
+            text: 'פרויקט אחד, חברה שלמה או הכול יחד. העוזר לא יקבל יותר מההרשאות שלכם — הן נבדקות בכל בקשה — והמנהרה נסגרת בלחיצה אחת.',
+          },
+          {
+            title: 'הכול חתום בשמכם',
+            text: 'מה שהעוזר יעשה, ההיסטוריה תרשום על שמכם, עם ציון «דרך עוזר». גם כעבור חצי שנה ברור מי שינה מה ולמה.',
+          },
+        ],
+        note: 'אם אפליקציית הדסקטופ פועלת, האישור הוא לחיצה אחת — בלי להקליד קוד בכלל.',
+      },
     },
     beta: { badge: 'בטא', note: 'Chatick בגרסת בטא: הוא עובד ומשמש מדי יום, אך עדיין משתנה ולעיתים נשבר.', warn: 'גרסת בטא. ייתכנו תקלות — דווחו עליהן, כל דיווח נקרא.' },
     hero: {

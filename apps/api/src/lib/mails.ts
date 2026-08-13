@@ -231,7 +231,10 @@ export async function sendFeedbackMail(p: {
   await send(p.to, fmt(s.subject, v), {
     lang,
     title: fmt(s.title, v),
-    paragraphs: [fmt(s.from, v), p.registered ? s.user : s.guest, p.body],
+    // Тело разбиваем по пустым строкам: в письме абзацы задаются массивом, и
+    // целиком оно склеивалось в одну простыню. У репортов ассистента там ещё
+    // и раздел «что пытались сделать» — он прилипал к концу предыдущей фразы.
+    paragraphs: [fmt(s.from, v), p.registered ? s.user : s.guest, ...p.body.split(/\n{2,}/).filter(Boolean)],
     ...(shot ? { action: { label: 'Screenshot', url: shot } } : {}),
   })
 }

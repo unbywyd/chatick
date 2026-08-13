@@ -263,6 +263,26 @@ const MARK_ANYAPP = asset('anyapp-logo-twotone-dark.svg')
         </a>
       </div>
       <p class="note skill-note">{t.skill.ctaNote}</p>
+
+      {/* Что даёт MCP-сервер. Раньше он был одной фразой под кнопкой, и тот,
+          кто решает, брать ли Chatick, не понимал, зачем это его команде —
+          хотя это и есть отличие: ассистент работает внутри проекта, а не в
+          отдельном чате. */}
+      <div class="mcp">
+        <h3>{t.skill.mcp.title}</h3>
+        <p class="mcp-sub">{t.skill.mcp.subtitle}</p>
+        <div class="mcp-grid">
+          {
+            t.skill.mcp.items.map((item) => (
+              <div class="mcp-item">
+                <p class="mcp-item-title">{item.title}</p>
+                <p class="mcp-item-text">{item.text}</p>
+              </div>
+            ))
+          }
+        </div>
+        <p class="note mcp-note">{t.skill.mcp.note}</p>
+      </div>
     </div>
   </section>
 
@@ -2353,6 +2373,68 @@ const MARK_ANYAPP = asset('anyapp-logo-twotone-dark.svg')
   .skill-note {
     margin-top: 12px;
     text-align: center;
+  }
+  /* Блок про MCP. Отделён линией, а не карточкой: это продолжение разговора
+     про скил, а не соседний товар — карточка читалась бы как врезка, которую
+     можно пропустить. */
+  .mcp {
+    margin: 44px auto 0;
+    /* Шире, чем .skill-grid: тут три колонки, и на 660px они сжимаются в
+       нечитаемые полоски. */
+    max-width: 900px;
+    padding-top: 36px;
+    border-top: 1px solid var(--line);
+  }
+  .mcp h3 {
+    margin: 0;
+    font-size: clamp(20px, 3vw, 26px);
+    line-height: 1.25;
+    letter-spacing: -0.01em;
+  }
+  .mcp-sub {
+    margin: 12px auto 0;
+    max-width: 660px;
+    color: var(--fg-muted);
+    font-size: 15px;
+    line-height: 1.65;
+  }
+  .mcp-grid {
+    margin-top: 30px;
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 26px;
+    text-align: start;
+  }
+  .mcp-item-title {
+    margin: 0;
+    font-weight: 600;
+    font-size: 15px;
+  }
+  /* Лаймовая черта вместо иконки: три галочки уже стоят выше, в .skill-points,
+     и повторять их значило бы сделать оба списка одинаково безразличными. */
+  .mcp-item-title::before {
+    content: '';
+    display: block;
+    width: 26px;
+    height: 2px;
+    margin-bottom: 12px;
+    background: var(--lime);
+  }
+  .mcp-item-text {
+    margin: 8px 0 0;
+    color: var(--fg-muted);
+    font-size: 14px;
+    line-height: 1.65;
+  }
+  .mcp-note {
+    margin-top: 26px;
+    text-align: center;
+  }
+  @media (max-width: 760px) {
+    .mcp-grid {
+      grid-template-columns: 1fr;
+      gap: 22px;
+    }
   }
   /* Ссылка в шапке: тише кнопки «Начать», но заметнее языков. */
   .nav-skill {

@@ -7,6 +7,47 @@ refuses to run otherwise, so a release can never ship without a description.
 
 Written in English only: this file is published on the website.
 
+## 0.3.9 — 2026-08-13
+
+### Added
+
+- **Releases.** Versions of your app now live in the project: what is in
+  testing, what is waiting for review, what people actually have installed.
+  Each version has its own page with the stages it went through, who moved it
+  and when, and a short link you can paste into a chat.
+- **Expo integration.** Connect it once and builds arrive on their own: run
+  `eas build`, and the version appears in Chatick with a link to the artifact
+  and to the build logs. A project with two apps (client and provider) keeps
+  them apart — each build carries its own name.
+- **Request a build.** Ask a developer for a version and get both the task and
+  the version created together, already linked. The author is notified when
+  someone else moves it to the next stage.
+- **Hours across projects.** Your recent time entries are now on the company
+  page, editable in place — including moving an entry to a different project
+  when it was logged against the wrong one.
+- **Assistant reports.** An assistant working through the bridge can tell us
+  what it ran into: an endpoint that does not exist, behaviour that contradicts
+  the guide, a feature someone asked for. Those dead ends used to be invisible
+  — the person just saw "it didn't work".
+- **Master access.** A tunnel can now cover every project you belong to, not
+  just one project or one company, and it can be granted from any of the
+  screens that hand out access. It never grants more than your own rights.
+
+### Fixed
+
+- **Green text on white was invisible.** Not "a bit pale" — a contrast ratio of
+  1.23, below anything readable. Fixed everywhere at once, including chart
+  tooltips and mention chips in light theme.
+- **Mentions notified nobody.** Mentioning someone from the web editor produced
+  no notification at all: the two mention formats were written differently and
+  only one was recognised. Seven real mentions on one day reached no one.
+- **Long links broke notification cards.** A Figma URL stretched a card to
+  three times its height and squeezed the rest of the list out of shape.
+- **A single company blocked creating a second one.** The button appeared to do
+  nothing: the page redirected to the company you already had.
+- **Version numbers disagreed.** The About dialog showed the previous release
+  while the installed app was already the current one.
+
 ## 0.3.8 — 2026-07-29
 
 ### Fixed
