@@ -45,6 +45,7 @@ const BUILD_PROFILES = ['development', 'preview', 'production'] as const
 type ReleaseDetails = {
   id: string
   version: string
+  appName: string | null
   buildType: string
   buildTypeLabel: string
   status: string
@@ -176,7 +177,9 @@ export function ReleasePage({ projectId, canManage }: { projectId: string; canMa
       </button>
 
       <div className="mb-4 flex flex-wrap items-center gap-2">
-        <h1 className="text-xl font-semibold">{r.version}</h1>
+        <h1 className="text-xl font-semibold">
+          {r.appName ? `${r.appName} ${r.version}` : r.version}
+        </h1>
         <span className="rounded bg-secondary px-1.5 py-0.5 text-xs text-secondary-foreground">{r.buildTypeLabel}</span>
         <span className={cn('rounded px-2 py-0.5 text-xs', toneOf(stages, r.status, r.isLive))}>
           {stageLabel(r.status, r.statusLabel)}

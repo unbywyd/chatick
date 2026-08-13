@@ -199,6 +199,10 @@ server.registerTool(
     inputSchema: {
       project: z.string(),
       version: z.string().min(1).describe('"1.4.0" — as the team calls it'),
+      appName: z
+        .string()
+        .optional()
+        .describe('WHICH app: "Client", "Provider". A project often ships several; buildType does not tell them apart'),
       buildType: z.enum(['ios', 'android', 'web', 'backend', 'desktop', 'other']),
       status: z.string().optional().describe('Stage key; omit to start at the first one'),
       buildProfile: z
@@ -231,6 +235,7 @@ server.registerTool(
     inputSchema: {
       project: z.string(),
       version: z.string().min(1).describe('"1.4.0" — as the team calls it'),
+      appName: z.string().optional().describe('WHICH app: "Client", "Provider"'),
       buildType: z.enum(['ios', 'android', 'web', 'backend', 'desktop', 'other']),
       assignee: z.string().optional().describe('"me" or a user id from chatick_members'),
       comment: z.string().optional().describe('What exactly is needed — goes into the task and the history'),

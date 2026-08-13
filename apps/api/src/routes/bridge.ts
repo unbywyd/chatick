@@ -3118,6 +3118,7 @@ bridgeRoute.get('/releases', async (c) => {
     items: rows.map(({ r, u }) => ({
       id: r.id,
       version: r.version,
+      appName: r.appName,
       buildType: r.buildType,
       status: r.status,
       statusLabel: buildType(r.buildType)?.stages.find((st) => st.key === r.status)?.label ?? r.status,
@@ -3159,6 +3160,7 @@ bridgeRoute.get('/releases/:id', async (c) => {
   return c.json({
     id: row.id,
     version: row.version,
+    appName: row.appName,
     buildType: row.buildType,
     status: row.status,
     isLive: isLiveStage(row.buildType, row.status),
@@ -3178,8 +3180,8 @@ bridgeRoute.get('/releases/:id', async (c) => {
   })
 })
 
-const RELEASE_FIELDS = ['version', 'buildType', 'status', 'referenceUrl', 'notes', 'comment', 'buildProfile', 'project'] as const
-const REQUEST_FIELDS = ['version', 'buildType', 'assignee', 'comment', 'referenceUrl', 'buildProfile', 'estimateMinutes', 'project'] as const
+const RELEASE_FIELDS = ['version', 'appName', 'buildType', 'status', 'referenceUrl', 'notes', 'comment', 'buildProfile', 'project'] as const
+const REQUEST_FIELDS = ['version', 'appName', 'buildType', 'assignee', 'comment', 'referenceUrl', 'buildProfile', 'estimateMinutes', 'project'] as const
 
 bridgeRoute.post('/releases', async (c) => {
   const ready = await releasesReady(c as never, 'releases.manage')
@@ -3285,7 +3287,7 @@ bridgeRoute.post('/releases/request', async (c) => {
       projectId: ready.projectId,
       number: `TASK-${next}`,
       sortOrder: minSort - 1,
-      title: `${label} ${version}`,
+      title: [label, typeof b.appName === 'string' ? b.appName.trim() : '', version].filter(Boolean).join(' '),
       description: comment ? richText(comment) : '',
       status: 'todo',
       priority: 'normal',
@@ -3300,6 +3302,7 @@ bridgeRoute.post('/releases/request', async (c) => {
     .values({
       projectId: ready.projectId,
       version,
+      appName: typeof b.appName === 'string' ? b.appName.trim().slice(0, 80) || null : null,
       buildType: type,
       status,
       ownerId: id.userId,

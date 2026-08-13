@@ -1649,7 +1649,9 @@
       "preview": "Preview",
       "production": "Production"
     },
-    "profileNone": "לא צוין"
+    "profileNone": "לא צוין",
+    "appName": "שם הבנייה",
+    "appNameHint": "למשל לקוח, ספק"
   },
   "myTime": {
     "title": "השעות האחרונות שלי",

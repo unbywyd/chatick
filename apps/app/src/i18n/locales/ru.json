@@ -1667,7 +1667,9 @@
       "preview": "Preview (превью)",
       "production": "Production (прод)"
     },
-    "profileNone": "Не указан"
+    "profileNone": "Не указан",
+    "appName": "Имя сборки",
+    "appNameHint": "напр. Клиент, Провайдер"
   },
   "myTime": {
     "title": "Мои последние часы",

@@ -266,8 +266,8 @@ function endpointCatalog(q: string): string {
 
   GET    /x/releases${q}                   what shipped and where, plus "live"
   GET    /x/releases/<id>${q}              one version with its stage history
-  POST   /x/releases/request${q}   {"version","buildType","assignee?","comment?","buildProfile?","estimateMinutes?"}
-  POST   /x/releases${q}           {"version","buildType","status?","referenceUrl?","notes?","comment?","buildProfile?"}
+  POST   /x/releases/request${q}   {"version","appName?","buildType","assignee?","comment?","buildProfile?","estimateMinutes?"}
+  POST   /x/releases${q}           {"version","appName?","buildType","status?","referenceUrl?","notes?","comment?","buildProfile?"}
   POST   /x/releases/<id>/stage${q} {"status","comment"}   comment REQUIRED
 
   /x/releases/request is the one you usually want. A manager does not "create a
@@ -276,6 +276,12 @@ function endpointCatalog(q: string): string {
   single call. Doing it as three calls risks breaking in the middle and leaving
   a task with no version. POST /x/releases without /request is for registering
   something ALREADY built, when there is nobody to ask.
+
+  "appName" is WHICH app was built — "Client", "Provider", "Admin". A project
+  often ships more than one, and buildType does not tell them apart: the client
+  and the provider for iOS are both "ios". Without it the "what is live"
+  summary collapsed them into one line and the second app vanished from view.
+  The web form requires it; here it is optional so older versions still work.
 
   "buildProfile" is what it was built WITH — development | preview | production
   (eas build --profile). It is NOT the stage: the stage says where the build

@@ -1649,7 +1649,9 @@
       "preview": "Preview",
       "production": "Production"
     },
-    "profileNone": "Not set"
+    "profileNone": "Not set",
+    "appName": "Build name",
+    "appNameHint": "e.g. Client, Provider"
   },
   "myTime": {
     "title": "My recent hours",

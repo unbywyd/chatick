@@ -75,6 +75,7 @@ type BuildTypeDef = { key: string; label: string; stages: Stage[] }
 type Release = {
   id: string
   version: string
+  appName: string | null
   buildType: string
   buildTypeLabel: string
   status: string
@@ -114,7 +115,11 @@ export function ReleasesTab({ projectId, canManage }: { projectId: string; canMa
 
   const list = useQuery({
     queryKey: ['releases', projectId],
-    queryFn: () => api<{ items: Release[]; live: Record<string, { version: string; id: string }> }>('/api/v1/releases', {}, 'project'),
+    queryFn: () =>
+      api<{
+        items: Release[]
+        live: Record<string, { version: string; appName: string | null; buildType: string; id: string }>
+      }>('/api/v1/releases', {}, 'project'),
   })
   const types = useQuery({
     queryKey: ['release-build-types', projectId],
@@ -175,14 +180,19 @@ export function ReleasesTab({ projectId, canManage }: { projectId: string; canMa
               <Rocket className="size-3.5" />
               {t('releases.liveNow')}
             </div>
+            {/* Ключ в ответе — приложение + тип сборки, поэтому клиент и
+                провайдер под одной платформой стоят рядом, а не затирают друг
+                друга. Подпись — «Клиент · iOS», если приложений несколько. */}
             <div className="flex flex-wrap gap-x-6 gap-y-2">
-              {Object.entries(list.data!.live).map(([type, info]) => (
+              {Object.entries(list.data!.live).map(([key, info]) => (
                 <button
-                  key={type}
+                  key={key}
                   onClick={() => navigate(`/c/${companyId}/p/${projectId}/releases/${info.id}`)}
                   className="text-start transition-opacity hover:opacity-70"
                 >
-                  <div className="text-[11px] text-muted-foreground">{byType.get(type)?.label ?? type}</div>
+                  <div className="text-[11px] text-muted-foreground">
+                    {[info.appName, byType.get(info.buildType)?.label ?? info.buildType].filter(Boolean).join(' · ')}
+                  </div>
                   <div className="text-sm font-semibold">{info.version}</div>
                 </button>
               ))}
@@ -308,7 +318,7 @@ export function ReleasesTab({ projectId, canManage }: { projectId: string; canMa
   )
 }
 
-type SortKey = 'version' | 'buildType' | 'profile' | 'status' | 'owner' | 'released' | 'tasks'
+type SortKey = 'app' | 'version' | 'buildType' | 'profile' | 'status' | 'owner' | 'released' | 'tasks'
 type SortDir = 'asc' | 'desc'
 
 /**
@@ -353,6 +363,9 @@ function ReleasesTable({
     return [...items].sort((a, b) => {
       let d = 0
       switch (sort.key) {
+        case 'app':
+          d = (a.appName ?? '').localeCompare(b.appName ?? '')
+          break
         case 'version':
           // Численно по частям: «1.10» больше «1.9», а по алфавиту — наоборот.
           d = compareVersions(a.version, b.version)
@@ -383,6 +396,7 @@ function ReleasesTable({
   }, [items, sort, buildTypes])
 
   const cols: { key: SortKey; label: string; className?: string }[] = [
+    { key: 'app', label: t('releases.appName') },
     { key: 'version', label: t('releases.version') },
     { key: 'buildType', label: t('releases.buildType') },
     { key: 'profile', label: t('releases.buildProfile'), className: 'hidden md:table-cell' },
@@ -432,6 +446,9 @@ function ReleasesTable({
                 onClick={() => onOpen(r.id)}
                 className="group/row cursor-pointer border-b last:border-0 hover:bg-accent/40"
               >
+                <td className="whitespace-nowrap px-2 py-1.5 align-middle text-xs">
+                  {r.appName || <span className="text-muted-foreground">—</span>}
+                </td>
                 <td className="px-2 py-1.5 align-middle">
                   <div className="flex items-center gap-1">
                     <span className="font-semibold group-hover/row:text-brand-ink">{r.version}</span>
@@ -742,6 +759,7 @@ function RequestDialog({
   const [version, setVersion] = useState('')
   const [type, setType] = useState('')
   const [assigneeId, setAssigneeId] = useState('')
+  const [appName, setAppName] = useState('')
   const [profile, setProfile] = useState('')
   const [comment, setComment] = useState('')
 
@@ -761,6 +779,7 @@ function RequestDialog({
           method: 'POST',
           body: JSON.stringify({
             version: version.trim(),
+            appName: appName.trim(),
             buildType: type,
             assigneeId: assigneeId || null,
             buildProfile: profile || null,
@@ -812,6 +831,14 @@ function RequestDialog({
           />
         </div>
         <div>
+          <label className="mb-1 block text-xs text-muted-foreground">{t('releases.appName')}</label>
+          <Input
+            value={appName}
+            onChange={(e) => setAppName(e.target.value)}
+            placeholder={t('releases.appNameHint')}
+          />
+        </div>
+        <div>
           <label className="mb-1 block text-xs text-muted-foreground">{t('releases.version')}</label>
           <Input value={version} onChange={(e) => setVersion(e.target.value)} placeholder="1.4.0" />
         </div>
@@ -851,7 +878,7 @@ function RequestDialog({
         <Button variant="ghost" onClick={onClose}>
           {t('common.cancel')}
         </Button>
-        <Button disabled={!version.trim() || !type || ask.isPending} onClick={() => ask.mutate()}>
+        <Button disabled={!version.trim() || !appName.trim() || !type || ask.isPending} onClick={() => ask.mutate()}>
           {t('releases.request')}
         </Button>
       </div>
@@ -872,6 +899,7 @@ function CreateDialog({
 }) {
   const { t } = useTranslation()
   const [version, setVersion] = useState('')
+  const [appName, setAppName] = useState('')
   const [type, setType] = useState(buildTypes[0]?.key ?? 'other')
   const [referenceUrl, setReferenceUrl] = useState('')
   const [profile, setProfile] = useState('')
@@ -885,6 +913,7 @@ function CreateDialog({
           method: 'POST',
           body: JSON.stringify({
             version: version.trim(),
+            appName: appName.trim(),
             buildType: type,
             referenceUrl: referenceUrl.trim() || null,
             buildProfile: profile || null,
@@ -901,8 +930,19 @@ function CreateDialog({
     <Overlay onClose={onClose} title={t('releases.create')}>
       <div className="space-y-3">
         <div>
+          {/* Имя сборки первым: у проекта бывает несколько приложений, и
+              «1.4.0» без ответа «чего именно» ничего не значит. */}
+          <label className="mb-1 block text-xs text-muted-foreground">{t('releases.appName')}</label>
+          <Input
+            value={appName}
+            onChange={(e) => setAppName(e.target.value)}
+            placeholder={t('releases.appNameHint')}
+            autoFocus
+          />
+        </div>
+        <div>
           <label className="mb-1 block text-xs text-muted-foreground">{t('releases.version')}</label>
-          <Input value={version} onChange={(e) => setVersion(e.target.value)} placeholder="1.4.0" autoFocus />
+          <Input value={version} onChange={(e) => setVersion(e.target.value)} placeholder="1.4.0" />
         </div>
         <div>
           <label className="mb-1 block text-xs text-muted-foreground">{t('releases.buildType')}</label>
@@ -947,7 +987,7 @@ function CreateDialog({
         <Button variant="ghost" onClick={onClose}>
           {t('common.cancel')}
         </Button>
-        <Button disabled={!version.trim() || create.isPending} onClick={() => create.mutate()}>
+        <Button disabled={!version.trim() || !appName.trim() || create.isPending} onClick={() => create.mutate()}>
           {t('releases.create')}
         </Button>
       </div>
