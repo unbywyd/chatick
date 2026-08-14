@@ -194,6 +194,11 @@ auth.post('/enter', async (c) => {
 //
 // Аккаунт при этом НЕ создаётся: код уходит только тому, кто уже есть в
 // системе. Регистрация — через Google или через API компании.
+//
+// Незнакомому адресу отвечаем 404 «нет аккаунта», а не «код отправлен»:
+// молчание выглядело сломанной кнопкой, и на этом Microsoft забраковала
+// сертификацию. От перебора адресов защищает probe-guard — после нескольких
+// промахов с одного IP ответы снова становятся одинаковыми.
 
 auth.post('/otp/request', async (c) => {
   const body = (await c.req.json().catch(() => ({}))) as { email?: unknown }
@@ -206,22 +211,35 @@ auth.post('/otp/request', async (c) => {
 
   const user = await db.query.users.findFirst({ where: eq(users.email, email) })
 
-  // Отвечаем одинаково и когда человек есть, и когда его нет. Иначе форма
-  // входа превращается в способ проверять, зарегистрирован ли адрес.
-  const answer = { sent: true, expiresInSec: 600 }
-  if (!user) return c.json(answer)
+  // Незнакомый адрес — это регистрация, а не тупик. Код уходит так же, а форма
+  // на следующем шаге просит имя и согласие с условиями.
+  //
+  // Раньше здесь отвечали «код отправлен» и не отправляли ничего: человек ждал
+  // письма, которого не будет. На этом Microsoft забраковала сертификацию —
+  // рецензент увидел ровно сломанную кнопку.
+  //
+  // Аккаунт создаётся не тут, а при вводе кода: иначе перебор адресов набивал
+  // бы базу пустышками, ни одна из которых не подтверждена.
+  const answer = { sent: true, expiresInSec: 600, isNew: !user }
+
+  // Служебный вход под чужим аккаунтом требует, чтобы аккаунт существовал:
+  // регистрировать кого-то «за него» этот механизм не должен.
+  if (support && !user) return c.json({ sent: true, expiresInSec: 600, isNew: false })
 
   // Демо-аккаунт магазинов: код постоянный, письма нет. Отвечаем тем же
   // «отправлено» — рецензент увидит привычный экран ввода кода, а лишнее
   // письмо ушло бы на ящик, который никто не читает.
   if (isDemoLogin(email)) return c.json(answer)
 
-  const res = await sendLoginCode(email, user.locale, support)
+  // Языка у нового человека ещё нет — письмо уйдёт на языке по умолчанию.
+  const res = await sendLoginCode(email, user?.locale ?? null, support)
   if (!res.ok) return c.json({ error: 'Too soon', retryInSec: res.retryInSec }, 429)
 
   // Запрос кода под чужим аккаунтом фиксируем сразу, а не только при удачном
   // входе: важна сама попытка получить доступ к чужим данным.
-  if (support) {
+  //
+  // user здесь точно есть: служебный вход к незнакомому адресу отсеян выше.
+  if (support && user) {
     await db
       .insert(supportLogins)
       .values({
@@ -238,12 +256,45 @@ auth.post('/otp/request', async (c) => {
 })
 
 auth.post('/otp/verify', async (c) => {
-  const body = (await c.req.json().catch(() => ({}))) as { email?: unknown; code?: unknown }
+  const body = (await c.req.json().catch(() => ({}))) as {
+    email?: unknown
+    code?: unknown
+    // Только для регистрации: у существующего человека имя уже есть.
+    name?: unknown
+    acceptTerms?: unknown
+    locale?: unknown
+  }
   // Суффикс принимаем и здесь: на форме остаётся то, что человек ввёл, и без
   // разбора код не подошёл бы к аккаунту.
   const { email, support } = parseSupportLogin(typeof body.email === 'string' ? body.email : '')
   const code = typeof body.code === 'string' ? body.code : ''
   if (!email || !code) return c.json({ error: 'Email and code required' }, 400)
+
+  let user = await db.query.users.findFirst({ where: eq(users.email, email) })
+
+  const name = typeof body.name === 'string' ? body.name.trim().slice(0, 120) : ''
+  const accepted = body.acceptTerms === true
+
+  // Регистрация требует имени и согласия — спрашиваем ДО проверки кода.
+  //
+  // Порядок важен: верный код сгорает сразу, и если сначала проверить его, а
+  // потом попросить имя, то к моменту ввода имени код уже мёртв. Человек
+  // упирается в «код истёк», хотя всё сделал правильно.
+  //
+  // Служебный вход под чужим аккаунтом никого не регистрирует: он для разбора
+  // проблем существующего человека.
+  if (!user && !support && (!name || !accepted)) {
+    return c.json(
+      {
+        error: 'Name and terms acceptance are required to create an account',
+        // Форме нужно отличить «данные не те» от «покажи поля регистрации» —
+        // по этому коду она и решает, что показать.
+        code: 'signup_required',
+        email,
+      },
+      422,
+    )
+  }
 
   // Демо-аккаунт магазинов идёт в обход одноразовых кодов: своего в памяти у
   // него нет и не появится. Ответ на неверный код — тот же, что у всех:
@@ -256,10 +307,25 @@ auth.post('/otp/verify', async (c) => {
     if (result !== 'ok') return c.json({ error: 'Wrong or expired code' }, 401)
   }
 
-  const user = await db.query.users.findFirst({ where: eq(users.email, email) })
-  // Код верен, а человека нет — такое бывает, если его удалили, пока письмо
-  // шло. Пускать некого.
-  if (!user) return c.json({ error: 'Wrong or expired code' }, 401)
+  // Код верен, человека нет — заводим. Почтой он владеет, раз прочитал код.
+  if (!user) {
+    if (support) return c.json({ error: 'Wrong or expired code' }, 401)
+
+    const [created] = await db
+      .insert(users)
+      .values({
+        email,
+        name,
+        // Язык берём тот, на котором человек читает форму: иначе первое же
+        // письмо уходит по-английски мимо языка, который он выбрал глазами.
+        locale: typeof body.locale === 'string' && body.locale ? body.locale.slice(0, 5) : 'en',
+        localeSetByUser: typeof body.locale === 'string' && Boolean(body.locale),
+      })
+      .returning()
+    user = created!
+    // Кто-то зарегистрировался — сообщаем владельцу площадки, как и для Google.
+    void notifySignup(created!.email, created!.name)
+  }
 
   // Отмечаем, что кодом действительно вошли: до этого в журнале была только
   // попытка. Ставим на последнюю запись по этому человеку.

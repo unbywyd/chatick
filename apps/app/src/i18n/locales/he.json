@@ -22,7 +22,16 @@
     "otpWrong": "הקוד שגוי או שפג תוקפו",
     "otpTooSoon": "קוד כבר נשלח. המתינו דקה.",
     "otpBadEmail": "בדקו את כתובת המייל",
-    "otpAnotherEmail": "מייל אחר"
+    "otpAnotherEmail": "מייל אחר",
+    "otpName": "השם שלכם",
+    "otpCreate": "יצירת חשבון",
+    "otpSignupNeeded": "אין עדיין חשבון עם האימייל הזה — הזינו שם וניצור אותו",
+    "otpSignupHint": "זו הפעם הראשונה שלכם. הקוד מהמייל מאשר שהאימייל שלכם.",
+    "otpNameRequired": "הזינו שם",
+    "otpTermsRequired": "יש לאשר את התנאים כדי להמשיך",
+    "otpTerms": "אני מאשר את <terms>תנאי השימוש</terms> ואת <privacy>מדיניות הפרטיות</privacy>",
+    "otpExistingOnly": "למי שכבר יש חשבון. חשבון חדש נוצר דרך Google או בהזמנה מעמית.",
+    "otpNewHint": "פעם ראשונה? אותו קוד ייצור לכם חשבון."
   },
   "start": {
     "logout": "התנתקות",

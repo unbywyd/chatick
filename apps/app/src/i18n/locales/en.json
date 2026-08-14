@@ -22,7 +22,16 @@
     "otpWrong": "Wrong or expired code",
     "otpTooSoon": "A code was just sent. Wait a minute.",
     "otpBadEmail": "Check the email address",
-    "otpAnotherEmail": "Use another email"
+    "otpAnotherEmail": "Use another email",
+    "otpName": "Your name",
+    "otpCreate": "Create account",
+    "otpSignupNeeded": "No account for this email yet — fill in your name to create one",
+    "otpSignupHint": "First time here. The code from the email confirms it is yours.",
+    "otpNameRequired": "Enter your name",
+    "otpTermsRequired": "Please accept the terms to continue",
+    "otpTerms": "I accept the <terms>Terms of Use</terms> and the <privacy>Privacy Policy</privacy>",
+    "otpExistingOnly": "For accounts that already exist. A new one is created with Google, or by an invite from a colleague.",
+    "otpNewHint": "New here? The same code creates your account."
   },
   "start": {
     "logout": "Sign out",

@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react'
 import { useNavigate, useSearchParams } from 'react-router-dom'
-import { useTranslation } from 'react-i18next'
+import { Trans, useTranslation } from 'react-i18next'
 import { toast } from 'sonner'
 import { API_URL, ApiError, api, consumeReturnTo, consumePendingInvite, getSessionToken, setSessionToken } from '@/lib/api'
 import { Logo } from '@/components/Logo'
@@ -57,6 +57,11 @@ export function LoginScreen() {
   const [otpCode, setOtpCode] = useState('')
   const [otpSent, setOtpSent] = useState(false)
   const [otpBusy, setOtpBusy] = useState(false)
+  // Незнакомый адрес — это регистрация, а не тупик: сервер отвечает 422
+  // «signup_required», и на том же экране появляются имя и согласие.
+  const [signup, setSignup] = useState(false)
+  const [otpName, setOtpName] = useState('')
+  const [otpTerms, setOtpTerms] = useState(false)
 
   async function requestCode() {
     if (!otpEmail.includes('@')) return toast.error(t('login.otpBadEmail'))
@@ -74,11 +79,20 @@ export function LoginScreen() {
   }
 
   async function submitCode() {
+    // На шаге регистрации оба поля обязательны — проверяем до запроса, чтобы
+    // не жечь код зря: верный код сгорает на сервере с первой же проверки.
+    if (signup && (!otpName.trim() || !otpTerms)) {
+      return toast.error(!otpName.trim() ? t('login.otpNameRequired') : t('login.otpTermsRequired'))
+    }
     setOtpBusy(true)
     try {
       const { token } = await api<{ token: string }>('/api/v1/auth/otp/verify', {
         method: 'POST',
-        body: JSON.stringify({ email: otpEmail.trim(), code: otpCode.trim() }),
+        body: JSON.stringify({
+          email: otpEmail.trim(),
+          code: otpCode.trim(),
+          ...(signup ? { name: otpName.trim(), acceptTerms: otpTerms, locale: i18n.language } : {}),
+        }),
       })
       setSessionToken(token)
       // Вход мог начинаться из десктопа — тогда идём туда же, куда увёл бы
@@ -87,8 +101,16 @@ export function LoginScreen() {
       // Вход по коду на почту — самый частый путь как раз для тех, кто пришёл
       // по ссылке с чужого устройства: возвращаем к ней, а не на общий экран.
       else navigate(consumeReturnTo() ?? '/start', { replace: true })
-    } catch {
-      toast.error(t('login.otpWrong'))
+    } catch (e) {
+      // 422 — не ошибка ввода, а «такого аккаунта нет, давайте заведём».
+      // Код при этом ещё жив: сервер проверяет его ПОСЛЕ полей регистрации,
+      // иначе к моменту ввода имени он бы уже сгорел.
+      if (e instanceof ApiError && e.status === 422) {
+        setSignup(true)
+        toast.info(t('login.otpSignupNeeded'))
+      } else {
+        toast.error(t('login.otpWrong'))
+      }
     } finally {
       setOtpBusy(false)
     }
@@ -205,13 +227,49 @@ export function LoginScreen() {
                   placeholder={t('login.otpCode')}
                   className="w-full rounded-full border bg-card px-5 py-3 text-center text-lg tracking-[0.4em] outline-none focus:ring-2 focus:ring-ring"
                 />
+
+                {/* Такого аккаунта нет — заводим его здесь же. Отдельный экран
+                    регистрации означал бы, что человек вводит код дважды: он
+                    сгорает с первой проверкой. */}
+                {signup && (
+                  <div className="flex flex-col gap-3 rounded-2xl border bg-card/60 p-3">
+                    <p className="text-xs text-muted-foreground">{t('login.otpSignupHint')}</p>
+                    <input
+                      autoFocus
+                      value={otpName}
+                      onChange={(e) => setOtpName(e.target.value)}
+                      placeholder={t('login.otpName')}
+                      maxLength={120}
+                      className="w-full rounded-full border bg-card px-5 py-3 text-sm outline-none focus:ring-2 focus:ring-ring"
+                    />
+                    <label className="flex cursor-pointer items-start gap-2.5 text-xs text-muted-foreground">
+                      <input
+                        type="checkbox"
+                        checked={otpTerms}
+                        onChange={(e) => setOtpTerms(e.target.checked)}
+                        className="mt-0.5 size-4 accent-brand"
+                      />
+                      <span>
+                        <Trans
+                          i18nKey="login.otpTerms"
+                          components={{
+                            terms: <a href="https://chatick.com/terms/" target="_blank" rel="noopener" className="underline underline-offset-2 hover:text-foreground" />,
+                            privacy: <a href="https://chatick.com/privacy/" target="_blank" rel="noopener" className="underline underline-offset-2 hover:text-foreground" />,
+                          }}
+                        />
+                      </span>
+                    </label>
+                  </div>
+                )}
+
                 <Button variant="brand" disabled={otpCode.length !== 6 || otpBusy} onClick={() => void submitCode()}>
-                  {t('login.otpEnter')}
+                  {signup ? t('login.otpCreate') : t('login.otpEnter')}
                 </Button>
                 <button
                   onClick={() => {
                     setOtpSent(false)
                     setOtpCode('')
+                    setSignup(false)
                   }}
                   className="text-xs text-muted-foreground underline-offset-2 hover:text-foreground hover:underline"
                 >
@@ -219,9 +277,15 @@ export function LoginScreen() {
                 </button>
               </>
             ) : (
-              <Button variant="brand" disabled={otpBusy} onClick={() => void requestCode()}>
-                {t('login.otpSend')}
-              </Button>
+              <>
+                <Button variant="brand" disabled={otpBusy} onClick={() => void requestCode()}>
+                  {t('login.otpSend')}
+                </Button>
+                {/* Что произойдёт дальше — до нажатия. Раньше человек с
+                    незнакомым адресом упирался в молчание и решал, что кнопка
+                    сломана; на этом и забраковали сертификацию. */}
+                <p className="text-center text-xs text-muted-foreground">{t('login.otpNewHint')}</p>
+              </>
             )}
 
             <button
@@ -229,6 +293,7 @@ export function LoginScreen() {
                 setByCode(false)
                 setOtpSent(false)
                 setOtpCode('')
+                setSignup(false)
               }}
               className="text-xs text-muted-foreground underline-offset-2 hover:text-foreground hover:underline"
             >
