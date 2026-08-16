@@ -60,6 +60,7 @@ import { setDue } from '../lib/notify-config.js'
 import { notifyTask, unassignNotice, dependentsOf, blockersOf } from './tasks.js'
 import { projectPath, projectUrl, companyOf } from '../lib/links.js'
 import { htmlToText, sanitizeHtml } from '../lib/sanitize-html.js'
+import { searchInDocument, searchInText, DEFAULT_CONTEXT } from '../lib/doc-search.js'
 import { richText } from '../lib/markdown.js'
 import { normalizeRefs } from '../lib/task-refs.js'
 import { fetchSiteIcon, nameFromUrl } from '../lib/site-icon.js'
@@ -4431,14 +4432,30 @@ bridgeRoute.get('/documents', async (c) => {
   const q = c.req.query('q')?.trim()
   const base = and(eq(documents.projectId, scope.projectId), isNull(documents.deletedAt))
   const rows = await db.query.documents.findMany({
-    where: q ? and(base, ilike(documents.title, `%${q}%`)) : base,
+    // Ищем и по содержимому, а не только по заголовку: «в каком документе
+    // вообще про это написано» — самый частый вопрос, а угадать заголовок
+    // по памяти получается редко.
+    where: q ? and(base, or(ilike(documents.title, `%${q}%`), ilike(documents.content, `%${q}%`))) : base,
     orderBy: desc(documents.updatedAt),
     limit: 100,
   })
   return c.json({
     items: rows.map((d) => {
       const text = htmlToText(d.content)
-      return { id: d.id, title: d.title || '—', chars: text.length, preview: text.slice(0, 160), updatedAt: d.updatedAt }
+      // При поиске показываем НАЙДЕННОЕ место, а не первые 160 символов:
+      // начало документа обычно одинаковое у всех и ничего не говорит о том,
+      // почему он попал в выдачу.
+      const hit = q ? searchInText(text, q, 120).matches[0] : null
+      return {
+        id: d.id,
+        title: d.title || '—',
+        chars: text.length,
+        preview: hit ? hit.text : text.slice(0, 160),
+        // Совпадение в тексте или только в заголовке — разные вещи: во втором
+        // случае открывать документ, может, и незачем.
+        ...(q ? { matchedIn: hit ? 'content' : 'title' } : {}),
+        updatedAt: d.updatedAt,
+      }
     }),
   })
 })
@@ -4453,6 +4470,31 @@ bridgeRoute.get('/documents/:id', async (c) => {
     where: and(eq(documents.id, c.req.param('id')), eq(documents.projectId, scope.projectId), isNull(documents.deletedAt)),
   })
   if (!d) return c.json({ error: 'Not found' }, 404)
+
+  // Поиск ВНУТРИ документа: отвечает на «где здесь про авторизацию», тогда
+  // как offset отвечает лишь на «дай кусок номер N». Спецификация в 32 тысячи
+  // символов — это восемь чтений подряд ради одного абзаца.
+  //
+  // Идёт до чтения кусками и заменяет его: содержимое целиком тут не нужно,
+  // нужны совпадения. offset у них тот же, что у обычного чтения текстом, —
+  // дочитать вокруг найденного можно сразу.
+  const q = c.req.query('q')?.trim()
+  if (q) {
+    const found = searchInDocument(d.content, q, Number(c.req.query('context')) || DEFAULT_CONTEXT)
+    return c.json({
+      id: d.id,
+      title: d.title,
+      query: q,
+      totalChars: found.total,
+      matches: found.matches,
+      // Совпадений больше потолка — молча показанные двадцать из сорока
+      // читаются как «больше нигде не упоминается».
+      truncated: found.truncated,
+      hint: found.matches.length
+        ? 'Read around a match with ?offset=<its offset> (text format).'
+        : 'Nothing found. Try a shorter query — the search is literal, not fuzzy.',
+    })
+  }
 
   const asHtml = c.req.query('format') === 'html'
   const body = asHtml ? d.content : htmlToText(d.content)

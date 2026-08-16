@@ -8,6 +8,7 @@ import { readFromConnection } from '../routes/db-connections.js'
 import { hasPermission } from '../routes/projects.js'
 import { snapshot } from '../routes/documents.js'
 import { htmlToText, sanitizeHtml } from './sanitize-html.js'
+import { searchInDocument, searchInText } from './doc-search.js'
 import { createNote, noteToTask, NOTE_TYPES } from '../routes/notes.js'
 import { timeConfigForProject } from '../routes/time.js'
 import { encrypt } from './crypto.js'
@@ -83,11 +84,77 @@ export async function buildMemoryContext(projectId: string): Promise<string> {
       summaries[0]!.content,
     )
   }
+  // Оглавление документов и журнала.
+  //
+  // Про историю чата ассистент видит оглавление и знает, что за ним можно
+  // сходить. Про документы и заметки он не знал НИЧЕГО, пока не спросит, — а
+  // наугад модель не спрашивает. Выходило так: на «как мы решили делать
+  // авторизацию» он искал по чату, где оглавление перед глазами, и отвечал по
+  // нему, не открыв документ, где ответ записан. Молча — ошибки не возникает,
+  // просто ответ хуже, чем мог быть.
+  //
+  // Только заголовки и размеры, без содержимого: спецификация на 32 тысячи
+  // символов в каждом запросе — это и дорого, и бесполезно. Дальше он сам
+  // решит, стоит ли открывать.
+  const index = await buildIndexContext(projectId)
+  if (index) parts.push('', index)
+
   parts.push(
     '',
     'RECENT MESSAGES:',
     ...tail.reverse().map((r) => `${r.author?.name ?? 'AI'}: ${r.msg.text}`),
   )
+  return parts.join('\n')
+}
+
+/** Сколько строк показываем: в проекте на сто документов оглавление само стало бы стеной текста. */
+const INDEX_LIMIT = 12
+
+async function buildIndexContext(projectId: string): Promise<string> {
+  const [docs, journal] = await Promise.all([
+    db
+      // Длину считаем в SQL, а не тянем содержимое ради length: оглавление
+      // собирается на КАЖДОЕ сообщение, и возить двенадцать документов по
+      // тридцать тысяч символов за раз — дорого и незачем. Число получается
+      // по HTML, а не по тексту, — для «большой или маленький» разницы нет.
+      .select({ id: documents.id, title: documents.title, chars: sql<number>`length(${documents.content})`, updatedAt: documents.updatedAt })
+      .from(documents)
+      .where(and(eq(documents.projectId, projectId), isNull(documents.deletedAt)))
+      .orderBy(desc(documents.updatedAt))
+      .limit(INDEX_LIMIT + 1),
+    db
+      .select({ id: notes.id, title: notes.title, type: notes.type, createdAt: notes.createdAt })
+      .from(notes)
+      .where(and(eq(notes.projectId, projectId), isNull(notes.deletedAt)))
+      .orderBy(desc(notes.createdAt))
+      .limit(INDEX_LIMIT + 1),
+  ])
+
+  const parts: string[] = []
+
+  if (docs.length) {
+    const shown = docs.slice(0, INDEX_LIMIT)
+    parts.push(
+      'DOCUMENTS in this project (read_document to open; read_document query="…" finds a passage without reading it through):',
+      ...shown.map(
+        (d) => `- [${d.id}] "${d.title || '—'}" (~${d.chars} chars, updated ${d.updatedAt.toISOString().slice(0, 10)})`,
+      ),
+      // Обрезали — говорим вслух: молча показанные двенадцать из тридцати
+      // читаются как «это всё, что есть».
+      ...(docs.length > INDEX_LIMIT ? [`  …and older ones — list_documents query="…" searches titles AND text.`] : []),
+    )
+  }
+
+  if (journal.length) {
+    const shown = journal.slice(0, INDEX_LIMIT)
+    if (parts.length) parts.push('')
+    parts.push(
+      'PROJECT JOURNAL — decisions, solutions, contradictions (read_note to open; list_notes scope="company" searches other projects too):',
+      ...shown.map((n) => `- [${n.id}] ${n.type} "${n.title || '—'}" (${n.createdAt.toISOString().slice(0, 10)})`),
+      ...(journal.length > INDEX_LIMIT ? ['  …and older ones — list_notes query="…" searches all of them.'] : []),
+    )
+  }
+
   return parts.join('\n')
 }
 
@@ -611,17 +678,20 @@ export function memoryTools(projectId: string, actorUserId: string): { tools: To
     },
     {
       name: 'list_documents',
-      description: 'List project documents (id, title, size in characters, updated). Optionally filter by title.',
+      description:
+        'List project documents (id, title, size in characters, updated). Pass query to search BOTH titles and their text — use it to find which document covers something before reading any of them; the preview then shows the matching passage.',
       parameters: { type: 'object', properties: { query: { type: 'string' } } },
     },
     {
       name: 'read_document',
       description:
-        'Read a document by id. Returns plain text by default — use format="html" only when you need the exact markup to edit it. LONG DOCUMENTS ARE READ IN CHUNKS: pass offset (characters, default 0) and limit (default 4000, max 8000). The response tells you the total length and whether more remains — call again with a bigger offset to continue.',
+        'Read a document by id. SEARCH FIRST when you are after something specific: pass query="word" and get back only the matching places with their offsets — a 30k-character spec is 8 sequential reads otherwise. Then read around a hit with offset=<its offset>. Without query it returns the text in CHUNKS: offset (default 0) and limit (default 4000, max 8000); the response says whether more remains. Use format="html" only when you need the exact markup to edit it.',
       parameters: {
         type: 'object',
         properties: {
           id: { type: 'string' },
+          query: { type: 'string', description: 'find this text inside the document instead of reading it through' },
+          context: { type: 'number', description: 'characters of context around each match (default 300)' },
           offset: { type: 'number', description: 'character offset to start from (default 0)' },
           limit: { type: 'number', description: 'characters to read (default 4000, max 8000)' },
           format: { type: 'string', enum: ['text', 'html'], description: 'text (default) or html when you need the markup' },
@@ -1315,15 +1385,20 @@ export function memoryTools(projectId: string, actorUserId: string): { tools: To
       const rows = await db
         .select()
         .from(documents)
-        .where(q ? and(base, ilike(documents.title, `%${q}%`)) : base)
+        // И по содержимому, а не только по заголовку: «в каком документе про
+        // это написано» — вопрос, на который заголовок отвечает редко.
+        .where(q ? and(base, or(ilike(documents.title, `%${q}%`), ilike(documents.content, `%${q}%`))) : base)
         .orderBy(desc(documents.updatedAt))
         .limit(50)
       if (!rows.length) return 'No documents.'
       return rows
         .map((d) => {
           const text = htmlToText(d.content)
-          const preview = text.slice(0, 120)
-          return `"${d.title || '—'}" (id=${d.id}, ${text.length} chars, updated ${d.updatedAt.toISOString().slice(0, 10)})${preview ? ` — ${preview}${text.length > 120 ? '…' : ''}` : ''}`
+          // При поиске показываем НАЙДЕННОЕ место: начало документа у всех
+          // одинаковое и не объясняет, почему он попал в выдачу.
+          const hit = q ? searchInText(text, q, 100).matches[0] : null
+          const preview = hit ? hit.text : text.slice(0, 120)
+          return `"${d.title || '—'}" (id=${d.id}, ${text.length} chars, updated ${d.updatedAt.toISOString().slice(0, 10)})${preview ? ` — ${preview}${!hit && text.length > 120 ? '…' : ''}` : ''}`
         })
         .join('\n')
     },
@@ -1333,6 +1408,22 @@ export function memoryTools(projectId: string, actorUserId: string): { tools: To
         where: and(eq(documents.id, String(args.id ?? '')), eq(documents.projectId, projectId), sql`${documents.deletedAt} is null`),
       })
       if (!d) return 'Document not found.'
+      // Поиск ВНУТРИ документа. offset отвечает на «дай кусок номер N», но не
+      // на «где здесь про авторизацию»: спецификация в 32 тысячи символов —
+      // это восемь чтений подряд ради одного абзаца.
+      const q = typeof args.query === 'string' ? args.query.trim() : ''
+      if (q) {
+        const found = searchInDocument(d.content, q, Number(args.context) || undefined)
+        if (!found.matches.length) {
+          return `"${d.title || '—'}" (${found.total} chars): nothing found for "${q}". The search is literal — try a shorter word.`
+        }
+        return [
+          `"${d.title || '—'}" — ${found.matches.length} place(s) matching "${q}" (document is ${found.total} chars)${found.truncated ? '; MORE MATCHES EXIST — narrow the query' : ''}`,
+          'Read around any of them with read_document offset=<offset>.',
+          '',
+          ...found.matches.map((m) => `[offset ${m.offset}] ${m.text}`),
+        ].join('\n')
+      }
       // По умолчанию отдаём простой текст: резать HTML по символам нельзя —
       // чанк оборвётся посреди тега. HTML нужен только для точечного редактирования.
       const asHtml = args.format === 'html'

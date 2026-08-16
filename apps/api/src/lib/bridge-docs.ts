@@ -684,6 +684,15 @@ ${endpointCatalog('')}
 ## Documents
 
   GET    /x/documents?q=text
+         Searches titles AND their text. Each item says "matchedIn": content
+         or title, and the preview shows the matching passage — so you can tell
+         which document is worth opening before opening any.
+  GET    /x/documents/<id>?q=text&context=300
+         SEARCH INSIDE one document. Returns only the matching passages with
+         their offsets, not the whole text. Use this first when you are after
+         something specific: a 30k-character spec is 8 sequential reads
+         otherwise, and you usually need one paragraph.
+         Then read around a hit with ?offset=<its offset>.
   GET    /x/documents/<id>?format=text|html&offset=0&limit=4000
          Long documents are read in chunks; the response says whether more remains.
   POST   /x/documents          {"title","content"}   content is HTML
