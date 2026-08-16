@@ -649,7 +649,14 @@ function registerIpc() {
     // Строка — из старых вызовов (строка проектов), объект — из списка
     // уведомлений, где вместе со ссылкой едет id прочитанного.
     const link = typeof payload === 'string' ? payload : payload?.link
-    if (link) send('navigate', { link, notificationId: typeof payload === 'string' ? null : payload?.notificationId })
+    if (link) {
+      send('navigate', {
+        link,
+        notificationId: typeof payload === 'string' ? null : payload?.notificationId,
+        // Уход в проект целиком: гасим все его уведомления, а не одно.
+        projectId: typeof payload === 'string' ? null : payload?.projectId,
+      })
+    }
   })
   ipcMain.on('panel:close', () => panel?.hide())
 

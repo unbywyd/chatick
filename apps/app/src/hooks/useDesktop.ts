@@ -20,7 +20,9 @@ type DesktopBridge = {
   openExternal: (url: string) => void
   info: () => Promise<{ version: string; platform: string; openAtLogin: boolean }>
   onToggleTimer: (fn: (projectId?: string | null) => void) => () => void
-  onNavigate: (fn: (p: string | { link: string; notificationId?: string | null }) => void) => () => void
+  onNavigate: (
+    fn: (p: string | { link: string; notificationId?: string | null; projectId?: string | null }) => void,
+  ) => () => void
   /** Ответ панели про введённый код подключения. */
   connectResult: (payload: ConnectResult) => void
   onConnectCheck: (fn: (code: string) => void) => () => void
@@ -454,6 +456,7 @@ export function useDesktopSync() {
       // Панель присылает объект; строка — от старых вызовов (переход в проект).
       const link = typeof payload === 'string' ? payload : payload?.link
       const notificationId = typeof payload === 'string' ? null : payload?.notificationId
+      const projectId = typeof payload === 'string' ? null : payload?.projectId
       if (!link) return
       // Старый трей слал «/p/<id>/…» без компании — такой адрес не совпадает
       // ни с одним маршрутом, и вместо проекта открывался чёрный экран.
@@ -471,11 +474,20 @@ export function useDesktopSync() {
       // Клик из панели — это прочтение: уведомление привело человека на место,
       // и висеть непрочитанным ему больше незачем. id приходит от панели: по
       // ссылке уведомления не различить, несколько ведут в одно место.
-      if (!notificationId) return
-      api('/api/v1/inbox/read', { method: 'POST', body: JSON.stringify({ ids: [notificationId] }) })
+      //
+      // Уход в проект целиком (заголовок группы в «Мне») гасит все его
+      // уведомления: под заголовком показаны именно они, и человек их видел.
+      const readBody = notificationId
+        ? { ids: [notificationId] }
+        : projectId
+          ? { projectId }
+          : null
+      if (!readBody) return
+      api('/api/v1/inbox/read', { method: 'POST', body: JSON.stringify(readBody) })
         .then(() => {
           qc.invalidateQueries({ queryKey: ['inbox'] })
           qc.invalidateQueries({ queryKey: ['sidebar-projects'] })
+          qc.invalidateQueries({ queryKey: ['desktop-tasks'] })
         })
         .catch(() => {})
     })

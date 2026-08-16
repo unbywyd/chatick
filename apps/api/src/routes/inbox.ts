@@ -145,16 +145,43 @@ inboxRoute.patch(
   },
 )
 
-// Пометить прочитанными: конкретные id / весь проект / всё
+// Пометить прочитанными: конкретные id / сущность / весь проект / всё
 inboxRoute.post(
   '/read',
-  zValidator('json', z.object({ ids: z.array(z.string()).optional(), projectId: z.string().optional(), all: z.boolean().optional() })),
+  zValidator(
+    'json',
+    z.object({
+      ids: z.array(z.string()).optional(),
+      projectId: z.string().optional(),
+      all: z.boolean().optional(),
+      // Погасить всё, что вело на эту задачу или сообщение. Открыв задачу,
+      // человек прочитал уведомление о ней — и не только то, по которому
+      // пришёл: на одну задачу их накапливается несколько (назначили,
+      // упомянули, прокомментировали), и гасить их по одному руками — работа,
+      // которую он делать не станет. Бейдж после этого не сходился с тем, что
+      // человек уже видел.
+      entityType: z.string().optional(),
+      entityId: z.string().optional(),
+    }),
+  ),
   async (c) => {
     const { sub } = c.get('session')
-    const { ids, projectId, all } = c.req.valid('json')
+    const { ids, projectId, all, entityType, entityId } = c.req.valid('json')
     const now = new Date()
     if (all) {
       await db.update(notifications).set({ readAt: now }).where(and(eq(notifications.userId, sub), isNull(notifications.readAt)))
+    } else if (entityType && entityId) {
+      await db
+        .update(notifications)
+        .set({ readAt: now })
+        .where(
+          and(
+            eq(notifications.userId, sub),
+            eq(notifications.entityType, entityType),
+            eq(notifications.entityId, entityId),
+            isNull(notifications.readAt),
+          ),
+        )
     } else if (projectId) {
       await db
         .update(notifications)

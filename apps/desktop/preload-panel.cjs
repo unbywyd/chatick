@@ -32,6 +32,9 @@ contextBridge.exposeInMainWorld('panel', {
     return () => ipcRenderer.off('panel:connect', handler)
   },
   open: (link, notificationId) => ipcRenderer.send('panel:open', { link, notificationId }),
+  // Переход в проект из заголовка группы «Мне»: там показаны все его
+  // уведомления, и человек, ушедший по этой дорожке, увидел их все.
+  openProject: (link, projectId) => ipcRenderer.send('panel:open', { link, projectId }),
   openApp: () => ipcRenderer.send('window:show'),
   close: () => ipcRenderer.send('panel:close'),
 })

@@ -505,6 +505,31 @@ export function TasksTab({ projectId, meId }: { projectId: string; meId?: string
     prevOpenId.current = openTaskId
   }, [openTaskId])
 
+  /**
+   * Открыл задачу — значит прочитал уведомления о ней.
+   *
+   * Гасим по сущности, а не по одному id: на задачу их накапливается
+   * несколько — назначили, упомянули, прокомментировали, — и человек, дошедший
+   * до карточки, прочитал все. Раньше не гасло ни одно, и бейдж в трее, в
+   * панели и на кнопке в панели задач продолжал висеть после того, как всё уже
+   * просмотрено. Доверие к счётчику от этого и ломается.
+   */
+  useEffect(() => {
+    if (!openTaskId) return
+    void api('/api/v1/inbox/read', {
+      method: 'POST',
+      body: JSON.stringify({ entityType: 'task', entityId: openTaskId }),
+    })
+      .then(() => {
+        // Бейджи считаются из этих запросов — без сброса цифра остаётся
+        // старой до следующего опроса, и человек видит то, что уже прочёл.
+        qc.invalidateQueries({ queryKey: ['inbox'] })
+        qc.invalidateQueries({ queryKey: ['sidebar-projects'] })
+        qc.invalidateQueries({ queryKey: ['desktop-tasks'] })
+      })
+      .catch(() => {})
+  }, [openTaskId, qc])
+
   useEffect(() => {
     const id = justClosed.current
     if (openTaskId || !id) return

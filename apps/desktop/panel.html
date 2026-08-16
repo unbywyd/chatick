@@ -1252,7 +1252,10 @@
         // Заголовок группы в «Мне» — дорожка в проект.
         const head = e.target.closest('[data-open-project]')
         if (head) {
-          window.panel.open(openProjectLink(head.dataset.openProject))
+          // Проект передаём отдельно: под заголовком показаны все его
+          // уведомления, и уходя по этой дорожке человек видит их все. Раньше
+          // не гасло ни одного, и бейдж висел после просмотра.
+          window.panel.openProject(openProjectLink(head.dataset.openProject), head.dataset.openProject)
           return
         }
         const open = e.target.closest('[data-link]')
