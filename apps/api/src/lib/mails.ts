@@ -318,27 +318,33 @@ export async function sendTaskReminderMail(p: {
 
 // --- Суточный дайджест ----------------------------------------------------
 
-const DIGEST: Record<MailLang, { subject: string; title: string; intro: string; cta: string; unsubscribe: string }> = {
+const DIGEST: Record<
+  MailLang,
+  { subject: string; title: string; intro: string; cta: string; unsubscribe: string; more: string }
+> = {
   en: {
     subject: 'Your Chatick digest — {{count}} unread',
     title: 'While you were away',
     intro: 'Here is what happened in your projects:',
     cta: 'Open Chatick',
-    unsubscribe: 'You get one digest a day. Turn it off in notification settings.',
+    unsubscribe: 'One email a day. <a href="{{url}}" style="color:#6b6b73">Turn it off</a>.',
+    more: 'and {{n}} more',
   },
   ru: {
     subject: 'Сводка Chatick — {{count}} непрочитанных',
     title: 'Пока вас не было',
     intro: 'Вот что произошло в ваших проектах:',
     cta: 'Открыть Chatick',
-    unsubscribe: 'Это одно письмо в сутки. Отключить можно в настройках уведомлений.',
+    unsubscribe: 'Одно письмо в сутки. <a href="{{url}}" style="color:#6b6b73">Отключить</a>.',
+    more: 'и ещё {{n}}',
   },
   he: {
     subject: 'סיכום Chatick — {{count}} שלא נקראו',
     title: 'בזמן שלא היית',
     intro: 'הנה מה שקרה בפרויקטים שלך:',
     cta: 'פתיחת Chatick',
-    unsubscribe: 'זהו סיכום יומי אחד. ניתן לכבות בהגדרות ההתראות.',
+    unsubscribe: 'מייל אחד ביום. <a href="{{url}}" style="color:#6b6b73">לכבות</a>.',
+    more: 'ועוד {{n}}',
   },
 }
 
@@ -350,13 +356,29 @@ export async function sendDigestMail(p: {
 }) {
   const lang = mailLang(p.locale)
   const s = DIGEST[lang]
-  // каждый проект — подзаголовок со списком событий
-  const blocks = p.groups.map(
-    (g) =>
+
+  // Показываем по нескольку событий на проект, остальное — счётчиком.
+  //
+  // Раньше в письмо вываливались все непрочитанные: у человека с 83
+  // уведомлениями получалась простыня на несколько экранов, которую он просто
+  // не читал — и пожаловался ровно на это. Сводка должна отвечать «где меня
+  // ждут», а не пересказывать каждое событие: за подробностями всё равно идут
+  // в приложение, и кнопка для этого прямо под текстом.
+  const PER_PROJECT = 4
+  const blocks = p.groups.map((g) => {
+    const shown = g.lines.slice(0, PER_PROJECT)
+    const rest = g.lines.length - shown.length
+    const tail = rest > 0 ? `<br><span style="color:#8a8a93">${fmt(s.more, { n: String(rest) })}</span>` : ''
+    return (
       `<b>${g.name}</b> <span style="color:#8a8a93">(${g.lines.length})</span><br>` +
-      g.lines.map((l) => `<span style="color:#55555d">• ${l}</span>`).join('<br>'),
-  )
-  const unsubscribeUrl = `${appUrl()}/#/start`
+      shown.map((l) => `<span style="color:#55555d">• ${l}</span>`).join('<br>') +
+      tail
+    )
+  })
+  // Прямо на экран, где дайджест выключается. Раньше вело на /#/start —
+  // человек попадал на список компаний и не понимал, куда дальше: настройка
+  // личная, одна на все проекты, и искать её внутри проекта неоткуда.
+  const unsubscribeUrl = `${appUrl()}/#/settings/notifications`
   await send(
     p.to,
     fmt(s.subject, { count: String(p.count) }),
@@ -365,7 +387,7 @@ export async function sendDigestMail(p: {
       title: s.title,
       paragraphs: [s.intro, ...blocks],
       action: { label: s.cta, url: appUrl() },
-      note: s.unsubscribe,
+      note: fmt(s.unsubscribe, { url: unsubscribeUrl }),
     },
     { unsubscribeUrl },
   )

@@ -72,6 +72,13 @@ export async function sendDailyDigests(): Promise<void> {
         .limit(100)
       if (!items.length) continue
 
+      // Компания — из проектов, о которых письмо. Без неё localeFor не имеет
+      // куда падать: личный язык у большинства не выбран (колонка NOT NULL
+      // DEFAULT 'en'), и сводка уходила по-английски в израильскую фирму, где
+      // у компании стоит he. Берём первую: дайджест почти всегда про одну
+      // компанию, а при нескольких выбор всё равно произволен.
+      const companyId = items[0]!.project.companyId
+
       const byProject = new Map<string, { name: string; lines: string[] }>()
       for (const it of items) {
         const g = byProject.get(it.project.id) ?? { name: it.project.name, lines: [] }
@@ -83,7 +90,7 @@ export async function sendDailyDigests(): Promise<void> {
         to: user.email,
         // Дайджест охватывает несколько проектов, поэтому только личный язык
         // и язык компании: user.locale сам по себе — дефолтный 'en'.
-        locale: await localeFor({ userId: user.id }),
+        locale: await localeFor({ userId: user.id, companyId }),
         count: r.count,
         groups: [...byProject.values()].map((g) => ({
           name: g.name,
