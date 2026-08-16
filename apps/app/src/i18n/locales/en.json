@@ -734,7 +734,9 @@
     "promptHint": "So you don't miss mentions and tasks assigned to you.",
     "permGranted": "Notifications are on.",
     "permBlocked": "Your browser didn't show the prompt. Click the icon at the left of the address bar and allow notifications there.",
-    "perProjectHint": "Which events you're subscribed to is set per project — open a project and go to Notifications."
+    "perProjectHint": "Which events you're subscribed to is set per project — open a project and go to Notifications.",
+    "digestMoved": "The daily email digest is a personal setting — one for all your projects.",
+    "digestMovedLink": "Open personal settings"
   },
   "projTeam": {
     "title": "Project team",
@@ -1717,6 +1719,10 @@
       "task_status": "Task status changed",
       "task_comment": "New comment on a task",
       "task_due": "Task due date approaching"
-    }
+    },
+    "inherited": "Inherited from the company. Change it here to override for this project only.",
+    "own": "Set for this project — the company default no longer applies here.",
+    "backToCompany": "Use company settings",
+    "eventsHintProject": "Turning one off silences it in this project. People can still unsubscribe individually below."
   }
 }

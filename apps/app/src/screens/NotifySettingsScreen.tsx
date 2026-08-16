@@ -11,6 +11,7 @@ import {
 } from '@/hooks/useSystemNotifications'
 import { Button } from '@/components/ui/button'
 import { Switch } from '@/components/ui/switch'
+import { DigestSettings } from '@/components/DigestSettings'
 
 // Системные уведомления — настройка ПРОГРАММЫ, а не проекта (SPEC §8.22).
 //
@@ -107,6 +108,13 @@ export function NotifySettingsScreen() {
           />
         </label>
       </section>
+
+      {/* Сводка на почту — тоже настройка человека, а не проекта: ключ в базе
+          только userId. Стояла на странице проекта и читалась как настройка
+          этого проекта, хотя выключалась сразу везде. */}
+      <div className="mt-4">
+        <DigestSettings />
+      </div>
 
       {/* Подписки на события — про проект, и живут в самом проекте */}
       <p className="mt-4 text-xs text-muted-foreground">{t('notif.perProjectHint')}</p>

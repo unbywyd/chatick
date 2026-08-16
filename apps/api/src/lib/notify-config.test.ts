@@ -179,3 +179,37 @@ describe('срок и номер задачи на иврите', () => {
     }
   })
 })
+
+describe('каждая настройка живёт ровно в одном месте', () => {
+  const app = (p: string) => readFileSync(join(here, '../../../app/src', p), 'utf8')
+
+  it('сводка на почту — только в личных настройках', () => {
+    // Ключ в базе — только userId. На странице проекта переключатель выглядел
+    // настройкой проекта, а выключался сразу везде: человек находил его
+    // выключенным в проекте, где не трогал, и решал, что интерфейс врёт.
+    const project = app('components/tabs/NotificationsTab.tsx')
+    expect(project).not.toMatch(/<DigestSettings\s*\/>/)
+    // Но и не прячем: со страницы проекта на неё ведёт ссылка.
+    expect(project).toMatch(/notif\.digestMoved/)
+    expect(app('screens/NotifySettingsScreen.tsx')).toMatch(/<DigestSettings\s*\/>/)
+  })
+
+  it('настройки компании видны и на проекте', () => {
+    // Иначе проект не может переопределить то, что за него решили, а ручка
+    // для этого уже есть.
+    const project = app('components/tabs/NotificationsTab.tsx')
+    expect(project).toMatch(/api\/v1\/notifications\/config/)
+    // Наследование названо словами: без этого переключатели читаются как
+    // настройка проекта, хотя показывают чужое умолчание.
+    expect(project).toMatch(/notifyConfig\.inherited/)
+    expect(project).toMatch(/inherit: true/)
+  })
+
+  it('дайджест не продублирован своей копией', () => {
+    // Общий компонент, а не две реализации: разойдясь, они показали бы
+    // одному человеку разное состояние одной настройки.
+    const shared = app('components/DigestSettings.tsx')
+    expect(shared).toMatch(/api\/v1\/inbox\/prefs/)
+    expect(app('components/tabs/NotificationsTab.tsx')).not.toMatch(/inbox\/prefs/)
+  })
+})

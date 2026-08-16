@@ -7,6 +7,11 @@ import { api } from '@/lib/api'
 import { Switch } from '@/components/ui/switch'
 import { Button } from '@/components/ui/button'
 import { Select, SelectTrigger, SelectValue, SelectContent, SelectItem } from '@/components/ui/select'
+import { Link } from 'react-router-dom'
+import { NOTIFY_EVENTS, DEFAULT_NOTIFY_CONFIG, type NotifyConfig } from '@/lib/notify-config'
+
+/** Варианты упреждения: часами до полусуток, дальше — сутками. */
+const LEAD_OPTIONS = [1, 2, 4, 8, 12, 24, 48, 72, 168]
 
 // Уведомления и подписки проекта (SPEC §8.9): личные подписки + напоминания задач.
 const EVENTS = [
@@ -62,8 +67,8 @@ export function NotificationsTab({ projectId, isAdmin }: { projectId: string; is
         <p className="mt-1 text-sm text-muted-foreground">{t('notif.subtitle')}</p>
       </div>
 
-      {/* Суточный email-дайджест (глобально, вместо мгновенных писем) */}
-      <DigestSettings />
+      {/* Настройки компании — они же умолчание для этого проекта */}
+      <ProjectNotifyConfig projectId={projectId} isAdmin={isAdmin} />
 
       {/* Личные подписки */}
       <section className="space-y-2.5 rounded-xl border bg-card p-4">
@@ -85,7 +90,112 @@ export function NotificationsTab({ projectId, isAdmin }: { projectId: string; is
 
       {/* Напоминания об открытых задачах */}
       <ReminderConfig projectId={projectId} isAdmin={isAdmin} />
+
+      {/* Сводка на почту — настройка человека, а не проекта: ключ в базе
+          только userId, и выключенная здесь она выключалась сразу везде.
+          Оставляем ссылку, чтобы её не искали. */}
+      <p className="text-xs text-muted-foreground">
+        {t('notif.digestMoved')}{' '}
+        <Link to="/settings/notifications" className="underline underline-offset-2 hover:text-foreground">
+          {t('notif.digestMovedLink')}
+        </Link>
+      </p>
     </div>
+  )
+}
+
+/**
+ * Настройки уведомлений проекта — те же, что у компании.
+ *
+ * Проект по умолчанию НАСЛЕДУЕТ компанию, и это видно словами: иначе человек
+ * видит переключатели, думает, что настраивает проект, а на деле смотрит на
+ * чужое умолчание. Переопределение — осознанное действие, и вернуться к
+ * общему можно одной кнопкой.
+ */
+function ProjectNotifyConfig({ projectId, isAdmin }: { projectId: string; isAdmin: boolean }) {
+  const { t } = useTranslation()
+  const qc = useQueryClient()
+
+  const q = useQuery({
+    queryKey: ['notify-config', projectId],
+    queryFn: () =>
+      api<{ config: NotifyConfig; inherited: boolean; canEdit: boolean }>('/api/v1/notifications/config', {}, 'project'),
+  })
+
+  const save = useMutation({
+    mutationFn: (body: Partial<NotifyConfig> & { inherit?: boolean }) =>
+      api('/api/v1/notifications/config', { method: 'PATCH', body: JSON.stringify(body) }, 'project'),
+    onSuccess: () => {
+      toast.success(t('notif.saved'))
+      qc.invalidateQueries({ queryKey: ['notify-config', projectId] })
+    },
+    onError: (e) => toast.error(e instanceof Error ? e.message : String(e)),
+  })
+
+  const inherited = q.data?.inherited ?? true
+  const cfg = { ...DEFAULT_NOTIFY_CONFIG, ...(q.data?.config ?? {}) }
+  const canEdit = (q.data?.canEdit ?? false) && isAdmin
+
+  if (q.isLoading) return null
+
+  return (
+    <section className="space-y-4 rounded-xl border bg-card p-4">
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <div>
+          <h2 className="text-sm font-semibold">{t('notifyConfig.title')}</h2>
+          <p className="text-xs text-muted-foreground">
+            {inherited ? t('notifyConfig.inherited') : t('notifyConfig.own')}
+          </p>
+        </div>
+        {canEdit && !inherited && (
+          <Button variant="outline" size="sm" onClick={() => save.mutate({ inherit: true })} disabled={save.isPending}>
+            {t('notifyConfig.backToCompany')}
+          </Button>
+        )}
+      </div>
+
+      {/* Унаследованное показываем приглушённым и только на чтение: так видно,
+          что настройка работает, но живёт не здесь. */}
+      <fieldset disabled={!canEdit} className="space-y-3 disabled:opacity-60">
+        <div className="flex items-center justify-between gap-3 rounded-lg border p-3">
+          <div>
+            <p className="text-sm font-medium">{t('notifyConfig.dueLead')}</p>
+            <p className="text-xs text-muted-foreground">{t('notifyConfig.dueLeadHint')}</p>
+          </div>
+          <Select
+            value={String(cfg.dueLeadHours)}
+            disabled={!canEdit || cfg.events.task_due === false}
+            onValueChange={(v) => save.mutate({ ...cfg, dueLeadHours: Number(v) })}
+          >
+            <SelectTrigger className="w-44 shrink-0">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              {LEAD_OPTIONS.map((h) => (
+                <SelectItem key={h} value={String(h)}>
+                  {h < 24 ? t('notifyConfig.leadHours', { count: h }) : t('notifyConfig.leadDays', { count: h / 24 })}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        </div>
+
+        <div className="space-y-1 rounded-lg border p-3">
+          <p className="text-sm font-medium">{t('notifyConfig.events')}</p>
+          <p className="pb-1 text-xs text-muted-foreground">{t('notifyConfig.eventsHintProject')}</p>
+          {NOTIFY_EVENTS.map((e) => (
+            <label key={e} className="flex cursor-pointer items-center justify-between gap-3 py-1">
+              <span className="text-sm">{t(`notifyConfig.event.${e}`)}</span>
+              <Switch
+                checked={cfg.events[e] !== false}
+                disabled={!canEdit}
+                onCheckedChange={(v) => save.mutate({ ...cfg, events: { ...cfg.events, [e]: v } })}
+              />
+            </label>
+          ))}
+        </div>
+      </fieldset>
+    </section>
   )
 }
 
@@ -272,57 +382,6 @@ function ReminderConfig({ projectId, isAdmin }: { projectId: string; isAdmin: bo
         <Button variant="brand" onClick={() => save.mutate()} disabled={save.isPending}>
           {t('notif.save')}
         </Button>
-      )}
-    </section>
-  )
-}
-
-// Суточный email-дайджест (SPEC §8.22): вместо письма на каждое событие — одно письмо в сутки.
-function DigestSettings() {
-  const { t } = useTranslation()
-  const qc = useQueryClient()
-  const prefs = useQuery({
-    queryKey: ['inbox-prefs'],
-    queryFn: () => api<{ dailyDigest: boolean; digestHourUtc: number }>('/api/v1/inbox/prefs'),
-  })
-  const save = useMutation({
-    mutationFn: (b: { dailyDigest: boolean; digestHourUtc: number }) =>
-      api('/api/v1/inbox/prefs', { method: 'PUT', body: JSON.stringify(b) }),
-    onSuccess: () => {
-      toast.success(t('notif.saved'))
-      qc.invalidateQueries({ queryKey: ['inbox-prefs'] })
-    },
-    onError: (e) => toast.error(e instanceof Error ? e.message : String(e)),
-  })
-
-  const daily = prefs.data?.dailyDigest ?? true
-  const hour = prefs.data?.digestHourUtc ?? 9
-
-  return (
-    <section className="space-y-3 rounded-xl border bg-card p-4">
-      <div className="flex items-center justify-between gap-3">
-        <div>
-          <h2 className="text-sm font-semibold">{t('notif.digest')}</h2>
-          <p className="text-xs text-muted-foreground">{t('notif.digestHint')}</p>
-        </div>
-        <Switch checked={daily} onCheckedChange={(v) => save.mutate({ dailyDigest: v, digestHourUtc: hour })} />
-      </div>
-      {daily && (
-        <label className="flex items-center gap-2 text-sm">
-          {t('notif.atHour')}
-          <Select value={String(hour)} onValueChange={(v) => save.mutate({ dailyDigest: true, digestHourUtc: Number(v) })}>
-            <SelectTrigger className="w-auto min-w-28">
-              <SelectValue />
-            </SelectTrigger>
-            <SelectContent>
-            {Array.from({ length: 24 }, (_, h) => (
-              <SelectItem key={h} value={String(h)}>
-                {String(h).padStart(2, '0')}:00 UTC
-              </SelectItem>
-            ))}
-            </SelectContent>
-          </Select>
-        </label>
       )}
     </section>
   )
