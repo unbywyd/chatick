@@ -70,8 +70,13 @@ describe('клиент узнаёт, что именно ему открыли',
   it('device flow отдаёт область словом', () => {
     // Иначе мастер приходит без project — как компанейский туннель — и
     // клиент занижает то, что человек открыл.
-    const poll = bridgeRoute.slice(bridgeRoute.indexOf("bridgeRoute.post('/device/poll'"))
-    expect(poll.slice(0, poll.indexOf('})\n'))).toMatch(/scope: .*scopeAll \? 'all'/)
+    // Режем до СЛЕДУЮЩЕЙ ручки, а не до первого «})»: внутри обработчика их
+    // несколько — ранние выходы с ошибками, — и срез по первому обрывался на
+    // проверке deviceCode, не доходя до ответа. Пока файл был с CRLF, «})\n»
+    // не находилось вовсе и тест проходил вхолостую.
+    const from = bridgeRoute.indexOf("bridgeRoute.post('/device/poll'")
+    const next = bridgeRoute.indexOf('bridgeRoute.', from + 20)
+    expect(bridgeRoute.slice(from, next)).toMatch(/scope: .*scopeAll \? 'all'/)
   })
 
   it('MCP различает мастер и компанию в ответе человеку', () => {

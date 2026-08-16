@@ -57,13 +57,21 @@ function endpointCatalog(q: string): string {
          in chat and stretches message cards out of shape. Both open the same
          task and neither grants access: rights are checked on arrival.
          Lists omit "shortUrl" — ask for the single task when you need it.
-  POST   /x/tasks${q}              {"title","description?","assignee?","status?","priority?","estimateMinutes?","sprintId?","attachmentIds?","resourceIds?","refs?"}
+  POST   /x/tasks${q}              {"title","description?","assignee?","status?","priority?","estimateMinutes?","dueDate?","sprintId?","attachmentIds?","resourceIds?","refs?"}
   PATCH  /x/tasks/<id>${q}         any subset of the same fields
   PATCH  /x/tasks/bulk${q}         {"tasks":["TASK-4","TASK-7"], "set":{...}, "refs":{"TASK-4":"19.1"}}
   DELETE /x/tasks/<id>${q}
   DELETE /x/tasks/bulk${q}         {"tasks":["TASK-4","TASK-7"]}
   POST   /x/tasks/<id>/restore${q}
   GET    /x/trash${q}${amp}type=task|file
+
+  "dueDate" — when the task is due: "2026-09-14", or a full timestamp if the
+  hour matters. null clears it. A bare date is read as midday, so it does not
+  slide to the previous day in western time zones.
+
+  Set it when the person names a date or a deadline, and leave it empty when
+  they do not: a made-up due date looks like a commitment somebody gave, and
+  the board stops meaning anything once half the dates are guesses.
 
   "resourceIds" — resources this task needs: a staging URL, an SSH key, a
   database. Link them, never copy a secret into the description: a password
@@ -359,11 +367,6 @@ function endpointCatalog(q: string): string {
   rewriting the task. Touching anything else needs tasks.edit.
 
   assignee accepts "me", a user id, a name or an email.
-
-  Tasks have NO due date. Deadlines live on the project, not on every task —
-  sending "dueDate" is rejected with 400 rather than quietly stored. Do not
-  invent one and do not ask the human for one: when a date matters here, it is
-  the project's, and a person sets it in the app.
 
   GET    /x/chat/summaries${q}${amp}q=text&from=&to=&full=1&limit=30
          The chat compressed into per-day summaries — how to know what was

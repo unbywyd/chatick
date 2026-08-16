@@ -945,6 +945,29 @@ async function resolveAssignee(id: BridgeIdentity, projectId: string, value: unk
  *
  * Подсказываем, куда идти, если поле — это отдельный подресурс.
  */
+/**
+ * Срок задачи из того, что прислал ассистент.
+ *
+ * Принимаем и «2026-09-14», и полную метку времени: модель пишет то так, то
+ * так, и отказ на голой дате означал бы, что срок ставится через раз.
+ *
+ * Голую дату разворачиваем в полдень по UTC, а не в полночь: полночь в поясе
+ * западнее UTC откатывается на предыдущий день, и «14-е» показывалось бы как
+ * 13-е. Полдень переживает сдвиг в любую сторону.
+ *
+ * null — снять срок, undefined — не трогать: это разные намерения, и путать
+ * их нельзя.
+ */
+function parseDue(v: unknown): Date | null | undefined {
+  if (v === undefined) return undefined
+  if (v === null || v === '') return null
+  if (typeof v !== 'string') return undefined
+  const raw = v.trim()
+  const iso = /^\d{4}-\d{2}-\d{2}$/.test(raw) ? `${raw}T12:00:00Z` : raw
+  const d = new Date(iso)
+  return Number.isNaN(d.getTime()) ? undefined : d
+}
+
 const SUBRESOURCE_HINT: Record<string, string> = {
   checklist: 'POST /x/tasks/<id>/checklist — a checklist is a sub-resource, not a task field',
   comments: 'POST /x/tasks/<id>/comments',
@@ -960,6 +983,10 @@ const TASK_FIELDS = [
   'status',
   'priority',
   'estimateMinutes',
+  // Срок. Ассистент ставит задачи не реже человека, и без этого поля они
+  // выходили бы без даты — а дописывать её потом руками значит потерять
+  // смысл поручать заведение задач ему.
+  'dueDate',
   // Свои номера задачи: экраны в макете, пункты договора, позиции сметы.
   'refs',
   'sprintId',
@@ -1306,6 +1333,7 @@ const taskView = (
   status: t.status,
   priority: t.priority,
   estimateMinutes: t.estimateMinutes ? Number(t.estimateMinutes) : null,
+  dueDate: t.dueDate ? t.dueDate.toISOString() : null,
   refs: t.refs || undefined,
   sprintId: t.groupId,
   assignee: assignee ? { id: assignee.id, name: assignee.name } : null,
@@ -1542,6 +1570,10 @@ bridgeRoute.patch('/tasks/bulk', async (c) => {
   if ((['todo', 'in_progress', 'review', 'done'] as const).includes(set.status as never)) patch.status = set.status
   if ((['low', 'normal', 'high', 'urgent'] as const).includes(set.priority as never)) patch.priority = set.priority
   if (set.estimateMinutes !== undefined) patch.estimateMinutes = set.estimateMinutes == null ? null : String(set.estimateMinutes)
+  {
+    const due = parseDue(set.dueDate)
+    if (due !== undefined) patch.dueDate = due
+  }
   if (set.sprintId !== undefined) patch.groupId = set.sprintId ?? null
   if (set.assignee !== undefined) {
     const resolved = await resolveAssignee(id, scope.projectId, set.assignee)
@@ -1822,6 +1854,7 @@ bridgeRoute.post('/tasks', async (c) => {
       estimateMinutes: b.estimateMinutes != null ? String(b.estimateMinutes) : null,
       refs: typeof b.refs === 'string' ? normalizeRefs(b.refs) : '',
       groupId: typeof b.sprintId === 'string' ? b.sprintId : null,
+      dueDate: parseDue(b.dueDate),
       createdById: id.userId,
     })
     .returning()
@@ -1881,6 +1914,10 @@ bridgeRoute.patch('/tasks/:id', async (c) => {
   if ((['todo', 'in_progress', 'review', 'done'] as const).includes(b.status as never)) patch.status = b.status
   if ((['low', 'normal', 'high', 'urgent'] as const).includes(b.priority as never)) patch.priority = b.priority
   if (b.estimateMinutes !== undefined) patch.estimateMinutes = b.estimateMinutes == null ? null : String(b.estimateMinutes)
+  {
+    const due = parseDue(b.dueDate)
+    if (due !== undefined) patch.dueDate = due
+  }
   if (typeof b.refs === 'string') patch.refs = normalizeRefs(b.refs)
   if (b.sprintId !== undefined) patch.groupId = b.sprintId ?? null
   if (b.assignee !== undefined) {
@@ -4348,8 +4385,9 @@ bridgeRoute.post('/notes/:id/task', async (c) => {
     title: typeof b.title === 'string' ? b.title : undefined,
     assigneeId: typeof b.assigneeId === 'string' ? b.assigneeId : null,
     priority: typeof b.priority === 'string' ? b.priority : undefined,
-    // Срока у задач через мост нет — см. TASK_FIELDS.
-    dueDate: null,
+    // noteToTask принимает строку, parseDue отдаёт Date — приводим здесь, а не
+    // расширяем чужую сигнатуру ради одного вызова.
+    dueDate: parseDue(b.dueDate)?.toISOString() ?? null,
   })
   if ('error' in res) return c.json({ error: res.error }, res.status)
   return c.json({ id: res.task.id, number: res.task.number, title: res.task.title, alreadyExisted: res.already })

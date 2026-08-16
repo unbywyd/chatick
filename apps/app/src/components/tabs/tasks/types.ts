@@ -125,6 +125,29 @@ export function isOverdue(t: Task) {
   return Boolean(t.dueDate && t.status !== 'done' && new Date(t.dueDate).getTime() < Date.now())
 }
 
+/** Срок горит, но ещё не прошёл: сегодня или завтра. */
+export function isDueSoon(t: Task) {
+  if (!t.dueDate || t.status === 'done') return false
+  const left = dueDays(t.dueDate)
+  return left !== null && left >= 0 && left <= 1
+}
+
+/**
+ * Сколько суток до срока: 0 — сегодня, отрицательное — просрочено.
+ *
+ * Считаем по календарным дням, а не по разнице в миллисекундах: срок стоит на
+ * дате, и «осталось 0.4 дня» человеку ничего не говорит. Обе даты приводим к
+ * полуночи — иначе задача, поставленная на сегодня в 9 утра, после обеда
+ * показывала бы «просрочено», хотя день ещё идёт.
+ */
+export function dueDays(due: string | null): number | null {
+  if (!due) return null
+  const d = new Date(due)
+  if (Number.isNaN(d.getTime())) return null
+  const midnight = (x: Date) => new Date(x.getFullYear(), x.getMonth(), x.getDate()).getTime()
+  return Math.round((midnight(d) - midnight(new Date())) / 86_400_000)
+}
+
 // Оценка времени: минуты → компактно «2ч 30м» / «45м» / «3ч» (SPEC §8.13)
 /**
  * Оценка времени в том же виде, что и в трекере: 2:30.

@@ -299,7 +299,14 @@
     "bulkDeleteConfirm": "Delete {{count}} tasks?",
     "selectGroup": "Select the whole group",
     "selectAll": "Select all",
-    "invertSelection": "Invert"
+    "invertSelection": "Invert",
+    "dueNone": "No date",
+    "dueToday": "today",
+    "dueTomorrow": "tomorrow",
+    "dueInDays": "in {{count}} days",
+    "dueOverdueBy": "{{count}} days late",
+    "dueFilter": "Due",
+    "dueFilterHint": "Overdue or due today and tomorrow"
   },
   "files": {
     "search": "Search files…",

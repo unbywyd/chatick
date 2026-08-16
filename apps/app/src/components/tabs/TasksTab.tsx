@@ -3,7 +3,7 @@ import { useNavigate, useParams, useSearchParams } from 'react-router-dom'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { useTranslation } from 'react-i18next'
 import { toast } from 'sonner'
-import { CalendarDays, ChevronDown, Download, FileSpreadsheet, Flag, LayoutList, Link2, MoreHorizontal, Paperclip, Plus, Search, Table2, Timer, Trash2, Upload, User, X } from 'lucide-react'
+import { CalendarClock, CalendarDays, ChevronDown, Download, FileSpreadsheet, Flag, LayoutList, Link2, MoreHorizontal, Paperclip, Plus, Search, Table2, Timer, Trash2, Upload, User, X } from 'lucide-react'
 import { api, previewUrl } from '@/lib/api'
 import { cn } from '@/lib/utils'
 import { Input } from '@/components/ui/input'
@@ -26,8 +26,10 @@ import { TaskRefs } from './tasks/TaskRefs'
 import { useTaskTimer } from '@/hooks/useTaskTimer'
 import { exportTasksToExcel, downloadImportTemplate, parseTasksFromExcel } from './tasks/taskExcel'
 import { useConfirm } from '@/components/ui/confirm'
-import { STATUSES, PRIORITIES, STATUS_ICON, STATUS_COLOR, PRIORITY_COLOR, fmtEstimate, type Task, type TaskGroup, type Member, type Status, type Priority } from './tasks/types'
+import { STATUSES, PRIORITIES, STATUS_ICON, STATUS_COLOR, PRIORITY_COLOR, fmtEstimate, isOverdue, isDueSoon, type Task, type TaskGroup, type Member, type Status, type Priority } from './tasks/types'
 import { StatusBadge } from './tasks/StatusBadge'
+import { DueDate } from './tasks/DueDate'
+import { DatePicker } from '@/components/ui/date-picker'
 import { TaskBlockedMark } from './tasks/TaskBlockedMark'
 import { BlockerFilter, matchesBlockerFilter, type BlockerFilterValue } from './tasks/BlockerFilter'
 
@@ -43,11 +45,19 @@ export function TasksTab({ projectId, meId }: { projectId: string; meId?: string
   const [assigneeSearch, setAssigneeSearch] = useState('')
   const [newSprintId, setNewSprintId] = useState<string | null>(null) // спринт для новой задачи
   const [statusFilter, setStatusFilter] = useState<Status | null>(null)
+  // Срок: один фильтр на «просрочено или горит». Раздельные «просроченные» и
+  // «скоро» дробят и без того длинный ряд фильтров, а спрашивают их вместе —
+  // это один вопрос «что не ждёт».
+  const [dueFilter, setDueFilter] = useState(false)
   const [priorityFilter, setPriorityFilter] = useState<Priority | null>(null)
   // Зависимости: ни один значок не нажат — показываем всё.
   const [depFilter, setDepFilter] = useState<BlockerFilterValue>(() => new Set())
   const [showDone, setShowDone] = useState(false)
   const [newTitle, setNewTitle] = useState('')
+  // Срок для новой задачи. Отдельным полем, а не только в карточке: когда
+  // задачу заводят под конкретную дату, сказать её сразу естественнее, чем
+  // открывать созданное и дописывать.
+  const [newDue, setNewDue] = useState('')
   // drawer открывается по URL: /c/:companyId/p/:id/tasks/:taskId — прямые
   // ссылки на задачу работают
   const navigate = useNavigate()
@@ -254,9 +264,24 @@ export function TasksTab({ projectId, meId }: { projectId: string; meId?: string
   }
 
   const create = useMutation({
-    mutationFn: (title: string) => api<Task>('/api/v1/tasks', { method: 'POST', body: JSON.stringify({ title, groupId: newSprintId }) }, 'project'),
+    mutationFn: (title: string) =>
+      api<Task>(
+        '/api/v1/tasks',
+        {
+          method: 'POST',
+          // Полдень по местному, а не полночь: в поясе восточнее UTC полночь
+          // уезжает на предыдущий день, и срок «14-го» стал бы 13-м.
+          body: JSON.stringify({
+            title,
+            groupId: newSprintId,
+            dueDate: newDue ? new Date(`${newDue}T12:00:00`).toISOString() : null,
+          }),
+        },
+        'project',
+      ),
     onSuccess: (created) => {
       setNewTitle('')
+      setNewDue('')
       refresh()
       setOpenTaskId(created.id, true) // открыть сразу в форме — заполнить детали
     },
@@ -344,20 +369,24 @@ export function TasksTab({ projectId, meId }: { projectId: string; meId?: string
     if (assigneeFilter) list = list.filter((task) => task.assignee?.id === assigneeFilter)
     if (statusFilter) list = list.filter((task) => task.status === statusFilter)
     if (priorityFilter) list = list.filter((task) => task.priority === priorityFilter)
+    // Выполненные не показываем даже с просроченным сроком: он у них в
+    // прошлом почти всегда, и список «что горит» забился бы сделанным.
+    if (dueFilter) list = list.filter((task) => isOverdue(task) || isDueSoon(task))
     // Пустой набор пропускает всех — это обычное состояние контрола, а не
     // «фильтр не задан», поэтому отдельной проверки на размер здесь нет.
     list = list.filter((task) => matchesBlockerFilter(task, depFilter))
     const needle = q.trim().toLowerCase()
     if (needle) list = list.filter((task) => task.title.toLowerCase().includes(needle) || task.number.toLowerCase().includes(needle))
     return list
-  }, [tasksQ.data, onlyMine, meId, assigneeFilter, statusFilter, priorityFilter, depFilter, q])
+  }, [tasksQ.data, onlyMine, meId, assigneeFilter, statusFilter, priorityFilter, depFilter, dueFilter, q])
 
-  const hasFilters = onlyMine || Boolean(assigneeFilter) || Boolean(statusFilter) || Boolean(priorityFilter) || q.trim().length > 0
+  const hasFilters = onlyMine || Boolean(assigneeFilter) || Boolean(statusFilter) || Boolean(priorityFilter) || dueFilter || q.trim().length > 0
   const resetFilters = () => {
     setOnlyMine(false)
     setAssigneeFilter(null)
     setStatusFilter(null)
     setPriorityFilter(null)
+    setDueFilter(false)
     setQ('')
   }
 
@@ -622,6 +651,7 @@ export function TasksTab({ projectId, meId }: { projectId: string; meId?: string
               </DropdownMenu>
             )}
             <Input ref={newTitleRef} value={newTitle} onChange={(e) => setNewTitle(e.target.value)} placeholder={t('tasks.newPlaceholder')} />
+            <DatePicker value={newDue} onChange={setNewDue} placeholder={t('tasks.dueNone')} className="w-36 shrink-0" />
             <Button variant="brand" type="submit" disabled={!newTitle.trim() || create.isPending}>
               <Plus className="size-4" />
               {t('start.create')}
@@ -720,6 +750,20 @@ export function TasksTab({ projectId, meId }: { projectId: string; meId?: string
             ))}
             {/* Зависимости: замочек / восклицательный / свободные. */}
             <BlockerFilter value={depFilter} onChange={setDepFilter} />
+            {/* Срок: просрочено или горит сегодня-завтра. Один переключатель,
+                а не два фильтра: спрашивают это одним вопросом — «что не
+                ждёт». */}
+            <button
+              onClick={() => setDueFilter((v) => !v)}
+              title={t('tasks.dueFilterHint')}
+              className={cn(
+                'inline-flex items-center gap-1 rounded-full border px-2.5 py-1 text-xs transition-colors',
+                dueFilter ? 'border-destructive bg-destructive/10 text-destructive' : 'text-muted-foreground hover:text-foreground',
+              )}
+            >
+              <CalendarClock className="size-3" />
+              {t('tasks.dueFilter')}
+            </button>
             <DropdownMenu>
               <DropdownMenuTrigger asChild>
                 <button
@@ -1246,6 +1290,9 @@ function TaskRow({
             {fmtEstimate(task.estimateMinutes)}
           </span>
         ) : null}
+        {/* Срок — до аватара: он про работу, а аватар про человека, и группа
+            «что за задача» не должна разрываться лицом посередине. */}
+        <DueDate due={task.dueDate} done={task.status === 'done'} compact />
         {task.assignee && <Avatar name={task.assignee.name} src={task.assignee.avatarUrl} size={22} title={task.assignee.name} />}
       </span>
     </li>

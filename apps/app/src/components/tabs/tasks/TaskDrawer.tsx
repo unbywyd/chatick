@@ -44,6 +44,8 @@ import { TaskChecklist } from './TaskChecklist'
 import { TaskBlockers } from './TaskBlockers'
 import { TaskRefs } from './TaskRefs'
 import { StatusBadge } from './StatusBadge'
+import { DueDate } from './DueDate'
+import { DatePicker } from '@/components/ui/date-picker'
 import { usePasteFiles } from '@/hooks/usePasteFiles'
 import { useProjectSocket } from '@/hooks/useProjectSocket'
 import { STATUSES, PRIORITIES, PRIORITY_DOT, fmtEstimate, type Task, type Member, type TaskGroup } from './types'
@@ -441,6 +443,22 @@ export function TaskDrawer({
                   className="h-8 w-28 rounded-md border bg-background px-2 text-sm outline-none focus:ring-2 focus:ring-ring"
                 />
                 <span className="text-xs text-muted-foreground">{t('tasks.estimateHint')}</span>
+              </div>
+            </PropRow>
+
+            {/* Срок. Дата хранится с часовым поясом, а выбирают её днём —
+                поэтому режем до yyyy-mm-dd и обратно собираем полдень по
+                местному времени: полночь в поясе восточнее UTC уезжает на
+                предыдущий день, и срок «14-го» превращался бы в 13-е. */}
+            <PropRow label={t('tasks.due')}>
+              <div className="flex items-center gap-2">
+                <DatePicker
+                  value={task.dueDate ? task.dueDate.slice(0, 10) : ''}
+                  onChange={(iso) => onPatch({ dueDate: iso ? new Date(`${iso}T12:00:00`).toISOString() : null })}
+                  placeholder={t('tasks.dueNone')}
+                  className="w-40"
+                />
+                {task.dueDate && <DueDate due={task.dueDate} done={task.status === 'done'} />}
               </div>
             </PropRow>
 

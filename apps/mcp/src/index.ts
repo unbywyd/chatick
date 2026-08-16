@@ -399,6 +399,10 @@ server.registerTool(
       description: z.string().optional(),
       assignee: z.string().describe('"me" or a user id from chatick_members'),
       estimateMinutes: z.number().int().positive().describe('Rough is fine; a guess beats nothing'),
+      dueDate: z
+        .string()
+        .optional()
+        .describe('Due date "2026-09-14". Only when the person named one — never invent a deadline'),
       priority: z.enum(['low', 'normal', 'high', 'urgent']).optional(),
       resourceIds: z.array(z.string()).optional().describe('Resources this task needs — link them, never paste secrets'),
       releaseIds: z.array(z.string()).optional().describe('Versions this task ships in — ids from chatick_releases'),
@@ -426,6 +430,10 @@ server.registerTool(
       status: z.enum(['todo', 'in_progress', 'review', 'done']).optional(),
       assignee: z.string().optional(),
       estimateMinutes: z.number().int().positive().optional(),
+      dueDate: z
+        .string()
+        .optional()
+        .describe('Due date "2026-09-14". Only when the person named one — never invent a deadline'),
       priority: z.enum(['low', 'normal', 'high', 'urgent']).optional(),
       resourceIds: z.array(z.string()).optional(),
       releaseIds: z.array(z.string()).optional().describe('Versions this task ships in — ids from chatick_releases'),

@@ -299,7 +299,14 @@
     "bulkDeleteConfirm": "למחוק {{count}} משימות?",
     "selectGroup": "בחירת כל הקבוצה",
     "selectAll": "בחירת הכול",
-    "invertSelection": "היפוך בחירה"
+    "invertSelection": "היפוך בחירה",
+    "dueNone": "ללא תאריך",
+    "dueToday": "היום",
+    "dueTomorrow": "מחר",
+    "dueInDays": "בעוד {{count}} ימים",
+    "dueOverdueBy": "באיחור {{count}} ימים",
+    "dueFilter": "יעדים",
+    "dueFilterHint": "באיחור או ליום-יומיים הקרובים"
   },
   "files": {
     "search": "חיפוש קבצים…",

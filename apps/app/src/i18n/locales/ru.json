@@ -193,7 +193,7 @@
     "newPlaceholder": "Новая задача — введите название и Enter",
     "search": "Поиск…",
     "mine": "Мои задачи",
-    "due": "Дедлайн",
+    "due": "Срок",
     "unassigned": "Никто",
     "statusLabel": "Статус",
     "priorityLabel": "Приоритет",
@@ -300,7 +300,14 @@
     "bulkDeleteConfirm": "Удалить задач: {{count}}?",
     "selectGroup": "Выбрать всю группу",
     "selectAll": "Выбрать все",
-    "invertSelection": "Инвертировать"
+    "invertSelection": "Инвертировать",
+    "dueNone": "Без срока",
+    "dueToday": "сегодня",
+    "dueTomorrow": "завтра",
+    "dueInDays": "через {{count}} дн.",
+    "dueOverdueBy": "просрочено на {{count}} дн.",
+    "dueFilter": "Сроки",
+    "dueFilterHint": "Просроченные и те, что горят сегодня-завтра"
   },
   "files": {
     "search": "Поиск файлов…",
