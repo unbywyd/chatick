@@ -184,6 +184,10 @@ type Dict = {
     /** короткая подпись для кнопки в шапке */
     heroWin: string
     /** Приложения пока без подписи — говорим об этом сами, до установки */
+    /** Подпись под плиткой Windows: она ведёт в магазин, а не на файл */
+    winStore: string
+    /** Прямой .exe — запасной путь там, где магазин закрыт политиками */
+    winDirect: string
     unsignedTitle: string
     unsignedText: string
     howTo: string
@@ -495,8 +499,10 @@ export const dict: Record<LocaleCode, Dict> = {
       desktopNote: 'Desktop app',
       mobileSoon: 'Mobile apps are on the roadmap.',
       heroWin: 'Download for Windows',
-      unsignedTitle: 'The desktop builds are not signed yet',
-      unsignedText: 'A code-signing certificate costs money, and Chatick is free with no sponsors behind it. Windows and your browser will warn you about the file. Nothing is hidden: the source is open, and you can build the same app yourself.',
+      winStore: 'Microsoft Store',
+      winDirect: 'Store blocked on your machine? Direct download:',
+      unsignedTitle: 'The macOS builds are not signed yet',
+      unsignedText: 'The Windows build comes from the Microsoft Store and is signed by the Store itself — no warnings there. macOS is another matter: a signing certificate costs money, and Chatick is free with no sponsors behind it, so macOS will warn you about the file. Nothing is hidden: the source is open, and you can build the same app yourself.',
       howTo: 'What to expect when installing',
       howToClose: 'Got it',
       step1: 'Your browser will say the file is downloaded rarely. Choose “Keep” — in Chrome it is hidden under the arrow next to the warning.',
@@ -808,8 +814,10 @@ export const dict: Record<LocaleCode, Dict> = {
       desktopNote: 'Приложение',
       mobileSoon: 'Мобильные приложения — в планах.',
       heroWin: 'Скачать для Windows',
-      unsignedTitle: 'Сборки для рабочего стола пока без подписи',
-      unsignedText: 'Сертификат для подписи стоит денег, а Chatick бесплатен и без спонсоров. Windows и браузер предупредят вас об этом файле. Скрывать нечего: исходники открыты, и такое же приложение вы можете собрать сами.',
+      winStore: 'Microsoft Store',
+      winDirect: 'Магазин закрыт политиками? Прямая загрузка:',
+      unsignedTitle: 'Сборки для macOS пока без подписи',
+      unsignedText: 'Сборка для Windows берётся из Microsoft Store и подписана самим магазином — там предупреждений нет. С macOS иначе: сертификат стоит денег, а Chatick бесплатен и без спонсоров, поэтому macOS предупредит вас об этом файле. Скрывать нечего: исходники открыты, и такое же приложение вы можете собрать сами.',
       howTo: 'Что будет при установке',
       howToClose: 'Понятно',
       step1: 'Браузер скажет, что файл скачивают редко. Выберите «Сохранить» — в Chrome это спрятано под стрелкой рядом с предупреждением.',
@@ -1121,8 +1129,10 @@ export const dict: Record<LocaleCode, Dict> = {
       desktopNote: 'אפליקציה',
       mobileSoon: 'אפליקציות לנייד בתוכניות.',
       heroWin: 'הורדה ל-Windows',
-      unsignedTitle: 'גרסאות שולחן העבודה עדיין ללא חתימה',
-      unsignedText: 'תעודת חתימה עולה כסף, ו-Chatick חינמי וללא נותני חסות. Windows והדפדפן יזהירו אתכם על הקובץ. אין מה להסתיר: הקוד פתוח, ואפשר לבנות את אותה אפליקציה בעצמכם.',
+      winStore: 'Microsoft Store',
+      winDirect: 'החנות חסומה במחשב? הורדה ישירה:',
+      unsignedTitle: 'גרסאות macOS עדיין ללא חתימה',
+      unsignedText: 'גרסת Windows מגיעה מ-Microsoft Store וחתומה על ידי החנות עצמה — שם אין אזהרות. ב-macOS זה אחרת: תעודת חתימה עולה כסף, ו-Chatick חינמי וללא נותני חסות, ולכן macOS יזהיר אתכם על הקובץ. אין מה להסתיר: הקוד פתוח, ואפשר לבנות את אותה אפליקציה בעצמכם.',
       howTo: 'מה יקרה בהתקנה',
       howToClose: 'הבנתי',
       step1: 'הדפדפן יאמר שהקובץ מורד לעיתים רחוקות. בחרו «שמירה» — ב-Chrome זה מוסתר מתחת לחץ שליד האזהרה.',

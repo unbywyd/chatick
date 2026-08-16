@@ -38,8 +38,15 @@ const VERSION = desktopPkg.version
 // Мак собирается двумя файлами: у arm64 и Intel разные сборки Electron, одной
 // универсальной нет. Кто не знает свою архитектуру — жмёт Apple Silicon: такие
 // маки выпускают с 2020 года, и их подавляющее большинство.
+// Windows ведёт в Microsoft Store: пакет подписывает магазин, поэтому там нет
+// ни «неизвестного издателя», ни SmartScreen, и установка не требует прав
+// администратора — для корпоративных машин это решает. Прямой .exe остаётся
+// ниже, для тех, кому магазин недоступен.
+const STORE_URL = 'https://apps.microsoft.com/detail/9n2dmzqhsnpn'
+const WIN_EXE = `/releases/Chatick-Setup-${VERSION}.exe`
+
 const DOWNLOADS = [
-  { key: 'windows' as const, href: `/releases/Chatick-Setup-${VERSION}.exe`, icon: 'windows' },
+  { key: 'windows' as const, href: STORE_URL, icon: 'windows', arch: t.download.winStore, external: true },
   {
     key: 'mac' as const,
     href: `/releases/Chatick-${VERSION}-arm64.dmg`,
@@ -314,7 +321,9 @@ const MARK_ANYAPP = asset('anyapp-logo-twotone-dark.svg')
               class:list={['dl-tile', { 'dl-tile-soon': !d.href }]}
               href={d.href || '#download'}
               aria-disabled={!d.href}
-              download={d.href ? true : undefined}
+              download={d.href && !d.external ? true : undefined}
+              target={d.external ? '_blank' : undefined}
+              rel={d.external ? 'noopener' : undefined}
             >
               <span class="dl-tile-ic" set:html={d.icon === 'windows' ? WIN_ICON : APPLE_ICON} />
               <span class="dl-tile-name">{t.download[d.key]}</span>
@@ -331,9 +340,10 @@ const MARK_ANYAPP = asset('anyapp-logo-twotone-dark.svg')
         {t.beta.warn}
       </p>
 
-      {/* Десктоп — отдельно и с оговоркой. Сказать про отсутствие подписи
-          самим, до установки, лучше, чем позволить Windows сказать это за нас
-          на языке «неизвестный издатель». */}
+      {/* Оговорка про подпись осталась, но сузилась: Windows из магазина
+          подписывает сам магазин, и предупреждений там нет. Она теперь про
+          macOS и про прямой .exe — тот путь никуда не делся, он нужен там, где
+          магазин закрыт политиками. */}
       <div class="unsigned">
         <div class="unsigned-head">
           <svg viewBox="0 0 24 24" width="17" height="17" fill="none" aria-hidden="true">
@@ -342,6 +352,12 @@ const MARK_ANYAPP = asset('anyapp-logo-twotone-dark.svg')
           <span>{t.download.unsignedTitle}</span>
         </div>
         <p class="unsigned-text">{t.download.unsignedText}</p>
+        <p class="unsigned-exe">
+          {t.download.winDirect}{' '}
+          <a href={WIN_EXE} download>
+            Chatick-Setup-{VERSION}.exe
+          </a>
+        </p>
         <div class="unsigned-actions">
           <button class="how-btn" id="howBtn" type="button" aria-expanded="false">
             <span class="how-mark">?</span>
@@ -1856,6 +1872,10 @@ const MARK_ANYAPP = asset('anyapp-logo-twotone-dark.svg')
   }
   .unsigned-head svg { flex: 0 0 auto; color: var(--lime); }
   .unsigned-text { margin-top: 8px; color: var(--fg-muted); font-size: .94rem; }
+  /* Прямой .exe: тише основного текста — это запасной путь, а не второй
+     равноправный способ поставить приложение под Windows. */
+  .unsigned-exe { margin-top: 10px; color: var(--fg-muted); font-size: .86rem; }
+  .unsigned-exe a { color: var(--fg); text-decoration: underline; text-underline-offset: 3px; }
   .unsigned-actions {
     margin-top: 14px;
     display: flex; flex-wrap: wrap; align-items: center; justify-content: center; gap: 10px;
