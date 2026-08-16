@@ -126,8 +126,12 @@ export function InboxScreen() {
               {!n.readAt && <span className="mt-2 size-2 shrink-0 rounded-full bg-brand" />}
             </button>
 
-            {/* Разобрать список, не открывая каждое: прочитать и уйти в проект */}
-            <div className="absolute end-3 top-3 flex items-center gap-1 opacity-0 transition-opacity group-hover:opacity-100">
+            {/* Разобрать список, не открывая каждое: прочитать и уйти в проект.
+                Видны всегда, а не по наведению: на телефоне и планшете наведения
+                нет вовсе, и там эти кнопки просто не существовали — а страница
+                уведомлений ровно для того и открывается, чтобы разобрать
+                список. */}
+            <div className="absolute end-3 top-3 flex items-center gap-1">
               {!n.readAt && (
                 <button
                   title={t('inbox.markRead')}

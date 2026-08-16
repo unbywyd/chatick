@@ -1,3 +1,4 @@
+import { useEffect, useRef } from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { useTranslation } from 'react-i18next'
@@ -6,6 +7,7 @@ import { api } from '@/lib/api'
 import { cn } from '@/lib/utils'
 import { Avatar } from '@/components/ui/avatar'
 import { Button } from '@/components/ui/button'
+import { useSeenLongEnough } from '@/hooks/useSeenLongEnough'
 // Формат адреса один на всё приложение: своя копия здесь уже расходилась
 // с общей — она не знала про вкладку /chat в ссылках старого вида.
 import { normalizeLink } from '@/hooks/useOpenNotification'
@@ -78,6 +80,31 @@ export function ProjectInbox({
   // Внутри проекта — только он: человек открыл его, чужие дела здесь шум.
   // На уровне компании — всё, ради того и заходят: «что меня касается».
   const items = (inbox.data?.items ?? []).filter((n) => (projectId ? n.projectId === projectId : true) && !n.readAt)
+
+  /**
+   * Разглядел — значит прочитал.
+   *
+   * Копим id и отправляем одним запросом: карточки досматриваются подряд, и
+   * запрос на каждую — это залп на всю ленту. Плюс каждый ответ дёргает
+   * invalidateQueries, а перерисовка ленты посреди чтения сбрасывает
+   * наблюдение у остальных карточек.
+   */
+  const pending = useRef(new Set<string>())
+  const flushAt = useRef<number | null>(null)
+  const watch = useSeenLongEnough({
+    onSeen: (id) => {
+      pending.current.add(id)
+      if (flushAt.current !== null) return
+      flushAt.current = window.setTimeout(() => {
+        flushAt.current = null
+        const ids = [...pending.current]
+        pending.current.clear()
+        if (ids.length) markRead.mutate({ ids })
+      }, 800)
+    },
+  })
+  useEffect(() => () => { if (flushAt.current !== null) clearTimeout(flushAt.current) }, [])
+
   if (!items.length) return null
 
   // Сначала переход, потом пометка: карточка не должна исчезать раньше, чем
@@ -120,6 +147,7 @@ export function ProjectInbox({
         {items.map((n) => (
           <div
             key={n.id}
+            ref={watch(n.id)}
             className="flex w-64 shrink-0 items-start gap-2 rounded-lg border bg-card p-2 transition-colors hover:border-brand/50"
           >
             <button onClick={() => open(n)} className="flex min-w-0 flex-1 items-start gap-2 text-start">

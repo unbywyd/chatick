@@ -20,7 +20,7 @@ import { currentScope, connectViaDesktop, startDeviceFlow, waitForApproval, acce
  *
  * Чего здесь НЕТ намеренно: ручки на каждую из 85 ручек моста. Их описания
  * забили бы контекст раньше, чем началась бы работа. Ядро — задачи,
- * комментарии, чек-листы, время, ресурсы; для редкого есть bridge_request.
+ * комментарии, чек-листы, время, ресурсы; для редкого есть chatick_request.
  */
 
 const server = new McpServer({ name: 'chatick', version: '0.1.0' })
@@ -140,7 +140,8 @@ server.registerTool(
       'Only the things addressed to this person directly — mentions in comments, chat and notes, plus tasks assigned ' +
       'to them. CHECK THIS FIRST, before chatick_inbox: "someone closed their own task" and "a person asked me a ' +
       'question and is waiting" carry different weight, and in one shared list the second drowns in the first. ' +
-      'Every item carries a ready url.',
+      'Every item carries a ready url. Once you have handled one, clear it with chatick_inbox_read — anything you ' +
+      'leave here stays on the person as an unread counter for work you already did.',
     inputSchema: {
       unread: z.boolean().optional().describe('Only unanswered ones (default true)'),
       since: z.string().optional().describe('ISO timestamp — only what came after it'),
@@ -163,12 +164,62 @@ server.registerTool(
       'Everything waiting for this person, across every project. Each item carries whatIsAsked — one sentence written ' +
       'for you, and a ready url. Start here for "what is on my plate" rather than listing tasks project by project — ' +
       'but for "did anyone ask ME something" use chatick_mentions, which is a much shorter list. ' +
-      'Pass since to ask only for what arrived after a moment you already saw.',
+      'Pass since to ask only for what arrived after a moment you already saw. ' +
+      'Clear whatever you handle with chatick_inbox_read, or the person is left with a counter for finished work.',
     inputSchema: { since: z.string().optional().describe('ISO timestamp — only what came after it') },
   },
   async ({ since }) => {
     try {
       return json(await call(await need(), 'GET', '/inbox', undefined, { since }))
+    } catch (e) {
+      return fail(e)
+    }
+  },
+)
+
+/**
+ * Вторая половина двух ручек выше.
+ *
+ * Их и добавляли ради «проверь, что там»: агент читает адресованное человеку и
+ * отвечает. Но разобрать и не погасить — значит оставить человеку счётчик за
+ * работу, которая уже сделана. Он видит цифру, которая не убирается ничем, и
+ * идёт спрашивать, не сломалось ли приложение.
+ *
+ * Правило записано и в hint ответа, и в гайде — и всё равно не выполнялось:
+ * поведение задают описания инструментов, а не поле JSON с адресом ручки.
+ * Поэтому здесь отдельный инструмент, вопреки общему правилу файла (см. шапку):
+ * это не восемьдесят пятая редкая ручка, а обязательное продолжение уже
+ * существующей.
+ *
+ * `task` — главный параметр: id задачи у агента уже есть, а id уведомлений о
+ * ней ему пришлось бы добывать отдельным запросом.
+ */
+server.registerTool(
+  'chatick_inbox_read',
+  {
+    title: 'Clear what I have handled',
+    description:
+      'Mark notifications read. ALWAYS call this after handling what chatick_mentions or chatick_inbox returned — ' +
+      'otherwise the person keeps seeing a counter for work that is already done, and cannot tell it apart from ' +
+      'what still needs them. Pass task=<id> to clear everything about one task at once: assigned, mentioned and ' +
+      'commented are separate notifications, and clearing them one by one is work nobody does. ids clears specific ' +
+      'ones, all=true clears everything waiting.',
+    inputSchema: {
+      task: z.string().optional().describe('Task id — clears every notification about that task'),
+      ids: z.array(z.string()).optional().describe('Notification ids from chatick_mentions / chatick_inbox'),
+      all: z.boolean().optional().describe('Clear everything unread'),
+      project: z.string().optional().describe('Required on a company-wide connection'),
+    },
+  },
+  async ({ task, ids, all, project }) => {
+    if (!task && !ids?.length && !all) {
+      return text('Nothing to clear: pass task=<id>, ids=[...] or all=true.')
+    }
+    try {
+      const scope = await need()
+      const body = task ? { entityType: 'task', entityId: task } : all ? { all: true } : { ids }
+      await call({ ...scope, projectId: project ?? scope.projectId }, 'POST', '/inbox/read', body)
+      return text(task ? `Cleared every notification about task ${task}.` : all ? 'Cleared everything.' : `Cleared ${ids!.length}.`)
     } catch (e) {
       return fail(e)
     }

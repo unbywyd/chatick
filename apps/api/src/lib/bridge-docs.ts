@@ -578,7 +578,8 @@ ${denied.length ? `\n  NOT ALLOWED: ${denied.join(', ')}\n  Do not attempt these
 ## What concerns me — start here
 
   GET  /x/inbox?unread=1&limit=30    everything addressed to this person
-  POST /x/inbox/read                 {"ids":["..."]} or {"all":true}
+  POST /x/inbox/read                 {"ids":["..."]}, {"all":true} or
+                                     {"entityType":"task","entityId":"..."}
 
 Each item carries \`whatIsAsked\` — one sentence written by our AI describing what
 the reader is actually expected to do ("Send the latest APK build"), plus
@@ -589,7 +590,11 @@ the reader is actually expected to do ("Send the latest APK build"), plus
                           {"text":"...","replyToId":"<entityId>","attachmentIds":[...]}
   entityType="task"    -> GET /x/tasks/<entityId>
 
-Mark items read once handled, otherwise you will see them again.
+Mark items read once handled, otherwise you will see them again — and so does the
+person, as a counter for work that is already done. Clearing by entity is usually
+what you want: one task collects several notifications (assigned, mentioned,
+commented), and {"entityType":"task","entityId":"<task id>"} closes all of them
+with the id you already have.
 
 Example — handle everything waiting for me:
 
@@ -1130,7 +1135,9 @@ ${endpointCatalog('?project=<id>')}
          ?unread=0 includes answered ones, ?since=<ISO> only newer ones.
 
   GET    /x/inbox                       what concerns this person, ACROSS ALL projects
-  POST   /x/inbox/read                  {"ids":[...]} or {"all":true}
+  POST   /x/inbox/read                  {"ids":[...]}, {"all":true}, or
+         {"entityType":"task","entityId":"<id>"} to clear every notification about
+         one task at once — the id you already have, instead of collecting theirs.
          Each item has whatIsAsked (AI-written), project.id, entityType/entityId
          and a ready "url". Start every "check what's waiting for me" here.
          ?since=<ISO> asks only for what arrived after a moment you already saw,

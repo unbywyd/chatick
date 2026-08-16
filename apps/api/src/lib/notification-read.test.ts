@@ -25,6 +25,14 @@ const preloadPanel = readFileSync(join(here, '../../../desktop/preload-panel.cjs
 
 const readRoute = route.slice(route.indexOf("inboxRoute.post(\n  '/read'"))
 
+// Мост — вторая дверь к тем же уведомлениям, и ходит в неё ассистент.
+const bridge = readFileSync(join(here, '../routes/bridge.ts'), 'utf8')
+const bridgeRead = (() => {
+  const from = bridge.indexOf("bridgeRoute.post('/inbox/read'")
+  return bridge.slice(from, bridge.indexOf('\n})', from))
+})()
+const mcp = readFileSync(join(here, '../../../mcp/src/index.ts'), 'utf8')
+
 describe('ручка умеет гасить по сущности', () => {
   it('принимает entityType и entityId', () => {
     // По одному id гасить мало: на задачу их накапливается несколько —
@@ -49,6 +57,57 @@ describe('ручка умеет гасить по сущности', () => {
     expect(readRoute).toMatch(/if \(all\)/)
     expect(readRoute).toMatch(/} else if \(projectId\)/)
     expect(readRoute).toMatch(/} else if \(ids\?\.length\)/)
+  })
+})
+
+// Ассистент разбирает задачи через мост, и гасить ему нужно то же самое.
+// Мост принимал только ids и all: id задачи у него на руках есть, а id
+// уведомлений о ней пришлось бы добывать отдельным запросом — шаг лишний, и
+// его пропускали. Разобранные задачи оставались непрочитанными.
+describe('мост гасит по сущности, как и интерфейс', () => {
+  it('принимает entityType и entityId', () => {
+    expect(bridgeRead).toMatch(/b\.entityType === 'string'/)
+    expect(bridgeRead).toMatch(/b\.entityId === 'string'/)
+  })
+
+  it('оба поля обязательны вместе', () => {
+    // Один entityType погасил бы все задачи разом.
+    expect(bridgeRead).toMatch(/const byEntity = Boolean\(entityType && entityId\)/)
+  })
+
+  it('пустой запрос по-прежнему отказ, и в ошибке видно новый способ', () => {
+    expect(bridgeRead).toMatch(/!ids\.length && !all && !byEntity/)
+    expect(bridgeRead).toMatch(/entityType\+entityId/)
+  })
+
+  it('гасит только свои и только непрочитанные', () => {
+    expect(bridgeRead).toMatch(/eq\(notifications\.userId, id\.userId\)/)
+    expect(bridgeRead).toMatch(/isNull\(notifications\.readAt\)/)
+  })
+
+  it('прежние способы никуда не делись', () => {
+    expect(bridgeRead).toMatch(/inArray\(notifications\.id, ids\)/)
+    expect(bridgeRead).toMatch(/if \(id\.projectId\) conds\.push/)
+  })
+})
+
+// Правило «разобрал — погаси» было записано и в hint, и в гайде, и всё равно
+// не выполнялось: поведение ассистента задают описания инструментов.
+describe('MCP умеет гасить и говорит об этом', () => {
+  it('инструмент есть', () => {
+    expect(mcp).toMatch(/'chatick_inbox_read'/)
+  })
+
+  it('принимает task — id задачи, а не уведомлений', () => {
+    const tool = mcp.slice(mcp.indexOf("'chatick_inbox_read'"))
+    expect(tool.slice(0, 2000)).toMatch(/entityType: 'task', entityId: task/)
+  })
+
+  it('оба читателя называют его по имени', () => {
+    for (const reader of ['chatick_mentions', 'chatick_inbox']) {
+      const from = mcp.indexOf(`'${reader}'`)
+      expect(mcp.slice(from, from + 1200)).toMatch(/chatick_inbox_read/)
+    }
   })
 })
 

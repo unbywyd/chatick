@@ -752,7 +752,7 @@ bridgeRoute.get('/mentions', async (c) => {
       createdAt: r.n.createdAt,
     })),
     hint:
-      'These are the things addressed to YOU personally — answer them first. For entityType="task" the entityId is the task id: read it with GET /x/tasks/<id> and reply with POST /x/tasks/<id>/comments. Mark handled ones read with POST /x/inbox/read.',
+      'These are the things addressed to YOU personally — answer them first. For entityType="task" the entityId is the task id: read it with GET /x/tasks/<id> and reply with POST /x/tasks/<id>/comments. Mark handled ones read with POST /x/inbox/read — {"entityType":"task","entityId":"<id>"} clears every notification about that task at once, which is what you want after handling one: assigned, mentioned and commented are separate items. Leave them and the person keeps a counter for work you already did.',
   })
 })
 
@@ -815,10 +815,27 @@ bridgeRoute.post('/inbox/read', async (c) => {
   const b = parsed_b.body as Record<string, unknown>
   const ids = Array.isArray(b.ids) ? (b.ids as unknown[]).map(String) : []
   const all = b.all === true
+  // Погасить всё, что вело на эту задачу. Интерфейс так и делает, открывая
+  // карточку: на одну задачу уведомлений накапливается несколько — назначили,
+  // упомянули, прокомментировали. Ассистент держит в руках id задачи, а не их,
+  // и без этого приёма ему пришлось бы сперва вычитывать /mentions и
+  // сопоставлять entityId. Шаг лишний, и его пропускали: разобранные задачи
+  // оставались непрочитанными.
+  const entityType = typeof b.entityType === 'string' ? b.entityType : null
+  const entityId = typeof b.entityId === 'string' ? b.entityId : null
+  const byEntity = Boolean(entityType && entityId)
 
-  if (!ids.length && !all) return c.json({ error: 'Pass ids[] or all=true' }, 400)
+  if (!ids.length && !all && !byEntity) {
+    return c.json({ error: 'Pass ids[], entityType+entityId, or all=true' }, 400)
+  }
   const conds = [eq(notifications.userId, id.userId), isNull(notifications.readAt)]
-  if (!all) conds.push(inArray(notifications.id, ids))
+  // Оба поля значат что-то только вместе: один entityType погасил бы разом все
+  // задачи человека.
+  if (byEntity) {
+    conds.push(eq(notifications.entityType, entityType!), eq(notifications.entityId, entityId!))
+  } else if (!all) {
+    conds.push(inArray(notifications.id, ids))
+  }
   if (id.projectId) conds.push(eq(notifications.projectId, id.projectId))
 
   await db.update(notifications).set({ readAt: new Date() }).where(and(...conds))
