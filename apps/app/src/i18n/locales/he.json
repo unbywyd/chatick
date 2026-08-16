@@ -682,6 +682,10 @@
       "task_comment": {
         "label": "תגובה חדשה למשימה שלי",
         "hint": "מישהו הגיב על משימה שהוקצתה לך"
+      },
+      "task_due": {
+        "label": "מועד היעד של משימה שלי מתקרב",
+        "hint": "נתריע מראש — כמה זמן, נקבע בחברה"
       }
     },
     "reminders": "תזכורות למשימות פתוחות",
@@ -1540,7 +1544,8 @@
     "ai": "AI ודואר",
     "integration": "אינטגרציות",
     "danger": "אזור מסוכן",
-    "backup": "גיבויים"
+    "backup": "גיבויים",
+    "notify": "התראות"
   },
   "summary": {
     "planned": "מתוכנן",
@@ -1692,5 +1697,28 @@
     "disconnectConfirm": "לנתק את האינטגרציה עם Expo?",
     "disconnectHint": "הגרסאות יישארו. את ה-webhook בצד Expo יש להסיר בנפרד: eas webhook:delete",
     "openBuild": "פתיחת הבנייה ב-Expo"
+  },
+  "notifyConfig": {
+    "title": "התראות",
+    "hint": "ברירת מחדל לכל הפרויקטים בחברה. פרויקט יכול להגדיר אחרת.",
+    "dueLead": "להתריע לפני מועד היעד",
+    "dueLeadHint": "כמה זמן מראש להודיע לאחראי",
+    "events": "לשלוח התראות על",
+    "eventsHint": "מה שכבוי כאן שותק בכל הפרויקטים. כל אחד יכול גם לבטל מנוי בעצמו.",
+    "leadHours_one": "שעה לפני",
+    "leadHours_two": "שעתיים לפני",
+    "leadHours_other": "{{count}} שעות לפני",
+    "leadDays_one": "יום לפני",
+    "leadDays_two": "יומיים לפני",
+    "leadDays_other": "{{count}} ימים לפני",
+    "event": {
+      "chat_mention": "אזכורים בצ׳אט",
+      "task_mention": "אזכורים במשימות",
+      "comment_mention": "אזכורים בתגובות",
+      "task_assigned": "הקצאת משימה",
+      "task_status": "שינוי סטטוס משימה",
+      "task_comment": "תגובה חדשה למשימה",
+      "task_due": "מועד היעד של משימה מתקרב"
+    }
   }
 }

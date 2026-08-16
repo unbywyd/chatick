@@ -4,6 +4,7 @@ import { db } from '../db/client.js'
 import { users, projects, projectMembers, notificationOptOuts, notificationLog, notifications } from '../db/schema.js'
 import { sendToUserAnywhere } from '../ws.js'
 import { projectLlm, complete } from './llm.js'
+import { NOTIFY_EVENTS, notifyConfigForProject, type NotifyEvent } from './notify-config.js'
 
 // Единая точка отправки уведомлений (SPEC §8.9).
 // Проверяет: (1) участник проекта, (2) не отписан от события, (3) не дубль.
@@ -20,6 +21,7 @@ export type NotificationEvent =
   | 'note_reminder'
   | 'timer_running'
   | 'release_status'
+  | 'task_due'
 
 /**
  * Извлекает id упомянутых пользователей.
@@ -69,6 +71,8 @@ const STR: Record<Lang, Record<string, string>> = {
     note_reminder: 'Reminder from {project}',
     timer_running: 'Your timer in {project} has been running for {hours}h',
     release_status: '{actor} moved {ref} to {status} in {project}',
+    // Без {actor}: срок наступает сам, автора у этого события нет.
+    task_due: '{ref} is due {when} in {project}',
     open: 'Open',
     footer: 'You can manage notifications in your project settings.',
   },
@@ -83,6 +87,7 @@ const STR: Record<Lang, Record<string, string>> = {
     note_reminder: 'Напоминание из проекта «{project}»',
     timer_running: 'Таймер в проекте «{project}» идёт уже {hours} ч',
     release_status: '{actor} перевёл(а) {ref} на стадию «{status}» в проекте «{project}»',
+    task_due: 'Срок задачи {ref} — {when} (проект «{project}»)',
     open: 'Открыть',
     footer: 'Управлять уведомлениями можно в настройках проекта.',
   },
@@ -97,6 +102,7 @@ const STR: Record<Lang, Record<string, string>> = {
     note_reminder: 'תזכורת מפרויקט «{project}»',
     timer_running: 'הטיימר בפרויקט «{project}» פועל כבר {hours} שעות',
     release_status: '{actor} העביר את {ref} לשלב {status} בפרויקט {project}',
+    task_due: 'מועד היעד של {ref} — {when} (פרויקט «{project}»)',
     open: 'פתח',
     footer: 'ניתן לנהל התראות בהגדרות הפרויקט.',
   },
@@ -154,6 +160,31 @@ export function stripMentions(text: string): string {
   return text.replace(/@\[([^\]]*)\]\([^)]+\)/g, '@$1').replace(/\s+/g, ' ').trim()
 }
 
+/**
+ * Срок словами: «сегодня», «завтра», «просрочено» или дата.
+ *
+ * Считаем по календарным суткам UTC, а не по разнице в часах: срок стоит на
+ * дате (полдень UTC — см. parseDue в bridge.ts), и «через 19 часов» человеку
+ * ничего не говорит, тогда как «завтра» говорит всё.
+ */
+const DUE_WORDS: Record<Lang, { today: string; tomorrow: string; overdue: string }> = {
+  en: { today: 'today', tomorrow: 'tomorrow', overdue: 'overdue' },
+  ru: { today: 'сегодня', tomorrow: 'завтра', overdue: 'просрочен' },
+  he: { today: 'היום', tomorrow: 'מחר', overdue: 'עבר' },
+}
+
+export function dueWords(iso: string, lang: Lang): string {
+  const d = new Date(iso)
+  if (Number.isNaN(d.getTime())) return ''
+  const day = (x: Date) => Date.UTC(x.getUTCFullYear(), x.getUTCMonth(), x.getUTCDate())
+  const diff = Math.round((day(d) - day(new Date())) / 86_400_000)
+  if (diff < 0) return DUE_WORDS[lang].overdue
+  if (diff === 0) return DUE_WORDS[lang].today
+  if (diff === 1) return DUE_WORDS[lang].tomorrow
+  const locale = lang === 'ru' ? 'ru-RU' : lang === 'he' ? 'he-IL' : 'en-US'
+  return d.toLocaleDateString(locale, { day: 'numeric', month: 'long', timeZone: 'UTC' })
+}
+
 type NotifyParams = {
   projectId: string
   event: NotificationEvent
@@ -192,6 +223,16 @@ export async function notify(params: NotifyParams): Promise<void> {
     let targets = recipientIds.filter((id) => memberIds.has(id))
     if (targets.length === 0) return
 
+    // Выключено ли событие в проекте (или, если проект молчит, в компании).
+    // Настройка руководства — проверяется ДО личных отписок: если канал закрыт
+    // на уровне проекта, разбирать индивидуальные предпочтения незачем.
+    // NOTIFY_EVENTS уже проекта, чем список событий: note_reminder и
+    // timer_running настраивать нечем, и они проходят всегда.
+    if ((NOTIFY_EVENTS as readonly string[]).includes(event)) {
+      const cfg = await notifyConfigForProject(projectId)
+      if (cfg.events[event as NotifyEvent] === false) return
+    }
+
     // отписки от этого события
     const optOuts = await db.query.notificationOptOuts.findMany({
       where: and(
@@ -219,7 +260,14 @@ export async function notify(params: NotifyParams): Promise<void> {
       }
 
       const lang = langOf(user.locale)
-      const vars = { actor: actorName, project: project.name, ...(params.vars || {}) }
+      const vars: Record<string, string> = { actor: actorName, project: project.name, ...(params.vars || {}) }
+      // Срок приходит в ISO — обращаем в слова на языке получателя. Пишем
+      // «сегодня»/«завтра», а не дату: до срока меньше суток, и «17 августа»
+      // заставляет сверяться с календарём ровно тогда, когда времени нет.
+      if (vars.dueAt) {
+        vars.when = dueWords(vars.dueAt, lang)
+        delete vars.dueAt
+      }
 
       // ГЛАВНОЕ: создаём ВНУТРЕННЕЕ уведомление (SPEC §8.22). Почта — суточным дайджестом.
       const [created] = await db

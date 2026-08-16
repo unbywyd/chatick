@@ -133,6 +133,38 @@ export function isDueSoon(t: Task) {
 }
 
 /**
+ * Насколько горит срок — четыре ступени вместо двух.
+ *
+ * В таблице на строку не влезает ни дата, ни «осталось столько-то»: там колонок
+ * и так под завязку. Остаётся точка цвета, и по ней надо понимать не только
+ * «просрочено или нет», а насколько близко. Отсюда ступени: зелёный — время
+ * есть, жёлтый — на этой неделе, оранжевый — сегодня-завтра, красный — прошло.
+ *
+ * Порог недели, а не месяца: дальше недели любой срок одинаково «потом», и
+ * дробить это оттенками значит требовать от человека различать зелёные.
+ *
+ * Выполненную задачу не красим вовсе — done важнее любого срока.
+ */
+export type DueLevel = 'overdue' | 'urgent' | 'soon' | 'far'
+
+export function dueLevel(t: Task): DueLevel | null {
+  if (!t.dueDate || t.status === 'done') return null
+  const left = dueDays(t.dueDate)
+  if (left === null) return null
+  if (left < 0) return 'overdue'
+  if (left <= 1) return 'urgent'
+  if (left <= 7) return 'soon'
+  return 'far'
+}
+
+export const DUE_COLOR: Record<DueLevel, string> = {
+  overdue: 'text-destructive',
+  urgent: 'text-orange-500',
+  soon: 'text-amber-500',
+  far: 'text-emerald-600',
+}
+
+/**
  * Сколько суток до срока: 0 — сегодня, отрицательное — просрочено.
  *
  * Считаем по календарным дням, а не по разнице в миллисекундах: срок стоит на

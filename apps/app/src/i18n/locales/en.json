@@ -681,6 +681,10 @@
       "task_comment": {
         "label": "A new comment on my task",
         "hint": "Someone comments on a task assigned to you"
+      },
+      "task_due": {
+        "label": "A task of mine is due soon",
+        "hint": "Warns you before the deadline, as set by the company"
       }
     },
     "reminders": "Open-task reminders",
@@ -1540,7 +1544,8 @@
     "ai": "AI & mail",
     "integration": "Integrations",
     "danger": "Danger zone",
-    "backup": "Backups"
+    "backup": "Backups",
+    "notify": "Notifications"
   },
   "summary": {
     "planned": "Planned",
@@ -1692,5 +1697,26 @@
     "disconnectConfirm": "Disconnect the Expo integration?",
     "disconnectHint": "Versions stay where they are. Remove the webhook on the Expo side separately: eas webhook:delete",
     "openBuild": "Open the build in Expo"
+  },
+  "notifyConfig": {
+    "title": "Notifications",
+    "hint": "Defaults for every project in this company. A project can override them.",
+    "dueLead": "Warn before a task is due",
+    "dueLeadHint": "How far ahead to notify the assignee",
+    "events": "Send notifications about",
+    "eventsHint": "Turning one off silences it in all projects. People can still unsubscribe individually.",
+    "leadHours_one": "{{count}} hour before",
+    "leadHours_other": "{{count}} hours before",
+    "leadDays_one": "{{count}} day before",
+    "leadDays_other": "{{count}} days before",
+    "event": {
+      "chat_mention": "Mentions in chat",
+      "task_mention": "Mentions in tasks",
+      "comment_mention": "Mentions in comments",
+      "task_assigned": "Task assigned",
+      "task_status": "Task status changed",
+      "task_comment": "New comment on a task",
+      "task_due": "Task due date approaching"
+    }
   }
 }

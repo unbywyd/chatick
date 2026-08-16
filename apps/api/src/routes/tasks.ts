@@ -11,6 +11,7 @@ import { hasPermission, ownsOrManages } from './projects.js'
 import { improveTask, validateTask, generateTaskNotes } from '../lib/llm.js'
 import { buildTeamContext } from '../lib/memory.js'
 import { notify, extractMentions, dropNotice } from '../lib/notify.js'
+import { setDue } from '../lib/notify-config.js'
 import { broadcast, tasksChanged } from '../ws.js'
 import { logActivity } from '../lib/audit.js'
 import { postTaskDone, postTaskAssigned } from '../lib/task-events.js'
@@ -426,7 +427,7 @@ tasksRoute.patch(
     if (body.status !== undefined) patch.status = body.status
     if (body.priority !== undefined) patch.priority = body.priority
     if (body.sortOrder !== undefined) patch.sortOrder = body.sortOrder
-    if (body.dueDate !== undefined) patch.dueDate = body.dueDate ? new Date(body.dueDate) : null
+    if (body.dueDate !== undefined) setDue(patch, body.dueDate ? new Date(body.dueDate) : null)
     if (body.assigneeId !== undefined) patch.assigneeId = body.assigneeId
     if (body.groupId !== undefined) patch.groupId = body.groupId
     if (body.estimateMinutes !== undefined) patch.estimateMinutes = body.estimateMinutes != null ? String(body.estimateMinutes) : null

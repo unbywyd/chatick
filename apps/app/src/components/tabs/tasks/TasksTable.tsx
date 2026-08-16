@@ -16,7 +16,7 @@ import {
   verticalListSortingStrategy,
   arrayMove,
 } from '@dnd-kit/sortable'
-import { ChevronDown, ChevronUp, ChevronsUpDown, Flag, GripVertical, Lock, Paperclip, Pencil, Plus, Trash2 } from 'lucide-react'
+import { CalendarClock, ChevronDown, ChevronUp, ChevronsUpDown, Flag, GripVertical, Lock, Paperclip, Pencil, Plus, Trash2 } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { Button } from '@/components/ui/button'
 import {
@@ -43,11 +43,12 @@ import { parseDuration } from '@/lib/time-parse'
 import { TaskRefs, REFS_SIGN } from './TaskRefs'
 import { StatusBadge } from './StatusBadge'
 import { TaskBlockedMark } from './TaskBlockedMark'
+import { DueDot } from './DueDot'
 
 // Табличный вид задач (SPEC §8.6): вложенные таблицы по группам-спринтам,
 // сортировка по колонкам, инлайн-смена статуса/ассайни, drag строк и групп.
 
-type SortKey = 'number' | 'title' | 'status' | 'priority' | 'estimate' | 'assignee' | 'refs' | 'deps'
+type SortKey = 'number' | 'title' | 'status' | 'priority' | 'estimate' | 'assignee' | 'refs' | 'deps' | 'due'
 type SortDir = 'asc' | 'desc'
 
 const STATUS_RANK: Record<Status, number> = { todo: 0, in_progress: 1, review: 2, done: 3 }
@@ -154,6 +155,17 @@ export function TasksTable({
         case 'assignee':
           d = (a.assignee?.name ?? '').localeCompare(b.assignee?.name ?? '')
           break
+        case 'due': {
+          // Бессрочные — всегда в конце, в обе стороны сортировки. «Без срока»
+          // это не «очень поздно»: перевернув порядок, человек ищет самое
+          // просроченное, а не список задач, которым срок не ставили. Поэтому
+          // считаем разницу до умножения на dir и возвращаем сразу.
+          const at = a.dueDate ? new Date(a.dueDate).getTime() : null
+          const bt = b.dueDate ? new Date(b.dueDate).getTime() : null
+          if (at === null || bt === null) return at === bt ? 0 : at === null ? 1 : -1
+          d = at - bt
+          break
+        }
         case 'refs':
           // Численно, а не по алфавиту: иначе «10» встаёт между «1» и «2».
           d = (parseFloat(a.refs ?? '') || Infinity) - (parseFloat(b.refs ?? '') || Infinity)
@@ -501,6 +513,13 @@ function GroupTable({
     { key: 'status', label: t('tasks.col.status'), className: 'w-36 whitespace-nowrap' },
     { key: 'priority', label: t('tasks.col.priority'), className: 'w-10' },
     { key: 'estimate', label: t('tasks.col.estimate'), className: 'w-24' },
+    // Срок рядом с оценкой: обе про время, и вместе отвечают «успеваем ли».
+    // В заголовке значок — колонка шириной в одну иконку, слово не влезет.
+    {
+      key: 'due',
+      label: <CalendarClock className="size-3.5" aria-label={t('tasks.dueLabel')} />,
+      className: 'w-10',
+    },
     { key: 'assignee', label: t('tasks.col.assignee'), className: 'w-40' },
     // Зависимости последней: колонка узкая и чаще пустая, а по клику на
     // заголовок поднимает наверх то, с чего надо начинать. В заголовке
@@ -838,6 +857,10 @@ function TableRow({
       {/* Инлайн-оценка времени */}
       <td className="align-middle text-xs">
         <EstimateCell mins={task.estimateMinutes} canEdit={canEdit} onSave={(m) => onPatch(task.id, { estimateMinutes: m })} />
+      </td>
+      {/* Срок — только цветной значок, подробности в подсказке */}
+      <td className="px-2 align-middle">
+        <DueDot task={task} />
       </td>
       {/* Инлайн-ассайни (с поиском по имени при большом составе) */}
       <td className="align-middle">

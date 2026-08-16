@@ -237,6 +237,19 @@ export const companies = pgTable('companies', {
   // Поле projects.time_config остаётся на месте под возможное переопределение
   // отдельным проектом — из интерфейса его убрали, но не из данных.
   timeConfig: text('time_config').notNull().default('{}'),
+  /**
+   * Уведомления по умолчанию для всех проектов компании (SPEC §8.9).
+   *
+   * JSON: { events: { chat_mention: bool, ... }, dueLeadHours: number,
+   *         dueEnabled: bool }.
+   *
+   * Наследование, а не копия при создании — как у time_config: правило
+   * «о сроках предупреждаем за сутки» заводят один раз на компанию, и когда
+   * его меняют, ждут, что оно поменяется везде, а не только в проектах,
+   * заведённых после. Проект может переопределить своим notify_config;
+   * «{}» значит «не задано», а не «всё выключено».
+   */
+  notifyConfig: text('notify_config').notNull().default('{}'),
   // Проекты приходят только через API — кнопка создания в интерфейсе исчезает.
   projectsViaApiOnly: boolean('projects_via_api_only').notNull().default(false),
   // То же для людей: состав команды виден, но правится только снаружи. Иначе
@@ -310,6 +323,8 @@ export const projects = pgTable(
     // считались одинаково у всех: иначе клиент режет дни по своему поясу,
     // а SQL — по серверному, и понедельник у них разный.
     timeConfig: text('time_config').notNull().default('{}'),
+    // Уведомления проекта; «{}» = берём у компании (см. companies.notify_config)
+    notifyConfig: text('notify_config').notNull().default('{}'),
     logoUrl: text('logo_url'),
     logoKey: text('logo_key'),
     // Идентификатор и имя проекта в системе заказчика. Имя показывается рядом
@@ -505,6 +520,14 @@ export const tasks = pgTable(
     // ручной порядок внутри статус-группы (drag&drop); меньше = выше
     sortOrder: doublePrecision('sort_order').notNull().default(0),
     dueDate: timestamp('due_date', { withTimezone: true }),
+    /**
+     * Когда предупредили о приближении срока — чтобы не предупреждать дважды.
+     *
+     * Тик планировщика идёт каждые 5 минут, и без метки человек получал бы
+     * напоминание двенадцать раз в час. Сбрасывается в null при смене
+     * due_date: перенесли срок — значит, про новый ещё не предупреждали.
+     */
+    dueNotifiedAt: timestamp('due_notified_at', { withTimezone: true }),
     assigneeId: text('assignee_id').references(() => users.id, { onDelete: 'set null' }),
     createdById: text('created_by_id').references(() => users.id, { onDelete: 'set null' }),
     // soft-delete (SPEC §8.21): восстановимо 7 дней, потом крон удаляет окончательно
@@ -1191,6 +1214,7 @@ export const notificationEvent = pgEnum('notification_event', [
   'note_reminder', // наступила дата напоминания в заметке
   'timer_running', // таймер идёт слишком долго — не забыли ли выключить
   'release_status', // версия сдвинулась по стадиям — автору и тем, кого это касается
+  'task_due', // срок задачи на подходе — предупреждаем заранее
 ])
 
 // Подписки: строка = (user, project, event) отключён. По умолчанию всё включено;

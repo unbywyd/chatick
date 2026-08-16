@@ -40,6 +40,7 @@ import { CompanyTimeTab } from '@/components/company/CompanyTimeTab'
 import { ProjectInbox } from '@/components/ProjectInbox'
 import { MyRecentTime } from '@/components/company/MyRecentTime'
 import { CompanyTimeSettings } from '@/components/company/CompanyTimeSettings'
+import { CompanyNotifySettings } from '@/components/company/CompanyNotifySettings'
 import { OverviewTab } from '@/components/company/OverviewTab'
 import { LlmSettings } from '@/components/company/LlmSettings'
 import { MailSettings } from '@/components/company/MailSettings'
@@ -568,7 +569,7 @@ function CompanyHome({
 // вкладкам, и вкладка живёт в адресе (?s=…): ссылкой на конкретную настройку
 // делятся, а возврат из соседнего экрана не сбрасывает на первую.
 
-const SETTINGS_TABS = ['company', 'time', 'ai', 'integration', 'backup', 'danger'] as const
+const SETTINGS_TABS = ['company', 'time', 'notify', 'ai', 'integration', 'backup', 'danger'] as const
 type SettingsTab = (typeof SETTINGS_TABS)[number]
 
 function CompanySettings({
@@ -584,7 +585,7 @@ function CompanySettings({
   const [params, setParams] = useSearchParams()
   // Вкладки, до которых человеку нет доступа, не показываем — и в адресе они
   // тоже не срабатывают: иначе ссылка вела бы на пустоту.
-  const tabs = SETTINGS_TABS.filter((k) => isAdmin || k === 'company' || k === 'time' || k === 'ai')
+  const tabs = SETTINGS_TABS.filter((k) => isAdmin || k === 'company' || k === 'time' || k === 'ai' || k === 'notify')
   const asked = params.get('s') as SettingsTab | null
   const tab: SettingsTab = asked && tabs.includes(asked) ? asked : 'company'
 
@@ -625,6 +626,9 @@ function CompanySettings({
       )}
 
       {tab === 'time' && <CompanyTimeSettings companyId={company.id} />}
+      {/* Уведомления компании — умолчание для всех проектов: правило
+          «о сроках предупреждаем за сутки» заводится один раз. */}
+      {tab === 'notify' && <CompanyNotifySettings companyId={company.id} />}
       {/* Бэкап переехал сюда из верхнего ряда: его открывают раз в месяц, а
           место в главном меню занимал наравне с ежедневным. */}
       {tab === 'backup' && <BackupTab company={company} />}

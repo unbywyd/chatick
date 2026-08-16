@@ -229,10 +229,13 @@ describe('срок задачи через мост', () => {
   })
 
   it('правится и поштучно, и пакетом', () => {
+    // Через setDue, а не присваиванием: он заодно снимает метку «уже
+    // предупредили о сроке». Перенесли дату — про новую ещё не напоминали, и
+    // прямая запись dueDate оставила бы задачу без предупреждения навсегда.
     const single = src.slice(src.indexOf('if (b.estimateMinutes !== undefined)'))
-    expect(single.slice(0, 400)).toMatch(/patch\.dueDate = due/)
+    expect(single.slice(0, 400)).toMatch(/setDue\(patch, due\)/)
     const bulk = src.slice(src.indexOf('if (set.estimateMinutes !== undefined)'))
-    expect(bulk.slice(0, 400)).toMatch(/patch\.dueDate = due/)
+    expect(bulk.slice(0, 400)).toMatch(/setDue\(patch, due\)/)
   })
 
   it('голая дата не уезжает на предыдущий день', () => {

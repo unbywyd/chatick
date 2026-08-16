@@ -20,6 +20,7 @@ import { companyStorageFor } from '../lib/s3.js'
 import { membersLockedForCompany, MEMBERS_LOCKED } from '../lib/members-locked.js'
 import { timeConfigSchema } from './projects.js'
 import { readTimeConfig } from './time.js'
+import { NOTIFY_EVENTS, readNotifyConfig } from '../lib/notify-config.js'
 import { LLM_PROVIDERS, testLlm, type LlmProvider } from '../lib/llm.js'
 import { env } from '../env.js'
 
@@ -460,6 +461,57 @@ companiesRoute.patch(
     }
 
     await db.update(companies).set({ timeConfig: JSON.stringify(merged) }).where(eq(companies.id, companyId))
+    return c.json({ config: merged })
+  },
+)
+
+/**
+ * Уведомления компании — умолчание для всех её проектов (SPEC §8.9).
+ *
+ * Читают все, кто состоит: человеку полезно знать, за сколько его
+ * предупредят о сроке, даже если менять он это не вправе. Меняет админ —
+ * настройка расходится на все проекты разом.
+ */
+companiesRoute.get('/:companyId/notify-config', async (c) => {
+  const { sub } = c.get('session')
+  const companyId = c.req.param('companyId')
+  const role = await memberRoleIn(companyId, sub)
+  if (!role) return c.json({ error: 'Forbidden' }, 403)
+
+  const company = await db.query.companies.findFirst({ where: eq(companies.id, companyId) })
+  if (!company) return c.json({ error: 'Not found' }, 404)
+  return c.json({ config: readNotifyConfig(company.notifyConfig), canEdit: role === 'admin' })
+})
+
+companiesRoute.patch(
+  '/:companyId/notify-config',
+  zValidator(
+    'json',
+    z.object({
+      events: z.record(z.enum(NOTIFY_EVENTS), z.boolean()).optional(),
+      dueLeadHours: z.number().int().min(1).max(24 * 14).optional(),
+    }),
+  ),
+  async (c) => {
+    const { sub } = c.get('session')
+    const companyId = c.req.param('companyId')
+    if ((await memberRoleIn(companyId, sub)) !== 'admin') return c.json({ error: 'Forbidden' }, 403)
+
+    const company = await db.query.companies.findFirst({ where: eq(companies.id, companyId) })
+    if (!company) return c.json({ error: 'Not found' }, 404)
+
+    const b = c.req.valid('json')
+    if (!Object.keys(b).length) return c.json({ error: 'Nothing to change.' }, 400)
+
+    const current = readNotifyConfig(company.notifyConfig)
+    // events сливаем по ключам, а не целиком: интерфейс шлёт один
+    // переключатель, и заменой объекта остальные молча вернулись бы к «вкл».
+    const merged = {
+      ...current,
+      ...b,
+      events: { ...current.events, ...(b.events ?? {}) },
+    }
+    await db.update(companies).set({ notifyConfig: JSON.stringify(merged) }).where(eq(companies.id, companyId))
     return c.json({ config: merged })
   },
 )

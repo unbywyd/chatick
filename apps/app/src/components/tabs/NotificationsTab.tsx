@@ -16,6 +16,9 @@ const EVENTS = [
   'task_assigned',
   'task_status',
   'task_comment',
+  // Срок задачи: кому-то напоминание нужно, кто-то ведёт сроки в своём
+  // календаре и второй раз о них слышать не хочет.
+  'task_due',
 ] as const
 type Event = (typeof EVENTS)[number]
 

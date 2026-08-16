@@ -56,6 +56,7 @@ import { readPresence } from './auth.js'
 import { canPublish, createShare, locate, revokeShare, type ShareEntityType } from './shares.js'
 import { notifyChatMentions } from './messages.js'
 import { notify, extractMentions } from '../lib/notify.js'
+import { setDue } from '../lib/notify-config.js'
 import { notifyTask, unassignNotice, dependentsOf, blockersOf } from './tasks.js'
 import { projectPath, projectUrl, companyOf } from '../lib/links.js'
 import { htmlToText, sanitizeHtml } from '../lib/sanitize-html.js'
@@ -1572,7 +1573,7 @@ bridgeRoute.patch('/tasks/bulk', async (c) => {
   if (set.estimateMinutes !== undefined) patch.estimateMinutes = set.estimateMinutes == null ? null : String(set.estimateMinutes)
   {
     const due = parseDue(set.dueDate)
-    if (due !== undefined) patch.dueDate = due
+    if (due !== undefined) setDue(patch, due)
   }
   if (set.sprintId !== undefined) patch.groupId = set.sprintId ?? null
   if (set.assignee !== undefined) {
@@ -1916,7 +1917,7 @@ bridgeRoute.patch('/tasks/:id', async (c) => {
   if (b.estimateMinutes !== undefined) patch.estimateMinutes = b.estimateMinutes == null ? null : String(b.estimateMinutes)
   {
     const due = parseDue(b.dueDate)
-    if (due !== undefined) patch.dueDate = due
+    if (due !== undefined) setDue(patch, due)
   }
   if (typeof b.refs === 'string') patch.refs = normalizeRefs(b.refs)
   if (b.sprintId !== undefined) patch.groupId = b.sprintId ?? null

@@ -1258,9 +1258,23 @@ function TaskRow({
         </DropdownMenuContent>
       </DropdownMenu>
 
+      {/* Номер и название на иврите слипались в «TASK-2test», да ещё и в
+          обратном порядке.
+
+          Причина не в отступе, а в двунаправленном алгоритме: номер и
+          латинское название — два соседних LTR-куска в RTL-строке, и алгоритм
+          выстраивает сами КУСКИ справа налево, оставляя буквы внутри каждого
+          слева направо. Отступ при этом не спасает: он рисуется по краям
+          строчного бокса, а не между переставленными кусками.
+
+          isolate на номере и <bdi> на названии делают каждый самостоятельным
+          куском с нейтральными границами — порядок сохраняется при любом
+          языке названия. inline-block заодно возвращает работу полям. */}
       <span className={cn('min-w-0 flex-1 truncate text-sm', task.status === 'done' && 'text-muted-foreground line-through')}>
-        <span className="me-1.5 text-xs text-muted-foreground">{task.number}</span>
-        {task.title}
+        <span dir="ltr" className="me-1.5 inline-block text-xs text-muted-foreground [unicode-bidi:isolate]">
+          {task.number}
+        </span>
+        <bdi>{task.title}</bdi>
       </span>
 
       {/* Свой номер задачи — рядом с нашим: по нему её и ищут в макете. */}

@@ -12,6 +12,7 @@ import { createNote, noteToTask, NOTE_TYPES } from '../routes/notes.js'
 import { timeConfigForProject } from '../routes/time.js'
 import { encrypt } from './crypto.js'
 import { notify, extractMentions } from './notify.js'
+import { setDue } from './notify-config.js'
 import { projectLlm, complete, validateTask, type ToolDef, type ToolHandler } from './llm.js'
 import { broadcast } from '../ws.js'
 import { visionEnabled, SUPPORTED, MAX_BYTES } from './vision.js'
@@ -1005,7 +1006,7 @@ export function memoryTools(projectId: string, actorUserId: string): { tools: To
       const groupId = await resolveSprint(args.sprint)
       if (groupId !== undefined) patch.groupId = groupId
       const due = parseDue(args.dueDate)
-      if (due !== undefined) patch.dueDate = due
+      if (due !== undefined) setDue(patch, due)
       if (typeof args.estimateMinutes === 'number') patch.estimateMinutes = String(Math.max(0, Math.round(args.estimateMinutes)))
       if (!Object.keys(patch).length) return 'Nothing to update.'
       const [row] = await db.update(tasks).set(patch).where(eq(tasks.id, t.id)).returning()
@@ -1102,7 +1103,7 @@ export function memoryTools(projectId: string, actorUserId: string): { tools: To
       const groupId = await resolveSprint(changes.sprint)
       if (groupId !== undefined) patch.groupId = groupId
       const due = parseDue(changes.dueDate)
-      if (due !== undefined) patch.dueDate = due
+      if (due !== undefined) setDue(patch, due)
       if (typeof changes.estimateMinutes === 'number')
         patch.estimateMinutes = String(Math.max(0, Math.round(changes.estimateMinutes)))
       if (!Object.keys(patch).length) return 'Nothing to update: "changes" had no recognised fields.'

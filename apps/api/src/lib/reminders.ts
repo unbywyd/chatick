@@ -14,6 +14,7 @@ import { htmlToText } from './sanitize-html.js'
 import { companyOf, projectPath, projectUrl } from './links.js'
 import { runDueBackups } from './auto-backup.js'
 import { localeFor } from './locale.js'
+import { notifyConfigForProject } from './notify-config.js'
 
 // Планировщик напоминаний об открытых задачах (SPEC §8.9).
 // Тик раз в 5 минут: для каждого включённого конфига проверяем, наступил ли срок,
@@ -176,6 +177,92 @@ async function sweepNoteReminders() {
 }
 
 /**
+ * Приближающийся срок задачи (SPEC §8.9).
+ *
+ * За сколько предупреждать — настройка проекта, а если проект молчит, то
+ * компании (notifyConfigForProject). Ноль настроек в интерфейсе означал бы
+ * либо шум, либо бесполезность: у стройки и у поддержки «заранее» разное.
+ *
+ * Кому: исполнителю, а если его нет — тем, кто задачу завёл. Всей команде
+ * такое не шлём: срок чужой задачи — не твоя забота, а от уведомлений «просто
+ * чтобы знали» отписываются вместе со всеми остальными.
+ *
+ * dueNotifiedAt защищает от повтора: тик идёт каждые 5 минут. Оно же
+ * сбрасывается в null при смене срока — перенесли дату, значит про новую ещё
+ * не предупреждали.
+ */
+async function sweepDueTasks() {
+  try {
+    // Берём с запасом по самому большому возможному упреждению: у каждого
+    // проекта оно своё, а тянуть задачи по одному проекту за раз — лишние
+    // запросы. Лишнее отсеем ниже, уже зная настройку.
+    const MAX_LEAD_MS = 24 * 14 * 3600_000
+    const horizon = new Date(Date.now() + MAX_LEAD_MS)
+
+    const soon = await db.query.tasks.findMany({
+      where: and(
+        isNotNull(tasks.dueDate),
+        isNull(tasks.dueNotifiedAt),
+        isNull(tasks.deletedAt),
+        lte(tasks.dueDate, horizon),
+        // Сделанную задачу срок уже не касается.
+        inArray(tasks.status, ['todo', 'in_progress', 'review']),
+      ),
+      limit: 500,
+    })
+    if (!soon.length) return
+
+    // Настройки читаем по проекту, а не по задаче: в одном проекте их обычно
+    // десятки, и это был бы тот же ответ, полученный заново.
+    const configs = new Map<string, Awaited<ReturnType<typeof notifyConfigForProject>>>()
+
+    for (const t of soon) {
+      let cfg = configs.get(t.projectId)
+      if (!cfg) {
+        cfg = await notifyConfigForProject(t.projectId)
+        configs.set(t.projectId, cfg)
+      }
+      if (cfg.events.task_due === false) continue
+
+      const due = t.dueDate!.getTime()
+      const leadMs = cfg.dueLeadHours * 3600_000
+      // Ещё рано — этот проект просил предупреждать позже.
+      if (due - Date.now() > leadMs) continue
+
+      const recipients = t.assigneeId
+        ? [t.assigneeId]
+        : t.createdById
+          ? [t.createdById]
+          : []
+      // Некому напоминать — но метку ставим, иначе задача будет всплывать в
+      // каждом тике до самого удаления.
+      if (recipients.length) {
+        await notify({
+          projectId: t.projectId,
+          event: 'task_due',
+          recipientIds: recipients,
+          // Срок наступает сам: актора нет, и подставлять сюда автора задачи
+          // значило бы написать, будто это он что-то сделал.
+          actorId: null,
+          actorName: '',
+          dedupeKey: `task_due:${t.id}:${t.dueDate!.toISOString()}`,
+          link: projectPath((await companyOf(t.projectId)) ?? '', t.projectId, `/tasks?task=${t.id}`),
+          preview: t.title,
+          // Дату отдаём в ISO: notify знает язык получателя, а мы — нет.
+          // Каждый получит её в своём формате, а не в нашем.
+          vars: { ref: t.number, dueAt: t.dueDate!.toISOString() },
+          entityType: 'task',
+          entityId: t.id,
+        })
+      }
+      await db.update(tasks).set({ dueNotifiedAt: new Date() }).where(eq(tasks.id, t.id))
+    }
+  } catch (err) {
+    console.error('[reminders] due tasks failed:', err)
+  }
+}
+
+/**
  * Забытые таймеры (SPEC §8.32). Проект решает сам: напоминать или
  * останавливать. Напоминание повторяется, пока таймер идёт, — один раз его
  * легко пропустить, а сутки в статистике портят всю картину.
@@ -242,6 +329,7 @@ export function startReminderScheduler() {
       void sendDailyDigests() // суточный email-дайджест непрочитанных (SPEC §8.22)
       void sweepNoteReminders() // напоминания в заметках (SPEC §8.31)
       void sweepRunningTimers() // забытые таймеры (SPEC §8.32)
+      void sweepDueTasks() // приближающийся срок задачи (SPEC §8.9)
       // Суточный бэкап компаний в их же хранилище (SPEC §8.48). Сам решает,
       // кому пора: тик частый, а бэкап раз в сутки.
       void runDueBackups().catch(() => {})
