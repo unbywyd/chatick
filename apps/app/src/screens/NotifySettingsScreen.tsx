@@ -12,6 +12,7 @@ import {
 import { Button } from '@/components/ui/button'
 import { Switch } from '@/components/ui/switch'
 import { DigestSettings } from '@/components/DigestSettings'
+import { NotifyScopeTabs, lastProjectNotifyPath } from '@/components/NotifyScopeTabs'
 
 // Системные уведомления — настройка ПРОГРАММЫ, а не проекта (SPEC §8.22).
 //
@@ -53,10 +54,16 @@ export function NotifySettingsScreen() {
         </Button>
         <h1 className="flex items-center gap-2 text-xl font-bold tracking-tight">
           <Bell className="size-5" />
-          {t('notif.system')}
+          {t('notif.titleMine')}
         </h1>
       </div>
-      <p className="mt-1 text-sm text-muted-foreground">{t('notif.systemHint')}</p>
+      <p className="mt-1 text-sm text-muted-foreground">{t('notif.subtitleMine')}</p>
+
+      {/* Вкладка проекта появится, когда сюда пришли из проекта: адрес
+          запоминаем в NotificationsTab и кладём в sessionStorage. */}
+      <div className="mt-4">
+        <NotifyScopeTabs active="mine" projectPath={lastProjectNotifyPath()} />
+      </div>
 
       <section className="mt-6 space-y-2.5 rounded-xl border bg-card p-4">
         {/* Разрешение — только по кнопке: браузер показывает диалог лишь в

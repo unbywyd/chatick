@@ -9,6 +9,7 @@ import { Button } from '@/components/ui/button'
 import { Select, SelectTrigger, SelectValue, SelectContent, SelectItem } from '@/components/ui/select'
 import { Link } from 'react-router-dom'
 import { NOTIFY_EVENTS, DEFAULT_NOTIFY_CONFIG, type NotifyConfig } from '@/lib/notify-config'
+import { NotifyScopeTabs } from '@/components/NotifyScopeTabs'
 
 /** Варианты упреждения: часами до полусуток, дальше — сутками. */
 const LEAD_OPTIONS = [1, 2, 4, 8, 12, 24, 48, 72, 168]
@@ -39,7 +40,16 @@ type Reminder = {
   statuses: string
 }
 
-export function NotificationsTab({ projectId, isAdmin }: { projectId: string; isAdmin: boolean }) {
+export function NotificationsTab({
+  projectId,
+  isAdmin,
+  projectPath,
+}: {
+  projectId: string
+  isAdmin: boolean
+  /** Адрес этой же страницы — для вкладки «этот проект». */
+  projectPath?: string
+}) {
   const { t } = useTranslation()
   const qc = useQueryClient()
   const onErr = (e: unknown) => toast.error(e instanceof Error ? e.message : String(e))
@@ -58,19 +68,26 @@ export function NotificationsTab({ projectId, isAdmin }: { projectId: string; is
   })
 
   return (
-    <div className="mx-auto w-full max-w-6xl space-y-8 p-6">
+    <div className="mx-auto w-full max-w-6xl space-y-6 p-6">
       <div>
         <h1 className="flex items-center gap-2 text-xl font-bold tracking-tight">
           <Bell className="size-5" />
-          {t('notif.title')}
+          {/* «Уведомления» на обеих страницах не говорило, чьи они: из меню
+              человек проваливался в проект и решал, что настраивает себя. */}
+          {t('notif.titleProject')}
         </h1>
-        <p className="mt-1 text-sm text-muted-foreground">{t('notif.subtitle')}</p>
+        <p className="mt-1 text-sm text-muted-foreground">{t('notif.subtitleProject')}</p>
       </div>
 
-      {/* Настройки компании — они же умолчание для этого проекта */}
-      <ProjectNotifyConfig projectId={projectId} isAdmin={isAdmin} />
+      {/* Путь к личным настройкам: раньше его не было вовсе, только назад
+          через меню. Заодно запоминаем, куда возвращаться. */}
+      <NotifyScopeTabs active="project" projectPath={projectPath} remember={projectPath} />
 
-      {/* Личные подписки */}
+      {/* Сначала своё, потом общее.
+          Личные подписки есть у КАЖДОГО, а настройки проекта — только у
+          руководства. Показывать сперва админский список значило заставлять
+          большинство пролистывать чужое, да ещё и неотличимое на вид: события
+          в обоих списках одни и те же. */}
       <section className="space-y-2.5 rounded-xl border bg-card p-4">
         <h2 className="text-sm font-semibold">{t('notif.subscriptions')}</h2>
         <p className="text-xs text-muted-foreground">{t('notif.subscriptionsHint')}</p>
@@ -88,12 +105,16 @@ export function NotificationsTab({ projectId, isAdmin }: { projectId: string; is
         ))}
       </section>
 
+      {/* Дальше — то, что решают за всех: видно только руководству проекта */}
+      <ProjectNotifyConfig projectId={projectId} isAdmin={isAdmin} />
+
       {/* Напоминания об открытых задачах */}
       <ReminderConfig projectId={projectId} isAdmin={isAdmin} />
 
       {/* Сводка на почту — настройка человека, а не проекта: ключ в базе
           только userId, и выключенная здесь она выключалась сразу везде.
-          Оставляем ссылку, чтобы её не искали. */}
+          Ссылку оставляем, хотя вкладка ведёт туда же: искать её будут
+          именно тут, рядом с подписками. */}
       <p className="text-xs text-muted-foreground">
         {t('notif.digestMoved')}{' '}
         <Link to="/settings/notifications" className="underline underline-offset-2 hover:text-foreground">
@@ -138,6 +159,15 @@ function ProjectNotifyConfig({ projectId, isAdmin }: { projectId: string; isAdmi
 
   if (q.isLoading) return null
 
+  // Не руководству — не показываем вовсе.
+  //
+  // Раньше блок висел серым: семь переключателей, неотличимых от личных
+  // подписок выше, все мёртвые и без объяснения. Человек видел «наследует
+  // настройки компании» и решал, что именно наследование их и заблокировало,
+  // хотя дело в роли. Настройка, которую нельзя менять и не нужно знать, —
+  // это шум, а не информация.
+  if (!canEdit) return null
+
   return (
     <section className="space-y-4 rounded-xl border bg-card p-4">
       <div className="flex flex-wrap items-center justify-between gap-3">
@@ -147,16 +177,14 @@ function ProjectNotifyConfig({ projectId, isAdmin }: { projectId: string; isAdmi
             {inherited ? t('notifyConfig.inherited') : t('notifyConfig.own')}
           </p>
         </div>
-        {canEdit && !inherited && (
+        {!inherited && (
           <Button variant="outline" size="sm" onClick={() => save.mutate({ inherit: true })} disabled={save.isPending}>
             {t('notifyConfig.backToCompany')}
           </Button>
         )}
       </div>
 
-      {/* Унаследованное показываем приглушённым и только на чтение: так видно,
-          что настройка работает, но живёт не здесь. */}
-      <fieldset disabled={!canEdit} className="space-y-3 disabled:opacity-60">
+      <div className="space-y-3">
         <div className="flex items-center justify-between gap-3 rounded-lg border p-3">
           <div>
             <p className="text-sm font-medium">{t('notifyConfig.dueLead')}</p>
@@ -164,7 +192,7 @@ function ProjectNotifyConfig({ projectId, isAdmin }: { projectId: string; isAdmi
           </div>
           <Select
             value={String(cfg.dueLeadHours)}
-            disabled={!canEdit || cfg.events.task_due === false}
+            disabled={cfg.events.task_due === false}
             onValueChange={(v) => save.mutate({ ...cfg, dueLeadHours: Number(v) })}
           >
             <SelectTrigger className="w-44 shrink-0">
@@ -188,13 +216,12 @@ function ProjectNotifyConfig({ projectId, isAdmin }: { projectId: string; isAdmi
               <span className="text-sm">{t(`notifyConfig.event.${e}`)}</span>
               <Switch
                 checked={cfg.events[e] !== false}
-                disabled={!canEdit}
                 onCheckedChange={(v) => save.mutate({ ...cfg, events: { ...cfg.events, [e]: v } })}
               />
             </label>
           ))}
         </div>
-      </fieldset>
+      </div>
     </section>
   )
 }
@@ -254,6 +281,11 @@ function ReminderConfig({ projectId, isAdmin }: { projectId: string; isAdmin: bo
 
   const sel = new Set(form.statuses.split(',').filter(Boolean))
 
+  // Не админу — не показываем: рассылка по расписанию его не касается, а
+  // серые кнопки с подписью «менять могут только админы» лишь занимают экран
+  // и заставляют гадать, что тут вообще происходит.
+  if (!isAdmin) return null
+
   return (
     <section className="space-y-4 rounded-xl border bg-card p-4">
       <div className="flex items-center justify-between gap-3">
@@ -263,16 +295,15 @@ function ReminderConfig({ projectId, isAdmin }: { projectId: string; isAdmin: bo
         </h2>
         <Switch
           checked={form.enabled}
-          disabled={!isAdmin}
           onCheckedChange={(v) => setForm({ ...form, enabled: v })}
         />
       </div>
       <p className="text-xs text-muted-foreground">{t('notif.remindersHint')}</p>
 
-      <fieldset disabled={!isAdmin || !form.enabled} className="space-y-4 disabled:opacity-50">
+      <fieldset disabled={!form.enabled} className="space-y-4 disabled:opacity-50">
         {/* Частота */}
         <div className="space-y-1.5">
-          <label className="text-xs font-medium text-muted-foreground">{t('notif.cadence')}</label>
+          <label className="block text-xs font-medium text-muted-foreground">{t('notif.cadence')}</label>
           {/* «каждые N часов» убрано намеренно: письма чаще раза в сутки
               раздражают и портят репутацию домена (сервер это тоже не пустит) */}
           <div className="inline-flex overflow-hidden rounded-md border">
@@ -345,7 +376,7 @@ function ReminderConfig({ projectId, isAdmin }: { projectId: string; isAdmin: bo
 
         {/* Кому */}
         <div className="space-y-1.5">
-          <label className="text-xs font-medium text-muted-foreground">{t('notif.audience')}</label>
+          <label className="block text-xs font-medium text-muted-foreground">{t('notif.audience')}</label>
           <div className="inline-flex overflow-hidden rounded-md border">
             {(['all_members', 'assignees'] as const).map((a) => (
               <button
@@ -362,7 +393,7 @@ function ReminderConfig({ projectId, isAdmin }: { projectId: string; isAdmin: bo
 
         {/* Какие статусы считать открытыми */}
         <div className="space-y-1.5">
-          <label className="text-xs font-medium text-muted-foreground">{t('notif.statuses')}</label>
+          <label className="block text-xs font-medium text-muted-foreground">{t('notif.statuses')}</label>
           <div className="flex flex-wrap gap-2">
             {STATUSES.map((s) => (
               <button
@@ -378,11 +409,9 @@ function ReminderConfig({ projectId, isAdmin }: { projectId: string; isAdmin: bo
         </div>
       </fieldset>
 
-      {isAdmin && (
-        <Button variant="brand" onClick={() => save.mutate()} disabled={save.isPending}>
-          {t('notif.save')}
-        </Button>
-      )}
+      <Button variant="brand" onClick={() => save.mutate()} disabled={save.isPending}>
+        {t('notif.save')}
+      </Button>
     </section>
   )
 }

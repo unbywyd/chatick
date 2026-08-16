@@ -213,3 +213,35 @@ describe('каждая настройка живёт ровно в одном м
     expect(app('components/tabs/NotificationsTab.tsx')).not.toMatch(/inbox\/prefs/)
   })
 })
+
+describe('видно, чьи это настройки и как уйти к другим', () => {
+  const app = (p: string) => readFileSync(join(here, '../../../app/src', p), 'utf8')
+
+  it('заголовки различают личное и проектное', () => {
+    // Обе страницы звались «Уведомления»: из меню человек проваливался в
+    // проект и решал, что настраивает себя.
+    expect(app('components/tabs/NotificationsTab.tsx')).toMatch(/notif\.titleProject/)
+    expect(app('screens/NotifySettingsScreen.tsx')).toMatch(/notif\.titleMine/)
+  })
+
+  it('с обеих страниц есть путь на другую', () => {
+    // Раньше из личных настроек в проект вело только «назад» через меню.
+    expect(app('components/tabs/NotificationsTab.tsx')).toMatch(/NotifyScopeTabs/)
+    expect(app('screens/NotifySettingsScreen.tsx')).toMatch(/NotifyScopeTabs/)
+  })
+
+  it('мёртвых блоков не показываем', () => {
+    // Семь серых переключателей без объяснения читались как «наследование
+    // заблокировало», хотя дело в роли.
+    const src = app('components/tabs/NotificationsTab.tsx')
+    expect(src).toMatch(/if \(!canEdit\) return null/)
+    expect(src).toMatch(/if \(!isAdmin\) return null/)
+  })
+
+  it('подпись под инлайновой меткой не налезает на кнопки', () => {
+    // <label> строчный, а space-y работает только между блочными детьми:
+    // подпись и кнопки схлопывались в одну строку.
+    const src = app('components/tabs/NotificationsTab.tsx')
+    expect(src).not.toMatch(/<label className="text-xs font-medium text-muted-foreground">/)
+  })
+})

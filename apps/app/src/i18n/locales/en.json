@@ -656,7 +656,7 @@
   "notif": {
     "title": "Notifications",
     "subtitle": "Choose what you get notified about; email arrives as one daily digest",
-    "subscriptions": "Notify me when…",
+    "subscriptions": "Notify me when… (only me)",
     "event": {
       "chat_mention": {
         "label": "I'm mentioned in chat",
@@ -688,7 +688,7 @@
       }
     },
     "reminders": "Open-task reminders",
-    "remindersHint": "Email a list of open tasks on a schedule. Only admins can change this.",
+    "remindersHint": "Email a list of open tasks on a schedule.",
     "cadence": "Frequency",
     "cadenceOpt": {
       "hourly": "Every N hours",
@@ -716,7 +716,7 @@
     "save": "Save reminders",
     "saved": "Saved",
     "minInterval": "(min every 12h)",
-    "subscriptionsHint": "These appear in the bell. Email is sent once a day as a digest, not per event.",
+    "subscriptionsHint": "Your own subscriptions in this project — nobody else is affected. These go to the bell; email arrives as one daily digest.",
     "digest": "Daily email digest",
     "digestHint": "One email a day summarising your unread notifications — instead of an email per event.",
     "system": "System notifications",
@@ -736,7 +736,15 @@
     "permBlocked": "Your browser didn't show the prompt. Click the icon at the left of the address bar and allow notifications there.",
     "perProjectHint": "Which events you're subscribed to is set per project — open a project and go to Notifications.",
     "digestMoved": "The daily email digest is a personal setting — one for all your projects.",
-    "digestMovedLink": "Open personal settings"
+    "digestMovedLink": "Open personal settings",
+    "scope": {
+      "mine": "My notifications",
+      "project": "This project"
+    },
+    "titleProject": "Notifications in this project",
+    "subtitleProject": "What this project sends you — and, for admins, what it sends everyone.",
+    "titleMine": "My notifications",
+    "subtitleMine": "Applies everywhere, in all your projects."
   },
   "projTeam": {
     "title": "Project team",

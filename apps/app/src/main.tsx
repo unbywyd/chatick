@@ -196,9 +196,13 @@ function TeamPage() {
 }
 function NotificationsPage() {
   const { project } = useProjectCtx()
-  const { id } = useParams()
+  const { id, companyId } = useParams()
   return id ? (
-    <NotificationsTab projectId={id} isAdmin={project?.myRole === 'owner' || project?.myRole === 'admin'} />
+    <NotificationsTab
+      projectId={id}
+      isAdmin={project?.myRole === 'owner' || project?.myRole === 'admin'}
+      projectPath={companyId ? `/c/${companyId}/p/${id}/notifications` : undefined}
+    />
   ) : null
 }
 function AiPage() {
