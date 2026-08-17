@@ -231,6 +231,7 @@ export function memoryTools(projectId: string, actorUserId: string): { tools: To
         "Create a task. You can set assignee (by member name or email), due date, time estimate, priority, status and sprint. " +
         'To pull someone into the description, write @[Their Name](<userId>) — plain "@Name" is text and notifies nobody. ' +
         "The assignee is notified by being assigned; mention others only when they specifically need to see it. " +
+        'When the task is about something the user just showed you — a screenshot, a log — pass its id in attachmentIds (get it from list_chat_images): the file lands in the task AND survives, otherwise chat attachments are deleted within a day. ' +
         'The reply carries a short link to the new task — pass it on as is. Requires the author\'s tasks.create permission.',
       parameters: {
         type: 'object',
@@ -243,6 +244,12 @@ export function memoryTools(projectId: string, actorUserId: string): { tools: To
           dueDate: { type: 'string', description: 'due date, ISO or YYYY-MM-DD' },
           estimateMinutes: { type: 'number', description: 'REQUIRED: time estimate in minutes assuming the person works WITH an AI assistant (realistic, usually shorter)' },
           sprint: { type: 'string', description: 'sprint/group name (created if missing is NOT done — use an existing one)' },
+          attachmentIds: {
+            type: 'array',
+            items: { type: 'string' },
+            description:
+              'File ids to attach — take them from list_chat_images. Use this when the user shows you something and asks for a task about it: attaching also SAVES the file, which is otherwise deleted within a day.',
+          },
         },
         required: ['title'],
       },
@@ -519,7 +526,7 @@ export function memoryTools(projectId: string, actorUserId: string): { tools: To
     {
       name: 'list_chat_images',
       description:
-        'Images the user has sent you in this private chat, newest first — file name, when it was sent, and the message it came with. Call this when they refer to a picture you were not given: "look at the one I sent earlier", "check that screenshot again".',
+        'Everything the user has attached in this private chat, newest first — id, file name, type, when it was sent and the message it came with. Not only pictures: logs, PDFs and archives show up here too. Call this when they refer to something they sent ("look at the one I sent earlier"), and ALSO when they ask you to turn an attachment into a task — the id from here is what create_task attachmentIds and attach_file_to_task need.',
       parameters: {
         type: 'object',
         properties: { limit: { type: 'number', description: 'how many to list, default 10' } },
@@ -794,6 +801,37 @@ export function memoryTools(projectId: string, actorUserId: string): { tools: To
   }
 
   /**
+   * Приложить файлы к задаче — то же, что делает attach_file_to_task, но
+   * пачкой и молча пропуская чужое.
+   *
+   * pendingUntil снимаем обязательно: файл из чата временный и удаляется
+   * уборщиком в течение суток (SPEC §8.17). Приложенный к задаче и не
+   * сохранённый исчез бы из неё сам, а задача осталась бы со ссылкой в никуда.
+   *
+   * Берём только СВОИ файлы этого проекта: чат с ассистентом личный, и
+   * подставленный чужой id не должен вытащить файл в задачу. Возвращаем имена
+   * приложенного, чтобы вызывающий мог сказать, что именно приложилось, —
+   * и промолчать о том, чего не нашлось, нельзя.
+   */
+  async function attachFilesToTask(ids: string[], taskId: string): Promise<string[]> {
+    if (!ids.length) return []
+    const rows = await db.query.files.findMany({
+      where: and(
+        inArray(files.id, ids),
+        eq(files.projectId, projectId),
+        eq(files.uploadedById, actorUserId),
+        isNull(files.deletedAt),
+      ),
+    })
+    if (!rows.length) return []
+    await db
+      .update(files)
+      .set({ taskId, pendingUntil: null })
+      .where(inArray(files.id, rows.map((r) => r.id)))
+    return rows.map((r) => r.name)
+  }
+
+  /**
    * Создание одной задачи — общий код для create_task и create_tasks.
    *
    * Возвращает и номер, и id: номер человек читает, а по id собирается ссылка.
@@ -1050,12 +1088,26 @@ export function memoryTools(projectId: string, actorUserId: string): { tools: To
       if (!(await hasPermission(projectId, actorUserId, 'tasks.create')))
         return 'PERMISSION DENIED: the author does not have the tasks.create permission. Politely refuse.'
       if (!String(args.title ?? '').trim()) return 'A title is required.'
+      // Права на вложения проверяем ДО создания задачи: иначе человек получил
+      // бы задачу без файла и отказ одной строкой — и не понял, что задача
+      // всё-таки завелась.
+      const wanted = Array.isArray(args.attachmentIds) ? (args.attachmentIds as unknown[]).map(String) : []
+      if (wanted.length && !(await hasPermission(projectId, actorUserId, 'files.upload'))) {
+        return 'PERMISSION DENIED: attaching files requires files.upload. Politely refuse — the task was NOT created.'
+      }
       const created = await createOneTask(args)
+      const attached = await attachFilesToTask(wanted, created.id)
       broadcast(projectId, 'tasks_changed', {})
+      if (attached.length) broadcast(projectId, 'files_changed', {})
       // Ссылку отдаём сразу: без неё ассистент на просьбу «дай ссылку»
       // собирает адрес сам и промахивается — такого маршрута нет.
       const link = await shortUrlFor('task', created.id, projectId, actorUserId)
-      return `Created ${created.number}: "${String(args.title).slice(0, 80)}".${link ? ` Link: ${link}` : ''}`
+      // Про неприложенное говорим вслух: молчаливая потеря файла выглядит
+      // как «приложил», а в задаче его нет.
+      const missed = wanted.length - attached.length
+      const files_ = attached.length ? ` Attached: ${attached.join(', ')}.` : ''
+      const lost = missed > 0 ? ` ${missed} file(s) could not be attached — wrong id, or not yours.` : ''
+      return `Created ${created.number}: "${String(args.title).slice(0, 80)}".${files_}${lost}${link ? ` Link: ${link}` : ''}`
     },
     update_task: async (args) => {
       const t = await findTask(String(args.number ?? ''))
@@ -1873,12 +1925,17 @@ export function memoryTools(projectId: string, actorUserId: string): { tools: To
     list_chat_images: async (args: Record<string, unknown>) => {
       const limit = Math.min(Math.max(1, Number((args as { limit?: number }).limit) || 10), 30)
       const rows = await db
-        .select({ name: files.name, mime: files.mime, at: files.createdAt, text: messages.text })
+        // id — чтобы приложенное к задаче можно было приложить. Без него
+        // attach_file_to_task и create_task требовали fileId, которого человек
+        // не знает, а взять его было НЕГДЕ: list_files временные файлы не
+        // показывает (там pendingUntil is null), а здесь отдавалось одно имя.
+        .select({ id: files.id, name: files.name, mime: files.mime, at: files.createdAt, text: messages.text })
         .from(files)
         .innerJoin(messages, eq(messages.id, files.messageId))
         .where(
           and(
             eq(files.projectId, projectId),
+            // Только свои: чат с ассистентом личный.
             eq(files.uploadedById, actorUserId),
             eq(messages.mode, 'ai'),
             isNull(files.deletedAt),
@@ -1886,13 +1943,16 @@ export function memoryTools(projectId: string, actorUserId: string): { tools: To
         )
         .orderBy(desc(files.createdAt))
         .limit(limit)
-      const imgs = rows.filter((r) => r.mime.startsWith('image/'))
-      if (!imgs.length) return 'No images in this chat yet.'
-      return imgs
-        .map(
-          (r) =>
-            `${r.name} — ${r.at.toISOString().slice(0, 16).replace('T', ' ')}, sent with: "${(r.text || '').slice(0, 60)}"`,
-        )
+      // Не только картинки: PDF, лог и архив бросают в чат не реже, а раньше
+      // они не показывались нигде — ассистент отвечал, что вложений нет.
+      if (!rows.length) return 'Nothing attached in this chat yet.'
+      return rows
+        .map((r) => {
+          const isImage = r.mime.startsWith('image/')
+          return `${r.name} (id=${r.id}, ${isImage ? 'image — view_image can open it' : r.mime})${
+            ` — ${r.at.toISOString().slice(0, 16).replace('T', ' ')}`
+          }, sent with: "${(r.text || '').slice(0, 60)}"`
+        })
         .join('\n')
     },
     view_image: async (args: Record<string, unknown>) => {
