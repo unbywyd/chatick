@@ -121,3 +121,24 @@ describe('человек не остаётся без объяснения', () 
     expect(screen).toMatch(/login\.otpSignupHint/)
   })
 })
+
+describe('вход по коду доступен и в приложении', () => {
+  // Его завели именно потому, что Google есть не у всех — Microsoft отклонила
+  // сборку с единственным входом через чужой сервис. Но в десктопной ветке
+  // экрана входа осталась ОДНА кнопка Google: починка до приложения не
+  // доехала, и там сохранилась ровно та картина, из-за которой был отказ.
+  const login = readFileSync(join(import.meta.dirname, '../../../app/src/screens/LoginScreen.tsx'), 'utf8')
+
+  it('в десктопной ветке есть переход к коду', () => {
+    const at = login.indexOf('shell && !byCode ? (')
+    expect(at, 'десктопная ветка на месте').toBeGreaterThan(-1)
+    const branch = login.slice(at, login.indexOf(') : byCode ? (', at))
+    expect(branch).toMatch(/setByCode\(true\)/)
+  })
+
+  it('выбор человека важнее того, где он сидит', () => {
+    // Без !byCode десктопная ветка перехватывала всё: кнопка нажималась, а
+    // форма не появлялась — то есть выхода не было вовсе.
+    expect(login).toMatch(/shell && !byCode \? \(/)
+  })
+})

@@ -173,7 +173,10 @@ export function LoginScreen() {
           <h1 className="text-2xl font-bold tracking-tight">{t('login.title')}</h1>
           <p className="mt-2 text-sm text-muted-foreground">{t('login.subtitle')}</p>
         </div>
-        {shell ? (
+        {/* !byCode: выбор человека важнее того, где он сидит. Без этого
+            десктопная ветка перехватывала всё, и вход по коду в приложении был
+            недостижим — кнопка нажималась, а форма не появлялась. */}
+        {shell && !byCode ? (
           <div className="flex flex-col items-center gap-3">
             {/* Кнопка не блокируется: нажать повторно — законный способ
                 начать заново, если в браузере что-то пошло не так. Ждать
@@ -200,6 +203,18 @@ export function LoginScreen() {
                 </button>
               </div>
             )}
+            {/* Вход по коду и в приложении.
+                В десктопной ветке его не было вовсе — только Google. А ведь
+                заводили его именно потому, что Google есть не у всех: Microsoft
+                отклонила сборку с единственным входом через чужой сервис.
+                Починка до приложения не доехала, и там осталась ровно та
+                картина, из-за которой отказ и случился. */}
+            <button
+              onClick={() => setByCode(true)}
+              className="text-xs text-muted-foreground underline-offset-2 hover:text-foreground hover:underline"
+            >
+              {t('login.byCode')}
+            </button>
           </div>
         ) : byCode ? (
           // Форма кода: сначала почта, после отправки — поле для шести цифр.
