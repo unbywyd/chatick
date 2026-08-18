@@ -25,7 +25,7 @@ describe('кнопка часов в панели', () => {
     // совпадает ни с чем и открывает пустой роутер.
     const fn = panel.slice(panel.indexOf('const openHoursLink'))
     expect(fn.slice(0, fn.indexOf('\n      }'))).toMatch(/companyId \?.*: null/s)
-    expect(panel).toMatch(/hours\.hidden = !hoursLink/)
+    expect(panel).toMatch(/openHoursLink\(id\) \|\| '\/start'/)
   })
 
   it('кнопка не мешает таскать окно', () => {
@@ -38,11 +38,21 @@ describe('кнопка часов в панели', () => {
   it('переход к часам не гасит уведомления проекта', () => {
     // projectId в panel:open означает «ушёл разбирать проект». Часы — не
     // разбор дел, и гасить бейдж за это нельзя.
-    expect(panel).toMatch(/openProject\(hoursLink, null\)/)
+    expect(panel).toMatch(/openProject\(openHoursLink/)
   })
 
   it('подпись приходит переводом, а не зашита', () => {
     expect(strings).toMatch(/openHours: t\('desktop\.openHours'\)/)
     expect(panel).toMatch(/T\('openHours'/)
+  })
+})
+
+describe('кнопка часов срабатывает, а не притворяется', () => {
+  it('ссылка считается в момент клика, а не при отрисовке', () => {
+    // Замкнув ссылку при отрисовке, кнопку получали живой, а ссылку пустой:
+    // панель показывается сразу, список проектов приезжает следом. Клик тогда
+    // молча не делал ничего — и отладить это нечем, консоли в панели нет.
+    expect(panel).toMatch(/currentTimerProject\(\)/)
+    expect(panel).toMatch(/hours\.hidden = !selId/)
   })
 })
