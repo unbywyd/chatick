@@ -178,10 +178,10 @@ export type TimeConfig = {
   workDayEnd: number
 }
 
-export /** Дольше суток — это не смена, а ошибка в дате. */
+/** Дольше суток — это не смена, а ошибка в дате. */
 const MAX_ENTRY_MS = 24 * 3600_000
 
-const DEFAULT_TIME_CONFIG: TimeConfig = {
+export const DEFAULT_TIME_CONFIG: TimeConfig = {
   maxTimers: 1, // параллельные таймеры разрешены, но по умолчанию их нет
   idleAction: 'remind',
   idleHours: 8,
