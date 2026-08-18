@@ -7,6 +7,30 @@ refuses to run otherwise, so a release can never ship without a description.
 
 Written in English only: this file is published on the website.
 
+## 0.4.0 — 2026-08-19
+
+### Added
+
+- **A main project for the company.** The tray panel used to open on "pick a
+  project", so a timer could not start until you chose one — and again on every
+  new machine. A company can now name its main project, and the panel opens
+  ready to work. Your own choice still wins; the setting only fills the gap
+  before you make one.
+- **Editing time from the tray.** Correct a running timer without opening the
+  app: click the counter, type the time, done. Seconds are kept as typed rather
+  than rounded away.
+
+### Fixed
+
+- **Opening a task now clears its notification.** The badge used to stay lit
+  after you had already read the thing it pointed at.
+- **The landing page no longer slides sideways.** A hidden anti-bot field in the
+  contact form stretched to the full width of the container and pushed the page
+  out of view — in Hebrew the whole layout drifted right from the contact
+  section onwards.
+- **The header fits narrow screens.** The language switcher and the "Start"
+  button stopped fitting together and pushed the button off the edge.
+
 ## 0.3.9 — 2026-08-13
 
 ### Added

@@ -19,7 +19,6 @@ type Dict = {
     /** Шаги установки: клон, установщик, перезапуск */
     steps: string[]
     cta: string
-    ctaNote: string
     /** Что человек получит после установки */
     points: string[]
     /**
@@ -248,14 +247,13 @@ export const dict: Record<LocaleCode, Dict> = {
       tag: 'Claude Code',
       title: 'Install the skill to get started',
       subtitle:
-        'The skill teaches Claude to work inside Chatick: take tasks, move statuses, tick checklists and report in comments. With the desktop app running, connecting is one button — no code to copy.',
+        'The skill teaches Claude to work inside Chatick: take tasks, move statuses, tick checklists and report in comments.',
       steps: [
         'git clone https://github.com/unbywyd/claude-skill-chatick.git ~/.claude/skills/chatick',
         'node ~/.claude/skills/chatick/scripts/install.mjs',
         'Restart Claude Code',
       ],
       cta: 'Skill on GitHub',
-      ctaNote: 'The second command installs the MCP server. Skip it and the skill still works — you just type a code every session.',
       points: [
         '“What is on me today?” instead of hunting the board',
         'Task, estimate and status straight from the conversation',
@@ -561,14 +559,13 @@ export const dict: Record<LocaleCode, Dict> = {
       tag: 'Claude Code',
       title: 'Поставьте скил — и можно начинать',
       subtitle:
-        'Скил учит Claude работать внутри Chatick: брать задачи, менять статусы, отмечать чеклисты и отписываться в комментариях. Если открыто приложение — подключение в одну кнопку, код вводить не нужно.',
+        'Скил учит Claude работать внутри Chatick: брать задачи, менять статусы, отмечать чеклисты и отписываться в комментариях.',
       steps: [
         'git clone https://github.com/unbywyd/claude-skill-chatick.git ~/.claude/skills/chatick',
         'node ~/.claude/skills/chatick/scripts/install.mjs',
         'Перезапустите Claude Code',
       ],
       cta: 'Скил на GitHub',
-      ctaNote: 'Вторая команда ставит MCP-сервер. Без неё скил тоже работает — просто код придётся вводить каждый раз.',
       points: [
         '«Что на мне сегодня?» — вместо поисков по доске',
         'Задача, оценка и статус — прямо из разговора',
@@ -876,14 +873,13 @@ export const dict: Record<LocaleCode, Dict> = {
       tag: 'Claude Code',
       title: 'התקינו את הסקיל — וזה מתחיל לעבוד',
       subtitle:
-        'הסקיל מלמד את Claude לעבוד בתוך Chatick: לקחת משימות, לשנות סטטוסים, לסמן צ׳קליסטים ולדווח בתגובות. עם האפליקציה פתוחה — חיבור בלחיצה אחת, בלי קוד להעתיק.',
+        'הסקיל מלמד את Claude לעבוד בתוך Chatick: לקחת משימות, לשנות סטטוסים, לסמן צ׳קליסטים ולדווח בתגובות.',
       steps: [
         'git clone https://github.com/unbywyd/claude-skill-chatick.git ~/.claude/skills/chatick',
         'node ~/.claude/skills/chatick/scripts/install.mjs',
         'הפעילו מחדש את Claude Code',
       ],
       cta: 'לסקיל ב־GitHub',
-      ctaNote: 'הפקודה השנייה מתקינה את שרת ה־MCP. בלעדיה הסקיל עדיין עובד — רק צריך להקליד קוד בכל פעם.',
       points: [
         '«מה עליי היום?» — במקום לחפש בלוח',
         'משימה, הערכת זמן וסטטוס — מתוך השיחה',
