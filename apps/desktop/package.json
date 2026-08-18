@@ -1,6 +1,6 @@
 {
   "name": "@chatick/desktop",
-  "version": "0.3.9",
+  "version": "0.4.0",
   "private": true,
   "main": "main.cjs",
   "description": "Team chat and project workspace where your AI assistant works alongside the team: tasks, files, documents and time tracking in one place.",
