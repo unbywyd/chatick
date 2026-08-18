@@ -32,6 +32,7 @@ type DesktopBridge = {
   onSetProject: (fn: (id: string) => void) => () => void
   onTaskStatus: (fn: (p: { taskId: string; status: string }) => void) => () => void
   onTaskTimer: (fn: (taskId: string) => void) => () => void
+  onTimerElapsed: (fn: (p: { id: string; minutes: number }) => void) => () => void
   onStateRefresh: (fn: () => void) => () => void
   onConnectRefresh: (fn: () => void) => () => void
   /**
@@ -418,6 +419,7 @@ export function useDesktopSync() {
         emptyProjects: t('desktop.emptyProjects'),
         openApp: t('desktop.openApp'),
         openHours: t('desktop.openHours'),
+        editElapsed: t('desktop.editElapsed'),
         close: t('desktop.close'),
         unreadOne: t('desktop.unread'),
         allRead: t('desktop.allRead'),
@@ -573,6 +575,35 @@ export function useDesktopSync() {
 
     // Таймер прямо на задаче: перебивает текущий, потому что работают над
     // чем-то одним, а два счётчика на одного человека — это уже путаница.
+    /**
+     * Правка натикавшего из панели трея.
+     *
+     * Панель присылает МИНУТЫ, а не новую дату: считает веб — здесь и токен, и
+     * права, и показ ошибки. Новое начало получается как «сейчас минус
+     * столько-то», поэтому день выставляется сам и отдельно его не трогаем —
+     * ровно то, на чём горели в TASK-6, когда сдвиг одного края делал из трёх
+     * минут сутки.
+     *
+     * Секунды обнуляем: в поле панели их нет, и невидимый остаток превращал бы
+     * набранное 1:03 в 1:03:47.
+     */
+    const offTimerElapsed = bridge.onTimerElapsed(async ({ id, minutes }) => {
+      const current = liveRef.current.timer
+      // Таймер мог остановиться, пока человек набирал.
+      if (!current || current.id !== id) return
+      const startedAt = new Date(Date.now() - minutes * 60_000)
+      startedAt.setSeconds(0, 0)
+      try {
+        await api(`/api/v1/time/mine/${id}`, { method: 'PATCH', body: JSON.stringify({ startedAt: startedAt.toISOString() }) })
+        qc.invalidateQueries({ queryKey: ['time-running'] })
+      } catch (e) {
+        // Панель ошибок не показывает — выводим в приложении, иначе правка
+        // молча не применяется и человек считает, что всё получилось.
+        toast.error(e instanceof Error ? e.message : String(e))
+        bridge.show()
+      }
+    })
+
     const offTaskTimer = bridge.onTaskTimer(async (taskId) => {
       // Из ref: список задач и текущий таймер к моменту нажатия могли смениться.
       const task = liveRef.current.tasks?.find((x) => x.id === taskId)
@@ -670,6 +701,7 @@ export function useDesktopSync() {
       offSetProject()
       offTaskStatus()
       offTaskTimer()
+      offTimerElapsed()
       offRefresh()
       offStateRefresh()
       offAbout()

@@ -24,6 +24,9 @@ contextBridge.exposeInMainWorld('panel', {
   setProject: (id) => ipcRenderer.send('panel:set-project', id),
   /** Запустить/остановить таймер на конкретной задаче. */
   taskTimer: (taskId) => ipcRenderer.send('panel:task-timer', taskId),
+  // Правка натикавшего: минуты, а не новая дата начала — считает веб, у него
+  // и права, и обработка ошибок.
+  setTimerElapsed: (id, minutes) => ipcRenderer.send('panel:timer-elapsed', { id, minutes }),
   /** Сменить статус своей задачи, не открывая приложение. */
   taskStatus: (taskId, status) => ipcRenderer.send('panel:task-status', { taskId, status }),
   onConnect: (fn) => {

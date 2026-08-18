@@ -76,6 +76,22 @@
         color: var(--brand);
       }
       .elapsed.idle { color: var(--muted); font-weight: 400; font-size: 14px; }
+      /* Счётчик правится на месте: набрал 103 — стало 1:03, начало уехало
+         назад. Иначе «работаю два часа, а таймер включил только что»
+         исправлялось лишь в приложении. */
+      .elapsed.editable { cursor: text; -webkit-app-region: no-drag; }
+      .elapsed.editable:hover { text-decoration: underline dotted; text-underline-offset: 3px; }
+      .elapsed-input {
+        /* Полоса таймера — ручка перетаскивания окна: без no-drag по полю
+           нельзя ни кликнуть, ни выделить текст. */
+        -webkit-app-region: no-drag;
+        width: 5.5ch; padding: 0; margin: 0;
+        border: 0; border-bottom: 1px solid var(--brand); border-radius: 0;
+        background: transparent; color: var(--brand); outline: none;
+        font: 600 20px/1.1 ui-monospace, 'SF Mono', Menlo, monospace;
+        font-variant-numeric: tabular-nums;
+      }
+      .elapsed-input.bad { border-bottom-color: #ff6b6b; color: #ff6b6b; }
       /* Проект таймера — дропдаун в шапке. Пока часы идут, он заблокирован:
          пауза → выбрал другой проект → запустил снова. Один предсказуемый
          путь вместо трёх кнопок, которые могли разойтись друг с другом. */
@@ -469,6 +485,7 @@
       <button class="play" id="play"></button>
       <div class="timer-info">
         <div class="elapsed idle" id="elapsed">No timer running</div>
+        <input class="elapsed-input" id="elapsedInput" hidden spellcheck="false" inputmode="numeric" />
         <button class="proj-btn" id="projBtn">
           <span class="dot" id="projDot"></span>
           <span class="name" id="projName">—</span>
@@ -617,6 +634,81 @@
           : `${m}:${String(s).padStart(2, '0')}`
       }
 
+      /**
+       * Разбор натикавшего: 103 → 1:03, 45 → 0:45, 2:30 → 2:30.
+       *
+       * КОПИЯ логики parseDuration из apps/app/src/lib/time-parse.ts. Панель —
+       * отдельный html без сборщика, импортировать оттуда нечем. Меняете
+       * здесь — поменяйте и там: иначе панель и приложение начнут понимать
+       * один и тот же ввод по-разному, а заметят это не сразу.
+       *
+       * Возвращает минуты или null.
+       */
+      function parseElapsed(input) {
+        const raw = String(input).trim().toLowerCase().replace(/\s+/g, '')
+        if (!raw) return null
+        if (/^\d{1,3}:\d{1,2}$/.test(raw)) {
+          const [h, m] = raw.split(':').map(Number)
+          return m > 59 ? null : (h || 0) * 60 + (m || 0)
+        }
+        // До двух цифр — минуты: 45 это 45 минут, а не 45 часов.
+        if (/^\d{1,2}$/.test(raw)) return Number(raw)
+        if (/^\d{3,4}$/.test(raw)) {
+          const n = Number(raw)
+          const h = Math.floor(n / 100)
+          const m = n % 100
+          // 190 минутами не бывает — это опечатка, а не 1 ч 90 мин.
+          return m < 60 ? h * 60 + m : null
+        }
+        return null
+      }
+
+      /** Минуты → «1:03», как в поле ввода (без секунд). */
+      function elapsedShort(minutes) {
+        const m = Math.max(0, Math.round(minutes))
+        return `${Math.floor(m / 60)}:${String(m % 60).padStart(2, '0')}`
+      }
+
+      /**
+       * Правка натикавшего: двигаем НАЧАЛО назад, конца у идущего таймера нет.
+       *
+       * Дату не трогаем отдельно — она получается сама из «сейчас минус
+       * столько-то». Секунды обнуляем: в поле их нет, и оставлять невидимый
+       * остаток значило бы, что 1:03 превращается в 1:03:47.
+       */
+      function commitElapsed() {
+        const inp = $('elapsedInput')
+        const mins = parseElapsed(inp.value)
+        const t = state.timer
+        if (mins === null || !t) { inp.classList.add('bad'); return }
+        // Потолок в сутки: тот же, что стоит на сервере. Здесь он не защита, а
+        // подсказка — отказ до отправки понятнее, чем ошибка после.
+        if (mins > 24 * 60) { inp.classList.add('bad'); return }
+        window.panel.setTimerElapsed(t.id, mins)
+        closeElapsedEdit()
+      }
+
+      function closeElapsedEdit() {
+        $('elapsedInput').hidden = true
+        $('elapsedInput').classList.remove('bad')
+        $('elapsed').hidden = false
+      }
+
+      function openElapsedEdit() {
+        const t = state.timer
+        if (!t) return
+        const started = new Date(t.startedAt).getTime()
+        if (Number.isNaN(started)) return
+        const inp = $('elapsedInput')
+        // Подставляем то, что стоит сейчас, — правят обычно на пару минут.
+        inp.value = elapsedShort(Math.floor((Date.now() - started) / 60000))
+        inp.classList.remove('bad')
+        $('elapsed').hidden = true
+        inp.hidden = false
+        inp.focus()
+        inp.select()
+      }
+
       /** Проект таймера: бегущий диктует свой, иначе — выбор человека. */
       function currentTimerProject() {
         if (state.timer?.projectId) return state.timer.projectId
@@ -636,11 +728,19 @@
         const selId = currentTimerProject()
         const sel = selId ? projectById(selId) : null
         if (t) {
-          $('elapsed').textContent = elapsedText(t)
+          // Пока правят — не перетираем поле тиканьем: иначе набранное
+          // затирается на следующей секунде.
+          if ($('elapsedInput').hidden) $('elapsed').textContent = elapsedText(t)
           $('elapsed').classList.remove('idle')
+          $('elapsed').classList.add('editable')
+          $('elapsed').title = T('editElapsed', 'Click to correct the time')
         } else {
           $('elapsed').textContent = T('idle', 'No timer running')
           $('elapsed').classList.add('idle')
+          // Без таймера править нечего — и подсказку не показываем.
+          $('elapsed').classList.remove('editable')
+          $('elapsed').removeAttribute('title')
+          closeElapsedEdit()
         }
 
         // Часы проекта: без проекта вести некуда, и кнопка прячется — серая
@@ -1247,6 +1347,16 @@
         $('projMenu').hidden = true
         $('projBtn').classList.remove('open')
       })
+      $('elapsed').onclick = () => { if (state.timer) openElapsedEdit() }
+      // Enter применяет, Escape отменяет: панель маленькая, промахнуться легко,
+      // и без отмены случайный клик по времени превращается в ловушку.
+      $('elapsedInput').onkeydown = (e) => {
+        if (e.key === 'Enter') { e.preventDefault(); commitElapsed() }
+        else if (e.key === 'Escape') { e.preventDefault(); closeElapsedEdit() }
+      }
+      // Ушли мимо — закрываем без сохранения: молча применить то, что человек
+      // бросил недонабранным, хуже, чем не применить ничего.
+      $('elapsedInput').onblur = () => closeElapsedEdit()
       $('openApp').onclick = () => window.panel.openApp()
       $('close').onclick = () => window.panel.close()
 

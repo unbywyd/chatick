@@ -1309,7 +1309,8 @@
     "pickProjectForTimer": "פתחו פרויקט כדי להתחיל מעקב זמן",
     "pickProject": "בחרו פרויקט",
     "showDone": "הצגת משימות שהושלמו לאחרונה",
-    "openHours": "שעות בפרויקט"
+    "openHours": "שעות בפרויקט",
+    "editElapsed": "לחצו לתיקון הזמן"
   },
   "update": {
     "available": "זמינה גרסה חדשה",

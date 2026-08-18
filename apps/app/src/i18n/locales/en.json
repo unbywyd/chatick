@@ -1308,7 +1308,8 @@
     "pickProjectForTimer": "Open a project to start tracking time",
     "pickProject": "Choose a project",
     "showDone": "show recently done",
-    "openHours": "Time in this project"
+    "openHours": "Time in this project",
+    "editElapsed": "Click to correct the time"
   },
   "update": {
     "available": "A new version is available",

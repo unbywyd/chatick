@@ -65,6 +65,11 @@ contextBridge.exposeInMainWorld('chatickDesktop', {
     ipcRenderer.on('task:timer', handler)
     return () => ipcRenderer.off('task:timer', handler)
   },
+  onTimerElapsed: (fn) => {
+    const handler = (_e, payload) => fn(payload)
+    ipcRenderer.on('timer:elapsed', handler)
+    return () => ipcRenderer.off('timer:elapsed', handler)
+  },
   onTaskStatus: (fn) => {
     const handler = (_e, payload) => fn(payload)
     ipcRenderer.on('task:status', handler)

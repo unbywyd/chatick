@@ -670,6 +670,9 @@ function registerIpc() {
   // намеренно, а веб просто переходит на нужный проект в фоне.
   ipcMain.on('panel:set-project', (_e, id) => send('project:set', id))
   ipcMain.on('panel:task-timer', (_e, taskId) => send('task:timer', taskId))
+  // Панель не ходит в API сама: токен и права живут в вебе, и дублировать их
+  // в главном процессе значило бы держать вторую копию авторизации.
+  ipcMain.on('panel:timer-elapsed', (_e, payload) => send('timer:elapsed', payload))
   ipcMain.on('panel:task-status', (_e, payload) => send('task:status', payload))
   ipcMain.on('panel:revoke-connection', (_e, id) => send('connect:revoke', id))
   ipcMain.on('connect:result', (_e, payload) => panel?.webContents.send('panel:connect', payload))
