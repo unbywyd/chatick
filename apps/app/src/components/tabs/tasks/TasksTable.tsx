@@ -653,6 +653,10 @@ function GroupTable({
                   // Чужую задачу участник не переписывает: сервер это проверит,
                   // но лучше не давать начать правку, чем отказать после ввода.
                   canEdit={canEditTask ? canEditTask(task) : canEdit}
+                  // Колонку ручки объявляет ЗАГОЛОВОК — по правам на группу.
+                  // Строка обязана занять её независимо от собственных прав,
+                  // иначе всё правее съезжает на колонку.
+                  showDrag={canEdit}
                   meId={meId}
                   active={openTaskId === task.id}
                   highlighted={highlightId === task.id}
@@ -715,6 +719,7 @@ function TableRow({
   members,
   lang,
   canEdit,
+  showDrag,
   canEditTask,
   meId,
   active,
@@ -728,6 +733,8 @@ function TableRow({
   members: Member[]
   lang: string
   canEdit: boolean
+  /** Есть ли в таблице колонка ручки: её объявляет заголовок, а не строка. */
+  showDrag: boolean
   /** правило владения задачей — приходит сверху, чтобы не размножать логику */
   canEditTask?: (task: Task) => boolean
   meId?: string
@@ -788,14 +795,28 @@ function TableRow({
         blocked && 'opacity-55 hover:opacity-100',
       )}
     >
-      {canEdit && (
+      {/* Ячейка ручки есть ВСЕГДА, когда колонка объявлена в заголовке —
+          пустая, если эту задачу человеку править нельзя.
+
+          Права считаются на КАЖДУЮ задачу (canEditTask), а заголовок один на
+          таблицу. Пока ячейку рисовали по правам строки, у своих задач она
+          была, у чужих нет — и всё, что правее, съезжало на колонку: точки
+          шли через одну, а исполнители прыгали из столбца в столбец. */}
+      {showDrag && (
         <td className="w-6 ps-1">
-          <button className="cursor-grab text-muted-foreground hover:text-foreground" {...attributes} {...listeners}>
-            <GripVertical className="size-3.5" />
-          </button>
+          {canEdit && (
+            <button className="cursor-grab text-muted-foreground hover:text-foreground" {...attributes} {...listeners}>
+              <GripVertical className="size-3.5" />
+            </button>
+          )}
         </td>
       )}
-      <td className="px-2 py-1.5 align-middle text-xs text-muted-foreground">{task.number}</td>
+      {/* Номер не переносим: «TASK-8» рвался на две строки, и вся строка
+          таблицы становилась вдвое выше соседних. tabular-nums — чтобы
+          цифры стояли столбиком и номера читались списком. */}
+      <td className="whitespace-nowrap px-2 py-1.5 align-middle text-xs tabular-nums text-muted-foreground">
+        {task.number}
+      </td>
       <td className="px-2 py-1.5 align-middle">
         <TaskRefs value={task.refs} canEdit={canEdit} compact onChange={(refs) => onPatch(task.id, { refs })} />
       </td>

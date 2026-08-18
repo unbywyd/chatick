@@ -379,7 +379,10 @@ export function OverviewTab({
           )}
         </section>
 
-        {/* Кто тянет: распределение нагрузки между людьми */}
+        {/* Время команды: сколько наработал каждый.
+
+            Называлось «Кто тянет» — читалось как оценка людей: раз кто-то
+            тянет, значит кто-то и нет. Секция же просто показывает часы. */}
         <section className="rounded-lg border bg-card p-4">
           <h2 className="mb-3 text-sm font-semibold">{t('overview.byPerson')}</h2>
           {!d.topPeople.length ? (
