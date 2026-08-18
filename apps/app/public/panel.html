@@ -696,7 +696,11 @@
        * здесь — поменяйте и там: иначе панель и приложение начнут понимать
        * один и тот же ввод по-разному, а заметят это не сразу.
        *
-       * Возвращает минуты или null.
+       * Возвращает СЕКУНДЫ или null.
+       *
+       * Именно секунды, а не минуты: округление до минуты делало правку одних
+       * секунд бессмысленной — «10:10» и «10:20» давали одно и то же, и
+       * человек видел, что ввод не применился.
        */
       function parseElapsed(input) {
         const raw = String(input).trim().toLowerCase().replace(/\s+/g, '')
@@ -716,14 +720,13 @@
         if (hms) {
           const [, h, m, sec] = hms
           if (Number(m) > 59 || Number(sec) > 59) return null
-          return Number(h) * 60 + Number(m) + (Number(sec) >= 30 ? 1 : 0)
+          return Number(h) * 3600 + Number(m) * 60 + Number(sec)
         }
         const ms = raw.match(/^(\d{1,3}):(\d{1,2})$/)
         if (ms) {
           const [, m, sec] = ms
           if (Number(sec) > 59) return null
-          // Минимум минута: таймер, идущий пять секунд, не должен обнуляться.
-          return Math.max(1, Number(m) + (Number(sec) >= 30 ? 1 : 0))
+          return Number(m) * 60 + Number(sec)
         }
         /**
          * Голые цифры БОЛЬШЕ НЕ ПРИНИМАЕМ — только формат счётчика.
@@ -755,17 +758,20 @@
        */
       function commitElapsed() {
         const inp = $('elapsedInput')
-        const mins = parseElapsed(inp.value)
+        // СЕКУНДЫ, не минуты: в базе лежат метки времени, и округление до
+        // минуты делало правку одних секунд бессмысленной — «10:10» и
+        // «10:20» давали одинаковый результат.
+        const seconds = parseElapsed(inp.value)
         const t = state.timer
-        if (mins === null || !t) { inp.classList.add('bad'); return }
+        if (seconds === null || !t) { inp.classList.add('bad'); return }
         // Потолок в сутки: тот же, что стоит на сервере. Здесь он не защита, а
         // подсказка — отказ до отправки понятнее, чем ошибка после.
-        if (mins > 24 * 60) { inp.classList.add('bad'); return }
+        if (seconds > 24 * 3600) { inp.classList.add('bad'); return }
         // preload живёт ВНУТРИ установленного приложения, а панель грузится с
         // сайта. Приложение лежит в магазине и обновляется не по нашей воле —
         // значит панель обязана работать со СТАРОЙ оболочкой. Нет метода —
         // молча закрываем поле, а не роняем панель.
-        window.panel.setTimerElapsed?.(t.id, mins)
+        window.panel.setTimerElapsed?.(t.id, seconds)
         closeElapsedEdit()
       }
 

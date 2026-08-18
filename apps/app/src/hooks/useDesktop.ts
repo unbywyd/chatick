@@ -38,7 +38,7 @@ type DesktopBridge = {
    * прямой вызов ронял весь useDesktop, оставляя чёрный экран и пустую панель.
    * Веб не имеет права требовать свежую оболочку.
    */
-  onTimerElapsed?: (fn: (p: { id: string; minutes: number }) => void) => () => void
+  onTimerElapsed?: (fn: (p: { id: string; seconds: number }) => void) => () => void
   onStateRefresh: (fn: () => void) => () => void
   onConnectRefresh: (fn: () => void) => () => void
   /**
@@ -593,21 +593,19 @@ export function useDesktopSync() {
      * Секунды обнуляем: в поле панели их нет, и невидимый остаток превращал бы
      * набранное 1:03 в 1:03:47.
      */
-    const offTimerElapsed = bridge.onTimerElapsed?.(async ({ id, minutes }) => {
+    const offTimerElapsed = bridge.onTimerElapsed?.(async ({ id, seconds }) => {
       const current = liveRef.current.timer
       // Таймер мог остановиться, пока человек набирал.
       if (!current || current.id !== id) return
       /**
-       * Секунды обнуляем У «СЕЙЧАС», а не у результата.
+       * Отсчитываем назад ТОЧНО, без округления.
        *
-       * setSeconds(0,0) ПОСЛЕ вычитания сдвигал начало ещё на текущие секунды:
-       * вводишь 10:10, а счётчик показывает 10:10:47 — «секунды идут от
-       * предыдущего значения». Округляем точку отсчёта, тогда разница выходит
-       * ровно та, что набрали.
+       * В базе лежат метки времени, а не минуты, — секунды там хранятся. Раньше
+       * я обнулял их и сохранял только минуты: правка одних секунд ничего не
+       * меняла, «10:10» и «10:20» давали одинаковый результат, и человек видел,
+       * что ввод не применился.
        */
-      const base = new Date()
-      base.setSeconds(0, 0)
-      const startedAt = new Date(base.getTime() - minutes * 60_000)
+      const startedAt = new Date(Date.now() - seconds * 1000)
       try {
         await api(`/api/v1/my/time/${id}`, { method: 'PATCH', body: JSON.stringify({ startedAt: startedAt.toISOString() }) })
         // Оба ключа: панель читает 'desktop-running', вкладка «Время» —
