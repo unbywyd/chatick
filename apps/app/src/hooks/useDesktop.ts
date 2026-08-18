@@ -597,10 +597,23 @@ export function useDesktopSync() {
       const current = liveRef.current.timer
       // Таймер мог остановиться, пока человек набирал.
       if (!current || current.id !== id) return
-      const startedAt = new Date(Date.now() - minutes * 60_000)
-      startedAt.setSeconds(0, 0)
+      /**
+       * Секунды обнуляем У «СЕЙЧАС», а не у результата.
+       *
+       * setSeconds(0,0) ПОСЛЕ вычитания сдвигал начало ещё на текущие секунды:
+       * вводишь 10:10, а счётчик показывает 10:10:47 — «секунды идут от
+       * предыдущего значения». Округляем точку отсчёта, тогда разница выходит
+       * ровно та, что набрали.
+       */
+      const base = new Date()
+      base.setSeconds(0, 0)
+      const startedAt = new Date(base.getTime() - minutes * 60_000)
       try {
         await api(`/api/v1/my/time/${id}`, { method: 'PATCH', body: JSON.stringify({ startedAt: startedAt.toISOString() }) })
+        // Оба ключа: панель читает 'desktop-running', вкладка «Время» —
+        // 'time-running'. Инвалидируя один, я оставлял панель ждать
+        // следующего опроса — до 30 секунд со старым числом на экране.
+        qc.invalidateQueries({ queryKey: ['desktop-running'] })
         qc.invalidateQueries({ queryKey: ['time-running'] })
       } catch (e) {
         // Панель ошибок не показывает — выводим в приложении, иначе правка

@@ -71,10 +71,17 @@
       .play.running:hover { background: #333; }
       .timer-info { min-width: 0; flex: 1; }
       .elapsed {
+        /* inline-block, а не блок: блочный див занимает всю строку, и клик
+           справа от цифр попадал «в счётчик», хотя визуально мимо. Теперь
+           кликабельно ровно то, что видно. */
+        display: inline-block;
         font: 600 20px/1.1 ui-monospace, 'SF Mono', Menlo, monospace;
         font-variant-numeric: tabular-nums;
         color: var(--brand);
       }
+      /* display в .elapsed перебивает атрибут hidden — счётчик оставался
+         виден рядом с полем правки, и время двоилось. Правило ПОСЛЕ него. */
+      .elapsed[hidden] { display: none; }
       .elapsed.idle { color: var(--muted); font-weight: 400; font-size: 14px; }
       /* Счётчик правится на месте: набрал 103 — стало 1:03, начало уехало
          назад. Иначе «работаю два часа, а таймер включил только что»
@@ -85,11 +92,18 @@
         /* Полоса таймера — ручка перетаскивания окна: без no-drag по полю
            нельзя ни кликнуть, ни выделить текст. */
         -webkit-app-region: no-drag;
-        /* Ширина по содержимому, а не постоянные 5.5ch: в поле бывает и
-           «0:05», и «1:03:25». Лишнее поле — это промах мимо цифр, который
-           выглядит как «кликнул и ничего», а на деле попал в пустоту.
-           Задаётся из кода через size по длине значения. */
-        width: auto; min-width: 0; padding: 0; margin: 0;
+        /* Ширина под самый длинный вариант — «20:10:00», восемь знаков.
+           Было 5.5ch и растягивание по родителю: поле занимало почти всю
+           панель, и клик рядом с цифрами попадал в пустоту, а выглядело это
+           как «нажал и ничего не произошло».
+
+           Фиксированная, а не по содержимому: шрифт моноширинный, разница
+           между «0:05» и «20:10:00» — четыре знака, и прыгающая на каждый
+           символ ширина раздражала бы сильнее лишнего пустого места. */
+        /* 80px хватает на «20:10:00» моноширинным двадцатым кеглем.
+           flex: 0 0 auto обязателен: родитель .timer-info растянут (flex: 1),
+           и без запрета поле тянулось под него — почти во всю панель. */
+        width: 80px; flex: 0 0 auto; min-width: 0; padding: 0; margin: 0; text-align: center;
         border: 0; border-bottom: 1px solid var(--brand); border-radius: 0;
         background: transparent; color: var(--brand); outline: none;
         font: 600 20px/1.1 ui-monospace, 'SF Mono', Menlo, monospace;
@@ -98,7 +112,7 @@
       .elapsed-input.bad { border-bottom-color: #ff6b6b; color: #ff6b6b; }
       /* Кнопки подтверждения рядом с полем: без них непонятно, чем закончить
          правку, а нажать мимо — значит потерять набранное. */
-      .elapsed-edit { display: inline-flex; align-items: center; gap: 4px; -webkit-app-region: no-drag; }
+      .elapsed-edit { display: inline-flex; align-items: center; gap: 4px; flex: 0 0 auto; -webkit-app-region: no-drag; }
       .elapsed-edit[hidden] { display: none; }
       .elapsed-ok, .elapsed-cancel {
         -webkit-app-region: no-drag;
@@ -755,12 +769,6 @@
         closeElapsedEdit()
       }
 
-      /** Поле ровно по числу: лишняя ширина ловит клики мимо цифр. */
-      function fitElapsedInput() {
-        const inp = $('elapsedInput')
-        inp.size = Math.max(1, inp.value.length)
-      }
-
       function closeElapsedEdit() {
         $('elapsedEdit').hidden = true
         $('elapsedInput').classList.remove('bad')
@@ -789,7 +797,6 @@
         // Ровно то, что человек видел на счётчике. Любой пересчёт означал бы
         // два разных числа для одного времени: на экране 2:02, в поле 0:02.
         inp.value = elapsedText(t)
-        fitElapsedInput()
         inp.classList.remove('bad')
         $('elapsed').hidden = true
         $('elapsedEdit').hidden = false
@@ -945,7 +952,10 @@
             if (!match(p)) continue
             const list = byProject.get(p.id) || []
             const unread = list.filter((n) => n.unread).length
-            rows.push(groupHead(p, unread ? `<span class="group-cnt">${unread}</span>` : `<span class="group-sub">${T('allRead', 'all read')}</span>`))
+            // Ничего не пишем, когда всё прочитано: «всё прочитано» напротив
+            // каждой строки — это шум в списке, где строк десяток. Бейдж и так
+            // говорит всё: есть число — есть непрочитанное, нет числа — нет.
+            rows.push(groupHead(p, unread ? `<span class="group-cnt">${unread}</span>` : ''))
             for (const n of list.slice(0, 8)) {
               rows.push(`
               <button class="row" data-link="${escape(n.link)}" data-notification="${escape(n.id)}">
@@ -961,7 +971,7 @@
             if (!match(p)) continue
             rows.push(groupHead(p, p.unread
               ? `<span class="group-sub">${p.unread} ${T('unreadOne', 'unread')}</span>`
-              : `<span class="group-sub">${T('allRead', 'all read')}</span>`))
+              : ''))
           }
         }
 
@@ -1456,7 +1466,15 @@
       $('elapsed').onclick = () => { if (state.timer && canEditElapsed) openElapsedEdit() }
       // Enter применяет, Escape отменяет: панель маленькая, промахнуться легко,
       // и без отмены случайный клик по времени превращается в ловушку.
-      $('elapsedInput').oninput = () => fitElapsedInput()
+      // Пускаем только цифры и двоеточие: буквы и знаки всё равно кончатся
+      // отказом при разборе, но человек узнает об этом лишь нажав галочку.
+      // Дешевле не дать набрать, чем потом объяснять, почему не приняли.
+      // Длина ограничена «20:10:00» — восемь знаков.
+      $('elapsedInput').oninput = (e) => {
+        const cleaned = e.target.value.replace(/[^\d:]/g, '').slice(0, 8)
+        if (cleaned !== e.target.value) e.target.value = cleaned
+        e.target.classList.remove('bad')
+      }
       $('elapsedInput').onkeydown = (e) => {
         if (e.key === 'Enter') { e.preventDefault(); commitElapsed() }
         else if (e.key === 'Escape') { e.preventDefault(); closeElapsedEdit() }

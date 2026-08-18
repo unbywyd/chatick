@@ -44,6 +44,17 @@
          он был исключён из зоны перетаскивания заодно с кнопкой, и панель
          переставала таскаться, стоило навести курсор на надпись. */
       .play { -webkit-app-region: no-drag; }
+      /* Часы проекта — из панели туда попасть было нечем: «Открыть Chatick»
+         ведёт в приложение вообще, а клик по названию — в чат проекта. */
+      .hours-btn {
+        -webkit-app-region: no-drag;
+        display: grid; place-items: center;
+        width: 28px; height: 28px; flex: 0 0 auto;
+        border: 0; background: transparent; border-radius: 8px;
+        color: var(--muted); cursor: pointer;
+      }
+      .hours-btn:hover { background: #2a2a2a; color: var(--fg); }
+      .hours-btn[hidden] { display: none; }
       /* Выделять текст в ручке всё равно нельзя — только мешает перетаскиванию. */
       .timer-info { user-select: none; }
       .play {
@@ -60,11 +71,59 @@
       .play.running:hover { background: #333; }
       .timer-info { min-width: 0; flex: 1; }
       .elapsed {
+        /* inline-block, а не блок: блочный див занимает всю строку, и клик
+           справа от цифр попадал «в счётчик», хотя визуально мимо. Теперь
+           кликабельно ровно то, что видно. */
+        display: inline-block;
         font: 600 20px/1.1 ui-monospace, 'SF Mono', Menlo, monospace;
         font-variant-numeric: tabular-nums;
         color: var(--brand);
       }
+      /* display в .elapsed перебивает атрибут hidden — счётчик оставался
+         виден рядом с полем правки, и время двоилось. Правило ПОСЛЕ него. */
+      .elapsed[hidden] { display: none; }
       .elapsed.idle { color: var(--muted); font-weight: 400; font-size: 14px; }
+      /* Счётчик правится на месте: набрал 103 — стало 1:03, начало уехало
+         назад. Иначе «работаю два часа, а таймер включил только что»
+         исправлялось лишь в приложении. */
+      .elapsed.editable { cursor: text; -webkit-app-region: no-drag; }
+      .elapsed.editable:hover { text-decoration: underline dotted; text-underline-offset: 3px; }
+      .elapsed-input {
+        /* Полоса таймера — ручка перетаскивания окна: без no-drag по полю
+           нельзя ни кликнуть, ни выделить текст. */
+        -webkit-app-region: no-drag;
+        /* Ширина под самый длинный вариант — «20:10:00», восемь знаков.
+           Было 5.5ch и растягивание по родителю: поле занимало почти всю
+           панель, и клик рядом с цифрами попадал в пустоту, а выглядело это
+           как «нажал и ничего не произошло».
+
+           Фиксированная, а не по содержимому: шрифт моноширинный, разница
+           между «0:05» и «20:10:00» — четыре знака, и прыгающая на каждый
+           символ ширина раздражала бы сильнее лишнего пустого места. */
+        /* 80px хватает на «20:10:00» моноширинным двадцатым кеглем.
+           flex: 0 0 auto обязателен: родитель .timer-info растянут (flex: 1),
+           и без запрета поле тянулось под него — почти во всю панель. */
+        width: 80px; flex: 0 0 auto; min-width: 0; padding: 0; margin: 0; text-align: center;
+        border: 0; border-bottom: 1px solid var(--brand); border-radius: 0;
+        background: transparent; color: var(--brand); outline: none;
+        font: 600 20px/1.1 ui-monospace, 'SF Mono', Menlo, monospace;
+        font-variant-numeric: tabular-nums;
+      }
+      .elapsed-input.bad { border-bottom-color: #ff6b6b; color: #ff6b6b; }
+      /* Кнопки подтверждения рядом с полем: без них непонятно, чем закончить
+         правку, а нажать мимо — значит потерять набранное. */
+      .elapsed-edit { display: inline-flex; align-items: center; gap: 4px; flex: 0 0 auto; -webkit-app-region: no-drag; }
+      .elapsed-edit[hidden] { display: none; }
+      .elapsed-ok, .elapsed-cancel {
+        -webkit-app-region: no-drag;
+        display: grid; place-items: center;
+        width: 22px; height: 22px; flex: 0 0 auto;
+        border: 0; border-radius: 6px; background: transparent; cursor: pointer;
+      }
+      .elapsed-ok { color: var(--brand); }
+      .elapsed-ok:hover { background: #2a2a2a; }
+      .elapsed-cancel { color: var(--muted); }
+      .elapsed-cancel:hover { background: #2a2a2a; color: var(--text); }
       /* Проект таймера — дропдаун в шапке. Пока часы идут, он заблокирован:
          пауза → выбрал другой проект → запустил снова. Один предсказуемый
          путь вместо трёх кнопок, которые могли разойтись друг с другом. */
@@ -458,12 +517,24 @@
       <button class="play" id="play"></button>
       <div class="timer-info">
         <div class="elapsed idle" id="elapsed">No timer running</div>
+        <span class="elapsed-edit" id="elapsedEdit" hidden>
+          <input class="elapsed-input" id="elapsedInput" spellcheck="false" inputmode="numeric" />
+          <button class="elapsed-ok" id="elapsedOk" title="OK">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"/></svg>
+          </button>
+          <button class="elapsed-cancel" id="elapsedCancel" title="Esc">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="M18 6 6 18M6 6l12 12"/></svg>
+          </button>
+        </span>
         <button class="proj-btn" id="projBtn">
           <span class="dot" id="projDot"></span>
           <span class="name" id="projName">—</span>
           <svg class="chev" width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="m6 9 6 6 6-6"/></svg>
         </button>
       </div>
+      <button class="hours-btn" id="hoursBtn" hidden>
+        <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></svg>
+      </button>
       <span class="avatar me-avatar" id="meAvatar" hidden></span>
     </div>
     <div class="proj-menu" id="projMenu" hidden>
@@ -536,6 +607,19 @@
         if (!companyId) return '/start'
         return `/c/${companyId}/p/${id}/chat`
       }
+      /**
+       * Часы ПРОЕКТА, а не компании.
+       *
+       * Компанейская вкладка «Часы» показывает всю картину и просилась сюда
+       * сильнее, но она открывается только руководству (canManage). Для
+       * рядового участника кнопка вела бы в настройки — то есть в никуда.
+       * Часы проекта видит каждый, и они ровно про тот таймер, рядом с
+       * которым кнопка стоит.
+       */
+      const openHoursLink = (id) => {
+        const companyId = projectById(id)?.companyId
+        return companyId ? `/c/${companyId}/p/${id}/time` : null
+      }
       const refocus = (id) => {
         const el = $(id)
         if (el) { el.focus(); el.setSelectionRange(el.value.length, el.value.length) }
@@ -590,6 +674,136 @@
           : `${m}:${String(s).padStart(2, '0')}`
       }
 
+      /**
+       * Умеет ли установленное приложение принять правку времени.
+       *
+       * preload живёт ВНУТРИ приложения, а панель грузится с сайта. Приложение
+       * лежит в магазине и обновляется не по нашей воле, поэтому панель обязана
+       * работать со СТАРОЙ оболочкой: нет метода — правку не предлагаем вовсе,
+       * а не роняем панель на первом же клике.
+       *
+       * Объявление ДО renderTimer намеренно: const не поднимается, и обращение
+       * из отрисовки к переменной, объявленной ниже, дало бы ReferenceError —
+       * то есть пустую панель, ровно то, от чего здесь и защищаемся.
+       */
+      const canEditElapsed = typeof window.panel.setTimerElapsed === 'function'
+
+      /**
+       * Разбор натикавшего: 103 → 1:03, 45 → 0:45, 2:30 → 2:30.
+       *
+       * КОПИЯ логики parseDuration из apps/app/src/lib/time-parse.ts. Панель —
+       * отдельный html без сборщика, импортировать оттуда нечем. Меняете
+       * здесь — поменяйте и там: иначе панель и приложение начнут понимать
+       * один и тот же ввод по-разному, а заметят это не сразу.
+       *
+       * Возвращает минуты или null.
+       */
+      function parseElapsed(input) {
+        const raw = String(input).trim().toLowerCase().replace(/\s+/g, '')
+        if (!raw) return null
+        /**
+         * Читаем В ТОМ ЖЕ формате, в каком показываем, — иначе одно и то же
+         * время значит на экране и в поле разное.
+         *
+         * «ч:мм:сс» — когда час уже набежал. «мм:сс» — пока нет: на счётчике
+         * «2:02» это две минуты две секунды, и прочитать это как два часа
+         * значит записать человеку время, которого он не вводил.
+         *
+         * Секунды округляем до минуты: правка идёт в минутах, а хранить
+         * невидимый остаток значит показать 1:03, а записать 1:03:47.
+         */
+        const hms = raw.match(/^(\d{1,3}):(\d{1,2}):(\d{1,2})$/)
+        if (hms) {
+          const [, h, m, sec] = hms
+          if (Number(m) > 59 || Number(sec) > 59) return null
+          return Number(h) * 60 + Number(m) + (Number(sec) >= 30 ? 1 : 0)
+        }
+        const ms = raw.match(/^(\d{1,3}):(\d{1,2})$/)
+        if (ms) {
+          const [, m, sec] = ms
+          if (Number(sec) > 59) return null
+          // Минимум минута: таймер, идущий пять секунд, не должен обнуляться.
+          return Math.max(1, Number(m) + (Number(sec) >= 30 ? 1 : 0))
+        }
+        /**
+         * Голые цифры БОЛЬШЕ НЕ ПРИНИМАЕМ — только формат счётчика.
+         *
+         * Раньше «200» читалось как два часа, а «2:00» — как две минуты. Одна
+         * и та же мысль давала два разных ответа в зависимости от того,
+         * поставил человек двоеточие или нет, и заметить это можно было
+         * только по чужим часам в отчёте.
+         *
+         * Теперь правило одно: как показано на счётчике, так и вводится.
+         * «45» без двоеточия — отказ, поле подсветится: пусть лучше не
+         * примет, чем примет НЕ ТО.
+         */
+        return null
+      }
+
+      /** Минуты → «1:03», как в поле ввода (без секунд). */
+      function elapsedShort(minutes) {
+        const m = Math.max(0, Math.round(minutes))
+        return `${Math.floor(m / 60)}:${String(m % 60).padStart(2, '0')}`
+      }
+
+      /**
+       * Правка натикавшего: двигаем НАЧАЛО назад, конца у идущего таймера нет.
+       *
+       * Дату не трогаем отдельно — она получается сама из «сейчас минус
+       * столько-то». Секунды обнуляем: в поле их нет, и оставлять невидимый
+       * остаток значило бы, что 1:03 превращается в 1:03:47.
+       */
+      function commitElapsed() {
+        const inp = $('elapsedInput')
+        const mins = parseElapsed(inp.value)
+        const t = state.timer
+        if (mins === null || !t) { inp.classList.add('bad'); return }
+        // Потолок в сутки: тот же, что стоит на сервере. Здесь он не защита, а
+        // подсказка — отказ до отправки понятнее, чем ошибка после.
+        if (mins > 24 * 60) { inp.classList.add('bad'); return }
+        // preload живёт ВНУТРИ установленного приложения, а панель грузится с
+        // сайта. Приложение лежит в магазине и обновляется не по нашей воле —
+        // значит панель обязана работать со СТАРОЙ оболочкой. Нет метода —
+        // молча закрываем поле, а не роняем панель.
+        window.panel.setTimerElapsed?.(t.id, mins)
+        closeElapsedEdit()
+      }
+
+      function closeElapsedEdit() {
+        $('elapsedEdit').hidden = true
+        $('elapsedInput').classList.remove('bad')
+        $('elapsed').hidden = false
+      }
+
+      function openElapsedEdit() {
+        const t = state.timer
+        if (!t) return
+        const started = new Date(t.startedAt).getTime()
+        if (Number.isNaN(started)) return
+        const inp = $('elapsedInput')
+        /**
+         * В поле — ЧАСЫ И МИНУТЫ, всегда с часами: «0:02».
+         *
+         * Счётчик показывает мм:сс, пока часа нет, и ч:мм:сс после. Подставить
+         * его как есть нельзя: «2:02» на экране значит две минуты, а в поле
+         * прочиталось бы как два часа — человек правит одно, получает другое.
+         *
+         * Пересчитывать в чистые минуты тоже нельзя: у таймера, идущего пять
+         * секунд, выходил «0:00», и время выглядело потерянным.
+         *
+         * Поэтому один формат ч:мм с округлением вверх до минуты: 5 секунд —
+         * это «0:01», а не ноль и не «0:05».
+         */
+        // Ровно то, что человек видел на счётчике. Любой пересчёт означал бы
+        // два разных числа для одного времени: на экране 2:02, в поле 0:02.
+        inp.value = elapsedText(t)
+        inp.classList.remove('bad')
+        $('elapsed').hidden = true
+        $('elapsedEdit').hidden = false
+        inp.focus()
+        inp.select()
+      }
+
       /** Проект таймера: бегущий диктует свой, иначе — выбор человека. */
       function currentTimerProject() {
         if (state.timer?.projectId) return state.timer.projectId
@@ -609,12 +823,27 @@
         const selId = currentTimerProject()
         const sel = selId ? projectById(selId) : null
         if (t) {
-          $('elapsed').textContent = elapsedText(t)
+          // Пока правят — не перетираем поле тиканьем: иначе набранное
+          // затирается на следующей секунде.
+          if ($('elapsedEdit').hidden) $('elapsed').textContent = elapsedText(t)
           $('elapsed').classList.remove('idle')
+          $('elapsed').classList.toggle('editable', canEditElapsed)
+          if (canEditElapsed) $('elapsed').title = T('editElapsed', 'Click to correct the time')
         } else {
           $('elapsed').textContent = T('idle', 'No timer running')
           $('elapsed').classList.add('idle')
+          // Без таймера править нечего — и подсказку не показываем.
+          $('elapsed').classList.remove('editable')
+          $('elapsed').removeAttribute('title')
+          closeElapsedEdit()
         }
+
+        // Часы проекта: без проекта вести некуда, и кнопка прячется — серая
+        // неактивная обещала бы страницу, которой сейчас нет.
+        const hours = $('hoursBtn')
+        hours.hidden = !selId
+        hours.title = T('openHours', 'Time in this project')
+        // Обработчик НЕ вешаем здесь — см. делегированный клик ниже.
 
         // Пока часы идут, выбор заблокирован: пауза разблокирует. Один
         // предсказуемый порядок — пауза → другой проект → плей.
@@ -723,7 +952,10 @@
             if (!match(p)) continue
             const list = byProject.get(p.id) || []
             const unread = list.filter((n) => n.unread).length
-            rows.push(groupHead(p, unread ? `<span class="group-cnt">${unread}</span>` : `<span class="group-sub">${T('allRead', 'all read')}</span>`))
+            // Ничего не пишем, когда всё прочитано: «всё прочитано» напротив
+            // каждой строки — это шум в списке, где строк десяток. Бейдж и так
+            // говорит всё: есть число — есть непрочитанное, нет числа — нет.
+            rows.push(groupHead(p, unread ? `<span class="group-cnt">${unread}</span>` : ''))
             for (const n of list.slice(0, 8)) {
               rows.push(`
               <button class="row" data-link="${escape(n.link)}" data-notification="${escape(n.id)}">
@@ -739,7 +971,7 @@
             if (!match(p)) continue
             rows.push(groupHead(p, p.unread
               ? `<span class="group-sub">${p.unread} ${T('unreadOne', 'unread')}</span>`
-              : `<span class="group-sub">${T('allRead', 'all read')}</span>`))
+              : ''))
           }
         }
 
@@ -1212,6 +1444,50 @@
         $('projMenu').hidden = true
         $('projBtn').classList.remove('open')
       })
+      /**
+       * Часы проекта — делегированно, как у остальных рабочих кнопок панели.
+       *
+       * Прямой onclick внутри renderTimer не срабатывал: отрисовка проходит не
+       * при каждом состоянии (например, при выходе она уходит в ранний return),
+       * и кнопка оставалась без обработчика — видимой, с подсветкой при
+       * наведении и полностью мёртвой.
+       *
+       * Слушатель на документе живёт с загрузки и от отрисовки не зависит.
+       * Ссылку считаем в момент клика: список проектов приезжает после первой
+       * отрисовки, и замкнутая раньше была бы пустой.
+       */
+      document.addEventListener('click', (e) => {
+        if (!e.target.closest('#hoursBtn')) return
+        const id = currentTimerProject()
+        // Проекта нет — вести некуда, но и молчать нельзя: /start даёт выбрать
+        // его руками, а бездействие читается как «сломано».
+        window.panel.openProject(id ? openHoursLink(id) || '/start' : '/start', null)
+      })
+      $('elapsed').onclick = () => { if (state.timer && canEditElapsed) openElapsedEdit() }
+      // Enter применяет, Escape отменяет: панель маленькая, промахнуться легко,
+      // и без отмены случайный клик по времени превращается в ловушку.
+      // Пускаем только цифры и двоеточие: буквы и знаки всё равно кончатся
+      // отказом при разборе, но человек узнает об этом лишь нажав галочку.
+      // Дешевле не дать набрать, чем потом объяснять, почему не приняли.
+      // Длина ограничена «20:10:00» — восемь знаков.
+      $('elapsedInput').oninput = (e) => {
+        const cleaned = e.target.value.replace(/[^\d:]/g, '').slice(0, 8)
+        if (cleaned !== e.target.value) e.target.value = cleaned
+        e.target.classList.remove('bad')
+      }
+      $('elapsedInput').onkeydown = (e) => {
+        if (e.key === 'Enter') { e.preventDefault(); commitElapsed() }
+        else if (e.key === 'Escape') { e.preventDefault(); closeElapsedEdit() }
+      }
+      // Ушли мимо — закрываем без сохранения. Но НЕ когда нажимают галочку:
+      // blur срабатывает раньше клика, и правка терялась ровно в тот момент,
+      // когда её подтверждали.
+      $('elapsedInput').onblur = (e) => {
+        if (e.relatedTarget && e.relatedTarget.closest('#elapsedEdit')) return
+        closeElapsedEdit()
+      }
+      $('elapsedOk').onclick = () => commitElapsed()
+      $('elapsedCancel').onclick = () => closeElapsedEdit()
       $('openApp').onclick = () => window.panel.openApp()
       $('close').onclick = () => window.panel.close()
 
@@ -1252,7 +1528,10 @@
         // Заголовок группы в «Мне» — дорожка в проект.
         const head = e.target.closest('[data-open-project]')
         if (head) {
-          window.panel.open(openProjectLink(head.dataset.openProject))
+          // Проект передаём отдельно: под заголовком показаны все его
+          // уведомления, и уходя по этой дорожке человек видит их все. Раньше
+          // не гасло ни одного, и бейдж висел после просмотра.
+          window.panel.openProject(openProjectLink(head.dataset.openProject), head.dataset.openProject)
           return
         }
         const open = e.target.closest('[data-link]')
