@@ -102,6 +102,32 @@ describe('поле ведёт себя предсказуемо', () => {
   })
 
   it('без таймера править нечего', () => {
-    expect(panel).toMatch(/if \(state\.timer\) openElapsedEdit\(\)/)
+    expect(panel).toMatch(/if \(state\.timer && canEditElapsed\) openElapsedEdit\(\)/)
+  })
+
+  it('со старой оболочкой правку не предлагаем', () => {
+    // preload живёт ВНУТРИ установленного приложения, а панель грузится с
+    // сайта. Приложение лежит в магазине и обновляется не по нашей воле:
+    // вызов метода, которого там нет, ронял панель насмерть.
+    expect(panel).toMatch(/typeof window\.panel\.setTimerElapsed === 'function'/)
+    expect(panel).toMatch(/window\.panel\.setTimerElapsed\?\./)
+  })
+
+  it('признак объявлен ДО первой отрисовки', () => {
+    // const не поднимается: обращение из renderTimer к переменной ниже дало бы
+    // ReferenceError — ту же пустую панель, от которой защищаемся.
+    const decl = panel.indexOf("const canEditElapsed =")
+    const use = panel.indexOf("classList.toggle('editable', canEditElapsed)")
+    expect(decl).toBeGreaterThan(-1)
+    expect(use).toBeGreaterThan(-1)
+    expect(decl).toBeLessThan(use)
+  })
+
+  it('веб не требует свежей оболочки', () => {
+    // Тот же промах на стороне приложения: bridge.onTimerElapsed вызывался
+    // напрямую, и весь useDesktop падал — чёрный экран вместо приложения.
+    expect(desktop).toMatch(/onTimerElapsed\?:/)
+    expect(desktop).toMatch(/bridge\.onTimerElapsed\?\./)
+    expect(desktop).toMatch(/offTimerElapsed\?\.\(\)/)
   })
 })

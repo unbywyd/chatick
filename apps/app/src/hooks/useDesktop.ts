@@ -32,7 +32,13 @@ type DesktopBridge = {
   onSetProject: (fn: (id: string) => void) => () => void
   onTaskStatus: (fn: (p: { taskId: string; status: string }) => void) => () => void
   onTaskTimer: (fn: (taskId: string) => void) => () => void
-  onTimerElapsed: (fn: (p: { id: string; minutes: number }) => void) => () => void
+  /**
+   * Необязательный: preload.cjs живёт ВНУТРИ установленного приложения, а веб
+   * обновляется отдельно. У того, кто не переустанавливал, метода нет — и
+   * прямой вызов ронял весь useDesktop, оставляя чёрный экран и пустую панель.
+   * Веб не имеет права требовать свежую оболочку.
+   */
+  onTimerElapsed?: (fn: (p: { id: string; minutes: number }) => void) => () => void
   onStateRefresh: (fn: () => void) => () => void
   onConnectRefresh: (fn: () => void) => () => void
   /**
@@ -587,7 +593,7 @@ export function useDesktopSync() {
      * Секунды обнуляем: в поле панели их нет, и невидимый остаток превращал бы
      * набранное 1:03 в 1:03:47.
      */
-    const offTimerElapsed = bridge.onTimerElapsed(async ({ id, minutes }) => {
+    const offTimerElapsed = bridge.onTimerElapsed?.(async ({ id, minutes }) => {
       const current = liveRef.current.timer
       // Таймер мог остановиться, пока человек набирал.
       if (!current || current.id !== id) return
@@ -701,7 +707,7 @@ export function useDesktopSync() {
       offSetProject()
       offTaskStatus()
       offTaskTimer()
-      offTimerElapsed()
+      offTimerElapsed?.()
       offRefresh()
       offStateRefresh()
       offAbout()

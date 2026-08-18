@@ -635,6 +635,20 @@
       }
 
       /**
+       * Умеет ли установленное приложение принять правку времени.
+       *
+       * preload живёт ВНУТРИ приложения, а панель грузится с сайта. Приложение
+       * лежит в магазине и обновляется не по нашей воле, поэтому панель обязана
+       * работать со СТАРОЙ оболочкой: нет метода — правку не предлагаем вовсе,
+       * а не роняем панель на первом же клике.
+       *
+       * Объявление ДО renderTimer намеренно: const не поднимается, и обращение
+       * из отрисовки к переменной, объявленной ниже, дало бы ReferenceError —
+       * то есть пустую панель, ровно то, от чего здесь и защищаемся.
+       */
+      const canEditElapsed = typeof window.panel.setTimerElapsed === 'function'
+
+      /**
        * Разбор натикавшего: 103 → 1:03, 45 → 0:45, 2:30 → 2:30.
        *
        * КОПИЯ логики parseDuration из apps/app/src/lib/time-parse.ts. Панель —
@@ -684,7 +698,11 @@
         // Потолок в сутки: тот же, что стоит на сервере. Здесь он не защита, а
         // подсказка — отказ до отправки понятнее, чем ошибка после.
         if (mins > 24 * 60) { inp.classList.add('bad'); return }
-        window.panel.setTimerElapsed(t.id, mins)
+        // preload живёт ВНУТРИ установленного приложения, а панель грузится с
+        // сайта. Приложение лежит в магазине и обновляется не по нашей воле —
+        // значит панель обязана работать со СТАРОЙ оболочкой. Нет метода —
+        // молча закрываем поле, а не роняем панель.
+        window.panel.setTimerElapsed?.(t.id, mins)
         closeElapsedEdit()
       }
 
@@ -732,8 +750,8 @@
           // затирается на следующей секунде.
           if ($('elapsedInput').hidden) $('elapsed').textContent = elapsedText(t)
           $('elapsed').classList.remove('idle')
-          $('elapsed').classList.add('editable')
-          $('elapsed').title = T('editElapsed', 'Click to correct the time')
+          $('elapsed').classList.toggle('editable', canEditElapsed)
+          if (canEditElapsed) $('elapsed').title = T('editElapsed', 'Click to correct the time')
         } else {
           $('elapsed').textContent = T('idle', 'No timer running')
           $('elapsed').classList.add('idle')
@@ -1347,7 +1365,7 @@
         $('projMenu').hidden = true
         $('projBtn').classList.remove('open')
       })
-      $('elapsed').onclick = () => { if (state.timer) openElapsedEdit() }
+      $('elapsed').onclick = () => { if (state.timer && canEditElapsed) openElapsedEdit() }
       // Enter применяет, Escape отменяет: панель маленькая, промахнуться легко,
       // и без отмены случайный клик по времени превращается в ловушку.
       $('elapsedInput').onkeydown = (e) => {
