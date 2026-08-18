@@ -164,3 +164,18 @@ describe('поле и счётчик — одно состояние', () => {
     expect(panel).toMatch(/relatedTarget\.closest\('#elapsedEdit'\)/)
   })
 })
+
+describe('правка идёт в свою ручку', () => {
+  it('зовём /my/time, а не проектную', () => {
+    // Свой таймер правится сессионным токеном. Путь /time/... попадает в
+    // проектный роут и отвечает «Project token required» — а панель проекта
+    // не выбирает вовсе.
+    expect(desktop).toMatch(/\/api\/v1\/my\/time\/\$\{id}/)
+  })
+
+  it('ручка смонтирована именно там', () => {
+    // Проверяем не память, а сервер: путь менялся, и клиент об этом не узнал.
+    const app = readFileSync(join(import.meta.dirname, '../app.ts'), 'utf8')
+    expect(app).toMatch(/'\/api\/v1\/my\/time', timeMineRoute/)
+  })
+})

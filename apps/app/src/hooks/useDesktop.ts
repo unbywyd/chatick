@@ -600,7 +600,7 @@ export function useDesktopSync() {
       const startedAt = new Date(Date.now() - minutes * 60_000)
       startedAt.setSeconds(0, 0)
       try {
-        await api(`/api/v1/time/mine/${id}`, { method: 'PATCH', body: JSON.stringify({ startedAt: startedAt.toISOString() }) })
+        await api(`/api/v1/my/time/${id}`, { method: 'PATCH', body: JSON.stringify({ startedAt: startedAt.toISOString() }) })
         qc.invalidateQueries({ queryKey: ['time-running'] })
       } catch (e) {
         // Панель ошибок не показывает — выводим в приложении, иначе правка

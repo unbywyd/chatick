@@ -85,7 +85,11 @@
         /* Полоса таймера — ручка перетаскивания окна: без no-drag по полю
            нельзя ни кликнуть, ни выделить текст. */
         -webkit-app-region: no-drag;
-        width: 5.5ch; padding: 0; margin: 0;
+        /* Ширина по содержимому, а не постоянные 5.5ch: в поле бывает и
+           «0:05», и «1:03:25». Лишнее поле — это промах мимо цифр, который
+           выглядит как «кликнул и ничего», а на деле попал в пустоту.
+           Задаётся из кода через size по длине значения. */
+        width: auto; min-width: 0; padding: 0; margin: 0;
         border: 0; border-bottom: 1px solid var(--brand); border-radius: 0;
         background: transparent; color: var(--brand); outline: none;
         font: 600 20px/1.1 ui-monospace, 'SF Mono', Menlo, monospace;
@@ -748,6 +752,12 @@
         closeElapsedEdit()
       }
 
+      /** Поле ровно по числу: лишняя ширина ловит клики мимо цифр. */
+      function fitElapsedInput() {
+        const inp = $('elapsedInput')
+        inp.size = Math.max(1, inp.value.length)
+      }
+
       function closeElapsedEdit() {
         $('elapsedEdit').hidden = true
         $('elapsedInput').classList.remove('bad')
@@ -776,6 +786,7 @@
         // Ровно то, что человек видел на счётчике. Любой пересчёт означал бы
         // два разных числа для одного времени: на экране 2:02, в поле 0:02.
         inp.value = elapsedText(t)
+        fitElapsedInput()
         inp.classList.remove('bad')
         $('elapsed').hidden = true
         $('elapsedEdit').hidden = false
@@ -1442,6 +1453,7 @@
       $('elapsed').onclick = () => { if (state.timer && canEditElapsed) openElapsedEdit() }
       // Enter применяет, Escape отменяет: панель маленькая, промахнуться легко,
       // и без отмены случайный клик по времени превращается в ловушку.
+      $('elapsedInput').oninput = () => fitElapsedInput()
       $('elapsedInput').onkeydown = (e) => {
         if (e.key === 'Enter') { e.preventDefault(); commitElapsed() }
         else if (e.key === 'Escape') { e.preventDefault(); closeElapsedEdit() }
