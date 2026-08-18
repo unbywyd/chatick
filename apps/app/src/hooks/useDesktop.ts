@@ -91,7 +91,7 @@ type DesktopState = {
    */
   company: { id: string; name: string; canGrantCompany: boolean } | null
   /** все компании человека: подключаться можно к любой, не только к первой */
-  companies: { id: string; name: string; canGrantCompany: boolean }[]
+  companies: { id: string; name: string; canGrantCompany: boolean; mainProjectId?: string | null }[]
   /** Кто вошёл: аватар в шапке панели отвечает на «от чьего имени всё это». */
   user: { name: string; email: string; avatarUrl: string | null } | null
   /** Действующие туннели ассистентов — их видно и можно закрыть из панели. */
@@ -241,7 +241,7 @@ export function useDesktopSync() {
     queryKey: ['companies'],
     enabled: Boolean(bridge) && authed,
     queryFn: () =>
-      api<{ companies: { id: string; name: string; myRole: 'admin' | 'manager' | 'member' }[] }>('/api/v1/companies'),
+      api<{ companies: { id: string; name: string; myRole: 'admin' | 'manager' | 'member'; mainProjectId?: string | null }[] }>('/api/v1/companies'),
   })
   const myCompanies = companies.data?.companies ?? []
   const company = myCompanies[0]
@@ -376,6 +376,9 @@ export function useDesktopSync() {
             id: c.id,
             name: c.name,
             canGrantCompany: true,
+            // Главный проект компании: панель подставляет его, когда человек
+            // ещё ничего не выбрал сам.
+            mainProjectId: c.mainProjectId ?? null,
           }))
         : [],
       connections: (authed ? bridgeSessions.data?.items ?? [] : []).map((x) => ({

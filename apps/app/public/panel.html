@@ -828,6 +828,20 @@
       function currentTimerProject() {
         if (state.timer?.projectId) return state.timer.projectId
         if (timerProject && projectById(timerProject)) return timerProject
+        /**
+         * Главный проект компании — умолчание, когда своего выбора ещё нет.
+         *
+         * Панель открывалась с «Выберите проект», и таймер нельзя было
+         * запустить, пока не выберешь: на новой машине каждый раз заново.
+         *
+         * СТРОГО после личного выбора: жёсткая настройка перетирала бы его
+         * при каждой перерисовке. И только если человек в этом проекте
+         * состоит — projectById вернёт его лишь тогда; иначе панель повела бы
+         * туда, где его не ждут.
+         */
+        for (const c of state.companies || []) {
+          if (c.mainProjectId && projectById(c.mainProjectId)) return c.mainProjectId
+        }
         // Разумное умолчание — проект, открытый в приложении.
         if (state.project?.id && projectById(state.project.id)) return state.project.id
         return null
