@@ -1740,5 +1740,13 @@
     "own": "Set for this project — the company default no longer applies here.",
     "backToCompany": "Use company settings",
     "eventsHintProject": "Turning one off silences it in this project. People can still unsubscribe individually below."
+  },
+  "mainProject": {
+    "title": "Main project",
+    "hint": "The tray panel opens on it for anyone who has not picked their own",
+    "none": "Not set",
+    "search": "Find a project…",
+    "notFound": "No such project",
+    "clear": "Clear"
   }
 }

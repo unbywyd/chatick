@@ -472,6 +472,55 @@ companiesRoute.patch(
  * предупредят о сроке, даже если менять он это не вправе. Меняет админ —
  * настройка расходится на все проекты разом.
  */
+/**
+ * Главный проект компании — умолчание для панели в трее (SPEC §8.33).
+ *
+ * Читают все, кто состоит: знать, какой проект считается основным, полезно
+ * каждому, даже если менять его нельзя. Ставит админ — это выбор за всех.
+ */
+companiesRoute.get('/:companyId/main-project', async (c) => {
+  const { sub } = c.get('session')
+  const companyId = c.req.param('companyId')
+  const role = await memberRoleIn(companyId, sub)
+  if (!role) return c.json({ error: 'Forbidden' }, 403)
+
+  const company = await db.query.companies.findFirst({ where: eq(companies.id, companyId) })
+  if (!company) return c.json({ error: 'Not found' }, 404)
+
+  // Проект удаляют жёстко, и внешний ключ обнуляет настройку сам. Но читаем
+  // всё равно из таблицы: между удалением и следующим открытием панели могло
+  // пройти время, и показывать имя из воздуха нельзя.
+  const project = company.mainProjectId
+    ? await db.query.projects.findFirst({ where: eq(projects.id, company.mainProjectId) })
+    : null
+
+  return c.json({
+    project: project ? { id: project.id, name: project.name } : null,
+    canEdit: role === 'admin',
+  })
+})
+
+companiesRoute.patch(
+  '/:companyId/main-project',
+  zValidator('json', z.object({ projectId: z.string().nullable() })),
+  async (c) => {
+    const { sub } = c.get('session')
+    const companyId = c.req.param('companyId')
+    if ((await memberRoleIn(companyId, sub)) !== 'admin') return c.json({ error: 'Forbidden' }, 403)
+
+    const { projectId } = c.req.valid('json')
+    if (projectId) {
+      // Только проект ЭТОЙ компании: чужой увёл бы людей туда, где их нет.
+      const project = await db.query.projects.findFirst({
+        where: and(eq(projects.id, projectId), eq(projects.companyId, companyId)),
+      })
+      if (!project) return c.json({ error: 'Project not found in this company' }, 400)
+    }
+    await db.update(companies).set({ mainProjectId: projectId }).where(eq(companies.id, companyId))
+    return c.json({ ok: true })
+  },
+)
+
 companiesRoute.get('/:companyId/notify-config', async (c) => {
   const { sub } = c.get('session')
   const companyId = c.req.param('companyId')

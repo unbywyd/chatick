@@ -45,6 +45,7 @@ import { OverviewTab } from '@/components/company/OverviewTab'
 import { LlmSettings } from '@/components/company/LlmSettings'
 import { MailSettings } from '@/components/company/MailSettings'
 import { CompanyStorageCard } from '@/components/company/CompanyStorageCard'
+import { CompanyMainProject } from '@/components/company/CompanyMainProject'
 import { CompanyLocale } from '@/components/company/CompanyLocale'
 import { CompanyProfile } from '@/components/company/CompanyProfile'
 import { ApiKeysTab } from '@/components/company/ApiKeysTab'
@@ -620,6 +621,9 @@ function CompanySettings({
         <>
           <CompanyProfile companyId={company.id} name={company.name} logoUrl={company.logoUrl} isAdmin={isAdmin} />
           <CompanyLocale companyId={company.id} current={company.locale ?? 'en'} isAdmin={isAdmin} />
+          {/* Главный проект: с него панель в трее открывается у всех, кто не
+              выбрал свой. Видно всем — знать полезно; менять может админ. */}
+          <CompanyMainProject companyId={company.id} />
           {/* Хранилище компании: проекты наследуют его, если не задали своё. */}
           {isAdmin && <CompanyStorageCard companyId={company.id} />}
         </>
