@@ -38,7 +38,7 @@ describe('кнопка часов в панели', () => {
   it('переход к часам не гасит уведомления проекта', () => {
     // projectId в panel:open означает «ушёл разбирать проект». Часы — не
     // разбор дел, и гасить бейдж за это нельзя.
-    expect(panel).toMatch(/openProject\(openHoursLink/)
+    expect(panel).toMatch(/openProject\(id \? openHoursLink/)
   })
 
   it('подпись приходит переводом, а не зашита', () => {
@@ -52,6 +52,7 @@ describe('кнопка часов срабатывает, а не притвор
     // Замкнув ссылку при отрисовке, кнопку получали живой, а ссылку пустой:
     // панель показывается сразу, список проектов приезжает следом. Клик тогда
     // молча не делал ничего — и отладить это нечем, консоли в панели нет.
+    expect(panel).toMatch(/closest\('#hoursBtn'\)/)
     expect(panel).toMatch(/currentTimerProject\(\)/)
     expect(panel).toMatch(/hours\.hidden = !selId/)
   })
