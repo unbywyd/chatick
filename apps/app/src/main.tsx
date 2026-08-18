@@ -25,6 +25,7 @@ import { ConnectScreen } from './screens/ConnectScreen'
 import { StartScreen } from './screens/StartScreen'
 import { InboxScreen } from './screens/InboxScreen'
 import { NotifySettingsScreen } from './screens/NotifySettingsScreen'
+import { ProfileScreen } from './screens/ProfileScreen'
 import { TasksTab } from './components/tabs/TasksTab'
 import { FilesTab } from './components/tabs/FilesTab'
 import { ResourcesTab } from './components/tabs/ResourcesTab'
@@ -278,6 +279,7 @@ createRoot(document.getElementById('root')!).render(
               <Route path="/inbox" element={<InboxScreen />} />
               {/* системные уведомления — настройка программы, не проекта */}
               <Route path="/settings/notifications" element={<NotifySettingsScreen />} />
+              <Route path="/settings/profile" element={<ProfileScreen />} />
               <Route path="/start" element={<StartScreen />} />
               <Route path="/start/:companyId" element={<StartScreen />} />
               <Route path="/start/:companyId/:companyTab" element={<StartScreen />} />

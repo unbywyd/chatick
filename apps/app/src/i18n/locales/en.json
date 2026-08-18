@@ -878,7 +878,13 @@
     "logoutConfirm": "Sign out of your account?",
     "projectSettings": "Project settings",
     "projectTeam": "Project team",
-    "companySettings": "Company settings"
+    "companySettings": "Company settings",
+    "title": "Profile",
+    "subtitle": "Your name and photo — this is what colleagues see",
+    "photo": "Photo",
+    "photoHint": "Click the picture to replace it",
+    "name": "Name",
+    "email": "Email"
   },
   "projSwitch": {
     "search": "Search projects…",

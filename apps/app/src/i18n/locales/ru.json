@@ -884,7 +884,13 @@
     "logoutConfirm": "Выйти из аккаунта?",
     "projectSettings": "Настройки проекта",
     "projectTeam": "Команда проекта",
-    "companySettings": "Настройки компании"
+    "companySettings": "Настройки компании",
+    "title": "Профиль",
+    "subtitle": "Имя и фото — их видят коллеги",
+    "photo": "Фото",
+    "photoHint": "Нажмите на снимок, чтобы заменить",
+    "name": "Имя",
+    "email": "Почта"
   },
   "projSwitch": {
     "search": "Поиск проектов…",

@@ -3,7 +3,7 @@ import { useNavigate, useSearchParams } from 'react-router-dom'
 import { useQueryClient } from '@tanstack/react-query'
 import { useTranslation } from 'react-i18next'
 import { toast } from 'sonner'
-import { Bell, Bot, Building2, Camera, Check, Info, Keyboard, LogOut, Pencil, Plug, SlidersHorizontal, Users, X, Bug } from 'lucide-react'
+import { Bell, Bot, Building2, Camera, Check, Info, Keyboard, LogOut, Pencil, Plug, SlidersHorizontal, User, Users, X, Bug } from 'lucide-react'
 import { api, API_URL, getSessionToken, setSessionToken, setProjectToken, type Me } from '@/lib/api'
 import { Avatar } from '@/components/ui/avatar'
 import {
@@ -218,6 +218,13 @@ export function ProfileMenu({
             {t('tabs.ai')}
           </DropdownMenuItem>
         )}
+
+        {/* Профиль отдельной страницей: правка имени рядом с «Выйти» — это
+            промах ценой выхода из аккаунта. В меню остаётся вход. */}
+        <DropdownMenuItem onSelect={() => navigate('/settings/profile')}>
+          <User className="size-4" />
+          {t('profile.title')}
+        </DropdownMenuItem>
 
         {/* Системные уведомления — про приложение, поэтому без привязки
             к проекту, в отличие от подписок на события */}

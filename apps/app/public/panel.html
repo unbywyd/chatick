@@ -183,7 +183,15 @@
       .group-head.closed .group-chev { transform: rotate(-90deg); }
       .filter-wrap { padding: 4px 4px 6px; }
       /* Кем вошли: маленький ответ на большой вопрос «от чьего имени всё это». */
-      .me-avatar { width: 28px; height: 28px; font-size: 11px; }
+      /* Аватар ведёт в профиль: имя и фото человек правит отсюда чаще
+         всего, а раньше их было видно, но не нажать. */
+      .me-avatar {
+        width: 28px; height: 28px; font-size: 11px;
+        -webkit-app-region: no-drag; cursor: pointer;
+        border: 0; padding: 0;
+        transition: opacity .12s;
+      }
+      .me-avatar:hover { opacity: .75; }
       /* .avatar задаёт display: grid, и оно перебивает браузерное скрытие по
          [hidden] — пустой кружок висел даже когда показывать нечего. */
       .avatar[hidden] { display: none; }
@@ -541,7 +549,7 @@
       <button class="hours-btn" id="hoursBtn" hidden>
         <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></svg>
       </button>
-      <span class="avatar me-avatar" id="meAvatar" hidden></span>
+      <button class="avatar me-avatar" id="meAvatar" hidden></button>
     </div>
     <div class="proj-menu" id="projMenu" hidden>
       <input id="projSearch" class="target-search" spellcheck="false" data-ph="connectSearch" placeholder="Search…" />
@@ -881,7 +889,8 @@
         const av = $('meAvatar')
         av.hidden = !me
         if (me) {
-          av.title = me.name ? `${me.name} · ${me.email}` : me.email
+          av.title = `${me.name ? me.name + ' · ' : ''}${me.email}
+${T('openProfile', 'Profile')}`
           // Только data: — панель в file:// не может загрузить картинку по
           // https, это для неё внешний ресурс. Готовую строку присылает
           // главный процесс; пока её нет, показываем инициалы.
@@ -1470,6 +1479,11 @@
        * Ссылку считаем в момент клика: список проектов приезжает после первой
        * отрисовки, и замкнутая раньше была бы пустой.
        */
+      // Профиль — адрес личный, компания в нём не нужна: это не проект.
+      document.addEventListener('click', (e) => {
+        if (!e.target.closest('#meAvatar')) return
+        window.panel.openProject('/settings/profile', null)
+      })
       document.addEventListener('click', (e) => {
         if (!e.target.closest('#hoursBtn')) return
         const id = currentTimerProject()

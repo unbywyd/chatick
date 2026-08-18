@@ -879,7 +879,13 @@
     "logoutConfirm": "להתנתק מהחשבון?",
     "projectSettings": "הגדרות הפרויקט",
     "projectTeam": "צוות הפרויקט",
-    "companySettings": "הגדרות החברה"
+    "companySettings": "הגדרות החברה",
+    "title": "פרופיל",
+    "subtitle": "השם והתמונה — זה מה שהעמיתים רואים",
+    "photo": "תמונה",
+    "photoHint": "לחצו על התמונה כדי להחליף",
+    "name": "שם",
+    "email": "דוא״ל"
   },
   "projSwitch": {
     "search": "חיפוש פרויקטים…",

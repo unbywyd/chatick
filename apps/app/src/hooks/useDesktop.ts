@@ -425,6 +425,7 @@ export function useDesktopSync() {
         emptyProjects: t('desktop.emptyProjects'),
         openApp: t('desktop.openApp'),
         openHours: t('desktop.openHours'),
+        openProfile: t('profile.title'),
         editElapsed: t('desktop.editElapsed'),
         close: t('desktop.close'),
         unreadOne: t('desktop.unread'),
