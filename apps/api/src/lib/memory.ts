@@ -13,7 +13,7 @@ import { submitAssistantReport, REPORT_KINDS, type ReportKind } from './assistan
 import { createNote, noteToTask, NOTE_TYPES } from '../routes/notes.js'
 import { timeConfigForProject } from '../routes/time.js'
 import { encrypt } from './crypto.js'
-import { notify, extractMentions } from './notify.js'
+import { notify, extractMentions, commentWatchers } from './notify.js'
 import { setDue } from './notify-config.js'
 import { projectLlm, complete, validateTask, type ToolDef, type ToolHandler } from './llm.js'
 import { broadcast } from '../ws.js'
@@ -1438,7 +1438,13 @@ export function memoryTools(projectId: string, actorUserId: string): { tools: To
       const mentioned = extractMentions(body)
       if (mentioned.length)
         void notify({ projectId, event: 'comment_mention', recipientIds: mentioned, actorId: actorUserId, actorName: actor?.name || 'Someone', dedupeKey: `comment_mention:${row!.id}`, link, preview: body, entityType: 'task', entityId: t.id })
-      const watchers = [t.assigneeId, t.createdById].filter((x): x is string => Boolean(x) && x !== actorUserId && !mentioned.includes(x!))
+      // Правило одно на все три пути — см. commentWatchers в notify.ts.
+      const watchers = commentWatchers({
+        assigneeId: t.assigneeId,
+        createdById: t.createdById,
+        mentioned,
+        actorId: actorUserId,
+      })
       if (watchers.length)
         void notify({ projectId, event: 'task_comment', recipientIds: watchers, actorId: actorUserId, actorName: actor?.name || 'Someone', dedupeKey: `task_comment:${row!.id}`, link, preview: body, vars: { ref: t.number }, entityType: 'task', entityId: t.id })
       broadcast(projectId, 'task_comments_changed', { taskId: t.id })

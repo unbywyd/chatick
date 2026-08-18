@@ -55,7 +55,7 @@ import { readTimeConfig, maybeTranslate, timeConfigForProject } from './time.js'
 import { readPresence } from './auth.js'
 import { canPublish, createShare, locate, revokeShare, type ShareEntityType } from './shares.js'
 import { notifyChatMentions } from './messages.js'
-import { notify, extractMentions } from '../lib/notify.js'
+import { notify, extractMentions, commentWatchers } from '../lib/notify.js'
 import { setDue } from '../lib/notify-config.js'
 import { notifyTask, unassignNotice, dependentsOf, blockersOf } from './tasks.js'
 import { projectPath, projectUrl, companyOf } from '../lib/links.js'
@@ -2799,15 +2799,22 @@ bridgeRoute.post('/tasks/:id/comments', async (c) => {
       entityType: 'task',
       entityId: task.id,
     })
-  // Автор задачи, исполнитель и тот, кому отвечают. Себя не уведомляем.
-  const watchers = [task.assigneeId, task.createdById, replyToId ? (await db.query.taskComments.findFirst({ where: eq(taskComments.id, replyToId) }))?.authorId : null].filter(
-    (x): x is string => Boolean(x) && x !== id.userId && !mentioned.includes(x!),
-  )
+  // Исполнитель, тот, кому отвечают, и автор задачи — если разговор не
+  // адресован кому-то другому. Правило одно на все три пути (notify.ts).
+  const watchers = commentWatchers({
+    assigneeId: task.assigneeId,
+    createdById: task.createdById,
+    replyToAuthorId: replyToId
+      ? ((await db.query.taskComments.findFirst({ where: eq(taskComments.id, replyToId) }))?.authorId ?? null)
+      : null,
+    mentioned,
+    actorId: id.userId,
+  })
   if (watchers.length)
     void notify({
       projectId: scope.projectId,
       event: 'task_comment',
-      recipientIds: [...new Set(watchers)],
+      recipientIds: watchers,
       actorId: id.userId,
       actorName,
       dedupeKey: `task_comment:${row!.id}`,

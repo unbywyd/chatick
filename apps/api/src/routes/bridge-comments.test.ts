@@ -77,7 +77,12 @@ describe('POST /x/tasks/:id/comments', () => {
   })
 
   it('не уведомляет самого себя', () => {
-    expect(body).toMatch(/x !== id\.userId/)
+    // Правило переехало в commentWatchers (notify.ts) — одно на интерфейс,
+    // мост и ассистента: раньше оно было выписано в каждом заново.
+    expect(body).toMatch(/commentWatchers\(\{/)
+    expect(body).toMatch(/actorId: id\.userId/)
+    const helper = readFileSync(join(import.meta.dirname, '../lib/notify.ts'), 'utf8')
+    expect(helper).toMatch(/x !== actorId/)
   })
 
   it('ограничивает длину текста', () => {

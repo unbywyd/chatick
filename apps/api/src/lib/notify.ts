@@ -24,6 +24,47 @@ export type NotificationEvent =
   | 'task_due'
 
 /**
+ * Кому уходит «новый комментарий к задаче».
+ *
+ * Исполнителю — всегда: задача на нём, и обсуждение в ней его работа, кому бы
+ * ни было адресовано.
+ *
+ * Автору — только когда разговор не адресован кому-то конкретному. Его
+ * добавили не зря: «поставил задачу Талю, Таль перевёл в ревью — и я не
+ * узнаю, хотя ревью ждут от меня». Но правило было слишком широким: когда
+ * двое переписываются между собой («@исполнитель, сделано?»), автора дёргали
+ * за разговор, в котором его нет.
+ *
+ * «Упоминаний нет» — это НЕ «не адресовано»: обычное обсуждение по делу идёт
+ * без них, и там автора уведомлять правильно. На проде таких комментариев
+ * больше половины, и молчать в них значило бы сломать то, ради чего автора в
+ * получатели и добавляли.
+ *
+ * Одна функция на все три пути — интерфейс, мост, ассистент. Раньше правило
+ * было выписано в каждом заново, и разойтись им ничего не мешало.
+ */
+export function commentWatchers(input: {
+  assigneeId: string | null
+  createdById: string | null
+  /** Кому отвечают — у моста есть ещё и эта сторона. */
+  replyToAuthorId?: string | null
+  /** id упомянутых в комментарии. */
+  mentioned: string[]
+  /** Кто пишет: себе не шлём. */
+  actorId: string
+}): string[] {
+  const { assigneeId, createdById, replyToAuthorId, mentioned, actorId } = input
+  const addressedToOthers = mentioned.length > 0 && !mentioned.includes(createdById ?? '')
+  return [
+    ...new Set(
+      [assigneeId, addressedToOthers ? null : createdById, replyToAuthorId ?? null].filter(
+        (x): x is string => Boolean(x) && x !== actorId && !mentioned.includes(x!),
+      ),
+    ),
+  ]
+}
+
+/**
  * Извлекает id упомянутых пользователей.
  *
  * Форматов ДВА, и это не избыточность:
@@ -36,6 +77,7 @@ export type NotificationEvent =
  * @Имя, видели его на экране подсвеченным и ждали ответа, которого не будет.
  * Тихо — ошибки нигде не возникало, просто список получателей выходил пустым.
  */
+
 export function extractMentions(text: string): string[] {
   const ids = new Set<string>()
   const add = (raw: string | undefined) => {

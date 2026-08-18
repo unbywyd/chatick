@@ -10,7 +10,7 @@ import { requireProject, type ProjectEnv } from '../auth.js'
 import { hasPermission, ownsOrManages } from './projects.js'
 import { improveTask, validateTask, generateTaskNotes } from '../lib/llm.js'
 import { buildTeamContext } from '../lib/memory.js'
-import { notify, extractMentions, dropNotice } from '../lib/notify.js'
+import { notify, extractMentions, dropNotice, commentWatchers } from '../lib/notify.js'
 import { setDue } from '../lib/notify-config.js'
 import { broadcast, tasksChanged } from '../ws.js'
 import { logActivity } from '../lib/audit.js'
@@ -1114,7 +1114,13 @@ tasksRoute.post(
     const mentioned = extractMentions(body)
     if (mentioned.length)
       void notify({ projectId, event: 'comment_mention', recipientIds: mentioned, actorId: sub, actorName, dedupeKey: `comment_mention:${row!.id}`, link, preview: body, entityType: 'task', entityId: task.id })
-    const watchers = [task.assigneeId, task.createdById].filter((x): x is string => Boolean(x) && x !== sub && !mentioned.includes(x!))
+    // Правило одно на все три пути — см. commentWatchers в notify.ts.
+    const watchers = commentWatchers({
+      assigneeId: task.assigneeId,
+      createdById: task.createdById,
+      mentioned,
+      actorId: sub,
+    })
     if (watchers.length)
       void notify({ projectId, event: 'task_comment', recipientIds: watchers, actorId: sub, actorName, dedupeKey: `task_comment:${row!.id}`, link, preview: body, vars: { ref: task.number }, entityType: 'task', entityId: task.id })
 
