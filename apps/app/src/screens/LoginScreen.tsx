@@ -72,6 +72,11 @@ export function LoginScreen() {
       toast.success(t('login.otpSent'))
     } catch (e) {
       const tooSoon = e instanceof ApiError && e.status === 429
+      // «Слишком часто» значит, что код уже отправлен и лежит в почте, — а мы
+      // не показывали поле для ввода, потому что оно ждало успешного ответа.
+      // Человек держал код в руках, и вводить его было некуда: единственным
+      // выходом оставалось ждать десять минут.
+      if (tooSoon) setOtpSent(true)
       toast.error(tooSoon ? t('login.otpTooSoon') : t('login.failed'))
     } finally {
       setOtpBusy(false)
