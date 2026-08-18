@@ -15,6 +15,7 @@ const docs = readFileSync(join(here, 'bridge-docs.ts'), 'utf8')
 const route = readFileSync(join(here, '../routes/bridge.ts'), 'utf8')
 const about = readFileSync(join(here, '../routes/about.ts'), 'utf8')
 const mcp = readFileSync(join(here, '../../../mcp/src/index.ts'), 'utf8')
+const memory = readFileSync(join(here, 'memory.ts'), 'utf8')
 
 describe('репорт нельзя прислать пустым', () => {
   it('короткий текст отклоняется', () => {
@@ -84,8 +85,11 @@ describe('ассистент не обещает того, чего не буд�
   })
 
   it('и гайд, и описание инструмента говорят то же', () => {
+    // Формулировки стали приглашающими, но «не обещать сроков» осталось во
+    // всех трёх местах: читает человек, автоматически ничего не делается.
     expect(docs).toMatch(/never promise the person a fix or a date/i)
-    expect(mcp).toMatch(/never\s+' \+\s*\n\s*'promise the person a fix or a date|never promise the person a fix or a date/i)
+    expect(mcp).toMatch(/never promise a fix or a date/i)
+    expect(memory).toMatch(/never promise a fix or a date/i)
   })
 })
 
@@ -93,7 +97,9 @@ describe('репорт про Chatick, а не про чужой проект', 
   it('гайд отделяет одно от другого', () => {
     // Иначе канал превращается в свалку задач чужой команды, которые нам
     // чинить нечем.
-    expect(docs).toMatch(/Do not use it for anything about the person's own project/i)
+    expect(docs).toMatch(/nothing about their own/i)
+    expect(mcp).toMatch(/never anything about their own project or team/i)
+    expect(memory).toMatch(/never anything about their own project or team/i)
   })
 
   it('проект не обязателен', () => {
@@ -117,5 +123,54 @@ describe('разбор входящего закрыт от посторонни
     // На просьбу можно ответить и не сделать; внедрённое не всегда требует
     // ответа. Без различия список улучшений неотличим от списка вопросов.
     expect(about).toMatch(/'new', 'read', 'answered', 'done'/)
+  })
+})
+
+describe('канал приглашает, а не отговаривает', () => {
+  // Прежние формулировки писались против спама и заодно отсекали просьбы
+  // людей — самое ценное. Ассистент читал «не список желаний» как запрет и
+  // отвечал «такого нет» вместо отправки.
+
+  it('старые запрещающие формулировки убраны', () => {
+    expect(docs).not.toMatch(/not "it would be nice if"/i)
+    expect(mcp).not.toMatch(/not as a wishlist/i)
+  })
+
+  it('все трое прямо зовут отправлять просьбы людей', () => {
+    for (const [name, src] of [['guide', docs], ['mcp', mcp], ['memory', memory]] as const) {
+      expect(src, name).toMatch(/WANTS SOMETHING THE PRODUCT DOES NOT DO/i)
+      // «Can it also…» — ровно та фраза, которую раньше игнорировали.
+      expect(src, name).toMatch(/can it also/i)
+    }
+  })
+
+  it('ассистент в интерфейсе умеет отправлять', () => {
+    // Он ближе всех к человеку, а инструмента у него не было вовсе: единственный
+    // «report» в memory.ts был отчётом по часам.
+    expect(memory).toMatch(/name: 'send_report'/)
+    expect(memory).toMatch(/send_report: async/)
+    expect(memory).toMatch(/submitAssistantReport\(/)
+  })
+
+  it('request назван самым частым видом', () => {
+    // Сервер принимал его с самого начала, но в списке он стоял последним и
+    // читался как исключение.
+    for (const [name, src] of [['guide', docs], ['mcp', mcp], ['memory', memory]] as const) {
+      expect(src, name).toMatch(/most common/i)
+    }
+  })
+
+  it('защита от спама осталась на сервере', () => {
+    // Пороги не опускаем: приглашающая формулировка не значит открытый шлюз.
+    expect(lib).toMatch(/body\.length < 30/)
+    expect(lib).toMatch(/HOURLY_LIMIT = 5/)
+  })
+
+  it('репорт подписывается человеком из базы, а не из разговора', () => {
+    // Иначе ассистент подставит имя, услышанное в чате, и отвечать будет некому.
+    const h = memory.slice(memory.indexOf('send_report: async'))
+    const body = h.slice(0, h.indexOf('\n    },'))
+    expect(body).toMatch(/users\.id, actorUserId/)
+    expect(body).toMatch(/user: \{ id: me\.id, name: me\.name, email: me\.email \}/)
   })
 })

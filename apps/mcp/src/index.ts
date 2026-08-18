@@ -704,21 +704,23 @@ server.registerTool(
 server.registerTool(
   'chatick_report',
   {
-    title: 'Tell the Chatick team what got in your way',
+    title: 'Send the Chatick team a request, an idea or a bug',
     description:
-      'Report a gap in Chatick itself: an endpoint that does not exist, behaviour that contradicts the guide, a feature ' +
-      'the person asked for and does not have, or documentation that is wrong. Send it when you actually hit the wall ' +
-      'while doing something — not as a wishlist. It is read by a human and is NOT implemented automatically, so never ' +
-      'promise the person a fix or a date. This is about Chatick, never about the person own project or their team.',
+      'Send the Chatick team a request, an idea, a complaint or a bug — about CHATICK ITSELF. ' +
+      'USE IT WHENEVER SOMEONE WANTS SOMETHING THE PRODUCT DOES NOT DO, or finds something awkward, confusing or broken. ' +
+      'A person asking "can it also…" IS a report: do not answer "there is no such thing" and move on — say you will pass ' +
+      'it on, and pass it on. Help them phrase it: ask what exactly is missing and what they were trying to do, then send that. ' +
+      'A human reads these and nothing is implemented automatically, so never promise a fix or a date. Send what the PERSON ' +
+      'said, not ideas of your own, and never anything about their own project or team — that belongs in tasks and notes.',
     inputSchema: {
       kind: z
         .enum(['missing', 'bug', 'request', 'docs'])
-        .describe('missing — no endpoint for it; bug — behaved unlike the guide; request — person asked for it; docs — guide is wrong'),
-      body: z.string().describe('What happened, in your own words. At least a sentence or two.'),
+        .describe('request — someone wants something Chatick does not do (the most common); bug — behaved unlike the guide; missing — no endpoint for it; docs — guide is wrong'),
+      body: z.string().describe('What they want or what went wrong, in their words. At least a sentence or two.'),
       context: z
         .string()
         .optional()
-        .describe('What you were trying to do. Without it a missing-endpoint report cannot be acted on.'),
+        .describe('What was being attempted when it came up. Without it half the reports cannot be acted on.'),
     },
   },
   async ({ kind, body, context }) => {

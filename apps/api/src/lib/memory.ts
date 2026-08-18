@@ -9,6 +9,7 @@ import { hasPermission } from '../routes/projects.js'
 import { snapshot } from '../routes/documents.js'
 import { htmlToText, sanitizeHtml } from './sanitize-html.js'
 import { searchInDocument, searchInText } from './doc-search.js'
+import { submitAssistantReport, REPORT_KINDS, type ReportKind } from './assistant-report.js'
 import { createNote, noteToTask, NOTE_TYPES } from '../routes/notes.js'
 import { timeConfigForProject } from '../routes/time.js'
 import { encrypt } from './crypto.js'
@@ -616,6 +617,48 @@ export function memoryTools(projectId: string, actorUserId: string): { tools: To
           from: { type: 'string', description: 'YYYY-MM-DD' },
           to: { type: 'string', description: 'YYYY-MM-DD' },
         },
+      },
+    },
+    /**
+     * Обратная связь о самом Chatick.
+     *
+     * Ассистент в чате ближе всех к человеку: жалобы и просьбы звучат именно
+     * здесь, между делом — «а можно, чтобы…», «неудобно вот это». Инструмента
+     * не было вовсе, и всё это оставалось в переписке.
+     *
+     * Формулировка нарочно приглашающая. У моста и MCP она была
+     * оборонительной («не список желаний», «только когда упёрся»), и модель
+     * читала её как запрет: просьбу человека под это не подводила и отвечала
+     * «такого нет» вместо отправки.
+     */
+    {
+      name: 'send_report',
+      description:
+        'Send the Chatick team a request, an idea, a complaint or a bug — about CHATICK ITSELF. ' +
+        'USE IT WHENEVER SOMEONE WANTS SOMETHING THE PRODUCT DOES NOT DO, or finds something awkward, confusing or broken. ' +
+        'A person asking "can it also…" IS a report — do not answer "there is no such thing" and drop it; say you will pass it on, and pass it on. ' +
+        'Help them phrase it: ask what exactly is missing and what they were trying to do, then send that. ' +
+        'A human reads these — nothing is implemented automatically, so never promise a fix or a date. ' +
+        'Send what the PERSON said, not ideas of your own, and never anything about their own project or team — that belongs in tasks and notes.',
+      parameters: {
+        type: 'object',
+        properties: {
+          kind: {
+            type: 'string',
+            enum: ['request', 'bug', 'missing', 'docs'],
+            description:
+              'request — someone asked for something Chatick does not have (the most common); bug — it behaves wrong; missing — you needed a tool that does not exist; docs — the instructions are wrong',
+          },
+          body: {
+            type: 'string',
+            description: 'What they want or what went wrong, in their words. A sentence or two minimum.',
+          },
+          context: {
+            type: 'string',
+            description: 'What they were doing when it came up — without it half the reports cannot be acted on',
+          },
+        },
+        required: ['kind', 'body'],
       },
     },
     {
@@ -1590,6 +1633,32 @@ export function memoryTools(projectId: string, actorUserId: string): { tools: To
       broadcast(projectId, 'time', { action: 'create', id: row!.id, userId: actorUserId })
       const minutes = Math.round((ended.getTime() - started.getTime()) / 60_000)
       return `Logged ${Math.floor(minutes / 60)}h ${minutes % 60}m${taskId ? ` on ${String(args.taskNumber)}` : ''}.`
+    },
+    send_report: async (args) => {
+      const kind = String(args.kind ?? 'request')
+      if (!(REPORT_KINDS as readonly string[]).includes(kind)) {
+        return `Unknown kind "${kind}". Use one of: ${REPORT_KINDS.join(', ')}.`
+      }
+      // Имя и почту берём из базы, а не из разговора: репорт подписывается
+      // человеком, и отвечать будут ему.
+      const me = await db.query.users.findFirst({ where: eq(users.id, actorUserId) })
+      if (!me) return 'Cannot send the report: this user no longer exists.'
+      const res = await submitAssistantReport({
+        kind: kind as ReportKind,
+        body: String(args.body ?? ''),
+        context: typeof args.context === 'string' ? args.context : undefined,
+        user: { id: me.id, name: me.name, email: me.email },
+        projectId,
+        clientName: 'Chatick assistant',
+      })
+      if (!res.ok) {
+        // Причину отдаём как есть: «слишком коротко» и «слишком часто» —
+        // разные вещи, и во втором случае переписывать текст бессмысленно.
+        return `Not sent: ${res.error}`
+      }
+      // Никаких «починим» и сроков: читает человек, автоматически ничего не
+      // происходит. Обещание за нас — это обещание, которое некому исполнить.
+      return 'Sent to the Chatick team. Tell them it has been passed on, and that a person will read it — without promising a fix or a date.'
     },
     time_report: async (args) => {
       const privileged = await hasPermission(projectId, actorUserId, 'tasks.edit')

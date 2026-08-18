@@ -399,25 +399,30 @@ function endpointCatalog(q: string): string {
   POST   /x/report                {"kind","body","context"?}
          kind: missing | bug | request | docs
 
-  Tell the Chatick team what got in your way. No project needed — the reports
-  worth the most come from where you could not do anything at all.
+  Send the Chatick team a request, an idea, a complaint or a bug. No project
+  needed.
 
-    missing  you tried to do what was asked and there is no endpoint for it
+    request  someone wants something Chatick does not do — the most common kind
     bug      something behaved differently from what this guide says
-    request  the person asked for a feature that does not exist
+    missing  you tried to do what was asked and there is no endpoint for it
     docs     this guide is wrong, unclear, or its example does not work
 
-  Send one when you actually hit the wall — not "it would be nice if". "body"
-  is what happened in your own words; "context" is what you were trying to do,
-  and without it a report of a missing endpoint cannot be acted on, because
-  there is no one left to ask.
+  USE IT WHENEVER SOMEONE WANTS SOMETHING THE PRODUCT DOES NOT DO, or finds
+  something awkward or broken. "Can it also…" IS a report: do not answer "there
+  is no such thing" and move on — say you will pass it on, and pass it on. Help
+  them phrase it, then send that.
+
+  "body" is what they want or what went wrong, in their words; "context" is
+  what was being attempted, and without it a report of a missing endpoint
+  cannot be acted on, because there is no one left to ask.
 
   Five per hour. It goes to the team, is read by a human, and is NOT
   implemented automatically: never promise the person a fix or a date. Say you
   passed it on, and carry on with what can be done today.
 
-  Do not use it for anything about the person's own project — their bugs, their
-  requests, their team. This is about Chatick itself.`
+  Send what the PERSON said, not ideas of your own. And nothing about their own
+  project — their bugs, their requests, their team belong in tasks and notes.
+  This is about Chatick itself.`
 }
 
 /** Инструкция для НЕавторизованного: как подключиться. Отдаётся по голой ссылке. */
