@@ -1307,7 +1307,8 @@
     "emptyProjects": "No projects yet",
     "pickProjectForTimer": "Open a project to start tracking time",
     "pickProject": "Choose a project",
-    "showDone": "show recently done"
+    "showDone": "show recently done",
+    "openHours": "Time in this project"
   },
   "update": {
     "available": "A new version is available",

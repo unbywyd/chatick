@@ -1308,7 +1308,8 @@
     "emptyProjects": "אין עדיין פרויקטים",
     "pickProjectForTimer": "פתחו פרויקט כדי להתחיל מעקב זמן",
     "pickProject": "בחרו פרויקט",
-    "showDone": "הצגת משימות שהושלמו לאחרונה"
+    "showDone": "הצגת משימות שהושלמו לאחרונה",
+    "openHours": "שעות בפרויקט"
   },
   "update": {
     "available": "זמינה גרסה חדשה",

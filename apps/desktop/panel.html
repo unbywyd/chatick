@@ -44,6 +44,17 @@
          он был исключён из зоны перетаскивания заодно с кнопкой, и панель
          переставала таскаться, стоило навести курсор на надпись. */
       .play { -webkit-app-region: no-drag; }
+      /* Часы проекта — из панели туда попасть было нечем: «Открыть Chatick»
+         ведёт в приложение вообще, а клик по названию — в чат проекта. */
+      .hours-btn {
+        -webkit-app-region: no-drag;
+        display: grid; place-items: center;
+        width: 28px; height: 28px; flex: 0 0 auto;
+        border: 0; background: transparent; border-radius: 8px;
+        color: var(--muted); cursor: pointer;
+      }
+      .hours-btn:hover { background: #2a2a2a; color: var(--fg); }
+      .hours-btn[hidden] { display: none; }
       /* Выделять текст в ручке всё равно нельзя — только мешает перетаскиванию. */
       .timer-info { user-select: none; }
       .play {
@@ -464,6 +475,9 @@
           <svg class="chev" width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="m6 9 6 6 6-6"/></svg>
         </button>
       </div>
+      <button class="hours-btn" id="hoursBtn" hidden>
+        <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></svg>
+      </button>
       <span class="avatar me-avatar" id="meAvatar" hidden></span>
     </div>
     <div class="proj-menu" id="projMenu" hidden>
@@ -535,6 +549,19 @@
         // проект хотя бы можно выбрать руками.
         if (!companyId) return '/start'
         return `/c/${companyId}/p/${id}/chat`
+      }
+      /**
+       * Часы ПРОЕКТА, а не компании.
+       *
+       * Компанейская вкладка «Часы» показывает всю картину и просилась сюда
+       * сильнее, но она открывается только руководству (canManage). Для
+       * рядового участника кнопка вела бы в настройки — то есть в никуда.
+       * Часы проекта видит каждый, и они ровно про тот таймер, рядом с
+       * которым кнопка стоит.
+       */
+      const openHoursLink = (id) => {
+        const companyId = projectById(id)?.companyId
+        return companyId ? `/c/${companyId}/p/${id}/time` : null
       }
       const refocus = (id) => {
         const el = $(id)
@@ -615,6 +642,14 @@
           $('elapsed').textContent = T('idle', 'No timer running')
           $('elapsed').classList.add('idle')
         }
+
+        // Часы проекта: без проекта вести некуда, и кнопка прячется — серая
+        // неактивная обещала бы страницу, которой сейчас нет.
+        const hoursLink = selId ? openHoursLink(selId) : null
+        const hours = $('hoursBtn')
+        hours.hidden = !hoursLink
+        hours.title = T('openHours', 'Time in this project')
+        hours.onclick = () => { if (hoursLink) window.panel.openProject(hoursLink, null) }
 
         // Пока часы идут, выбор заблокирован: пауза разблокирует. Один
         // предсказуемый порядок — пауза → другой проект → плей.
