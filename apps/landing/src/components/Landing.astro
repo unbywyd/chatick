@@ -1078,6 +1078,7 @@ const MARK_ANYAPP = asset('anyapp-logo-twotone-dark.svg')
     align-items: center;
     justify-content: space-between;
     height: 62px;
+    gap: 12px;
   }
   .logo {
     display: inline-flex;
@@ -1087,11 +1088,25 @@ const MARK_ANYAPP = asset('anyapp-logo-twotone-dark.svg')
     font-weight: 700;
     font-size: 1.1rem;
     letter-spacing: -0.02em;
+    /* Логотип уступает место первым: справа стоит «Начать», и это она
+       должна остаться целой, а не название, которое и так везде видно. */
+    min-width: 0;
+    flex-shrink: 1;
+  }
+  /* Кнопка «Начать» — единственное действие в шапке: сжимать её нельзя,
+     иначе она выдавливалась за край экрана. */
+  .nav-actions .btn-sm {
+    flex: none;
   }
   .nav-actions {
     display: flex;
     align-items: center;
     gap: 18px;
+    /* Без min-width: 0 flex-элемент не даёт себя сжать меньше содержимого:
+       на узком экране ряд не помещался в шапку и выдавливался за край,
+       утаскивая вбок всю страницу. */
+    min-width: 0;
+    flex-shrink: 1;
   }
   .langs {
     display: flex;
@@ -2177,6 +2192,9 @@ const MARK_ANYAPP = asset('anyapp-logo-twotone-dark.svg')
 
   /* --- Формы ---------------------------------------------------------------- */
   .contact-card {
+    /* Опора для .trap: без неё absolute-ловушка считает край от секции,
+       а не от формы. */
+    position: relative;
     max-width: 600px;
     margin: 32px auto 0;
     background: var(--bg-soft);
@@ -2238,11 +2256,25 @@ const MARK_ANYAPP = asset('anyapp-logo-twotone-dark.svg')
   /* Ловушка для ботов: поле, которое человек не видит, а бот заполняет.
      Пряталась через left: -9999px — в RTL раскладка зеркалится, и этот
      же отступ уносил элемент за пределы страницы, растягивая её вбок на
-     те самые 9999px. Прячем без сдвига: размера нет, наружу не торчит. */
-  .trap {
+     те самые 9999px. Прячем без сдвига: размера нет, наружу не торчит.
+
+     Селектор именно `.form-fields .trap`, а не просто `.trap`: правило
+     `.form-fields input` весом выше одного класса, и его `width: 100%`
+     перебивало здешний `width: 1px`. Поле раздувалось до ширины контейнера
+     и, будучи absolute без inset, уезжало вбок — на иврите страница
+     съезжала вправо начиная с секции контактов. */
+  .form-fields .trap {
     position: absolute;
+    /* inset-inline-start прибивает поле к краю формы: у absolute без
+       привязки левый край считается от места в потоке, а в RTL это место
+       оказывается за пределами страницы. */
+    inset-inline-start: 0;
+    top: 0;
     width: 1px;
+    min-width: 0;
     height: 1px;
+    padding: 0;
+    border: 0;
     overflow: hidden;
     clip-path: inset(50%);
     white-space: nowrap;
@@ -2482,8 +2514,27 @@ const MARK_ANYAPP = asset('anyapp-logo-twotone-dark.svg')
       display: none;
     }
   }
-  @media (max-width: 560px) {
+  @media (max-width: 620px) {
     .nav-skill {
+      display: none;
+    }
+    /* Языки в шапке жмутся сильнее всего: их ряд и кнопка «Начать» вместе
+       перестают помещаться, и кнопку выдавливало за край экрана.
+       Переключатель не прячем — в подвале его нет, и на телефоне сменить
+       язык стало бы нечем. Сжимаем отступы: три ярлыка по три буквы
+       остаются читаемыми, а высота 44px под палец сохраняется. */
+    .nav-actions {
+      gap: 8px;
+    }
+    .lang {
+      padding: 4px 6px;
+    }
+    .langs {
+      gap: 1px;
+    }
+    /* Название рядом со знаком съедает последние пиксели: сам знак
+       остаётся и продолжает вести на главную. */
+    .logo span {
       display: none;
     }
   }
