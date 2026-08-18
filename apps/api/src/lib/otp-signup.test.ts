@@ -142,3 +142,26 @@ describe('вход по коду доступен и в приложении', (
     expect(login).toMatch(/shell && !byCode \? \(/)
   })
 })
+
+describe('429 — не ошибка, а «код уже у вас»', () => {
+  const login = readFileSync(join(import.meta.dirname, '../../../app/src/screens/LoginScreen.tsx'), 'utf8')
+
+  it('открывает поле ввода, как при успехе', () => {
+    // Письмо ушло меньше минуты назад — код лежит в почте. Не показывать
+    // поле значило: код есть, а деть его некуда.
+    const at = login.indexOf('e.status === 429')
+    expect(at).toBeGreaterThan(-1)
+    const branch = login.slice(at, at + 260)
+    expect(branch).toMatch(/setOtpSent\(true\)/)
+  })
+
+  it('говорит спокойно, а не красным', () => {
+    // «Не удалось войти» на успешно отправленный код — враньё, из-за
+    // которого человек считает сломанным весь вход.
+    const at = login.indexOf('e.status === 429')
+    // Режем ДО else: там своя ветка со своим toast.error, и она законна.
+    const branch = login.slice(at, login.indexOf('} else {', at))
+    expect(branch).toMatch(/toast\.success/)
+    expect(branch).not.toMatch(/toast\.error/)
+  })
+})

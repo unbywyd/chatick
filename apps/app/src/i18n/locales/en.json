@@ -31,7 +31,8 @@
     "otpTermsRequired": "Please accept the terms to continue",
     "otpTerms": "I accept the <terms>Terms of Use</terms> and the <privacy>Privacy Policy</privacy>",
     "otpExistingOnly": "For accounts that already exist. A new one is created with Google, or by an invite from a colleague.",
-    "otpNewHint": "New here? The same code creates your account."
+    "otpNewHint": "New here? The same code creates your account.",
+    "otpAlreadySent": "The code is already in your inbox — enter it below"
   },
   "start": {
     "logout": "Sign out",
