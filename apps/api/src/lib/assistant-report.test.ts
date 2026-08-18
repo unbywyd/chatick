@@ -174,3 +174,30 @@ describe('канал приглашает, а не отговаривает', ()
     expect(body).toMatch(/user: \{ id: me\.id, name: me\.name, email: me\.email \}/)
   })
 })
+
+describe('в письме видно, какого вида репорт', () => {
+  it('вид уходит первой строкой', () => {
+    // Тема письма показывает тему обращения (bug/feature/other), и четыре вида
+    // в неё не помещаются: docs и missing оба приходили как «Other» и
+    // «Feature request». Отличить их можно было только прочитав текст.
+    expect(lib).toMatch(/const head = `\$\{input\.kind\} — \$\{KIND_LABEL\[input\.kind\]\}`/)
+    expect(lib).toMatch(/\? `\$\{head\}/)
+    expect(lib).toMatch(/: `\$\{head\}/)
+  })
+
+  it('подписаны все четыре вида', () => {
+    // Пропущенный дал бы undefined прямо в теле письма.
+    const at = lib.indexOf('const KIND_LABEL')
+    expect(at, 'карта подписей на месте').toBeGreaterThan(-1)
+    // Режем по '}' в НАЧАЛЕ строки: внутри значений есть свои скобки.
+    const map = lib.slice(at, lib.indexOf('\n}', at))
+    for (const kind of ['request', 'bug', 'missing', 'docs']) {
+      expect(map, kind).toMatch(new RegExp('^  ' + kind + ':', 'm'))
+    }
+  })
+
+  it('«что пытались сделать» никуда не делось', () => {
+    // Без контекста «не хватает ручки» нечем воспроизвести.
+    expect(lib).toMatch(/— что пытались сделать —/)
+  })
+})

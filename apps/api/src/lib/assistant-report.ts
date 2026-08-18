@@ -28,6 +28,21 @@ const TOPIC_OF: Record<ReportKind, 'bug' | 'feature' | 'other'> = {
   docs: 'other', // инструкция врёт или непонятна
 }
 
+/**
+ * Вид репорта словами — для письма.
+ *
+ * Тема письма показывает тему обращения (bug/feature/other), и видов в неё не
+ * помещается: docs и missing оба приходили как «Other» и «Feature request».
+ * Отличить «инструкция врёт» от «человек попросил фичу» можно было, только
+ * прочитав текст целиком.
+ */
+const KIND_LABEL: Record<ReportKind, string> = {
+  request: 'человек попросил то, чего нет',
+  bug: 'повело себя не так, как описано',
+  missing: 'не хватило ручки или поля',
+  docs: 'инструкция врёт или непонятна',
+}
+
 /** Сколько репортов с одного туннеля в час. */
 const HOURLY_LIMIT = 5
 
@@ -118,9 +133,16 @@ async function notify(id: string, topic: 'bug' | 'feature' | 'other', body: stri
 
   // В теле письма — и то, что пытались сделать: без этого репорт «не хватает
   // ручки» приходится разбирать переспросами, а спросить уже не у кого.
+  // Вид репорта — первой строкой письма.
+  //
+  // Тема письма показывает ТЕМУ обращения (bug/feature/other), а видов
+  // четыре: docs и missing оба приходили как «Other» и «Feature request», и
+  // отличить «инструкция врёт» от «человек попросил фичу» можно было только
+  // прочитав текст целиком. В базе kind лежит, в письме его не было.
+  const head = `${input.kind} — ${KIND_LABEL[input.kind]}`
   const text = input.context?.trim()
-    ? `${body}\n\n— что пытались сделать —\n${input.context.trim()}`
-    : body
+    ? `${head}\n\n${body}\n\n— что пытались сделать —\n${input.context.trim()}`
+    : `${head}\n\n${body}`
 
   for (const to of list) {
     void sendFeedbackMail({
