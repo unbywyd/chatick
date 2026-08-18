@@ -178,7 +178,10 @@ export type TimeConfig = {
   workDayEnd: number
 }
 
-export const DEFAULT_TIME_CONFIG: TimeConfig = {
+export /** Дольше суток — это не смена, а ошибка в дате. */
+const MAX_ENTRY_MS = 24 * 3600_000
+
+const DEFAULT_TIME_CONFIG: TimeConfig = {
   maxTimers: 1, // параллельные таймеры разрешены, но по умолчанию их нет
   idleAction: 'remind',
   idleHours: 8,
@@ -480,6 +483,22 @@ timeMineRoute.patch('/:id', zValidator('json', minePatchSchema), async (c) => {
   const ended = patch.endedAt !== undefined ? patch.endedAt : entry.endedAt
   if (ended && ended.getTime() < started.getTime()) {
     return c.json({ error: 'The end cannot be earlier than the start' }, 400)
+  }
+  /**
+   * Потолок на длительность — защита от сдвига одного края.
+   *
+   * Проверки «конец не раньше начала» мало: подвинув ТОЛЬКО дату начала на
+   * день назад, запись в три минуты превращалась в 1443 — и проходила, потому
+   * что порядок не нарушен. В отчёте по часам это выглядело как сутки работы.
+   *
+   * Сутки с запасом: смена через полночь законна и бывает длинной, а вот
+   * «работал 25 часов подряд» — это уже не смена, а промах в дате.
+   */
+  if (ended && ended.getTime() - started.getTime() > MAX_ENTRY_MS) {
+    return c.json(
+      { error: 'That would make the entry longer than a day — check the dates, not just the times.' },
+      400,
+    )
   }
 
   const [row] = await db.update(timeEntries).set(patch).where(eq(timeEntries.id, entry.id)).returning()
@@ -834,6 +853,14 @@ timeRoute.patch('/:id', zValidator('json', patchSchema), async (c) => {
   const ended = patch.endedAt !== undefined ? patch.endedAt : entry.endedAt
   if (ended && ended.getTime() <= started.getTime()) {
     return c.json({ error: 'End must be after start (a shift past midnight already counts as the next day)' }, 400)
+  }
+  // Тот же потолок, что и на личной ручке: сдвиг одного края превращал
+  // трёхминутную запись в суточную, не нарушая порядка дат.
+  if (ended && ended.getTime() - started.getTime() > MAX_ENTRY_MS) {
+    return c.json(
+      { error: 'That would make the entry longer than a day — check the dates, not just the times.' },
+      400,
+    )
   }
 
   const [row] = await db.update(timeEntries).set(patch).where(eq(timeEntries.id, entry.id)).returning()

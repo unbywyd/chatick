@@ -562,44 +562,46 @@ function EntryRow({
         ) : null}
       </div>
 
-      {/* время правится на месте: 9, 930, 9:30 */}
+      {/* Время правится на месте: 9, 930, 9:30. Дата — своей кнопкой сразу
+          за ним, у каждого края отдельно: раньше календарь был один и двигал
+          только начало, а конец оставался на месте. */}
       <TimeCell
         value={start}
         saved={saved}
         onCommit={(minutes) => patch.mutate({ startedAt: withTimeOfDay(start, minutes).toISOString() })}
       />
+      <DateCell
+        value={start}
+        label={t('time.startDate')}
+        onChange={(d) => patch.mutate({ startedAt: d.toISOString() })}
+      />
       <span className="text-xs text-muted-foreground">–</span>
       {end ? (
-        <span className="relative">
-          {/* Сдвиг дня сохраняем, а не пересчитываем: иначе у ночной смены
-              конец нельзя вернуть в тот же день — правка времени всегда
-              возвращала бы «+1». */}
-          <TimeCell
+        <>
+          <span className="relative">
+            {/* Сдвиг дня сохраняем, а не пересчитываем: иначе у ночной смены
+                конец нельзя вернуть в тот же день — правка времени всегда
+                возвращала бы «+1». */}
+            <TimeCell
+              value={end}
+              saved={saved}
+              onCommit={(minutes) => patch.mutate({ endedAt: resolveEnd(start, minutes, offset).toISOString() })}
+            />
+            {offset > 0 && (
+              <span className="absolute -end-3 -top-1 text-[9px] text-brand-ink" title={t('time.nextDay')}>
+                +{offset}
+              </span>
+            )}
+          </span>
+          <DateCell
             value={end}
-            saved={saved}
-            onCommit={(minutes) => patch.mutate({ endedAt: resolveEnd(start, minutes, offset).toISOString() })}
+            label={t('time.endDate')}
+            highlight={offset > 0}
+            onChange={(d) => patch.mutate({ endedAt: d.toISOString() })}
           />
-          {offset > 0 && (
-            <span className="absolute -end-3 -top-1 text-[9px] text-brand-ink" title={t('time.nextDay')}>
-              +{offset}
-            </span>
-          )}
-        </span>
+        </>
       ) : (
         <span className="w-12 text-center text-xs text-brand-ink">{t('time.running')}</span>
-      )}
-
-      {/* Дата — отдельной кнопкой: время набирают часто, дату меняют редко,
-          и вешать календарь на клик по времени значит мешать частому ради
-          редкого. */}
-      {end && (
-        <DateCell
-          start={start}
-          end={end}
-          offset={offset}
-          onStart={(d) => patch.mutate({ startedAt: d.toISOString() })}
-          onEnd={(d) => patch.mutate({ endedAt: d.toISOString() })}
-        />
       )}
 
       {/* Длительность тоже правится: набрал 10:00 — конец подвинулся сам, а
@@ -735,59 +737,56 @@ function DurationCell({
 }
 
 /**
- * Даты записи — кнопкой рядом со временем.
+ * Дата одного края записи — кнопкой рядом со своим временем.
  *
  * Время правится набором на месте, и это правильный быстрый путь: набрал 930 и
  * пошёл дальше. Вешать календарь на тот же клик значит показывать панель при
  * каждой правке времени — то есть в частом случае ради редкого. Поэтому дата
  * получила свой значок.
  *
- * Показываем обе даты, а не одну: у смены через полночь начало и конец в разных
- * днях, и «сменить дату» без уточнения какую — вопрос без ответа.
+ * У КАЖДОГО края свой. Раньше значок был один, подписанный «дата начала», и
+ * двигал только начало: конец оставался на месте, и запись в три минуты молча
+ * становилась суточной — проверено на проде, 3 минуты превращались в 1443.
+ * Починить это было нечем: второй календарь показывался лишь у записей через
+ * полночь, то есть у обычной записи подвинуть конец следом было негде.
+ *
+ * Своя кнопка у каждой даты убирает и догадку «а что именно сдвинется», и
+ * исчезающий второй календарь: что нажал, то и поменялось.
  *
  * Календарь двигает день, СОХРАНЯЯ время суток. Сдвиг именно дня — то, зачем
  * сюда приходят: время уже набрано в соседнем поле.
  */
 function DateCell({
-  start,
-  end,
-  offset,
-  onStart,
-  onEnd,
+  value,
+  label,
+  highlight,
+  onChange,
 }: {
-  start: Date
-  end: Date | null
-  /** на сколько дней конец позже начала: 0 — тот же день */
-  offset: number
-  onStart: (d: Date) => void
-  onEnd: (d: Date) => void
+  value: Date
+  /** «Дата начала» или «Дата окончания» — человек должен видеть, что правит. */
+  label: string
+  /** Конец ночной смены: именно он и отличается от дня записи. */
+  highlight?: boolean
+  onChange: (d: Date) => void
 }) {
-  const { t, i18n } = useTranslation()
+  const { i18n } = useTranslation()
   const [open, setOpen] = useState(false)
   const locale = i18n.resolvedLanguage ?? 'en'
-  const short = (d: Date) => d.toLocaleDateString(locale, { day: '2-digit', month: '2-digit' })
-
-  /** Тот же час и минута, но другой день. */
-  const moveDay = (from: Date, to: Date) => {
-    const next = new Date(to)
-    next.setHours(from.getHours(), from.getMinutes(), 0, 0)
-    return next
-  }
 
   return (
     <Popover open={open} onOpenChange={setOpen}>
       <PopoverTrigger asChild>
         <button
           type="button"
-          // Даты не печатаем — в строке и так две времени и длительность, а
-          // день записи виден в заголовке группы. Но в подсказке они есть:
-          // иначе, чтобы узнать дату, пришлось бы открывать календарь.
-          title={`${t('time.changeDate')}: ${short(start)}${offset > 0 && end ? ` → ${short(end)}` : ''}`}
+          // Дату не печатаем — в строке и так два времени и длительность, а
+          // день записи виден в заголовке группы. Но в подсказке она есть:
+          // иначе, чтобы её узнать, пришлось бы открывать календарь.
+          title={`${label}: ${value.toLocaleDateString(locale, { day: '2-digit', month: '2-digit' })}`}
           className={cn(
             'grid size-7 shrink-0 place-items-center rounded-md transition-colors',
             'text-muted-foreground hover:bg-accent hover:text-foreground',
             // Переход через полночь — не мелочь: пометку видно и без наведения.
-            offset > 0 && 'text-brand-ink',
+            highlight && 'text-brand-ink',
           )}
         >
           <CalendarDays className="size-[18px]" />
@@ -795,32 +794,19 @@ function DateCell({
       </PopoverTrigger>
       {/* dir у PopoverContent уже свой — портал уносит содержимое мимо вёрстки. */}
       <PopoverContent className="w-auto p-2" align="end">
-        <div className="space-y-2">
-          <p className="px-1 text-xs font-medium">{t('time.startDate')}</p>
-          <Calendar
-            selected={start}
-            onSelect={(d) => {
-              if (d) onStart(moveDay(start, d))
-              setOpen(false)
-            }}
-          />
-          {/* Конец отдельным календарём только когда он в другом дне: обычной
-              записи внутри одних суток второй календарь ни к чему, а вот у
-              ночной смены конец иначе не сдвинуть — он пересчитывается от
-              начала, и «тот же день» оказывался недостижим. */}
-          {end && offset > 0 && (
-            <>
-              <p className="border-t px-1 pt-2 text-xs font-medium">{t('time.endDate')}</p>
-              <Calendar
-                selected={end}
-                onSelect={(d) => {
-                  if (d) onEnd(moveDay(end, d))
-                  setOpen(false)
-                }}
-              />
-            </>
-          )}
-        </div>
+        <p className="px-1 pb-2 text-xs font-medium">{label}</p>
+        <Calendar
+          selected={value}
+          onSelect={(d) => {
+            if (d) {
+              // Тот же час и минута, но другой день.
+              const next = new Date(d)
+              next.setHours(value.getHours(), value.getMinutes(), 0, 0)
+              onChange(next)
+            }
+            setOpen(false)
+          }}
+        />
       </PopoverContent>
     </Popover>
   )
