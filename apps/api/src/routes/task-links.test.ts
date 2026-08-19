@@ -162,6 +162,90 @@ describe('ассистент связывает при создании', () => 
   })
 })
 
+describe('связи видны там, где читают задачу', () => {
+  it('GET одной задачи отдаёт связи, а не молчит про них', () => {
+    // Без этого ассистент, прочитавший задачу перед работой, не узнает, из
+    // чего она выросла, — и переспросит либо не свяжет следующую.
+    const at = bridge.indexOf("bridgeRoute.get('/tasks/:id'")
+    expect(at).toBeGreaterThan(-1)
+    const body = bridge.slice(at, at + 3000)
+    expect(body).toMatch(/linksOfTask/)
+    expect(bridge).toMatch(/async function linksOfTask/)
+  })
+
+  it('пустые связи не засоряют ответ', () => {
+    // Три пустых массива в каждом ответе читаются как данные, которых нет.
+    const at = bridge.indexOf('async function linksOfTask')
+    const body = bridge.slice(at, at + 1800)
+    expect(body).toMatch(/derivedFrom\.length \? \{ derivedFrom \}/)
+    expect(body).toMatch(/related\.length \? \{ related \}/)
+  })
+
+  it('удалённые задачи не всплывают в связях', () => {
+    const at = bridge.indexOf('async function linksOfTask')
+    const body = bridge.slice(at, at + 1800)
+    expect(body.match(/isNull\(tasks\.deletedAt\)/g)?.length ?? 0).toBeGreaterThanOrEqual(2)
+  })
+})
+
+describe('правка задачи умеет связи', () => {
+  it('links принимается при PATCH', () => {
+    const at = bridge.indexOf("bridgeRoute.patch('/tasks/:id',")
+    expect(at).toBeGreaterThan(-1)
+    // Ручка длинная: до применения связей от её начала около 3.5 тыс символов.
+    const body = bridge.slice(at, at + 9000)
+    expect(body).toMatch(/linkTasks\(b\.links/)
+  })
+
+  it('запрос ТОЛЬКО со связями не отвергается как пустой', () => {
+    // Ровно та ловушка, на которой уже спотыкались ресурсы: поле разрешено,
+    // а ручка считает тело пустым и отвечает «Nothing to update».
+    const at = bridge.indexOf("bridgeRoute.patch('/tasks/:id',")
+    const body = bridge.slice(at, at + 9000)
+    // lastIndexOf, а не indexOf: строка «Nothing to update» встречается выше
+    // в комментарии, объясняющем прошлую такую же ловушку с ресурсами.
+    const at2 = body.lastIndexOf('Nothing to update')
+    const guard = body.slice(at2 - 400, at2)
+    expect(guard).toMatch(/b\.links === undefined/)
+  })
+
+  it('правка ДОБАВЛЯЕТ связи, а не заменяет их', () => {
+    // В отличие от releaseIds: стереть историю происхождения коротким списком
+    // было бы потерей, которую никто не заметит.
+    const at = bridge.indexOf('async function linkTasks')
+    const body = bridge.slice(at, at + 2000)
+    expect(body, 'linkTasks удаляет прежние связи').not.toMatch(/\.delete\(taskLinks\)/)
+  })
+})
+
+describe('инструменты ассистента знают про связи', () => {
+  const mcp = readFileSync(join(import.meta.dirname, '..', '..', '..', 'mcp', 'src', 'index.ts'), 'utf8')
+
+  it('создание задачи принимает links', () => {
+    const at = mcp.indexOf("'chatick_task_create'")
+    expect(at).toBeGreaterThan(-1)
+    expect(mcp.slice(at, at + 3000)).toMatch(/links: z/)
+  })
+
+  it('правка задачи принимает links', () => {
+    const at = mcp.indexOf("'chatick_task_update'")
+    expect(at).toBeGreaterThan(-1)
+    expect(mcp.slice(at, at + 3000)).toMatch(/links: z/)
+  })
+
+  it('описание предупреждает, что это не блокеры', () => {
+    // Без этой оговорки связь однажды поставят через /blockers, и замочек
+    // соврёт — а один совравший замочек обесценивает все остальные.
+    expect(mcp).toMatch(/NOT blockers/)
+  })
+
+  it('сырой вызов упоминает ручки связей', () => {
+    const at = mcp.indexOf("'chatick_request'")
+    expect(at).toBeGreaterThan(-1)
+    expect(mcp.slice(at, at + 2000)).toMatch(/task links/)
+  })
+})
+
 describe('мост отдаёт и принимает связи', () => {
   it('три ручки на месте', () => {
     expect(bridge).toMatch(/bridgeRoute\.get\(\s*'\/tasks\/:id\/links'/)

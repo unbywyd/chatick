@@ -457,6 +457,14 @@ server.registerTool(
       priority: z.enum(['low', 'normal', 'high', 'urgent']).optional(),
       resourceIds: z.array(z.string()).optional().describe('Resources this task needs — link them, never paste secrets'),
       releaseIds: z.array(z.string()).optional().describe('Versions this task ships in — ids from chatick_releases'),
+      links: z
+        .array(z.union([z.string(), z.object({ task: z.string(), kind: z.enum(['derived', 'related']) })]))
+        .optional()
+        .describe(
+          'Tasks this one grew out of: ["TASK-3"], or [{"task":"TASK-9","kind":"related"}] for a sibling. ' +
+            'Use it whenever you split one task into several — link each new task back to the original in the ' +
+            'same call, because a second call is the one you forget. NOT blockers: links hold nothing back.',
+        ),
     },
   },
   async ({ project, ...body }) => {
@@ -473,8 +481,9 @@ server.registerTool(
   {
     title: 'Change a task',
     description:
-      'Status, assignee, estimate, linked resources. Moving to in_progress belongs BEFORE the work, not after. ' +
-      'Every status change deserves a comment: the board says that something moved, only the comment says what.',
+      'Status, assignee, estimate, linked resources, related tasks. Moving to in_progress belongs BEFORE the work, ' +
+      'not after. Every status change deserves a comment: the board says that something moved, only the comment ' +
+      'says what.',
     inputSchema: {
       project: z.string(),
       task: z.string(),
@@ -488,6 +497,14 @@ server.registerTool(
       priority: z.enum(['low', 'normal', 'high', 'urgent']).optional(),
       resourceIds: z.array(z.string()).optional(),
       releaseIds: z.array(z.string()).optional().describe('Versions this task ships in — ids from chatick_releases'),
+      links: z
+        .array(z.union([z.string(), z.object({ task: z.string(), kind: z.enum(['derived', 'related']) })]))
+        .optional()
+        .describe(
+          'Tasks this one grew out of: ["TASK-3"], or [{"task":"TASK-9","kind":"related"}] for a sibling. ' +
+            'ADDS links, never replaces them — removing one is a separate call (DELETE /tasks/<id>/links/<linkId> ' +
+            'via chatick_request). NOT blockers: links hold nothing back.',
+        ),
     },
   },
   async ({ project, task, ...body }) => {
@@ -682,6 +699,8 @@ server.registerTool(
     title: 'Any other bridge endpoint',
     description:
       'Raw call to the Chatick bridge, for the endpoints without a dedicated tool here: sprints, documents, blockers, ' +
+      'task links (GET/POST /tasks/<id>/links, DELETE /tasks/<id>/links/<linkId> — links say where a task came from, ' +
+      'they never block anything), ' +
       'files, chat, notes. Read GET /x/guide first — it lists every path and the exact permissions of this person. ' +
       'Paths start with a slash and omit the /x prefix: "/sprints", "/documents/<id>/append".',
     inputSchema: {

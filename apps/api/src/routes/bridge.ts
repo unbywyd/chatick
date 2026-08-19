@@ -1143,6 +1143,44 @@ async function linkTasks(links: unknown, projectId: string, taskId: string, user
   return rows.map((r) => ({ taskId: r.toTaskId, kind: r.kind }))
 }
 
+/**
+ * Связи задачи одной выборкой — для GET /x/tasks/<id>.
+ *
+ * Отдаём вместе с задачей, а не отдельной ручкой: «из чего это выросло» —
+ * вопрос того же ряда, что «кто исполнитель», и ради него незачем делать
+ * второй запрос. Ассистент, читающий задачу перед работой, увидит исходную
+ * сразу, а не после того, как догадается спросить.
+ */
+async function linksOfTask(taskId: string) {
+  const out = await db
+    .select({ t: tasks, linkId: taskLinks.id, kind: taskLinks.kind })
+    .from(taskLinks)
+    .innerJoin(tasks, eq(tasks.id, taskLinks.toTaskId))
+    .where(and(eq(taskLinks.fromTaskId, taskId), isNull(tasks.deletedAt)))
+    .orderBy(asc(tasks.number))
+  const inc = await db
+    .select({ t: tasks, linkId: taskLinks.id, kind: taskLinks.kind })
+    .from(taskLinks)
+    .innerJoin(tasks, eq(tasks.id, taskLinks.fromTaskId))
+    .where(and(eq(taskLinks.toTaskId, taskId), isNull(tasks.deletedAt)))
+    .orderBy(asc(tasks.number))
+
+  const view = (r: { t: typeof tasks.$inferSelect; linkId: string }) => ({
+    ...linkedView(r.t),
+    linkId: r.linkId,
+  })
+  const derivedFrom = out.filter((r) => r.kind === 'derived').map(view)
+  const derivedInto = inc.filter((r) => r.kind === 'derived').map(view)
+  const related = [...out, ...inc].filter((r) => r.kind === 'related').map(view)
+  // Пустые поля не отдаём: у большинства задач связей нет, и три пустых
+  // массива в каждом ответе — шум, который ассистент читает как данные.
+  return {
+    ...(derivedFrom.length ? { derivedFrom } : {}),
+    ...(derivedInto.length ? { derivedInto } : {}),
+    ...(related.length ? { related } : {}),
+  }
+}
+
 /** Версии задачи со статусом — чтобы не переходить внутрь за одним словом. */
 async function releasesOfTask(taskId: string) {
   const rows = await db
@@ -1862,6 +1900,7 @@ bridgeRoute.get('/tasks/:id', async (c) => {
   // вопрос того же ряда, что и «кто исполнитель», и ради него незачем делать
   // второй запрос.
   const linkedReleases = await releasesOfTask(row[0]!.t.id)
+  const taskLinkList = await linksOfTask(row[0]!.t.id)
   return c.json({
     ...taskView(
       row[0]!.t,
@@ -1872,6 +1911,7 @@ bridgeRoute.get('/tasks/:id', async (c) => {
       await shortUrlFor('task', row[0]!.t.id, scope.projectId, id.userId),
     ),
     ...(linkedReleases.length ? { releases: linkedReleases } : {}),
+    ...taskLinkList,
   })
 })
 
@@ -2002,7 +2042,8 @@ bridgeRoute.patch('/tasks/:id', async (c) => {
     !Object.keys(patch).length &&
     b.attachmentIds === undefined &&
     b.resourceIds === undefined &&
-    b.releaseIds === undefined
+    b.releaseIds === undefined &&
+    b.links === undefined
   ) {
     return c.json({ error: 'Nothing to update' }, 400)
   }
@@ -2039,6 +2080,11 @@ bridgeRoute.patch('/tasks/:id', async (c) => {
   const attachments = await attachToTask(b.attachmentIds, scope.projectId, id.userId, row!.id)
   const resources = b.resourceIds !== undefined ? await linkResources(b.resourceIds, scope.projectId, row!.id) : []
   const taskReleaseList = b.releaseIds !== undefined ? await linkReleases(b.releaseIds, scope.projectId, row!.id) : []
+  // Связи ДОБАВЛЯЮТСЯ, а не заменяют прежние, — в отличие от releaseIds.
+  // Разница намеренная: «эта задача выросла ещё и вот из этой» дописывает
+  // историю, а стереть её молча, прислав короткий список, было бы потерей.
+  // Убирают связь отдельной ручкой DELETE, где это видно по названию.
+  const linkedNow = b.links !== undefined ? await linkTasks(b.links, scope.projectId, row!.id, id.userId) : []
   // Те же уведомления, что из интерфейса: назначили — сказали, сняли — убрали.
   const assigneeChanged = patch.assigneeId !== undefined && patch.assigneeId !== existing.assigneeId
   void notifyTask(scope.projectId, id.userId, row!, {
@@ -2061,6 +2107,7 @@ bridgeRoute.patch('/tasks/:id', async (c) => {
     ...(b.attachmentIds !== undefined ? { attachments } : {}),
     ...(b.resourceIds !== undefined ? { resources } : {}),
     ...(b.releaseIds !== undefined ? { releases: taskReleaseList } : {}),
+    ...(linkedNow.length ? { links: linkedNow } : {}),
   })
 })
 
