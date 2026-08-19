@@ -119,7 +119,17 @@ export function ProjectSidebar({
           </div>
         )}
 
-        <ul className="min-h-0 flex-1 space-y-1 overflow-y-auto py-2">
+        {/*
+          Колонка ровно 56px, и в неё не помещались две вещи, нарисованные
+          СНАРУЖИ кнопки: кольцо активного проекта (ring-2) и счётчик
+          непрочитанных (-end-1). Браузер считал список переполненным и давал
+          горизонтальную прокрутку — полоса съедала ширину, иконки дёргались.
+
+          overflow-x-clip, а не hidden: clip не создаёт прокручиваемую область
+          вовсе, поэтому кольцо остаётся видимым целиком. Боковые отступы дают
+          обоим украшениям место, вместо того чтобы их срезать.
+        */}
+        <ul className="min-h-0 flex-1 space-y-1 overflow-y-auto overflow-x-clip px-1.5 py-2">
           {list.map((p) => {
             const unread = p.stats?.unread ?? 0
             const active = p.id === activeId
