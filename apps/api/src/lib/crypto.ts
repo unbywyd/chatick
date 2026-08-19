@@ -27,3 +27,34 @@ export function decrypt(stored: string): string {
   decipher.setAuthTag(tag)
   return Buffer.concat([decipher.update(ct), decipher.final()]).toString('utf8')
 }
+
+/**
+ * То же самое для двоичных данных.
+ *
+ * encrypt() выше принимает строку и отдаёт base64 — для пароля это удобно, а
+ * для файла означало бы гонять его через utf8 и base64 туда-обратно, раздувая
+ * на треть и ломаясь на любом байте, который не складывается в валидный
+ * символ. Здесь тот же AES-256-GCM и тот же ключ, но вход и выход — байты.
+ *
+ * Формат: nonce[12] | ciphertext | authTag[16] — как и у строкового варианта,
+ * только без base64-обёртки. GCM даёт не только скрытность, но и целостность:
+ * подменённый в хранилище байт не расшифруется, а не отдастся мусором.
+ */
+export function encryptBytes(plain: Buffer): Buffer {
+  const nonce = randomBytes(12)
+  const cipher = createCipheriv('aes-256-gcm', key(), nonce)
+  const ct = Buffer.concat([cipher.update(plain), cipher.final()])
+  return Buffer.concat([nonce, ct, cipher.getAuthTag()])
+}
+
+export function decryptBytes(stored: Buffer): Buffer {
+  // Меньше, чем nonce + tag, — это не наш файл, а обрезок. Расшифровка такого
+  // упала бы где-то внутри с невнятной ошибкой; лучше сказать прямо.
+  if (stored.length < 12 + 16) throw new Error('Encrypted blob is too short to be valid')
+  const nonce = stored.subarray(0, 12)
+  const tag = stored.subarray(stored.length - 16)
+  const ct = stored.subarray(12, stored.length - 16)
+  const decipher = createDecipheriv('aes-256-gcm', key(), nonce)
+  decipher.setAuthTag(tag)
+  return Buffer.concat([decipher.update(ct), decipher.final()])
+}
