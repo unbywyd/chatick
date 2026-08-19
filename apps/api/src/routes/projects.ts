@@ -59,7 +59,7 @@ const aiConfigSchema = z.object({
   // при создании задачи ИИ генерирует заметки (факты/проблемы/рекомендации/опровержения) — SPEC §8.14
   generateTaskNotes: z.boolean().default(false),
   // автопубликация в чат системных сообщений о задачах (завершил / назначил) — SPEC §8.23
-  autoPostTaskEvents: z.boolean().default(true),
+  autoPostTaskEvents: z.boolean().default(false),
 })
 
 /**

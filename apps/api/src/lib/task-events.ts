@@ -21,7 +21,12 @@ const langOf = (l: string | null | undefined): Lang => {
 async function autoPostEnabled(projectId: string): Promise<{ enabled: boolean; lang: Lang }> {
   const project = await db.query.projects.findFirst({ where: eq(projects.id, projectId) })
   const cfg = JSON.parse(project?.aiConfig || '{}') as { autoPostTaskEvents?: boolean; language?: string }
-  return { enabled: cfg.autoPostTaskEvents !== false, lang: langOf(cfg.language) }
+  // Умолчание — ВЫКЛЮЧЕНО. Каждое завершение задачи отдельным сообщением
+  // превращало чат в ленту событий: за день их десятки, и живой разговор
+  // тонет между ними. О том же самом уже сообщают уведомления, адресно и
+  // только тем, кого это касается. Кому лента нужна — включает её в
+  // настройках проекта.
+  return { enabled: cfg.autoPostTaskEvents === true, lang: langOf(cfg.language) }
 }
 
 /** Опубликовать в чат «Я завершил задачу TASK-N …» от имени пользователя. */

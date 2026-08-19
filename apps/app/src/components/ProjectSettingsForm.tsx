@@ -41,7 +41,7 @@ export const DEFAULT_AI_CONFIG: AiConfig = {
   answerRepeats: true,
   improveTasks: false,
   generateTaskNotes: false,
-  autoPostTaskEvents: true,
+  autoPostTaskEvents: false,
 }
 
 export type ProjectSettings = {
