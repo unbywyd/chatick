@@ -54,6 +54,10 @@ export function ProjectSidebar({
   const companies = useQuery({
     queryKey: ['companies'],
     queryFn: () => api<{ companies: Company[] }>('/api/v1/companies'),
+    // Состав компаний меняется в разы реже, чем человек ходит между
+    // проектами. Без этого шапка сайдбара пустела на каждом переходе, пока
+    // ехал ответ, — а приходил в нём ровно тот же список.
+    staleTime: 5 * 60_000,
   })
   // Компания открытого проекта, а не первая из списка.
   //
@@ -72,6 +76,21 @@ export function ProjectSidebar({
     enabled: Boolean(company?.id),
     queryFn: () => api<ProjectListItem[]>(`/api/v1/projects?companyId=${company!.id}`),
     refetchInterval: 30_000, // подтягиваем новые сообщения и бейджи
+    /**
+     * Список не считается устаревшим сразу.
+     *
+     * Без staleTime react-query перезапрашивал его при каждом монтировании —
+     * то есть на каждом переходе между проектами. Данные приходили те же
+     * самые, но на время запроса список успевал моргнуть, и сайдбар
+     * пропадал-появлялся на каждом клике.
+     *
+     * Свежесть при этом не страдает: refetchInterval выше продолжает
+     * обновлять бейджи каждые 30 секунд, а по возвращении на вкладку список
+     * перечитывается сам.
+     */
+    staleTime: 30_000,
+    /** Прежние проекты остаются на экране, пока едут новые. */
+    placeholderData: (prev) => prev,
   })
 
   // меню профиля показывает настройки активного проекта — значит нужна и роль
@@ -139,11 +158,21 @@ export function ProjectSidebar({
                   onClick={() => open(p.id)}
                   title={p.name}
                   className={cn(
-                    'relative rounded-lg p-0.5 transition-all',
-                    active ? 'ring-2 ring-brand' : 'opacity-80 hover:opacity-100',
+                    // ring-offset-2 даёт кольцу зазор от логотипа: без него
+                    // обводка ложилась вплотную к картинке, и активный проект
+                    // выглядел меньше соседей и как будто обрезанным.
+                    // Цвет отступа — фон сайдбара, иначе между кольцом и
+                    // значком светилась бы белая рамка.
+                    'relative rounded-lg transition-all',
+                    active
+                      ? 'ring-2 ring-brand ring-offset-2 ring-offset-background'
+                      : 'opacity-80 hover:opacity-100',
                   )}
                 >
-                  <ProjectBadge name={p.name} color={p.color} logoUrl={p.logoUrl} size={38} />
+                  {/* 34px, а не 38: в 56px колонки значок должен уместиться
+                      вместе с кольцом активного и его зазором, иначе обводка
+                      упрётся в край и вернётся горизонтальная прокрутка. */}
+                  <ProjectBadge name={p.name} color={p.color} logoUrl={p.logoUrl} size={34} />
                   {/* Бейдж — только непрочитанные уведомления, то есть места,
                       где человека затронули лично. Чужая активность сюда не
                       попадает и попадать не должна. */}
