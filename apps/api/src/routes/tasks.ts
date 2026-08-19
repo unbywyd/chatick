@@ -1060,6 +1060,145 @@ tasksRoute.delete('/:taskId/blockers/:linkId', async (c) => {
   return c.json({ ok: true })
 })
 
+/* --- Ресурсы задачи --------------------------------------------------------
+ *
+ * Ресурс — это доступ: стенд, ключ, база. Задача на него ССЫЛАЕТСЯ, а не
+ * хранит копию: пароль, вставленный в описание, читают все, кто видит задачу,
+ * и отозвать его уже нельзя. Кто может раскрыть значение — решает сам ресурс.
+ *
+ * Здесь везде отдаются только id, имя и адрес. Значения секретов не
+ * выбираются вовсе — ни в списке, ни у кандидатов.
+ */
+
+/** Ресурсы, привязанные к задаче. */
+tasksRoute.get('/:taskId/resources', async (c) => {
+  const { projectId, sub } = c.get('auth')
+  if (!(await hasPermission(projectId, sub, 'tasks.read'))) return c.json({ error: 'Forbidden' }, 403)
+  const taskId = c.req.param('taskId')
+
+  const rows = await db
+    .select({
+      linkId: taskResources.id,
+      id: credentials.id,
+      name: credentials.name,
+      url: credentials.url,
+      icon: credentials.icon,
+    })
+    .from(taskResources)
+    .innerJoin(credentials, eq(credentials.id, taskResources.resourceId))
+    .where(and(eq(taskResources.taskId, taskId), isNull(credentials.deletedAt)))
+    .orderBy(asc(credentials.name))
+
+  return c.json({ items: rows })
+})
+
+/**
+ * Кого можно привязать: ресурсы этого проекта, ещё не привязанные.
+ *
+ * Предлагать уже привязанный — врать подсказкой: человек выберет, а в ответ
+ * получит «уже есть».
+ */
+tasksRoute.get('/:taskId/resources/candidates', async (c) => {
+  const { projectId, sub } = c.get('auth')
+  if (!(await hasPermission(projectId, sub, 'tasks.read'))) return c.json({ error: 'Forbidden' }, 403)
+  const taskId = c.req.param('taskId')
+  const q = (c.req.query('q') ?? '').trim()
+
+  const linked = await db
+    .select({ id: taskResources.resourceId })
+    .from(taskResources)
+    .where(eq(taskResources.taskId, taskId))
+  const already = new Set(linked.map((r) => r.id))
+
+  const conds = [eq(credentials.projectId, projectId), isNull(credentials.deletedAt)]
+  if (q) {
+    conds.push(sql`(${credentials.name} ilike ${`%${q}%`} or ${credentials.url} ilike ${`%${q}%`})`)
+  }
+  const rows = await db
+    .select({ id: credentials.id, name: credentials.name, url: credentials.url, icon: credentials.icon })
+    .from(credentials)
+    .where(and(...conds))
+    .orderBy(desc(credentials.createdAt))
+    .limit(200)
+
+  return c.json({ items: rows.filter((r) => !already.has(r.id)).slice(0, 50) })
+})
+
+/** Привязать ресурсы. Список: выбрали несколько галочками — один запрос. */
+tasksRoute.post(
+  '/:taskId/resources',
+  zValidator('json', z.object({ resourceIds: z.array(z.string()).min(1).max(50) })),
+  async (c) => {
+    const { projectId, sub } = c.get('auth')
+    if (!(await hasPermission(projectId, sub, 'tasks.edit'))) return c.json({ error: 'Forbidden' }, 403)
+    const taskId = c.req.param('taskId')
+    const { resourceIds } = c.req.valid('json')
+
+    const task = await db.query.tasks.findFirst({
+      where: and(eq(tasks.id, taskId), eq(tasks.projectId, projectId), isNull(tasks.deletedAt)),
+    })
+    if (!task) return c.json({ error: 'Not found' }, 404)
+
+    // Только ресурсы ЭТОГО проекта: чужой в карточке показал бы доступ,
+    // которого у человека нет и открыть который он не сможет.
+    const found = await db
+      .select({ id: credentials.id })
+      .from(credentials)
+      .where(
+        and(
+          eq(credentials.projectId, projectId),
+          inArray(credentials.id, resourceIds),
+          isNull(credentials.deletedAt),
+        ),
+      )
+    if (found.length !== resourceIds.length) {
+      return c.json({ error: 'Some resources are not in this project' }, 400)
+    }
+
+    await db
+      .insert(taskResources)
+      .values(found.map((r) => ({ taskId, resourceId: r.id })))
+      // Повторная привязка — не ошибка и не вторая привязка.
+      .onConflictDoNothing()
+
+    void logActivity({
+      projectId,
+      actorId: sub,
+      action: 'update',
+      entityType: 'task',
+      entityId: taskId,
+      entityLabel: `${task.number} ${task.title}`,
+    })
+    tasksChanged(projectId, [task.assigneeId, task.createdById])
+    return c.json({ ok: true, added: found.length })
+  },
+)
+
+/**
+ * Отвязать ресурс.
+ *
+ * Отдельной ручкой, а не заменой всего списка через PATCH: прислав короткий
+ * массив, легко молча стереть привязку, которую поставил кто-то другой.
+ * Здесь видно по названию, что именно убирают.
+ */
+tasksRoute.delete('/:taskId/resources/:resourceId', async (c) => {
+  const { projectId, sub } = c.get('auth')
+  if (!(await hasPermission(projectId, sub, 'tasks.edit'))) return c.json({ error: 'Forbidden' }, 403)
+  const taskId = c.req.param('taskId')
+
+  const task = await db.query.tasks.findFirst({
+    where: and(eq(tasks.id, taskId), eq(tasks.projectId, projectId)),
+  })
+  if (!task) return c.json({ error: 'Not found' }, 404)
+
+  await db
+    .delete(taskResources)
+    .where(and(eq(taskResources.taskId, taskId), eq(taskResources.resourceId, c.req.param('resourceId'))))
+
+  tasksChanged(projectId, [task.assigneeId, task.createdById])
+  return c.json({ ok: true })
+})
+
 /* --- Связанные задачи ------------------------------------------------------
  *
  * Не блокеры: эти связи ничего не держат и не влияют на «с чего начать».

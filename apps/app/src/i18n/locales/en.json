@@ -1619,6 +1619,22 @@
     "remove": "Remove link",
     "pickTitle": "Which tasks to link"
   },
+  "taskResources": {
+    "link": "Link",
+    "unlink": "Unlink",
+    "empty": "No access linked to this task",
+    "pickTitle": "What access does this task need",
+    "search": "Search by name or address",
+    "nothingFound": "Nothing found",
+    "createNew": "Create new",
+    "createAndLink": "Create and link",
+    "linkChosen_zero": "Link",
+    "linkChosen_one": "Link {{count}}",
+    "linkChosen_other": "Link {{count}}",
+    "name": "Name",
+    "url": "Address",
+    "secretHint": "Passwords and keys are added on the resource itself, where you can see who it opens for."
+  },
   "db": {
     "title": "Databases",
     "add": "Connect a database",

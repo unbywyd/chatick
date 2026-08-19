@@ -1199,6 +1199,16 @@ async function releasesOfTask(taskId: string) {
   }))
 }
 
+/**
+ * ЗАМЕНЯЕТ весь список ресурсов задачи присланным.
+ *
+ * Так работают поля-списки в PATCH, и для releaseIds это верно. Но для
+ * ресурсов замена опасна: приславший один id молча сотрёт привязки, которые
+ * поставил кто-то другой, и узнают об этом, когда доступ понадобится.
+ * Поэтому у ассистента есть отдельные POST/DELETE /tasks/<id>/resources —
+ * добавить одно, убрать одно, ничего не задев. Это поле оставлено для тех,
+ * кто действительно хочет задать список целиком.
+ */
 async function linkResources(resourceIds: unknown, projectId: string, taskId: string) {
   const ids = Array.isArray(resourceIds)
     ? (resourceIds as unknown[]).filter((x): x is string => typeof x === 'string').slice(0, 20)
@@ -2602,6 +2612,101 @@ bridgeRoute.post('/tasks/:id/blockers', async (c) => {
   })
   tasksChanged(scope.projectId, [task.assigneeId, task.createdById])
   return c.json({ ok: true, linked: resolved.length })
+})
+
+/* --- Ресурсы задачи в мосте ------------------------------------------------
+ *
+ * Задача ССЫЛАЕТСЯ на доступ, а не хранит его копию. Значения секретов здесь
+ * не отдаются нигде: ассистент видит, что доступ существует и как он
+ * называется, а раскрыть его может только тот, кому это позволяет сам ресурс.
+ */
+
+bridgeRoute.get('/tasks/:id/resources', async (c) => {
+  const scope = await resolveProject(c as never)
+  if ('error' in scope) return c.json({ error: scope.error }, scope.status)
+  const denied = await require(c as never, 'tasks.read', scope.projectId)
+  if (denied) return c.json(denied, 403)
+
+  const task = await taskByKey(scope.projectId, c.req.param('id'))
+  if (!task) return c.json({ error: 'Task not found' }, 404)
+
+  const rows = await db
+    .select({ id: credentials.id, name: credentials.name, url: credentials.url })
+    .from(taskResources)
+    .innerJoin(credentials, eq(credentials.id, taskResources.resourceId))
+    .where(and(eq(taskResources.taskId, task.id), isNull(credentials.deletedAt)))
+    .orderBy(asc(credentials.name))
+
+  return c.json({ task: { number: task.number, title: task.title }, items: rows })
+})
+
+/** Привязать ресурсы — ДОБАВЛЯЕТ, ничего не стирая. */
+bridgeRoute.post('/tasks/:id/resources', async (c) => {
+  const id = auth(c as never)
+  const scope = await resolveProject(c as never)
+  if ('error' in scope) return c.json({ error: scope.error }, scope.status)
+  const denied = await require(c as never, 'tasks.edit', scope.projectId)
+  if (denied) return c.json(denied, 403)
+
+  const parsed_r = await readJson(c as never)
+  if ('error' in parsed_r) return c.json(parsed_r, 400)
+  const b = parsed_r.body as Record<string, unknown>
+  const bad = unknownFields(b, ['resources', 'project'])
+  if (bad) return c.json({ error: bad }, 400)
+
+  const task = await taskByKey(scope.projectId, c.req.param('id'))
+  if (!task) return c.json({ error: 'Task not found' }, 404)
+
+  const ids = Array.isArray(b.resources) ? b.resources.map((x) => String(x).trim()).filter(Boolean) : []
+  if (!ids.length) return c.json({ error: 'resources must be a non-empty array of resource ids' }, 400)
+  if (ids.length > 50) return c.json({ error: `Too many resources: ${ids.length}. Maximum 50 per request.` }, 400)
+
+  // Только ресурсы этого проекта: чужой показал бы доступ, которого нет.
+  const mine = await db
+    .select({ id: credentials.id })
+    .from(credentials)
+    .where(
+      and(inArray(credentials.id, ids), eq(credentials.projectId, scope.projectId), isNull(credentials.deletedAt)),
+    )
+  if (mine.length !== ids.length) {
+    return c.json({ error: 'Some resources are not in this project' }, 400)
+  }
+
+  await db
+    .insert(taskResources)
+    .values(mine.map((r) => ({ taskId: task.id, resourceId: r.id })))
+    .onConflictDoNothing()
+
+  void logActivity({
+    projectId: scope.projectId,
+    actorId: id.userId,
+    action: 'update',
+    entityType: 'task',
+    entityId: task.id,
+    entityLabel: `${task.number} ${task.title}`,
+  })
+  tasksChanged(scope.projectId, [task.assigneeId, task.createdById])
+  return c.json({ ok: true, linked: mine.length })
+})
+
+/** Отвязать один ресурс. Остальные привязки не трогаются. */
+bridgeRoute.delete('/tasks/:id/resources/:resourceId', async (c) => {
+  const scope = await resolveProject(c as never)
+  if ('error' in scope) return c.json({ error: scope.error }, scope.status)
+  const denied = await require(c as never, 'tasks.edit', scope.projectId)
+  if (denied) return c.json(denied, 403)
+
+  const task = await taskByKey(scope.projectId, c.req.param('id'))
+  if (!task) return c.json({ error: 'Task not found' }, 404)
+
+  const [gone] = await db
+    .delete(taskResources)
+    .where(and(eq(taskResources.taskId, task.id), eq(taskResources.resourceId, c.req.param('resourceId'))))
+    .returning()
+  if (!gone) return c.json({ error: 'Resource is not linked to this task' }, 404)
+
+  tasksChanged(scope.projectId, [task.assigneeId, task.createdById])
+  return c.json({ ok: true })
 })
 
 /* --- Связи задач в мосте ---------------------------------------------------

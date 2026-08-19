@@ -647,6 +647,79 @@ server.registerTool(
 // --- Ресурсы -----------------------------------------------------------------
 
 server.registerTool(
+  'chatick_task_resources',
+  {
+    title: 'Access a task needs',
+    description:
+      'Resources linked to a task: staging URLs, keys, databases — name and address only. Secret VALUES are never ' +
+      'returned: reading one is a separate, deliberate call, and it stays that way because a password that passed ' +
+      'through here would end up in your context and in the chat history, where it outlives the conversation and ' +
+      'cannot be revoked.',
+    inputSchema: { project: z.string(), task: z.string() },
+  },
+  async ({ project, task }) => {
+    try {
+      return json(
+        await call({ ...(await need()), projectId: project }, 'GET', `/tasks/${encodeURIComponent(task)}/resources`),
+      )
+    } catch (e) {
+      return fail(e)
+    }
+  },
+)
+
+server.registerTool(
+  'chatick_task_resource_link',
+  {
+    title: 'Give a task the access it needs',
+    description:
+      'Links existing resources (ids from chatick_resources) to a task. ADDS them without touching what is already ' +
+      'linked — unlike the "resourceIds" field, which replaces the whole list and silently wipes links somebody ' +
+      'else made. Link the resource instead of pasting an address or a password into the task description: text in ' +
+      'a description is readable by everyone who can see the task and cannot be taken back.',
+    inputSchema: {
+      project: z.string(),
+      task: z.string(),
+      resources: z.array(z.string()).min(1).describe('Resource ids from chatick_resources'),
+    },
+  },
+  async ({ project, task, resources }) => {
+    try {
+      return json(
+        await call({ ...(await need()), projectId: project }, 'POST', `/tasks/${encodeURIComponent(task)}/resources`, {
+          resources,
+        }),
+      )
+    } catch (e) {
+      return fail(e)
+    }
+  },
+)
+
+server.registerTool(
+  'chatick_task_resource_unlink',
+  {
+    title: 'Remove one access from a task',
+    description:
+      'Unlinks one resource from a task. Other links stay, and the resource itself keeps existing in the project.',
+    inputSchema: { project: z.string(), task: z.string(), resourceId: z.string() },
+  },
+  async ({ project, task, resourceId }) => {
+    try {
+      return json(
+        await call(
+          { ...(await need()), projectId: project },
+          'DELETE',
+          `/tasks/${encodeURIComponent(task)}/resources/${encodeURIComponent(resourceId)}`,
+        ),
+      )
+    } catch (e) {
+      return fail(e)
+    }
+  },
+)
+
+server.registerTool(
   'chatick_resource_create',
   {
     title: 'Store a link or credentials',

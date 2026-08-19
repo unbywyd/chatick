@@ -78,6 +78,21 @@ function endpointCatalog(q: string): string {
   pasted there is readable by everyone who can see the task and cannot be taken
   back, while a linked resource keeps deciding for itself who may open it.
 
+  GET    /x/tasks/<id>/resources${q}                what this task needs access to
+  POST   /x/tasks/<id>/resources${q}                {"resources":["<id>","<id>"]}
+  DELETE /x/tasks/<id>/resources/<resourceId>${q}   unlink one
+
+  Prefer these over "resourceIds" when adding or removing a single resource.
+  The field REPLACES the whole list: send one id and you silently wipe the
+  links somebody else made, and nobody finds out until the access is needed.
+  POST adds without touching the rest; DELETE removes exactly one.
+
+  None of these return secret VALUES — only that the resource exists and what
+  it is called. Reading a value is a separate, deliberate call, and it stays
+  that way: a password that passes through here would end up in your context
+  and in the chat history, where it outlives the conversation and cannot be
+  revoked.
+
   "links" — the tasks this new one grew out of. Accepts numbers directly:
   ["TASK-3"], or ["TASK-3", {"task":"TASK-9","kind":"related"}] when one of
   them is a sibling rather than a source. Default kind is "derived".

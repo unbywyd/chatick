@@ -2,7 +2,7 @@ import { and, asc, desc, eq, gt, gte, ilike, inArray, isNotNull, isNull, lte, or
 import { companyOf, projectPath } from './links.js'
 import { shortUrlFor } from './short-links.js'
 import { db } from '../db/client.js'
-import { chatSummaries, credentials, documents, files, messages, notes, projectMembers, projects, resourceSecrets, taskComments, taskGroups, taskBlockers, dbConnections, dbTablePolicies, tasks, timeEntries, users } from '../db/schema.js'
+import { chatSummaries, credentials, documents, files, messages, notes, projectMembers, projects, resourceSecrets, taskComments, taskGroups, taskBlockers, taskResources, dbConnections, dbTablePolicies, tasks, timeEntries, users } from '../db/schema.js'
 import { dependentsOf } from '../routes/tasks.js'
 import { readFromConnection } from '../routes/db-connections.js'
 import { hasPermission } from '../routes/projects.js'
@@ -16,7 +16,7 @@ import { encrypt } from './crypto.js'
 import { notify, extractMentions, commentWatchers } from './notify.js'
 import { setDue } from './notify-config.js'
 import { projectLlm, complete, validateTask, type ToolDef, type ToolHandler } from './llm.js'
-import { broadcast } from '../ws.js'
+import { broadcast, tasksChanged } from '../ws.js'
 import { visionEnabled, SUPPORTED, MAX_BYTES } from './vision.js'
 import { getObjectStream, resolveStorage } from './s3.js'
 import { env } from '../env.js'
@@ -462,6 +462,38 @@ export function memoryTools(projectId: string, actorUserId: string): { tools: To
       description:
         'Attach an existing project file (by id, e.g. one shared in chat) to a task (by number). The file then appears in the task Files section. Requires files.upload + tasks.edit.',
       parameters: { type: 'object', properties: { fileId: { type: 'string' }, number: { type: 'string' } }, required: ['fileId', 'number'] },
+    },
+    // --- Ресурсы задачи ---
+    //
+    // Ассистент умел создавать ресурсы, но не мог привязать их к задаче — и
+    // на просьбу «дай задаче доступ к стенду» вставлял адрес и пароль прямо
+    // в описание. Оттуда их читают все, кто видит задачу, и отозвать это
+    // нельзя. Ссылка на ресурс решает, кому раскрыться, сама.
+    {
+      name: 'link_resource_to_task',
+      description:
+        'Link an existing project resource (staging URL, SSH key, database — id from list_resources) to a task, by task number. ADDS the link without touching resources already linked. Use this instead of pasting an address or a password into the task description: text in a description is readable by everyone who can see the task and cannot be taken back, while a linked resource keeps deciding for itself who may open it. Requires tasks.edit.',
+      parameters: {
+        type: 'object',
+        properties: { resourceId: { type: 'string' }, number: { type: 'string' } },
+        required: ['resourceId', 'number'],
+      },
+    },
+    {
+      name: 'unlink_resource_from_task',
+      description:
+        'Remove one resource link from a task, by task number. Other links stay. The resource itself is not deleted — it keeps existing in the project. Requires tasks.edit.',
+      parameters: {
+        type: 'object',
+        properties: { resourceId: { type: 'string' }, number: { type: 'string' } },
+        required: ['resourceId', 'number'],
+      },
+    },
+    {
+      name: 'list_task_resources',
+      description:
+        'What a task needs access to: linked resources with their name and address. Secret VALUES are never returned here — only that the access exists. Use it to answer "what do I need to work on this".',
+      parameters: { type: 'object', properties: { number: { type: 'string' } }, required: ['number'] },
     },
     // --- Зависимости задач ---
     //
@@ -1460,6 +1492,51 @@ export function memoryTools(projectId: string, actorUserId: string): { tools: To
       if (!file) return 'File not found.'
       await db.update(files).set({ taskId: t.id, pendingUntil: null }).where(eq(files.id, fileId))
       return `Attached "${file.name}" to ${t.number}.`
+    },
+    link_resource_to_task: async (args) => {
+      if (!(await hasPermission(projectId, actorUserId, 'tasks.edit')))
+        return 'PERMISSION DENIED: linking a resource to a task requires tasks.edit. Politely refuse.'
+      const t = await findTask(String(args.number ?? ''))
+      if (!t) return 'Task not found.'
+      const resourceId = String(args.resourceId ?? '')
+      // Только ресурс этого проекта: чужой показал бы в карточке доступ,
+      // которого у человека нет и открыть который он не сможет.
+      const res = await db.query.credentials.findFirst({
+        where: and(eq(credentials.id, resourceId), eq(credentials.projectId, projectId), isNull(credentials.deletedAt)),
+      })
+      if (!res) return 'Resource not found in this project.'
+      await db.insert(taskResources).values({ taskId: t.id, resourceId }).onConflictDoNothing()
+      tasksChanged(projectId, [t.assigneeId, t.createdById])
+      return `Linked "${res.name || res.url || resourceId}" to ${t.number}.`
+    },
+    unlink_resource_from_task: async (args) => {
+      if (!(await hasPermission(projectId, actorUserId, 'tasks.edit')))
+        return 'PERMISSION DENIED: unlinking a resource requires tasks.edit. Politely refuse.'
+      const t = await findTask(String(args.number ?? ''))
+      if (!t) return 'Task not found.'
+      const resourceId = String(args.resourceId ?? '')
+      const [gone] = await db
+        .delete(taskResources)
+        .where(and(eq(taskResources.taskId, t.id), eq(taskResources.resourceId, resourceId)))
+        .returning()
+      if (!gone) return `That resource is not linked to ${t.number}.`
+      tasksChanged(projectId, [t.assigneeId, t.createdById])
+      return `Unlinked the resource from ${t.number}. The resource itself still exists.`
+    },
+    list_task_resources: async (args) => {
+      if (!(await hasPermission(projectId, actorUserId, 'tasks.read')))
+        return 'PERMISSION DENIED: the author cannot read tasks. Politely refuse.'
+      const t = await findTask(String(args.number ?? ''))
+      if (!t) return 'Task not found.'
+      // Значения секретов НЕ выбираем: попав сюда, пароль осел бы в контексте
+      // модели и в истории чата, где переживёт разговор и не отзывается.
+      const rows = await db
+        .select({ id: credentials.id, name: credentials.name, url: credentials.url })
+        .from(taskResources)
+        .innerJoin(credentials, eq(credentials.id, taskResources.resourceId))
+        .where(and(eq(taskResources.taskId, t.id), isNull(credentials.deletedAt)))
+      if (!rows.length) return `${t.number} has no linked resources.`
+      return rows.map((r) => `${r.id} — ${r.name || '(no name)'}${r.url ? ` — ${r.url}` : ''}`).join('\n')
     },
     list_task_comments: async (args) => {
       if (!(await hasPermission(projectId, actorUserId, 'tasks.read')))

@@ -1619,6 +1619,23 @@
     "remove": "הסרת הקישור",
     "pickTitle": "אילו משימות לקשר"
   },
+  "taskResources": {
+    "link": "קישור",
+    "unlink": "ניתוק",
+    "empty": "לא מקושרים גישות למשימה",
+    "pickTitle": "לאילו גישות המשימה זקוקה",
+    "search": "חיפוש לפי שם או כתובת",
+    "nothingFound": "לא נמצא דבר",
+    "createNew": "יצירת חדש",
+    "createAndLink": "יצירה וקישור",
+    "linkChosen_zero": "קישור",
+    "linkChosen_one": "קישור {{count}}",
+    "linkChosen_two": "קישור {{count}}",
+    "linkChosen_other": "קישור {{count}}",
+    "name": "שם",
+    "url": "כתובת",
+    "secretHint": "סיסמאות ומפתחות נוספים במשאב עצמו — שם רואים למי הוא נחשף."
+  },
   "db": {
     "title": "מסדי נתונים",
     "add": "חיבור מסד נתונים",
