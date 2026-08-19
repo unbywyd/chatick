@@ -20,12 +20,11 @@ import {
 } from 'lucide-react'
 import { useNavigate, useParams, useSearchParams } from 'react-router-dom'
 import { ShareDialog } from '@/components/ShareDialog'
-import { api } from '@/lib/api'
+import { api, API_URL, getProjectToken } from '@/lib/api'
 import { cn } from '@/lib/utils'
 import { Input } from '@/components/ui/input'
-import ReactMarkdown from 'react-markdown'
-import remarkGfm from 'remark-gfm'
 import { Button } from '@/components/ui/button'
+import { RichEditor } from '@/components/ui/rich-editor'
 import { ResourceFiles } from './resources/ResourceFiles'
 import { DragHandle } from '@/components/ui/drag-handle'
 import { PeoplePicker, type Person } from '@/components/ui/people-picker'
@@ -296,8 +295,12 @@ export function ResourcesTab({ projectId, isAdmin }: { projectId: string; isAdmi
                 текст: markdown разбирается при выводе, поэтому уже
                 сохранённые описания читаются как задумано, без миграции. */}
             {r.description && (
-              <div className="prose prose-sm prose-invert mt-1 max-w-none text-xs text-muted-foreground [&_a]:text-brand [&_code]:text-xs [&_p]:my-0.5">
-                <ReactMarkdown remarkPlugins={[remarkGfm]}>{r.description}</ReactMarkdown>
+              <div className="mt-1 text-xs text-muted-foreground">
+                {/* Сервер приводит описание к безопасному HTML через richText —
+                    и markdown из моста, и разметку из редактора. Поэтому здесь
+                    просто читаем результат тем же компонентом, что и задачи:
+                    два разных пути отображения одного поля разошлись бы. */}
+                <RichEditor value={r.description} onChange={() => {}} mentions={[]} preset="minimal" readOnly />
               </div>
             )}
           </li>
@@ -334,6 +337,15 @@ function ResourceForm({ projectId, editing, onClose }: { projectId: string; edit
   const [description, setDescription] = useState(editing?.description ?? '')
   // новые секреты для добавления
   const [newSecrets, setNewSecrets] = useState<{ label: string; value: string }[]>([])
+  /**
+   * Файлы, выбранные до сохранения нового ресурса.
+   *
+   * Секреты уходят вместе с созданием одним телом, а файл — multipart, и
+   * его нельзя приложить, пока у ресурса нет id. Придерживаем и дозаливаем
+   * сразу после создания: иначе человек, заводящий запись под кейстор, не
+   * находит в форме места, куда его положить.
+   */
+  const [pendingFiles, setPendingFiles] = useState<File[]>([])
   /**
    * Кому видны секреты. null — «ещё не трогали»: для нового ресурса это значит
    * «вся команда» (умолчание сервера), для существующего — то, что придёт в
@@ -469,7 +481,7 @@ function ResourceForm({ projectId, editing, onClose }: { projectId: string; edit
           await api(`/api/v1/resources/${editing.id}/secrets`, { method: 'POST', body: JSON.stringify(s) }, 'project')
         }
       } else {
-        await api(
+        const made = await api<{ id: string }>(
           '/api/v1/resources',
           {
             method: 'POST',
@@ -483,6 +495,23 @@ function ResourceForm({ projectId, editing, onClose }: { projectId: string; edit
           },
           'project',
         )
+        // Файлы — только теперь: до создания у ресурса не было id, а значит
+        // и адреса, по которому их принять.
+        for (const file of pendingFiles) {
+          const form = new FormData()
+          form.set('file', file)
+          const res = await fetch(`${API_URL}/api/v1/resources/${made.id}/files`, {
+            method: 'POST',
+            headers: { authorization: `Bearer ${getProjectToken()}` },
+            body: form,
+          })
+          if (!res.ok) {
+            const body = (await res.json().catch(() => ({}))) as { error?: string }
+            // Ресурс уже создан — говорим, что именно не долетело, вместо
+            // общего «не сохранилось».
+            throw new Error(`${file.name}: ${body.error ?? `HTTP ${res.status}`}`)
+          }
+        }
       }
     },
     onSuccess: () => {
@@ -574,12 +603,18 @@ function ResourceForm({ projectId, editing, onClose }: { projectId: string; edit
           </Button>
         )}
 
-        <textarea
+        {/* Тот же редактор, что у задач и комментариев: описание ресурса
+            выбивалось из общего поведения — человек писал разметку и получал
+            сырые звёздочки. Сервер пропускает поле через richText, поэтому
+            уже сохранённые простым текстом описания не ломаются: они
+            превращаются в разметку при первой же правке. */}
+        <RichEditor
           value={description}
-          onChange={(e) => setDescription(e.target.value)}
-          rows={2}
+          onChange={(html) => setDescription(html)}
+          mentions={[]}
+          preset="minimal"
           placeholder={t('resources.descPlaceholder')}
-          className="w-full resize-none rounded-md border bg-transparent px-3 py-2 text-sm outline-none placeholder:text-muted-foreground focus:ring-2 focus:ring-ring"
+          className="min-h-[72px] rounded-md border px-3 py-2 text-sm"
         />
 
         {/* Секреты */}
@@ -606,10 +641,16 @@ function ResourceForm({ projectId, editing, onClose }: { projectId: string; edit
             <Plus className="size-3.5" /> {t('resources.addSecret')}
           </Button>
 
-          {/* Файлы ресурса: кейстор, сертификат, ключ. Только у сохранённого —
-              файл кладётся сразу на сервер, и до появления id класть его
-              некуда. Для нового ресурса блок появится после сохранения. */}
-          {editing && <ResourceFiles resourceId={editing.id} canEdit />}
+          {/* Файлы ресурса: кейстор, сертификат, ключ.
+              Виден и у нового: файл кладётся на сервер только после создания,
+              но выбрать его человек должен там же, где заводит запись, —
+              иначе он ищет, куда приложить кейстор, и не находит. */}
+          <ResourceFiles
+            resourceId={editing?.id ?? null}
+            canEdit
+            pending={pendingFiles}
+            onPendingChange={setPendingFiles}
+          />
 
           {/* Кому видны секреты. Показываем только когда они есть: у голой
               ссылки прятать нечего, а лишний выбор в форме заставляет думать

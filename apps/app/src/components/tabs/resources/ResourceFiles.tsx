@@ -24,7 +24,27 @@ function humanSize(bytes: number): string {
   return `${(bytes / 1024 / 1024).toFixed(1)} MB`
 }
 
-export function ResourceFiles({ resourceId, canEdit }: { resourceId: string; canEdit: boolean }) {
+export function ResourceFiles({
+  resourceId,
+  canEdit,
+  pending,
+  onPendingChange,
+}: {
+  /** null у ещё не сохранённого ресурса: класть файл некуда, id появится позже. */
+  resourceId: string | null
+  canEdit: boolean
+  /**
+   * Файлы, выбранные до сохранения.
+   *
+   * Форма нового ресурса — ровно то место, где человек заводит запись под
+   * кейстор. Прятать от него загрузку до первого сохранения значит
+   * отправлять его искать, куда же положить файл, посреди начатого дела.
+   * Здесь файлы придерживаются, а форма дозаливает их, как только у ресурса
+   * появится id.
+   */
+  pending?: File[]
+  onPendingChange?: (files: File[]) => void
+}) {
   const { t } = useTranslation()
   const qc = useQueryClient()
   const inputRef = useRef<HTMLInputElement>(null)
@@ -32,6 +52,7 @@ export function ResourceFiles({ resourceId, canEdit }: { resourceId: string; can
 
   const q = useQuery({
     queryKey: ['resource-files', resourceId],
+    enabled: Boolean(resourceId),
     queryFn: () => api<{ items: ResourceFile[] }>(`/api/v1/resources/${resourceId}/files`, {}, 'project'),
   })
 
@@ -50,6 +71,11 @@ export function ResourceFiles({ resourceId, canEdit }: { resourceId: string; can
    * формы на сервере.
    */
   const upload = async (file: File) => {
+    // Ресурса ещё нет — держим файл у себя, форма дозальёт его после создания.
+    if (!resourceId) {
+      onPendingChange?.([...(pending ?? []), file])
+      return
+    }
     setBusy(true)
     try {
       const form = new FormData()
@@ -97,7 +123,8 @@ export function ResourceFiles({ resourceId, canEdit }: { resourceId: string; can
   }
 
   const items = q.data?.items ?? []
-  if (!canEdit && !items.length) return null
+  const held = pending ?? []
+  if (!canEdit && !items.length && !held.length) return null
 
   return (
     <div className="mt-3 border-t pt-3">
@@ -106,7 +133,9 @@ export function ResourceFiles({ resourceId, canEdit }: { resourceId: string; can
         {t('resourceFiles.title')}
       </p>
 
-      {!items.length && <p className="text-xs text-muted-foreground">{t('resourceFiles.empty')}</p>}
+      {!items.length && !held.length && (
+        <p className="text-xs text-muted-foreground">{t('resourceFiles.empty')}</p>
+      )}
 
       <ul className="space-y-1">
         {items.map((f) => (
@@ -137,6 +166,29 @@ export function ResourceFiles({ resourceId, canEdit }: { resourceId: string; can
           </li>
         ))}
       </ul>
+
+      {/* Придержанные: их ещё нет на сервере, поэтому ни скачать, ни
+          сослаться на них нельзя — только убрать из списка. */}
+      {held.length > 0 && (
+        <ul className="space-y-1">
+          {held.map((f, i) => (
+            <li key={i} className="flex items-center gap-2 rounded-md border border-dashed px-2 py-1.5">
+              <Paperclip className="size-3.5 shrink-0 text-muted-foreground" />
+              <span className="min-w-0 flex-1 truncate text-xs">{f.name}</span>
+              <span className="shrink-0 text-[10px] tabular-nums text-muted-foreground">{humanSize(f.size)}</span>
+              <span className="shrink-0 text-[10px] text-muted-foreground">{t('resourceFiles.afterSave')}</span>
+              <button
+                type="button"
+                title={t('resourceFiles.remove')}
+                onClick={() => onPendingChange?.(held.filter((_, j) => j !== i))}
+                className="shrink-0 rounded p-0.5 text-muted-foreground transition-colors hover:text-destructive"
+              >
+                <X className="size-3.5" />
+              </button>
+            </li>
+          ))}
+        </ul>
+      )}
 
       {canEdit && (
         <>

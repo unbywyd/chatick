@@ -9,6 +9,7 @@ import { db } from '../db/client.js'
 import { credentials, resourceFiles, resourceSecrets, resourceViewers, credentialAccessLog, projectMembers, users } from '../db/schema.js'
 import { requireProject, type ProjectEnv } from '../auth.js'
 import { encrypt, decrypt, encryptBytes, decryptBytes } from '../lib/crypto.js'
+import { richText } from '../lib/markdown.js'
 import { hasPermission } from './projects.js'
 import { logActivity } from '../lib/audit.js'
 import { fetchSiteIcon, nameFromUrl } from '../lib/site-icon.js'
@@ -243,7 +244,10 @@ resourcesRoute.post(
 
     const [row] = await db
       .insert(credentials)
-      .values({ projectId, name: title, url: link, description, source, messageId: messageId ?? null, createdById: sub })
+      // richText, а не сырая строка: редактор в форме шлёт HTML, мост и
+      // ассистент — markdown. Функция сама различает их и вычищает опасные
+      // теги, поэтому одно поле принимает оба источника без развилок.
+      .values({ projectId, name: title, url: link, description: richText(description ?? ''), source, messageId: messageId ?? null, createdById: sub })
       .returning()
     if (secrets.length) {
       await db.insert(resourceSecrets).values(secrets.map((s) => ({ resourceId: row!.id, label: s.label, valueEncrypted: encrypt(s.value) })))
@@ -303,7 +307,7 @@ resourcesRoute.patch(
 
     if (name !== undefined) patch.name = name.trim()
     if (url !== undefined) patch.url = link
-    if (description !== undefined) patch.description = description
+    if (description !== undefined) patch.description = richText(description)
 
     // Имя стёрли или его и не было — берём из ссылки.
     const nextName = (patch.name as string | undefined) ?? r.name
