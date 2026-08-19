@@ -1,0 +1,146 @@
+import { describe, it, expect } from 'vitest'
+import { readFileSync } from 'node:fs'
+import { join } from 'node:path'
+
+// Файлы под ресурсом: кейстор, сертификат, приватный ключ.
+//
+// Здесь три необратимые ошибки, и каждая проверяется саботажем:
+//   1. файл всплыл в общих файлах проекта — ключ подписи увидят все;
+//   2. содержимое ушло в ответ API или ассистенту — секрет осел в чужом
+//      контексте и в истории, откуда его не отозвать;
+//   3. в хранилище лёг исходник вместо шифротекста — доступ к бакету стал
+//      доступом к ключу.
+
+const src = readFileSync(join(import.meta.dirname, 'resources.ts'), 'utf8')
+const files = readFileSync(join(import.meta.dirname, 'files.ts'), 'utf8')
+const schema = readFileSync(join(import.meta.dirname, '..', 'db', 'schema.ts'), 'utf8')
+
+function handler(text: string, method: string, path: string): string {
+  const re = new RegExp(`resourcesRoute\\.${method}\\(\\s*'${path.replace(/[/:]/g, (m) => `\\${m}`)}'`)
+  const m = re.exec(text)
+  expect(m, `ручка ${method.toUpperCase()} ${path} не найдена`).not.toBeNull()
+  const rest = text.slice(m!.index + 20)
+  const end = rest.indexOf('resourcesRoute.')
+  return rest.slice(0, end === -1 ? undefined : end)
+}
+
+describe('файл ресурса не попадает в общие файлы', () => {
+  it('таблица отдельная, а не флаг в files', () => {
+    expect(schema).toMatch(/export const resourceFiles = pgTable\(\s*'resource_files'/)
+    // Саботаж: если однажды кто-то заведёт признак «это секретный файл»
+    // внутри files, этот тест обязан упасть — именно забытый в выборке флаг
+    // и вынес бы кейстор в общий менеджер.
+    const filesTable = schema.slice(schema.indexOf("'files',"), schema.indexOf("'files',") + 1800)
+    expect(filesTable).not.toMatch(/secret|resourceId|isSecret/i)
+  })
+
+  it('файловый менеджер не знает про resource_files', () => {
+    // Ни одной выборки из resourceFiles в маршрутах файлов проекта.
+    expect(files, 'files.ts читает resourceFiles — файл ресурса окажется в менеджере').not.toMatch(
+      /resourceFiles/,
+    )
+  })
+
+  it('у файла ресурса нет projectId — его нельзя выбрать «по проекту»', () => {
+    const t = schema.slice(schema.indexOf("'resource_files'"), schema.indexOf("'resource_files'") + 900)
+    expect(t).toMatch(/resourceId/)
+    // Отсутствие projectId — не экономия, а защита: выборка «все файлы
+    // проекта» физически не сможет зацепить эту таблицу.
+    expect(t).not.toMatch(/projectId/)
+  })
+})
+
+describe('содержимое не утекает', () => {
+  it('список файлов отдаёт имя и размер, но не данные', () => {
+    const body = handler(src, 'get', '/:id/files')
+    expect(body).toMatch(/resourceFiles\.name/)
+    expect(body).toMatch(/resourceFiles\.size/)
+    // Ключ в хранилище — тоже лишнее: по нему можно пойти в бакет напрямую.
+    expect(body).not.toMatch(/GetObjectCommand|decryptBytes/)
+  })
+
+  it('скачивание требует прав на секреты, а не просто на проект', () => {
+    const body = handler(src, 'get', '/:id/files/:fileId')
+    expect(body).toMatch(/canSeeSecrets/)
+  })
+
+  it('скачивание попадает в журнал доступа', () => {
+    // Кто забрал ключ подписи — вопрос, который задают через полгода.
+    const body = handler(src, 'get', '/:id/files/:fileId')
+    expect(body).toMatch(/audit\(projectId, sub, 'reveal'/)
+  })
+
+  it('ответ не кешируется', () => {
+    const body = handler(src, 'get', '/:id/files/:fileId')
+    expect(body).toMatch(/'cache-control': 'no-store'/)
+  })
+})
+
+describe('в хранилище лежит шифротекст', () => {
+  it('загрузка шифрует до отправки', () => {
+    const body = handler(src, 'post', '/:id/files')
+    const enc = body.indexOf('encryptBytes')
+    const put = body.indexOf('PutObjectCommand')
+    expect(enc, 'encryptBytes не вызывается при загрузке').toBeGreaterThan(-1)
+    // Саботаж: положить Body: plain вместо encryptBytes(plain) — тест упадёт.
+    expect(body).toMatch(/Body: encryptBytes\(plain\)/)
+    expect(put).toBeGreaterThan(-1)
+  })
+
+  it('скачивание расшифровывает', () => {
+    const body = handler(src, 'get', '/:id/files/:fileId')
+    expect(body).toMatch(/decryptBytes/)
+  })
+
+  it('presigned-ссылок на файл ресурса нет', () => {
+    // Ссылка прямо в бакет отдала бы шифротекст — тупик, который выглядит
+    // как рабочая ссылка. Расшифровать может только сервер.
+    for (const path of ['/:id/files', '/:id/files/:fileId']) {
+      expect(handler(src, 'get', path)).not.toMatch(/presignDownload|presignView|getSignedUrl/)
+    }
+  })
+
+  it('тип объекта в хранилище обезличен', () => {
+    const body = handler(src, 'post', '/:id/files')
+    expect(body).toMatch(/ContentType: 'application\/octet-stream'/)
+  })
+})
+
+describe('права и границы', () => {
+  it('все четыре ручки проверяют доступ к секретам', () => {
+    expect(handler(src, 'get', '/:id/files')).toMatch(/canSeeSecrets/)
+    expect(handler(src, 'post', '/:id/files')).toMatch(/canSeeSecrets/)
+    expect(handler(src, 'get', '/:id/files/:fileId')).toMatch(/canSeeSecrets/)
+    expect(handler(src, 'delete', '/:id/files/:fileId')).toMatch(/canSeeSecrets/)
+  })
+
+  it('ресурс берётся строго из своего проекта', () => {
+    for (const [m, p] of [
+      ['get', '/:id/files'],
+      ['post', '/:id/files'],
+      ['get', '/:id/files/:fileId'],
+      ['delete', '/:id/files/:fileId'],
+    ] as const) {
+      expect(handler(src, m, p), `${m} ${p} не ограничена проектом`).toMatch(
+        /eq\(credentials\.projectId, projectId\)/,
+      )
+    }
+  })
+
+  it('файл ищется только внутри своего ресурса', () => {
+    // Иначе по чужому fileId можно было бы скачать файл другого ресурса.
+    const body = handler(src, 'get', '/:id/files/:fileId')
+    expect(body).toMatch(/eq\(resourceFiles\.resourceId, resource\.id\)/)
+  })
+
+  it('размер ограничен', () => {
+    expect(src).toMatch(/MAX_RESOURCE_FILE/)
+    expect(handler(src, 'post', '/:id/files')).toMatch(/too large/i)
+  })
+
+  it('удаление убирает и объект из хранилища', () => {
+    // Иначе шифротекст висит вечно там, откуда его считали удалённым.
+    const body = handler(src, 'delete', '/:id/files/:fileId')
+    expect(body).toMatch(/DeleteObjectCommand/)
+  })
+})

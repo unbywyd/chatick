@@ -1,11 +1,14 @@
 import { Hono } from 'hono'
+import { nanoid } from 'nanoid'
+import { PutObjectCommand, GetObjectCommand, DeleteObjectCommand } from '@aws-sdk/client-s3'
+import { resolveStorage } from '../lib/s3.js'
 import { zValidator } from '@hono/zod-validator'
 import { z } from 'zod'
-import { and, desc, eq, inArray, sql } from 'drizzle-orm'
+import { and, asc, desc, eq, inArray, isNull, sql } from 'drizzle-orm'
 import { db } from '../db/client.js'
-import { credentials, resourceSecrets, resourceViewers, credentialAccessLog, projectMembers, users } from '../db/schema.js'
+import { credentials, resourceFiles, resourceSecrets, resourceViewers, credentialAccessLog, projectMembers, users } from '../db/schema.js'
 import { requireProject, type ProjectEnv } from '../auth.js'
-import { encrypt, decrypt } from '../lib/crypto.js'
+import { encrypt, decrypt, encryptBytes, decryptBytes } from '../lib/crypto.js'
 import { hasPermission } from './projects.js'
 import { logActivity } from '../lib/audit.js'
 import { fetchSiteIcon, nameFromUrl } from '../lib/site-icon.js'
@@ -434,4 +437,174 @@ resourcesRoute.get('/audit/log', async (c) => {
       user: r.user ? { id: r.user.id, name: r.user.name, email: r.user.email } : null,
     })),
   )
+})
+
+
+/* --- Файлы ресурса ---------------------------------------------------------
+ *
+ * Кейстор, сертификат, приватный ключ. Всё то, что нельзя вставить текстом и
+ * нельзя положить в общие файлы проекта.
+ *
+ * В хранилище уходит ШИФРОТЕКСТ. Скачивание — только потоком через нас:
+ * presigned-ссылка отдала бы шифротекст, расшифровать может лишь сервер.
+ *
+ * Права те же, что у текстовых секретов: canSeeSecrets. Адрес и описание
+ * ресурса видит весь проект, файл — только те, кому он открыт.
+ */
+
+/** Сколько весит самый большой осмысленный файл ресурса. */
+const MAX_RESOURCE_FILE = 25 * 1024 * 1024
+
+/** Список файлов ресурса — имена и размеры, без содержимого. */
+resourcesRoute.get('/:id/files', async (c) => {
+  const { projectId, sub } = c.get('auth')
+  const resource = await db.query.credentials.findFirst({
+    where: and(eq(credentials.id, c.req.param('id')), eq(credentials.projectId, projectId), isNull(credentials.deletedAt)),
+  })
+  if (!resource) return c.json({ error: 'Not found' }, 404)
+  if (!(await canSeeSecrets(resource, sub))) return c.json({ error: 'Forbidden' }, 403)
+
+  const rows = await db
+    .select({
+      id: resourceFiles.id,
+      name: resourceFiles.name,
+      mime: resourceFiles.mime,
+      size: resourceFiles.size,
+      createdAt: resourceFiles.createdAt,
+    })
+    .from(resourceFiles)
+    .where(eq(resourceFiles.resourceId, resource.id))
+    .orderBy(asc(resourceFiles.name))
+
+  return c.json({ items: rows })
+})
+
+/** Приложить файл. Шифруем ДО отправки в хранилище. */
+resourcesRoute.post('/:id/files', async (c) => {
+  const { projectId, sub } = c.get('auth')
+  const resource = await db.query.credentials.findFirst({
+    where: and(eq(credentials.id, c.req.param('id')), eq(credentials.projectId, projectId), isNull(credentials.deletedAt)),
+  })
+  if (!resource) return c.json({ error: 'Not found' }, 404)
+  // Приложить файл — то же по весу действие, что добавить секрет: смотреть
+  // на него сможет тот же круг людей.
+  if (!(await canSeeSecrets(resource, sub))) return c.json({ error: 'Forbidden' }, 403)
+
+  const form = await c.req.formData()
+  const file = form.get('file')
+  if (!file || typeof file === 'string') return c.json({ error: 'file field is required' }, 400)
+
+  const plain = Buffer.from(await file.arrayBuffer())
+  if (plain.length > MAX_RESOURCE_FILE) {
+    return c.json({ error: `File is too large: ${plain.length} bytes, maximum ${MAX_RESOURCE_FILE}` }, 400)
+  }
+
+  const store = await resolveStorage(projectId)
+  // Ключ обезличен: по имени объекта в бакете не понять, что это за файл и
+  // к какому проекту относится.
+  const key = `${store.keyPrefix}resource-files/${resource.id}/${nanoid()}`
+  await store.client.send(
+    new PutObjectCommand({
+      Bucket: store.bucket,
+      Key: key,
+      Body: encryptBytes(plain),
+      // Тип намеренно общий: в хранилище лежит шифротекст, а не картинка и
+      // не архив, и притворяться ими он не должен.
+      ContentType: 'application/octet-stream',
+    }),
+  )
+
+  const [row] = await db
+    .insert(resourceFiles)
+    .values({
+      resourceId: resource.id,
+      name: (file.name || 'file').slice(0, 200),
+      key,
+      mime: file.type || 'application/octet-stream',
+      // Размер ИСХОДНОГО файла: шифротекст на 28 байт длиннее, и показывать
+      // человеку эту разницу незачем.
+      size: String(plain.length),
+      uploadedById: sub,
+    })
+    .returning()
+
+  void logActivity({
+    projectId,
+    actorId: sub,
+    action: 'update',
+    entityType: 'resource',
+    entityId: resource.id,
+    entityLabel: resource.name || resource.url || '',
+  })
+  return c.json({ id: row!.id, name: row!.name, size: row!.size, mime: row!.mime }, 201)
+})
+
+/** Скачать: достаём из хранилища и расшифровываем на лету. */
+resourcesRoute.get('/:id/files/:fileId', async (c) => {
+  const { projectId, sub } = c.get('auth')
+  const resource = await db.query.credentials.findFirst({
+    where: and(eq(credentials.id, c.req.param('id')), eq(credentials.projectId, projectId), isNull(credentials.deletedAt)),
+  })
+  if (!resource) return c.json({ error: 'Not found' }, 404)
+  if (!(await canSeeSecrets(resource, sub))) return c.json({ error: 'Forbidden' }, 403)
+
+  const file = await db.query.resourceFiles.findFirst({
+    where: and(eq(resourceFiles.id, c.req.param('fileId')), eq(resourceFiles.resourceId, resource.id)),
+  })
+  if (!file) return c.json({ error: 'Not found' }, 404)
+
+  const store = await resolveStorage(projectId)
+  const res = await store.client.send(new GetObjectCommand({ Bucket: store.bucket, Key: file.key }))
+  const cipher = Buffer.from(await res.Body!.transformToByteArray())
+  const plain = decryptBytes(cipher)
+
+  // Скачивание файла — то же событие, что раскрытие пароля, и попадает в тот
+  // же журнал доступа: кто и когда забрал ключ подписи, узнают из записи, а
+  // не по памяти.
+  void audit(projectId, sub, 'reveal', resource.id, `${resource.name || resource.url || ''} · ${file.name}`)
+
+  return new Response(new Uint8Array(plain), {
+    headers: {
+      'content-type': file.mime,
+      'content-length': String(plain.length),
+      'content-disposition': `attachment; filename*=UTF-8''${encodeURIComponent(file.name)}`,
+      // Секрет не должен осесть в кеше браузера или прокси.
+      'cache-control': 'no-store',
+    },
+  })
+})
+
+/** Убрать файл — и запись, и объект из хранилища. */
+resourcesRoute.delete('/:id/files/:fileId', async (c) => {
+  const { projectId, sub } = c.get('auth')
+  const resource = await db.query.credentials.findFirst({
+    where: and(eq(credentials.id, c.req.param('id')), eq(credentials.projectId, projectId), isNull(credentials.deletedAt)),
+  })
+  if (!resource) return c.json({ error: 'Not found' }, 404)
+  if (!(await canSeeSecrets(resource, sub))) return c.json({ error: 'Forbidden' }, 403)
+
+  const [gone] = await db
+    .delete(resourceFiles)
+    .where(and(eq(resourceFiles.id, c.req.param('fileId')), eq(resourceFiles.resourceId, resource.id)))
+    .returning()
+  if (!gone) return c.json({ error: 'Not found' }, 404)
+
+  // Из хранилища тоже: иначе шифротекст останется висеть навсегда, оплачивая
+  // место и оставляя данные там, откуда их считали удалёнными.
+  try {
+    const store = await resolveStorage(projectId)
+    await store.client.send(new DeleteObjectCommand({ Bucket: store.bucket, Key: gone.key }))
+  } catch {
+    // Запись уже удалена; висящий объект — меньшее зло, чем ошибка у человека.
+  }
+
+  void logActivity({
+    projectId,
+    actorId: sub,
+    action: 'update',
+    entityType: 'resource',
+    entityId: resource.id,
+    entityLabel: resource.name || resource.url || '',
+  })
+  return c.json({ ok: true })
 })
