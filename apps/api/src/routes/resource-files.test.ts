@@ -126,6 +126,43 @@ describe('мост и ассистент', () => {
     expect(body).toMatch(/action: 'reveal'/)
   })
 
+  it('мост принимает файл под ресурс и шифрует его', () => {
+    const at = bridge.indexOf("bridgeRoute.post('/resources/:id/files'")
+    expect(at, 'ручка загрузки не найдена').toBeGreaterThan(-1)
+    const body = bridge.slice(at, at + 2600)
+    // Саботаж: Body: plain вместо encryptBytes(plain) — тест упадёт.
+    expect(body).toMatch(/Body: encryptBytes\(plain\)/)
+    // Загрузить файл под ресурс — по весу то же, что завести секрет.
+    expect(body).toMatch(/'resources\.manage'/)
+  })
+
+  it('ассистент грузит файл одним инструментом, без токена и curl', () => {
+    // Гайд показывал curl с <token>, но через MCP подставить его неоткуда —
+    // ассистент видел инструкцию, которую не мог выполнить, и сдавался.
+    expect(mcp).toMatch(/'chatick_upload'/)
+    const at = mcp.indexOf("'chatick_upload'")
+    const body = mcp.slice(at, at + 2600)
+    expect(body).toMatch(/resourceId/)
+    expect(body).toMatch(/readFile/)
+  })
+
+  it('токен не отдаётся модели', () => {
+    // upload подставляет его внутри: отданный наружу токен осел бы в
+    // контексте и в истории переписки, откуда не отзывается.
+    const b = readFileSync(join(import.meta.dirname, '..', '..', '..', 'mcp', 'src', 'bridge.ts'), 'utf8')
+    const at = b.indexOf('export async function upload')
+    expect(at, 'upload не найден').toBeGreaterThan(-1)
+    expect(b.slice(at, at + 1400)).toMatch(/authorization: \`Bearer \$\{scope\.token\}/)
+    // Ни один инструмент не возвращает токен наружу.
+    expect(mcp).not.toMatch(/return json\(\{ token/)
+  })
+
+  it('гайд больше не велит просить человека', () => {
+    const docs = readFileSync(join(import.meta.dirname, '..', 'lib', 'bridge-docs.ts'), 'utf8')
+    expect(docs).toMatch(/POST   \/x\/resources\/<id>\/files/)
+    expect(docs).toMatch(/Do not ask the human/)
+  })
+
   it('MCP умеет править ресурс и видеть файлы', () => {
     // Без правки ассистент плодил дубли: заново вводил секреты, перепривязывал
     // задачу и просил человека удалить старое руками.

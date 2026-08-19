@@ -978,11 +978,17 @@ carry the answer.
   forever. A resource holding only the password is a false sense of safety —
   the password unlocks something that has to exist somewhere.
 
+  POST   /x/resources/<id>/files              multipart: file=@path
+
   The list gives names and sizes, never contents. Downloading is a separate,
   deliberate call and lands in the same audit log as revealing a password.
-  Uploading is not available here yet — ask the human to attach the file in
-  the resource card, and say why it belongs there rather than in project
-  files.
+
+    curl -X POST '${b}/x/resources/<id>/files?project=<projectId>' \
+      -H 'authorization: Bearer <token>' -F 'file=@./main.jks'
+
+  Through MCP use the chatick_upload tool with resourceId instead: it
+  reads the file, builds the multipart body and supplies the token itself.
+  Do not ask the human to attach the file by hand — you can do it.
   Because PATCH only adds, this is how you undo your own mistake — a wrong
   label, a value pasted twice. It takes exactly one named secret; the resource
   itself stays, deleting that is still a human's call.
@@ -1260,9 +1266,11 @@ ${endpointCatalog('?project=<id>')}
          for an app already published, so a resource holding only the password
          is a false sense of safety.
   GET    /x/resources/<id>/files/<fileId>?project=<id>
-         Download one. Binary, and audited like revealing a password. Uploading
-         is not available to you: ask the human to attach it in the resource
-         card, and say why it belongs there rather than in project files.
+         Download one. Binary, and audited like revealing a password.
+  POST   /x/resources/<id>/files?project=<id>
+         Attach one: multipart, file=@path. Through MCP call chatick_upload
+         with resourceId — it reads the file and supplies the token itself, so
+         there is no curl to assemble. Do not ask the human to do it by hand.
 
   POST   /x/disconnect                  close this tunnel when you are done
 

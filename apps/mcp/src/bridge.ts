@@ -93,3 +93,42 @@ export async function tunnelLeft(scope: Scope): Promise<number | null> {
 }
 
 export const apiBase = () => BASE
+
+/**
+ * Загрузка файла — единственное место, где тело не JSON.
+ *
+ * Отдельная функция, а не флаг в call(): там тело всегда сериализуется в
+ * JSON, и multipart туда не вписывается, не сломав остальные сорок вызовов.
+ *
+ * Токен подставляется здесь же и наружу не выходит. Отдавать его модели,
+ * чтобы она собрала curl сама, значило бы положить доступ в контекст и в
+ * историю переписки, откуда его не отозвать.
+ */
+export async function upload(
+  scope: Scope,
+  path: string,
+  file: { name: string; bytes: Uint8Array; type?: string },
+  extra?: Record<string, string>,
+): Promise<unknown> {
+  const url = new URL(`${BASE}/x${path}`)
+  if (scope.projectId) url.searchParams.set('project', scope.projectId)
+
+  const form = new FormData()
+  form.set('file', new Blob([file.bytes], { type: file.type || 'application/octet-stream' }), file.name)
+  for (const [k, v] of Object.entries(extra ?? {})) form.set(k, v)
+
+  // content-type не ставим руками: границу multipart генерирует сам FormData,
+  // и подменённый заголовок ломает разбор на сервере.
+  const res = await fetch(url, {
+    method: 'POST',
+    headers: { authorization: `Bearer ${scope.token}` },
+    body: form,
+  })
+
+  const text = await res.text()
+  const data = text && /^\s*[[{]/.test(text) ? (JSON.parse(text) as Record<string, unknown>) : { text }
+  if (!res.ok) {
+    throw new BridgeError(res.status, (data.error as string) ?? `HTTP ${res.status}`, data.hint as string | undefined)
+  }
+  return data
+}

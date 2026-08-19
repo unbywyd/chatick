@@ -2,7 +2,7 @@
 import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js'
 import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js'
 import { z } from 'zod'
-import { call, BridgeError, type Scope } from './bridge.js'
+import { call, upload, BridgeError, type Scope } from './bridge.js'
 import { currentScope, connectViaDesktop, startDeviceFlow, waitForApproval, acceptToken, forget } from './auth.js'
 
 /**
@@ -676,6 +676,54 @@ server.registerTool(
           `/resources/${encodeURIComponent(resourceId)}`,
           body,
         ),
+      )
+    } catch (e) {
+      return fail(e)
+    }
+  },
+)
+
+server.registerTool(
+  'chatick_upload',
+  {
+    title: 'Upload a file',
+    description:
+      'Uploads a file from this machine to Chatick. Give it the path — reading the file, the multipart body and ' +
+      'the token are handled for you; there is no curl to assemble and no token to fetch. ' +
+      'With "resourceId" the file is stored UNDER THAT RESOURCE: encrypted at rest, visible only to people who ' +
+      'may see its secrets, and never listed among project files. That is where a keystore, a certificate or a ' +
+      'private key belongs — an Android signing key cannot be reissued for an app already published, so a ' +
+      'resource holding only the password protects nothing. ' +
+      'Without "resourceId" it goes to project files, where the whole team sees it: right for a build, a ' +
+      'screenshot or a log, wrong for anything that unlocks something.',
+    inputSchema: {
+      project: z.string(),
+      path: z.string().describe('Absolute path to the file on this machine'),
+      resourceId: z
+        .string()
+        .optional()
+        .describe('Store under this resource, encrypted. Omit for ordinary project files'),
+      taskId: z.string().optional().describe('Attach to a task — project files only, ignored with resourceId'),
+    },
+  },
+  async ({ project, path: filePath, resourceId, taskId }) => {
+    try {
+      const { readFile } = await import('node:fs/promises')
+      const { basename } = await import('node:path')
+      let bytes: Buffer
+      try {
+        bytes = await readFile(filePath)
+      } catch {
+        // Отдельная ветка: «файла нет» — ошибка человека, и она должна
+        // читаться как таковая, а не как отказ сервера.
+        return fail(new Error(`Cannot read file: ${filePath}`))
+      }
+      const scope = { ...(await need()), projectId: project }
+      const file = { name: basename(filePath), bytes: new Uint8Array(bytes) }
+      return json(
+        resourceId
+          ? await upload(scope, `/resources/${encodeURIComponent(resourceId)}/files`, file)
+          : await upload(scope, '/files', file, taskId ? { taskId } : undefined),
       )
     } catch (e) {
       return fail(e)

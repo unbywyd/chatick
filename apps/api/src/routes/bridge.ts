@@ -2653,6 +2653,81 @@ bridgeRoute.get('/resources/:id/files', async (c) => {
   })
 })
 
+/**
+ * Приложить файл к ресурсу.
+ *
+ * Тело — multipart, как и у файлов проекта. Ассистенту не нужно знать про
+ * это: инструмент chatick_upload собирает форму сам. Но ручка остаётся
+ * обычной, чтобы её можно было позвать и curl-ом.
+ */
+bridgeRoute.post('/resources/:id/files', async (c) => {
+  const id = auth(c as never)
+  const scope = await resolveProject(c as never)
+  if ('error' in scope) return c.json({ error: scope.error }, scope.status)
+  // manage, а не read: положить файл под ресурс — то же по весу действие,
+  // что завести секрет.
+  const denied = await require(c as never, 'resources.manage', scope.projectId)
+  if (denied) return c.json(denied, 403)
+
+  const resource = await db.query.credentials.findFirst({
+    where: and(
+      eq(credentials.id, c.req.param('id')),
+      eq(credentials.projectId, scope.projectId),
+      isNull(credentials.deletedAt),
+    ),
+  })
+  if (!resource) return c.json({ error: 'Resource not found' }, 404)
+
+  const form = await c.req.formData()
+  const file = form.get('file')
+  if (!file || typeof file === 'string') {
+    return c.json({ error: 'file field is required (multipart: -F "file=@path")' }, 400)
+  }
+
+  const plain = Buffer.from(await file.arrayBuffer())
+  const MAX = 25 * 1024 * 1024
+  if (plain.length > MAX) {
+    return c.json({ error: `File is too large: ${plain.length} bytes, maximum ${MAX}` }, 400)
+  }
+
+  const { resolveStorage } = await import('../lib/s3.js')
+  const { PutObjectCommand } = await import('@aws-sdk/client-s3')
+  const { encryptBytes } = await import('../lib/crypto.js')
+  const store = await resolveStorage(scope.projectId)
+  const key = `${store.keyPrefix}resource-files/${resource.id}/${nanoid()}`
+  await store.client.send(
+    new PutObjectCommand({
+      Bucket: store.bucket,
+      Key: key,
+      // В хранилище уходит шифротекст — доступ к бакету не даёт доступа к ключу.
+      Body: encryptBytes(plain),
+      ContentType: 'application/octet-stream',
+    }),
+  )
+
+  const [row] = await db
+    .insert(resourceFiles)
+    .values({
+      resourceId: resource.id,
+      name: (file.name || 'file').slice(0, 200),
+      key,
+      mime: file.type || 'application/octet-stream',
+      size: String(plain.length),
+      uploadedById: id.userId,
+    })
+    .returning()
+
+  void logActivity({
+    projectId: scope.projectId,
+    actorId: id.userId,
+    action: 'update',
+    entityType: 'resource',
+    entityId: resource.id,
+    entityLabel: resource.name || resource.url || '',
+  })
+  return c.json({ id: row!.id, name: row!.name, size: row!.size, encrypted: true }, 201)
+})
+
 bridgeRoute.get('/resources/:id/files/:fileId', async (c) => {
   const id = auth(c as never)
   const scope = await resolveProject(c as never)
