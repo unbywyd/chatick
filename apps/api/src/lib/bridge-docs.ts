@@ -979,6 +979,7 @@ carry the answer.
   the password unlocks something that has to exist somewhere.
 
   POST   /x/resources/<id>/files              multipart: file=@path
+  DELETE /x/resources/<id>/files/<fileId>     remove one, storage included
 
   The list gives names and sizes, never contents. Downloading is a separate,
   deliberate call and lands in the same audit log as revealing a password.
@@ -1271,6 +1272,8 @@ ${endpointCatalog('?project=<id>')}
          Attach one: multipart, file=@path. Through MCP call chatick_upload
          with resourceId — it reads the file and supplies the token itself, so
          there is no curl to assemble. Do not ask the human to do it by hand.
+  DELETE /x/resources/<id>/files/<fileId>?project=<id>
+         Remove one you attached by mistake. The object leaves storage too.
 
   POST   /x/disconnect                  close this tunnel when you are done
 

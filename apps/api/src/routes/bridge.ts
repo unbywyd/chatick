@@ -2776,6 +2776,57 @@ bridgeRoute.get('/resources/:id/files/:fileId', async (c) => {
   })
 })
 
+/**
+ * Убрать файл ресурса — и запись, и объект из хранилища.
+ *
+ * Положить файл ассистент мог, а убрать нет — и ошибочно приложенный
+ * кейстор оставалось удалять человеку руками. Асимметрия «создать можно,
+ * исправить нельзя» — та же, из-за которой ресурсы плодились дублями.
+ */
+bridgeRoute.delete('/resources/:id/files/:fileId', async (c) => {
+  const id = auth(c as never)
+  const scope = await resolveProject(c as never)
+  if ('error' in scope) return c.json({ error: scope.error }, scope.status)
+  const denied = await require(c as never, 'resources.manage', scope.projectId)
+  if (denied) return c.json(denied, 403)
+
+  const resource = await db.query.credentials.findFirst({
+    where: and(
+      eq(credentials.id, c.req.param('id')),
+      eq(credentials.projectId, scope.projectId),
+      isNull(credentials.deletedAt),
+    ),
+  })
+  if (!resource) return c.json({ error: 'Resource not found' }, 404)
+
+  const [gone] = await db
+    .delete(resourceFiles)
+    .where(and(eq(resourceFiles.id, c.req.param('fileId')), eq(resourceFiles.resourceId, resource.id)))
+    .returning()
+  if (!gone) return c.json({ error: 'File is not attached to this resource' }, 404)
+
+  // Из хранилища тоже: иначе шифротекст останется висеть там, откуда его
+  // считали удалённым.
+  try {
+    const { resolveStorage } = await import('../lib/s3.js')
+    const { DeleteObjectCommand } = await import('@aws-sdk/client-s3')
+    const store = await resolveStorage(scope.projectId)
+    await store.client.send(new DeleteObjectCommand({ Bucket: store.bucket, Key: gone.key }))
+  } catch {
+    // Запись уже удалена; висящий объект — меньшее зло, чем ошибка в ответе.
+  }
+
+  void logActivity({
+    projectId: scope.projectId,
+    actorId: id.userId,
+    action: 'update',
+    entityType: 'resource',
+    entityId: resource.id,
+    entityLabel: resource.name || resource.url || '',
+  })
+  return c.json({ ok: true })
+})
+
 /* --- Ресурсы задачи в мосте ------------------------------------------------
  *
  * Задача ССЫЛАЕТСЯ на доступ, а не хранит его копию. Значения секретов здесь

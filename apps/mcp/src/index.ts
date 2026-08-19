@@ -732,6 +732,31 @@ server.registerTool(
 )
 
 server.registerTool(
+  'chatick_resource_file_remove',
+  {
+    title: 'Remove a file from a resource',
+    description:
+      'Deletes one file kept under a resource — the encrypted object leaves storage too. Use it to undo your own ' +
+      'mistake: attaching the wrong file and leaving it there means somebody else has to clean up, and a stray ' +
+      'keystore is exactly the kind of leftover nobody wants to inherit.',
+    inputSchema: { project: z.string(), resourceId: z.string(), fileId: z.string() },
+  },
+  async ({ project, resourceId, fileId }) => {
+    try {
+      return json(
+        await call(
+          { ...(await need()), projectId: project },
+          'DELETE',
+          `/resources/${encodeURIComponent(resourceId)}/files/${encodeURIComponent(fileId)}`,
+        ),
+      )
+    } catch (e) {
+      return fail(e)
+    }
+  },
+)
+
+server.registerTool(
   'chatick_resource_files',
   {
     title: 'Files kept under a resource',

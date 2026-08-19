@@ -157,6 +157,18 @@ describe('мост и ассистент', () => {
     expect(mcp).not.toMatch(/return json\(\{ token/)
   })
 
+  it('что ассистент может положить, то может и убрать', () => {
+    // Асимметрия «создать можно, исправить нельзя» уже приводила к дублям
+    // ресурсов: ошибочно приложенный кейстор удалял бы человек руками.
+    expect(bridge).toMatch(/bridgeRoute\.delete\(\s*.\/resources\/:id\/files\/:fileId./)
+    expect(mcp).toMatch(/.chatick_resource_file_remove./)
+    const at = bridge.indexOf("bridgeRoute.delete('/resources/:id/files/:fileId'")
+    const body = bridge.slice(at, at + 2200)
+    // Объект уходит из хранилища вместе с записью.
+    expect(body).toMatch(/DeleteObjectCommand/)
+    expect(body).toMatch(/'resources\.manage'/)
+  })
+
   it('гайд больше не велит просить человека', () => {
     const docs = readFileSync(join(import.meta.dirname, '..', 'lib', 'bridge-docs.ts'), 'utf8')
     expect(docs).toMatch(/POST   \/x\/resources\/<id>\/files/)
