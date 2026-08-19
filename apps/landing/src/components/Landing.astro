@@ -270,26 +270,36 @@ const MARK_ANYAPP = asset('anyapp-logo-twotone-dark.svg')
         </a>
       </div>
 
-      {/* Что даёт MCP-сервер. Одной фразы под кнопкой не хватало: тот, кто
-          решает, брать ли Chatick, не понимал, зачем это его команде — хотя
-          это и есть отличие, ассистент работает внутри проекта, а не в
-          отдельном чате. Фраза под кнопкой повторяла этот же подзаголовок
-          слово в слово, поэтому её здесь больше нет. */}
-      <div class="mcp">
-        <h3>{t.skill.mcp.title}</h3>
-        <p class="mcp-sub">{t.skill.mcp.subtitle}</p>
-        <div class="mcp-grid">
-          {
-            t.skill.mcp.items.map((item) => (
-              <div class="mcp-item">
-                <p class="mcp-item-title">{item.title}</p>
-                <p class="mcp-item-text">{item.text}</p>
-              </div>
-            ))
-          }
-        </div>
-        <p class="note mcp-note">{t.skill.mcp.note}</p>
-      </div>
+    </div>
+  </section>
+
+  {/* Что даёт MCP-сервер. Одной фразы под кнопкой не хватало: тот, кто решает,
+      брать ли Chatick, не понимал, зачем это его команде — хотя это и есть
+      отличие, ассистент работает внутри проекта, а не в отдельном чате.
+
+      Светлая полоса во всю ширину — единственный способ выделить блок, не
+      трогая цвета: лайм на странице закреплён за действиями, синий занят
+      карточкой заказчика, и третий акцент спорил бы с обоими. Инверсия
+      разделяет сильнее любого оттенка и не добавляет в палитру ничего.
+
+      Три гарантии пронумерованы и разделены линиями, а не разложены по
+      карточкам: это один ответ на один вопрос «что я отдаю ассистенту», а
+      три одинаковые плитки читались бы как три несвязанные возможности. */}
+  <section class="mcp-band">
+    <div class="container">
+      <h2 class="mcp-title">{t.skill.mcp.title}</h2>
+      <p class="mcp-sub">{t.skill.mcp.subtitle}</p>
+      <ol class="mcp-grid">
+        {
+          t.skill.mcp.items.map((item) => (
+            <li class="mcp-item">
+              <p class="mcp-item-title">{item.title}</p>
+              <p class="mcp-item-text">{item.text}</p>
+            </li>
+          ))
+        }
+      </ol>
+      <p class="mcp-note">{t.skill.mcp.note}</p>
     </div>
   </section>
 
@@ -2429,65 +2439,144 @@ const MARK_ANYAPP = asset('anyapp-logo-twotone-dark.svg')
   /* Блок про MCP. Отделён линией, а не карточкой: это продолжение разговора
      про скил, а не соседний товар — карточка читалась бы как врезка, которую
      можно пропустить. */
-  .mcp {
-    margin: 44px auto 0;
-    /* Шире, чем .skill-grid: тут три колонки, и на 660px они сжимаются в
-       нечитаемые полоски. */
-    max-width: 900px;
-    padding-top: 36px;
-    border-top: 1px solid var(--line);
+  /* --- Полоса MCP: светлая врезка во всю ширину --------------------------- */
+  /* Единственное светлое место на чёрной странице. Цвета не добавляет: те же
+     токены, поменянные ролями, — поэтому лайм здесь по-прежнему значит
+     «действие», а не «украшение».
+
+     Переменные переопределены на самой секции, а не подменены точечно у
+     каждого правила: вложенные .note, ссылки и всё, что читает --fg-muted,
+     подхватывают светлую тему само, и добавить сюда новый элемент можно, не
+     вспоминая про инверсию. */
+  .mcp-band {
+    --fg: #14160f;
+    --fg-muted: #55594a;
+    --border: rgba(20, 22, 15, 0.14);
+    padding: 78px 0;
+    background: #eef0e6;
+    color: var(--fg);
+    /* Кант на стыке: светлое встык к чёрному даёт дребезжащую линию на
+       границе, тонкая лаймовая полоска делает переход намеренным. */
+    border-block: 1px solid rgba(212, 242, 40, 0.5);
   }
-  .mcp h3 {
-    margin: 0;
-    font-size: clamp(20px, 3vw, 26px);
+  .mcp-title {
+    font-size: clamp(1.45rem, 3vw, 1.95rem);
     line-height: 1.25;
-    letter-spacing: -0.01em;
+    letter-spacing: -0.015em;
+    text-align: center;
+    text-wrap: balance;
+    color: var(--fg);
   }
   .mcp-sub {
-    margin: 12px auto 0;
-    max-width: 660px;
+    margin: 14px auto 0;
+    max-width: 66ch;
     color: var(--fg-muted);
     font-size: 15px;
     line-height: 1.65;
+    text-align: center;
+    text-wrap: pretty;
   }
+  /* Три гарантии в ряд. Нумерованный список, а не набор <div>: порядок здесь
+     смысловой — сначала что видно команде, потом сколько отдаёшь, потом чьё
+     имя останется. Разделители вместо карточек: это одна таблица гарантий. */
   .mcp-grid {
-    margin-top: 30px;
+    margin: 44px 0 0;
+    padding: 0;
+    list-style: none;
     display: grid;
-    grid-template-columns: repeat(3, 1fr);
-    gap: 26px;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 0;
     text-align: start;
+    counter-reset: mcp;
+    /* Колонки разной длины, и разделитель обрывался там, где кончался текст —
+       три линии разной высоты читались как недоделка. Растягиваем ячейки на
+       всю высоту ряда, тогда линии идут до общего низа. */
+    align-items: stretch;
+  }
+  .mcp-item {
+    counter-increment: mcp;
+    padding-inline: 32px;
+    /* Логическое свойство: на иврите линия сама уходит на другую сторону. */
+    border-inline-start: 1px solid var(--border);
+  }
+  .mcp-item:first-child {
+    padding-inline-start: 0;
+    border-inline-start: 0;
+  }
+  .mcp-item:last-child {
+    padding-inline-end: 0;
+  }
+  /* Номер моноширинным — тем же голосом, что заголовки и команды на странице.
+     Лайм здесь не подходит: он значит «нажми», а номер нажать нельзя. */
+  .mcp-item-title::before {
+    content: counter(mcp, decimal-leading-zero);
+    display: block;
+    margin-bottom: 14px;
+    font-family: var(--font-mono);
+    font-size: 13px;
+    font-weight: 500;
+    letter-spacing: 0.06em;
+    color: var(--fg-muted);
+    font-variant-numeric: tabular-nums;
   }
   .mcp-item-title {
     margin: 0;
-    font-weight: 600;
-    font-size: 15px;
-  }
-  /* Лаймовая черта вместо иконки: три галочки уже стоят выше, в .skill-points,
-     и повторять их значило бы сделать оба списка одинаково безразличными. */
-  .mcp-item-title::before {
-    content: '';
-    display: block;
-    width: 26px;
-    height: 2px;
-    margin-bottom: 12px;
-    background: var(--lime);
+    font-weight: 650;
+    font-size: 15.5px;
+    line-height: 1.35;
+    color: var(--fg);
   }
   .mcp-item-text {
-    margin: 8px 0 0;
+    margin: 10px 0 0;
     color: var(--fg-muted);
     font-size: 14px;
-    line-height: 1.65;
+    line-height: 1.68;
+    text-wrap: pretty;
   }
   .mcp-note {
-    margin-top: 26px;
+    margin: 46px auto 0;
+    max-width: 66ch;
     text-align: center;
+    color: var(--fg-muted);
+    font-size: 13.5px;
+    line-height: 1.6;
   }
-  @media (max-width: 760px) {
+  /* Выделение и фокус внутри светлой полосы: браузерные умолчания рассчитаны
+     на тёмный фон страницы и здесь смотрелись бы чужими. */
+  .mcp-band ::selection {
+    background: rgba(212, 242, 40, 0.55);
+    color: #14160f;
+  }
+  .mcp-band :focus-visible {
+    outline: 2px solid #14160f;
+    outline-offset: 3px;
+  }
+  @media (max-width: 900px) {
     .mcp-grid {
       grid-template-columns: 1fr;
-      gap: 22px;
+    }
+    /* В столбик разделитель переезжает наверх: вертикальная линия между
+       строками ничего не разделяет. */
+    .mcp-item {
+      padding-inline: 0;
+      padding-block: 26px;
+      border-inline-start: 0;
+      border-block-start: 1px solid var(--border);
+    }
+    .mcp-item:first-child {
+      padding-block-start: 0;
+      border-block-start: 0;
+    }
+    .mcp-item:last-child {
+      padding-block-end: 0;
     }
   }
+  @media (max-width: 620px) {
+    .mcp-band {
+      padding: 56px 0;
+    }
+  }
+
   /* Ссылка в шапке: тише кнопки «Начать», но заметнее языков. */
   .nav-skill {
     display: inline-flex;
