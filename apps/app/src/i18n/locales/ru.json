@@ -1626,6 +1626,17 @@
     "stripHolding_few": "держат {{count}} задачи",
     "stripHolding_many": "держат {{count}} задач"
   },
+  "links": {
+    "derivedFrom": "Выросла из",
+    "derivedInto": "Породила",
+    "related": "Связанные",
+    "noDerivedFrom": "Задача ни из чего не выросла",
+    "noDerivedInto": "Из этой задачи ничего не выросло",
+    "noRelated": "Связанных задач нет",
+    "add": "Связать",
+    "remove": "Убрать связь",
+    "pickTitle": "Какие задачи связать"
+  },
   "db": {
     "title": "Базы данных",
     "add": "Подключить базу",

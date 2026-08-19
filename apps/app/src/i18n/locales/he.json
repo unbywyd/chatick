@@ -1608,6 +1608,17 @@
     "stripHolding_one": "מעכבות משימה {{count}}",
     "stripHolding_other": "מעכבות {{count}} משימות"
   },
+  "links": {
+    "derivedFrom": "צמחה מתוך",
+    "derivedInto": "הולידה",
+    "related": "משימות קשורות",
+    "noDerivedFrom": "המשימה לא צמחה מתוך משימה אחרת",
+    "noDerivedInto": "לא צמחו משימות מתוך זו",
+    "noRelated": "אין משימות קשורות",
+    "add": "קישור",
+    "remove": "הסרת הקישור",
+    "pickTitle": "אילו משימות לקשר"
+  },
   "db": {
     "title": "מסדי נתונים",
     "add": "חיבור מסד נתונים",

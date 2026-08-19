@@ -18,12 +18,24 @@ import type { LinkedTask } from './TaskBlockedMark'
 export function TaskPickerDialog({
   taskId,
   side,
+  source = 'blockers',
+  title,
   onClose,
   onPick,
 }: {
   taskId: string
-  /** blockers — кого мы ждём; blocking — кто ждёт нас. */
-  side: 'blockers' | 'blocking'
+  /**
+   * Для блокеров: blockers — кого мы ждём, blocking — кто ждёт нас.
+   * Для связей направление на список кандидатов не влияет.
+   */
+  side?: 'blockers' | 'blocking'
+  /**
+   * Откуда брать кандидатов. Списки разные: у блокеров выпадают ещё и те, кто
+   * замкнул бы кольцо, у связей колец не бывает вовсе.
+   */
+  source?: 'blockers' | 'links'
+  /** Заголовок диалога: «что блокирует» и «что связано» — разные вопросы. */
+  title?: string
   onClose: () => void
   onPick: (ids: string[]) => void
 }) {
@@ -39,10 +51,12 @@ export function TaskPickerDialog({
   }, [q])
 
   const candidates = useQuery({
-    queryKey: ['blocker-candidates', taskId, side, debounced],
+    queryKey: ['task-candidates', source, taskId, side, debounced],
     queryFn: () =>
       api<{ items: LinkedTask[] }>(
-        `/api/v1/tasks/${taskId}/blockers/candidates?side=${side}&q=${encodeURIComponent(debounced)}`,
+        source === 'links'
+          ? `/api/v1/tasks/${taskId}/links/candidates?q=${encodeURIComponent(debounced)}`
+          : `/api/v1/tasks/${taskId}/blockers/candidates?side=${side ?? 'blockers'}&q=${encodeURIComponent(debounced)}`,
         {},
         'project',
       ),
@@ -65,7 +79,7 @@ export function TaskPickerDialog({
         onClick={(e) => e.stopPropagation()}
       >
         <div className="flex items-center justify-between border-b p-3">
-          <h2 className="text-sm font-semibold">{t('blockers.pickTitle')}</h2>
+          <h2 className="text-sm font-semibold">{title ?? t('blockers.pickTitle')}</h2>
           <Button variant="ghost" size="icon" onClick={onClose}>
             <X className="size-4" />
           </Button>

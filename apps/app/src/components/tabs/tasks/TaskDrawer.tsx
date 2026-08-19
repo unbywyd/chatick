@@ -42,6 +42,7 @@ import { TaskComments } from './TaskComments'
 import { TaskNotes } from './TaskNotes'
 import { TaskChecklist } from './TaskChecklist'
 import { TaskBlockers } from './TaskBlockers'
+import { TaskLinks } from './TaskLinks'
 import { TaskRefs } from './TaskRefs'
 import { StatusBadge } from './StatusBadge'
 import { DueDate } from './DueDate'
@@ -1029,6 +1030,21 @@ export function TaskDrawer({
               часть постановки, а порядок работ вокруг задачи. */}
           {routeProjectId && (
             <TaskBlockers
+              taskId={task.id}
+              projectId={routeProjectId}
+              canEdit={canEdit}
+              onOpenTask={(id) =>
+                navigate(`/c/${companyId}/p/${routeProjectId}/tasks/${id}`)
+              }
+            />
+          )}
+
+          {/* Связи: из чего задача выросла и что на неё похоже. Отдельным
+              блоком под зависимостями, а не вперемешку с ними: блокер значит
+              «ещё рано», связь — «посмотри и сюда». Свалив их в один список,
+              мы бы научили не доверять замочку. */}
+          {routeProjectId && (
+            <TaskLinks
               taskId={task.id}
               projectId={routeProjectId}
               canEdit={canEdit}

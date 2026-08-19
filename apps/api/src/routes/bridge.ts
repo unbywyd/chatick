@@ -19,7 +19,7 @@ import {
   projects,
   shares,
   resourceSecrets, resourceViewers,
-  taskBlockers, taskChecklist, taskResources,
+  taskBlockers, taskChecklist, taskLinks, taskResources,
   taskComments,
   taskReleases,
   releases,
@@ -1018,6 +1018,9 @@ const TASK_FIELDS = [
   // Версии, к которым относится задача. Связь необязательна с обеих сторон:
   // версия живёт без задачи, задача без версии.
   'releaseIds',
+  // Из чего задача выросла. Разбирая одну задачу на несколько, ассистент
+  // проставляет связь здесь же — вторым вызовом её забывают.
+  'links',
   // project передают в query, но в теле он безобиден и приходит по привычке
   'project',
 ] as const
@@ -1096,6 +1099,48 @@ async function linkReleases(releaseIds: unknown, projectId: string, taskId: stri
     }
   }
   return releasesOfTask(taskId)
+}
+
+/**
+ * Связать только что созданную задачу с теми, из которых она выросла.
+ *
+ * Принимаем номера ("TASK-3"), а не только id: ассистент оперирует номерами,
+ * и требовать от него лишний запрос за id значит получить связь, которую он
+ * не поставит.
+ */
+async function linkTasks(links: unknown, projectId: string, taskId: string, userId: string) {
+  const raw = Array.isArray(links) ? (links as unknown[]) : []
+  if (!raw.length) return []
+
+  // Два вида записи: "TASK-3" и {task:"TASK-3", kind:"related"}.
+  const wanted = raw
+    .map((x) =>
+      typeof x === 'string'
+        ? { key: x.trim(), kind: 'derived' as const }
+        : x && typeof x === 'object'
+          ? {
+              key: String((x as Record<string, unknown>).task ?? '').trim(),
+              kind: (x as Record<string, unknown>).kind === 'related' ? ('related' as const) : ('derived' as const),
+            }
+          : { key: '', kind: 'derived' as const },
+    )
+    .filter((x) => x.key)
+    .slice(0, 50)
+  if (!wanted.length) return []
+
+  const rows: { projectId: string; fromTaskId: string; toTaskId: string; kind: string; createdById: string }[] = []
+  const seen = new Set<string>()
+  for (const w of wanted) {
+    const found = await taskByKey(projectId, w.key)
+    // Молча пропускаем ненайденное: задача уже создана, и ронять весь вызов
+    // из-за одной опечатки в номере значило бы потерять её.
+    if (!found || found.id === taskId || seen.has(found.id)) continue
+    seen.add(found.id)
+    // Новая задача выросла ИЗ перечисленных — она слева.
+    rows.push({ projectId, fromTaskId: taskId, toTaskId: found.id, kind: w.kind, createdById: userId })
+  }
+  if (rows.length) await db.insert(taskLinks).values(rows).onConflictDoNothing()
+  return rows.map((r) => ({ taskId: r.toTaskId, kind: r.kind }))
 }
 
 /** Версии задачи со статусом — чтобы не переходить внутрь за одним словом. */
@@ -1889,6 +1934,7 @@ bridgeRoute.post('/tasks', async (c) => {
   const attachments = await attachToTask(b.attachmentIds, scope.projectId, id.userId, row!.id)
   const resources = b.resourceIds !== undefined ? await linkResources(b.resourceIds, scope.projectId, row!.id) : []
   const taskReleaseList = b.releaseIds !== undefined ? await linkReleases(b.releaseIds, scope.projectId, row!.id) : []
+  const linked = await linkTasks(b.links, scope.projectId, row!.id, id.userId)
   // Назначение через мост затрагивает человека ровно так же, как из интерфейса:
   // раньше задача сваливалась на него молча.
   void notifyTask(scope.projectId, id.userId, row!, { assigneeChanged: Boolean(row!.assigneeId), mentions: true })
@@ -1907,6 +1953,9 @@ bridgeRoute.post('/tasks', async (c) => {
       ),
       attachments,
       ...(b.releaseIds !== undefined ? { releases: taskReleaseList } : {}),
+      // Сколько связей реально легло: ненайденные номера пропускаются молча,
+      // и без этого поля ассистент считал бы связанным то, что не связалось.
+      ...(linked.length ? { links: linked } : {}),
     },
     201,
   )
@@ -2506,6 +2555,142 @@ bridgeRoute.post('/tasks/:id/blockers', async (c) => {
   })
   tasksChanged(scope.projectId, [task.assigneeId, task.createdById])
   return c.json({ ok: true, linked: resolved.length })
+})
+
+/* --- Связи задач в мосте ---------------------------------------------------
+ *
+ * Ассистент — главный их потребитель: разбирая одну задачу на несколько, он и
+ * проставляет derived. Ручки намеренно отдельны от блокеров: связь ничего не
+ * держит, и смешать их значило бы позволить «похожей задаче» гасить работу.
+ */
+
+bridgeRoute.get('/tasks/:id/links', async (c) => {
+  const scope = await resolveProject(c as never)
+  if ('error' in scope) return c.json({ error: scope.error }, scope.status)
+  const denied = await require(c as never, 'tasks.read', scope.projectId)
+  if (denied) return c.json(denied, 403)
+
+  const task = await taskByKey(scope.projectId, c.req.param('id'))
+  if (!task) return c.json({ error: 'Task not found' }, 404)
+
+  const out = await db
+    .select({ t: tasks, linkId: taskLinks.id, kind: taskLinks.kind })
+    .from(taskLinks)
+    .innerJoin(tasks, eq(tasks.id, taskLinks.toTaskId))
+    .where(and(eq(taskLinks.fromTaskId, task.id), isNull(tasks.deletedAt)))
+    .orderBy(asc(tasks.number))
+
+  const inc = await db
+    .select({ t: tasks, linkId: taskLinks.id, kind: taskLinks.kind })
+    .from(taskLinks)
+    .innerJoin(tasks, eq(tasks.id, taskLinks.fromTaskId))
+    .where(and(eq(taskLinks.toTaskId, task.id), isNull(tasks.deletedAt)))
+    .orderBy(asc(tasks.number))
+
+  const view = (r: { t: typeof tasks.$inferSelect; linkId: string }) => ({
+    ...linkedView(r.t),
+    linkId: r.linkId,
+  })
+
+  return c.json({
+    task: { number: task.number, title: task.title },
+    /** Из чего эта задача выросла. */
+    derivedFrom: out.filter((r) => r.kind === 'derived').map(view),
+    /** Что выросло из неё. */
+    derivedInto: inc.filter((r) => r.kind === 'derived').map(view),
+    /** Просто связанные: симметрично, обе стороны в одном списке. */
+    related: [...out, ...inc].filter((r) => r.kind === 'related').map(view),
+  })
+})
+
+bridgeRoute.post('/tasks/:id/links', async (c) => {
+  const id = auth(c as never)
+  const scope = await resolveProject(c as never)
+  if ('error' in scope) return c.json({ error: scope.error }, scope.status)
+  const denied = await require(c as never, 'tasks.edit', scope.projectId)
+  if (denied) return c.json(denied, 403)
+
+  const parsed_l = await readJson(c as never)
+  if ('error' in parsed_l) return c.json(parsed_l, 400)
+  const b = parsed_l.body as Record<string, unknown>
+  const bad = unknownFields(b, ['tasks', 'kind', 'direction', 'project'])
+  if (bad) return c.json({ error: bad }, 400)
+
+  const task = await taskByKey(scope.projectId, c.req.param('id'))
+  if (!task) return c.json({ error: 'Task not found' }, 404)
+
+  const kind = b.kind === 'derived' ? 'derived' : 'related'
+  const direction = b.direction === 'into' ? 'into' : 'from'
+  const keys = Array.isArray(b.tasks) ? b.tasks.map((x) => String(x).trim()).filter(Boolean) : []
+  if (!keys.length) return c.json({ error: 'tasks must be a non-empty array of task numbers or ids' }, 400)
+  if (keys.length > 50) return c.json({ error: `Too many tasks: ${keys.length}. Maximum 50 per request.` }, 400)
+
+  const resolved: { id: string; number: string }[] = []
+  for (const k of keys) {
+    const found = await taskByKey(scope.projectId, k)
+    if (!found) return c.json({ error: `Task ${k} not found in this project` }, 404)
+    if (found.id === task.id) return c.json({ error: 'A task cannot link to itself' }, 400)
+    resolved.push({ id: found.id, number: found.number })
+  }
+
+  // Уже связанные пропускаем: уникальный индекс ловит только одинаковый
+  // порядок пары, а связь в обратную сторону — та же самая связь.
+  const existing = await db
+    .select({ a: taskLinks.fromTaskId, b: taskLinks.toTaskId })
+    .from(taskLinks)
+    .where(
+      and(
+        eq(taskLinks.projectId, scope.projectId),
+        or(eq(taskLinks.fromTaskId, task.id), eq(taskLinks.toTaskId, task.id)),
+      ),
+    )
+  const already = new Set(existing.flatMap((r) => [r.a, r.b]))
+  const fresh = resolved.filter((r) => !already.has(r.id))
+
+  if (fresh.length) {
+    await db
+      .insert(taskLinks)
+      .values(
+        fresh.map((r) => ({
+          projectId: scope.projectId,
+          fromTaskId: direction === 'from' ? task.id : r.id,
+          toTaskId: direction === 'from' ? r.id : task.id,
+          kind,
+          createdById: id.userId,
+        })),
+      )
+      .onConflictDoNothing()
+  }
+
+  void logActivity({
+    projectId: scope.projectId,
+    actorId: id.userId,
+    action: 'update',
+    entityType: 'task',
+    entityId: task.id,
+    entityLabel: `${task.number} ${task.title}`,
+  })
+  tasksChanged(scope.projectId, [task.assigneeId, task.createdById])
+  return c.json({ ok: true, linked: fresh.length })
+})
+
+bridgeRoute.delete('/tasks/:id/links/:linkId', async (c) => {
+  const scope = await resolveProject(c as never)
+  if ('error' in scope) return c.json({ error: scope.error }, scope.status)
+  const denied = await require(c as never, 'tasks.edit', scope.projectId)
+  if (denied) return c.json(denied, 403)
+
+  const task = await taskByKey(scope.projectId, c.req.param('id'))
+  if (!task) return c.json({ error: 'Task not found' }, 404)
+
+  const [gone] = await db
+    .delete(taskLinks)
+    .where(and(eq(taskLinks.id, c.req.param('linkId')), eq(taskLinks.projectId, scope.projectId)))
+    .returning()
+  if (!gone) return c.json({ error: 'Link not found' }, 404)
+
+  tasksChanged(scope.projectId, [task.assigneeId, task.createdById])
+  return c.json({ ok: true })
 })
 
 bridgeRoute.delete('/tasks/:id/blockers/:linkId', async (c) => {

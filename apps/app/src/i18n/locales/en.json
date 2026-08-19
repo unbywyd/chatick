@@ -1608,6 +1608,17 @@
     "stripHolding_one": "holding back {{count}} task",
     "stripHolding_other": "holding back {{count}} tasks"
   },
+  "links": {
+    "derivedFrom": "Grew out of",
+    "derivedInto": "Spawned",
+    "related": "Related",
+    "noDerivedFrom": "This task did not grow out of anything",
+    "noDerivedInto": "Nothing grew out of this task",
+    "noRelated": "No related tasks",
+    "add": "Link",
+    "remove": "Remove link",
+    "pickTitle": "Which tasks to link"
+  },
   "db": {
     "title": "Databases",
     "add": "Connect a database",

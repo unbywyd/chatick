@@ -1,11 +1,11 @@
 import { Hono } from 'hono'
 import { zValidator } from '@hono/zod-validator'
 import { z } from 'zod'
-import { and, asc, desc, eq, inArray, isNull, sql } from 'drizzle-orm'
+import { and, asc, desc, eq, inArray, isNull, or, sql } from 'drizzle-orm'
 import { buildType, isLiveStage } from '../lib/release-stages.js'
 import { companyOf, projectPath } from '../lib/links.js'
 import { db } from '../db/client.js'
-import { credentials, files, projects, taskBlockers, taskChecklist, taskComments, taskGroups, taskNotes, taskResources, tasks, users, taskReleases, releases } from '../db/schema.js'
+import { credentials, files, projects, taskBlockers, taskChecklist, taskComments, taskGroups, taskLinks, taskNotes, taskResources, tasks, users, taskReleases, releases } from '../db/schema.js'
 import { requireProject, type ProjectEnv } from '../auth.js'
 import { hasPermission, ownsOrManages } from './projects.js'
 import { improveTask, validateTask, generateTaskNotes } from '../lib/llm.js'
@@ -1055,6 +1055,194 @@ tasksRoute.delete('/:taskId/blockers/:linkId', async (c) => {
   await db
     .delete(taskBlockers)
     .where(and(eq(taskBlockers.id, c.req.param('linkId')), eq(taskBlockers.projectId, projectId)))
+
+  tasksChanged(projectId, [task.assigneeId, task.createdById])
+  return c.json({ ok: true })
+})
+
+/* --- Связанные задачи ------------------------------------------------------
+ *
+ * Не блокеры: эти связи ничего не держат и не влияют на «с чего начать».
+ * Они отвечают на другой вопрос — из чего задача выросла и что на неё похоже.
+ * Поэтому и таблица отдельная, и ручки отдельные: перепутать их нельзя.
+ */
+
+/** Обе стороны связей: направленные derived читаются по-разному, related — одинаково. */
+tasksRoute.get('/:taskId/links', async (c) => {
+  const { projectId, sub } = c.get('auth')
+  if (!(await hasPermission(projectId, sub, 'tasks.read'))) return c.json({ error: 'Forbidden' }, 403)
+  const taskId = c.req.param('taskId')
+
+  // Строки, где наша задача слева: для derived это «мы выросли из них».
+  const out = await db
+    .select({ task: tasks, assignee: users, linkId: taskLinks.id, kind: taskLinks.kind })
+    .from(taskLinks)
+    .innerJoin(tasks, eq(tasks.id, taskLinks.toTaskId))
+    .leftJoin(users, eq(users.id, tasks.assigneeId))
+    .where(and(eq(taskLinks.fromTaskId, taskId), isNull(tasks.deletedAt)))
+    .orderBy(asc(tasks.status), asc(tasks.number))
+
+  // Строки, где наша задача справа: для derived это «из нас выросли они».
+  const inc = await db
+    .select({ task: tasks, assignee: users, linkId: taskLinks.id, kind: taskLinks.kind })
+    .from(taskLinks)
+    .innerJoin(tasks, eq(tasks.id, taskLinks.fromTaskId))
+    .leftJoin(users, eq(users.id, tasks.assigneeId))
+    .where(and(eq(taskLinks.toTaskId, taskId), isNull(tasks.deletedAt)))
+    .orderBy(asc(tasks.status), asc(tasks.number))
+
+  const view = (r: (typeof out)[number]) => ({ ...linkView(r.task, r.assignee), linkId: r.linkId })
+
+  return c.json({
+    /** Из чего эта задача выросла. */
+    derivedFrom: out.filter((r) => r.kind === 'derived').map(view),
+    /** Что выросло из неё. */
+    derivedInto: inc.filter((r) => r.kind === 'derived').map(view),
+    /** Просто связанные — симметрично, поэтому обе стороны в одном списке. */
+    related: [...out, ...inc].filter((r) => r.kind === 'related').map(view),
+  })
+})
+
+/**
+ * Кого можно связать. Выпадают сама задача и уже связанные — предлагать то,
+ * что заведомо отвергнут, значит врать подсказкой.
+ *
+ * Колец здесь не проверяем, в отличие от блокеров: связь ничего не держит, и
+ * замкнутая цепочка «похоже на» никого не блокирует.
+ */
+tasksRoute.get('/:taskId/links/candidates', async (c) => {
+  const { projectId, sub } = c.get('auth')
+  if (!(await hasPermission(projectId, sub, 'tasks.read'))) return c.json({ error: 'Forbidden' }, 403)
+  const taskId = c.req.param('taskId')
+  const q = (c.req.query('q') ?? '').trim()
+
+  const linked = await db
+    .select({ a: taskLinks.fromTaskId, b: taskLinks.toTaskId })
+    .from(taskLinks)
+    .where(
+      and(
+        eq(taskLinks.projectId, projectId),
+        or(eq(taskLinks.fromTaskId, taskId), eq(taskLinks.toTaskId, taskId)),
+      ),
+    )
+  const already = new Set(linked.flatMap((r) => [r.a, r.b]))
+
+  const conds = [eq(tasks.projectId, projectId), isNull(tasks.deletedAt)]
+  if (q) {
+    conds.push(
+      sql`(${tasks.title} ilike ${`%${q}%`} or ${tasks.number} ilike ${`%${q}%`} or ${tasks.refs} ilike ${`%${q}%`})`,
+    )
+  }
+  const rows = await db
+    .select({ task: tasks, assignee: users })
+    .from(tasks)
+    .leftJoin(users, eq(users.id, tasks.assigneeId))
+    .where(and(...conds))
+    .orderBy(asc(tasks.status), desc(tasks.createdAt))
+    .limit(200)
+
+  const items = rows
+    .filter((r) => r.task.id !== taskId && !already.has(r.task.id))
+    .slice(0, 50)
+    .map((r) => linkView(r.task, r.assignee))
+  return c.json({ items })
+})
+
+/** Связать задачи. Список: выбрали несколько галочками — один запрос. */
+tasksRoute.post(
+  '/:taskId/links',
+  zValidator(
+    'json',
+    z.object({
+      taskIds: z.array(z.string()).min(1).max(50),
+      kind: z.enum(['derived', 'related']).default('related'),
+      /**
+       * Для derived направление решает смысл: from — «эта выросла из тех»,
+       * into — «из этой выросли те». Для related безразлично, связь
+       * симметрична.
+       */
+      direction: z.enum(['from', 'into']).default('from'),
+    }),
+  ),
+  async (c) => {
+    const { projectId, sub } = c.get('auth')
+    if (!(await hasPermission(projectId, sub, 'tasks.edit'))) return c.json({ error: 'Forbidden' }, 403)
+    const taskId = c.req.param('taskId')
+    const { taskIds, kind, direction } = c.req.valid('json')
+
+    const task = await db.query.tasks.findFirst({
+      where: and(eq(tasks.id, taskId), eq(tasks.projectId, projectId), isNull(tasks.deletedAt)),
+    })
+    if (!task) return c.json({ error: 'Not found' }, 404)
+
+    // Сама с собой — не связь.
+    if (taskIds.includes(taskId)) return c.json({ error: 'A task cannot link to itself' }, 400)
+
+    // Только задачи ЭТОГО проекта: чужой номер человек всё равно не откроет.
+    const found = await db
+      .select({ id: tasks.id })
+      .from(tasks)
+      .where(and(eq(tasks.projectId, projectId), inArray(tasks.id, taskIds), isNull(tasks.deletedAt)))
+    if (found.length !== taskIds.length) return c.json({ error: 'Some tasks are not in this project' }, 400)
+
+    // Связь уже может существовать в обратную сторону — уникальный индекс её
+    // не поймает (пара упорядочена), поэтому отсекаем явно: иначе в списке
+    // появятся два одинаковых пункта.
+    const existing = await db
+      .select({ a: taskLinks.fromTaskId, b: taskLinks.toTaskId })
+      .from(taskLinks)
+      .where(
+        and(
+          eq(taskLinks.projectId, projectId),
+          or(eq(taskLinks.fromTaskId, taskId), eq(taskLinks.toTaskId, taskId)),
+        ),
+      )
+    const linkedAlready = new Set(existing.flatMap((r) => [r.a, r.b]))
+    const fresh = taskIds.filter((x) => !linkedAlready.has(x))
+
+    if (fresh.length) {
+      await db
+        .insert(taskLinks)
+        .values(
+          fresh.map((other) => ({
+            projectId,
+            fromTaskId: direction === 'from' ? taskId : other,
+            toTaskId: direction === 'from' ? other : taskId,
+            kind,
+            createdById: sub,
+          })),
+        )
+        // Повторная связь — не ошибка и не вторая связь.
+        .onConflictDoNothing()
+    }
+
+    void logActivity({
+      projectId,
+      actorId: sub,
+      action: 'update',
+      entityType: 'task',
+      entityId: taskId,
+      entityLabel: `${task.number} ${task.title}`,
+    })
+    tasksChanged(projectId, [task.assigneeId, task.createdById])
+    return c.json({ ok: true, added: fresh.length })
+  },
+)
+
+/** Убрать связь. Направление не важно — у связи один id. */
+tasksRoute.delete('/:taskId/links/:linkId', async (c) => {
+  const { projectId, sub } = c.get('auth')
+  if (!(await hasPermission(projectId, sub, 'tasks.edit'))) return c.json({ error: 'Forbidden' }, 403)
+  const taskId = c.req.param('taskId')
+
+  const task = await db.query.tasks.findFirst({
+    where: and(eq(tasks.id, taskId), eq(tasks.projectId, projectId)),
+  })
+  if (!task) return c.json({ error: 'Not found' }, 404)
+
+  await db
+    .delete(taskLinks)
+    .where(and(eq(taskLinks.id, c.req.param('linkId')), eq(taskLinks.projectId, projectId)))
 
   tasksChanged(projectId, [task.assigneeId, task.createdById])
   return c.json({ ok: true })

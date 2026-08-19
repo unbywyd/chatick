@@ -57,7 +57,7 @@ function endpointCatalog(q: string): string {
          in chat and stretches message cards out of shape. Both open the same
          task and neither grants access: rights are checked on arrival.
          Lists omit "shortUrl" — ask for the single task when you need it.
-  POST   /x/tasks${q}              {"title","description?","assignee?","status?","priority?","estimateMinutes?","dueDate?","sprintId?","attachmentIds?","resourceIds?","refs?"}
+  POST   /x/tasks${q}              {"title","description?","assignee?","status?","priority?","estimateMinutes?","dueDate?","sprintId?","attachmentIds?","resourceIds?","refs?","links?"}
   PATCH  /x/tasks/<id>${q}         any subset of the same fields
   PATCH  /x/tasks/bulk${q}         {"tasks":["TASK-4","TASK-7"], "set":{...}, "refs":{"TASK-4":"19.1"}}
   DELETE /x/tasks/<id>${q}
@@ -77,6 +77,16 @@ function endpointCatalog(q: string): string {
   database. Link them, never copy a secret into the description: a password
   pasted there is readable by everyone who can see the task and cannot be taken
   back, while a linked resource keeps deciding for itself who may open it.
+
+  "links" — the tasks this new one grew out of. Accepts numbers directly:
+  ["TASK-3"], or ["TASK-3", {"task":"TASK-9","kind":"related"}] when one of
+  them is a sibling rather than a source. Default kind is "derived".
+
+  Use it whenever you split one task into several — that is the case it exists
+  for. Creating five tasks from one review and linking them afterwards means
+  two rounds of calls and a link you will forget on the fifth. A number that
+  does not resolve is skipped rather than failing the whole call, and the
+  response lists what actually got linked.
   Create the resource with POST /x/resources, pass its id here. Ids from
   another project are ignored rather than rejected, so one stale id does not
   fail the whole call.
@@ -198,6 +208,39 @@ function endpointCatalog(q: string): string {
   BEFORE this one. side="blocking" is the mirror: this task must be finished
   before the listed ones. Both write the same link, so pick whichever matches
   the sentence you would say out loud.
+
+  GET    /x/tasks/<id>/links${q}              where this task came from, and what resembles it
+  POST   /x/tasks/<id>/links${q}              {"tasks":["TASK-3"], "kind":"derived"|"related"}
+  DELETE /x/tasks/<id>/links/<linkId>${q}     remove one link
+
+  Links are NOT blockers. They hold nothing back and never affect what to
+  start next; they answer a different question — where a task came from and
+  what else touches the same ground. A blocker says "not yet"; a link says
+  "look here too".
+
+  You are the one who will usually set them. Splitting one task into several
+  is your most common move: a client leaves ten remarks in a single task, you
+  turn them into five. Do it, and the connection lives only in your head —
+  a week later nobody opening any of the five can tell where it came from.
+  So when you break a task apart, link each new task back to the original
+  with kind="derived" in the same breath. Passing links to create_task does
+  it at creation, which is one call instead of two.
+
+    kind="derived"   this task grew out of the listed ones. Directed: the new
+                     task shows "grew out of TASK-3", the original shows
+                     "spawned TASK-9, TASK-10".
+    kind="related"   these tasks touch the same thing. Symmetric — both sides
+                     read the same, so direction does not matter.
+    direction        for derived only: "from" (default) means this task grew
+                     out of the listed ones; "into" is the mirror.
+
+  Use derived when one task produced another, related when two tasks merely
+  belong together — a bug and the feature that caused it, two screens sharing
+  a component. When in doubt, related: claiming a lineage that is not there
+  misleads whoever reads it in six months.
+
+  Links live inside one project. A link to another project's task would show a
+  number the reader cannot open.
 
   The reply to GET includes "openBlockers" — unfinished tasks in the way.
   Zero means the task can be picked up right now; that is the number worth

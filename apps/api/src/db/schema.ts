@@ -646,6 +646,40 @@ export const taskBlockers = pgTable(
   ],
 )
 
+/**
+ * Связи между задачами: происхождение и сходство.
+ *
+ * Отдельной таблицей от task_blockers, а не полем kind в ней: смешав их,
+ * пришлось бы всюду фильтровать «а это блокер или нет», и однажды забудут —
+ * тогда «похожая задача» начнёт гасить замочком чужую работу. Здесь про то,
+ * откуда задача взялась, там — про порядок работ. Разные вопросы.
+ */
+export const taskLinks = pgTable(
+  'task_links',
+  {
+    id: id(),
+    projectId: text('project_id').notNull().references(() => projects.id, { onDelete: 'cascade' }),
+    /** Откуда смотрим: у derived — порождённая задача. */
+    fromTaskId: text('from_task_id').notNull().references(() => tasks.id, { onDelete: 'cascade' }),
+    /** Куда: у derived — исходная, из которой выросли. */
+    toTaskId: text('to_task_id').notNull().references(() => tasks.id, { onDelete: 'cascade' }),
+    /**
+     * derived — «выросла из», направленная и читается по-разному с двух сторон.
+     * related — «связано», симметричная: обе стороны видят одно и то же.
+     */
+    kind: text('kind').notNull().default('related'),
+    createdById: text('created_by_id').references(() => users.id, { onDelete: 'set null' }),
+    createdAt: createdAt(),
+  },
+  (t) => [
+    // Одна и та же связь дважды — это не две связи.
+    uniqueIndex('task_links_pair_idx').on(t.fromTaskId, t.toTaskId),
+    index('task_links_from_idx').on(t.fromTaskId),
+    index('task_links_to_idx').on(t.toTaskId),
+    index('task_links_project_idx').on(t.projectId),
+  ],
+)
+
 export const taskNotes = pgTable(
   'task_notes',
   {
