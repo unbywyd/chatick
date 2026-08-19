@@ -1,6 +1,6 @@
 import { and, eq, isNotNull, lt, sql } from 'drizzle-orm'
 import { db } from '../db/client.js'
-import { files, tasks, taskGroups, credentials, documents } from '../db/schema.js'
+import { files, tasks, taskGroups, credentials, documents, resourceFiles } from '../db/schema.js'
 import { resolveStorage, deleteObject } from './s3.js'
 
 const RETENTION_MS = 7 * 24 * 60 * 60 * 1000 // 7 дней в корзине (SPEC §8.21)
@@ -85,6 +85,32 @@ export async function sweepSoftDeleted(): Promise<void> {
     // задачи / спринты / ресурсы — просто удаляем записи (каскады сработают)
     const t = await db.delete(tasks).where(and(isNotNull(tasks.deletedAt), lt(tasks.deletedAt, cutoff))).returning({ id: tasks.id })
     const g = await db.delete(taskGroups).where(and(isNotNull(taskGroups.deletedAt), lt(taskGroups.deletedAt, cutoff))).returning({ id: taskGroups.id })
+
+    /**
+     * Файлы ресурса — ДО удаления самих ресурсов.
+     *
+     * Каскад в базе уносит строки resource_files вместе с ресурсом, но
+     * хранилище про каскады не знает: объекты остались бы там навсегда.
+     * Зашифрованные — и всё же это данные, которые считаются удалёнными,
+     * место, за которое платят, и мусор, о котором никто уже не вспомнит.
+     * Поэтому сначала забираем ключи, потом удаляем записи.
+     */
+    const doomed = await db
+      .select({ key: resourceFiles.key, projectId: credentials.projectId })
+      .from(resourceFiles)
+      .innerJoin(credentials, eq(credentials.id, resourceFiles.resourceId))
+      .where(and(isNotNull(credentials.deletedAt), lt(credentials.deletedAt, cutoff)))
+    for (const row of doomed) {
+      try {
+        const store = await resolveStorage(row.projectId)
+        await deleteObject(store, row.key)
+      } catch (e) {
+        // Запись всё равно уйдёт: висящий объект хуже, чем неудалённый
+        // ресурс, но не настолько, чтобы останавливать всю уборку.
+        console.error('[cleanup] resource file object left in storage:', row.key, e)
+      }
+    }
+
     const cr = await db.delete(credentials).where(and(isNotNull(credentials.deletedAt), lt(credentials.deletedAt, cutoff))).returning({ id: credentials.id })
     const dc = await db.delete(documents).where(and(isNotNull(documents.deletedAt), lt(documents.deletedAt, cutoff))).returning({ id: documents.id })
     const total = expiredFiles.length + t.length + g.length + cr.length + dc.length

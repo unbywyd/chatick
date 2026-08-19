@@ -198,6 +198,32 @@ describe('мост и ассистент', () => {
   })
 })
 
+describe('удалённый ресурс не оставляет файлов в хранилище', () => {
+  const cleanup = readFileSync(join(import.meta.dirname, '..', 'lib', 'file-cleanup.ts'), 'utf8')
+
+  it('уборка корзины забирает ключи ДО удаления ресурсов', () => {
+    // Каскад в базе уносит строки resource_files, но хранилище про каскады
+    // не знает: объекты остались бы там навсегда.
+    const keys = cleanup.indexOf('resourceFiles.key')
+    const del = cleanup.indexOf('db.delete(credentials)')
+    expect(keys, 'уборка не читает ключи файлов ресурса').toBeGreaterThan(-1)
+    expect(del).toBeGreaterThan(keys)
+  })
+
+  it('объекты действительно удаляются из хранилища', () => {
+    const at = cleanup.indexOf('resourceFiles.key')
+    const body = cleanup.slice(at, at + 1200)
+    expect(body).toMatch(/deleteObject/)
+  })
+
+  it('сбой одного объекта не роняет всю уборку', () => {
+    // Иначе один недоступный ключ остановил бы очистку остальных.
+    const at = cleanup.indexOf('resourceFiles.key')
+    const body = cleanup.slice(at, at + 1200)
+    expect(body).toMatch(/catch/)
+  })
+})
+
 describe('права и границы', () => {
   it('все четыре ручки проверяют доступ к секретам', () => {
     expect(handler(src, 'get', '/:id/files')).toMatch(/canSeeSecrets/)
