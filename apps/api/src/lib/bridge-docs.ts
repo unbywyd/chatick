@@ -1253,6 +1253,16 @@ ${endpointCatalog('?project=<id>')}
   DELETE /x/resources/<id>/secrets/<secretId>?project=<id>
          Remove one secret. PATCH only adds, so this is how a wrong label or a
          duplicated value gets undone without leaving the resource littered.
+  GET    /x/resources/<id>/files?project=<id>
+         Files kept under a resource: keystore, certificate, private key. Names
+         and sizes only, never contents. They are encrypted at rest and never
+         appear among project files — an Android signing key cannot be reissued
+         for an app already published, so a resource holding only the password
+         is a false sense of safety.
+  GET    /x/resources/<id>/files/<fileId>?project=<id>
+         Download one. Binary, and audited like revealing a password. Uploading
+         is not available to you: ask the human to attach it in the resource
+         card, and say why it belongs there rather than in project files.
 
   POST   /x/disconnect                  close this tunnel when you are done
 
