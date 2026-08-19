@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { memo, useEffect, useState } from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { useTranslation } from 'react-i18next'
@@ -37,6 +37,37 @@ function useElapsed(startedAt?: string): number {
   return startedAt ? Math.floor((now - new Date(startedAt).getTime()) / 1000) : 0
 }
 
+/**
+ * Бегущие цифры отдельным компонентом.
+ *
+ * Счётчик обновляется раз в секунду, и пока он жил прямо в TimerControl,
+ * каждый тик перерисовывал весь контрол целиком: список проектов, поповер,
+ * значки, кнопки — ради двух цифр, которые изменились. Здесь тикает только
+ * сам <span>, остальное стоит на месте.
+ */
+const Elapsed = memo(function Elapsed({
+  startedAt,
+  className,
+  title,
+  onClick,
+}: {
+  startedAt?: string
+  className?: string
+  title?: string
+  onClick?: () => void
+}) {
+  const elapsed = useElapsed(startedAt)
+  const text = formatElapsed(elapsed)
+  if (onClick) {
+    return (
+      <button onClick={onClick} className={className} title={title}>
+        {text}
+      </button>
+    )
+  }
+  return <span className={className}>{text}</span>
+})
+
 export function TimerControl({ collapsed }: { collapsed: boolean }) {
   const { t } = useTranslation()
   const { id: projectId, companyId } = useParams()
@@ -49,6 +80,20 @@ export function TimerControl({ collapsed }: { collapsed: boolean }) {
     queryFn: () => api<{ items: RunningEntry[] }>('/api/v1/time/running', {}, 'project'),
     // опрос — только страховка: основное обновление приходит по сокету
     refetchInterval: 60_000,
+    /**
+     * Таймер не исчезает на переходе между проектами.
+     *
+     * Ручка отдаёт ВСЕ идущие таймеры человека (`where userId = sub`), от
+     * проекта зависит только подпись «это не здесь» — поэтому projectId в
+     * ключе остаётся. Но при смене проекта ключ становится новым, кеша под
+     * него ещё нет, и контрол на мгновение получал undefined: бегущий таймер
+     * пропадал и появлялся заново на каждом клике по проекту.
+     *
+     * Прежние данные держатся, пока едут новые. Показать секунду назад
+     * полученное состояние своего же таймера безопасно — оно не устаревает
+     * за время одного запроса.
+     */
+    placeholderData: (prev) => prev,
   })
 
   // Таймер могли запустить не отсюда: ИИ из чата, мост из редактора, другая
@@ -63,7 +108,6 @@ export function TimerControl({ collapsed }: { collapsed: boolean }) {
   })
 
   const first = running.data?.items[0]
-  const elapsed = useElapsed(first?.startedAt)
   const count = running.data?.items.length ?? 0
 
   const onErr = (e: unknown) => toast.error(e instanceof Error ? e.message : String(e))
@@ -83,6 +127,11 @@ export function TimerControl({ collapsed }: { collapsed: boolean }) {
     queryKey: ['sidebar-projects', companyId],
     enabled: Boolean(companyId),
     queryFn: () => api<ProjectLite[]>(`/api/v1/projects?companyId=${companyId}`),
+    // Ключ общий с сайдбаром — значит и настройки должны совпадать, иначе
+    // два подписчика на один кеш спорят, устарел он или нет, и список
+    // перезапрашивается чаще, чем нужно любому из них.
+    staleTime: 30_000,
+    placeholderData: (prev) => prev,
   })
   const myProjects = (projectsQ.data ?? []).filter((p) => p.isMember)
   const start = useMutation({
@@ -159,13 +208,12 @@ export function TimerControl({ collapsed }: { collapsed: boolean }) {
         </button>
         {first && (
           <>
-            <button
+            <Elapsed
+              startedAt={first.startedAt}
               onClick={() => navigate(timePath(first.projectId))}
               className={cn('font-mono text-[10px] tabular-nums', elsewhere ? 'text-amber-500' : 'text-brand-ink')}
               title={elsewhere ? t('time.runningIn', { project: elsewhere }) : t('time.openPage')}
-            >
-              {formatElapsed(elapsed)}
-            </button>
+            />
             {/* маленький значок проекта: в узкой колонке это единственный
                 способ понять, чей таймер идёт */}
             {(() => {
@@ -197,8 +245,11 @@ export function TimerControl({ collapsed }: { collapsed: boolean }) {
 
       {first ? (
         <div className="min-w-0 flex-1 leading-tight">
-          <span className={cn('block font-mono text-xs tabular-nums', elsewhere ? 'text-amber-500' : 'text-brand-ink')}>
-            {formatElapsed(elapsed)}
+          <span className="block">
+            <Elapsed
+              startedAt={first.startedAt}
+              className={cn('font-mono text-xs tabular-nums', elsewhere ? 'text-amber-500' : 'text-brand-ink')}
+            />
             {count > 1 && <span className="ms-1 text-[10px] text-muted-foreground">+{count - 1}</span>}
           </span>
           {/* К какому проекту привязан таймер — видно ВСЕГДА, а не только когда
