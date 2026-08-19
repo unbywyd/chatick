@@ -973,6 +973,39 @@ export const resourceSecrets = pgTable(
  * оставить ресурс без единого владельца — с секретом, который больше никто не
  * откроет.
  */
+/**
+ * Файлы под ресурсом: кейстор, сертификат, ключ, .env.
+ *
+ * ОТДЕЛЬНАЯ таблица от files, а не флаг в ней. Флаг однажды забудут в одной
+ * из выборок — в менеджере, в поиске, в выдаче задачи — и ключ подписи
+ * окажется на виду у всего проекта. Разные сущности живут в разных таблицах
+ * именно затем, чтобы такую ошибку нельзя было совершить по невнимательности.
+ *
+ * В хранилище лежит ШИФРОТЕКСТ (encryptBytes), не исходник: тот, кто получит
+ * доступ к бакету, файла не прочитает. Ключ шифрования — в .env, в базу не
+ * попадает ни в каком виде.
+ *
+ * Права наследуются от ресурса через resource_viewers, как у текстовых
+ * секретов: адрес и описание видят все участники проекта, файл — нет.
+ */
+export const resourceFiles = pgTable(
+  'resource_files',
+  {
+    id: id(),
+    resourceId: text('resource_id').notNull().references(() => credentials.id, { onDelete: 'cascade' }),
+    /** Исходное имя: в хранилище ключ обезличен, а человеку нужно «main.jks». */
+    name: text('name').notNull(),
+    /** Ключ объекта в S3/R2. Под ним лежит шифротекст. */
+    key: text('key').notNull(),
+    mime: text('mime').notNull().default('application/octet-stream'),
+    /** Размер ИСХОДНОГО файла, а не шифротекста: его показывают человеку. */
+    size: text('size').notNull().default('0'),
+    uploadedById: text('uploaded_by_id').references(() => users.id, { onDelete: 'set null' }),
+    createdAt: createdAt(),
+  },
+  (t) => [index('resource_files_idx').on(t.resourceId)],
+)
+
 export const resourceViewers = pgTable(
   'resource_viewers',
   {
