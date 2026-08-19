@@ -281,6 +281,19 @@ export const companyMembers = pgTable(
     companyId: text('company_id').notNull().references(() => companies.id, { onDelete: 'cascade' }),
     userId: text('user_id').notNull().references(() => users.id, { onDelete: 'cascade' }),
     role: companyRole('role').notNull().default('member'),
+    /**
+     * Должность и зона ответственности — на уровне компании.
+     *
+     * Проект наследует их, пока не задал своё: должность человека не меняется
+     * от проекта к проекту, а заводить её в каждом заново — десять мест,
+     * где она разойдётся. Наследование, а не копия при добавлении: меняя
+     * должность здесь, ждут, что она изменится везде.
+     *
+     * Читает это в первую очередь ассистент: «спроси у Даниэля» осмысленно
+     * только если известно, что Даниэль — бэкендер.
+     */
+    jobTitle: text('job_title').notNull().default(''),
+    responsibility: text('responsibility').notNull().default(''),
     createdAt: createdAt(),
   },
   (t) => [
