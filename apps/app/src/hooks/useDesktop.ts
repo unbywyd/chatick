@@ -215,6 +215,11 @@ export function useDesktopSync() {
     enabled: Boolean(bridge) && authed,
     queryFn: () => api<Me>('/api/v1/auth/me'),
     staleTime: 5 * 60_000,
+    // Свой опрос, как у остальных запросов панели. Без него единственная
+    // неудачная попытка (перезапуск API, спящая сеть) оставляла шапку без
+    // имени и с вопросительным знаком вместо аватарки — до перезапуска
+    // программы, потому что повторить её было уже нечему.
+    refetchInterval: 5 * 60_000,
   })
 
   // Непрочитанные — то же, что показывает колокольчик: только адресованное мне.
@@ -242,6 +247,12 @@ export function useDesktopSync() {
     enabled: Boolean(bridge) && authed,
     queryFn: () =>
       api<{ companies: { id: string; name: string; myRole: 'admin' | 'manager' | 'member'; mainProjectId?: string | null }[] }>('/api/v1/companies'),
+    // Этот опрос — единственное, что оживляет панель после падения запроса:
+    // проверено на самой библиотеке. Упавший запрос оставляет data пустым, из
+    // пустого списка компаний собирается пустой ключ, а он ВЫКЛЮЧАЕТ запрос
+    // проектов (enabled ниже) вместе с его собственным опросом. Без строки
+    // ниже чинить панель нечему — она пуста до перезапуска программы.
+    refetchInterval: 60_000,
   })
   const myCompanies = companies.data?.companies ?? []
   const company = myCompanies[0]
@@ -699,6 +710,13 @@ export function useDesktopSync() {
       qc.invalidateQueries({ queryKey: ['desktop-running'] })
       qc.invalidateQueries({ queryKey: ['inbox'] })
       qc.invalidateQueries({ queryKey: ['desktop-tasks'] })
+      // И то, на чём держится сама панель. Раньше кнопка обновляла только
+      // три запроса выше — те, что и так опрашивают себя сами. Когда человек
+      // жмёт «обновить», он смотрит на пустую панель: сломано как раз то,
+      // чего в этом списке не было.
+      qc.invalidateQueries({ queryKey: ['companies'] })
+      qc.invalidateQueries({ queryKey: ['tray-projects'] })
+      qc.invalidateQueries({ queryKey: ['me'] })
       setStateNonce((n) => n + 1)
     })
 
