@@ -86,7 +86,8 @@
     "ownCompanies": "החברה שלי",
     "guestCompanies": "היכן שאני משתתף",
     "projectsCount_one": "פרויקט אחד",
-    "projectsCount_other": "{{count}} פרויקטים"
+    "projectsCount_other": "{{count}} פרויקטים",
+    "leaveDangerHint": "תאבדו גישה לכל הפרויקטים של החברה, למשימות, לקבצים ולשיחות. חזרה אפשרית רק בהזמנה חדשה ממנהל — לא תוכלו להחזיר את עצמכם."
   },
   "companyTabs": {
     "projects": "פרויקטים",

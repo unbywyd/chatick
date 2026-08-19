@@ -1,5 +1,5 @@
 import { useTranslation } from 'react-i18next'
-import { Building2, Check, ChevronsUpDown, LogOut, Plus } from 'lucide-react'
+import { Building2, Check, ChevronsUpDown, Plus } from 'lucide-react'
 import type { Company } from '@/lib/api'
 import { cn } from '@/lib/utils'
 import {
@@ -21,14 +21,12 @@ export function CompanySwitcher({
   current,
   onSelect,
   onCreate,
-  onLeave,
 }: {
   companies: Company[]
   current: Company
   onSelect: (id: string) => void
   /** создать свою — только если её ещё нет */
   onCreate?: () => void
-  onLeave: (company: Company) => void
 }) {
   const { t } = useTranslation()
 
@@ -40,8 +38,6 @@ export function CompanySwitcher({
   // хотя своей у него нет вовсе.
   const hasOwn = companies.some((c) => c.isOwner)
   const canCreate = Boolean(onCreate) && !hasOwn
-  // Уйти можно только из чужой: свою без хозяина не оставишь.
-  const canLeave = !current.isOwner
 
   return (
     <DropdownMenu>
@@ -75,9 +71,8 @@ export function CompanySwitcher({
           </DropdownMenuItem>
         ))}
 
-        {/* Черта только когда под ней что-то есть: у человека со своей
-            единственной компанией оба пункта ниже скрыты. */}
-        {(canCreate || canLeave) && <DropdownMenuSeparator />}
+        {/* Черта только когда под ней что-то есть. */}
+        {canCreate && <DropdownMenuSeparator />}
 
         {canCreate && (
           <DropdownMenuItem onSelect={onCreate}>
@@ -86,18 +81,15 @@ export function CompanySwitcher({
           </DropdownMenuItem>
         )}
 
-        {/* Выйти можно только из чужой: свою без хозяина не оставишь. Удаление
-            здесь не показываем — необратимому место в опасной зоне настроек,
-            а не в меню, куда заходят просто сменить компанию. */}
-        {canLeave && (
-          <DropdownMenuItem
-            onSelect={() => onLeave(current)}
-            className={cn('text-destructive focus:text-destructive')}
-          >
-            <LogOut className="size-4" />
-            {t('start.leaveCompany')}
-          </DropdownMenuItem>
-        )}
+        {/*
+          Выхода из компании здесь больше НЕТ.
+          Он стоял последним пунктом — там, где в любом другом приложении
+          «выйти из аккаунта», — и человек, целясь выйти из программы, терял
+          доступ ко всем проектам компании. Вернуть себя он не может: нужен
+          другой админ или доступ к базе.
+          Необратимому место в опасной зоне настроек компании: туда надо
+          дойти намеренно, а не задеть мимоходом в меню переключения.
+        */}
       </DropdownMenuContent>
     </DropdownMenu>
   )

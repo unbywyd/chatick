@@ -154,7 +154,6 @@ export function StartScreen() {
                 current={company}
                 onSelect={setCompanyId}
                 onCreate={goCreate}
-                onLeave={setLeaving}
               />
             </>
           )}
@@ -200,6 +199,7 @@ export function StartScreen() {
             meId={me.data?.id}
             onEntered={(id) => navigate(`/c/${company.id}/p/${id}`)}
             onDeleteCompany={setDeletingCompany}
+            onLeaveCompany={setLeaving}
           />
         ) : companiesQ.isLoading ? (
           <p className="py-16 text-center text-sm text-muted-foreground">…</p>
@@ -419,10 +419,13 @@ function CompanyHome({
   meId,
   onEntered,
   onDeleteCompany,
+  onLeaveCompany,
 }: {
   company: Company
   meId?: string
   onDeleteCompany: (c: Company) => void
+  /** Выход из чужой компании — необратим, живёт в опасной зоне настроек. */
+  onLeaveCompany: (c: Company) => void
   onEntered: (projectId: string) => void
 }) {
   const { t } = useTranslation()
@@ -555,7 +558,12 @@ function CompanyHome({
       ) : tab === 'connect' && canManage ? (
         <CompanyConnectTab company={company} />
       ) : (
-        <CompanySettings company={company} isAdmin={isAdmin} onDeleteCompany={onDeleteCompany} />
+        <CompanySettings
+          company={company}
+          isAdmin={isAdmin}
+          onDeleteCompany={onDeleteCompany}
+          onLeaveCompany={onLeaveCompany}
+        />
       )}
     </div>
   )
@@ -577,10 +585,13 @@ function CompanySettings({
   company,
   isAdmin,
   onDeleteCompany,
+  onLeaveCompany,
 }: {
   company: Company
   isAdmin: boolean
   onDeleteCompany: (c: Company) => void
+  /** Выход из чужой компании — необратим, поэтому живёт в опасной зоне. */
+  onLeaveCompany: (c: Company) => void
 }) {
   const { t } = useTranslation()
   const [params, setParams] = useSearchParams()
@@ -626,6 +637,28 @@ function CompanySettings({
           <CompanyMainProject companyId={company.id} />
           {/* Хранилище компании: проекты наследуют его, если не задали своё. */}
           {isAdmin && <CompanyStorageCard companyId={company.id} />}
+
+          {/*
+            Выход из компании — здесь, внизу опасной зоны, а не в меню
+            переключения компаний.
+
+            Там он стоял последним пунктом, ровно на месте «выйти из
+            аккаунта», и человек, целясь закрыть приложение, разом терял
+            доступ ко всем проектам. Вернуть себя он не может — нужен другой
+            админ или доступ к базе, то есть цена промаха несоразмерна жесту.
+
+            Свою компанию покинуть нельзя: она осталась бы без хозяина.
+          */}
+          {!company.isOwner && (
+            <DangerZone>
+              <DangerAction
+                title={t('start.leaveCompany')}
+                description={t('start.leaveDangerHint')}
+                actionLabel={t('start.leaveCompany')}
+                onAction={() => onLeaveCompany(company)}
+              />
+            </DangerZone>
+          )}
         </>
       )}
 
