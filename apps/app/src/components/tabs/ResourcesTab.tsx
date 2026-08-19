@@ -23,7 +23,10 @@ import { ShareDialog } from '@/components/ShareDialog'
 import { api } from '@/lib/api'
 import { cn } from '@/lib/utils'
 import { Input } from '@/components/ui/input'
+import ReactMarkdown from 'react-markdown'
+import remarkGfm from 'remark-gfm'
 import { Button } from '@/components/ui/button'
+import { ResourceFiles } from './resources/ResourceFiles'
 import { DragHandle } from '@/components/ui/drag-handle'
 import { PeoplePicker, type Person } from '@/components/ui/people-picker'
 import { useConfirm } from '@/components/ui/confirm'
@@ -287,7 +290,16 @@ export function ResourcesTab({ projectId, isAdmin }: { projectId: string; isAdmi
                 <Trash2 className="size-4" />
               </Button>
             </div>
-            {r.description && <p className="mt-1 whitespace-pre-wrap text-xs text-muted-foreground">{r.description}</p>}
+            {/* Разметка, а не сырой текст: описания задач и комментариев её
+                рендерят, и ресурс выбивался — ассистент писал «**важно**», а
+                человек видел звёздочки. Формат хранения прежний, простой
+                текст: markdown разбирается при выводе, поэтому уже
+                сохранённые описания читаются как задумано, без миграции. */}
+            {r.description && (
+              <div className="prose prose-sm prose-invert mt-1 max-w-none text-xs text-muted-foreground [&_a]:text-brand [&_code]:text-xs [&_p]:my-0.5">
+                <ReactMarkdown remarkPlugins={[remarkGfm]}>{r.description}</ReactMarkdown>
+              </div>
+            )}
           </li>
         ))}
         {!list.isLoading && filtered.length === 0 && (
@@ -593,6 +605,11 @@ function ResourceForm({ projectId, editing, onClose }: { projectId: string; edit
           <Button variant="ghost" size="sm" className="mt-1" onClick={() => setNewSecrets((p) => [...p, { label: '', value: '' }])}>
             <Plus className="size-3.5" /> {t('resources.addSecret')}
           </Button>
+
+          {/* Файлы ресурса: кейстор, сертификат, ключ. Только у сохранённого —
+              файл кладётся сразу на сервер, и до появления id класть его
+              некуда. Для нового ресурса блок появится после сохранения. */}
+          {editing && <ResourceFiles resourceId={editing.id} canEdit />}
 
           {/* Кому видны секреты. Показываем только когда они есть: у голой
               ссылки прятать нечего, а лишний выбор в форме заставляет думать

@@ -418,6 +418,15 @@
     "needManageHint": "You can view resources but not add or edit them. Access is granted in the project team.",
     "openTeam": "Open the team"
   },
+  "resourceFiles": {
+    "title": "Files under lock",
+    "empty": "No files",
+    "attach": "Attach a file",
+    "uploading": "Uploading…",
+    "download": "Download",
+    "remove": "Remove file",
+    "hint": "Encrypted on upload and visible only to those who can see the secrets. Never appears in project files."
+  },
   "creds": {
     "search": "Search credentials…",
     "add": "Add",
