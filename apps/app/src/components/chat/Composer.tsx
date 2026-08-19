@@ -2,11 +2,13 @@ import { useEffect, useRef, useState } from 'react'
 import { useEditor, EditorContent, ReactRenderer } from '@tiptap/react'
 import { BubbleMenu } from '@tiptap/react/menus'
 import StarterKit from '@tiptap/starter-kit'
+import CodeBlockLowlight from '@tiptap/extension-code-block-lowlight'
+import { createLowlight, common } from 'lowlight'
 import Placeholder from '@tiptap/extension-placeholder'
 import Mention from '@tiptap/extension-mention'
 import { TextDirection } from '@/components/ui/text-direction'
 import tippy, { type Instance } from 'tippy.js'
-import { Bold, Check, CheckSquare, ClipboardPaste, Code, FileText, Image as ImageIcon, Italic, KeyRound, List, Loader2, NotebookPen, Paperclip, SendHorizontal, Strikethrough, X } from 'lucide-react'
+import { Bold, Check, CheckSquare, ClipboardPaste, Code, SquareCode, FileText, Image as ImageIcon, Italic, KeyRound, List, Loader2, NotebookPen, Paperclip, SendHorizontal, Strikethrough, X } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
 import { toast } from 'sonner'
 import { useQuery } from '@tanstack/react-query'
@@ -122,7 +124,10 @@ export function Composer({
   const editor = useEditor({
     editable: !disabled,
     extensions: [
-      StarterKit.configure({ heading: false, blockquote: false, horizontalRule: false }),
+      // codeBlock выключаем в StarterKit и ставим свой: стандартный не знает
+      // языков вовсе, а ```js в чате разработчиков — обычное дело.
+      StarterKit.configure({ heading: false, blockquote: false, horizontalRule: false, codeBlock: false }),
+      CodeBlockLowlight.configure({ lowlight }),
       // Направление блока: композер чата — такой же редактор, и ивритское
       // сообщение должно писаться справа налево, а латинское слева направо.
       TextDirection,
@@ -436,6 +441,16 @@ export function Composer({
           <ToolBtn active={editor.isActive('code')} onClick={() => editor.chain().focus().toggleCode().run()} title="Code">
             <Code className="size-3.5" />
           </ToolBtn>
+          {/* Блок кода отдельной кнопкой: он был доступен только тем, кто знает
+              про три обратные кавычки, — то есть почти никому. В карточке
+              задачи такая кнопка есть, и чат выбивался из общего поведения. */}
+          <ToolBtn
+            active={editor.isActive('codeBlock')}
+            onClick={() => editor.chain().focus().toggleCodeBlock().run()}
+            title="Code block"
+          >
+            <SquareCode className="size-3.5" />
+          </ToolBtn>
           <ToolBtn active={editor.isActive('bulletList')} onClick={() => editor.chain().focus().toggleBulletList().run()} title="List">
             <List className="size-3.5" />
           </ToolBtn>
@@ -556,11 +571,27 @@ function inline(nodes: Node[] = []): string {
     .join('')
 }
 
+/**
+ * Подсветка кода в композере.
+ *
+ * `common` — общий набор грамматик (около сорока языков), а не все подряд:
+ * полный набор тянет в сборку сотни килобайт ради языков, которые в чат
+ * никто не пришлёт. Создаём один раз на модуль — экземпляр на каждый рендер
+ * означал бы пересборку грамматик при каждом нажатии клавиши.
+ */
+const lowlight = createLowlight(common)
+
 export function serializeToMarkdown(doc: Node): string {
   const blocks: string[] = []
   for (const node of doc.content ?? []) {
     if (node.type === 'paragraph') blocks.push(inline(node.content))
-    else if (node.type === 'codeBlock') blocks.push('```\n' + inline(node.content) + '\n```')
+    else if (node.type === 'codeBlock') {
+      // Язык из атрибута узла. Без него ```js уезжало голыми кавычками:
+      // отправитель язык указывал, а получатель видел код без подсветки —
+      // и выглядело это как «формат не поддерживается».
+      const lang = typeof node.attrs?.language === 'string' ? node.attrs.language : ''
+      blocks.push('```' + lang + '\n' + inline(node.content) + '\n```')
+    }
     else if (node.type === 'bulletList')
       blocks.push((node.content ?? []).map((li) => '- ' + inline(li.content?.[0]?.content)).join('\n'))
     else if (node.type === 'orderedList')

@@ -4,6 +4,7 @@ import { useInfiniteQuery, useMutation, useQuery, useQueryClient } from '@tansta
 import { AlertTriangle, ArrowDown, Zap, Bot, CheckSquare, Copy, FileText, Users, BrainCircuit, KeyRound, Loader2, Menu, MoreHorizontal, NotebookPen, PanelsTopLeft, Reply, Search, Settings, Share2, Trash2, X, MessagesSquare } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
 import ReactMarkdown from 'react-markdown'
+import { CodeBlock } from './CodeBlock'
 // GFM: без него markdown не знает таблиц вовсе — они схлопывались в строку.
 import remarkGfm from 'remark-gfm'
 import { toast } from 'sonner'
@@ -1048,7 +1049,11 @@ function MessageRow({
         )}
         {!(message.text === '📎' && (message.attachments?.length ?? 0) > 0) && (
           <div className="msg-md break-words text-sm">
-            <ReactMarkdown remarkPlugins={[remarkGfm]}>{renderMentions(message.text)}</ReactMarkdown>
+            {/* Свой блок кода: подсветка, как в композере при наборе. Без
+                неё отправитель видел цвета, а получатель — серую простыню. */}
+            <ReactMarkdown remarkPlugins={[remarkGfm]} components={{ code: CodeBlock }}>
+              {renderMentions(message.text)}
+            </ReactMarkdown>
           </div>
         )}
         {(message.attachments?.length ?? 0) > 0 && (

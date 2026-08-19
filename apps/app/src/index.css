@@ -633,3 +633,54 @@
     display: none;
   }
 }
+
+/* --- Подсветка кода -------------------------------------------------------
+   Классы hljs-* расставляет lowlight — и в композере при наборе, и в ленте
+   сообщений. Без этих правил они не красят ничего, и подсветка выглядит
+   отсутствующей, хотя разметка на месте.
+
+   Цвета из токенов темы, а не из готовой темы highlight.js: та приносит свой
+   фон и свою палитру, которые спорят с оформлением приложения и не знают про
+   переключение светлой и тёмной. Здесь шесть ролей вместо сорока — этого
+   хватает, чтобы код читался, и он остаётся частью интерфейса, а не вставкой
+   из чужого редактора. */
+.hljs-comment,
+.hljs-quote {
+  color: var(--muted-foreground);
+  font-style: italic;
+}
+.hljs-keyword,
+.hljs-selector-tag,
+.hljs-literal,
+.hljs-type {
+  color: color-mix(in srgb, var(--brand) 85%, var(--foreground));
+}
+.hljs-string,
+.hljs-regexp,
+.hljs-addition {
+  color: #5aa469;
+}
+.dark .hljs-string,
+.dark .hljs-regexp,
+.dark .hljs-addition {
+  color: #7bc48a;
+}
+.hljs-number,
+.hljs-symbol,
+.hljs-bullet {
+  color: #b58b4a;
+}
+.hljs-title,
+.hljs-name,
+.hljs-attr,
+.hljs-function .hljs-title {
+  color: #4a7fb5;
+}
+.dark .hljs-title,
+.dark .hljs-name,
+.dark .hljs-attr {
+  color: #6ea8dd;
+}
+.hljs-deletion {
+  color: var(--destructive);
+}
