@@ -7,6 +7,7 @@ import { api, type Company } from '@/lib/api'
 import { Input } from '@/components/ui/input'
 import { Button } from '@/components/ui/button'
 import { useConfirm } from '@/components/ui/confirm'
+import { JobTitleField } from './JobTitleField'
 import {
   DropdownMenu,
   DropdownMenuTrigger,
@@ -19,6 +20,9 @@ import {
 type MemberRow = {
   id: string
   role: 'admin' | 'manager' | 'member'
+  /** Должность компании: проекты наследуют её, пока не задали своё. */
+  jobTitle?: string
+  responsibility?: string
   user: { id: string; name: string; email: string; avatarUrl: string | null }
 }
 type InviteRow = { id: string; email: string; role: string; status: string }
@@ -73,6 +77,18 @@ export function TeamTab({ company, meId }: { company: Company; meId?: string }) 
     onSuccess: refresh,
     onError: onErr,
   })
+  const setJobTitle = useMutation({
+    mutationFn: ({ userId, jobTitle }: { userId: string; jobTitle: string }) =>
+      api(`${base}/members/${userId}`, { method: 'PATCH', body: JSON.stringify({ jobTitle }) }),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['company-members', company.id] })
+      // Команда проекта показывает унаследованное — её тоже надо освежить,
+      // иначе там останется прежняя должность до перезагрузки.
+      qc.invalidateQueries({ queryKey: ['project-members'] })
+    },
+    onError: (e) => toast.error(e instanceof Error ? e.message : String(e)),
+  })
+
   const setMemberRole = useMutation({
     mutationFn: ({ userId, role }: { userId: string; role: Role }) =>
       api(`${base}/members/${userId}`, { method: 'PATCH', body: JSON.stringify({ role }) }),
@@ -199,6 +215,14 @@ export function TeamTab({ company, meId }: { company: Company; meId?: string }) 
                     {isSelf && <span className="font-normal text-muted-foreground"> · {t('team.you')}</span>}
                   </span>
                   <span className="block truncate text-xs text-muted-foreground">{m.user.email}</span>
+                  {/* Должность прямо в строке, а не за раскрытием: её пишут
+                      ради того, чтобы ассистент и коллеги понимали, кто есть
+                      кто, — спрятанное поле не заполняет никто. */}
+                  <JobTitleField
+                    value={m.jobTitle ?? ''}
+                    canEdit={isAdmin}
+                    onSave={(jobTitle) => setJobTitle.mutate({ userId: m.user.id, jobTitle })}
+                  />
                 </span>
 
                 {/* Инлайн-смена роли */}

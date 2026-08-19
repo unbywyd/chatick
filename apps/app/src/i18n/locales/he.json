@@ -1789,5 +1789,11 @@
     "search": "חיפוש פרויקט…",
     "notFound": "לא נמצא פרויקט",
     "clear": "ניקוי"
+  },
+  "jobTitle": {
+    "empty": "הוספת תפקיד",
+    "edit": "שינוי התפקיד",
+    "placeholder": "לדוגמה: Backend developer",
+    "inherited": "מוגדר ברמת החברה"
   }
 }

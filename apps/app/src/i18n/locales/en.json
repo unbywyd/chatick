@@ -1786,5 +1786,11 @@
     "search": "Find a project…",
     "notFound": "No such project",
     "clear": "Clear"
+  },
+  "jobTitle": {
+    "empty": "Add a job title",
+    "edit": "Change the job title",
+    "placeholder": "e.g. Backend developer",
+    "inherited": "Set at company level"
   }
 }
