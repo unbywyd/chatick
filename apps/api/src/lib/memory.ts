@@ -1,6 +1,7 @@
 import { and, asc, desc, eq, gt, gte, ilike, inArray, isNotNull, isNull, lte, or, sql } from 'drizzle-orm'
 import { companyOf, projectPath } from './links.js'
 import { shortUrlFor } from './short-links.js'
+import { profilesForProject } from './job-title.js'
 import { db } from '../db/client.js'
 import { chatSummaries, credentials, documents, files, messages, notes, projectMembers, projects, resourceSecrets, taskComments, taskGroups, taskBlockers, taskResources, dbConnections, dbTablePolicies, tasks, timeEntries, users } from '../db/schema.js'
 import { dependentsOf } from '../routes/tasks.js'
@@ -39,9 +40,14 @@ export async function buildTeamContext(projectId: string): Promise<string> {
     .innerJoin(users, eq(users.id, projectMembers.userId))
     .where(eq(projectMembers.projectId, projectId))
   if (!rows.length) return ''
+  // Должность может быть задана у компании: проект наследует её, пока не
+  // написал своё. Ассистенту нужен ответ «кто этот человек», а не то,
+  // откуда значение взялось.
+  const profiles = await profilesForProject(projectId)
   const lines = rows.map((r) => {
     const who = r.name || r.email
-    const bits = [r.jobTitle, r.responsibility && `responsible for: ${r.responsibility}`].filter(Boolean).join('; ')
+    const p = profiles.get(r.id) ?? { jobTitle: r.jobTitle, responsibility: r.responsibility }
+    const bits = [p.jobTitle, p.responsibility && `responsible for: ${p.responsibility}`].filter(Boolean).join('; ')
     // id и язык — чтобы ИИ мог собрать упоминание @[Имя](id) и понять, на каком
     // языке человек читает. Без id упоминание не станет ссылкой и не создаст
     // уведомление: адресат просто не узнает, что обращались к нему.

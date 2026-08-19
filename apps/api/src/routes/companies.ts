@@ -355,7 +355,13 @@ companiesRoute.get('/:companyId/members', async (c) => {
   if (!(await memberRoleIn(companyId, sub))) return c.json({ error: 'Forbidden' }, 403)
 
   const rows = await db
-    .select({ id: companyMembers.id, role: companyMembers.role, user: users })
+    .select({
+      id: companyMembers.id,
+      role: companyMembers.role,
+      jobTitle: companyMembers.jobTitle,
+      responsibility: companyMembers.responsibility,
+      user: users,
+    })
     .from(companyMembers)
     .innerJoin(users, eq(users.id, companyMembers.userId))
     .where(eq(companyMembers.companyId, companyId))
@@ -364,6 +370,9 @@ companiesRoute.get('/:companyId/members', async (c) => {
     rows.map((r) => ({
       id: r.id,
       role: r.role,
+      // Должность компании: проекты наследуют её, пока не задали своё.
+      jobTitle: r.jobTitle,
+      responsibility: r.responsibility,
       user: { id: r.user.id, name: r.user.name, email: r.user.email, avatarUrl: r.user.avatarUrl },
     })),
   )
@@ -1247,23 +1256,44 @@ companiesRoute.delete('/:companyId/llm', async (c) => {
 // Сменить роль участника (только admin; себя-единственного-админа не понизить)
 companiesRoute.patch(
   '/:companyId/members/:userId',
-  zValidator('json', z.object({ role: z.enum(['admin', 'manager', 'member']) })),
+  zValidator(
+    'json',
+    z.object({
+      role: z.enum(['admin', 'manager', 'member']).optional(),
+      // Должность и зона ответственности — свободный текст: список в форме
+      // подсказывает типовые, но своё название встречается чаще любого списка.
+      jobTitle: z.string().max(120).optional(),
+      responsibility: z.string().max(300).optional(),
+    }),
+  ),
   async (c) => {
     const { sub } = c.get('session')
     const { companyId, userId } = c.req.param()
     if ((await memberRoleIn(companyId, sub)) !== 'admin') return c.json({ error: 'Forbidden' }, 403)
 
-    const { role } = c.req.valid('json')
-    if (userId === sub && role !== 'admin') {
+    const { role, jobTitle, responsibility } = c.req.valid('json')
+
+    // Проверка на последнего админа — ТОЛЬКО когда роль действительно меняют.
+    // Без условия на role !== undefined правка одной должности у себя же
+    // упиралась бы в «нельзя понизить единственного админа», хотя роль
+    // никто не трогал.
+    if (role !== undefined && userId === sub && role !== 'admin') {
       const admins = await db.query.companyMembers.findMany({
         where: and(eq(companyMembers.companyId, companyId), eq(companyMembers.role, 'admin')),
       })
       if (admins.length <= 1) return c.json({ error: 'Cannot demote the only admin' }, 400)
     }
 
+    // Меняем только переданное: пустое тело не должно молча стирать должность.
+    const patch: Record<string, unknown> = {}
+    if (role !== undefined) patch.role = role
+    if (jobTitle !== undefined) patch.jobTitle = jobTitle.trim().slice(0, 120)
+    if (responsibility !== undefined) patch.responsibility = responsibility.trim().slice(0, 300)
+    if (!Object.keys(patch).length) return c.json({ error: 'Nothing to update' }, 400)
+
     await db
       .update(companyMembers)
-      .set({ role })
+      .set(patch)
       .where(and(eq(companyMembers.companyId, companyId), eq(companyMembers.userId, userId)))
     return c.json({ ok: true })
   },

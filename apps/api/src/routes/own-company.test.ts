@@ -18,6 +18,7 @@ const switcher = readFileSync(
   join(import.meta.dirname, '../../../app/src/components/CompanySwitcher.tsx'),
   'utf8',
 )
+const startScreen = readFileSync(join(import.meta.dirname, '../../../app/src/screens/StartScreen.tsx'), 'utf8')
 
 /** Тело ручки от объявления до следующего объявления маршрута. */
 function handler(method: string, path: string): string {
@@ -71,8 +72,19 @@ describe('переключатель компаний', () => {
     expect(switcher).not.toMatch(/c\.myRole === 'admin'/)
   })
 
-  it('выйти можно из чужой, даже будучи в ней админом', () => {
-    expect(switcher).toMatch(/const canLeave = !current\.isOwner/)
-    expect(switcher).not.toMatch(/current\.myRole !== 'admin'/)
+  it('выхода из компании в переключателе НЕТ', () => {
+    // Он стоял последним пунктом — там, где в любом приложении «выйти из
+    // аккаунта», — и человек, целясь закрыть программу, терял доступ ко всем
+    // проектам компании. Вернуть себя он не может: нужен другой админ.
+    expect(switcher, 'выход вернулся в меню переключения компаний').not.toMatch(/leaveCompany/)
+  })
+
+  it('выйти можно из чужой, и живёт это в опасной зоне', () => {
+    // Правило прежнее — свою компанию не покинешь, она осталась бы без
+    // хозяина. Изменилось только место: туда надо дойти намеренно.
+    const at = startScreen.indexOf('<DangerZone>')
+    expect(at, 'опасной зоны на экране компании нет').toBeGreaterThan(-1)
+    expect(startScreen.slice(Math.max(0, at - 300), at)).toMatch(/!company\.isOwner/)
+    expect(startScreen.slice(at, at + 500)).toMatch(/leaveCompany/)
   })
 })

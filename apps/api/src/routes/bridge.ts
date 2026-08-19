@@ -63,6 +63,7 @@ import { projectPath, projectUrl, companyOf } from '../lib/links.js'
 import { htmlToText, sanitizeHtml } from '../lib/sanitize-html.js'
 import { searchInDocument, searchInText, DEFAULT_CONTEXT } from '../lib/doc-search.js'
 import { richText } from '../lib/markdown.js'
+import { profilesForProject } from '../lib/job-title.js'
 import { normalizeRefs } from '../lib/task-refs.js'
 import { fetchSiteIcon, nameFromUrl } from '../lib/site-icon.js'
 import { encrypt } from '../lib/crypto.js'
@@ -3492,6 +3493,9 @@ bridgeRoute.get('/members', async (c) => {
     .innerJoin(users, eq(users.id, projectMembers.userId))
     .where(eq(projectMembers.projectId, scope.projectId))
 
+  // Должность может быть задана у компании и унаследована проектом —
+  // ассистенту отдаём разрешённое значение, то же, что видит человек.
+  const profiles = await profilesForProject(scope.projectId)
   return c.json({
     canManage: await managesTeam(scope.projectId, id.userId),
     members: rows.map((r) => ({
@@ -3499,8 +3503,8 @@ bridgeRoute.get('/members', async (c) => {
       name: r.u.name,
       email: r.u.email,
       role: r.m.role,
-      jobTitle: r.m.jobTitle || undefined,
-      responsibility: r.m.responsibility || undefined,
+      jobTitle: profiles.get(r.u.id)?.jobTitle || undefined,
+      responsibility: profiles.get(r.u.id)?.responsibility || undefined,
       permissions: resolveDomains(r.m.role, r.m.permissions),
     })),
   })
