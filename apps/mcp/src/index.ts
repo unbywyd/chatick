@@ -684,6 +684,136 @@ server.registerTool(
 )
 
 server.registerTool(
+  'chatick_timer_stop',
+  {
+    title: 'Stop the running timer',
+    description:
+      'Stops whatever timer is running for this person — including one left running in a different project, which ' +
+      'is the usual reason hours look wrong at the end of a day. Returns what was stopped and how long it ran.',
+    inputSchema: { project: z.string(), description: z.string().optional().describe('What the time went on') },
+  },
+  async ({ project, ...body }) => {
+    try {
+      return json(await call({ ...(await need()), projectId: project }, 'POST', '/time/stop', body))
+    } catch (e) {
+      return fail(e)
+    }
+  },
+)
+
+server.registerTool(
+  'chatick_time_log',
+  {
+    title: 'Log time after the fact',
+    description:
+      'Records work that already happened — the timer was never started, or was started an hour late. Both ends are ' +
+      'ISO timestamps. Log ONLY what the person told you: invented hours are worse than missing ones, because ' +
+      'somebody bills by them.',
+    inputSchema: {
+      project: z.string(),
+      startedAt: z.string().describe('ISO timestamp, e.g. 2026-08-19T09:00:00Z'),
+      endedAt: z.string().describe('ISO timestamp'),
+      description: z.string().optional(),
+      task: z.string().optional().describe('Task number, e.g. TASK-81'),
+    },
+  },
+  async ({ project, ...body }) => {
+    try {
+      return json(await call({ ...(await need()), projectId: project }, 'POST', '/time', body))
+    } catch (e) {
+      return fail(e)
+    }
+  },
+)
+
+server.registerTool(
+  'chatick_time_list',
+  {
+    title: 'Time entries',
+    description:
+      'Entries of this project for a period. Yours by default; project leads see everyone unless mine=true. Use it ' +
+      'to find the id of an entry that needs fixing.',
+    inputSchema: {
+      project: z.string(),
+      from: z.string().optional().describe('ISO date, e.g. 2026-08-01'),
+      to: z.string().optional(),
+      task: z.string().optional().describe('Only entries on this task number'),
+      mine: z.boolean().optional().describe('Only your own entries'),
+    },
+  },
+  async ({ project, mine, ...q }) => {
+    try {
+      return json(
+        await call({ ...(await need()), projectId: project }, 'GET', '/time', undefined, {
+          ...q,
+          ...(mine ? { mine: '1' } : {}),
+        }),
+      )
+    } catch (e) {
+      return fail(e)
+    }
+  },
+)
+
+server.registerTool(
+  'chatick_time_update',
+  {
+    title: 'Fix a time entry',
+    description:
+      'Corrects an entry: its description, when it started or ended, the task it belongs to, or THE PROJECT. ' +
+      'Moving between projects is the case this exists for — "I worked on one thing but the timer was running on ' +
+      'another" happens to everyone, and without this the tracker stops matching reality. Moving an entry drops ' +
+      'its task link, because that task lives in the project you are leaving. Only the fields you pass change. ' +
+      'Someone else\'s entry needs tasks.edit.',
+    inputSchema: {
+      project: z.string().describe('Project the entry is in NOW'),
+      entryId: z.string(),
+      description: z.string().optional(),
+      startedAt: z.string().optional().describe('ISO timestamp'),
+      endedAt: z.string().optional().describe('ISO timestamp'),
+      task: z.string().optional().describe('Task number in the target project'),
+      moveToProject: z.string().optional().describe('Project id to move this entry to'),
+    },
+  },
+  async ({ project, entryId, moveToProject, ...body }) => {
+    try {
+      return json(
+        await call(
+          { ...(await need()), projectId: project },
+          'PATCH',
+          `/time/${encodeURIComponent(entryId)}`,
+          { ...body, ...(moveToProject ? { project: moveToProject } : {}) },
+        ),
+      )
+    } catch (e) {
+      return fail(e)
+    }
+  },
+)
+
+server.registerTool(
+  'chatick_time_report',
+  {
+    title: 'Time report',
+    description:
+      'Hours for a period, grouped by person and by task. Answers "how much went into this" without adding entries ' +
+      'up by hand.',
+    inputSchema: {
+      project: z.string(),
+      from: z.string().optional().describe('ISO date'),
+      to: z.string().optional(),
+    },
+  },
+  async ({ project, ...q }) => {
+    try {
+      return json(await call({ ...(await need()), projectId: project }, 'GET', '/time/report', undefined, q))
+    } catch (e) {
+      return fail(e)
+    }
+  },
+)
+
+server.registerTool(
   'chatick_upload',
   {
     title: 'Upload a file',

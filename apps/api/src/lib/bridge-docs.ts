@@ -794,6 +794,12 @@ poking at timers.
   PATCH /x/time/<entryId>        {"description?","task?","startedAt?","endedAt?","project?"}
   GET   /x/time/report?from=YYYY-MM-DD&to=YYYY-MM-DD
 
+  "project" on PATCH MOVES the entry to another project. That is the case it
+  exists for: someone worked on one thing while the timer ran on another, and
+  noticed at the end of the day. Without it the tracker quietly stops matching
+  reality, and nobody goes back to fix it by hand. Moving drops the task link —
+  that task lives in the project you are leaving.
+
   ONE entry links to at most ONE task. Two things at once means two timers —
   the project caps how many may run (1 unless changed).
   Everything is optional: a bare start with no task and no description is the
@@ -1201,6 +1207,9 @@ ${endpointCatalog('?project=<id>')}
   PATCH  /x/time/<entryId>?project=<id>  {"description?","task?","startedAt?","endedAt?","project?"}
          Timers and after-the-fact entries; GET /x/time lists them one by one,
          GET /x/time/report adds the hours up.
+         "project" MOVES the entry elsewhere — for the day someone worked on
+         one thing while the timer ran on another. The task link drops with
+         the move, since that task stays behind.
          Pausing IS stopping — there is no pause field, a break must not land
          in the hours; /x/time/resume carries on with the same description and
          task. The parallel-timer limit counts the PERSON across all projects,
