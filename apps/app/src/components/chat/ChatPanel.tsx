@@ -85,7 +85,27 @@ export function ChatPanel({
   const [prefill, setPrefill] = useState<string | null>(null)
   /** сообщение, которым делятся */
   const [sharing, setSharing] = useState<ChatMessage | null>(null)
-  const [sandboxStream, setSandboxStream] = useState('') // постепенная печать ответа ИИ
+  /**
+   * Поток ответа ИИ — в ref, а не в состоянии.
+   *
+   * Чанки приходят десятками в секунду, и пока текст лежал в useState, каждый
+   * из них перерисовывал весь ChatPanel: список сообщений, композер, шапку,
+   * оверлеи — полторы тысячи строк ради строки, которую показывает ОДИН
+   * компонент. На типичный ответ в 800 символов это сорок перерисовок.
+   *
+   * Теперь чанк уходит прямо тому, кто его рисует: ChatPanel только копит
+   * текст и зовёт подписчика. Перерисовывается один SandboxOverlay.
+   */
+  const sandboxStreamRef = useRef('')
+  const streamListenerRef = useRef<((text: string) => void) | null>(null)
+  const pushStream = useCallback((delta: string) => {
+    sandboxStreamRef.current += delta
+    streamListenerRef.current?.(sandboxStreamRef.current)
+  }, [])
+  const resetStream = useCallback(() => {
+    sandboxStreamRef.current = ''
+    streamListenerRef.current?.('')
+  }, [])
   const [aiThinking, setAiThinking] = useState(false) // ai-режим: ждём ответ
   const [searchOpen, setSearchOpen] = useState(false)
   const scrollRef = useRef<HTMLDivElement>(null)
@@ -167,7 +187,7 @@ export function ChatPanel({
       setMyPending(null)
       setSandboxId(messageId)
     },
-    onSandboxChunk: ({ delta }) => setSandboxStream((prev) => prev + delta),
+    onSandboxChunk: ({ delta }) => pushStream(delta),
     onMessageDeleted: ({ messageId }) => {
       setLive((prev) => prev.filter((m) => m.id !== messageId))
       qc.invalidateQueries({ queryKey: ['messages', projectId] })
@@ -676,17 +696,21 @@ export function ChatPanel({
         <SandboxOverlay
           messageId={sandboxId}
           aiMode={aiMode}
-          streamingText={sandboxStream}
-          onStreamReset={() => setSandboxStream('')}
+          onStream={(fn) => {
+            streamListenerRef.current = fn
+            // Текст мог начать приходить до того, как оверлей смонтировался.
+            return sandboxStreamRef.current
+          }}
+          onStreamReset={resetStream}
           onSent={() => {
             setSandboxId(null)
-            setSandboxStream('')
+            resetStream()
             setMyPending(null)
             qc.invalidateQueries({ queryKey: ['messages', projectId] })
           }}
           onDiscard={() => {
             setSandboxId(null)
-            setSandboxStream('')
+            resetStream()
             setMyPending(null)
             qc.invalidateQueries({ queryKey: ['messages', projectId] })
           }}

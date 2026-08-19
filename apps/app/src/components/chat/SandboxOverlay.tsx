@@ -37,18 +37,38 @@ type SandboxData = {
 export function SandboxOverlay({
   messageId,
   aiMode,
-  streamingText,
+  onStream,
   onStreamReset,
   onSent,
   onDiscard,
 }: {
   messageId: string
   aiMode: 'observer' | 'assistant' | 'moderator'
-  streamingText?: string // постепенная печать ответа ИИ (ws sandbox_chunk)
+  /**
+   * Подписка на поток ответа ИИ вместо готовой строки.
+   *
+   * Раньше текст приходил пропсом, а копился в состоянии ChatPanel — и каждый
+   * чанк перерисовывал весь чат целиком. Теперь чанки приходят сюда, и
+   * перерисовывается только этот оверлей, который их и показывает.
+   *
+   * Возвращает уже накопленное: поток мог начаться до того, как оверлей
+   * смонтировался, и без этого первые чанки терялись бы.
+   */
+  onStream?: (fn: (text: string) => void) => string
   onStreamReset?: () => void
   onSent: () => void
   onDiscard: () => void
 }) {
+  // Текст живёт здесь: он нужен только этому компоненту.
+  const [streamingText, setStreamingText] = useState('')
+  useEffect(() => {
+    if (!onStream) return
+    setStreamingText(onStream(setStreamingText))
+    return () => {
+      onStream(() => {})
+    }
+  }, [onStream])
+
   const { t } = useTranslation()
   const qc = useQueryClient()
   const confirm = useConfirm()
