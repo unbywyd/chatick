@@ -965,6 +965,24 @@ carry the answer.
   list sent short would otherwise wipe someone else's key.
 
   DELETE /x/resources/<id>/secrets/<secretId>  remove one secret
+
+  GET    /x/resources/<id>/files              what files are kept under it
+  GET    /x/resources/<id>/files/<fileId>     download one (binary, audited)
+
+  Some secrets are not text: a keystore, a certificate, a private key. Those
+  live as FILES under the resource — encrypted at rest, visible only to the
+  people who may see its secrets, and never listed among project files.
+
+  This matters more than it sounds. An Android signing key cannot be reissued
+  for an app that is already published: lose the file and updates stop
+  forever. A resource holding only the password is a false sense of safety —
+  the password unlocks something that has to exist somewhere.
+
+  The list gives names and sizes, never contents. Downloading is a separate,
+  deliberate call and lands in the same audit log as revealing a password.
+  Uploading is not available here yet — ask the human to attach the file in
+  the resource card, and say why it belongs there rather than in project
+  files.
   Because PATCH only adds, this is how you undo your own mistake — a wrong
   label, a value pasted twice. It takes exactly one named secret; the resource
   itself stays, deleting that is still a human's call.

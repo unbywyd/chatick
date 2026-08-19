@@ -64,7 +64,16 @@ export async function call<T = unknown>(
   })
 
   const text = await res.text()
-  const data = text ? (JSON.parse(text) as Record<string, unknown>) : {}
+  /**
+   * Разбираем по тому, что пришло, а не вслепую.
+   *
+   * GET /guide отдаёт markdown, и слепой JSON.parse ронял вызов с
+   * «Unexpected token '#'». Инструкция была недостижима через инструмент,
+   * который сам же велит прочитать её первым делом.
+   */
+  const ct = res.headers.get('content-type') ?? ''
+  const looksJson = ct.includes('json') || /^\s*[[{]/.test(text)
+  const data: Record<string, unknown> = text && looksJson ? (JSON.parse(text) as Record<string, unknown>) : text ? { text } : {}
 
   if (!res.ok) {
     throw new BridgeError(

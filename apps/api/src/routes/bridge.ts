@@ -19,6 +19,7 @@ import {
   projects,
   shares,
   resourceSecrets, resourceViewers,
+  resourceFiles,
   taskBlockers, taskChecklist, taskLinks, taskResources,
   taskComments,
   taskReleases,
@@ -2612,6 +2613,92 @@ bridgeRoute.post('/tasks/:id/blockers', async (c) => {
   })
   tasksChanged(scope.projectId, [task.assigneeId, task.createdById])
   return c.json({ ok: true, linked: resolved.length })
+})
+
+/* --- Файлы ресурса в мосте --------------------------------------------------
+ *
+ * Ассистент видит, что файл существует и как называется, но не его
+ * содержимое: список отдаёт имя и размер. Скачать можно, и это отдельное
+ * осознанное действие, которое пишется в журнал доступа рядом с раскрытием
+ * пароля.
+ */
+
+bridgeRoute.get('/resources/:id/files', async (c) => {
+  const scope = await resolveProject(c as never)
+  if ('error' in scope) return c.json({ error: scope.error }, scope.status)
+  const denied = await require(c as never, 'resources.read', scope.projectId)
+  if (denied) return c.json(denied, 403)
+
+  const resource = await db.query.credentials.findFirst({
+    where: and(
+      eq(credentials.id, c.req.param('id')),
+      eq(credentials.projectId, scope.projectId),
+      isNull(credentials.deletedAt),
+    ),
+  })
+  if (!resource) return c.json({ error: 'Resource not found' }, 404)
+
+  const rows = await db
+    .select({ id: resourceFiles.id, name: resourceFiles.name, size: resourceFiles.size, mime: resourceFiles.mime })
+    .from(resourceFiles)
+    .where(eq(resourceFiles.resourceId, resource.id))
+    .orderBy(asc(resourceFiles.name))
+
+  return c.json({
+    resource: { id: resource.id, name: resource.name || resource.url || '' },
+    items: rows,
+    hint: rows.length
+      ? 'Download a file with GET /x/resources/<id>/files/<fileId>. It is a deliberate act and it is logged.'
+      : undefined,
+  })
+})
+
+bridgeRoute.get('/resources/:id/files/:fileId', async (c) => {
+  const id = auth(c as never)
+  const scope = await resolveProject(c as never)
+  if ('error' in scope) return c.json({ error: scope.error }, scope.status)
+  const denied = await require(c as never, 'resources.read', scope.projectId)
+  if (denied) return c.json(denied, 403)
+
+  const resource = await db.query.credentials.findFirst({
+    where: and(
+      eq(credentials.id, c.req.param('id')),
+      eq(credentials.projectId, scope.projectId),
+      isNull(credentials.deletedAt),
+    ),
+  })
+  if (!resource) return c.json({ error: 'Resource not found' }, 404)
+
+  const file = await db.query.resourceFiles.findFirst({
+    where: and(eq(resourceFiles.id, c.req.param('fileId')), eq(resourceFiles.resourceId, resource.id)),
+  })
+  if (!file) return c.json({ error: 'File not found' }, 404)
+
+  const { resolveStorage } = await import('../lib/s3.js')
+  const { GetObjectCommand } = await import('@aws-sdk/client-s3')
+  const { decryptBytes } = await import('../lib/crypto.js')
+  const store = await resolveStorage(scope.projectId)
+  const obj = await store.client.send(new GetObjectCommand({ Bucket: store.bucket, Key: file.key }))
+  const plain = decryptBytes(Buffer.from(await obj.Body!.transformToByteArray()))
+
+  // Тот же журнал, что и у раскрытия пароля: забрать ключ подписи — событие,
+  // о котором через полгода спросят «кто это сделал».
+  await db.insert(credentialAccessLog).values({
+    projectId: scope.projectId,
+    userId: id.userId,
+    action: 'reveal',
+    credentialId: resource.id,
+    credentialName: `${resource.name || resource.url || ''} · ${file.name}`,
+  })
+
+  return new Response(new Uint8Array(plain), {
+    headers: {
+      'content-type': file.mime,
+      'content-length': String(plain.length),
+      'content-disposition': `attachment; filename*=UTF-8''${encodeURIComponent(file.name)}`,
+      'cache-control': 'no-store',
+    },
+  })
 })
 
 /* --- Ресурсы задачи в мосте ------------------------------------------------

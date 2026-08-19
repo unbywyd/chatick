@@ -106,6 +106,49 @@ describe('в хранилище лежит шифротекст', () => {
   })
 })
 
+describe('мост и ассистент', () => {
+  const bridge = readFileSync(join(import.meta.dirname, 'bridge.ts'), 'utf8')
+  const mcp = readFileSync(join(import.meta.dirname, '..', '..', '..', 'mcp', 'src', 'index.ts'), 'utf8')
+
+  it('мост отдаёт список без содержимого', () => {
+    const at = bridge.indexOf("bridgeRoute.get('/resources/:id/files'")
+    expect(at, 'ручка списка не найдена').toBeGreaterThan(-1)
+    const body = bridge.slice(at, at + 1600)
+    expect(body).toMatch(/resourceFiles\.name/)
+    expect(body, 'список тянет содержимое из хранилища').not.toMatch(/GetObjectCommand|decryptBytes/)
+  })
+
+  it('скачивание через мост пишется в журнал доступа', () => {
+    const at = bridge.indexOf("bridgeRoute.get('/resources/:id/files/:fileId'")
+    expect(at).toBeGreaterThan(-1)
+    const body = bridge.slice(at, at + 2600)
+    expect(body).toMatch(/credentialAccessLog/)
+    expect(body).toMatch(/action: 'reveal'/)
+  })
+
+  it('MCP умеет править ресурс и видеть файлы', () => {
+    // Без правки ассистент плодил дубли: заново вводил секреты, перепривязывал
+    // задачу и просил человека удалить старое руками.
+    expect(mcp).toMatch(/'chatick_resource_update'/)
+    expect(mcp).toMatch(/'chatick_resource_files'/)
+  })
+
+  it('MCP разбирает ответ по типу, а не вслепую', () => {
+    // GET /guide отдаёт markdown: слепой JSON.parse ронял вызов, и инструкция
+    // была недостижима через инструмент, который велит её прочитать.
+    const b = readFileSync(join(import.meta.dirname, '..', '..', '..', 'mcp', 'src', 'bridge.ts'), 'utf8')
+    expect(b).toMatch(/looksJson/)
+    expect(b).toMatch(/content-type/)
+  })
+
+  it('гайд объясняет, почему файл живёт в ресурсе', () => {
+    const docs = readFileSync(join(import.meta.dirname, '..', 'lib', 'bridge-docs.ts'), 'utf8')
+    expect(docs).toMatch(/resources\/<id>\/files/)
+    expect(docs).toMatch(/cannot be reissued/)
+    expect(docs).toMatch(/never listed among project files/)
+  })
+})
+
 describe('права и границы', () => {
   it('все четыре ручки проверяют доступ к секретам', () => {
     expect(handler(src, 'get', '/:id/files')).toMatch(/canSeeSecrets/)

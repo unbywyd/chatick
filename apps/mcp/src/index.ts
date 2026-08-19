@@ -647,6 +647,69 @@ server.registerTool(
 // --- Ресурсы -----------------------------------------------------------------
 
 server.registerTool(
+  'chatick_resource_update',
+  {
+    title: 'Change a resource',
+    description:
+      'Edits an existing resource: name, address, description, or who may see its secrets. Use it instead of ' +
+      'creating a second resource with the fix — a duplicate means the secrets get re-entered by hand, every task ' +
+      'linked to the old one keeps pointing at it, and somebody has to delete the leftover. Only the fields you ' +
+      'pass are changed. Descriptions render as markdown.',
+    inputSchema: {
+      project: z.string(),
+      resourceId: z.string(),
+      name: z.string().optional(),
+      url: z.string().optional(),
+      description: z.string().optional(),
+      viewers: z
+        .array(z.string())
+        .optional()
+        .describe('User ids who may reveal the secrets. Replaces the list; only the author may change it'),
+    },
+  },
+  async ({ project, resourceId, ...body }) => {
+    try {
+      return json(
+        await call(
+          { ...(await need()), projectId: project },
+          'PATCH',
+          `/resources/${encodeURIComponent(resourceId)}`,
+          body,
+        ),
+      )
+    } catch (e) {
+      return fail(e)
+    }
+  },
+)
+
+server.registerTool(
+  'chatick_resource_files',
+  {
+    title: 'Files kept under a resource',
+    description:
+      'Lists files attached to a resource: keystore, certificate, private key. Name and size only — never the ' +
+      'contents. These files are encrypted at rest and never appear in project files, which is the point: a ' +
+      'signing key cannot be reissued for an app that is already published, so "password saved, file not saved" ' +
+      'is a false sense of safety.',
+    inputSchema: { project: z.string(), resourceId: z.string() },
+  },
+  async ({ project, resourceId }) => {
+    try {
+      return json(
+        await call(
+          { ...(await need()), projectId: project },
+          'GET',
+          `/resources/${encodeURIComponent(resourceId)}/files`,
+        ),
+      )
+    } catch (e) {
+      return fail(e)
+    }
+  },
+)
+
+server.registerTool(
   'chatick_task_resources',
   {
     title: 'Access a task needs',
