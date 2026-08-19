@@ -425,7 +425,8 @@
     "uploading": "Uploading…",
     "download": "Download",
     "remove": "Remove file",
-    "hint": "Encrypted on upload and visible only to those who can see the secrets. Never appears in project files."
+    "hint": "Encrypted on upload and visible only to those who can see the secrets. Never appears in project files.",
+    "afterSave": "after saving"
   },
   "creds": {
     "search": "Search credentials…",
