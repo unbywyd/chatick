@@ -53,11 +53,23 @@ export function broadcast(projectId: string, event: string, payload: unknown, op
 }
 
 /** Событие конкретному юзеру проекта (все его вкладки). */
-export function sendToUser(projectId: string, userId: string, event: string, payload: unknown) {
+/**
+ * Событие одному человеку в одном проекте.
+ *
+ * Возвращает, дошло ли хоть до одной вкладки. Это нужно тем, кто по факту
+ * доставки строит ответ: ассистент, переключивший экран, не должен говорить
+ * «открыл», если человек в этот момент нигде не смотрит.
+ */
+export function sendToUser(projectId: string, userId: string, event: string, payload: unknown): boolean {
   const msg = JSON.stringify({ event, payload })
+  let delivered = false
   for (const c of rooms.get(projectId) ?? []) {
-    if (c.userId === userId && c.ws.readyState === WebSocket.OPEN) c.ws.send(msg)
+    if (c.userId === userId && c.ws.readyState === WebSocket.OPEN) {
+      c.ws.send(msg)
+      delivered = true
+    }
   }
+  return delivered
 }
 
 /**
@@ -148,8 +160,22 @@ async function presenceList(projectId: string): Promise<PresenceUser[]> {
   return rows.filter(Boolean).map((u) => ({ id: u!.id, name: u!.name, avatarUrl: u!.avatarUrl }))
 }
 
+/**
+ * Разослать список присутствующих.
+ *
+ * Ошибку глотаем намеренно. Функцию зовут без await (void push…) — значит
+ * отказ становится необработанным отклонением, а оно роняет ВЕСЬ процесс.
+ * База живёт на другой машине, и обрыв связи там — обычное дело: одного
+ * ECONNRESET хватало, чтобы сервер умер, а у всех разом опустели списки
+ * проектов и пропал пользователь. Кто где сидит — украшение интерфейса, и
+ * ради него останавливать работу нельзя.
+ */
 async function pushPresence(projectId: string) {
-  broadcast(projectId, 'presence', await presenceList(projectId))
+  try {
+    broadcast(projectId, 'presence', await presenceList(projectId))
+  } catch (e) {
+    console.error('presence push failed', e)
+  }
 }
 
 // --- Presence внутри документа (SPEC §8.25): кто сейчас открыл документ ---
@@ -160,8 +186,13 @@ async function docPresenceList(projectId: string, docId: string): Promise<Presen
   return rows.filter(Boolean).map((u) => ({ id: u!.id, name: u!.name, avatarUrl: u!.avatarUrl }))
 }
 
+/** То же и для присутствия в документе — см. pushPresence выше. */
 async function pushDocPresence(projectId: string, docId: string) {
-  broadcast(projectId, 'doc_presence', { docId, users: await docPresenceList(projectId, docId) })
+  try {
+    broadcast(projectId, 'doc_presence', { docId, users: await docPresenceList(projectId, docId) })
+  } catch (e) {
+    console.error('doc presence push failed', e)
+  }
 }
 
 export function attachWs(server: Server) {
