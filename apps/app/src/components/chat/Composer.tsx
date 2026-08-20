@@ -196,13 +196,54 @@ export function Composer({
         return false
       },
       // вставка из буфера: картинки/файлы → загрузка как вложения (SPEC §8.16); текст — как обычно
-      handlePaste: (_view, event) => {
+      handlePaste: (view, event) => {
         const files = filesFromClipboard(event.clipboardData)
         if (files.length) {
           event.preventDefault()
           void uploadFiles(files)
           return true
         }
+
+        /**
+         * Вставка готового markdown-блока: ```js … ```
+         *
+         * Само расширение это не разбирает: его input-правило срабатывает
+         * только на НАБОР кавычек, а обработчик вставки — только на копию из
+         * VS Code (там язык приходит отдельным типом данных). Обычный markdown
+         * — из переписки, из README, из ответа ассистента — оставался текстом:
+         * блок кода получался, но ограда виднелась внутри него, а язык не
+         * применялся, и подсветки не было.
+         *
+         * Разбираем сами: снимаем ограду, берём язык из неё и кладём
+         * содержимое настоящим блоком кода.
+         */
+        // Переводы строк Windows приводим к обычным: буфер из блокнота,
+        // консоли и многих редакторов приходит с ними, и разбор ограды об это
+        // спотыкался — вставка не срабатывала ровно там, где ею и пользуются.
+        const text = event.clipboardData?.getData('text/plain')?.replace(/\r\n?/g, '\n')
+        // Только когда ограда обрамляет ВСЮ вставку и внутри неё нет второй:
+        // код вперемешку с текстом — это markdown-документ, и превращать его
+        // целиком в один блок значило бы съесть остальное. Без запрета на
+        // ограду внутри два блока подряд склеивались в один.
+        const fence = text?.trim().match(/^```([\w-]*)\n((?:(?!\n```)[\s\S])*)\n?```$/)
+        // Внутри блока кода ограда — обычные символы, там она ничего не значит.
+        const inCode = view.state.selection.$from.parent.type.name === 'codeBlock'
+        // Тип узла берём из схемы, а не из имени: расширение могли отключить.
+        // Проверяем ДО preventDefault — иначе на редакторе без блоков кода
+        // вставка просто пропадала бы, вместо того чтобы лечь обычным текстом.
+        const codeBlockType = view.state.schema.nodes.codeBlock
+        if (fence && !inCode && codeBlockType) {
+          event.preventDefault()
+          const [, language, code] = fence
+          const { state } = view
+          const node = codeBlockType.create(
+            language ? { language } : null,
+            code ? state.schema.text(code) : null,
+          )
+          view.dispatch(state.tr.replaceSelectionWith(node).scrollIntoView())
+          return true
+        }
+
         return false
       },
     },
