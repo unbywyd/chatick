@@ -607,7 +607,7 @@ export function TasksTab({ projectId, meId }: { projectId: string; meId?: string
   return (
     <div className="relative h-full overflow-hidden">
       <div className="h-full overflow-y-auto">
-        <div className="mx-auto w-full max-w-6xl p-6">
+        <div className="page-w p-6">
           {/* Быстрое создание */}
           <form
             className="flex gap-2"
@@ -724,8 +724,25 @@ export function TasksTab({ projectId, meId }: { projectId: string; meId?: string
             </div>
           )}
 
+          {/*
+            Фильтры и поиск остаются на виду при прокрутке.
+
+            Липнет только этот ряд, а не вся шапка: форма создания, прогресс
+            и сводка занимают вместе больше двухсот пикселей — четверть
+            экрана, которую пришлось бы отдать навсегда. Их смотрят один раз
+            при заходе, а фильтр меняют посреди списка, когда шапка уже
+            уехала вверх.
+
+            Отрицательные поля с обратным padding: контейнер страницы имеет
+            свой отступ, и без этого липкая полоса обрывалась бы, оставляя
+            по краям щели, сквозь которые видно уезжающий список.
+
+            Фон непрозрачный: сквозь полупрозрачный видно строки задач,
+            которые проезжают под фильтрами, и рябит.
+          */}
+          <div className="sticky top-0 z-10 -mx-6 mt-3 border-b bg-background px-6 pb-2 pt-2">
           {/* Фильтры-чипсы */}
-          <div className="mt-3 flex flex-wrap items-center gap-1.5">
+          <div className="flex flex-wrap items-center gap-1.5">
             <Chip active={onlyMine} onClick={() => setOnlyMine((v) => !v)}>
               <Avatar name={me?.user.name} src={me?.user.avatarUrl} size={16} />
               {t('tasks.mine')}
@@ -882,6 +899,8 @@ export function TasksTab({ projectId, meId }: { projectId: string; meId?: string
                 <Table2 className="size-4" />
               </button>
             </div>
+          </div>
+
           </div>
 
           {/* Табличный вид: вложенные таблицы по спринт-группам */}
@@ -1258,23 +1277,28 @@ function TaskRow({
         </DropdownMenuContent>
       </DropdownMenu>
 
-      {/* Номер и название на иврите слипались в «TASK-2test», да ещё и в
-          обратном порядке.
+      {/* Номер задачи стоит ПЕРЕД названием — и в иврите тоже.
 
-          Причина не в отступе, а в двунаправленном алгоритме: номер и
-          латинское название — два соседних LTR-куска в RTL-строке, и алгоритм
-          выстраивает сами КУСКИ справа налево, оставляя буквы внутри каждого
-          слева направо. Отступ при этом не спасает: он рисуется по краям
-          строчного бокса, а не между переставленными кусками.
+          Инлайном этого не добиться: в RTL-строке первый элемент и есть самый
+          правый, поэтому номер уезжал вправо, а название прижималось к нему —
+          «testTASK-2». Ни dir, ни isolate, ни plaintext, ни отступы этого не
+          меняют: они управляют направлением ВНУТРИ куска, а не тем, с какой
+          стороны строки он окажется. Проверено замером всех вариантов.
 
-          isolate на номере и <bdi> на названии делают каждый самостоятельным
-          куском с нейтральными границами — порядок сохраняется при любом
-          языке названия. inline-block заодно возвращает работу полям. */}
-      <span className={cn('min-w-0 flex-1 truncate text-sm', task.status === 'done' && 'text-muted-foreground line-through')}>
-        <span dir="ltr" className="me-1.5 inline-block text-xs text-muted-foreground [unicode-bidi:isolate]">
+          Поэтому строка — flex, а порядок в ней задаётся row-reverse: в RTL
+          он ставит первый элемент разметки слева. Номеру остаётся dir="ltr",
+          чтобы «TASK-9» не читалось как «9-TASK», а min-w-0 на названии —
+          чтобы обрезалось многоточием именно оно, а не номер. */}
+      <span
+        className={cn(
+          'flex min-w-0 flex-1 items-center gap-1.5 text-sm rtl:flex-row-reverse rtl:justify-end',
+          task.status === 'done' && 'text-muted-foreground line-through',
+        )}
+      >
+        <span dir="ltr" className="shrink-0 text-xs text-muted-foreground">
           {task.number}
         </span>
-        <bdi>{task.title}</bdi>
+        <bdi className="min-w-0 truncate">{task.title}</bdi>
       </span>
 
       {/* Свой номер задачи — рядом с нашим: по нему её и ищут в макете. */}
