@@ -21,12 +21,20 @@ export function CompanySwitcher({
   current,
   onSelect,
   onCreate,
+  compact = false,
 }: {
   companies: Company[]
   current: Company
   onSelect: (id: string) => void
   /** создать свою — только если её ещё нет */
   onCreate?: () => void
+  /**
+   * Только стрелка, без логотипа и названия.
+   *
+   * В сайдбаре имя компании уже написано соседней кнопкой, и повторять его
+   * внутри переключателя значит показать одно и то же дважды подряд.
+   */
+  compact?: boolean
 }) {
   const { t } = useTranslation()
 
@@ -43,15 +51,19 @@ export function CompanySwitcher({
     <DropdownMenu>
       <DropdownMenuTrigger asChild>
         <button
-          className="flex items-center gap-1.5 rounded-md px-1.5 py-1 text-sm font-medium transition-colors hover:bg-accent"
+          className={cn(
+            'flex items-center rounded-md transition-colors hover:bg-accent',
+            compact ? 'shrink-0 p-1.5 text-muted-foreground hover:text-foreground' : 'gap-1.5 px-1.5 py-1 text-sm font-medium',
+          )}
           title={t('start.changeCompany')}
         >
-          {current.logoUrl ? (
-            <img src={current.logoUrl} alt="" className="size-5 rounded" referrerPolicy="no-referrer" />
-          ) : (
-            <Building2 className="size-4 text-muted-foreground" />
-          )}
-          <span className="max-w-40 truncate">{current.name}</span>
+          {!compact &&
+            (current.logoUrl ? (
+              <img src={current.logoUrl} alt="" className="size-5 rounded" referrerPolicy="no-referrer" />
+            ) : (
+              <Building2 className="size-4 text-muted-foreground" />
+            ))}
+          {!compact && <span className="max-w-40 truncate">{current.name}</span>}
           <ChevronsUpDown className="size-3.5 text-muted-foreground" />
         </button>
       </DropdownMenuTrigger>

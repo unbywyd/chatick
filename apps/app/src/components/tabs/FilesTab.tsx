@@ -203,7 +203,7 @@ export function FilesTab({ projectId, isAdmin = false }: { projectId: string; is
 
   return (
     <div
-      className="mx-auto w-full max-w-6xl p-6"
+      className="page-w p-6"
       onDragOver={(e) => {
         e.preventDefault()
         setDragOver(true)

@@ -684,3 +684,220 @@
 .hljs-deletion {
   color: var(--destructive);
 }
+
+/* Ширина страницы ---------------------------------------------------------
+   Одно место на все вкладки: раньше в одиннадцати файлах стояло max-w-6xl
+   (1152px), а в документах — 1400. Числа разъезжались при каждой правке.
+
+   1400px, а не 1152: чат сворачивается в полосу 56px, и на широком экране
+   освободившиеся триста пикселей уходили в поля. Таблицы задач и времени от
+   этого выигрывают заметнее всего — в них колонки жались, хотя место было.
+
+   Верхний предел всё же нужен: без него на мониторе 2560 строка таблицы
+   растягивается через весь экран, и глаз теряет, какая ячейка к какой
+   строке относится. */
+@utility page-w {
+  margin-inline: auto;
+  width: 100%;
+  max-width: 1400px;
+}
+
+/* --- Приветствие перед туром -----------------------------------------------
+   Один авторский момент: галочка рисует себя, следом проявляется текст. Фон
+   при этом медленно дышит — не мигает и не пульсирует резко.
+
+   Цвета из токенов: экран одинаково работает в светлой и тёмной теме, где
+   background и foreground меняются местами сами. */
+
+/* Живой фон приветствия.
+   
+   Три пятна, у каждого свой цвет, свой путь и свой период — 17, 23 и 29
+   секунд. Периоды взаимно простые: их сумма не повторяется почти никогда, и
+   движение не читается как зацикленная анимация.
+   
+   Фон под ними непрозрачный. Полупрозрачный пробовали — сквозь него
+   просвечивал интерфейс, и всё вместе выглядело грязно. Это отдельный момент,
+   а не плёнка поверх работы. */
+.tour-welcome-haze {
+  position: absolute;
+  inset: 0;
+  overflow: hidden;
+}
+
+/* Кольца на размытии.
+   
+   Браузер рисует сильный blur ступенями по 8 бит, и на широкой мягкой заливке
+   они видны концентрическими полосами. Тонкий шум поверх разбивает ступень.
+   Приём старый, из печати: дизеринг вместо большей битности. */
+.tour-welcome-haze::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  opacity: 0.035;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='120' height='120'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.85' numOctaves='3'/%3E%3C/filter%3E%3Crect width='120' height='120' filter='url(%23n)'/%3E%3C/svg%3E");
+  pointer-events: none;
+}
+
+/* Пятна.
+   
+   Мягкость даёт radial-gradient, а не filter: blur. Размытие в 90-100px на
+   трёх больших движущихся слоях браузер пересчитывает КАЖДЫЙ кадр — замер
+   показал 18 кадров в секунду вместо шестидесяти. Градиент же рисуется один
+   раз и дальше только двигается, а двигать готовый слой видеокарта умеет
+   даром.
+   
+   contain: paint отрезает пятно от остальной страницы: браузер знает, что
+   за его границами ничего не изменится, и не проверяет соседей. */
+.tour-welcome-haze span {
+  position: absolute;
+  display: block;
+  border-radius: 9999px;
+  contain: paint;
+  will-change: transform, opacity;
+}
+
+/* Фирменный лайм — главный, самый крупный и яркий. */
+.tour-haze-a {
+  width: 54vmax;
+  height: 54vmax;
+  inset-inline-start: -12vmax;
+  top: -10vmax;
+  background: radial-gradient(circle closest-side, color-mix(in oklch, var(--brand) 62%, transparent), transparent 100%);
+  animation: tour-drift-a 17s ease-in-out infinite;
+}
+/* Холодный сине-зелёный: даёт глубину, без него три лаймовых пятна сливались
+   бы в одно большое. */
+.tour-haze-b {
+  width: 44vmax;
+  height: 44vmax;
+  inset-inline-end: -10vmax;
+  bottom: -8vmax;
+  background: radial-gradient(circle closest-side, color-mix(in oklch, oklch(0.72 0.14 195) 52%, transparent), transparent 100%);
+  animation: tour-drift-b 23s ease-in-out infinite;
+}
+/* Тёплый жёлто-зелёный, самый слабый: живёт у нижнего края и лишь подсвечивает
+   переход между двумя первыми. */
+.tour-haze-c {
+  width: 38vmax;
+  height: 38vmax;
+  inset-inline-start: 26vmax;
+  bottom: -14vmax;
+  background: radial-gradient(circle closest-side, color-mix(in oklch, oklch(0.85 0.17 132) 42%, transparent), transparent 100%);
+  animation: tour-drift-c 29s ease-in-out infinite;
+}
+
+/* На белом те же пятна выцветают: светлота почти совпадает с фоном, остаётся
+   один оттенок. Берём тона темнее и держим доли ниже. */
+:root:not(.dark) .tour-haze-a {
+  background: radial-gradient(circle closest-side, color-mix(in oklch, var(--brand-ink) 24%, transparent), transparent 100%);
+}
+:root:not(.dark) .tour-haze-b {
+  background: radial-gradient(circle closest-side, color-mix(in oklch, oklch(0.55 0.12 195) 20%, transparent), transparent 100%);
+}
+:root:not(.dark) .tour-haze-c {
+  background: radial-gradient(circle closest-side, color-mix(in oklch, oklch(0.6 0.14 132) 16%, transparent), transparent 100%);
+}
+
+@keyframes tour-drift-a {
+  0%, 100% { transform: translate3d(0, 0, 0) scale(1); opacity: 0.8; }
+  50% { transform: translate3d(8vmax, 5vmax, 0) scale(1.15); opacity: 1; }
+}
+@keyframes tour-drift-b {
+  0%, 100% { transform: translate3d(0, 0, 0) scale(1.1); opacity: 0.9; }
+  50% { transform: translate3d(-7vmax, -6vmax, 0) scale(0.95); opacity: 0.55; }
+}
+@keyframes tour-drift-c {
+  0%, 100% { transform: translate3d(0, 0, 0) scale(0.95); opacity: 0.5; }
+  50% { transform: translate3d(-9vmax, -7vmax, 0) scale(1.2); opacity: 0.85; }
+}
+
+/* Галочка рисует себя: сначала контур пузыря, затем «тик».
+   stroke-dasharray в длину пути — линия появляется, а не проявляется. */
+.tour-welcome-mark {
+  color: var(--foreground);
+}
+/* Галочка рисуется, пока текст проявляется — одновременно, а не по очереди.
+   
+   Раньше сначала долго рисовался знак, потом резко возникала надпись: пауза
+   между ними читалась как подвисание, будто экран сломался. Теперь всё
+   начинается почти сразу и сходится к одному моменту. */
+.tour-mark-bubble {
+  stroke-dasharray: 200;
+  stroke-dashoffset: 200;
+  animation: tour-draw 1700ms cubic-bezier(0.22, 1, 0.36, 1) 250ms forwards;
+}
+.tour-mark-tick {
+  stroke-dasharray: 34;
+  stroke-dashoffset: 34;
+  animation: tour-draw 1100ms cubic-bezier(0.22, 1, 0.36, 1) 900ms forwards;
+}
+.tour-welcome-mark {
+  opacity: 0;
+  animation: tour-fade-in 1200ms ease-out 150ms forwards;
+}
+@keyframes tour-fade-in {
+  to { opacity: 1; }
+}
+@keyframes tour-draw {
+  to { stroke-dashoffset: 0; }
+}
+
+/* Текст проявляется следом за галочкой, лесенкой. Смещение маленькое:
+   крупный шрифт, едущий издалека, читается как баннер. */
+.tour-welcome-title,
+.tour-welcome-sub,
+.tour-welcome-cta {
+  opacity: 0;
+  animation: tour-rise 620ms cubic-bezier(0.16, 1, 0.3, 1) forwards;
+}
+.tour-welcome-title,
+.tour-welcome-sub,
+.tour-welcome-cta {
+  animation-duration: 1600ms;
+}
+.tour-welcome-title { animation-delay: 450ms; }
+.tour-welcome-sub { animation-delay: 750ms; }
+.tour-welcome-cta { animation-delay: 1050ms; }
+/* Появление с лёгким размытием: надпись «наводится на резкость», а не
+   включается щелчком. Смещение маленькое — крупный шрифт, едущий издалека,
+   читается как баннер. */
+@keyframes tour-rise {
+  from { opacity: 0; transform: translate3d(0, 14px, 0); filter: blur(6px); }
+  to { opacity: 1; transform: none; filter: blur(0); }
+}
+
+/* Кому движение мешает — показываем сразу и неподвижно. Не «поменьше
+   анимации», а без неё: просьба системная, и выполнять её надо буквально. */
+
+/* Уход.
+   
+   Медленнее появления и с лёгким разлётом: экран не выключается, а
+   растворяется. Резкое исчезновение после плавного прихода читается как сбой,
+   особенно когда следом сразу вспыхивает первая подсказка тура. */
+.tour-welcome.is-leaving {
+  animation: tour-leave 900ms cubic-bezier(0.4, 0, 0.2, 1) forwards;
+  pointer-events: none;
+}
+@keyframes tour-leave {
+  from { opacity: 1; transform: scale(1); filter: blur(0); }
+  to { opacity: 0; transform: scale(1.04); filter: blur(10px); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .tour-welcome.is-leaving,
+  .tour-welcome-mark,
+  .tour-welcome-haze span,
+  .tour-mark-bubble,
+  .tour-mark-tick,
+  .tour-welcome-title,
+  .tour-welcome-sub,
+  .tour-welcome-cta {
+    animation: none;
+  }
+  .tour-mark-bubble,
+  .tour-mark-tick { stroke-dashoffset: 0; }
+  .tour-welcome-mark,
+  .tour-welcome-title,
+  .tour-welcome-sub,
+  .tour-welcome-cta { opacity: 1; filter: none; }
+}

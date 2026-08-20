@@ -66,7 +66,7 @@ export function AiUsageTab({ projectId, isAdmin }: { projectId: string; isAdmin:
   })
 
   return (
-    <div className="mx-auto w-full max-w-6xl space-y-8 p-6">
+    <div className="page-w space-y-8 p-6">
       <div>
         <h1 className="flex items-center gap-2 text-xl font-bold tracking-tight">
           <Bot className="size-5" />

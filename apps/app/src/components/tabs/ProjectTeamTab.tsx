@@ -2,7 +2,7 @@ import { useMemo, useState } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { useTranslation } from 'react-i18next'
 import { toast } from 'sonner'
-import { ChevronDown, Lock, Plus, Search, Trash2, UserPlus, X } from 'lucide-react'
+import { ChevronDown, Lock, Mail, Plus, Search, Trash2, UserPlus, X } from 'lucide-react'
 import { api } from '@/lib/api'
 import { cn } from '@/lib/utils'
 import { Input } from '@/components/ui/input'
@@ -43,12 +43,15 @@ export function ProjectTeamTab({
   projectId,
   companyId,
   canEdit,
+  canInvite = false,
   managedExternally,
 }: {
   projectId: string
   companyId?: string
   /** Может настраивать роли, права и профили участников. */
   canEdit: boolean
+  /** Может звать людей со стороны: приглашение заводит их и в компанию. */
+  canInvite?: boolean
   /**
    * Состав ведётся во внешней системе: добавить и убрать человека нельзя, но
    * роли и права остаются нашими — их внешняя система не знает (SPEC §8.42).
@@ -80,6 +83,18 @@ export function ProjectTeamTab({
     queryFn: () => api<Member[]>(`/api/v1/projects/${projectId}/members`),
   })
 
+  /**
+   * Приглашённые, но ещё не принявшие.
+   *
+   * Без них приглашение выглядело как «ничего не произошло»: нажал
+   * «пригласить», а команда осталась прежней, и непонятно — сработало или
+   * нет. Строка с адресом отвечает: сработало, ждём человека.
+   */
+  const invites = useQuery({
+    queryKey: ['project-invites', projectId],
+    queryFn: () => api<{ id: string; email: string; role: string }[]>(`/api/v1/projects/${projectId}/invites`),
+  })
+
   const filtered = useMemo(() => {
     const list = members.data ?? []
     const needle = q.trim().toLowerCase()
@@ -89,7 +104,10 @@ export function ProjectTeamTab({
   }, [members.data, q])
 
   const onErr = (e: unknown) => toast.error(e instanceof Error ? e.message : String(e))
-  const refresh = () => qc.invalidateQueries({ queryKey: ['project-members', projectId] })
+  const refresh = () => {
+    qc.invalidateQueries({ queryKey: ['project-members', projectId] })
+    qc.invalidateQueries({ queryKey: ['project-invites', projectId] })
+  }
 
   const setLevel = useMutation({
     mutationFn: ({ userId, domain, level }: { userId: string; domain: Domain; level: Level }) =>
@@ -131,7 +149,7 @@ export function ProjectTeamTab({
   })
 
   return (
-    <div className="mx-auto w-full max-w-6xl p-6">
+    <div className="page-w p-6">
       <div className="flex items-center justify-between gap-3">
         <div>
           <h1 className="text-xl font-bold tracking-tight">{t('projTeam.title')}</h1>
@@ -159,6 +177,7 @@ export function ProjectTeamTab({
 
       {adding && companyId && (
         <AddFromCompany
+          canInvite={canInvite}
           projectId={projectId}
           companyId={companyId}
           existingIds={new Set(members.data?.map((m) => m.user.id))}
@@ -299,6 +318,30 @@ export function ProjectTeamTab({
           )
         })}
       </ul>
+
+      {/* Приглашённые — отдельным списком под своими: они ещё не участники,
+          и показывать их вперемешку значило бы обещать доступ, которого
+          пока нет. Ролей и прав здесь не правим — их не к чему прикладывать,
+          пока человек не принял. */}
+      {(invites.data?.length ?? 0) > 0 && (
+        <div className="mt-6">
+          <div className="mb-2 flex items-baseline gap-2">
+            <h3 className="text-sm font-semibold">{t('projTeam.pendingTitle')}</h3>
+            <span className="text-xs text-muted-foreground">{t('projTeam.pendingHint')}</span>
+          </div>
+          <ul className="space-y-1.5">
+            {(invites.data ?? []).map((inv) => (
+              <li key={inv.id} className="flex items-center gap-3 rounded-md border border-dashed px-3 py-2">
+                <span className="grid size-7 shrink-0 place-items-center rounded-full bg-secondary">
+                  <Mail className="size-3.5 text-muted-foreground" />
+                </span>
+                <span className="min-w-0 flex-1 truncate text-sm">{inv.email}</span>
+                <span className="shrink-0 text-xs text-muted-foreground">{t(`roles.${inv.role}`)}</span>
+              </li>
+            ))}
+          </ul>
+        </div>
+      )}
     </div>
   )
 }
@@ -356,6 +399,7 @@ function ProfileFields({
 
 // Добавление участника компании в проект (без подтверждения, письмо постфактум)
 function AddFromCompany({
+  canInvite,
   projectId,
   companyId,
   existingIds,
@@ -367,9 +411,15 @@ function AddFromCompany({
   existingIds: Set<string | undefined>
   onClose: () => void
   onAdded: () => void
+  /** Может звать со стороны. Сервер требует админа компании — здесь лишь
+   *  не показываем кнопку тому, кто упрётся в отказ. */
+  canInvite?: boolean
 }) {
   const { t } = useTranslation()
   const [q, setQ] = useState('')
+  // Роль будущего участника: она же уедет в компанию. По умолчанию обычный
+  // участник — повышают осознанно, а понижать потом неудобно и обидно.
+  const [role, setRole] = useState<'member' | 'admin'>('member')
 
   const companyMembers = useQuery({
     queryKey: ['company-members', companyId],
@@ -383,6 +433,39 @@ function AddFromCompany({
       ? list.filter((m) => m.user.name.toLowerCase().includes(needle) || m.user.email.toLowerCase().includes(needle))
       : list
   }, [companyMembers.data, existingIds, q])
+
+  /**
+   * Человек, которого в компании ещё нет.
+   *
+   * Раньше на это уходило: пригласить в компанию → ждать, пока примет →
+   * вернуться в проект → добавить. Между вторым и третьим шагом стояло
+   * ожидание, которым руководитель не управляет.
+   *
+   * Приглашение уже умеет нести с собой проект: примет — попадёт сразу и в
+   * компанию, и сюда. Роль одна на оба места: разделять их в этой форме
+   * значило бы спрашивать два вопроса там, где человек решает один.
+   */
+  const invite = useMutation({
+    mutationFn: (email: string) =>
+      api(`/api/v1/companies/${companyId}/invites`, {
+        method: 'POST',
+        body: JSON.stringify({ email, role, projectId }),
+      }),
+    onSuccess: () => {
+      toast.success(t('projTeam.invited'))
+      setQ('')
+      onAdded()
+    },
+    onError: (e) => toast.error(e instanceof Error ? e.message : String(e)),
+  })
+
+  // Простая проверка формы, а не строгая: строгую делает сервер, а здесь
+  // важно лишь не показывать «пригласить» при поиске по имени.
+  const isEmail = /^[^@s]+@[^@s]+.[^@s]+$/.test(q.trim())
+  // Уже в компании — значит его надо не звать, а добавить кнопкой выше.
+  const inCompany = (companyMembers.data ?? []).some(
+    (m) => m.user.email.toLowerCase() === q.trim().toLowerCase(),
+  )
 
   const add = useMutation({
     mutationFn: (userId: string) =>
@@ -402,7 +485,10 @@ function AddFromCompany({
           <X className="size-4" />
         </Button>
       </div>
-      <Input value={q} onChange={(e) => setQ(e.target.value)} placeholder={t('team.search')} />
+      {/* Одно поле на два действия: искать своих и звать чужих. Отдельная
+          форма приглашения рядом со списком заставляла бы сначала понять,
+          что человека в списке нет, а потом перевести взгляд. */}
+      <Input value={q} onChange={(e) => setQ(e.target.value)} placeholder={t('projTeam.searchOrInvite')} />
       <ul className="mt-3 max-h-56 space-y-1.5 overflow-y-auto">
         {available.map((m) => (
           <li key={m.id} className="flex items-center gap-3 rounded-md border px-3 py-2">
@@ -423,8 +509,36 @@ function AddFromCompany({
             </Button>
           </li>
         ))}
-        {available.length === 0 && (
+        {available.length === 0 && !isEmail && (
           <p className="p-3 text-center text-xs text-muted-foreground">{t('projTeam.nobodyToAdd')}</p>
+        )}
+
+        {/* Набрали почту, которой нет среди своих — предлагаем позвать.
+            Показываем только на похожем на адрес: иначе кнопка «пригласить»
+            висела бы под каждым неудачным поиском по имени. */}
+        {isEmail && !inCompany && canInvite && (
+          <li className="flex items-center gap-3 rounded-md border border-dashed px-3 py-2">
+            <span className="grid size-7 shrink-0 place-items-center rounded-full bg-secondary">
+              <Mail className="size-3.5 text-muted-foreground" />
+            </span>
+            <span className="min-w-0 flex-1">
+              <span className="block truncate text-sm">{q.trim()}</span>
+              <span className="block truncate text-xs text-muted-foreground">{t('projTeam.inviteHint')}</span>
+            </span>
+            {/* Роль выбирается здесь же: она уедет и в компанию, и в проект. */}
+            <select
+              value={role}
+              onChange={(e) => setRole(e.target.value as 'member' | 'admin')}
+              className="h-8 shrink-0 rounded-md border bg-background px-1.5 text-xs"
+            >
+              <option value="member">{t('roles.member')}</option>
+              <option value="admin">{t('roles.admin')}</option>
+            </select>
+            <Button variant="brand" size="sm" onClick={() => invite.mutate(q.trim())} disabled={invite.isPending}>
+              <Plus className="size-3.5" />
+              {t('projTeam.inviteBtn')}
+            </Button>
+          </li>
         )}
       </ul>
       <p className="mt-2 text-xs text-muted-foreground">{t('projTeam.addNote')}</p>

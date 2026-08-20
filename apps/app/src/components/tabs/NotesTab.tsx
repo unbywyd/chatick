@@ -208,7 +208,7 @@ export function NotesTab({ projectId }: { projectId: string }) {
   }
 
   return (
-    <div className="mx-auto w-full max-w-6xl space-y-4 p-6">
+    <div className="page-w space-y-4 p-6">
       {shareDialog}
       <div className="flex items-center justify-between gap-3">
         <div>

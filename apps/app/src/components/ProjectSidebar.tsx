@@ -9,6 +9,7 @@ import { api, type Company, type Me, type ProjectListItem } from '@/lib/api'
 import { cn } from '@/lib/utils'
 import { ProfileMenu } from '@/components/ProfileMenu'
 import { NotificationBell } from '@/components/NotificationBell'
+import { CompanySwitcher } from '@/components/CompanySwitcher'
 import { TimerControl } from '@/components/time/TimerControl'
 import { ProjectBadge } from '@/components/ui/project-badge'
 import { CompanyBrand } from '@/components/CompanyBrand'
@@ -148,7 +149,7 @@ export function ProjectSidebar({
           вовсе, поэтому кольцо остаётся видимым целиком. Боковые отступы дают
           обоим украшениям место, вместо того чтобы их срезать.
         */}
-        <ul className="min-h-0 flex-1 space-y-1 overflow-y-auto overflow-x-clip px-1.5 py-2">
+        <ul data-tour="projects" className="min-h-0 flex-1 space-y-1 overflow-y-auto overflow-x-clip px-1.5 py-2">
           {list.map((p) => {
             const unread = p.stats?.unread ?? 0
             const active = p.id === activeId
@@ -203,6 +204,20 @@ export function ProjectSidebar({
               </span>
             )}
           </button>
+          {/* Смена компании — и в свёрнутом виде: иначе за ней пришлось бы
+              сперва разворачивать сайдбар, то есть добавлять шаг к тому,
+              что мы этой стрелкой и сокращаем. */}
+          {myCompanies.length > 1 && company && (
+            <CompanySwitcher
+              companies={myCompanies}
+              current={company}
+              compact
+              onSelect={(id) => {
+                if (id === company.id) return
+                navigate(`/start/${id}`)
+              }}
+            />
+          )}
           {/* колокольчик и профиль живут только здесь: в навбаре проекта они
               дублировались, а сайдбар виден на любой вкладке */}
           <NotificationBell currentProjectId={activeId} />
@@ -241,11 +256,11 @@ export function ProjectSidebar({
 
       {activeId && (
         <div className="border-b px-2 py-2">
-          <TimerControl collapsed={false} />
+          <span data-tour="timer"><TimerControl collapsed={false} /></span>
         </div>
       )}
 
-      <ul className="min-h-0 flex-1 overflow-y-auto px-1 pb-2">
+      <ul data-tour="projects" className="min-h-0 flex-1 overflow-y-auto px-1 pb-2">
         {projects.isLoading && <p className="px-3 py-2 text-sm text-muted-foreground">…</p>}
         {list.map((p) => {
           const unread = p.stats?.unread ?? 0
@@ -313,7 +328,40 @@ export function ProjectSidebar({
           создают проект, а на список проектов компании, и у человека без
           права на создание упиралась в отказ. Возврат в компанию — то, что
           отсюда действительно нужно, и в свёрнутом виде его не было вовсе. */}
-      <div className="flex items-center gap-2 border-t p-2">
+      <div data-tour="company-row" className="flex items-center gap-2 border-t p-2">
+        {/*
+          Смена компании — здесь же, отдельной стрелкой.
+
+          Перед кнопкой, а не после: в конце ряда она отрывалась от названия
+          компании и вставала между колокольчиком и профилем — читалась как
+          третий значок настроек, а не как «сменить вот эту компанию».
+
+          Раньше на это уходило четыре шага: нажать компанию, попасть на
+          главную, найти переключатель наверху, выбрать другую, зайти в
+          проект. Сама кнопка по-прежнему ведёт в настройки — это разные
+          намерения, и объединять их в один клик значило бы отнять одно
+          ради другого.
+
+          Стрелка показывается только когда есть из чего выбирать: у
+          человека с одной компанией она открывала бы список из одной
+          строки — уже выбранной.
+        */}
+        {myCompanies.length > 1 && company && (
+          <CompanySwitcher
+            companies={myCompanies}
+            current={company}
+            compact
+            onSelect={(id) => {
+              if (id === company.id) return
+              /**
+               * Уводим на главную страницу выбранной компании, а не остаёмся
+               * в проекте: проект принадлежит прежней компании, и после
+               * смены человек смотрел бы на чужой для неё контекст.
+               */
+              navigate(`/start/${id}`)
+            }}
+          />
+        )}
         {/* CompanyBrand, а не мелкий круглый значок: логотип и название —
             это лицо компании, и люди хотят видеть их, а не кружок 18px. */}
         <button

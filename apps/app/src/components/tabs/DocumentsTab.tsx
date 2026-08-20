@@ -113,7 +113,7 @@ export function DocumentsTab({ projectId, meId }: { projectId: string; meId?: st
   }
 
   return (
-    <div className="mx-auto w-full max-w-6xl space-y-4 p-6">
+    <div className="page-w space-y-4 p-6">
       <div className="flex items-center justify-between gap-3">
         <div>
           <h1 className="flex items-center gap-2 text-xl font-bold tracking-tight">
@@ -395,7 +395,7 @@ pre{background:#f4f4f5;padding:.85rem;border-radius:6px;overflow-x:auto}</style>
 
       <div className="flex min-h-0 flex-1">
         <div className="min-h-0 flex-1 overflow-y-auto">
-        <div className="mx-auto w-full max-w-[1400px] space-y-3 p-4 sm:p-6">
+        <div className="page-w space-y-3 p-4 sm:p-6">
           <input
             value={title}
             onChange={(e) => {
