@@ -3,6 +3,8 @@ import { useTranslation } from 'react-i18next'
 import { useEditor, EditorContent, ReactRenderer } from '@tiptap/react'
 import { BubbleMenu } from '@tiptap/react/menus'
 import StarterKit from '@tiptap/starter-kit'
+import CodeBlockLowlight from '@tiptap/extension-code-block-lowlight'
+import { createLowlight, common } from 'lowlight'
 import Placeholder from '@tiptap/extension-placeholder'
 import Mention from '@tiptap/extension-mention'
 import Link from '@tiptap/extension-link'
@@ -64,6 +66,15 @@ export function mentionSuggestion(getItems: () => RichMention[], includeAi = fal
 }
 
 // Универсальный rich-editor. preset: full (задачи) | minimal (комментарии)
+/**
+ * Подсветка кода в описаниях, комментариях и заметках.
+ *
+ * Общий набор грамматик, а не полный: полный тянет в сборку сотни килобайт
+ * ради языков, которых в задачах не бывает. Экземпляр один на модуль —
+ * внутри компонента он пересобирал бы грамматики на каждое нажатие клавиши.
+ */
+const lowlight = createLowlight(common)
+
 export function RichEditor({
   value,
   onChange,
@@ -101,8 +112,12 @@ export function RichEditor({
       StarterKit.configure(
         preset === 'minimal'
           ? { heading: false, blockquote: false, horizontalRule: false, codeBlock: false }
-          : { horizontalRule: false },
+          : { horizontalRule: false, codeBlock: false },
       ),
+      // Свой блок кода вместо стандартного: тот не знает про языки и не
+      // подсвечивает. Ассистент пишет примеры с языком, и без этого они
+      // выглядели бы серой простынёй.
+      CodeBlockLowlight.configure({ lowlight }),
       Placeholder.configure({ placeholder: placeholder ?? '' }),
       // autolink: набрал адрес и поставил пробел — он стал ссылкой. Без этого
       // адрес в описании оставался обычным текстом, и по нему нельзя было
@@ -122,7 +137,7 @@ export function RichEditor({
       Image.configure({ inline: false, allowBase64: false, HTMLAttributes: { class: 'inline-doc-image' } }),
       TextDirection,
     ],
-    content: withInlineImageAuth(value),
+    content: markdownToHtml(withInlineImageAuth(value)),
     onSelectionUpdate: ({ editor: e }) => setDir(currentDirection(e as never)),
     editorProps: {
       attributes: {
@@ -219,7 +234,7 @@ export function RichEditor({
   useEffect(() => {
     if (!editor) return
     if (readOnly) {
-      editor.commands.setContent(withInlineImageAuth(value))
+      editor.commands.setContent(markdownToHtml(withInlineImageAuth(value)))
       return
     }
     if (value === '') {
@@ -228,7 +243,7 @@ export function RichEditor({
       return
     }
     if (!touched.current && editor.isEmpty) {
-      editor.commands.setContent(withInlineImageAuth(value))
+      editor.commands.setContent(markdownToHtml(withInlineImageAuth(value)))
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [value, readOnly])
@@ -358,7 +373,13 @@ export function serializeToMarkdown(doc: MdNode): string {
     if (node.type === 'paragraph') blocks.push(inline(node.content))
     else if (node.type === 'heading') blocks.push('#'.repeat(Number(node.attrs?.level ?? 2)) + ' ' + inline(node.content))
     else if (node.type === 'blockquote') blocks.push('> ' + inline(node.content?.[0]?.content))
-    else if (node.type === 'codeBlock') blocks.push('```\n' + inline(node.content) + '\n```')
+    else if (node.type === 'codeBlock') {
+      // Язык возвращаем в ограду. Без него правка описания незаметно
+      // стирала язык: открыл задачу, поправил слово, сохранил — и подсветка
+      // пропала, потому что уехало ``` вместо ```js.
+      const lang = typeof node.attrs?.language === 'string' ? node.attrs.language : ''
+      blocks.push('```' + lang + '\n' + inline(node.content) + '\n```')
+    }
     else if (node.type === 'bulletList') blocks.push((node.content ?? []).map((li) => '- ' + inline(li.content?.[0]?.content)).join('\n'))
     else if (node.type === 'orderedList') blocks.push((node.content ?? []).map((li, i) => `${i + 1}. ` + inline(li.content?.[0]?.content)).join('\n'))
     else if (node.type === 'taskList')
@@ -387,7 +408,16 @@ function collectMentions(doc: MdNode): string[] {
  * разметкой быть не должно.
  */
 function looksLikeHtml(s: string): boolean {
-  return /<(p|h[1-6]|ul|ol|li|blockquote|pre|div|table|strong|em|code)[^>]*>[\s\S]*<\/>/i.test(s)
+  // Закрывающий тег ЛЮБОГО из блочных, а не «</>»: прежнее выражение искало
+  // литерал, которого в разметке не бывает, и отвечало «нет» на всё подряд —
+  // включая обычный HTML. Пока функцию не вызывали, ошибка не проявлялась;
+  // с первым же вызовом описания задач поехали через markdown-экранирование
+  // и показались сырыми тегами.
+  // Список в одном месте: раньше он был выписан дважды в одном выражении, и
+  // достаточно было поправить одну половину, чтобы проверка тихо перестала
+  // узнавать часть разметки.
+  const TAGS = '(p|h[1-6]|ul|ol|li|blockquote|pre|div|table|strong|em|code)'
+  return new RegExp('<' + TAGS + '[^>]*>[\\s\\S]*<\\/' + TAGS + '>', 'i').test(s)
 }
 
 /** @deprecated см. serializeToMarkdown — конвертация больше не нужна. */
@@ -401,8 +431,39 @@ function markdownToHtml(md: string): string {
 
   // экранируем, затем базовые инлайн-замены; блоки — по строкам как параграфы
   const esc = (s: string) => s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
-  return md
-    .split('\n\n')
+
+  /**
+   * Блоки кода вынимаем ДО всего остального.
+   *
+   * Ассистент оформляет примеры оградой ```js, и раньше она доезжала до
+   * карточки как есть: в описании виднелись сами кавычки, при правке блок не
+   * собирался, а при сохранении язык терялся. Внутри кода разметки нет —
+   * звёздочки и подчёркивания там значат код, а не курсив, — поэтому блоки
+   * заменяем заглушками, а возвращаем в конце уже готовым HTML.
+   */
+  const codeBlocks: string[] = []
+  const NUL = String.fromCharCode(0)
+  const withoutCode = md.replace(
+    /^```([\w-]*)\n([\s\S]*?)\n?```$/gm,
+    (_m: string, lang: string, code: string) => {
+      // Язык — классом language-*: так его понимает и tiptap, и подсветка.
+      const cls = lang ? ' class="language-' + esc(lang) + '"' : ''
+      codeBlocks.push('<pre><code' + cls + '>' + esc(code) + '</code></pre>')
+      return NUL + 'CODE' + (codeBlocks.length - 1) + NUL
+    },
+  )
+
+  // Заглушка могла обрасти <p> — снимаем его вместе с ней, иначе блок кода
+  // окажется внутри абзаца, а это недопустимая разметка.
+  const restore = (html: string) =>
+    html.replace(
+      new RegExp('(?:<p>)?' + NUL + 'CODE(\\d+)' + NUL + '(?:<\/p>)?', 'g'),
+      (_m: string, i: string) => codeBlocks[Number(i)] ?? '',
+    )
+
+  return restore(
+    withoutCode
+      .split('\n\n')
     .map((block) => {
       // одиночная картинка — отдельный блок (иначе Tiptap завернёт её в <p>)
       const img = block.match(/^!\[([^\]]*)\]\(([^)]+)\)$/)
@@ -417,5 +478,6 @@ function markdownToHtml(md: string): string {
       if (block.startsWith('# ')) return `<h2>${b.slice(2)}</h2>`
       return `<p>${b.replace(/\n/g, '<br>')}</p>`
     })
-    .join('')
+    .join(''),
+  )
 }
