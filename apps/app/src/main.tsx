@@ -209,6 +209,10 @@ function TeamPage() {
         (project?.myRole === 'owner' || project?.myRole === 'admin' || isCompanyAdmin) &&
         !project?.membersViaApiOnly
       }
+      // Звать людей со стороны — решение уровня компании: приглашение
+      // заводит человека и в неё, а не только в проект. Сервер это и так
+      // требует; здесь лишь не показываем кнопку тому, кто упрётся в отказ.
+      canInvite={isCompanyAdmin}
       managedExternally={Boolean(project?.membersViaApiOnly)}
     />
   ) : null

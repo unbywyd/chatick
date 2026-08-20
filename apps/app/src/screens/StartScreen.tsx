@@ -185,7 +185,7 @@ export function StartScreen() {
           (проекты, настройки) имеют — и при переключении вся страница вместе
           с табами прыгает вправо на её ширину. */}
       <main className="min-h-0 flex-1 overflow-y-auto [scrollbar-gutter:stable]">
-        <div className="mx-auto w-full max-w-6xl px-6 py-8">
+        <div className="page-w px-6 py-8">
         {!companyId ? (
           <CompanyPicker
             data={companiesQ.data}
@@ -532,6 +532,8 @@ function CompanyHome({
         <OverviewTab
           companyId={company.id}
           onOpenProject={onEntered}
+          // «Все проекты» — на соседнюю вкладку, где список полный и с поиском.
+          onOpenAllProjects={() => navigate(`/start/${company.id}/projects`)}
           // Фильтры едут в адресе: ссылку можно переслать, и вкладка «Часы»
           // прочитает их сама, даже если уже была смонтирована.
           onOpenReport={(userId, period) =>

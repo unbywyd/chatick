@@ -8,7 +8,7 @@ import { DeleteObjectCommand, PutObjectCommand, S3Client } from '@aws-sdk/client
 import { deleteObject, getObjectStream, resolveStorage, s3Bucket, s3Client, S3_KEY_PREFIX } from '../lib/s3.js'
 import { sendDeletedMail } from '../lib/mails.js'
 import { db } from '../db/client.js'
-import { companyBackupStorage, companyStorage, companies, companyMembers, companyInvites, companyWebhooks, files, messages, projectMembers, projects, tasks, timeEntries, users } from '../db/schema.js'
+import { companyBackupStorage, companyStorage, companies, companyMembers, companyInvites, companyWebhooks, files, messages, notifications, projectMembers, projects, tasks, timeEntries, users } from '../db/schema.js'
 import { requireSession, type SessionEnv } from '../auth.js'
 import { sendInviteMail } from '../lib/mail-invite.js'
 import { projectLocale } from '../lib/locale.js'
@@ -270,12 +270,34 @@ companiesRoute.get('/:companyId/overview', async (c) => {
     .where(and(inArray(timeEntries.projectId, ids), sql`${timeEntries.endedAt} is not null`))
     .groupBy(timeEntries.projectId)
 
+  /**
+   * Что затронуло МЕНЯ в каждом проекте и когда в последний раз.
+   *
+   * Не «последняя активность» вообще: в шумном проекте, где я не участвую,
+   * события идут постоянно, и он вытеснял бы с главной то, где меня ждут.
+   * Уведомления адресные — упоминания, назначения, ответы, — поэтому они и
+   * отвечают на вопрос «куда мне зайти в первую очередь».
+   */
+  const notifyRows = await db
+    .select({
+      projectId: notifications.projectId,
+      // Текстом в ISO, а не timestamp: драйвер отдал бы Date, а сравнение
+      // дат как строк даёт неверный порядок — «Aug 12» оказывается выше
+      // «Aug 18». У ISO порядок строк совпадает с хронологическим.
+      lastAt: sql<string | null>`to_char(max(${notifications.createdAt}) at time zone 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS"Z"')`,
+      unread: sql<number>`count(*) filter (where ${notifications.readAt} is null)::int`,
+    })
+    .from(notifications)
+    .where(and(inArray(notifications.projectId, ids), eq(notifications.userId, sub)))
+    .groupBy(notifications.projectId)
+
   const byId = <T extends { projectId: string }>(rows: T[]) => new Map(rows.map((r) => [r.projectId, r]))
   const totalTimeMap = byId(totalTimeRows)
   const taskMap = byId(taskRows)
   const memberMap = byId(memberRows)
   const timeMap = byId(timeRows)
   const msgMap = byId(msgRows)
+  const notifyMap = byId(notifyRows)
 
   // Где я сам состою — чтобы на обзоре было видно, куда я войду, а куда нет.
   // Одним запросом на весь список, а не по проекту в цикле.
@@ -321,6 +343,10 @@ companiesRoute.get('/:companyId/overview', async (c) => {
       minutes: timeMap.get(p.id)?.minutes ?? 0,
       totalMinutes: totalTimeMap.get(p.id)?.minutes ?? 0,
       messages: msgMap.get(p.id)?.count ?? 0,
+      // Когда меня в последний раз затронуло и сколько ещё не прочитано —
+      // по ним обзор решает, какие проекты показать первыми.
+      lastTouchedAt: notifyMap.get(p.id)?.lastAt ?? null,
+      unread: notifyMap.get(p.id)?.unread ?? 0,
     }
   })
 
@@ -331,7 +357,26 @@ companiesRoute.get('/:companyId/overview', async (c) => {
 
   return c.json({
     period,
-    projects: list.sort((a, b) => b.minutes - a.minutes),
+    /**
+     * Порядок: сначала то, куда человеку идти.
+     *
+     * Раньше сортировали по часам за период — наверху оказывались проекты,
+     * где много работали, даже если там давно ничего не происходит. В
+     * компании с двумя десятками проектов нужный приходилось искать глазами
+     * по всему списку, хотя заходят почти всегда именно отсюда.
+     *
+     * Своё вперёд чужого: в проект, где я не состою, всё равно не пустят.
+     * Дальше — по свежести того, что меня коснулось. Проекты без единого
+     * уведомления ко мне сортируются часами, как раньше: для них это
+     * единственный признак, что там вообще идёт работа.
+     */
+    projects: list.sort((a, b) => {
+      if (a.isMember !== b.isMember) return a.isMember ? -1 : 1
+      if (a.lastTouchedAt && b.lastTouchedAt) return b.lastTouchedAt.localeCompare(a.lastTouchedAt)
+      if (a.lastTouchedAt) return -1
+      if (b.lastTouchedAt) return 1
+      return b.minutes - a.minutes
+    }),
     totals: {
       projects: list.length,
       people: companyPeople[0]?.count ?? 0,

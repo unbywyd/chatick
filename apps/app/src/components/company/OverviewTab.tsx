@@ -42,6 +42,10 @@ type ProjectStat = {
   /** За всё время — чтобы часы за период не читались как «часов нет». */
   totalMinutes: number
   messages: number
+  /** Когда меня последний раз затронуло в этом проекте. Null — ни разу. */
+  lastTouchedAt: string | null
+  /** Непрочитанные уведомления мне — по ним проект помечается на обзоре. */
+  unread: number
 }
 type Overview = {
   projects: ProjectStat[]
@@ -79,10 +83,13 @@ const CHART_LABEL_STYLE = { color: 'var(--muted-foreground)' }
 export function OverviewTab({
   companyId,
   onOpenProject,
+  onOpenAllProjects,
   onOpenReport,
 }: {
   companyId: string
   onOpenProject?: (id: string) => void
+  /** Показать все проекты компании — уводит на вкладку «Проекты». */
+  onOpenAllProjects?: () => void
   /** отчёт по человеку за тот же период — на вкладке «Часы» */
   onOpenReport?: (userId: string, period: Period) => void
 }) {
@@ -108,6 +115,24 @@ export function OverviewTab({
   const shownProjects = needle
     ? (d?.projects ?? []).filter((p) => p.name.toLowerCase().includes(needle))
     : (d?.projects ?? [])
+
+  /**
+   * На обзоре — только то, куда человек пойдёт; остальное на вкладке.
+   *
+   * В компании с двумя десятками проектов список занимал всю страницу, и
+   * нужный искали глазами — хотя заходят в проекты почти всегда именно
+   * отсюда. Сервер уже отдал их в порядке «где меня коснулось свежее
+   * всего», поэтому здесь достаточно отрезать хвост.
+   *
+   * Порог и предел совпадают: пока проектов не больше десяти, показываем
+   * все и кнопку не рисуем — прятать три проекта за «показать все» значит
+   * добавить шаг на ровном месте.
+   */
+  const TOP_PROJECTS = 10
+  // При поиске предел снимаем: человек ищет конкретный проект, и «найдено,
+  // но не показано» — худшее, что можно ответить.
+  const overLimit = !needle && shownProjects.length > TOP_PROJECTS
+  const visibleProjects = overLimit ? shownProjects.slice(0, TOP_PROJECTS) : shownProjects
 
   if (q.isLoading) return <p className="py-16 text-center text-sm text-muted-foreground">…</p>
   if (!d || !d.projects.length) {
@@ -171,7 +196,7 @@ export function OverviewTab({
           {shownProjects.length === 0 && (
             <li className="py-6 text-center text-sm text-muted-foreground">{t('overview.noProjectMatch')}</li>
           )}
-          {shownProjects.map((p) => (
+          {visibleProjects.map((p) => (
             // Строка кликается целиком: на обзоре видно, где что происходит,
             // и уходить за этим в список проектов — лишний шаг.
             <li
@@ -186,6 +211,14 @@ export function OverviewTab({
               <div className="min-w-0 flex-1">
                 <div className="flex items-baseline gap-2">
                   <span className="truncate text-sm font-medium">{p.name}</span>
+                  {/* Непрочитанное мне — счётчиком у имени. Проект уже стоит
+                      наверху по свежести, но без метки непонятно, почему он
+                      там: порядок объясняет сам себя. */}
+                  {p.unread > 0 && (
+                    <span className="shrink-0 rounded-full bg-brand/15 px-1.5 py-0.5 text-[10px] font-medium tabular-nums text-brand">
+                      {p.unread}
+                    </span>
+                  )}
                   {/* Замок — заранее видно, что внутрь не пустят: без него
                       человек кликает и упирается в отказ, гадая, что сломалось. */}
                   {!p.isMember && (
@@ -241,6 +274,17 @@ export function OverviewTab({
             </li>
           ))}
         </ul>
+        {/* Кнопка появляется, только когда что-то действительно скрыто, и
+            говорит сколько: «Все проекты» без числа не даёт понять, стоит
+            ли туда идти. */}
+        {overLimit && (
+          <button
+            onClick={onOpenAllProjects}
+            className="mt-3 w-full rounded-md border border-dashed py-2 text-xs text-muted-foreground transition-colors hover:border-solid hover:text-foreground"
+          >
+            {t('overview.allProjects', { count: shownProjects.length })}
+          </button>
+        )}
       </section>
 
       {/* Ритм: по неделям видно, набирает компания обороты или затухает */}
