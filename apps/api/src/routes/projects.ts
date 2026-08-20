@@ -7,7 +7,7 @@ import sharp from 'sharp'
 import { db } from '../db/client.js'
 import { env } from '../env.js'
 import { companyTrialSpendUsd } from '../lib/ai-usage.js'
-import { companies, companyMembers, files, FREE_STORAGE_BYTES, messages, notifications, projects, projectMembers, projectStorage, tasks, timeEntries, users, projectAi } from '../db/schema.js'
+import { companies, companyInvites, companyMembers, files, FREE_STORAGE_BYTES, messages, notifications, projects, projectMembers, projectStorage, tasks, timeEntries, users, projectAi } from '../db/schema.js'
 import { encrypt } from '../lib/crypto.js'
 import { membersLockedForCompany, membersLockedForProject, MEMBERS_LOCKED } from '../lib/members-locked.js'
 import { logActivity } from '../lib/audit.js'
@@ -866,6 +866,37 @@ projectsRoute.delete('/:projectId', async (c) => {
 })
 
 // Участники проекта
+/**
+ * Приглашённые в этот проект, но ещё не принявшие.
+ *
+ * Отдельной ручкой, а не в списке участников: тот отдаёт строки таблицы
+ * участников, у приглашённого её ещё нет — он существует только как адрес
+ * почты. Смешивать их в одном ответе значило бы выдумывать половину полей.
+ *
+ * Без этого списка приглашение выглядело как «ничего не произошло»:
+ * человек нажал «пригласить», а команда осталась прежней.
+ */
+projectsRoute.get('/:projectId/invites', async (c) => {
+  const { sub } = c.get('session')
+  const projectId = c.req.param('projectId')
+  const project = await db.query.projects.findFirst({ where: eq(projects.id, projectId) })
+  if (!project) return c.json({ error: 'Not found' }, 404)
+  const membership = await projectRoleOf(projectId, sub)
+  if (!membership && !canCreateProjects(await companyRoleOf(project.companyId, sub)))
+    return c.json({ error: 'Forbidden' }, 403)
+
+  const rows = await db
+    .select({ id: companyInvites.id, email: companyInvites.email, role: companyInvites.role, createdAt: companyInvites.createdAt })
+    .from(companyInvites)
+    .where(
+      and(
+        eq(companyInvites.projectId, projectId),
+        eq(companyInvites.status, 'pending'),
+      ),
+    )
+  return c.json(rows)
+})
+
 projectsRoute.get('/:projectId/members', async (c) => {
   const { sub } = c.get('session')
   const projectId = c.req.param('projectId')
@@ -1061,6 +1092,17 @@ projectsRoute.delete('/:projectId/members/:userId', async (c) => {
   const companyRole = await companyRoleOf(project.companyId, sub)
   const allowed = me?.role === 'owner' || me?.role === 'admin' || canCreateProjects(companyRole)
   if (!allowed) return c.json({ error: 'Forbidden' }, 403)
+
+  /**
+   * Владельца проекта убрать нельзя.
+   *
+   * У каждого проекта он ровно один, и во многих он единственное
+   * начальство: удалив его, проект остаётся без того, кто может вернуть
+   * людей и раздать права. Мост это уже запрещал при смене роли, а здесь
+   * дыра оставалась открытой.
+   */
+  const victim = await projectRoleOf(projectId, userId)
+  if (victim?.role === 'owner') return c.json({ error: 'Project owner cannot be removed' }, 400)
 
   await db.delete(projectMembers).where(and(eq(projectMembers.projectId, projectId), eq(projectMembers.userId, userId)))
 

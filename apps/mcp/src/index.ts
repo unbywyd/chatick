@@ -388,6 +388,92 @@ server.registerTool(
   },
 )
 
+server.registerTool(
+  'chatick_member_add',
+  {
+    title: 'Add someone to the project',
+    description:
+      'Adds a person to the project. Pass userId for someone already in the company — take it from ' +
+      'chatick_members on another project, never invent one. Pass email instead to invite someone from ' +
+      'outside: they get one invitation that puts them in the company AND this project, so nobody has to ' +
+      'be added twice. Inviting from outside needs a company admin.',
+    inputSchema: {
+      project: z.string().describe('Project id'),
+      userId: z.string().optional().describe('Existing company member'),
+      email: z.string().optional().describe('Invite someone who is not in the company yet'),
+      role: z.enum(['admin', 'member']).optional().describe('Role in the project; defaults to member'),
+      companyRole: z
+        .enum(['admin', 'manager', 'member'])
+        .optional()
+        .describe('Role in the company for an invited person; defaults to member'),
+    },
+  },
+  async ({ project, userId, email, role, companyRole }) => {
+    try {
+      return json(await call({ ...(await need()), projectId: project }, 'POST', '/members', { userId, email, role, companyRole }))
+    } catch (e) {
+      return fail(e)
+    }
+  },
+)
+
+server.registerTool(
+  'chatick_member_role',
+  {
+    title: 'Change what someone may do',
+    description:
+      'Changes a project role and, with it, the default permission levels. The project owner cannot be ' +
+      'changed — every project has exactly one, and in many of them they are the only person who can hand ' +
+      'rights back.',
+    inputSchema: {
+      project: z.string().describe('Project id'),
+      userId: z.string().describe('Who to change — id from chatick_members'),
+      role: z.enum(['admin', 'member']).describe('New role in the project'),
+    },
+  },
+  async ({ project, userId, role }) => {
+    try {
+      return json(await call({ ...(await need()), projectId: project }, 'PATCH', `/members/${userId}`, { role }))
+    } catch (e) {
+      return fail(e)
+    }
+  },
+)
+
+server.registerTool(
+  'chatick_member_remove',
+  {
+    title: 'Remove someone from the project',
+    description:
+      'Takes a person out of THIS project. They stay in the company — leaving it is a decision of another ' +
+      'level and is not done from here. The owner cannot be removed. Ask the human first: losing access ' +
+      'mid-work is disruptive, and putting someone back does not restore what they were doing.',
+    inputSchema: {
+      project: z.string().describe('Project id'),
+      userId: z.string().describe('Who to remove — id from chatick_members'),
+    },
+  },
+  async ({ project, userId }) => {
+    try {
+      return json(await call({ ...(await need()), projectId: project }, 'DELETE', `/members/${userId}`))
+    } catch (e) {
+      return fail(e)
+    }
+  },
+)
+
+server.registerTool(
+  'chatick_members_available',
+  { title: 'Who could be added', description: 'People in the company who are not in this project yet.', inputSchema: { project: z.string().describe('Project id') } },
+  async ({ project }) => {
+    try {
+      return json(await call({ ...(await need()), projectId: project }, 'GET', '/members/available'))
+    } catch (e) {
+      return fail(e)
+    }
+  },
+)
+
 // --- Задачи ------------------------------------------------------------------
 
 server.registerTool(
@@ -1104,3 +1190,75 @@ server.registerTool(
 
 const transport = new StdioServerTransport()
 await server.connect(transport)
+
+/**
+ * Открыть страницу Chatick в браузере человека.
+ *
+ * Ассистент часто заканчивает работу словами «вот задача» и ссылкой, которую
+ * человек копирует и вставляет руками. Здесь он открывает её сам.
+ *
+ * Браузер запускается НА ЭТОЙ машине — той, где работает MCP, то есть рядом с
+ * человеком. Открывать сразу в приложении Chatick было бы приятнее, но своего
+ * протокола у него пока нет: это отдельная сборка (см. DEFERRED.md).
+ */
+server.registerTool(
+  'chatick_open',
+  {
+    title: 'Open a page in the browser',
+    description:
+      'Opens a Chatick page on the screen of the person you work with: a task, a document, a project, a ' +
+      'company. Pass a link that came from another tool ("shortUrl", "link") — never one you assembled ' +
+      'yourself, ids are not guessable. Use it when they are about to look at the thing anyway; saying what ' +
+      'you opened is polite, opening five pages in a row is not.',
+    inputSchema: {
+      url: z.string().describe('A chatick.com link taken from another tool reply'),
+    },
+  },
+  async ({ url }) => {
+    try {
+      /**
+       * Только свои адреса.
+       *
+       * Инструмент запускает программу на машине человека по строке, которую
+       * предложила модель. Без проверки достаточно подсунуть ей чужую ссылку
+       * в тексте задачи — и мы откроем что угодно от его имени.
+       */
+      let target: URL
+      try {
+        target = new URL(url)
+      } catch {
+        return fail(new Error('Not a URL: ' + url))
+      }
+      if (target.protocol !== 'https:' && target.protocol !== 'http:') {
+        return fail(new Error('Only http(s) links can be opened'))
+      }
+      // Точное совпадение домена или его поддомен: проверка через includes
+      // пропустила бы chatick.com.evil.net.
+      const host = target.hostname.toLowerCase()
+      if (host !== 'chatick.com' && !host.endsWith('.chatick.com') && host !== 'localhost') {
+        return fail(new Error('Only chatick.com links can be opened, got: ' + host))
+      }
+
+      /**
+       * Открываем средствами системы.
+       *
+       * Аргументом, а не строкой команды: адрес приходит извне, и склеивать
+       * его с командой значит отдать кавычки чужому тексту. execFile ничего
+       * не разбирает через оболочку.
+       *
+       * Windows: у start нет исполняемого файла, поэтому там cmd с /c, а
+       * пустые кавычки — заголовок окна, без них start съедает сам адрес.
+       */
+      const { execFile } = await import('node:child_process')
+      await new Promise<void>((resolve, reject) => {
+        const done = (err: unknown) => (err ? reject(err) : resolve())
+        if (process.platform === 'win32') execFile('cmd', ['/c', 'start', '', target.href], done)
+        else if (process.platform === 'darwin') execFile('open', [target.href], done)
+        else execFile('xdg-open', [target.href], done)
+      })
+      return json({ opened: target.href })
+    } catch (e) {
+      return fail(e)
+    }
+  },
+)

@@ -1057,10 +1057,22 @@ Start with GET /x/context if you need to understand the project before acting.
   GET    /x/members/available          company people not yet in this project
   POST   /x/members                    {"userId"|"email", "role"?: "admin"|"member"}
   PATCH  /x/members/<userId>           {"role"?, "permissions"?, "jobTitle"?, "responsibility"?}
+  DELETE /x/members/<userId>           take them out of THIS project
 
 Managing the team requires being an owner/admin of the project, or an admin of
 the company. GET /x/members works for anyone who can read tasks and reports
 "canManage" so you know whether the rest will be allowed.
+
+Someone who is not in the company yet: POST /x/members with "email" instead
+of "userId". One invitation puts them in the company AND this project, so
+nobody has to be added twice — but inviting from outside needs a company
+admin, not just project rights.
+
+DELETE removes a person from the project only; they stay in the company.
+The project owner cannot be removed or have their role changed: every
+project has exactly one, and in many they are the only person who can hand
+rights back. Ask the human before removing anyone — losing access mid-work
+is disruptive, and adding them back does not restore what they were doing.
 
 Adding someone already in the company puts them in the project right away and
 sends them a notification email. If the email belongs to nobody in the company,

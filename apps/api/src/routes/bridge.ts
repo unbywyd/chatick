@@ -49,7 +49,7 @@ import { authenticateBridge, closeSession, startDeviceAuth, pollDeviceAuth, IDLE
 import { readFromConnection } from './db-connections.js'
 import { connectDoc, guideDoc } from '../lib/bridge-docs.js'
 import { logActivity } from '../lib/audit.js'
-import { sendAddedToProjectMail } from '../lib/mails.js'
+import { sendAddedToProjectMail, sendRemovedFromProjectMail } from '../lib/mails.js'
 import { sendInviteMail } from '../lib/mail-invite.js'
 import { createNote, noteToTask, NOTE_TYPES, type NoteType } from './notes.js'
 import { readTimeConfig, maybeTranslate, timeConfigForProject } from './time.js'
@@ -3733,6 +3733,55 @@ bridgeRoute.patch('/members/:userId', async (c) => {
   })
 
   return c.json({ ok: true, userId, role, permissions: domains })
+})
+
+/**
+ * Убрать человека из проекта.
+ *
+ * Ассистент умел добавлять и менять роли, но не убирать: команда росла и
+ * не убывала, и за каждым уходом человек шёл в интерфейс руками.
+ *
+ * Из ПРОЕКТА, а не из компании: компанию мост не трогает вовсе — это
+ * решение другого уровня, и отдавать его ассистенту не стоит.
+ */
+bridgeRoute.delete('/members/:userId', async (c) => {
+  const id = auth(c as never)
+  const scope = await resolveProject(c as never)
+  if ('error' in scope) return c.json({ error: scope.error }, scope.status)
+  if (!(await managesTeam(scope.projectId, id.userId))) {
+    return c.json({ error: 'Forbidden: only project owners/admins manage the team' }, 403)
+  }
+
+  const project = await db.query.projects.findFirst({ where: eq(projects.id, scope.projectId) })
+  if (!project) return c.json({ error: 'Project not found' }, 404)
+  // Состав ведётся во внешней системе (SPEC §8.42).
+  if (await membersLockedForProject(scope.projectId)) return c.json(MEMBERS_LOCKED, 403)
+
+  const userId = c.req.param('userId')
+  const target = await projectRoleOf(scope.projectId, userId)
+  if (!target) return c.json({ error: 'Not a project member' }, 404)
+  // Владелец один на проект и часто единственное начальство: убрав его,
+  // проект остаётся без того, кто может вернуть людей и раздать права.
+  if (target.role === 'owner') return c.json({ error: 'Project owner cannot be removed' }, 400)
+
+  await db
+    .delete(projectMembers)
+    .where(and(eq(projectMembers.projectId, scope.projectId), eq(projectMembers.userId, userId)))
+
+  const user = await db.query.users.findFirst({ where: eq(users.id, userId) })
+  if (user)
+    await sendRemovedFromProjectMail({ to: user.email, locale: user.locale, projectName: project.name })
+
+  await logActivity({
+    projectId: scope.projectId,
+    actorId: id.userId,
+    action: 'delete',
+    entityType: 'member',
+    entityId: userId,
+    entityLabel: `${user?.name || user?.email || userId} removed from the project`,
+  })
+
+  return c.json({ removed: true, userId })
 })
 
 /**
