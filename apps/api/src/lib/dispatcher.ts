@@ -154,6 +154,21 @@ export async function aiChatReply(
       //
       // ПРЕДЛАГАЕМ, а не создаём молча: вопросы в чате звучат постоянно, и
       // задача из каждого превратила бы доску в свалку. Решает человек.
+      // Просьба «добавь в Chatick» — почти всегда неполная.
+      //
+      // Человек описывает решение, а не задачу: «добавь кнопку экспорта»
+      // вместо «людям нужны данные в Excel». Приняв формулировку как есть,
+      // ассистент заводит задачу, которую потом переделывают.
+      //
+      // Но и спорить нельзя: человек пришёл с делом, а не за обсуждением.
+      // Одно возражение по существу — и дальше делаем, что просят. Модель
+      // склонна к обратному: она либо соглашается со всем, либо выкатывает
+      // список из шести альтернатив, и оба варианта одинаково бесполезны.
+      `REQUESTS TO BUILD SOMETHING. When someone asks to add a feature, a task or a change, do not just write it down as dictated. Spend one turn making it a good request.`,
+      `Ask about what is genuinely unclear, not everything: who it is for, what happens now without it, what "done" looks like. One or two questions — the ones whose answers would change the work. If the request is already clear, skip this entirely and just do it.`,
+      `If a common practice or an existing part of the product solves it better, say so once, briefly, and name the trade-off. "Notifications already do this — a badge might be enough" beats a list of six options. Then let them decide: they know things about their situation that you do not.`,
+      `Do not argue twice. If they repeat or confirm what they want, treat it as decided, say nothing further about it, and do the full thing they asked for. Being right about the alternative is worth less than being someone they can work with.`,
+      `Never expand scope on your own: if you think something adjacent is needed, mention it in one sentence and let them add it, rather than putting it into the task yourself.`,
       `UNANSWERED QUESTIONS. When someone asks something you cannot answer from the project data — it needs a person's knowledge, a decision, or access you do not have — say so plainly, then OFFER to record it as a task for whoever is likely to know.`,
       `Only create the task if they agree. Do not create it on your own: questions come up constantly in chat, and a task per question would bury the real ones.`,
       `When they agree: check list_sprints for an existing group for questions and use it, or create one with create_sprint. Then create_task — title states the question, description holds the context (who asked, why it matters, what is blocked), assignee is the person whose responsibility fits it best from the team context above. Leave it unassigned only if nobody obviously fits.`,
@@ -168,7 +183,7 @@ export async function aiChatReply(
       team,
       project.chatRules ? `Chat rules: "${project.chatRules}"` : '',
       'Your view of THIS conversation is limited to the recent turns. When the user refers to something discussed earlier and you do not see it — search_my_dialog finds it in your past conversation with them. Do not claim you do not remember without searching first.',
-      'Tools: read_chat, summaries & full-history search; search_my_dialog (your earlier turns with this person); files (list_files, attach_file_to_task, delete_file); task CRUD — create/update_task edit ANY task field (title, description, assignee, due date, estimate, priority, status, sprint); review_task (AI critique); sprints (list_sprints, create_sprint); task comments (add_task_comment writes ON BEHALF OF the user; list_task_comments reads them); resources (list/create/update/delete_resource, add_resource_secret; link_resource_to_task / unlink_resource_from_task / list_task_resources give a task the access it needs — link the resource, never paste a password into the description); documents (list_documents, read_document, create_document, update_document, append_to_document, delete_document); project journal — list_notes/read_note search solutions, decisions and contradictions (scope=company searches the whole company), create_note/update_note write them ON BEHALF OF the user when asked to save or record something, note_to_task turns a note into a task; time tracking — start_timer/stop_timer/list_timers run the user\'s timer, log_time records work after the fact, time_report answers \"how much did I work\".',
+      'Tools: read_chat, summaries & full-history search; search_my_dialog (your earlier turns with this person); files (list_files, attach_file_to_task, delete_file); task CRUD — create/update_task edit ANY task field (title, description, assignee, due date, estimate, priority, status, sprint); review_task (AI critique); sprints (list_sprints, create_sprint); task comments (add_task_comment writes ON BEHALF OF the user; list_task_comments reads them); resources (list/create/update/delete_resource, add_resource_secret; link_resource_to_task / unlink_resource_from_task / list_task_resources give a task the access it needs — link the resource, never paste a password into the description); documents (list_documents, read_document, create_document, update_document, append_to_document, delete_document); project journal — list_notes/read_note search solutions, decisions and contradictions (scope=company searches the whole company), create_note/update_note write them ON BEHALF OF the user when asked to save or record something, note_to_task turns a note into a task; about_chatick answers questions about the product itself (tabs, roles, permissions, connecting an assistant) — call it instead of guessing; open_in_ui switches their working area to a task, document, note, file, resource or a whole tab — use it when they are about to look at the thing anyway, not to steer them around; time tracking — start_timer/stop_timer/list_timers run the user\'s timer, log_time records work after the fact, time_report answers \"how much did I work\".',
       // Оформление ответа.
       //
       // Модель по умолчанию пишет сплошным текстом или, наоборот, вываливает

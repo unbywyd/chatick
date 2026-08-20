@@ -22,6 +22,8 @@ import { visionEnabled, SUPPORTED, MAX_BYTES } from './vision.js'
 import { getObjectStream, resolveStorage } from './s3.js'
 import { env } from '../env.js'
 import { logActivity } from './audit.js'
+import { CHATICK_HELP } from './chatick-help.js'
+import { sendToUser } from '../ws.js'
 
 // Память ИИ (SPEC §5.6): саммари-цепочка + инструменты + фоновое сжатие.
 
@@ -231,6 +233,45 @@ export function memoryTools(projectId: string, actorUserId: string): { tools: To
         'Get one task with full description by its number (e.g. TASK-5). The reply includes a short link ' +
         '(chatick.com/t-AbC12) — give the human that one when they ask where the task is, never a link you built yourself.',
       parameters: { type: 'object', properties: { number: { type: 'string' } }, required: ['number'] },
+    },
+    {
+      name: 'about_chatick',
+      description:
+        'What Chatick itself can do — tabs, roles, permissions, the two chats, connecting an assistant. ' +
+        'Call it when someone asks how to do something IN the product ("where do I set a due date", "how ' +
+        'do I invite a person", "what are resources for") instead of guessing or saying you do not know. ' +
+        'Not needed for questions about their work — only about the tool.',
+      parameters: { type: 'object', properties: {} },
+    },
+    {
+      name: 'open_in_ui',
+      description:
+        'Switch the working area on the screen of the person you are talking to: open a task, a document, a ' +
+        'file, a note, or a whole tab. Their chat stays where it is — only the panel next to it changes. ' +
+        'Use it when they are about to look at the thing anyway ("here is the task" — open it), not to steer ' +
+        'them around. One place at a time: a screen that keeps jumping is worse than no help at all. ' +
+        'Nothing happens if the app is closed, and that is fine — the reply says so.',
+      parameters: {
+        type: 'object',
+        properties: {
+          what: {
+            type: 'string',
+            enum: ['task', 'document', 'note', 'file', 'resource', 'tab'],
+            description: 'What kind of thing to open',
+          },
+          id: {
+            type: 'string',
+            description:
+              'Id or number of the thing (TASK-5 works for tasks). Omit for "tab" — pass tab instead.',
+          },
+          tab: {
+            type: 'string',
+            enum: ['tasks', 'files', 'documents', 'notes', 'resources', 'releases', 'time', 'team', 'history'],
+            description: 'Which tab to switch to when what="tab"',
+          },
+        },
+        required: ['what'],
+      },
     },
     {
       name: 'create_task',
@@ -1119,6 +1160,70 @@ export function memoryTools(projectId: string, actorUserId: string): { tools: To
         )
         .join('\n')
     },
+    /**
+     * Переключить рабочую зону на экране человека.
+     *
+     * Ассистент заканчивал словами «вот задача TASK-5», и человек шёл искать её
+     * руками — хотя ассистент уже знает, где она. Здесь он открывает её сам.
+     *
+     * Событие адресное: только тому, с кем идёт разговор, и только в этом
+     * проекте. Чужой экран переключать нельзя ни при каких обстоятельствах —
+     * это не подсказка, а вмешательство.
+     *
+     * Открытых вкладок может не быть вовсе: человек говорит с ассистентом из
+     * трея или ушёл с сайта. Это не ошибка, и врать «открыл» нельзя — отвечаем
+     * честно, чтобы модель не строила следующий шаг на несбывшемся.
+     */
+    /**
+     * Справка о самом продукте.
+     *
+     * Отдельным инструментом, а не в системном промпте: промпт уходит с каждым
+     * сообщением, а спрашивают «как в Chatick сделать X» несколько раз в день.
+     * Платить за описание продукта в каждом разговоре о задачах незачем.
+     */
+    about_chatick: async () => CHATICK_HELP,
+
+    open_in_ui: async (args) => {
+      const what = typeof args.what === 'string' ? args.what : ''
+      const rawId = typeof args.id === 'string' ? args.id.trim() : ''
+      const tab = typeof args.tab === 'string' ? args.tab : ''
+
+      // Путь собираем ЗДЕСЬ, а не доверяем модели: она предложила бы строку,
+      // а интерфейс перешёл бы куда угодно внутри приложения.
+      let path = ''
+      if (what === 'tab') {
+        const allowed = ['tasks', 'files', 'documents', 'notes', 'resources', 'releases', 'time', 'team', 'history']
+        if (!allowed.includes(tab)) return `Unknown tab: ${tab || '(none)'}. One of: ${allowed.join(', ')}`
+        path = tab
+      } else if (what === 'task') {
+        if (!rawId) return 'Pass the task number or id'
+        // Номер вида TASK-5 переводим в id: интерфейс адресует задачи по id,
+        // а человек и модель говорят номерами.
+        const byNumber = /^[A-Za-z]+-\d+$/.test(rawId)
+        const row = byNumber
+          ? await db.query.tasks.findFirst({ where: and(eq(tasks.projectId, projectId), eq(tasks.number, rawId.toUpperCase())) })
+          : await db.query.tasks.findFirst({ where: and(eq(tasks.projectId, projectId), eq(tasks.id, rawId)) })
+        if (!row) return `No task ${rawId} in this project`
+        path = `tasks/${row.id}`
+      } else {
+        const map: Record<string, string> = {
+          document: 'documents',
+          note: 'notes',
+          file: 'files',
+          resource: 'resources',
+        }
+        const seg = map[what]
+        if (!seg) return `Unknown target: ${what}`
+        if (!rawId) return `Pass the ${what} id`
+        path = `${seg}/${rawId}`
+      }
+
+      const delivered = sendToUser(projectId, actorUserId, 'open_in_ui', { path })
+      return delivered
+        ? `Opened ${path} on their screen`
+        : 'Nobody is looking at this project right now — nothing was opened. Tell them where to find it instead.'
+    },
+
     list_files: async (args) => {
       const q = typeof args.query === 'string' ? args.query.trim() : ''
       // только «настоящие» файлы: не удалённые и не временные (неотправленные вложения)
