@@ -1,10 +1,10 @@
 import { Hono } from 'hono'
 import { zValidator } from '@hono/zod-validator'
 import { z } from 'zod'
-import { and, asc, desc, eq, gt, ilike, inArray, lt, lte, sql } from 'drizzle-orm'
+import { and, asc, desc, eq, gt, ilike, inArray, isNull, lt, lte, ne, or, sql } from 'drizzle-orm'
 import { companyOf, projectPath } from '../lib/links.js'
 import { db } from '../db/client.js'
-import { chatSummaries, credentials, documents, files, messages, notes, sandboxMessages, tasks, users } from '../db/schema.js'
+import { chatSummaries, credentials, documents, files, messages, notes, projectMembers, sandboxMessages, tasks, users } from '../db/schema.js'
 import { requireProject, type ProjectEnv } from '../auth.js'
 import { broadcast, sendToUser } from '../ws.js'
 import { evaluateMessage, sandboxReply, aiChatReply, type ProposedTask } from '../lib/dispatcher.js'
@@ -161,6 +161,67 @@ const canSee = (m: typeof messages.$inferSelect, sub: string) =>
   m.mode === 'ai' ? m.authorId === sub || m.recipientId === sub : m.status === 'delivered' || m.authorId === sub
 
 // История: delivered группы + свои ai/held/pending; курсор before
+/**
+ * Сколько новых сообщений в каждом канале.
+ *
+ * Отвечает бейджам: на свёрнутом чате — общим числом, на табах — отдельно
+ * по каналам. Чат и ассистент считаются раздельно: открыв ассистента,
+ * человек не прочитал групповой чат.
+ */
+messagesRoute.get('/unread', async (c) => {
+  const { projectId, sub } = c.get('auth')
+
+  const member = await db.query.projectMembers.findFirst({
+    where: and(eq(projectMembers.projectId, projectId), eq(projectMembers.userId, sub)),
+  })
+
+  /**
+   * Своё не считаем: собственное сообщение прочитано в момент отправки.
+   * Без этого бейдж загорался от того, что человек только что написал сам.
+   *
+   * Отметки нет (ни разу не открывал) — считаем всё непрочитанным: в новом
+   * проекте бейдж позовёт заглянуть, а «прочитано» соврало бы.
+   */
+  const count = async (mode: 'group' | 'ai', since: Date | null) => {
+    const conds = [
+      eq(messages.projectId, projectId),
+      eq(messages.mode, mode),
+      ne(messages.authorId, sub),
+    ]
+    if (since) conds.push(gt(messages.createdAt, since))
+    // Личный канал ассистента адресный — чужие ответы меня не касаются.
+    if (mode === 'ai') conds.push(or(isNull(messages.recipientId), eq(messages.recipientId, sub))!)
+    const [row] = await db
+      .select({ n: sql<number>`count(*)::int` })
+      .from(messages)
+      .where(and(...conds))
+    return row?.n ?? 0
+  }
+
+  const [group, ai] = await Promise.all([
+    count('group', member?.lastSeenGroupAt ?? null),
+    count('ai', member?.lastSeenAiAt ?? null),
+  ])
+  return c.json({ group, ai, total: group + ai })
+})
+
+/**
+ * Отметить канал прочитанным до текущего момента.
+ *
+ * Зовётся, когда человек смотрит на канал: открыл чат, переключил таб.
+ * Время ставит сервер, а не клиент — часы на устройстве могут врать, и
+ * отметка из будущего спрятала бы всё последующее.
+ */
+messagesRoute.post('/seen', zValidator('json', z.object({ mode: z.enum(['group', 'ai']) })), async (c) => {
+  const { projectId, sub } = c.get('auth')
+  const { mode } = c.req.valid('json')
+  await db
+    .update(projectMembers)
+    .set(mode === 'group' ? { lastSeenGroupAt: new Date() } : { lastSeenAiAt: new Date() })
+    .where(and(eq(projectMembers.projectId, projectId), eq(projectMembers.userId, sub)))
+  return c.json({ ok: true })
+})
+
 messagesRoute.get('/', zValidator('query', z.object({ before: z.string().optional() })), async (c) => {
   const { projectId, sub } = c.get('auth')
   const { before } = c.req.valid('query')

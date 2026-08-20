@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useImperativeHandle, useMemo, useRef, useState } from 'react'
 import { useNavigate, useParams, useSearchParams } from 'react-router-dom'
 import { useInfiniteQuery, useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { AlertTriangle, ArrowDown, Zap, Bot, CheckSquare, Copy, FileText, Users, BrainCircuit, KeyRound, Loader2, Menu, MoreHorizontal, NotebookPen, PanelsTopLeft, Reply, Search, Settings, Share2, Trash2, X, MessagesSquare } from 'lucide-react'
+import { AlertTriangle, ArrowDown, Bot, CheckSquare, Copy, FileText, Users, BrainCircuit, KeyRound, Loader2, Menu, MoreHorizontal, NotebookPen, PanelsTopLeft, PanelRightClose, PanelRightOpen, Reply, Search, Settings, Share2, Trash2, X, MessagesSquare } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
 import ReactMarkdown from 'react-markdown'
 import { CodeBlock } from './CodeBlock'
@@ -9,6 +9,7 @@ import { CodeBlock } from './CodeBlock'
 import remarkGfm from 'remark-gfm'
 import { toast } from 'sonner'
 import { api } from '@/lib/api'
+import { useChatCollapsed } from '@/hooks/useChatCollapsed'
 import { cn } from '@/lib/utils'
 import { DropdownMenu, DropdownMenuTrigger, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator } from '@/components/ui/dropdown-menu'
 import { ContextMenu, ContextMenuTrigger, ContextMenuContent, ContextMenuItem, ContextMenuSeparator } from '@/components/ui/context-menu'
@@ -64,8 +65,50 @@ export function ChatPanel({
   const qc = useQueryClient()
   // Группа и ИИ — два разных чата под одним композером, а не лента с пометками:
   // человек всегда видит ровно ту переписку, в которую пишет.
+  const [collapsed, toggleCollapsed] = useChatCollapsed()
   const [mode, setMode] = useState<ChatMode>('group')
   const isAi = mode === 'ai'
+
+  /**
+   * Сколько новых сообщений — для бейджей на свёрнутом чате и на табах.
+   *
+   * Опрашиваем, а не считаем на клиенте: сообщения приходят и по сокету, и
+   * пока вкладка была закрыта, — на клиенте полной картины нет.
+   */
+  const unread = useQuery({
+    queryKey: ['chat-unread', projectId],
+    enabled: Boolean(projectId),
+    queryFn: () => api<{ group: number; ai: number; total: number }>(`/api/v1/messages/unread`, {}, 'project'),
+    refetchInterval: 30_000,
+  })
+
+  /**
+   * Открытый канал считается прочитанным.
+   *
+   * Отмечаем при разворачивании и при смене таба — в оба момента человек
+   * смотрит именно на этот канал. Свёрнутый чат не отмечаем: он не открыт,
+   * и гасить бейдж было бы враньём.
+   */
+  const markSeen = useCallback(
+    (which: ChatMode) => {
+      if (!projectId) return
+      void api('/api/v1/messages/seen', { method: 'POST', body: JSON.stringify({ mode: which }) }, 'project')
+        .then(() => qc.invalidateQueries({ queryKey: ['chat-unread', projectId] }))
+        .catch(() => {})
+    },
+    [projectId, qc],
+  )
+
+  /**
+   * Открытый канал прочитан.
+   *
+   * Свёрнутый чат не отмечаем: он не открыт, и гасить бейдж значило бы
+   * соврать — человек ничего не увидел.
+   */
+  useEffect(() => {
+    if (collapsed) return
+    markSeen(mode)
+  }, [collapsed, mode, markSeen])
   // Горячие клавиши «фокус в чат» и «фокус в ИИ»: переключают режим и ставят
   // курсор в поле — одним нажатием, без промежуточного клика по вкладке.
   // Через тот же switchMode, что и табы: иначе горячая клавиша была бы
@@ -124,7 +167,15 @@ export function ChatPanel({
   // пока не выключишь. Живёт здесь, а не в композере, потому что переключатель
   // стоит в строке режимов под полем — в самом поле он съедал место рядом со
   // скрепкой и кнопкой отправки.
-  const [bypassAi, setBypassAi] = useState(false)
+  /**
+   * Отправка мимо проверки ИИ — переключатель убран из интерфейса.
+   *
+   * Молнией почти не пользовались, а место она занимала рядом с самым
+   * частым действием. Само свойство осталось: сервер его понимает, мост им
+   * пользуется, и старые сообщения по-прежнему помечены значком в ленте.
+   * Здесь оно просто всегда выключено — вернуть кнопку будет одной строкой.
+   */
+  const bypassAi = false
 
   const llm = useQuery({
     queryKey: ['llm-status', projectId],
@@ -172,7 +223,19 @@ export function ChatPanel({
       }
       return [...prev, m]
     })
-  }, [])
+
+    /**
+     * Пришло новое — пересчитываем бейдж.
+     *
+     * Свёрнутый чат ленты не показывает, и без этого счётчик ждал бы
+     * следующего опроса: до полуминуты «нового нет», хотя сообщение уже
+     * пришло. Ради ответа на «есть ли новое» полосу и оставляют открытой.
+     *
+     * Пересчитывает сервер, а не мы: он один знает, докуда человек дочитал
+     * и что из пришедшего адресовано ему.
+     */
+    qc.invalidateQueries({ queryKey: ['chat-unread', projectId] })
+  }, [qc, projectId])
 
   const { online, connected } = useProjectSocket(projectId, {
     onMessage: onWsMessage,
@@ -189,6 +252,18 @@ export function ChatPanel({
       setSandboxId(messageId)
     },
     onSandboxChunk: ({ delta }) => pushStream(delta),
+    /**
+     * Ассистент открыл что-то в рабочей зоне.
+     *
+     * Путь пришёл с сервера уже собранным — сами его не строим и не правим.
+     * Проверяем только форму: относительный сегмент без ведущего слэша, без
+     * протокола и без выхода вверх. Событие приходит по нашему сокету, но
+     * доверять содержимому на слово всё равно нельзя.
+     */
+    onOpenInUi: ({ path }) => {
+      if (!path || path.startsWith('/') || path.includes('..') || path.includes('://')) return
+      navigate(`/c/${companyId}/p/${projectId}/${path}`)
+    },
     onMessageDeleted: ({ messageId }) => {
       setLive((prev) => prev.filter((m) => m.id !== messageId))
       qc.invalidateQueries({ queryKey: ['messages', projectId] })
@@ -440,6 +515,103 @@ export function ChatPanel({
     [members.data],
   )
 
+  /**
+   * Свёрнутый чат — узкая полоса вместо панели.
+   *
+   * По умолчанию свёрнут: в проект заходят работать с задачами, а разговор
+   * открывают, когда он нужен. Развёрнутая панель отнимала половину экрана
+   * у того, кто пришёл посмотреть доску.
+   *
+   * В полосе остаётся только то, ради чего в чат заглядывают не открывая:
+   * есть ли новое, кто здесь и кто сейчас онлайн. Поиск и меню действий
+   * убраны — они нужны внутри разговора, а не вместо него.
+   */
+  if (collapsed) {
+    const total = unread.data?.total ?? 0
+    return (
+      <div className="flex h-full flex-col items-center border-s bg-card/40 pb-3">
+        {/* Стрелка — вверху, напротив такой же у сайдбара: две панели по
+            краям раскрываются одним жестом, зеркально друг другу.
+
+            Глиф выбран по НАПРАВЛЕНИЮ, а не по имени: у panel-right-close
+            шеврон смотрит вправо, у panel-right-open — влево (свернул из
+            самих иконок). Свёрнутой полосе нужна стрелка К КРАЮ экрана —
+            то есть вправо. Имена здесь сбивают: они про состояние панели, а
+            человек читает направление. */}
+        <button
+          onClick={toggleCollapsed}
+          title={t('chat.expand')}
+          className="grid h-12 w-full shrink-0 place-items-center border-b text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
+        >
+          <PanelRightClose className="size-4 rtl:rotate-180" />
+        </button>
+
+        {/* Кто сейчас в проекте — счётчиком: список имён в полосу шириной с
+            иконку не поместится, а число отвечает на «есть ли кто живой». */}
+        {online.length > 0 && (
+          <span
+            title={t('chat.onlineNow', { count: online.length })}
+            className="mt-3 flex shrink-0 items-center gap-1 rounded-full border border-brand/40 bg-brand/10 px-1.5 py-0.5 text-[10px] font-semibold text-brand-ink"
+          >
+            <span className="size-1.5 rounded-full bg-brand" />
+            {online.length}
+          </span>
+        )}
+
+        {/* Участники — столбиком, как в свёрнутом сайдбаре. Больше десяти не
+            показываем: полоса высокая, но не бесконечная, и остаток честнее
+            свести в «+N», чем срезать без следа. */}
+        <div className="mt-3 flex min-h-0 flex-col items-center gap-1.5 overflow-y-auto">
+          {(members.data ?? []).slice(0, 10).map((m) => (
+            <button
+              key={m.user.id}
+              onClick={onOpenTeam}
+              title={m.user.name}
+              className="shrink-0 rounded-full transition-opacity hover:opacity-80"
+            >
+              <Avatar name={m.user.name} src={m.user.avatarUrl} size={28} />
+            </button>
+          ))}
+          {(members.data ?? []).length > 10 && (
+            <button
+              onClick={onOpenTeam}
+              title={t('tabs.team')}
+              className="grid size-7 shrink-0 place-items-center rounded-full bg-secondary text-[10px] font-medium text-muted-foreground"
+            >
+              +{(members.data ?? []).length - 10}
+            </button>
+          )}
+        </div>
+
+        {/* Чат — внизу, у самого поля ввода развёрнутой панели: рука идёт
+            туда же, куда пойдёт печатать. Открывает то же, что стрелка
+            вверху, но бейдж живёт только здесь — иначе одно и то же число
+            повторялось бы дважды в полосе высотой в экран.
+
+            mt-auto прижимает к низу, что бы ни выросло выше: список
+            участников длинный и переменной высоты. */}
+        <button
+          onClick={toggleCollapsed}
+          title={t('chat.expand')}
+          className="relative mt-auto grid size-9 shrink-0 place-items-center rounded-lg text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
+        >
+          <MessagesSquare className="size-5" />
+          {/* Бейдж поверх иконки: свёрнутая полоса должна отвечать «есть ли
+              Цифра — brand-foreground, а не brand-ink: последний в тёмной
+              теме почти белый (он для ссылок), и на ярком лайме цифра
+              пропадала. brand-foreground тёмный в обеих темах — он и создан
+              для текста поверх фирменной заливки.
+              новое» без единого клика — ради этого её и оставляют. */}
+          {total > 0 && (
+            <span className="absolute -end-0.5 -top-0.5 min-w-4 rounded-full bg-brand px-1 text-[10px] font-semibold leading-4 text-brand-foreground">
+              {total > 99 ? '99+' : total}
+            </span>
+          )}
+        </button>
+      </div>
+    )
+  }
+
   return (
     <div className="relative flex h-full flex-col overflow-hidden">
       <header className="flex items-center justify-between gap-2 border-b px-3 py-2">
@@ -534,6 +706,25 @@ export function ChatPanel({
               </DropdownMenuItem>
             </DropdownMenuContent>
           </DropdownMenu>
+
+          {/* Стрелка «свернуть» — внутрь, от края: обратная той, что стоит
+              в свёрнутой полосе. Пара читается как один переключатель.
+
+              Зеркалим по языку: колонка чата стоит на логической границе и
+              меняет сторону вместе с ним — в LTR она слева от рабочей зоны,
+              в RTL справа (проверено замером). */}
+          {/* Только на широком экране: ниже 1280px чат — вкладка во весь экран,
+              и сворачивать его некуда. Кнопка там предлагала действие, после
+              которого оставалась пустая полоса вместо переписки. */}
+          <Button
+            variant="ghost"
+            size="icon"
+            title={t('chat.collapse')}
+            onClick={toggleCollapsed}
+            className="hidden xl:inline-flex"
+          >
+            <PanelRightOpen className="size-4 rtl:rotate-180" />
+          </Button>
         </div>
       </header>
 
@@ -772,7 +963,8 @@ export function ChatPanel({
             </button>
           </div>
         )}
-        <Composer
+        <div data-tour="composer">
+          <Composer
           // Пока ассистент отвечает, поле заперто: композер очищает себя сразу
           // после отправки, и отклонённый вопрос просто пропал бы вместе с
           // набранным текстом.
@@ -788,47 +980,32 @@ export function ChatPanel({
           canBypassAi={!isAi && (myRole === 'owner' || myRole === 'admin')}
           bypassAi={bypassAi}
         />
+        </div>
 
         {/* Под полем, а не над ним: переключатель отвечает на вопрос «куда
-            уйдёт то, что я сейчас пишу», и стоит там же, где ответ нужен. */}
-        <div className="mt-2 flex items-center gap-1">
-          <ModeButton
+            уйдёт то, что я сейчас пишу», и стоит там же, где ответ нужен.
+
+            Две равные половины, а не кнопки в ряд: прежний вид не читался
+            как переключатель — было непонятно, что это два канала, а не
+            два действия. Активная половина светлее, спящая утоплена в фон.
+
+            Молнию («мимо проверки ИИ») убрали: ею почти не пользовались, а
+            место она занимала рядом с самым частым действием. */}
+        <div data-tour="modes" className="mt-2 grid grid-cols-2 gap-1 rounded-lg bg-secondary/60 p-1">
+          <ModeTab
             active={!isAi}
             onClick={() => switchMode('group')}
             icon={<Users className="size-3.5" />}
             label={t('chat.modeGroup')}
+            badge={unread.data?.group ?? 0}
           />
-          <ModeButton
+          <ModeTab
             active={isAi}
             onClick={() => switchMode('ai')}
             icon={<Bot className="size-3.5" />}
             label={t('chat.modeAi')}
+            badge={unread.data?.ai ?? 0}
           />
-          {/* Компактная подпись вместо шапки-панели: чем личный канал
-              отличается от общего, надо сказать, но не целой полосой. */}
-          {isAi && <span className="ms-1 truncate text-xs text-muted-foreground">{t('aiChannel.subtitle')}</span>}
-
-          {/* Мимо проверки ИИ — на противоположном краю строки, напротив
-              переключателя каналов. Режим залипающий и вдали от поля ввода
-              легко забывается, поэтому включённый он подписан словом, а не
-              только подсвечен: молча уходящие непроверенные сообщения — не то,
-              что стоит экономить местом. */}
-          {!isAi && (myRole === 'owner' || myRole === 'admin') && (
-            <button
-              type="button"
-              onClick={() => setBypassAi((v) => !v)}
-              title={bypassAi ? t('chat.bypassOn') : t('chat.bypassOff')}
-              className={cn(
-                'ms-auto flex shrink-0 items-center gap-1.5 rounded-md px-2 py-1 text-xs transition-colors',
-                bypassAi
-                  ? 'bg-orange-400/15 text-orange-400'
-                  : 'text-muted-foreground hover:bg-accent hover:text-foreground',
-              )}
-            >
-              <Zap className={cn('size-3.5', bypassAi && 'fill-current')} />
-              {bypassAi && <span>{t('chat.rawBadge')}</span>}
-            </button>
-          )}
         </div>
       </footer>
     </div>
@@ -1379,19 +1556,49 @@ function ChatSearch({ projectId, lang, onJump, onClose }: { projectId: string; l
 }
 
 /** Таб «в какой чат пишем» — под композером. */
-function ModeButton({ active, onClick, icon, label }: { active: boolean; onClick: () => void; icon: React.ReactNode; label: string }) {
+/**
+ * Половина переключателя каналов.
+ *
+ * Прежний вид — две кнопки в ряд — не читался как переключатель: было
+ * непонятно, что это два канала, а не два действия. Здесь половины равны и
+ * лежат в общей утопленной подложке: активная поднята и светлее, спящая
+ * сливается с фоном. Форма сама говорит, что выбирают одно из двух.
+ */
+function ModeTab({
+  active,
+  onClick,
+  icon,
+  label,
+  badge,
+}: {
+  active: boolean
+  onClick: () => void
+  icon: React.ReactNode
+  label: string
+  /** Непрочитанные в этом канале. 0 — метки нет. */
+  badge?: number
+}) {
   return (
     <button
       type="button"
       onClick={onClick}
       aria-pressed={active}
       className={cn(
-        'flex cursor-pointer items-center gap-1.5 rounded-md px-2.5 py-1 text-xs font-medium transition-colors',
-        active ? 'bg-brand/15 text-brand-ink' : 'text-muted-foreground hover:bg-accent hover:text-foreground',
+        'flex cursor-pointer items-center justify-center gap-1.5 rounded-md px-2.5 py-1.5 text-xs font-medium transition-colors',
+        active
+          ? 'bg-background text-foreground shadow-sm'
+          : 'text-muted-foreground hover:bg-background/40 hover:text-foreground',
       )}
     >
       {icon}
-      {label}
+      <span className="truncate">{label}</span>
+      {/* Бейдж не гасим на активном табе: он гаснет от того, что человек
+          прочитал, а не от того, что смотрит в эту сторону. */}
+      {Boolean(badge) && (
+        <span className="ms-0.5 min-w-4 rounded-full bg-brand px-1 text-[10px] font-semibold leading-4 text-brand-foreground">
+          {badge! > 99 ? '99+' : badge}
+        </span>
+      )}
     </button>
   )
 }

@@ -30,6 +30,17 @@ export const users = pgTable(
     googleId: text('google_id'),
     avatarUrl: text('avatar_url'),
     avatarKey: text('avatar_key'), // S3-ключ загруженного аватара (раздаётся через /auth/avatar/:id)
+    /**
+     * Прошёл ли человек вводный тур по интерфейсу.
+     *
+     * Null — ещё не видел, показываем при первом заходе в проект. Дата — видел
+     * и закрыл вопрос: прошёл до конца или вышел на середине, разницы нет.
+     * Насильно возвращать того, кто вышел, нельзя — он ответил.
+     *
+     * Одна отметка на человека, а не на проект: интерфейс везде одинаковый, и
+     * в каждом новом проекте повторять то же самое значит мешать работать.
+     */
+    tourSeenAt: timestamp('tour_seen_at', { withTimezone: true }),
     isAdmin: boolean('is_admin').notNull().default(false),
     // Идентификатор человека во внешней системе. По нему узнаём его при
     // повторном вызове API и не заводим дубль.
@@ -447,6 +458,21 @@ export const projectMembers = pgTable(
     jobTitle: text('job_title').notNull().default(''),
     responsibility: text('responsibility').notNull().default(''),
     // подтверждение правил чата перед вступлением (SPEC.md §4.2)
+    /**
+     * Докуда человек дочитал каждый канал.
+     *
+     * Два поля, а не одно: чат и ассистент — разные разговоры, и «есть
+     * новое» про них отвечается отдельно. Открыв ассистента, человек не
+     * прочитал групповой чат.
+     *
+     * В базе, а не в браузере: иначе на втором устройстве всё
+     * непрочитанное показалось бы заново.
+     *
+     * Null — не открывал ни разу. Считать это «всё непрочитано» честнее,
+     * чем «всё прочитано»: в новом проекте бейдж позовёт заглянуть.
+     */
+    lastSeenGroupAt: timestamp('last_seen_group_at', { withTimezone: true }),
+    lastSeenAiAt: timestamp('last_seen_ai_at', { withTimezone: true }),
     rulesAcceptedAt: timestamp('rules_accepted_at', { withTimezone: true }),
     createdAt: createdAt(),
   },

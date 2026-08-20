@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { NavLink, Outlet, useLocation, useNavigate, useOutletContext, useParams, useSearchParams } from 'react-router-dom'
 import { useQuery } from '@tanstack/react-query'
 import { useTranslation } from 'react-i18next'
@@ -7,6 +7,10 @@ import { api, getSessionToken, setReturnTo, type Me } from '@/lib/api'
 import { cn } from '@/lib/utils'
 import { useProjectToken } from '@/hooks/useProjectToken'
 import { useResizable } from '@/hooks/useResizable'
+import { useChatCollapsed } from '@/hooks/useChatCollapsed'
+import { Tour, type TourStep } from '@/components/Tour'
+import { TourWelcome } from '@/components/TourWelcome'
+import { useProjectTour } from '@/hooks/useProjectTour'
 import { useSidebarCollapsed } from '@/hooks/useSidebarCollapsed'
 import { useMediaQuery } from '@/hooks/useMediaQuery'
 import { ChatPanel, type ChatPanelHandle } from '@/components/chat/ChatPanel'
@@ -73,6 +77,63 @@ export function ProjectLayout() {
   const [sidebarOpen, setSidebarOpen] = useState(false)
   // ширина колонки чата: было 38% — на широком мониторе это заметно много
   const chat = useResizable('chatick_chat_width', 380, 300, 720)
+  // Широкий экран: чат — колонка рядом с работой, а не отдельная вкладка.
+  // Объявлен здесь, потому что от него зависит и сворачивание чата ниже.
+  const wide = useMediaQuery('(min-width: 1280px)')
+
+  /**
+   * Свёрнут ли чат: колонка сужается до полосы, иначе рядом со свёрнутой
+   * панелью зияет пустое место шириной в треть экрана.
+   *
+   * Только на широком. Ниже 1280px чат — вкладка во весь экран, и «свернуть»
+   * его оставляло полосу в 56px с аватарками вместо переписки: экран пустой,
+   * а чата нет. Прятать то, что и так занимает экран целиком, нечего — из
+   * него выходят кнопкой «в работу».
+   */
+  const [chatCollapsedPref, toggleChatCollapsed] = useChatCollapsed()
+  const chatCollapsed = chatCollapsedPref && wide
+
+  /**
+   * Вводный тур.
+   *
+   * Показывается один раз на человека, при первом заходе в проект. Кто закрыл
+   * его — ответил, и возвращаться к нему насильно нельзя.
+   */
+  const tour = useProjectTour()
+  /**
+   * Тур убран до перезагрузки, но НЕ отвечено «не нужно».
+   *
+   * Живёт в памяти, а не в базе: щелчок мимо и Escape — это «уйди сейчас», и
+   * при следующем заходе тур покажется снова. Отвечает человек только кнопкой
+   * «Пропустить» или дойдя до конца.
+   */
+  const [tourHidden, setTourHidden] = useState(false)
+  /**
+   * Приветствие показано, дальше сам тур.
+   *
+   * Отдельной отметки в базе у приветствия нет: оно часть тура. Иначе
+   * появилось бы состояние «поздоровались, но не показали», в котором человек
+   * при следующем заходе попадал бы сразу в подсказки без объяснения.
+   */
+  const [greeted, setGreeted] = useState(false)
+  const tourSteps: TourStep[] = useMemo(
+    () => [
+      // Показываем ПОЛЕ ВВОДА, а не всю колонку: колонка шириной с саму
+      // карточку, рядом с ней подсказке не встать — она ложилась поверх.
+      // А речь всё равно про «пишите как в обычном чате».
+      { key: 'chat', target: '[data-tour="composer"]', side: 'top', before: () => { if (chatCollapsed) toggleChatCollapsed() } },
+      { key: 'tabs', target: '[data-tour="tabs"]' },
+      { key: 'projects', target: '[data-tour="projects"]', side: 'right' },
+      { key: 'timer', target: '[data-tour="timer"]', side: 'right' },
+      // Компания — стрелка вправо: карточка сверху накрывала саму цель, ведь
+      // строка компании и так стоит у нижнего края экрана.
+      { key: 'company', target: '[data-tour="company-row"]', side: 'right' },
+      // Показываем ПЕРЕКЛЮЧАТЕЛЬ каналов, а не всю колонку чата: разговор про
+      // ассистента, а подсвечивался общий чат — человек искал глазами не то.
+      { key: 'assistant', target: '[data-tour="modes"]', side: 'top' },
+    ],
+    [chatCollapsed, toggleChatCollapsed],
+  )
   const [collapsed] = useSidebarCollapsed()
 
   // Текущая вкладка из URL (/c/:companyId/p/:id/chat, .../tasks, ...). Берём из
@@ -84,7 +145,6 @@ export function ProjectLayout() {
   // задачи. URL при этом оставался /chat, и вкладка «Задачи» не подсвечивалась,
   // хотя открыты именно они. Переводим адрес на /tasks, чтобы подсветка,
   // ссылка и содержимое говорили одно и то же.
-  const wide = useMediaQuery('(min-width: 1280px)')
   const [search] = useSearchParams()
 
   // Горячие клавиши: слушатель один на проект, здесь же и живёт.
@@ -185,13 +245,23 @@ export function ProjectLayout() {
         <div className="fixed inset-0 z-30 bg-black/50 md:hidden" onClick={() => setSidebarOpen(false)} />
       )}
 
+      {/* Вводный тур поверх всего: он объясняет интерфейс, значит должен
+          лежать выше него. Выйти можно на любом шаге — см. Tour. */}
+      {tour.show && !tourHidden && !greeted && (
+        <TourWelcome name={me.data?.name ?? ''} onStart={() => setGreeted(true)} />
+      )}
+      {tour.show && !tourHidden && greeted && (
+        <Tour steps={tourSteps} onDone={tour.finish} onDismiss={() => setTourHidden(true)} />
+      )}
+
       {/* КОЛОНКА 2 — чат. На xl всегда виден; ниже — только когда выбран таб «Чат». */}
       {/*
         Колонка чата. Ниже xl занимает всю ширину (чат — вкладка), на широком
         экране получает фиксированную ширину, которую можно тянуть за границу.
       */}
       <div
-        style={{ ['--chat-w' as string]: `${chat.width}px` }}
+        style={{ ['--chat-w' as string]: chatCollapsed ? '56px' : `${chat.width}px` }}
+        data-tour="chat"
         className={cn(
           'relative min-w-0 flex-col border-e xl:flex xl:w-[var(--chat-w)] xl:shrink-0 xl:flex-none',
           isChatTab ? 'flex flex-1' : 'hidden',
@@ -199,7 +269,10 @@ export function ProjectLayout() {
       >
         {/* своей шапки здесь нет: название и навигация живут в шапке чата,
             иначе строка с именем проекта дублируется дважды подряд */}
-        {/* ручка перетаскивания границы */}
+        {/* Ручка перетаскивания границы. В свёрнутом виде её нет: тянуть
+            полосу шириной с иконку некуда, а перетаскивание боролось бы с
+            заданной шириной и оставляло колонку в промежуточном состоянии. */}
+        {!chatCollapsed && (
         <div
           onPointerDown={chat.onPointerDown}
           onDoubleClick={chat.reset}
@@ -210,6 +283,7 @@ export function ProjectLayout() {
             chat.dragging && 'after:bg-brand',
           )}
         />
+        )}
         {/* Проекта нет — чат ни к чему: он продолжал бы опрашивать сервер и
             держать сокет ради того, чего больше не существует. */}
         <div className="min-h-0 flex-1">
@@ -227,7 +301,7 @@ export function ProjectLayout() {
 
       {/* КОЛОНКА 3 — рабочая зона. Ниже xl показывается вместо чата. */}
       <div className={cn('min-w-0 flex-1 flex-col', isChatTab ? 'hidden xl:flex' : 'flex')}>
-        <nav className="flex items-center gap-1 border-b px-2 py-2">
+        <nav data-tour="tabs" className="flex items-center gap-1 border-b px-2 py-2">
           {/* назад в чат — когда чат не помещается рядом */}
           {!isChatTab && (
             <button
