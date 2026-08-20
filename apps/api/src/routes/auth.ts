@@ -441,7 +441,38 @@ auth.get('/me', requireSession, async (c) => {
     locale: user.locale,
     phone: user.phone,
     avatarUrl: user.avatarUrl,
+    // Видел ли вводный тур. Отдаём булевым: интерфейсу нужен ответ «показывать
+    // или нет», а не дата — по ней он всё равно ничего не решает.
+    tourSeen: Boolean(user.tourSeenAt),
   })
+})
+
+/**
+ * Отметить вводный тур пройденным.
+ *
+ * Один раз на человека: интерфейс везде одинаковый, и в каждом новом проекте
+ * повторять то же самое значит мешать работать.
+ *
+ * Ставится и когда прошли до конца, и когда закрыли на середине. Разницы нет:
+ * человек ответил на вопрос «нужно ли объяснять», и возвращаться к нему
+ * насильно нельзя. Запустить заново можно из меню профиля.
+ */
+auth.post('/me/tour-seen', requireSession, async (c) => {
+  const { sub } = c.get('session')
+  await db.update(users).set({ tourSeenAt: new Date() }).where(eq(users.id, sub))
+  return c.json({ ok: true })
+})
+
+/**
+ * Показать тур заново.
+ *
+ * Нужен тому, кто закрыл его в первый день и через месяц захотел разобраться,
+ * а также нам — чтобы проверять тур, не заводя каждый раз нового человека.
+ */
+auth.post('/me/tour-reset', requireSession, async (c) => {
+  const { sub } = c.get('session')
+  await db.update(users).set({ tourSeenAt: null }).where(eq(users.id, sub))
+  return c.json({ ok: true })
 })
 
 // PATCH /api/v1/auth/me — смена имени

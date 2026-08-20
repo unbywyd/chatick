@@ -548,6 +548,8 @@
     "owner": "Owner"
   },
   "chat": {
+    "collapse": "Collapse chat",
+    "expand": "Open chat",
     "noLlmTitle": "AI is not connected",
     "noLlmText": "The chat runs on the AI dispatcher. Connect your company's LLM provider to start messaging.",
     "noLlmCta": "Open LLM settings",
@@ -759,6 +761,12 @@
     "subtitleMine": "Applies everywhere, in all your projects."
   },
   "projTeam": {
+    "searchOrInvite": "Name, or email to invite",
+    "inviteHint": "Not in the company yet — will be invited to both",
+    "inviteBtn": "Invite",
+    "invited": "Invitation sent",
+    "pendingTitle": "Invited",
+    "pendingHint": "Will join the project once they accept",
     "title": "Project team",
     "subtitle": "Members, invitations and permissions of this project",
     "add": "Add member",
@@ -1275,6 +1283,7 @@
     "reportFor": "Hours report for {{name}}",
     "totalHoursHint": "Total time tracked on this project, all time",
     "findProject": "Find a project",
+    "allProjects": "All projects ({{count}})",
     "noProjectMatch": "No projects match",
     "askForAccess": "You are not in this project. Ask {{names}} for access",
     "notMember": "You are not in this project"
@@ -1792,5 +1801,43 @@
     "edit": "Change the job title",
     "placeholder": "e.g. Backend developer",
     "inherited": "Set at company level"
+  },
+  "tour": {
+    "next": "Next",
+    "back": "Back",
+    "finish": "Got it",
+    "skip": "Skip",
+    "chat": {
+      "title": "Work starts here",
+      "text": "Write as in any chat. The AI dispatcher reads along and turns what matters into tasks. The panel folds away — use the arrow when you do not need it."
+    },
+    "tabs": {
+      "title": "Everything about the project",
+      "text": "Tasks and due dates, files, documents you edit together, notes with decisions, resources with encrypted credentials, releases and time."
+    },
+    "projects": {
+      "title": "Your projects",
+      "text": "Switch between them here. Bold means something unread is waiting for you."
+    },
+    "timer": {
+      "title": "Time tracking",
+      "text": "Start a timer on a project or a task. Forgot to stop it — the entry can be fixed, and work can be logged after the fact."
+    },
+    "company": {
+      "title": "Company and profile",
+      "text": "Company settings live here, and the arrow next to it switches companies if you belong to several."
+    },
+    "assistant": {
+      "title": "Just ask",
+      "text": "Open Assistant and write it plainly: \"what are my tasks\", \"create a task about the payment and open it\", \"what is new\", \"start a document for the meeting\". It does it and shows you. To connect an outside AI, go to Settings → Connect."
+    },
+    "replay": "Replay the intro tour",
+    "close": "Close",
+    "welcome": {
+      "hello": "Hello, {{name}}!",
+      "text": "Chatick is a place where you do not hunt, figure things out or keep it all in your head. Order happens on its own.",
+      "start": "Continue",
+      "countdown": "Starting in {{count}}s"
+    }
   }
 }

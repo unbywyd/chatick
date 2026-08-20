@@ -3,7 +3,7 @@ import { useNavigate, useSearchParams } from 'react-router-dom'
 import { useQueryClient } from '@tanstack/react-query'
 import { useTranslation } from 'react-i18next'
 import { toast } from 'sonner'
-import { Bell, Bot, Building2, Camera, Check, Info, Keyboard, LogOut, Pencil, Plug, SlidersHorizontal, User, Users, X, Bug } from 'lucide-react'
+import { Bell, Bot, Building2, Camera, Check, Compass, Info, Keyboard, LogOut, Pencil, Plug, SlidersHorizontal, User, Users, X, Bug } from 'lucide-react'
 import { api, API_URL, getSessionToken, setSessionToken, setProjectToken, type Me } from '@/lib/api'
 import { Avatar } from '@/components/ui/avatar'
 import {
@@ -199,6 +199,23 @@ export function ProfileMenu({
             {t('profile.projectSettings')}
           </DropdownMenuItem>
         )}
+          {/* Показать тур заново.
+              Нужен тому, кто закрыл его в первый день и через месяц захотел
+              разобраться: иначе единственный способ — завести нового человека. */}
+          <DropdownMenuItem
+            onSelect={async () => {
+              try {
+                await api('/api/v1/auth/me/tour-reset', { method: 'POST' })
+                qc.invalidateQueries({ queryKey: ['me'] })
+              } catch {
+                /* тихо: не получилось — человек просто не увидит тур */
+              }
+            }}
+          >
+            <Compass className="size-4" />
+            {t('tour.replay')}
+          </DropdownMenuItem>
+
         {projectId && (
           <DropdownMenuItem onSelect={() => navigate(`/c/${companyId}/p/${projectId}/team`)}>
             <Users className="size-4" />
