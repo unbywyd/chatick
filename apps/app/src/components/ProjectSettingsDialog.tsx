@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { createPortal } from 'react-dom'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { useTranslation } from 'react-i18next'
@@ -42,25 +42,38 @@ export function ProjectSettingsDialog({
   const qc = useQueryClient()
   const [form, setForm] = useState<ProjectSettings | null>(null)
 
-  useQuery({
+  const projectQ = useQuery({
     queryKey: ['project', projectId],
-    queryFn: async () => {
-      const p = await api<ProjectDetails>(`/api/v1/projects/${projectId}`)
-      // форму наполняем один раз: иначе фоновый рефетч затрёт правки
-      setForm((cur) =>
-        cur ?? {
-          name: p.name,
-          about: p.about,
-          chatRules: p.chatRules,
-          aiConfig: { ...DEFAULT_AI_CONFIG, ...p.aiConfig },
-          color: p.color,
-          logoUrl: p.logoUrl ?? null,
-          storageLimit: p.storageLimit != null ? Number(p.storageLimit) : null,
-        },
-      )
-      return p
-    },
+    queryFn: () => api<ProjectDetails>(`/api/v1/projects/${projectId}`),
   })
+
+  /**
+   * Форма наполняется из ДАННЫХ, а не из тела запроса.
+   *
+   * Раньше setForm стоял внутри queryFn, и это работало ровно до тех пор, пока
+   * каждое монтирование ходило на сервер. Ключ ['project', id] общий с
+   * ProjectScreen: открывая настройки изнутри проекта, react-query находит
+   * свежий ответ в кеше, queryFn НЕ ЗОВЁТ вовсе — и форма остаётся пустой.
+   * Человек видел модалку с шапкой, кнопками и пустотой посередине.
+   *
+   * Наполняем один раз (cur ?? ...): фоновый рефетч не должен затирать то, что
+   * человек уже набрал.
+   */
+  useEffect(() => {
+    const p = projectQ.data
+    if (!p) return
+    setForm((cur) =>
+      cur ?? {
+        name: p.name,
+        about: p.about,
+        chatRules: p.chatRules,
+        aiConfig: { ...DEFAULT_AI_CONFIG, ...p.aiConfig },
+        color: p.color,
+        logoUrl: p.logoUrl ?? null,
+        storageLimit: p.storageLimit != null ? Number(p.storageLimit) : null,
+      },
+    )
+  }, [projectQ.data])
 
   const save = useMutation({
     mutationFn: (v: ProjectSettings) => api(`/api/v1/projects/${projectId}`, { method: 'PATCH', body: JSON.stringify(v) }),
