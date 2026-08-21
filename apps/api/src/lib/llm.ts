@@ -52,6 +52,24 @@ export const LLM_PROVIDERS = {
   },
 } as const
 
+/**
+ * Ограничение длины ответа для OpenAI-совместимого запроса.
+ *
+ * Свежие модели OpenAI (o-серия, gpt-5 и новее) отвечают 400 на max_tokens и
+ * требуют max_completion_tokens. Старые и все прочие провайдеры, наоборот,
+ * знают только max_tokens. Отличить их можно лишь по имени модели — способа
+ * спросить у провайдера нет.
+ *
+ * Ошибка выглядела в чате как «не получилось получить ответ»: сервер отвечал
+ * 400, а человек видел общее сообщение и не мог понять, что настройка модели
+ * несовместима с запросом.
+ */
+function tokenLimit(model: string, value: number): Record<string, number> {
+  const m = model.toLowerCase()
+  const needsNewName = /^(o[1-9]|gpt-[5-9])/.test(m)
+  return needsNewName ? { max_completion_tokens: value } : { max_tokens: value }
+}
+
 export type LlmProvider = keyof typeof LLM_PROVIDERS
 
 export type LlmConfig = {
@@ -160,6 +178,7 @@ export async function complete(
         },
         body: JSON.stringify({
           model: cfg.model,
+          // Anthropic знает только max_tokens — помощник здесь не нужен.
           max_tokens: opts.maxTokens ?? 2000,
           system: opts.system,
           messages: [{ role: 'user', content: opts.user }],
@@ -182,7 +201,7 @@ export async function complete(
       headers: { Authorization: `Bearer ${cfg.apiKey}`, 'content-type': 'application/json' },
       body: JSON.stringify({
         model: cfg.model,
-        max_tokens: opts.maxTokens ?? 2000,
+        ...tokenLimit(cfg.model, opts.maxTokens ?? 2000),
         messages: [
           { role: 'system', content: opts.system },
           { role: 'user', content: opts.user },
@@ -383,7 +402,7 @@ export async function completeWithTools(
       const res = await fetch(`${p.baseUrl}/chat/completions`, {
         method: 'POST',
         headers: { Authorization: `Bearer ${cfg.apiKey}`, 'content-type': 'application/json' },
-        body: JSON.stringify({ model: cfg.model, max_tokens: opts.maxTokens ?? 1500, messages: msgs, tools }),
+        body: JSON.stringify({ model: cfg.model, ...tokenLimit(cfg.model, opts.maxTokens ?? 1500), messages: msgs, tools }),
       })
       if (!res.ok) {
         console.error('[llm] tools failed:', res.status, await res.text().catch(() => ''))
@@ -431,7 +450,7 @@ export async function completeWithTools(
     const final = await fetch(`${p.baseUrl}/chat/completions`, {
       method: 'POST',
       headers: { Authorization: `Bearer ${cfg.apiKey}`, 'content-type': 'application/json' },
-      body: JSON.stringify({ model: cfg.model, max_tokens: opts.maxTokens ?? 1500, messages: msgs }),
+      body: JSON.stringify({ model: cfg.model, ...tokenLimit(cfg.model, opts.maxTokens ?? 1500), messages: msgs }),
     })
     flushUsage(cfg, acc)
     if (!final.ok) return null
@@ -468,7 +487,7 @@ export async function completeStream(
             }
           : {
               model: cfg.model,
-              max_tokens: opts.maxTokens ?? 2000,
+              ...tokenLimit(cfg.model, opts.maxTokens ?? 2000),
               messages: [
                 { role: 'system', content: opts.system },
                 { role: 'user', content: opts.user },
