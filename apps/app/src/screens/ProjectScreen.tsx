@@ -42,6 +42,13 @@ import { useShortcuts } from '@/hooks/useShortcuts'
 const WORK_TABS = ['tasks', 'files', 'documents', 'notes', 'resources', 'history'] as const
 
 /**
+ * Страницы проекта, которых нет в полосе вкладок: сюда попадают из меню
+ * профиля. Ни одна вкладка не подсвечена, и на широком экране выхода с них не
+ * было вовсе — стрелка «назад» пряталась как ненужная рядом с чатом.
+ */
+const OFF_TAB_PAGES = ['shortcuts', 'ai', 'notifications', 'team', 'time'] as const
+
+/**
  * Вкладки, которые включаются в проекте отдельно.
  *
  * Ставится перед «История»: версии — рабочий раздел, а история читается редко
@@ -71,7 +78,7 @@ export function ProjectLayout() {
   const { t } = useTranslation()
   const navigate = useNavigate()
   const { id, companyId } = useParams()
-  const { pathname } = useLocation()
+  const { pathname, key: locationKey } = useLocation()
   /** Основание всех адресов проекта — чтобы компания не терялась при переходах. */
   const base = `/c/${companyId}/p/${id}`
   const [sidebarOpen, setSidebarOpen] = useState(false)
@@ -139,6 +146,9 @@ export function ProjectLayout() {
   // Текущая вкладка из URL (/c/:companyId/p/:id/chat, .../tasks, ...). Берём из
   // pathname: маршрут не splat, поэтому useParams('*') здесь пустой.
   const tab = pathname.split('/')[5] || 'chat'
+  // Страница вне полосы вкладок: показываем «назад» на любой ширине —
+  // подсветки нет, и уйти отсюда иначе нечем.
+  const offTab = (OFF_TAB_PAGES as readonly string[]).includes(tab)
   const isChatTab = tab === 'chat'
 
   // На широком экране чат — отдельная колонка, а в рабочей зоне рисуются
@@ -302,12 +312,27 @@ export function ProjectLayout() {
       {/* КОЛОНКА 3 — рабочая зона. Ниже xl показывается вместо чата. */}
       <div className={cn('min-w-0 flex-1 flex-col', isChatTab ? 'hidden xl:flex' : 'flex')}>
         <nav data-tour="tabs" className="flex items-center gap-1 border-b px-2 py-2">
-          {/* назад в чат — когда чат не помещается рядом */}
+          {/* Назад — когда рабочая зона показана вместо чата.
+
+              Настоящая история, если она есть: человек пришёл сюда из
+              какого-то места приложения и вернуться хочет именно туда, а не
+              туда, куда мы решили за него.
+
+              Если истории нет — прямая ссылка, открытая в новой вкладке, или
+              обновлённая страница, — уводим в работу проекта. Тогда
+              navigate(-1) вышвырнул бы из приложения на предыдущий сайт.
+              React Router помечает первую запись в истории ключом 'default':
+              по нему одно и отличаем от другого. */}
           {!isChatTab && (
             <button
-              onClick={() => navigate(`${base}/chat`)}
-              className="shrink-0 rounded-md p-2 text-muted-foreground hover:bg-accent hover:text-foreground xl:hidden"
-              title={t('tabs.chat')}
+              onClick={() => (locationKey === 'default' ? navigate(`${base}/tasks`) : navigate(-1))}
+              className={cn(
+                'shrink-0 rounded-md p-2 text-muted-foreground hover:bg-accent hover:text-foreground',
+                // Рядом с чатом кнопка лишняя — чат и так виден слева.
+                offTab ? '' : 'xl:hidden',
+              )}
+              // Не «Чат»: кнопка ведёт назад по истории, а без неё — в работу.
+              title={t('connect.back')}
             >
               <ArrowLeft className="size-4 rtl:-scale-x-100" />
             </button>

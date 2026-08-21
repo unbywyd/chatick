@@ -35,7 +35,7 @@ export function ShortcutsTab() {
   const groups = ['create', 'navigate', 'chat'] as const
 
   return (
-    <div className="mx-auto w-full max-w-3xl p-6">
+    <div className="page-w p-6">
       <div className="flex items-center gap-2">
         <Keyboard className="size-5 text-muted-foreground" />
         <h1 className="text-lg font-bold">{t('shortcuts.title')}</h1>
