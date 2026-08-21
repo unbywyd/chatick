@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react'
-import { useQueryClient } from '@tanstack/react-query'
+import { useQueryClient, type QueryClient } from '@tanstack/react-query'
 import { api, getProjectToken, setProjectToken } from '@/lib/api'
 
 // Источник истины о текущем проекте — projectId в URL (SPEC §8.29).
@@ -33,6 +33,53 @@ function projectOfToken(token: string | null): string | null {
   }
 }
 
+/**
+ * Данные, которые НЕ зависят от открытого проекта.
+ *
+ * Всё остальное сносится при переключении: запросы к проекту не передают
+ * projectId в адресе — сервер узнаёт проект по токену, — и отличить свои
+ * данные от чужих в кэше нельзя. Перечислять проектные ключи поимённо
+ * бессмысленно: забудешь один, и на экране повиснут чужие спринты.
+ *
+ * Поэтому наоборот: перечислен короткий белый список, а сомнительное
+ * считается проектным. Ошибиться в эту сторону безопасно — лишний запрос
+ * против показа чужих данных.
+ *
+ * Сюда попадает только то, что ходит на session-токене. notify-config,
+ * например, выглядит общим, но у него ['notify-config', projectId] и
+ * project-токен — он проектный.
+ */
+const SESSION_KEYS = new Set([
+  'about',
+  'bridge-sessions',
+  'companies',
+  'desktop-running',
+  'desktop-tasks',
+  'inbox',
+  'inbox-prefs',
+  'inbox-system',
+  'me',
+  'tray-projects',
+])
+
+/**
+ * Снести кэш проекта, оставив общее.
+ *
+ * qc.clear() сносил и то и другое. Шапка сайдбара с названием компании и
+ * переключателем — на ['companies'], и она пустела при каждом переходе между
+ * проектами: компания не менялась, а контрол мигал и прыгал. staleTime там
+ * стоял, но против clear() он бессилен — тот удаляет запись целиком, а не
+ * помечает устаревшей.
+ */
+export function dropProjectCache(qc: QueryClient): void {
+  qc.removeQueries({
+    predicate: (q) => {
+      const head = q.queryKey[0]
+      return typeof head !== 'string' || !SESSION_KEYS.has(head)
+    },
+  })
+}
+
 export function useProjectToken(projectId: string | undefined): State & { accept: () => void } {
   const qc = useQueryClient()
   const [state, setState] = useState<State>({ status: 'loading' })
@@ -49,14 +96,7 @@ export function useProjectToken(projectId: string | undefined): State & { accept
       })
       if (wanted.current !== id) return // успели переключиться дальше — этот ответ уже неактуален
       setProjectToken(r.token)
-      // Сносим ВЕСЬ кэш, а не перечисленные ключи.
-      //
-      // Запросы к проекту не передают projectId в адресе — сервер узнаёт
-      // проект по токену. Значит любые данные в кэше могли прийти от
-      // предыдущего проекта, и перечислять их поимённо бессмысленно: список
-      // разошёлся уже сейчас (спринты в нём забыли, и на экране висели чужие),
-      // а с каждым новым запросом расходился бы снова.
-      qc.clear()
+      dropProjectCache(qc)
       setState({ status: 'ready' })
     } catch (e) {
       const err = e as { status?: number; body?: { needRulesAccept?: boolean; chatRules?: string; projectName?: string } }
