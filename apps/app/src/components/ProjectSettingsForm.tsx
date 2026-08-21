@@ -3,8 +3,9 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { api } from '@/lib/api'
 import { useTranslation } from 'react-i18next'
 import { toast } from 'sonner'
-import { Eye, MessageCircleQuestion, ShieldCheck, ChevronDown, HardDrive } from 'lucide-react'
+import { ChevronDown, HardDrive } from 'lucide-react'
 import { DangerZone, DangerAction } from '@/components/company/DangerZone'
+import { AiBehaviorFields } from '@/components/AiBehaviorFields'
 import { Switch } from '@/components/ui/switch'
 import { Input } from '@/components/ui/input'
 import { ProjectBadge } from '@/components/ui/project-badge'
@@ -67,18 +68,14 @@ const GB = 1024 * 1024 * 1024
 // значит обещать то, чего нет.
 const STORAGE_OPTIONS = [1, 2] as const // GB
 
-const MODES: { key: AiMode; icon: typeof Eye }[] = [
-  { key: 'observer', icon: Eye },
-  { key: 'assistant', icon: MessageCircleQuestion },
-  { key: 'moderator', icon: ShieldCheck },
-]
-
 // Хранилище и опасная зона — отдельными вкладками. Удаление проекта висело
 // прямо под обычными полями «Основного», куда заходят менять имя и цвет: до
 // необратимой кнопки дотягивались мимоходом.
 // Настройки времени переехали в компанию: пояс и правила таймера — свойства
 // организации, а не отдельной работы. Наследуются, задавать здесь нечего.
-const FORM_TABS = ['general', 'ai', 'rules', 'features', 'danger'] as const
+// «Правила» отдельной вкладкой больше нет: это часть поведения агента, и
+// живёт она теперь рядом с остальными его настройками — во вкладке ИИ.
+const FORM_TABS = ['general', 'ai', 'features', 'danger'] as const
 type FormTab = (typeof FORM_TABS)[number]
 
 // Настройки проекта — поля растут, разбито табами: Основное / ИИ / Правила
@@ -90,6 +87,7 @@ export function ProjectSettingsForm({
   onLogoUpload,
   onLogoRemove,
   onDelete,
+  aiPageHref,
 }: {
   value: ProjectSettings
   onChange: (v: ProjectSettings) => void
@@ -102,6 +100,8 @@ export function ProjectSettingsForm({
   onLogoRemove?: () => void
   /** Удаление проекта — отдельной вкладкой, если человеку оно вообще доступно. */
   onDelete?: () => void
+  /** Ссылка на страницу ИИ проекта: там источник, ключ и расход. */
+  aiPageHref?: string
 }) {
   const { t } = useTranslation()
   const [tab, setTab] = useState<FormTab>('general')
@@ -139,7 +139,6 @@ export function ProjectSettingsForm({
   const setAi = <K extends keyof AiConfig>(k: K, v: AiConfig[K]) =>
     onChange({ ...value, aiConfig: { ...value.aiConfig, [k]: v } })
 
-  const rulesLeft = CHAT_RULES_MAX - value.chatRules.length
 
   return (
     <div>
@@ -278,77 +277,33 @@ export function ProjectSettingsForm({
 
       {tab === 'ai' && (
         <div className="space-y-5">
-          {/* Режим — 3 карточки (SPEC §4.1) */}
-          <div className="grid gap-2 sm:grid-cols-3">
-            {MODES.map(({ key, icon: Icon }) => (
-              <button
-                key={key}
-                type="button"
-                onClick={() => setAi('mode', key)}
-                className={cn(
-                  'rounded-lg border p-3 text-start transition-colors',
-                  value.aiConfig.mode === key ? 'border-brand bg-accent' : 'hover:bg-accent/50',
-                )}
-              >
-                <Icon className={cn('size-4', value.aiConfig.mode === key ? 'text-brand-ink' : 'text-muted-foreground')} />
-                <p className="mt-2 text-sm font-medium">{t(`aiMode.${key}.title`)}</p>
-                <p className="mt-0.5 text-xs leading-snug text-muted-foreground">{t(`aiMode.${key}.desc`)}</p>
-              </button>
-            ))}
-          </div>
+          {/* Та же разметка, что и на странице ИИ проекта: правила переехали
+              сюда же, отдельной вкладкой они были продолжением этого разговора.
+              Здесь поля сохраняются общей кнопкой формы — в том числе при
+              создании проекта, когда сохранять ещё некуда. */}
+          <AiBehaviorFields
+            value={value.aiConfig}
+            onChange={(v) => set('aiConfig', v)}
+            chatRules={value.chatRules}
+            onRulesChange={(v) => set('chatRules', v)}
+          />
 
-          <ToggleRow
-            label={t('projectForm.autoTranslate')}
-            hint={t('projectForm.autoTranslateHint')}
-            checked={value.aiConfig.autoTranslate}
-            onChange={(v) => setAi('autoTranslate', v)}
-          />
-          <ToggleRow
-            label={t('projectForm.answerRepeats')}
-            hint={t('projectForm.answerRepeatsHint')}
-            checked={value.aiConfig.answerRepeats}
-            onChange={(v) => setAi('answerRepeats', v)}
-          />
-          <ToggleRow
-            label={t('projectForm.improveTasks')}
-            hint={t('projectForm.improveTasksHint')}
-            checked={value.aiConfig.improveTasks}
-            onChange={(v) => setAi('improveTasks', v)}
-          />
-          <ToggleRow
-            label={t('projectForm.generateTaskNotes')}
-            hint={t('projectForm.generateTaskNotesHint')}
-            checked={value.aiConfig.generateTaskNotes}
-            onChange={(v) => setAi('generateTaskNotes', v)}
-          />
-          <ToggleRow
-            label={t('projectForm.autoPostTaskEvents')}
-            hint={t('projectForm.autoPostTaskEventsHint')}
-            checked={value.aiConfig.autoPostTaskEvents}
-            onChange={(v) => setAi('autoPostTaskEvents', v)}
-          />
+          {/* Ссылка на страницу ИИ: там же выбирается источник и ключ, и без
+              указателя два экрана выглядят независимыми. Только у готового
+              проекта — на создании этой страницы ещё нет. */}
+          {projectId && aiPageHref && (
+            <a
+              href={aiPageHref}
+              className="flex items-center justify-between gap-3 rounded-lg border p-3 text-sm transition-colors hover:bg-accent/50"
+            >
+              <span>
+                <span className="block font-medium">{t('projectForm.aiPageLink')}</span>
+                <span className="block text-xs text-muted-foreground">{t('projectForm.aiPageLinkHint')}</span>
+              </span>
+              <ChevronDown className="size-4 -rotate-90 text-muted-foreground" />
+            </a>
+          )}
         </div>
-      )}
-
-      {tab === 'rules' && (
-        <Field
-          label={t('projectForm.rules')}
-          hint={t('projectForm.rulesHint')}
-          trailing={
-            <span className={cn('text-xs tabular-nums', rulesLeft < 30 ? 'text-destructive' : 'text-muted-foreground')}>
-              {rulesLeft}
-            </span>
-          }
-        >
-          <textarea
-            value={value.chatRules}
-            onChange={(e) => set('chatRules', e.target.value.slice(0, CHAT_RULES_MAX))}
-            rows={5}
-            maxLength={CHAT_RULES_MAX}
-            placeholder={t('projectForm.rulesPlaceholder')}
-            className="w-full resize-none rounded-md border bg-transparent px-3 py-2 text-sm outline-none placeholder:text-muted-foreground focus:ring-2 focus:ring-ring"
-          />
-        </Field>
       )}
 
       {tab === 'features' && projectId && <FeaturesSection projectId={projectId} />}

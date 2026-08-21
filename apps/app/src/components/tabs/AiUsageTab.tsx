@@ -1,12 +1,25 @@
 import { useState, useEffect } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { useTranslation } from 'react-i18next'
+import { useNavigate, useParams } from 'react-router-dom'
 import { toast } from 'sonner'
 import { Bot, Cpu } from 'lucide-react'
 import { api } from '@/lib/api'
 import { cn } from '@/lib/utils'
 import { Button } from '@/components/ui/button'
 import { Select, SelectTrigger, SelectValue, SelectContent, SelectItem } from '@/components/ui/select'
+import { AiBehaviorFields } from '@/components/AiBehaviorFields'
+import { DEFAULT_AI_CONFIG, type AiConfig } from '@/components/ProjectSettingsForm'
+
+/**
+ * Табы страницы ИИ.
+ *
+ * Настройки первыми: сюда приходят настраивать, а не смотреть отчёт. Расход,
+ * журнал и прайсинг — про одно и то же и смотрятся подряд, поэтому одним
+ * табом, а не тремя.
+ */
+const AI_TABS = ['settings', 'usage'] as const
+type AiTab = (typeof AI_TABS)[number]
 
 // ИИ-агент проекта + учёт использования (SPEC §8.11).
 type Config = {
@@ -33,6 +46,23 @@ export function AiUsageTab({ projectId, isAdmin }: { projectId: string; isAdmin:
   const { t, i18n } = useTranslation()
   const qc = useQueryClient()
   const onErr = (e: unknown) => toast.error(e instanceof Error ? e.message : String(e))
+
+  /**
+   * Таб — из адреса, а не из состояния.
+   *
+   * Тот же приём, что в настройках компании: ссылкой делятся, страницу
+   * обновляют, и таб должен пережить и то и другое. Чужое значение в адресе
+   * не роняет экран, а откатывается к первому табу. Дефолт в адрес не пишем:
+   * /ai короче и понятнее, чем /ai/settings.
+   */
+  const navigate = useNavigate()
+  const { companyId, aiTab } = useParams()
+  const tab: AiTab = AI_TABS.includes(aiTab as AiTab) ? (aiTab as AiTab) : 'settings'
+  const goTab = (key: AiTab) => {
+    const base = `/c/${companyId}/p/${projectId}/ai`
+    // replace: кнопка «назад» должна уводить со страницы, а не отматывать по табам
+    navigate(key === 'settings' ? base : `${base}/${key}`, { replace: true })
+  }
 
   const cfgQ = useQuery({ queryKey: ['ai-config', projectId], queryFn: () => api<Config>('/api/v1/ai/config', {}, 'project') })
   const usageQ = useQuery({ queryKey: ['ai-usage', projectId], queryFn: () => api<{ spentUsd: number; byModel: UsageRow[] }>('/api/v1/ai/usage', {}, 'project') })
@@ -65,6 +95,38 @@ export function AiUsageTab({ projectId, isAdmin }: { projectId: string; isAdmin:
     onError: onErr,
   })
 
+  /**
+   * Поведение агента: раньше жило в настройках проекта и сохранялось общей
+   * кнопкой формы. Здесь общей кнопки нет, поэтому у полей своё сохранение —
+   * иначе они бы молча ничего не делали.
+   */
+  const projQ = useQuery({
+    queryKey: ['project-ai-behavior', projectId],
+    queryFn: () => api<{ aiConfig: AiConfig | null; chatRules: string | null }>(`/api/v1/projects/${projectId}`),
+  })
+  const [behavior, setBehavior] = useState<{ aiConfig: AiConfig; chatRules: string } | null>(null)
+  // Заполняем один раз пришедшими данными и больше не трогаем: иначе правка
+  // затиралась бы ответом фонового перезапроса прямо под руками.
+  useEffect(() => {
+    const p = projQ.data
+    if (!p) return
+    setBehavior((cur) => cur ?? { aiConfig: { ...DEFAULT_AI_CONFIG, ...(p.aiConfig ?? {}) }, chatRules: p.chatRules ?? '' })
+  }, [projQ.data])
+
+  const saveBehavior = useMutation({
+    mutationFn: () =>
+      api(`/api/v1/projects/${projectId}`, {
+        method: 'PATCH',
+        body: JSON.stringify({ aiConfig: behavior?.aiConfig, chatRules: behavior?.chatRules ?? '' }),
+      }),
+    onSuccess: () => {
+      toast.success(t('ai.saved'))
+      qc.invalidateQueries({ queryKey: ['project-ai-behavior', projectId] })
+      qc.invalidateQueries({ queryKey: ['projects'] })
+    },
+    onError: onErr,
+  })
+
   return (
     <div className="page-w space-y-8 p-6">
       <div>
@@ -75,6 +137,24 @@ export function AiUsageTab({ projectId, isAdmin }: { projectId: string; isAdmin:
         <p className="mt-1 text-sm text-muted-foreground">{t('ai.subtitle')}</p>
       </div>
 
+      <nav className="flex gap-1 border-b">
+        {AI_TABS.map((key) => (
+          <button
+            key={key}
+            type="button"
+            onClick={() => goTab(key)}
+            className={cn(
+              '-mb-px border-b-2 px-3 py-2 text-sm transition-colors',
+              tab === key ? 'border-brand font-medium text-foreground' : 'border-transparent text-muted-foreground hover:text-foreground',
+            )}
+          >
+            {t(`ai.tabs.${key}`)}
+          </button>
+        ))}
+      </nav>
+
+      {tab === 'settings' && (
+      <>
       {/* Источник ИИ */}
       <section className="space-y-4 rounded-xl border bg-card p-4">
         <h2 className="text-sm font-semibold">{t('ai.source')}</h2>
@@ -161,6 +241,31 @@ export function AiUsageTab({ projectId, isAdmin }: { projectId: string; isAdmin:
         )}
       </section>
 
+      {/* Поведение агента и правила — переехали из настроек проекта: всё про
+          ИИ должно жить в одном месте, а не тремя экранами врозь. */}
+      {behavior && (
+        <section className="space-y-4 rounded-xl border bg-card p-4">
+          <h2 className="text-sm font-semibold">{t('ai.behavior')}</h2>
+          <AiBehaviorFields
+            value={behavior.aiConfig}
+            onChange={(v) => setBehavior({ ...behavior, aiConfig: v })}
+            chatRules={behavior.chatRules}
+            onRulesChange={(v) => setBehavior({ ...behavior, chatRules: v })}
+          />
+          {isAdmin && (
+            <div className="flex justify-end">
+              <Button variant="brand" onClick={() => saveBehavior.mutate()} disabled={saveBehavior.isPending}>
+                {t('ai.save')}
+              </Button>
+            </div>
+          )}
+        </section>
+      )}
+      </>
+      )}
+
+      {tab === 'usage' && (
+      <>
       {/* Использование по моделям */}
       <section className="space-y-3 rounded-xl border bg-card p-4">
         <h2 className="flex items-center gap-2 text-sm font-semibold">
@@ -222,6 +327,8 @@ export function AiUsageTab({ projectId, isAdmin }: { projectId: string; isAdmin:
           </ul>
         )}
       </section>
+      </>
+      )}
     </div>
   )
 }

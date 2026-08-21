@@ -169,7 +169,9 @@
     "featureReleases": "גרסאות",
     "featureReleasesHint": "לשונית «גרסאות»: מה שוחרר ולאן, כדי שלא ישאלו בעל פה איזו גרסה בייצור",
     "featureReleasesOffHint": "כיבוי יסתיר את הלשונית אך הנתונים יישארו — ההיסטוריה לא תאבד",
-    "featuresAdminOnly": "רק בעלים או מנהל הפרויקט יכולים לשנות תכונות"
+    "featuresAdminOnly": "רק בעלים או מנהל הפרויקט יכולים לשנות תכונות",
+    "aiPageLink": "מקור ה-AI, מפתח והוצאות",
+    "aiPageLinkHint": "איזה AI משרת את הפרויקט וכמה הוא הוציא"
   },
   "aiMode": {
     "observer": {
@@ -869,7 +871,12 @@
     "outputPerM": "פלט /1M",
     "activeNow": "פעיל",
     "notActiveHint": "אין עדיין מפתח חברה — בינתיים עונה ה-AI לניסיון",
-    "selected": "נבחר"
+    "selected": "נבחר",
+    "tabs": {
+      "settings": "הגדרות",
+      "usage": "הוצאות"
+    },
+    "behavior": "התנהגות הסוכן"
   },
   "notes": {
     "title": "הערות AI",

@@ -169,7 +169,9 @@
     "featureReleases": "Releases",
     "featureReleasesHint": "The Releases tab: what shipped and where, so nobody has to ask \"which version is live\"",
     "featureReleasesOffHint": "Turning it off hides the tab but keeps the data — the history stays",
-    "featuresAdminOnly": "Only the project owner or an admin can change features"
+    "featuresAdminOnly": "Only the project owner or an admin can change features",
+    "aiPageLink": "AI source, key and spending",
+    "aiPageLinkHint": "Which AI serves this project and what it has spent"
   },
   "aiMode": {
     "observer": {
@@ -868,7 +870,12 @@
     "outputPerM": "Output /1M",
     "activeNow": "Working now",
     "notActiveHint": "No company key yet — the trial AI is answering meanwhile",
-    "selected": "Selected"
+    "selected": "Selected",
+    "tabs": {
+      "settings": "Settings",
+      "usage": "Spending"
+    },
+    "behavior": "Agent behaviour"
   },
   "notes": {
     "title": "AI notes",

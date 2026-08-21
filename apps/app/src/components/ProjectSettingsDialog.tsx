@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react'
 import { createPortal } from 'react-dom'
+import { useParams } from 'react-router-dom'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { useTranslation } from 'react-i18next'
 import { toast } from 'sonner'
@@ -39,6 +40,7 @@ export function ProjectSettingsDialog({
   onDelete?: () => void
 }) {
   const { t } = useTranslation()
+  const { companyId } = useParams()
   const qc = useQueryClient()
   const [form, setForm] = useState<ProjectSettings | null>(null)
 
@@ -138,6 +140,9 @@ export function ProjectSettingsDialog({
               value={form}
               onChange={setForm}
               projectId={projectId}
+              // companyId из адреса: модалка открывается только внутри проекта,
+              // и тащить его отдельным свойством через все места незачем.
+              aiPageHref={companyId ? `#/c/${companyId}/p/${projectId}/ai` : undefined}
               onLogoUpload={(f) => uploadLogo.mutate(f)}
               onLogoRemove={() => removeLogo.mutate()}
             />

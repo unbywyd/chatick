@@ -230,8 +230,26 @@ function NotificationsPage() {
 }
 function AiPage() {
   const { project } = useProjectCtx()
-  const { id } = useParams()
-  return id ? <AiUsageTab projectId={id} isAdmin={project?.myRole === 'owner' || project?.myRole === 'admin'} /> : null
+  const { id, companyId } = useParams()
+
+  // Начальство проекта либо начальство компании — та же тройка, что на сервере
+  // и в команде проекта. Админ компании менял общий ключ компании, а ключ её
+  // же отдельного проекта не мог: видел форму без кнопки.
+  const companies = useQuery({
+    queryKey: ['companies'],
+    queryFn: () => api<{ companies: { id: string; myRole: string }[] }>('/api/v1/companies'),
+  })
+  const companyRole = companies.data?.companies.find((c) => c.id === companyId)?.myRole
+  // admin и manager — ровно то, что пропускает canCreateProjects на сервере.
+  // Разойдись списки, человек получил бы кнопку, дающую отказ.
+  const isCompanyBoss = companyRole === 'admin' || companyRole === 'manager'
+
+  return id ? (
+    <AiUsageTab
+      projectId={id}
+      isAdmin={project?.myRole === 'owner' || project?.myRole === 'admin' || isCompanyBoss}
+    />
+  ) : null
 }
 function TimePage() {
   const { id } = useParams()
@@ -330,7 +348,9 @@ createRoot(document.getElementById('root')!).render(
                 <Route path="resources/:resourceId?" element={<ResourcesPage />} />
                 <Route path="team" element={<TeamPage />} />
                 <Route path="notifications" element={<NotificationsPage />} />
-                <Route path="ai" element={<AiPage />} />
+                {/* :aiTab — таб страницы ИИ в адресе: ссылкой делятся, и
+                    открываться она должна сразу нужным табом */}
+                <Route path="ai/:aiTab?" element={<AiPage />} />
                 <Route path="history" element={<HistoryPage />} />
                 <Route path="documents/:documentId?" element={<DocumentsPage />} />
                 <Route path="notes/:noteId?" element={<NotesPage />} />

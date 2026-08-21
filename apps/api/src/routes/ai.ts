@@ -5,16 +5,33 @@ import { and, desc, eq, sql } from 'drizzle-orm'
 import { db } from '../db/client.js'
 import { projectAi, aiUsageLog, modelPricing, projects } from '../db/schema.js'
 import { requireProject, type ProjectEnv } from '../auth.js'
-import { encrypt } from '../lib/crypto.js'
+import { encrypt, decrypt } from '../lib/crypto.js'
 import { env } from '../env.js'
-import { LLM_PROVIDERS, projectLlm } from '../lib/llm.js'
+import { LLM_PROVIDERS, projectLlm, testLlm, type LlmProvider } from '../lib/llm.js'
 import { DEFAULT_PRICING, projectSpendUsd, companyTrialSpendUsd } from '../lib/ai-usage.js'
+import { companyRoleOf, canCreateProjects } from './projects.js'
 
 // Настройка ИИ-агента проекта + учёт использования (SPEC §8.11). Project-токен, owner/admin.
 export const aiRoute = new Hono<ProjectEnv>()
 aiRoute.use('*', requireProject)
 
 const isAdmin = (role: string) => role === 'owner' || role === 'admin'
+
+/**
+ * Кто распоряжается ИИ проекта: начальство проекта либо админ компании.
+ *
+ * Та же тройка, что в projects.ts и в команде проекта. Без неё выходило
+ * нелепо: админ компании меняет общий ключ компании, а ключ её же отдельного
+ * проекта — нет, потому что не состоит в этом проекте. Роль всё равно
+ * читается из базы на каждом запросе (auth.ts), так что доступ не расширяется
+ * никому постороннему.
+ */
+async function mayManageAi(projectId: string, userId: string, role: string): Promise<boolean> {
+  if (isAdmin(role)) return true
+  const project = await db.query.projects.findFirst({ where: eq(projects.id, projectId) })
+  if (!project) return false
+  return canCreateProjects(await companyRoleOf(project.companyId, userId))
+}
 
 // Текущий источник ИИ + пробный бюджет/трата
 aiRoute.get('/config', async (c) => {
@@ -55,8 +72,8 @@ const configSchema = z.object({
 })
 
 aiRoute.put('/config', zValidator('json', configSchema), async (c) => {
-  const { projectId, role } = c.get('auth')
-  if (!isAdmin(role)) return c.json({ error: 'Forbidden' }, 403)
+  const { projectId, role, sub } = c.get('auth')
+  if (!(await mayManageAi(projectId, sub, role))) return c.json({ error: 'Forbidden' }, 403)
   const b = c.req.valid('json')
   const existing = await db.query.projectAi.findFirst({ where: eq(projectAi.projectId, projectId) })
 
@@ -64,6 +81,18 @@ aiRoute.put('/config', zValidator('json', configSchema), async (c) => {
     if (!b.provider || !(b.provider in LLM_PROVIDERS)) return c.json({ error: 'Unknown provider' }, 400)
     const hasKey = Boolean(existing?.keyEncrypted)
     if (!b.apiKey && !hasKey) return c.json({ error: 'API key is required' }, 400)
+
+    /**
+     * Проверяем ключ и модель живым запросом — как у ключа компании.
+     *
+     * Без этого неверный ключ ложился в базу молча и всплывал потом в чате
+     * общим «не получилось получить ответ». Причину берём от провайдера: он
+     * объясняет точнее, чем мы угадаем.
+     */
+    const provider = b.provider as LlmProvider
+    const key = b.apiKey || decrypt(existing!.keyEncrypted!)
+    const check = await testLlm({ provider, model: b.model || LLM_PROVIDERS[provider].defaultModel, apiKey: key })
+    if (!check.ok) return c.json({ error: check.reason }, 422)
   }
 
   const values = {
@@ -159,13 +188,13 @@ aiRoute.get('/pricing', async (c) => {
   )
 })
 
-// Задать/сбросить цену модели для проекта (owner/admin)
+// Задать/сбросить цену модели для проекта (начальство проекта или админ компании)
 aiRoute.put(
   '/pricing',
   zValidator('json', z.object({ model: z.string().min(1), inputPerM: z.number().min(0).nullable(), outputPerM: z.number().min(0).nullable() })),
   async (c) => {
-    const { projectId, role } = c.get('auth')
-    if (!isAdmin(role)) return c.json({ error: 'Forbidden' }, 403)
+    const { projectId, role, sub } = c.get('auth')
+    if (!(await mayManageAi(projectId, sub, role))) return c.json({ error: 'Forbidden' }, 403)
     const { model, inputPerM, outputPerM } = c.req.valid('json')
     // null/null → сброс override (вернуться к дефолту)
     if (inputPerM === null || outputPerM === null) {
