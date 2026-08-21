@@ -25,7 +25,7 @@ describe('меню профиля: группы', () => {
     // цена такой правки: экран выглядит целым, а входа куда-то больше нет.
     const before = [
       'about.title', 'bug.title', 'connect.menuItem', 'notif.system',
-      'profile.changePhoto', 'profile.companySettings', 'profile.logout',
+      'profile.changePhoto', 'profile.logout',
       'profile.projectSettings', 'profile.projectTeam', 'profile.title',
       'project.language', 'project.theme', 'shortcuts.title',
       'sidebar.companySettings', 'tabs.ai', 'tabs.notifications', 'tour.replay',
@@ -43,6 +43,18 @@ describe('меню профиля: группы', () => {
     }
   })
 
+  it('в компанию ведёт один пункт, а не два', () => {
+    /**
+     * Было «Настройки компании» и «Компания»: разные места — настройки против
+     * обзора, — но по названиям неотличимые. Разницу можно было выяснить,
+     * только сходив в оба.
+     *
+     * Настройки остались табом на экране компании, так что путь никуда не
+     * делся; из меню он теперь один.
+     */
+    expect(keys.filter((k) => k.toLowerCase().includes('companysettings'))).toEqual(['sidebar.companySettings'])
+  })
+
   it('группы идут в порядке: компания, проект, личное', () => {
     const groups = keys.filter((k) => k.startsWith('profile.group'))
     expect(groups).toEqual(['profile.groupCompany', 'profile.groupProject', 'profile.groupPersonal'])
@@ -54,9 +66,8 @@ describe('меню профиля: группы', () => {
     const project = at('profile.groupProject')
     const personal = at('profile.groupPersonal')
 
-    // Оба входа в компанию — до заголовка проекта, и рядом друг с другом:
-    // раньше они висели по разным концам списка.
-    for (const k of ['profile.companySettings', 'sidebar.companySettings'])
+    // Вход в компанию — до заголовка проекта.
+    for (const k of ['sidebar.companySettings'])
       expect(at(k) > company && at(k) < project, `${k} не в группе компании`).toBe(true)
 
     for (const k of ['profile.projectSettings', 'profile.projectTeam', 'tabs.notifications', 'tabs.ai'])

@@ -188,16 +188,12 @@ export function ProfileMenu({
         {companyId && (
           <>
             <DropdownMenuLabel>{t('profile.groupCompany')}</DropdownMenuLabel>
-            {/* Настройки компании: язык, ключи API, вебхуки, связь с внешней
-                системой. Раньше попасть туда можно было только через список
-                проектов — а компании, у которой проекты приходят снаружи, идти
-                в этот список незачем и не за чем. */}
-            <DropdownMenuItem onSelect={() => navigate(`/start/${companyId}/settings`)}>
-              <SlidersHorizontal className="size-4" />
-              {t('profile.companySettings')}
-            </DropdownMenuItem>
-            {/* Обзор компании: проекты, команда, время. Отдельный пункт от
-                настроек — это разные места, а назывались почти одинаково. */}
+            {/* Один вход, а не два.
+                Было «Настройки компании» и «Компания» — разные места
+                (настройки против обзора), но по названиям неотличимые:
+                прочитать разницу можно было, только сходив в оба.
+                Ведём в обзор: настройки там обычный таб, путь никуда не
+                делся, а решать головоломку в меню больше не нужно. */}
             <DropdownMenuItem onSelect={() => navigate(`/start/${companyId}`)}>
               <Building2 className="size-4" />
               {t('sidebar.companySettings')}

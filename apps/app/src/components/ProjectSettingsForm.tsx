@@ -87,7 +87,7 @@ export function ProjectSettingsForm({
   onLogoUpload,
   onLogoRemove,
   onDelete,
-  aiPageHref,
+  onOpenAiPage,
 }: {
   value: ProjectSettings
   onChange: (v: ProjectSettings) => void
@@ -100,8 +100,13 @@ export function ProjectSettingsForm({
   onLogoRemove?: () => void
   /** Удаление проекта — отдельной вкладкой, если человеку оно вообще доступно. */
   onDelete?: () => void
-  /** Ссылка на страницу ИИ проекта: там источник, ключ и расход. */
-  aiPageHref?: string
+  /**
+   * Уйти на страницу ИИ проекта: там источник, ключ и расход.
+   *
+   * Обработчик, а не адрес: переход должен ещё и закрыть модалку, а из
+   * формы её не видно.
+   */
+  onOpenAiPage?: () => void
 }) {
   const { t } = useTranslation()
   const [tab, setTab] = useState<FormTab>('general')
@@ -291,17 +296,21 @@ export function ProjectSettingsForm({
           {/* Ссылка на страницу ИИ: там же выбирается источник и ключ, и без
               указателя два экрана выглядят независимыми. Только у готового
               проекта — на создании этой страницы ещё нет. */}
-          {projectId && aiPageHref && (
-            <a
-              href={aiPageHref}
-              className="flex items-center justify-between gap-3 rounded-lg border p-3 text-sm transition-colors hover:bg-accent/50"
+          {projectId && onOpenAiPage && (
+            /* Кнопка, а не ссылка: переход обязан закрыть модалку.
+               Ссылка меняла адрес, а модалка оставалась поверх новой
+               страницы — со стороны выглядело, будто клик не сработал. */
+            <button
+              type="button"
+              onClick={onOpenAiPage}
+              className="flex w-full items-center justify-between gap-3 rounded-lg border p-3 text-start text-sm transition-colors hover:bg-accent/50"
             >
               <span>
                 <span className="block font-medium">{t('projectForm.aiPageLink')}</span>
                 <span className="block text-xs text-muted-foreground">{t('projectForm.aiPageLinkHint')}</span>
               </span>
-              <ChevronDown className="size-4 -rotate-90 text-muted-foreground" />
-            </a>
+              <ChevronDown className="size-4 shrink-0 -rotate-90 text-muted-foreground rtl:rotate-90" />
+            </button>
           )}
         </div>
       )}
