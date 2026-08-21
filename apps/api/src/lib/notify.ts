@@ -156,7 +156,7 @@ const STR: Record<Lang, Record<string, string>> = {
  * вместо «Саша упомянул вас». Пишется в notifications.summary после создания —
  * уведомление появляется мгновенно, текст уточняется через секунду.
  */
-async function summarizeAsk(
+export async function summarizeAsk(
   notificationId: string,
   projectId: string,
   text: string,

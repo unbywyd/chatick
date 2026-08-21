@@ -476,12 +476,43 @@ auth.post('/me/tour-reset', requireSession, async (c) => {
 })
 
 // PATCH /api/v1/auth/me — смена имени
-auth.patch('/me', requireSession, zValidator('json', z.object({ name: z.string().min(1).max(120) })), async (c) => {
-  const { sub } = c.get('session')
-  const { name } = c.req.valid('json')
-  await db.update(users).set({ name: name.trim() }).where(eq(users.id, sub))
-  return c.json({ ok: true, name: name.trim() })
-})
+auth.patch(
+  '/me',
+  requireSession,
+  zValidator(
+    'json',
+    z.object({
+      name: z.string().min(1).max(120).optional(),
+      /**
+       * Язык человека — тот же, на котором он читает интерфейс.
+       *
+       * Переключатель менял только интерфейс, в браузере, и на сервер ничего
+       * не уходило. Профиль оставался с тем языком, что достался при
+       * создании, — а на нём ИИ пишет сводки уведомлений и письма. Человек
+       * видел ивритский интерфейс и английские уведомления и не мог понять,
+       * где это меняется: места для этого не было вовсе.
+       */
+      locale: z.enum(['en', 'ru', 'he']).optional(),
+    }),
+  ),
+  async (c) => {
+    const { sub } = c.get('session')
+    const { name, locale } = c.req.valid('json')
+
+    const patch: Record<string, unknown> = {}
+    if (name !== undefined) patch.name = name.trim()
+    if (locale !== undefined) {
+      patch.locale = locale
+      // Выбор человека, а не унаследованное значение: с этой отметкой его
+      // язык переживёт любую массовую правку по компании.
+      patch.localeSetByUser = true
+    }
+    if (!Object.keys(patch).length) return c.json({ error: 'Nothing to update' }, 400)
+
+    await db.update(users).set(patch).where(eq(users.id, sub))
+    return c.json({ ok: true, ...(patch.name ? { name: patch.name } : {}), ...(locale ? { locale } : {}) })
+  },
+)
 
 // POST /api/v1/auth/me/avatar — загрузка аватара (webp, приватный бакет; раздаём через /avatar/:userId)
 auth.post('/me/avatar', requireSession, async (c) => {

@@ -499,7 +499,22 @@ async function upsertUser(companyId: string, companyName: string, u: IncomingUse
 
   let created = false
   if (!user) {
-    const [row] = await db.insert(users).values({ email: u.email, name: u.name, externalId: u.externalId }).returning()
+    /**
+     * Язык наследуем от компании, а не берём умолчание схемы ('en').
+     *
+     * Человека завела внешняя система, языка он не выбирал — и получал
+     * английский. В компании с ивритом это значило, что ИИ пересказывал ему
+     * ивритские сообщения по-английски: в ленте уведомлений рядом с
+     * ивритским текстом стояла английская строка.
+     *
+     * localeSetByUser не трогаем: он и правда не выбирал. Сменит язык в
+     * профиле — его выбор победит.
+     */
+    const company = await db.query.companies.findFirst({ where: eq(companies.id, companyId) })
+    const [row] = await db
+      .insert(users)
+      .values({ email: u.email, name: u.name, externalId: u.externalId, locale: company?.locale ?? 'en' })
+      .returning()
     user = row!
     created = true
   } else if (user.externalId !== u.externalId) {
