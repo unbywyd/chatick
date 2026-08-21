@@ -263,20 +263,26 @@ export function ProfileMenu({
         {/* Показать тур заново.
             Нужен тому, кто закрыл его в первый день и через месяц захотел
             разобраться: иначе единственный способ — завести нового человека.
-            Личное: тур показывается человеку, а не проекту. */}
-        <DropdownMenuItem
-          onSelect={async () => {
-            try {
-              await api('/api/v1/auth/me/tour-reset', { method: 'POST' })
-              qc.invalidateQueries({ queryKey: ['me'] })
-            } catch {
-              /* тихо: не получилось — человек просто не увидит тур */
-            }
-          }}
-        >
-          <Compass className="size-4" />
-          {t('tour.replay')}
-        </DropdownMenuItem>
+
+            Только в проекте: тур показывает рабочие места — чат, вкладки,
+            ассистента, — и живёт он в ProjectScreen. На странице компании
+            пункт был, флаг сбрасывался, а показывать оказывалось нечего:
+            нажатие выглядело как поломка. */}
+        {projectId && (
+          <DropdownMenuItem
+            onSelect={async () => {
+              try {
+                await api('/api/v1/auth/me/tour-reset', { method: 'POST' })
+                qc.invalidateQueries({ queryKey: ['me'] })
+              } catch {
+                /* тихо: не получилось — человек просто не увидит тур */
+              }
+            }}
+          >
+            <Compass className="size-4" />
+            {t('tour.replay')}
+          </DropdownMenuItem>
+        )}
 
         <DropdownMenuSeparator />
 

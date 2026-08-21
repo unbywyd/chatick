@@ -143,7 +143,23 @@ export function StartScreen() {
     <div className="flex h-dvh flex-col">
       <header className="flex items-center justify-between border-b px-6 py-3">
         <div className="flex items-center gap-3">
-          <Logo />
+          {/* Логотип уводит к выбору компании — там же, где человек начинал.
+
+              Только когда компаний больше одной: с единственной /start сам
+              возвращает обратно (выбирать не из чего), и клик выглядел бы
+              сломанным. Тогда логотип остаётся просто логотипом. */}
+          {company && (companiesQ.data?.companies.length ?? 0) > 1 ? (
+            <button
+              type="button"
+              onClick={() => navigate('/start')}
+              title={t('start.allCompanies')}
+              className="rounded-md transition-opacity hover:opacity-70"
+            >
+              <Logo />
+            </button>
+          ) : (
+            <Logo />
+          )}
           {company && (
             <>
               <span className="text-muted-foreground">/</span>

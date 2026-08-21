@@ -87,7 +87,8 @@
     "guestCompanies": "Where I take part",
     "projectsCount_one": "{{count}} project",
     "projectsCount_other": "{{count}} projects",
-    "leaveDangerHint": "You will lose access to every project of this company, along with their tasks, files and conversations. Getting back requires a new invitation from an administrator — you cannot restore yourself."
+    "leaveDangerHint": "You will lose access to every project of this company, along with their tasks, files and conversations. Getting back requires a new invitation from an administrator — you cannot restore yourself.",
+    "allCompanies": "All companies"
   },
   "companyTabs": {
     "projects": "Projects",

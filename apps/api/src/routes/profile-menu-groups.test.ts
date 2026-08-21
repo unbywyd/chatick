@@ -55,6 +55,17 @@ describe('меню профиля: группы', () => {
     expect(keys.filter((k) => k.toLowerCase().includes('companysettings'))).toEqual(['sidebar.companySettings'])
   })
 
+  it('тур предлагается только там, где он есть', () => {
+    /**
+     * Тур живёт в ProjectScreen и показывает рабочие места — чат, вкладки,
+     * ассистента. На странице компании пункт всё равно показывался: флаг
+     * сбрасывался, показывать оказывалось нечего, и нажатие читалось как
+     * поломка.
+     */
+    const item = menu.match(/\{projectId && \(\s*<DropdownMenuItem[\s\S]{0,600}?tour\.replay/)
+    expect(item, 'пункт тура снова показывается вне проекта').not.toBeNull()
+  })
+
   it('группы идут в порядке: компания, проект, личное', () => {
     const groups = keys.filter((k) => k.startsWith('profile.group'))
     expect(groups).toEqual(['profile.groupCompany', 'profile.groupProject', 'profile.groupPersonal'])
