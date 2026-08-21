@@ -5,8 +5,8 @@ import { and, asc, desc, eq, inArray, isNull, or, sql } from 'drizzle-orm'
 import { buildType, isLiveStage } from '../lib/release-stages.js'
 import { companyOf, projectPath } from '../lib/links.js'
 import { db } from '../db/client.js'
-import { credentials, files, projects, taskBlockers, taskChecklist, taskComments, taskGroups, taskLinks, taskNotes, taskResources, tasks, users, taskReleases, releases } from '../db/schema.js'
-import { requireProject, type ProjectEnv } from '../auth.js'
+import { credentials, files, projectMembers, projects, taskBlockers, taskChecklist, taskComments, taskGroups, taskLinks, taskNotes, taskResources, tasks, users, taskReleases, releases } from '../db/schema.js'
+import { requireProject, requireSession, type ProjectEnv, type SessionEnv } from '../auth.js'
 import { hasPermission, ownsOrManages } from './projects.js'
 import { improveTask, validateTask, generateTaskNotes } from '../lib/llm.js'
 import { buildTeamContext } from '../lib/memory.js'
@@ -1502,4 +1502,84 @@ tasksRoute.post('/validate', zValidator('json', z.object({ title: z.string().def
   const result = await validateTask(projectId, { title, description, language })
   if (!result) return c.json({ error: 'AI unavailable' }, 503)
   return c.json(result)
+})
+
+
+/**
+ * Мои задачи по всем проектам компании — панель «Мои задачи» (TASK-21).
+ *
+ * Отдельная ручка на session-токене, а не обход проектов по одному: обходить
+ * пришлось бы тринадцать раз, и каждый со своим токеном, который на фронте
+ * один.
+ *
+ * Прав здесь не ослабляем: берём ровно те проекты, где человек СОСТОИТ, и
+ * ровно те задачи, что назначены на НЕГО. Своё человек видит всегда — та же
+ * логика, что в timeMineRoute для часов.
+ */
+export const tasksMineRoute = new Hono<SessionEnv>()
+tasksMineRoute.use('*', requireSession)
+
+tasksMineRoute.get('/', async (c) => {
+  const { sub } = c.get('session')
+  const companyId = c.req.query('companyId')
+  if (!companyId) return c.json({ error: 'companyId required' }, 400)
+
+  /**
+   * Проекты компании, где человек состоит.
+   *
+   * Через членство, а не через роль в компании: админ компании вправе зайти в
+   * любой проект, но «мои задачи» — это про назначенное лично, и показывать
+   * ему чужие проекты в этом списке незачем.
+   */
+  const mine = await db
+    .select({ id: projects.id, name: projects.name, color: projects.color, logoUrl: projects.logoUrl })
+    .from(projects)
+    .innerJoin(projectMembers, eq(projectMembers.projectId, projects.id))
+    .where(and(eq(projects.companyId, companyId), eq(projectMembers.userId, sub)))
+  if (!mine.length) return c.json({ items: [] })
+
+  const rows = await db
+    .select({
+      id: tasks.id,
+      number: tasks.number,
+      title: tasks.title,
+      status: tasks.status,
+      priority: tasks.priority,
+      dueDate: tasks.dueDate,
+      createdAt: tasks.createdAt,
+      projectId: tasks.projectId,
+      author: { id: users.id, name: users.name, avatarUrl: users.avatarUrl },
+    })
+    .from(tasks)
+    .leftJoin(users, eq(users.id, tasks.createdById))
+    .where(
+      and(
+        inArray(tasks.projectId, mine.map((p) => p.id)),
+        eq(tasks.assigneeId, sub),
+        isNull(tasks.deletedAt),
+        // Всё, кроме сделанного: иначе панель утонет в закрытых задачах.
+        sql`${tasks.status} <> 'done'`,
+      ),
+    )
+    /**
+     * Сначала просроченные, потом от старых к новым.
+     *
+     * Порядок считает Postgres, а не фронт: список приходит готовым, и при
+     * дозагрузке страницами порядок не разъедется.
+     *
+     * now() в сравнении, а не переданное клиентом время: часы у клиента могут
+     * врать, и задача считалась бы просроченной у одного и нет у другого.
+     */
+    .orderBy(
+      sql`case when ${tasks.dueDate} is not null and ${tasks.dueDate} < now() then 0 else 1 end`,
+      asc(tasks.createdAt),
+    )
+
+  const projectById = new Map(mine.map((p) => [p.id, p]))
+  return c.json({
+    items: rows.map((r) => ({
+      ...r,
+      project: projectById.get(r.projectId) ?? null,
+    })),
+  })
 })

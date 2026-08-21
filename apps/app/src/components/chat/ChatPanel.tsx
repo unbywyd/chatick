@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useImperativeHandle, useMemo, useRef, useState } from 'react'
 import { useNavigate, useParams, useSearchParams } from 'react-router-dom'
 import { useInfiniteQuery, useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { AlertTriangle, ArrowDown, Bot, CheckSquare, Copy, FileText, Users, BrainCircuit, KeyRound, Loader2, Menu, MoreHorizontal, NotebookPen, PanelsTopLeft, PanelRightClose, PanelRightOpen, Reply, Search, Settings, Share2, Trash2, X, MessagesSquare } from 'lucide-react'
+import { AlertTriangle, ArrowDown, Bot, CheckSquare, Copy, FileText, Users, BrainCircuit, KeyRound, Loader2, Menu, MoreHorizontal, NotebookPen, PanelsTopLeft, PanelRightClose, PanelRightOpen, Reply, Search, Settings, Share2, Trash2, X, MessagesSquare, ListChecks } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
 import ReactMarkdown from 'react-markdown'
 import { CodeBlock } from './CodeBlock'
@@ -22,6 +22,8 @@ import { AvatarRow } from '@/components/ui/avatar-row'
 import { Avatar } from '@/components/ui/avatar'
 import { ShareDialog } from '@/components/ShareDialog'
 import { AiFeed } from './AiFeed'
+import { MyTasksPanel } from './MyTasksPanel'
+import { ChatSkeleton } from '@/components/ui/skeleton'
 import { FileViewer, type ViewerFile } from '@/components/files/FileViewer'
 import { NOTE_META, NOTE_TYPES, type NoteType } from '@/components/tabs/NotesTab'
 import { DatePicker } from '@/components/ui/date-picker'
@@ -36,7 +38,7 @@ const renderMentions = (text: string) => text.replace(mentionRe, '**@$1**')
 const stripMentionMarkup = (text: string) => text.replace(mentionRe, '@$1')
 
 /** Чем чат управляем снаружи: горячие клавиши ставят фокус в нужное поле. */
-export type ChatPanelHandle = { focusChat: () => void; focusAi: () => void }
+export type ChatPanelHandle = { focusChat: () => void; focusAi: () => void; showTasks: () => void }
 
 export function ChatPanel({
   aiMode = 'assistant',
@@ -68,6 +70,19 @@ export function ChatPanel({
   const [collapsed, toggleCollapsed] = useChatCollapsed()
   const [mode, setMode] = useState<ChatMode>('group')
   const isAi = mode === 'ai'
+
+  /**
+   * Мои задачи — третий вид панели, но НЕ третий ChatMode.
+   *
+   * ChatMode отвечает на вопрос «куда уйдёт то, что я пишу», уходит на сервер
+   * в messages/seen и размечает прочитанное. Задачи туда не входят: писать в
+   * них из композера нельзя. Поэтому отдельный переключатель поверх, а режим
+   * чата остаётся прежним — вернувшись из задач, человек попадает в тот же
+   * канал, из которого ушёл.
+   *
+   * Открыт по умолчанию: чаще всего человек приходит посмотреть, что на нём.
+   */
+  const [showTasks, setShowTasks] = useState(true)
 
   /**
    * Сколько новых сообщений — для бейджей на свёрнутом чате и на табах.
@@ -114,8 +129,17 @@ export function ChatPanel({
   // Через тот же switchMode, что и табы: иначе горячая клавиша была бы
   // единственным способом уйти от отвечающего ассистента без вопроса.
   useImperativeHandle(ref, () => ({
-    focusChat: () => void switchMode('group'),
-    focusAi: () => void switchMode('ai'),
+    // Тур начинает с задач: панель и так открывается на них, и уводить с
+    // них первым же шагом значит спорить с собственным умолчанием.
+    showTasks: () => setShowTasks(true),
+    focusChat: () => {
+      setShowTasks(false)
+      void switchMode('group')
+    },
+    focusAi: () => {
+      setShowTasks(false)
+      void switchMode('ai')
+    },
   }))
   const [checkingUsers, setCheckingUsers] = useState<Map<string, string>>(new Map()) // userId -> name («пишет…»)
   // id сообщения, которое сейчас проверяется (null — ничего не ждём)
@@ -731,7 +755,13 @@ export function ChatPanel({
       {/* Лента чуть светлее окна: без этого чат сливается с рабочей областью
           и не читается как отдельная поверхность. */}
       <div ref={scrollRef} onScroll={onScroll} className="relative flex-1 overflow-y-auto bg-card/40 p-4">
-        {llmMissing ? (
+        {showTasks ? (
+          /* p-4 у контейнера тут лишний: у списка свои отступы, иначе
+             карточки задач вжимаются в узкую колонку. */
+          <div data-tour="my-tasks" className="-m-4">
+            <MyTasksPanel />
+          </div>
+        ) : llmMissing ? (
           <div className="mx-auto mt-8 max-w-xs rounded-xl border bg-card p-5 text-center">
             <span className="mx-auto grid size-12 place-items-center rounded-full bg-secondary">
               <BrainCircuit className="size-6 text-muted-foreground" />
@@ -771,6 +801,9 @@ export function ChatPanel({
             {/* Пустой чат объясняет, что здесь делают: одна серая строка не
                 отвечала ни на «куда я попал», ни на «с чего начать». Примеры
                 кликабельны — начать разговор проще, когда есть с чего. */}
+            {/* Пока едет история — скелетон, а не пустота: колонка чата на
+                тёмной теме выглядела погасшей. */}
+            {feed.length === 0 && history.isLoading && <ChatSkeleton />}
             {feed.length === 0 && !history.isLoading && (
               <div className="mx-auto max-w-sm px-4 pt-10 text-center">
                 <span className="mx-auto grid size-14 place-items-center rounded-2xl bg-brand/10 text-brand-ink">
@@ -944,6 +977,13 @@ export function ChatPanel({
         />
       )}
 
+      {/* Композер прячем на задачах: писать в задачу из чата нельзя, а пустое
+          поле под списком обещает обратное.
+
+          Не рендерим вовсе, а не прячем классом: скрытый hidden элемент
+          остаётся в разметке с нулевыми размерами, и тур, ищущий цель через
+          querySelector, находил его и ставил подсказку в угол экрана. */}
+      {!showTasks && (
       <footer className="border-t p-3">
         {/* На что отвечаем — над полем ввода, как в мессенджерах: иначе, начав
             писать, человек уже не помнит, к чему это относится. */}
@@ -982,32 +1022,50 @@ export function ChatPanel({
         />
         </div>
 
-        {/* Под полем, а не над ним: переключатель отвечает на вопрос «куда
-            уйдёт то, что я сейчас пишу», и стоит там же, где ответ нужен.
-
-            Две равные половины, а не кнопки в ряд: прежний вид не читался
-            как переключатель — было непонятно, что это два канала, а не
-            два действия. Активная половина светлее, спящая утоплена в фон.
-
-            Молнию («мимо проверки ИИ») убрали: ею почти не пользовались, а
-            место она занимала рядом с самым частым действием. */}
-        <div data-tour="modes" className="mt-2 grid grid-cols-2 gap-1 rounded-lg bg-secondary/60 p-1">
-          <ModeTab
-            active={!isAi}
-            onClick={() => switchMode('group')}
-            icon={<Users className="size-3.5" />}
-            label={t('chat.modeGroup')}
-            badge={unread.data?.group ?? 0}
-          />
-          <ModeTab
-            active={isAi}
-            onClick={() => switchMode('ai')}
-            icon={<Bot className="size-3.5" />}
-            label={t('chat.modeAi')}
-            badge={unread.data?.ai ?? 0}
-          />
-        </div>
       </footer>
+      )}
+
+      {/* Переключатель вынесен из композера и виден всегда — иначе с вида
+          задач, где поля ввода нет, вернуться было бы нечем.
+
+          Три равные доли, а не кнопки в ряд: прежний вид не читался как
+          переключатель — было непонятно, что это каналы, а не действия.
+          Активная доля светлее, спящая утоплена в фон.
+
+          Молнию («мимо проверки ИИ») убрали: ею почти не пользовались, а
+          место она занимала рядом с самым частым действием. */}
+      {/* Подложка темнее самих табов: активный красится в bg-background, и на
+          такой же подложке он сливался — в тёмной теме различить активный
+          было нельзя вовсе (0.15 против 0.15). */}
+      <div data-tour="modes" className="grid grid-cols-3 gap-1 border-t bg-secondary/60 p-1">
+        <ModeTab
+          active={showTasks}
+          onClick={() => setShowTasks(true)}
+          icon={<ListChecks className="size-3.5" />}
+          label={t('myTasks.tab')}
+          badge={0}
+        />
+        <ModeTab
+          active={!showTasks && !isAi}
+          onClick={() => {
+            setShowTasks(false)
+            void switchMode('group')
+          }}
+          icon={<Users className="size-3.5" />}
+          label={t('chat.modeGroup')}
+          badge={unread.data?.group ?? 0}
+        />
+        <ModeTab
+          active={!showTasks && isAi}
+          onClick={() => {
+            setShowTasks(false)
+            void switchMode('ai')
+          }}
+          icon={<Bot className="size-3.5" />}
+          label={t('chat.modeAi')}
+          badge={unread.data?.ai ?? 0}
+        />
+      </div>
     </div>
   )
 }
@@ -1586,8 +1644,10 @@ function ModeTab({
       className={cn(
         'flex cursor-pointer items-center justify-center gap-1.5 rounded-md px-2.5 py-1.5 text-xs font-medium transition-colors',
         active
-          ? 'bg-background text-foreground shadow-sm'
-          : 'text-muted-foreground hover:bg-background/40 hover:text-foreground',
+          // Рамка, а не только фон: тень в тёмной теме почти не читается, и
+          // активный держится на одной разнице яркости подложки.
+          ? 'border border-border bg-background text-foreground shadow-sm'
+          : 'border border-transparent text-muted-foreground hover:bg-background/40 hover:text-foreground',
       )}
     >
       {icon}

@@ -2,7 +2,7 @@ import { useMemo, useState } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { useTranslation } from 'react-i18next'
 import { useNavigate, useParams, useSearchParams } from 'react-router-dom'
-import { useProjectCtx } from '@/screens/ProjectScreen'
+import { useProjectCtx } from '@/screens/project-context'
 import { ShareDialog } from '@/components/ShareDialog'
 import { toast } from 'sonner'
 import {
