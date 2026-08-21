@@ -3,7 +3,7 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { useTranslation } from 'react-i18next'
 import { useNavigate, useParams } from 'react-router-dom'
 import { toast } from 'sonner'
-import { Bot, Cpu } from 'lucide-react'
+import { Bot, Check, Cpu } from 'lucide-react'
 import { api } from '@/lib/api'
 import { cn } from '@/lib/utils'
 import { Button } from '@/components/ui/button'
@@ -77,6 +77,8 @@ export function AiUsageTab({ projectId, isAdmin }: { projectId: string; isAdmin:
   const [provider, setProvider] = useState('')
   const [model, setModel] = useState('')
   const [apiKey, setApiKey] = useState('')
+  /** Провайдера меняют осознанно: иначе показываем карточку, а не форму. */
+  const [changingCustom, setChangingCustom] = useState(false)
 
   useEffect(() => {
     if (!cfg) return
@@ -91,6 +93,9 @@ export function AiUsageTab({ projectId, isAdmin }: { projectId: string; isAdmin:
     onSuccess: () => {
       toast.success(t('ai.saved'))
       setApiKey('')
+      // Сохранили — возвращаемся к карточке, иначе форма остаётся открытой
+      // и выглядит так, будто ничего не применилось.
+      setChangingCustom(false)
       qc.invalidateQueries({ queryKey: ['ai-config', projectId] })
     },
     onError: onErr,
@@ -199,8 +204,46 @@ export function AiUsageTab({ projectId, isAdmin }: { projectId: string; isAdmin:
           </div>
         )}
 
-        {/* Свой агент */}
-        {source === 'custom' && cfg && (
+        {/* Свой агент — уже настроен: карточка, а не форма.
+            Ключ сохранён и на экране его нет; разворачивать все поля ради
+            смены модели значит требовать заполнить заново то, что менять не
+            просили. */}
+        {source === 'custom' && cfg?.hasKey && !changingCustom && (
+          <div className="flex flex-wrap items-center gap-x-2 gap-y-2 rounded-lg border bg-card px-3 py-2.5 text-sm">
+            <Check className="size-4 shrink-0 text-brand-ink" />
+            <span className="font-medium">{cfg.providers.find((p) => p.id === provider)?.label}</span>
+            <span className="text-muted-foreground">·</span>
+            <input
+              value={model}
+              onChange={(e) => setModel(e.target.value)}
+              disabled={!isAdmin}
+              placeholder={cfg.providers.find((p) => p.id === provider)?.defaultModel}
+              className="h-7 min-w-0 flex-1 rounded-md border bg-background px-2 text-xs disabled:border-transparent disabled:bg-transparent"
+            />
+            {isAdmin && (
+              <div className="ms-auto flex shrink-0 items-center gap-1">
+                <Button variant="brand" size="sm" onClick={() => saveCfg.mutate()} disabled={saveCfg.isPending}>
+                  {t('llm.apply')}
+                </Button>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => {
+                    // Новый провайдер — новый ключ и новая модель.
+                    setModel('')
+                    setApiKey('')
+                    setChangingCustom(true)
+                  }}
+                >
+                  {t('llm.changeProvider')}
+                </Button>
+              </div>
+            )}
+          </div>
+        )}
+
+        {/* Свой агент — форма: пока ключа нет либо провайдера меняют. */}
+        {source === 'custom' && cfg && (!cfg.hasKey || changingCustom) && (
           <div className="space-y-3">
             <label className="block">
               <span className="mb-1 block text-xs font-medium text-muted-foreground">{t('ai.provider')}</span>
@@ -229,10 +272,27 @@ export function AiUsageTab({ projectId, isAdmin }: { projectId: string; isAdmin:
           </div>
         )}
 
-        {isAdmin && (
-          <Button variant="brand" onClick={() => saveCfg.mutate()} disabled={saveCfg.isPending}>
-            {t('ai.save')}
-          </Button>
+        {/* Общая кнопка не нужна, когда показана карточка: у неё своя
+            «Применить», и две кнопки сохранения рядом только путают. */}
+        {isAdmin && !(source === 'custom' && cfg?.hasKey && !changingCustom) && (
+          <div className="flex gap-2">
+            <Button variant="brand" onClick={() => saveCfg.mutate()} disabled={saveCfg.isPending}>
+              {t('ai.save')}
+            </Button>
+            {changingCustom && (
+              <Button
+                variant="outline"
+                onClick={() => {
+                  setChangingCustom(false)
+                  setProvider(cfg?.provider || cfg?.providers[0]?.id || '')
+                  setModel(cfg?.model ?? '')
+                  setApiKey('')
+                }}
+              >
+                {t('common.cancel')}
+              </Button>
+            )}
+          </div>
         )}
       </section>
 
