@@ -246,7 +246,10 @@ export function OverviewTab({
                   <span className="block h-full rounded-full bg-brand/70" style={{ width: `${p.progress}%` }} />
                 </span>
               </div>
-              <span className="w-14 shrink-0 text-end text-xs tabular-nums text-muted-foreground">
+              {/* dir="ltr": та же дробь, что и в карточке сверху, и так же
+                  переворачивалась бы в иврите — «сделано» и «всего» менялись
+                  бы местами. */}
+              <span dir="ltr" className="w-14 shrink-0 text-end text-xs tabular-nums text-muted-foreground">
                 {p.tasksDone}/{p.tasksTotal}
               </span>
               <span className="hidden w-16 shrink-0 items-center justify-end gap-1 text-xs tabular-nums text-muted-foreground sm:flex">
@@ -490,9 +493,21 @@ function Metric({
         <Icon className={cn('size-3.5', tone === 'warn' && 'text-amber-500')} />
         {label}
       </p>
-      <p className={cn('mt-1 font-mono text-xl font-semibold tabular-nums', tone === 'warn' && 'text-amber-500')}>
-        {value}
-        {hint && <span className="ms-2 font-sans text-xs font-normal text-muted-foreground">{hint}</span>}
+      {/* dir="ltr" — иначе в иврите «231 / 480» переворачивается в «480 / 231»,
+          и цифры меняются смыслом: выходит, что сделано больше, чем всего.
+          Доля процентов при этом влезала между числом и дробью.
+
+          Выравнивание по началу строки оставляем на языке: сама карточка
+          читается справа налево, а вот число внутри — нет. */}
+      <p
+        dir="ltr"
+        className={cn(
+          'mt-1 flex items-baseline gap-2 font-mono text-xl font-semibold tabular-nums rtl:flex-row-reverse rtl:justify-end',
+          tone === 'warn' && 'text-amber-500',
+        )}
+      >
+        <span>{value}</span>
+        {hint && <span className="font-sans text-xs font-normal text-muted-foreground">{hint}</span>}
       </p>
     </div>
   )

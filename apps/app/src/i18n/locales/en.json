@@ -972,7 +972,9 @@
     "filterAll": "All",
     "filterUnread": "Unread",
     "allProjects": "All projects",
-    "here": "Concerns you here"
+    "here": "Concerns you here",
+    "detailsClose": "Close",
+    "detailsGo": "Open"
   },
   "docs": {
     "title": "Documents",
@@ -1817,6 +1819,10 @@
     "inherited": "Set at company level"
   },
   "tour": {
+    "myTasks": {
+      "title": "Your tasks, right here",
+      "text": "The panel opens on what is assigned to you across the company. Click a task and it opens on the right — the project switches by itself."
+    },
     "next": "Next",
     "back": "Back",
     "finish": "Got it",
@@ -1853,5 +1859,12 @@
       "start": "Continue",
       "countdown": "Starting in {{count}}s"
     }
+  },
+  "myTasks": {
+    "tab": "My tasks",
+    "emptyTitle": "Nothing assigned to you",
+    "emptyText": "Tasks assigned to you across the company will show up here",
+    "overdue_one": "{{count}}d overdue",
+    "overdue_other": "{{count}}d overdue"
   }
 }

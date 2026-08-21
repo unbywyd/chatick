@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import { NavLink, Outlet, useLocation, useNavigate, useOutletContext, useParams, useSearchParams } from 'react-router-dom'
+import { NavLink, Outlet, useLocation, useNavigate, useParams, useSearchParams } from 'react-router-dom'
 import { useQuery } from '@tanstack/react-query'
 import { useTranslation } from 'react-i18next'
 import { ArrowLeft, ExternalLink, Lock, MessagesSquare, X, FolderX } from 'lucide-react'
@@ -17,8 +17,16 @@ import { ChatPanel, type ChatPanelHandle } from '@/components/chat/ChatPanel'
 import { ProjectSidebar } from '@/components/ProjectSidebar'
 import { Button } from '@/components/ui/button'
 import { ProjectInbox } from '@/components/ProjectInbox'
+import { TaskListSkeleton } from '@/components/ui/skeleton'
+import type { ProjectDetails, ProjectOutletCtx } from './project-context'
 import { ShortcutsCheatSheet } from '@/components/ShortcutsCheatSheet'
 import { useShortcuts } from '@/hooks/useShortcuts'
+
+// Контекст проекта живёт отдельным модулем — иначе вкладки и этот экран
+// импортируют друг друга по кругу. Реэкспорт, чтобы прежние импорты
+// продолжали работать.
+export { useProjectCtx } from './project-context'
+export type { ProjectDetails, ProjectOutletCtx } from './project-context'
 
 /*
   Оболочка приложения — мессенджер, а не набор страниц (SPEC §8.29).
@@ -50,23 +58,6 @@ const WORK_TABS = ['tasks', 'files', 'documents', 'notes', 'resources', 'history
  */
 const OPTIONAL_TABS: Record<string, string> = { releases: 'releases' }
 
-export type ProjectDetails = {
-  /** Состав команды ведётся во внешней системе: видно, но не правится. */
-  membersViaApiOnly?: boolean
-  id: string
-  companyId: string
-  name: string
-  about: string
-  chatRules: string
-  aiConfig: Record<string, unknown>
-  myRole: 'owner' | 'admin' | 'member' | null
-  /** Имя проекта во внешней системе — показывается рядом с нашим. */
-  externalName?: string | null
-  /** Готовая ссылка «туда». null, если интеграция не настроена. */
-  externalLink?: { name: string; url: string } | null
-}
-
-export type ProjectOutletCtx = { project?: ProjectDetails; meId?: string }
 
 export function ProjectLayout() {
   const { t } = useTranslation()
@@ -117,12 +108,72 @@ export function ProjectLayout() {
    * при следующем заходе попадал бы сразу в подсказки без объяснения.
    */
   const [greeted, setGreeted] = useState(false)
+
+  /**
+   * «Показать тур заново» из меню — начинаем с чистого листа.
+   *
+   * tourHidden и greeted живут в памяти этого экрана, а пункт меню сбрасывает
+   * только отметку в базе. Человек, закрывший тур щелчком мимо, нажимал
+   * «показать заново» — и не видел ничего: локальное «спрятан» никуда не
+   * девалось.
+   *
+   * Следить за сменой отметки бесполезно: у того, кто закрыл тур в этом же
+   * сеансе, она уже пустая — менять серверу нечего, и перехода не возникает.
+   * Поэтому меню шлёт прямой сигнал.
+   */
+  useEffect(() => {
+    const replay = () => {
+      setTourHidden(false)
+      setGreeted(false)
+    }
+    window.addEventListener('chatick:tour-replay', replay)
+    return () => window.removeEventListener('chatick:tour-replay', replay)
+  }, [])
+
+  /**
+   * Ссылка на панель чата — объявлена ДО шагов тура, которые ею пользуются.
+   *
+   * Стояла ниже, и шаги захватывали её замыкание пустым: before() молча
+   * ничего не делал, панель оставалась на «Моих задачах», композер не
+   * рендерился, тур не находил цель и не показывался вовсе. Типы такое не
+   * ловят — обращение внутри стрелочной функции, а не при вычислении.
+   */
+  const chatRef = useRef<ChatPanelHandle>(null)
+
   const tourSteps: TourStep[] = useMemo(
     () => [
       // Показываем ПОЛЕ ВВОДА, а не всю колонку: колонка шириной с саму
       // карточку, рядом с ней подсказке не встать — она ложилась поверх.
       // А речь всё равно про «пишите как в обычном чате».
-      { key: 'chat', target: '[data-tour="composer"]', side: 'top', before: () => { if (chatCollapsed) toggleChatCollapsed() } },
+      /**
+       * Начинаем с того, что человек и так видит.
+       *
+       * Панель открывается на «Моих задачах» — с них и начинается работа:
+       * что на мне сейчас. Раньше первым шёл чат, и тур первым же действием
+       * уводил с задач, оставляя человека в другом месте.
+       */
+      {
+        key: 'myTasks',
+        target: '[data-tour="my-tasks"]',
+        side: 'right',
+        before: () => {
+          if (chatCollapsed) toggleChatCollapsed()
+          chatRef.current?.showTasks()
+        },
+      },
+      /**
+       * Чат — вторым, и только теперь переключаем панель.
+       *
+       * Композера на «Моих задачах» нет: писать в задачу отсюда нельзя. Без
+       * переключения цель шага не находится, и Tour молча ничего не рисует —
+       * ни тура, ни ошибки.
+       */
+      {
+        key: 'chat',
+        target: '[data-tour="composer"]',
+        side: 'top',
+        before: () => chatRef.current?.focusChat(),
+      },
       { key: 'tabs', target: '[data-tour="tabs"]' },
       { key: 'projects', target: '[data-tour="projects"]', side: 'right' },
       { key: 'timer', target: '[data-tour="timer"]', side: 'right' },
@@ -131,7 +182,7 @@ export function ProjectLayout() {
       { key: 'company', target: '[data-tour="company-row"]', side: 'right' },
       // Показываем ПЕРЕКЛЮЧАТЕЛЬ каналов, а не всю колонку чата: разговор про
       // ассистента, а подсвечивался общий чат — человек искал глазами не то.
-      { key: 'assistant', target: '[data-tour="modes"]', side: 'top' },
+      { key: 'assistant', target: '[data-tour="modes"]', side: 'top', before: () => chatRef.current?.focusChat() },
     ],
     [chatCollapsed, toggleChatCollapsed],
   )
@@ -152,7 +203,6 @@ export function ProjectLayout() {
   //
   // Ниже xl чат и рабочая зона делят одно место, поэтому «фокус в чат» сперва
   // уводит на /chat — иначе фокус ушёл бы в поле, которого на экране нет.
-  const chatRef = useRef<ChatPanelHandle>(null)
   const focusChatColumn = useCallback(
     (fn: (h: ChatPanelHandle) => void) => {
       if (!wide && id) navigate(`${base}/chat`)
@@ -431,12 +481,14 @@ export function ProjectLayout() {
               </div>
             </div>
           ) : token.status === 'loading' ? (
-            // Ждём токен проекта. Иначе вкладки успевают сходить за данными со
-            // старым токеном — сервер узнаёт проект по нему, и на экране
-            // оказывается содержимое предыдущего проекта.
-            <div className="grid h-full place-items-center p-6">
-              <span className="text-sm text-muted-foreground">…</span>
-            </div>
+            /* Ждём токен проекта. Иначе вкладки успевают сходить за данными
+               со старым токеном — сервер узнаёт проект по нему, и на экране
+               оказывается содержимое предыдущего проекта.
+
+               Скелетон, а не многоточие по центру: пустой экран на тёмной
+               теме читается как поломка, особенно когда ответа ждать больше
+               доли секунды. */
+            <TaskListSkeleton />
           ) : (
             <Outlet context={{ project: project.data, meId: me.data?.id } satisfies ProjectOutletCtx} />
           )}
@@ -449,6 +501,4 @@ export function ProjectLayout() {
   )
 }
 
-export function useProjectCtx() {
-  return useOutletContext<ProjectOutletCtx>()
-}
+

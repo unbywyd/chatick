@@ -62,8 +62,28 @@ describe('меню профиля: группы', () => {
      * сбрасывался, показывать оказывалось нечего, и нажатие читалось как
      * поломка.
      */
-    const item = menu.match(/\{projectId && \(\s*<DropdownMenuItem[\s\S]{0,600}?tour\.replay/)
-    expect(item, 'пункт тура снова показывается вне проекта').not.toBeNull()
+    /**
+     * Ищем ближайшее условие ПЕРЕД пунктом, а не совпадение на длину: тело
+     * обработчика меняется, и проверка «уложись в 600 символов» ломалась от
+     * добавленного комментария, хотя условие стояло на месте.
+     */
+    const at = menu.indexOf("t('tour.replay')")
+    expect(at, 'пункт тура не найден').toBeGreaterThan(-1)
+
+    // Открывающий тег ЭТОГО пункта и то, что стоит прямо перед ним.
+    const item = menu.lastIndexOf('<DropdownMenuItem', at)
+    const before = menu.slice(0, item)
+    const guard = before.lastIndexOf('{projectId && (')
+    const otherItemAfterGuard = before.lastIndexOf('</DropdownMenuItem>')
+
+    expect(guard, 'пункт тура снова показывается вне проекта').toBeGreaterThan(-1)
+    /**
+     * Условие должно относиться именно к этому пункту: между ним и пунктом не
+     * должно быть закрытого чужого пункта. Иначе проверка ловила бы любое
+     * {projectId && (} выше по файлу — а их там несколько, и пункт тура можно
+     * было раскрыть на все экраны при зелёном тесте.
+     */
+    expect(guard, 'между условием и пунктом стоит другой пункт').toBeGreaterThan(otherItemAfterGuard)
   })
 
   it('группы идут в порядке: компания, проект, личное', () => {

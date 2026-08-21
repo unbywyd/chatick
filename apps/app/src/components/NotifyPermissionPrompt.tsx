@@ -50,8 +50,13 @@ export function NotifyPermissionPrompt() {
   }
 
   return (
-    <div className="fixed inset-x-0 bottom-0 z-50 flex justify-center p-3">
-      <div className="flex w-full max-w-md items-center gap-3 rounded-xl border bg-card p-3 shadow-lg">
+    /* Обёртка растянута во всю ширину и прозрачна — клики сквозь неё должны
+       проходить. Без pointer-events-none она ловила их полосой вдоль нижнего
+       края экрана: там и кнопка создания задачи, и поле ввода в чате.
+       Сама карточка клики принимает — иначе кнопки в ней перестали бы
+       нажиматься. */
+    <div className="pointer-events-none fixed inset-x-0 bottom-0 z-50 flex justify-center p-3">
+      <div className="pointer-events-auto flex w-full max-w-md items-center gap-3 rounded-xl border bg-card p-3 shadow-lg">
         <span className="grid size-9 shrink-0 place-items-center rounded-full bg-brand/15 text-brand-ink">
           <Bell className="size-4" />
         </span>
