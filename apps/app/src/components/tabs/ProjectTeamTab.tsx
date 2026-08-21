@@ -1,8 +1,9 @@
 import { useMemo, useState } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { useTranslation } from 'react-i18next'
+import { PageHeader } from '@/components/ui/page-header'
 import { toast } from 'sonner'
-import { ChevronDown, Lock, Mail, Plus, Search, Trash2, UserPlus, X } from 'lucide-react'
+import { ChevronDown, Lock, Mail, Plus, Search, Trash2, UserPlus, Users, X } from 'lucide-react'
 import { api } from '@/lib/api'
 import { cn } from '@/lib/utils'
 import { Input } from '@/components/ui/input'
@@ -150,25 +151,26 @@ export function ProjectTeamTab({
 
   return (
     <div className="page-w p-6">
-      <div className="flex items-center justify-between gap-3">
-        <div>
-          <h1 className="text-xl font-bold tracking-tight">{t('projTeam.title')}</h1>
-          <p className="mt-1 text-sm text-muted-foreground">{t('projTeam.subtitle')}</p>
-          {/* Иначе пропавшая кнопка «Добавить» читается как поломка. */}
-          {managedExternally && (
-            <p className="mt-2 flex items-start gap-2 text-xs text-muted-foreground">
-              <Lock className="mt-0.5 size-3.5 shrink-0" />
-              {t('team.managedExternally', { system: t('team.yourSystem') })}
-            </p>
-          )}
-        </div>
-        {canChangeMembers && (
-          <Button variant="brand" onClick={() => setAdding(true)}>
-            <UserPlus className="size-4" />
-            {t('projTeam.add')}
-          </Button>
-        )}
-      </div>
+      <PageHeader
+        icon={<Users className="size-5" />}
+        title={t('projTeam.title')}
+        subtitle={t('projTeam.subtitle')}
+        trailing={
+          canChangeMembers && (
+            <Button variant="brand" className="shrink-0" onClick={() => setAdding(true)}>
+              <UserPlus className="size-4" />
+              {t('projTeam.add')}
+            </Button>
+          )
+        }
+      />
+      {/* Иначе пропавшая кнопка «Добавить» читается как поломка. */}
+      {managedExternally && (
+        <p className="mt-2 flex items-start gap-2 text-xs text-muted-foreground">
+          <Lock className="mt-0.5 size-3.5 shrink-0" />
+          {t('team.managedExternally', { system: t('team.yourSystem') })}
+        </p>
+      )}
 
       <div className="relative mt-4">
         <Search className="pointer-events-none absolute start-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />

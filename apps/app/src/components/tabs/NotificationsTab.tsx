@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { useTranslation } from 'react-i18next'
+import { PageHeader } from '@/components/ui/page-header'
 import { toast } from 'sonner'
 import { Bell, Clock } from 'lucide-react'
 import { api } from '@/lib/api'
@@ -69,15 +70,13 @@ export function NotificationsTab({
 
   return (
     <div className="page-w space-y-6 p-6">
-      <div>
-        <h1 className="flex items-center gap-2 text-xl font-bold tracking-tight">
-          <Bell className="size-5" />
-          {/* «Уведомления» на обеих страницах не говорило, чьи они: из меню
-              человек проваливался в проект и решал, что настраивает себя. */}
-          {t('notif.titleProject')}
-        </h1>
-        <p className="mt-1 text-sm text-muted-foreground">{t('notif.subtitleProject')}</p>
-      </div>
+      {/* «Уведомления» на обеих страницах не говорило, чьи они: из меню
+          человек проваливался в проект и решал, что настраивает себя. */}
+      <PageHeader
+        icon={<Bell className="size-5" />}
+        title={t('notif.titleProject')}
+        subtitle={t('notif.subtitleProject')}
+      />
 
       {/* Путь к личным настройкам: раньше его не было вовсе, только назад
           через меню. Заодно запоминаем, куда возвращаться. */}

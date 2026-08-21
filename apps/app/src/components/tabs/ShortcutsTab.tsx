@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from 'react'
 import { useTranslation } from 'react-i18next'
+import { PageHeader } from '@/components/ui/page-header'
 import { toast } from 'sonner'
 import { Keyboard, RotateCcw, X } from 'lucide-react'
 import {
@@ -36,11 +37,7 @@ export function ShortcutsTab() {
 
   return (
     <div className="page-w p-6">
-      <div className="flex items-center gap-2">
-        <Keyboard className="size-5 text-muted-foreground" />
-        <h1 className="text-lg font-bold">{t('shortcuts.title')}</h1>
-      </div>
-      <p className="mt-1 text-sm text-muted-foreground">{t('shortcuts.hint')}</p>
+      <PageHeader icon={<Keyboard className="size-5" />} title={t('shortcuts.title')} subtitle={t('shortcuts.hint')} />
 
       <div className="mt-6 space-y-6">
         {groups.map((g) => (

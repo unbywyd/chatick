@@ -9,6 +9,7 @@ import { cn } from '@/lib/utils'
 import { Button } from '@/components/ui/button'
 import { Select, SelectTrigger, SelectValue, SelectContent, SelectItem } from '@/components/ui/select'
 import { AiBehaviorFields } from '@/components/AiBehaviorFields'
+import { PageHeader } from '@/components/ui/page-header'
 import { DEFAULT_AI_CONFIG, type AiConfig } from '@/components/ProjectSettingsForm'
 
 /**
@@ -129,13 +130,7 @@ export function AiUsageTab({ projectId, isAdmin }: { projectId: string; isAdmin:
 
   return (
     <div className="page-w space-y-8 p-6">
-      <div>
-        <h1 className="flex items-center gap-2 text-xl font-bold tracking-tight">
-          <Bot className="size-5" />
-          {t('ai.title')}
-        </h1>
-        <p className="mt-1 text-sm text-muted-foreground">{t('ai.subtitle')}</p>
-      </div>
+      <PageHeader icon={<Bot className="size-5" />} title={t('ai.title')} subtitle={t('ai.subtitle')} />
 
       <nav className="flex gap-1 border-b">
         {AI_TABS.map((key) => (

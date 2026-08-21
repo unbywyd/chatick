@@ -6,15 +6,16 @@ import { join } from 'node:path'
  * Обвязка страниц проекта: ширина контейнера и кнопка «назад».
  *
  * Страницы вне полосы вкладок — горячие клавиши, ИИ, уведомления, команда —
- * попадаются из меню профиля. Ни одна вкладка при этом не подсвечена, а
- * стрелка «назад» пряталась на широком экране как ненужная рядом с чатом:
- * выхода со страницы не оставалось вовсе.
+ * открываются из меню профиля. Ни одна вкладка при этом не подсвечена, и уйти
+ * с них было нечем: единственная стрелка жила в панели вкладок, вела всегда в
+ * чат и на широком экране пряталась вовсе.
  *
- * И вторая беда: стрелка всегда вела в чат, куда бы человек ни шёл. Пришёл из
- * команды проекта — возвращали в чат.
+ * Стрелка теперь в самой странице, в одном ряду с заголовком — как на
+ * странице профиля, откуда и взят образец.
  */
 
 const app = (f: string) => readFileSync(join(import.meta.dirname, '../../../app/src', f), 'utf8')
+const header = app('components/ui/page-header.tsx')
 const screen = app('screens/ProjectScreen.tsx')
 
 const PAGES = ['ShortcutsTab', 'AiUsageTab', 'NotificationsTab', 'ProjectTeamTab'] as const
@@ -33,10 +34,25 @@ describe('страницы проекта: одна ширина', () => {
   })
 })
 
-describe('кнопка «назад» на странице проекта', () => {
+describe('заголовок страницы со стрелкой «назад»', () => {
+  it('стрелка стоит на всех четырёх страницах', () => {
+    // Копипастой их было бы четыре разных: у горячих клавиш заголовок был
+    // даже другого размера, чем у соседей.
+    for (const name of PAGES) {
+      expect(app(`components/tabs/${name}.tsx`), `${name}: нет общего заголовка`).toMatch(/<PageHeader/)
+    }
+  })
+
+  it('стрелка внутри страницы, а не в полосе вкладок', () => {
+    // В навбаре кнопка осталась своя — «назад в чат», когда чат не помещается
+    // рядом. Она про другое и живёт отдельно.
+    expect(header).toMatch(/<ArrowLeft/)
+    expect(screen, 'кнопка навбара снова притворяется общей').toMatch(/title=\{t\('tabs\.chat'\)\}/)
+  })
+
   it('идёт по настоящей истории, когда она есть', () => {
-    expect(screen, 'кнопка снова ведёт в одно жёстко заданное место').toMatch(
-      /locationKey === 'default' \? navigate\(`\$\{base\}\/tasks`\) : navigate\(-1\)/,
+    expect(header, 'кнопка снова ведёт в одно жёстко заданное место').toMatch(
+      /locationKey === 'default' && companyId && id \? navigate\(`\/c\/\$\{companyId\}\/p\/\$\{id\}\/tasks`\) : navigate\(-1\)/,
     )
   })
 
@@ -46,19 +62,12 @@ describe('кнопка «назад» на странице проекта', () 
      * вышвырнул бы на предыдущий сайт. React Router помечает первую запись
      * ключом 'default'; читаем именно его.
      */
-    expect(screen).toMatch(/key: locationKey \} = useLocation\(\)/)
-  })
-
-  it('на страницах вне вкладок кнопка видна на любой ширине', () => {
-    // Иначе на широком экране уйти с них нечем: подсветки нет, кнопки нет.
-    expect(screen).toMatch(/const OFF_TAB_PAGES = \[[\s\S]*?'shortcuts'[\s\S]*?\] as const/)
-    expect(screen).toMatch(/offTab \? '' : 'xl:hidden'/)
+    expect(header).toMatch(/const \{ key: locationKey \} = useLocation\(\)/)
   })
 
   it('подпись не обещает чат', () => {
     // Кнопка ведёт назад по истории — подпись «Чат» была бы враньём.
-    const btn = screen.match(/onClick=\{\(\) => \(locationKey[\s\S]{0,600}?title=\{t\('([^']+)'\)\}/)
-    expect(btn?.[1], 'подпись кнопки не найдена').toBeDefined()
-    expect(btn![1]).not.toBe('tabs.chat')
+    expect(header).toMatch(/title=\{t\('connect\.back'\)\}/)
+    expect(header).not.toMatch(/tabs\.chat/)
   })
 })
