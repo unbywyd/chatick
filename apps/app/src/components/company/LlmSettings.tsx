@@ -69,7 +69,14 @@ export function LlmSettings({ companyId, isAdmin }: { companyId: string; isAdmin
     mutationFn: () =>
       api(`/api/v1/companies/${companyId}/llm`, {
         method: 'PUT',
-        body: JSON.stringify({ provider: provider ?? status.data?.provider, model: model || undefined, apiKey: apiKey || undefined }),
+        // vision шлём всегда: сервер выключает его, если поле не пришло, и
+        // сохранение модели молча гасило бы только что включённую галочку.
+        body: JSON.stringify({
+          provider: provider ?? status.data?.provider,
+          model: model || undefined,
+          apiKey: apiKey || undefined,
+          vision,
+        }),
       }),
     onSuccess: () => {
       toast.success(t('llm.saved'))
@@ -84,6 +91,19 @@ export function LlmSettings({ companyId, isAdmin }: { companyId: string; isAdmin
     onSuccess: () => qc.invalidateQueries({ queryKey: ['company-llm', companyId] }),
     onError: (e) => toast.error(e instanceof Error ? e.message : String(e)),
   })
+
+  /**
+   * Можно ли сохранять — одним условием на кнопку и на отправку формы.
+   *
+   * Раньше их было два, и они разошлись: кнопку починили, проверку в onSubmit
+   * забыли. Кнопка стала активной, форма отправлялась, обработчик молча
+   * отказывался сохранять — нажатие без единого следа.
+   *
+   * Ключ обязателен, только пока его нет: меняя одну модель, человек не должен
+   * вводить его заново — мы его даже не показываем.
+   */
+  const canSave =
+    Boolean(provider ?? status.data?.provider) && (Boolean(apiKey) || Boolean(status.data?.configured)) && !save.isPending
 
   if (status.isLoading) return <p className="text-sm text-muted-foreground">…</p>
 
@@ -135,7 +155,9 @@ export function LlmSettings({ companyId, isAdmin }: { companyId: string; isAdmin
           className="space-y-3 rounded-lg border p-4"
           onSubmit={(e) => {
             e.preventDefault()
-            if ((provider ?? status.data?.provider) && apiKey) save.mutate()
+            // Те же условия, что и у кнопки. Разойдись они — кнопка активна, а
+            // отправка молча ничего не делает: клик в пустоту без ошибки.
+            if (canSave) save.mutate()
           }}
         >
           <div className="grid gap-3 sm:grid-cols-2">
@@ -208,9 +230,7 @@ export function LlmSettings({ companyId, isAdmin }: { companyId: string; isAdmin
             <p className="mt-1 text-xs text-muted-foreground">{t('llm.keyNote')}</p>
           </div>
           <div className="flex justify-end">
-            <Button variant="brand" type="submit" // Ключ обязателен, только если его ещё нет: меняя одну модель, человек
-              // не должен вводить его заново — мы его даже не показываем.
-              disabled={!(provider ?? status.data?.provider) || (!apiKey && !status.data?.configured) || save.isPending}>
+            <Button variant="brand" type="submit" disabled={!canSave}>
               {save.isPending && <Loader2 className="size-3.5 animate-spin" />}
               {save.isPending ? t('llm.testing') : t('llm.saveTest')}
             </Button>

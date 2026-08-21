@@ -1269,8 +1269,9 @@ companiesRoute.put(
     if (!effectiveKey) return c.json({ error: 'API key required' }, 400)
 
     // проверяем живым запросом до сохранения: и ключ, и что модель существует
-    const ok = await testLlm({ provider, model: resolvedModel, apiKey: effectiveKey })
-    if (!ok) return c.json({ error: 'LLM check failed — verify the key and model' }, 422)
+    const check = await testLlm({ provider, model: resolvedModel, apiKey: effectiveKey })
+    // Причину отдаём как есть: провайдер объясняет точнее, чем мы угадаем.
+    if (!check.ok) return c.json({ error: check.reason }, 422)
 
     await db
       .update(companies)

@@ -569,10 +569,59 @@ export async function completeStream(
   }
 }
 
-/** Быстрая проверка ключа при сохранении настроек. */
-export async function testLlm(cfg: LlmConfig): Promise<boolean> {
-  const r = await complete(cfg, { system: 'Reply with exactly: ok', user: 'ping', maxTokens: 8 })
-  return r !== null
+/**
+ * Быстрая проверка ключа и модели при сохранении настроек.
+ *
+ * Возвращает причину отказа, а не голое «нет». Провайдер объясняет внятно
+ * («модели нет», «ключ протух», «нет доступа»), и терять это объяснение
+ * нельзя: без него человек видит общее «проверьте ключ и модель» и гадает,
+ * что из двух не так. Прошлый раз это стоило нам отладки вслепую.
+ */
+export async function testLlm(cfg: LlmConfig): Promise<{ ok: true } | { ok: false; reason: string }> {
+  const p = LLM_PROVIDERS[cfg.provider]
+  const ping = [{ role: 'user', content: 'ping' }]
+  try {
+    // Два провайдера — два запроса, а не один с тройными развилками внутри:
+    // у них разные заголовки, адреса и имя лимита токенов.
+    const res =
+      p.kind === 'anthropic'
+        ? await fetch(`${p.baseUrl}/messages`, {
+            method: 'POST',
+            headers: { 'x-api-key': cfg.apiKey, 'anthropic-version': '2023-06-01', 'content-type': 'application/json' },
+            body: JSON.stringify({ model: cfg.model, max_tokens: 8, messages: ping }),
+          })
+        : await fetch(`${p.baseUrl}/chat/completions`, {
+            method: 'POST',
+            headers: { Authorization: `Bearer ${cfg.apiKey}`, 'content-type': 'application/json' },
+            // Лимит токенов только через tokenLimit: у новых моделей OpenAI
+            // поле называется иначе, и прямое имя ломает проверку на них.
+            body: JSON.stringify({ model: cfg.model, ...tokenLimit(cfg.model, 8), messages: ping }),
+          })
+    if (res.ok) return { ok: true }
+    return { ok: false, reason: providerError(await res.text().catch(() => '')) || `HTTP ${res.status}` }
+  } catch (err) {
+    // Сеть не дошла до провайдера — это не «неверный ключ», и говорить так нельзя.
+    return { ok: false, reason: err instanceof Error ? err.message : String(err) }
+  }
+}
+
+/**
+ * Вытащить читаемое сообщение из ответа провайдера.
+ *
+ * У OpenAI-совместимых оно в `error.message`, у Anthropic там же. Если формат
+ * незнакомый — отдаём первые строки как есть: сырой текст полезнее пустоты,
+ * но целиком тело возвращать нельзя, там бывает страница на килобайты.
+ */
+function providerError(body: string): string {
+  try {
+    const j = JSON.parse(body) as { error?: { message?: string } | string }
+    const e = j.error
+    const msg = typeof e === 'string' ? e : e?.message
+    if (msg) return msg.slice(0, 300)
+  } catch {
+    /* не JSON — ниже вернём как есть */
+  }
+  return body.trim().slice(0, 300)
 }
 
 const LANG_NAMES: Record<string, string> = { en: 'English', ru: 'Russian', he: 'Hebrew' }
