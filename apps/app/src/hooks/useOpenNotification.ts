@@ -74,7 +74,7 @@ export function useOpenNotification(currentProjectId?: string) {
   const companyOf = (projectId: string) => projectCompany.data?.get(projectId)
 
   const markRead = useMutation({
-    mutationFn: (body: { ids?: string[]; projectId?: string; all?: boolean }) =>
+    mutationFn: (body: { ids?: string[]; projectId?: string; all?: boolean; companyId?: string }) =>
       api('/api/v1/inbox/read', { method: 'POST', body: JSON.stringify(body) }),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ['inbox'] })

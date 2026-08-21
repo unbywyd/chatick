@@ -1,16 +1,16 @@
-import { useEffect, useRef } from 'react'
+import { useState } from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { useTranslation } from 'react-i18next'
-import { Check, X } from 'lucide-react'
+import { ArrowRight, Check, X } from 'lucide-react'
 import { api } from '@/lib/api'
 import { cn } from '@/lib/utils'
 import { Avatar } from '@/components/ui/avatar'
 import { Button } from '@/components/ui/button'
-import { useSeenLongEnough } from '@/hooks/useSeenLongEnough'
 // Формат адреса один на всё приложение: своя копия здесь уже расходилась
 // с общей — она не знала про вкладку /chat в ссылках старого вида.
 import { normalizeLink } from '@/hooks/useOpenNotification'
+import { NotificationDialog } from '@/components/NotificationDialog'
 
 // Полоса «что меня касается» внутри проекта (SPEC §8.22).
 //
@@ -66,7 +66,7 @@ export function ProjectInbox({
   })
 
   const markRead = useMutation({
-    mutationFn: (body: { ids?: string[]; projectId?: string; all?: boolean }) =>
+    mutationFn: (body: { ids?: string[]; projectId?: string; all?: boolean; companyId?: string }) =>
       api('/api/v1/inbox/read', { method: 'POST', body: JSON.stringify(body) }),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ['inbox'] })
@@ -82,36 +82,51 @@ export function ProjectInbox({
   const items = (inbox.data?.items ?? []).filter((n) => (projectId ? n.projectId === projectId : true) && !n.readAt)
 
   /**
-   * Разглядел — значит прочитал.
+   * Прочитанным уведомление делает только человек.
    *
-   * Копим id и отправляем одним запросом: карточки досматриваются подряд, и
-   * запрос на каждую — это залп на всю ленту. Плюс каждый ответ дёргает
-   * invalidateQueries, а перерисовка ленты посреди чтения сбрасывает
-   * наблюдение у остальных карточек.
+   * Была автопометка: карточка гасла, продержавшись 2.5 секунды на экране.
+   * Задумка «разглядел — значит прочитал» на деле работала иначе. Лента
+   * горизонтальная, на широком экране видно сразу несколько карточек, и они
+   * гасли пачками просто оттого, что человек смотрит на страницу. На обзоре
+   * компании, где лента собирает все проекты, за десяток секунд молча уходило
+   * два десятка уведомлений — ни одного из них не открывали.
+   *
+   * Хуже всего, что потерю нельзя ни заметить, ни отменить: уведомление
+   * исчезает без следа, и вернуть его можно только правкой в базе.
+   *
+   * Остались два явных действия: переход по уведомлению и кнопка «прочитать».
    */
-  const pending = useRef(new Set<string>())
-  const flushAt = useRef<number | null>(null)
-  const watch = useSeenLongEnough({
-    onSeen: (id) => {
-      pending.current.add(id)
-      if (flushAt.current !== null) return
-      flushAt.current = window.setTimeout(() => {
-        flushAt.current = null
-        const ids = [...pending.current]
-        pending.current.clear()
-        if (ids.length) markRead.mutate({ ids })
-      }, 800)
-    },
-  })
-  useEffect(() => () => { if (flushAt.current !== null) clearTimeout(flushAt.current) }, [])
+
+  /**
+   * Открытое окно деталей: null — закрыто.
+   *
+   * Объявлено ДО раннего return: без уведомлений компонент выходил раньше, и
+   * хук не вызывался вовсе. Стоило первому уведомлению прийти — число хуков
+   * менялось между отрисовками, и React падал с «Rendered more hooks than
+   * during the previous render».
+   */
+  const [details, setDetails] = useState<Notification | null>(null)
 
   if (!items.length) return null
 
-  // Сначала переход, потом пометка: карточка не должна исчезать раньше, чем
-  // человек окажется на месте — иначе клик выглядит как «просто пропало».
-  const open = (n: Notification) => {
+  /**
+   * Клик открывает детали, а не гасит уведомление.
+   *
+   * Прежде клик сразу вёл по ссылке и помечал прочитанным. Если ссылки не
+   * было, normalizeLink подставлял /tasks — человек тыкал в уведомление и
+   * оказывался неизвестно где, а само оно исчезало. Прочитать длинный текст
+   * было негде: в карточку он не влезает.
+   *
+   * Прочитанным делаем при ЗАКРЫТИИ окна: человек прочёл и закончил.
+   */
+  const close = () => {
+    if (details) markRead.mutate({ ids: [details.id] })
+    setDetails(null)
+  }
+  const goTo = (n: Notification) => {
     navigate(normalizeLink(n.link, n.projectId, companyId))
     markRead.mutate({ ids: [n.id] })
+    setDetails(null)
   }
 
   return (
@@ -129,10 +144,23 @@ export function ProjectInbox({
           variant="ghost"
           size="sm"
           className="h-6 gap-1 px-2 text-xs text-muted-foreground"
-          onClick={() => markRead.mutate(projectId ? { projectId } : { all: true })}
+          // На странице компании гасим только её проекты: кнопка стоит под
+          // лентой одной компании, а { all } стирал бы и остальные.
+          onClick={() => markRead.mutate(projectId ? { projectId } : { all: true, companyId })}
         >
           <Check className="size-3" />
           {t('inbox.markAllRead')}
+        </Button>
+        {/* Когда их сотня, листать вбок бессмысленно: разбирать такую пачку
+            идут на отдельный экран, где есть фильтры и вертикальный список. */}
+        <Button
+          variant="ghost"
+          size="sm"
+          className="h-6 gap-1 px-2 text-xs text-muted-foreground"
+          onClick={() => navigate('/inbox')}
+        >
+          {t('inbox.seeAll')}
+          <ArrowRight className="size-3 rtl:-scale-x-100" />
         </Button>
       </div>
 
@@ -140,17 +168,19 @@ export function ProjectInbox({
           список отодвинул бы работу вниз.
 
           pb-3 вместо pb-2 — под полосу прокрутки: она рисуется поверх нижнего
-          края карточек и срезала их, а на узкой полосе за неё ещё и не
-          ухватиться. touch-pan-x — чтобы на трекпаде и тачскрине лента
-          листалась вбок, а не пыталась прокрутить страницу. */}
-      <div className="flex touch-pan-x gap-2 overflow-x-auto overscroll-x-contain px-3 pb-3 pt-1.5">
+          края карточек и срезала их. touch-pan-x — чтобы на трекпаде и
+          тачскрине лента листалась вбок, а не пыталась прокрутить страницу.
+
+          scrollbar-thin: полоса по умолчанию волосяная, и при сотне карточек
+          за неё не ухватиться мышью — а именно мышью её и тянут, когда
+          карточек много. */}
+      <div className="scrollbar-thin flex touch-pan-x gap-2 overflow-x-auto overscroll-x-contain px-3 pb-3 pt-1.5">
         {items.map((n) => (
           <div
             key={n.id}
-            ref={watch(n.id)}
             className="flex w-64 shrink-0 items-start gap-2 rounded-lg border bg-card p-2 transition-colors hover:border-brand/50"
           >
-            <button onClick={() => open(n)} className="flex min-w-0 flex-1 items-start gap-2 text-start">
+            <button onClick={() => setDetails(n)} className="flex min-w-0 flex-1 items-start gap-2 text-start">
               <Avatar name={n.actor?.name ?? 'AI'} src={n.actor?.avatarUrl} size={24} />
               <span className="min-w-0 flex-1">
                 {/* Ни block, ни truncate рядом с line-clamp: оба ставят свой
@@ -183,6 +213,16 @@ export function ProjectInbox({
           </div>
         ))}
       </div>
+
+      {details && (
+        <NotificationDialog
+          notification={details}
+          onClose={close}
+          // Кнопки перехода нет, когда ссылки нет: normalizeLink подставил бы
+          // /tasks, и «перейти» уводило бы в никуда конкретное.
+          onOpen={details.link ? () => goTo(details) : undefined}
+        />
+      )}
     </div>
   )
 }

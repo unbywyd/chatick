@@ -162,13 +162,36 @@ inboxRoute.post(
       // человек уже видел.
       entityType: z.string().optional(),
       entityId: z.string().optional(),
+      /**
+       * «Прочитать все» под лентой компании — только её проекты.
+       *
+       * Без этого кнопка гасила уведомления ВСЕХ компаний: человек видел
+       * ленту одной, а стирал и остальные, о чём узнавал по опустевшему
+       * счётчику в другом месте.
+       */
+      companyId: z.string().optional(),
     }),
   ),
   async (c) => {
     const { sub } = c.get('session')
-    const { ids, projectId, all, entityType, entityId } = c.req.valid('json')
+    const { ids, projectId, all, entityType, entityId, companyId } = c.req.valid('json')
     const now = new Date()
-    if (all) {
+    if (all && companyId) {
+      // Границы компании: гасим только то, что относится к её проектам.
+      await db
+        .update(notifications)
+        .set({ readAt: now })
+        .where(
+          and(
+            eq(notifications.userId, sub),
+            isNull(notifications.readAt),
+            inArray(
+              notifications.projectId,
+              db.select({ id: projects.id }).from(projects).where(eq(projects.companyId, companyId)),
+            ),
+          ),
+        )
+    } else if (all) {
       await db.update(notifications).set({ readAt: now }).where(and(eq(notifications.userId, sub), isNull(notifications.readAt)))
     } else if (entityType && entityId) {
       await db

@@ -1,5 +1,6 @@
-import { useMemo } from 'react'
-import { useNavigate } from 'react-router-dom'
+import { useMemo, useState } from 'react'
+import { useNavigate, useParams } from 'react-router-dom'
+import { NotificationDialog } from '@/components/NotificationDialog'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { useTranslation } from 'react-i18next'
 import { toast } from 'sonner'
@@ -22,6 +23,23 @@ export function NotificationBell({ currentProjectId }: { currentProjectId?: stri
   const { t, i18n } = useTranslation()
   const navigate = useNavigate()
   const qc = useQueryClient()
+  /**
+   * Компания из адреса: /start/:companyId и /c/:companyId/p/:id.
+   *
+   * На экране выбора компании (/start) её нет — там колокольчик и правда
+   * показывает всё подряд, и «прочитать все» честно относится ко всему.
+   * Внутри компании список тот же, но кнопка не должна выходить за её
+   * пределы: человек видит одну компанию, а гасил бы и остальные.
+   */
+  const { companyId } = useParams()
+  /**
+   * Детали перед переходом — как в ленте проекта.
+   *
+   * Клик сразу уводил и гасил уведомление, а без ссылки уводил в /tasks:
+   * человек тыкал и оказывался неизвестно где. Теперь сначала показываем, о
+   * чём речь, а переход — отдельным действием.
+   */
+  const [details, setDetails] = useState<InboxNotification | null>(null)
 
   const inbox = useQuery({
     queryKey: ['inbox'],
@@ -61,7 +79,10 @@ export function NotificationBell({ currentProjectId }: { currentProjectId?: stri
         <div className="flex shrink-0 items-center justify-between border-b px-3 py-2">
           <span className="text-sm font-semibold">{t('inbox.title')}</span>
           {unread > 0 && (
-            <button onClick={() => markRead.mutate({ all: true })} className="text-xs text-muted-foreground hover:text-foreground">
+            <button
+              onClick={() => markRead.mutate(companyId ? { all: true, companyId } : { all: true })}
+              className="text-xs text-muted-foreground hover:text-foreground"
+            >
               {t('inbox.markAllRead')}
             </button>
           )}
@@ -97,7 +118,7 @@ export function NotificationBell({ currentProjectId }: { currentProjectId?: stri
               {g.items.map((n) => (
                 <li key={n.id}>
                   <button
-                    onClick={() => openNotification(n)}
+                    onClick={() => setDetails(n)}
                     className={cn('flex w-full items-start gap-2 px-3 py-2 text-start transition-colors hover:bg-accent', !n.readAt && 'bg-brand/5')}
                   >
                     <Avatar name={n.actor?.name ?? 'AI'} src={n.actor?.avatarUrl} size={22} className="mt-0.5" />
@@ -125,6 +146,25 @@ export function NotificationBell({ currentProjectId }: { currentProjectId?: stri
           {t('inbox.seeAll')}
         </button>
       </DropdownMenuContent>
+      {details && (
+        <NotificationDialog
+          notification={details}
+          onClose={() => {
+            markRead.mutate({ ids: [details.id] })
+            setDetails(null)
+          }}
+          // Переход оставляем прежнему обработчику: он умеет менять проект и
+          // перезагружать приложение, когда уведомление из другого.
+          onOpen={
+            details.link
+              ? () => {
+                  setDetails(null)
+                  void openNotification(details)
+                }
+              : undefined
+          }
+        />
+      )}
     </DropdownMenu>
   )
 }

@@ -2,6 +2,7 @@ import { useMemo, useState } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import { useTranslation } from 'react-i18next'
 import { useNavigate } from 'react-router-dom'
+import { NotificationDialog } from '@/components/NotificationDialog'
 import { ArrowLeft, Bell, Check, ExternalLink } from 'lucide-react'
 import { api } from '@/lib/api'
 import { cn } from '@/lib/utils'
@@ -35,6 +36,8 @@ export function InboxScreen() {
   })
 
   const { openNotification, openProject, markRead } = useOpenNotification()
+  /** Детали перед переходом — как в ленте и колокольчике. */
+  const [details, setDetails] = useState<Parameters<typeof openNotification>[0] | null>(null)
 
   const items = inbox.data?.items ?? []
 
@@ -105,7 +108,7 @@ export function InboxScreen() {
         {shown.map((n) => (
           <li key={n.id} className={cn('group relative', !n.readAt && 'bg-brand/5')}>
             <button
-              onClick={() => openNotification(n)}
+              onClick={() => setDetails(n)}
               className="flex w-full items-start gap-3 p-3 text-start transition-colors hover:bg-accent"
             >
               <Avatar name={n.actor?.name ?? 'AI'} src={n.actor?.avatarUrl} size={32} className="mt-0.5" />
@@ -152,6 +155,24 @@ export function InboxScreen() {
           </li>
         ))}
       </ul>
+
+      {details && (
+        <NotificationDialog
+          notification={details}
+          onClose={() => {
+            markRead.mutate({ ids: [details.id] })
+            setDetails(null)
+          }}
+          onOpen={
+            details.link
+              ? () => {
+                  setDetails(null)
+                  void openNotification(details)
+                }
+              : undefined
+          }
+        />
+      )}
     </div>
   )
 }

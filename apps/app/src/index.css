@@ -632,6 +632,27 @@
   .scrollbar-none::-webkit-scrollbar {
     display: none;
   }
+
+  /* Обратный случай: ленту уведомлений тянут мышью, когда карточек много, и
+     волосяная полоса по умолчанию для этого не годится — за неё не
+     ухватиться. Делаем её заметной, но не навязчивой. */
+  .scrollbar-thin {
+    scrollbar-width: thin;
+    scrollbar-color: var(--border) transparent;
+  }
+  .scrollbar-thin::-webkit-scrollbar {
+    height: 8px;
+  }
+  .scrollbar-thin::-webkit-scrollbar-track {
+    background: transparent;
+  }
+  .scrollbar-thin::-webkit-scrollbar-thumb {
+    background-color: var(--border);
+    border-radius: 4px;
+  }
+  .scrollbar-thin:hover::-webkit-scrollbar-thumb {
+    background-color: var(--muted-foreground);
+  }
 }
 
 /* --- Подсветка кода -------------------------------------------------------
