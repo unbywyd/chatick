@@ -69,7 +69,7 @@ export function LlmSettings({ companyId, isAdmin }: { companyId: string; isAdmin
     mutationFn: () =>
       api(`/api/v1/companies/${companyId}/llm`, {
         method: 'PUT',
-        body: JSON.stringify({ provider: provider ?? status.data?.provider, model: model || undefined, apiKey }),
+        body: JSON.stringify({ provider: provider ?? status.data?.provider, model: model || undefined, apiKey: apiKey || undefined }),
       }),
     onSuccess: () => {
       toast.success(t('llm.saved'))
@@ -208,7 +208,9 @@ export function LlmSettings({ companyId, isAdmin }: { companyId: string; isAdmin
             <p className="mt-1 text-xs text-muted-foreground">{t('llm.keyNote')}</p>
           </div>
           <div className="flex justify-end">
-            <Button variant="brand" type="submit" disabled={!(provider ?? status.data?.provider) || !apiKey || save.isPending}>
+            <Button variant="brand" type="submit" // Ключ обязателен, только если его ещё нет: меняя одну модель, человек
+              // не должен вводить его заново — мы его даже не показываем.
+              disabled={!(provider ?? status.data?.provider) || (!apiKey && !status.data?.configured) || save.isPending}>
               {save.isPending && <Loader2 className="size-3.5 animate-spin" />}
               {save.isPending ? t('llm.testing') : t('llm.saveTest')}
             </Button>

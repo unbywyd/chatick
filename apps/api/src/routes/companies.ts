@@ -14,7 +14,7 @@ import { sendInviteMail } from '../lib/mail-invite.js'
 import { projectLocale } from '../lib/locale.js'
 import { issueKey, listKeys, revokeKey } from '../lib/company-key.js'
 import { newSecret } from '../lib/webhooks.js'
-import { encrypt } from '../lib/crypto.js'
+import { decrypt, encrypt } from '../lib/crypto.js'
 import { companyMail, sendVia, dropTransport } from '../lib/company-mail.js'
 import { companyStorageFor } from '../lib/s3.js'
 import { membersLockedForCompany, MEMBERS_LOCKED } from '../lib/members-locked.js'
@@ -1238,7 +1238,14 @@ companiesRoute.put(
     z.object({
       provider: z.enum(Object.keys(LLM_PROVIDERS) as [LlmProvider, ...LlmProvider[]]),
       model: z.string().min(1).max(120).optional(),
-      apiKey: z.string().min(8).max(512),
+      /**
+       * Ключ необязателен, если он уже сохранён.
+       *
+       * Иначе сменить одну модель было нельзя: поле ключа пустое (мы его не
+       * показываем), кнопка сохранения оставалась мёртвой, и человек решал,
+       * что инпут «не принимает» название модели.
+       */
+      apiKey: z.string().min(8).max(512).optional(),
       /** Разрешить модели смотреть картинки. Выключено, пока не включат. */
       vision: z.boolean().optional(),
     }),
@@ -1251,13 +1258,29 @@ companiesRoute.put(
     const { provider, model, apiKey, vision } = c.req.valid('json')
     const resolvedModel = model || LLM_PROVIDERS[provider].defaultModel
 
-    // проверяем ключ живым запросом до сохранения
-    const ok = await testLlm({ provider, model: resolvedModel, apiKey })
+    /**
+     * Новый ключ или уже сохранённый.
+     *
+     * Меняя только модель, человек не должен вводить ключ заново — мы его ему
+     * даже не показываем, а требовать вслепую значит требовать невозможного.
+     */
+    const current = await db.query.companies.findFirst({ where: eq(companies.id, companyId) })
+    const effectiveKey = apiKey || (current?.llmKeyEncrypted ? decrypt(current.llmKeyEncrypted) : null)
+    if (!effectiveKey) return c.json({ error: 'API key required' }, 400)
+
+    // проверяем живым запросом до сохранения: и ключ, и что модель существует
+    const ok = await testLlm({ provider, model: resolvedModel, apiKey: effectiveKey })
     if (!ok) return c.json({ error: 'LLM check failed — verify the key and model' }, 422)
 
     await db
       .update(companies)
-      .set({ llmProvider: provider, llmModel: resolvedModel, llmKeyEncrypted: encrypt(apiKey), llmVision: vision === true })
+      .set({
+        llmProvider: provider,
+        llmModel: resolvedModel,
+        // Ключ перезаписываем только когда прислали новый.
+        ...(apiKey ? { llmKeyEncrypted: encrypt(apiKey) } : {}),
+        llmVision: vision === true,
+      })
       .where(eq(companies.id, companyId))
     return c.json({ ok: true, provider, model: resolvedModel })
   },

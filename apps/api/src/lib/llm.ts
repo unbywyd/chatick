@@ -70,6 +70,24 @@ function tokenLimit(model: string, value: number): Record<string, number> {
   return needsNewName ? { max_completion_tokens: value } : { max_tokens: value }
 }
 
+/**
+ * Рассуждающие модели и вызов инструментов.
+ *
+ * Свежие модели OpenAI по умолчанию «думают» перед ответом, и в /chat/completions
+ * это несовместимо с function tools: провайдер отвечает 400 и сам подсказывает
+ * решение — reasoning_effort: 'none'.
+ *
+ * Шлём только тем, кому нужно. Остальные провайдеры лишний параметр обычно
+ * игнорируют (проверено на DeepSeek), но «обычно» — не основание отправлять
+ * его всем: один строгий провайдер, и сломается уже работающий чат.
+ *
+ * Ограничение относится к инструментам, поэтому и параметр добавляем только к
+ * запросам с ними: для обычного ответа рассуждение полезно и мешать ему нечем.
+ */
+function toolsCompat(model: string): Record<string, string> {
+  return /^(o[1-9]|gpt-[5-9])/.test(model.toLowerCase()) ? { reasoning_effort: 'none' } : {}
+}
+
 export type LlmProvider = keyof typeof LLM_PROVIDERS
 
 export type LlmConfig = {
@@ -402,7 +420,7 @@ export async function completeWithTools(
       const res = await fetch(`${p.baseUrl}/chat/completions`, {
         method: 'POST',
         headers: { Authorization: `Bearer ${cfg.apiKey}`, 'content-type': 'application/json' },
-        body: JSON.stringify({ model: cfg.model, ...tokenLimit(cfg.model, opts.maxTokens ?? 1500), messages: msgs, tools }),
+        body: JSON.stringify({ model: cfg.model, ...tokenLimit(cfg.model, opts.maxTokens ?? 1500), ...toolsCompat(cfg.model), messages: msgs, tools }),
       })
       if (!res.ok) {
         console.error('[llm] tools failed:', res.status, await res.text().catch(() => ''))
