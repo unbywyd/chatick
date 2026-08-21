@@ -916,7 +916,10 @@
     "photo": "Фото",
     "photoHint": "Нажмите на снимок, чтобы заменить",
     "name": "Имя",
-    "email": "Почта"
+    "email": "Почта",
+    "groupCompany": "Компания",
+    "groupProject": "Проект",
+    "groupPersonal": "Личное"
   },
   "projSwitch": {
     "search": "Поиск проектов…",

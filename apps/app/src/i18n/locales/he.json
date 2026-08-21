@@ -911,7 +911,10 @@
     "photo": "תמונה",
     "photoHint": "לחצו על התמונה כדי להחליף",
     "name": "שם",
-    "email": "דוא״ל"
+    "email": "דוא״ל",
+    "groupCompany": "חברה",
+    "groupProject": "פרויקט",
+    "groupPersonal": "אישי"
   },
   "projSwitch": {
     "search": "חיפוש פרויקטים…",

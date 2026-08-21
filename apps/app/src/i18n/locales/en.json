@@ -910,7 +910,10 @@
     "photo": "Photo",
     "photoHint": "Click the picture to replace it",
     "name": "Name",
-    "email": "Email"
+    "email": "Email",
+    "groupCompany": "Company",
+    "groupProject": "Project",
+    "groupPersonal": "Personal"
   },
   "projSwitch": {
     "search": "Search projects…",

@@ -12,6 +12,7 @@ import {
   DropdownMenuContent,
   DropdownMenuItem,
   DropdownMenuSeparator,
+  DropdownMenuLabel,
 } from '@/components/ui/dropdown-menu'
 import { useConfirm } from '@/components/ui/confirm'
 import { ConnectDialog } from '@/screens/ConnectScreen'
@@ -180,61 +181,59 @@ export function ProfileMenu({
 
         <DropdownMenuSeparator />
 
-        {/* Настройки компании: язык, ключи API, вебхуки, связь с внешней
-            системой. Раньше попасть туда можно было только через список
-            проектов — а компании, у которой проекты приходят снаружи, идти
-            в этот список незачем и не за чем. */}
+        {/* Три группы: компания, проект, личное.
+            Раньше пункты шли вперемешку — «показать тур» между двумя
+            проектными, два разных входа в компанию по разным концам списка, —
+            и понять, к чему относится пункт, можно было только открыв его. */}
         {companyId && (
-          <DropdownMenuItem onSelect={() => navigate(`/start/${companyId}/settings`)}>
-            <Building2 className="size-4" />
-            {t('profile.companySettings')}
-          </DropdownMenuItem>
-        )}
-
-        {/* Настройки проекта и состав команды — сюда, вкладками они не были
-            нужны: в настройки заходят изредка, а команду смотрят из профиля. */}
-        {projectId && isAdmin && (
-          <DropdownMenuItem onSelect={() => setSettingsOpen(true)}>
-            <SlidersHorizontal className="size-4" />
-            {t('profile.projectSettings')}
-          </DropdownMenuItem>
-        )}
-          {/* Показать тур заново.
-              Нужен тому, кто закрыл его в первый день и через месяц захотел
-              разобраться: иначе единственный способ — завести нового человека. */}
-          <DropdownMenuItem
-            onSelect={async () => {
-              try {
-                await api('/api/v1/auth/me/tour-reset', { method: 'POST' })
-                qc.invalidateQueries({ queryKey: ['me'] })
-              } catch {
-                /* тихо: не получилось — человек просто не увидит тур */
-              }
-            }}
-          >
-            <Compass className="size-4" />
-            {t('tour.replay')}
-          </DropdownMenuItem>
-
-        {projectId && (
-          <DropdownMenuItem onSelect={() => navigate(`/c/${companyId}/p/${projectId}/team`)}>
-            <Users className="size-4" />
-            {t('profile.projectTeam')}
-          </DropdownMenuItem>
+          <>
+            <DropdownMenuLabel>{t('profile.groupCompany')}</DropdownMenuLabel>
+            {/* Настройки компании: язык, ключи API, вебхуки, связь с внешней
+                системой. Раньше попасть туда можно было только через список
+                проектов — а компании, у которой проекты приходят снаружи, идти
+                в этот список незачем и не за чем. */}
+            <DropdownMenuItem onSelect={() => navigate(`/start/${companyId}/settings`)}>
+              <SlidersHorizontal className="size-4" />
+              {t('profile.companySettings')}
+            </DropdownMenuItem>
+            {/* Обзор компании: проекты, команда, время. Отдельный пункт от
+                настроек — это разные места, а назывались почти одинаково. */}
+            <DropdownMenuItem onSelect={() => navigate(`/start/${companyId}`)}>
+              <Building2 className="size-4" />
+              {t('sidebar.companySettings')}
+            </DropdownMenuItem>
+          </>
         )}
 
         {projectId && (
-          <DropdownMenuItem onSelect={() => navigate(`/c/${companyId}/p/${projectId}/notifications`)}>
-            <Bell className="size-4" />
-            {t('tabs.notifications')}
-          </DropdownMenuItem>
+          <>
+            <DropdownMenuSeparator />
+            <DropdownMenuLabel>{t('profile.groupProject')}</DropdownMenuLabel>
+            {isAdmin && (
+              <DropdownMenuItem onSelect={() => setSettingsOpen(true)}>
+                <SlidersHorizontal className="size-4" />
+                {t('profile.projectSettings')}
+              </DropdownMenuItem>
+            )}
+            <DropdownMenuItem onSelect={() => navigate(`/c/${companyId}/p/${projectId}/team`)}>
+              <Users className="size-4" />
+              {t('profile.projectTeam')}
+            </DropdownMenuItem>
+            <DropdownMenuItem onSelect={() => navigate(`/c/${companyId}/p/${projectId}/notifications`)}>
+              <Bell className="size-4" />
+              {t('tabs.notifications')}
+            </DropdownMenuItem>
+            {isAdmin && (
+              <DropdownMenuItem onSelect={() => navigate(`/c/${companyId}/p/${projectId}/ai`)}>
+                <Bot className="size-4" />
+                {t('tabs.ai')}
+              </DropdownMenuItem>
+            )}
+          </>
         )}
-        {projectId && isAdmin && (
-          <DropdownMenuItem onSelect={() => navigate(`/c/${companyId}/p/${projectId}/ai`)}>
-            <Bot className="size-4" />
-            {t('tabs.ai')}
-          </DropdownMenuItem>
-        )}
+
+        <DropdownMenuSeparator />
+        <DropdownMenuLabel>{t('profile.groupPersonal')}</DropdownMenuLabel>
 
         {/* Профиль отдельной страницей: правка имени рядом с «Выйти» — это
             промах ценой выхода из аккаунта. В меню остаётся вход. */}
@@ -265,12 +264,23 @@ export function ProfileMenu({
           {t('connect.menuItem')}
         </DropdownMenuItem>
 
-        {companyId && (
-          <DropdownMenuItem onSelect={() => navigate(`/start/${companyId}`)}>
-            <Building2 className="size-4" />
-            {t('sidebar.companySettings')}
-          </DropdownMenuItem>
-        )}
+        {/* Показать тур заново.
+            Нужен тому, кто закрыл его в первый день и через месяц захотел
+            разобраться: иначе единственный способ — завести нового человека.
+            Личное: тур показывается человеку, а не проекту. */}
+        <DropdownMenuItem
+          onSelect={async () => {
+            try {
+              await api('/api/v1/auth/me/tour-reset', { method: 'POST' })
+              qc.invalidateQueries({ queryKey: ['me'] })
+            } catch {
+              /* тихо: не получилось — человек просто не увидит тур */
+            }
+          }}
+        >
+          <Compass className="size-4" />
+          {t('tour.replay')}
+        </DropdownMenuItem>
 
         <DropdownMenuSeparator />
 
