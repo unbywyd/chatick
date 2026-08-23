@@ -1009,7 +1009,14 @@ export function ChatPanel({
           // после отправки, и отклонённый вопрос просто пропал бы вместе с
           // набранным текстом.
           disabled={llmMissing || (isAi && aiThinking)}
-          placeholder={llmMissing ? t('chat.noLlmPlaceholder') : isAi ? t('chat.placeholderAi') : t('chat.placeholderGroup')}
+          // Подсказка про Ctrl+Enter прямо в поле: комбинацию не угадывают, а
+          // голый Enter здесь переносит строку — человек жмёт его и не
+          // понимает, почему сообщение не уходит.
+          placeholder={
+            llmMissing
+              ? t('chat.noLlmPlaceholder')
+              : t(isAi ? 'chat.placeholderAi' : 'chat.placeholderGroup', { key: sendKeyLabel() })
+          }
           // Упоминания и отправка мимо проверки — свойства группового чата:
           // в личном канале некого упоминать и нечего обходить.
           mentions={isAi ? [] : mentionItems}
@@ -1068,6 +1075,19 @@ export function ChatPanel({
       </div>
     </div>
   )
+}
+
+/**
+ * Как называется клавиша отправки на этой машине.
+ *
+ * На Mac это ⌘, и писать там «Ctrl» — врать: такой комбинации в поле нет.
+ * navigator.platform объявлен устаревшим, но замена (userAgentData) есть не
+ * во всех браузерах, а ошибиться здесь безопасно: худшее — покажем Ctrl тому,
+ * у кого ⌘.
+ */
+function sendKeyLabel(): string {
+  if (typeof navigator === 'undefined') return 'Ctrl'
+  return /Mac|iPhone|iPad/.test(navigator.platform || navigator.userAgent) ? '⌘' : 'Ctrl'
 }
 
 function isSameDay(a: Date, b: Date) {

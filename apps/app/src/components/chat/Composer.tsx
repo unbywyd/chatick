@@ -29,7 +29,7 @@ export const AI_MENTION_ID = 'ai'
 export type PendingAttachment = { id: string; name: string; mime: string; size: number }
 
 // Композер чата: tiptap + markdown-база, bubble-меню инструментов по выделению,
-// mentions (@участники + @AI первым), Enter=отправить / Shift+Enter=перенос
+// mentions (@участники + @AI первым), Ctrl/Cmd+Enter=отправить / Enter=перенос
 /** Что можно приложить к сообщению ссылкой (SPEC §8.34). */
 export type PinKind = 'task' | 'note' | 'document' | 'resource'
 type Pin = { id: string; kind: PinKind; number?: string; title: string }
