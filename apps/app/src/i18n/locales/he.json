@@ -1879,6 +1879,8 @@
     "emptyTitle": "אין משימות עליך",
     "emptyText": "משימות שהוקצו לך בכל פרויקטי החברה יופיעו כאן",
     "overdue_one": "איחור {{count}} ימים",
-    "overdue_other": "איחור {{count}} ימים"
+    "overdue_other": "איחור {{count}} ימים",
+    "byProject": "לפי פרויקט",
+    "byUrgency": "לפי דחיפות"
   }
 }

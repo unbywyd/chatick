@@ -1876,6 +1876,8 @@
     "emptyTitle": "Nothing assigned to you",
     "emptyText": "Tasks assigned to you across the company will show up here",
     "overdue_one": "{{count}}d overdue",
-    "overdue_other": "{{count}}d overdue"
+    "overdue_other": "{{count}}d overdue",
+    "byProject": "By project",
+    "byUrgency": "By urgency"
   }
 }

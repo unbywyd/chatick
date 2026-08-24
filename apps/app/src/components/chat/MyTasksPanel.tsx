@@ -1,8 +1,10 @@
+import { useMemo, useState } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import { useTranslation } from 'react-i18next'
 import { useNavigate, useParams } from 'react-router-dom'
 import { api } from '@/lib/api'
 import { cn } from '@/lib/utils'
+import { ChevronDown, ChevronRight, LayoutList, ListOrdered } from 'lucide-react'
 import { Avatar } from '@/components/ui/avatar'
 import { ProjectBadge } from '@/components/ui/project-badge'
 import { Skeleton } from '@/components/ui/skeleton'
@@ -29,6 +31,14 @@ type MyTask = {
   project: { id: string; name: string; color: string; logoUrl: string | null } | null
 }
 
+/**
+ * Как человек привык видеть список. Живёт в браузере: это его привычка, а не
+ * свойство проекта или компании.
+ *
+ * Пусто читаем как «по проектам» — это умолчание.
+ */
+const GROUP_KEY = 'chatick_my_tasks_grouped'
+
 /** Просрочка в днях, если срок прошёл. */
 function overdueDays(due: string | null): number {
   if (!due) return 0
@@ -50,6 +60,54 @@ export function MyTasksPanel({ onOpen }: { onOpen?: () => void }) {
   })
 
   const items = q.data?.items ?? []
+
+  /**
+   * Как разложен список.
+   *
+   * По проектам — умолчание: имя проекта уходит в заголовок секции, и строка
+   * задачи перестаёт его повторять. Список читается короче, а границы между
+   * чужими работами видны сами собой.
+   *
+   * По срочности — сквозной порядок, каким его отдаёт сервер: сначала
+   * просроченные, потом от старых к новым. Нужен, когда вопрос не «что в этом
+   * проекте», а «что горит вообще».
+   *
+   * Выбор держим в браузере: это привычка человека, а не свойство проекта.
+   */
+  const [grouped, setGrouped] = useState(() => localStorage.getItem(GROUP_KEY) !== '0')
+  const [closed, setClosed] = useState<Set<string>>(new Set())
+
+  const groups = useMemo(() => {
+    if (!grouped) return []
+    const by = new Map<string, { project: MyTask['project']; id: string; tasks: MyTask[] }>()
+    for (const t of items) {
+      const g = by.get(t.projectId) ?? { project: t.project, id: t.projectId, tasks: [] }
+      g.tasks.push(t)
+      by.set(t.projectId, g)
+    }
+    /**
+     * Открытый проект — первым.
+     *
+     * Не прокруткой к нему: панель отвечает на вопрос «что горит», и уехав к
+     * текущему проекту, она спрятала бы просроченное из соседнего — ровно то,
+     * ради чего её и открывают. Достаточно поставить сверху.
+     */
+    /**
+     * Внутри секции — от новых к старым.
+     *
+     * Сервер отдаёт по срочности, и это верно для сквозного списка: там
+     * вопрос «что горит вообще». Но когда проект уже выбран, разговор идёт о
+     * его работе, и первым хочется видеть свежее — то, что поставили только
+     * что, а не забытое полугодовой давности.
+     */
+    for (const g of by.values()) {
+      g.tasks.sort((a, b) => +new Date(b.createdAt) - +new Date(a.createdAt))
+    }
+
+    return [...by.values()].sort((a, b) =>
+      a.id === projectId ? -1 : b.id === projectId ? 1 : 0,
+    )
+  }, [items, grouped, projectId])
 
   // Скелетон вместо многоточия: панель открыта по умолчанию, и первое, что
   // человек видит при входе, не должно быть пустым местом.
@@ -75,57 +133,129 @@ export function MyTasksPanel({ onOpen }: { onOpen?: () => void }) {
     )
   }
 
+  /** Строка задачи. Имя проекта показываем только вне группировки. */
+  const row = (task: MyTask, withProject: boolean) => {
+    const late = overdueDays(task.dueDate)
+    return (
+      <li key={task.id}>
+        <button
+          type="button"
+          onClick={() => {
+            navigate(`/c/${companyId}/p/${task.projectId}/tasks/${task.id}`)
+            onOpen?.()
+          }}
+          className="w-full rounded-lg border bg-card p-2.5 text-start transition-colors hover:bg-accent"
+        >
+          <div className="flex items-center gap-2">
+            {withProject && task.project && (
+              <>
+                <ProjectBadge
+                  name={task.project.name}
+                  color={task.project.color}
+                  logoUrl={task.project.logoUrl}
+                  size={18}
+                />
+                <span className="truncate text-[11px] text-muted-foreground">{task.project.name}</span>
+              </>
+            )}
+            <span className={cn('shrink-0 font-mono text-[10px] text-muted-foreground', withProject && 'ms-auto')}>
+              {task.number}
+            </span>
+          </div>
+
+          <p className="mt-1 line-clamp-2 text-sm leading-snug">{task.title}</p>
+
+          <div className="mt-1.5 flex items-center gap-2 text-[11px] text-muted-foreground">
+            {/* Кто поставил: в чужой задаче это первое, что хочется знать. */}
+            {task.author && (
+              <Avatar name={task.author.name} src={task.author.avatarUrl} size={16} title={task.author.name} />
+            )}
+            <span>{new Date(task.createdAt).toLocaleDateString(i18n.language)}</span>
+            {late > 0 && (
+              <span className="ms-auto shrink-0 rounded-full bg-destructive/10 px-1.5 py-0.5 font-medium text-destructive">
+                {t('myTasks.overdue', { count: late })}
+              </span>
+            )}
+          </div>
+        </button>
+      </li>
+    )
+  }
+
   return (
-    <ul className="space-y-1 p-2">
-      {items.map((task) => {
-        const late = overdueDays(task.dueDate)
-        // Открытая задача подсвечена: в длинном списке иначе теряешь место,
-        // с которого ушёл.
-        const here = task.projectId === projectId
-        return (
-          <li key={task.id}>
-            <button
-              type="button"
-              onClick={() => {
-                navigate(`/c/${companyId}/p/${task.projectId}/tasks/${task.id}`)
-                onOpen?.()
-              }}
-              className={cn(
-                'w-full rounded-lg border p-2.5 text-start transition-colors hover:bg-accent',
-                here ? 'border-brand/40 bg-accent/40' : 'bg-card',
-              )}
-            >
-              <div className="flex items-center gap-2">
-                {task.project && (
-                  <ProjectBadge
-                    name={task.project.name}
-                    color={task.project.color}
-                    logoUrl={task.project.logoUrl}
-                    size={18}
-                  />
-                )}
-                <span className="truncate text-[11px] text-muted-foreground">{task.project?.name}</span>
-                <span className="ms-auto shrink-0 font-mono text-[10px] text-muted-foreground">{task.number}</span>
-              </div>
+    <div className="p-2">
+      {/* Переключатель раскладки. Сверху и всегда виден: он объясняет, ПОЧЕМУ
+          список выглядит именно так — без него порядок кажется случайным. */}
+      <div className="mb-2 flex items-center gap-1 rounded-lg bg-secondary/60 p-1">
+        {([
+          { key: true, icon: LayoutList, label: 'myTasks.byProject' },
+          { key: false, icon: ListOrdered, label: 'myTasks.byUrgency' },
+        ] as const).map(({ key, icon: Icon, label }) => (
+          <button
+            key={String(key)}
+            type="button"
+            onClick={() => {
+              setGrouped(key)
+              localStorage.setItem(GROUP_KEY, key ? '1' : '0')
+            }}
+            className={cn(
+              'flex flex-1 cursor-pointer items-center justify-center gap-1.5 rounded-md px-2 py-1 text-[11px] font-medium transition-colors',
+              grouped === key
+                ? 'border border-border bg-background text-foreground shadow-sm'
+                : 'border border-transparent text-muted-foreground hover:text-foreground',
+            )}
+          >
+            <Icon className="size-3" />
+            {t(label)}
+          </button>
+        ))}
+      </div>
 
-              <p className="mt-1 line-clamp-2 text-sm leading-snug">{task.title}</p>
-
-              <div className="mt-1.5 flex items-center gap-2 text-[11px] text-muted-foreground">
-                {/* Кто поставил: в чужой задаче это первое, что хочется знать. */}
-                {task.author && (
-                  <Avatar name={task.author.name} src={task.author.avatarUrl} size={16} title={task.author.name} />
-                )}
-                <span>{new Date(task.createdAt).toLocaleDateString(i18n.language)}</span>
-                {late > 0 && (
-                  <span className="ms-auto shrink-0 rounded-full bg-destructive/10 px-1.5 py-0.5 font-medium text-destructive">
-                    {t('myTasks.overdue', { count: late })}
+      {grouped ? (
+        <div className="space-y-3">
+          {groups.map((g) => {
+            const shut = closed.has(g.id)
+            return (
+              <div key={g.id}>
+                {/* Заголовок секции — он же кнопка сворачивания. Липкий:
+                    в длинном списке иначе не понять, чей проект перед тобой. */}
+                <button
+                  type="button"
+                  onClick={() =>
+                    setClosed((prev) => {
+                      const next = new Set(prev)
+                      if (!next.delete(g.id)) next.add(g.id)
+                      return next
+                    })
+                  }
+                  className="sticky top-0 z-10 mb-1 flex w-full items-center gap-2 rounded-md bg-card/95 px-1.5 py-1 text-start backdrop-blur transition-colors hover:bg-accent"
+                >
+                  {shut ? (
+                    <ChevronRight className="size-3.5 shrink-0 text-muted-foreground rtl:-scale-x-100" />
+                  ) : (
+                    <ChevronDown className="size-3.5 shrink-0 text-muted-foreground" />
+                  )}
+                  {g.project && (
+                    <ProjectBadge
+                      name={g.project.name}
+                      color={g.project.color}
+                      logoUrl={g.project.logoUrl}
+                      size={18}
+                    />
+                  )}
+                  <span className="truncate text-xs font-medium">{g.project?.name}</span>
+                  <span className="ms-auto shrink-0 rounded-full bg-secondary px-1.5 text-[10px] tabular-nums text-muted-foreground">
+                    {g.tasks.length}
                   </span>
-                )}
+                </button>
+                {!shut && <ul className="space-y-1">{g.tasks.map((task) => row(task, false))}</ul>}
               </div>
-            </button>
-          </li>
-        )
-      })}
-    </ul>
+            )
+          })}
+        </div>
+      ) : (
+        <ul className="space-y-1">{items.map((task) => row(task, true))}</ul>
+      )}
+    </div>
   )
 }

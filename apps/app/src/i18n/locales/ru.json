@@ -1899,6 +1899,8 @@
     "overdue_one": "{{count}} д. просрочки",
     "overdue_few": "{{count}} д. просрочки",
     "overdue_many": "{{count}} д. просрочки",
-    "overdue_other": "{{count}} д. просрочки"
+    "overdue_other": "{{count}} д. просрочки",
+    "byProject": "По проектам",
+    "byUrgency": "По срочности"
   }
 }
