@@ -568,8 +568,10 @@ server.registerTool(
     title: 'Change a task',
     description:
       'Status, assignee, estimate, linked resources, related tasks. Moving to in_progress belongs BEFORE the work, ' +
-      'not after. Every status change deserves a comment: the board says that something moved, only the comment ' +
-      'says what.',
+      'not after. When the work is done move it to review, not to done: you are handing it over, and closing ' +
+      'your own work skips the person who has to check it. verified belongs to whoever did the checking — never ' +
+      'set it on your own work. Every status change deserves a comment: the board says that something moved, ' +
+      'only the comment says what.',
     inputSchema: {
       project: z.string(),
       task: z.string(),
