@@ -752,16 +752,22 @@ export function ChatPanel({
         </div>
       </header>
 
+      {/* Мои задачи — вне общей ленты, со своей прокруткой.
+
+          Внутри неё переключатель раскладки уезжал под шапку вместе со всем
+          остальным, а он должен оставаться на месте: он объясняет, ПОЧЕМУ
+          список выглядит именно так. */}
+      {showTasks && (
+        <div data-tour="my-tasks" className="flex min-h-0 flex-1 flex-col bg-card/40">
+          <MyTasksPanel />
+        </div>
+      )}
+
       {/* Лента чуть светлее окна: без этого чат сливается с рабочей областью
           и не читается как отдельная поверхность. */}
+      {!showTasks && (
       <div ref={scrollRef} onScroll={onScroll} className="relative flex-1 overflow-y-auto bg-card/40 p-4">
-        {showTasks ? (
-          /* p-4 у контейнера тут лишний: у списка свои отступы, иначе
-             карточки задач вжимаются в узкую колонку. */
-          <div data-tour="my-tasks" className="-m-4">
-            <MyTasksPanel />
-          </div>
-        ) : llmMissing ? (
+        {llmMissing ? (
           <div className="mx-auto mt-8 max-w-xs rounded-xl border bg-card p-5 text-center">
             <span className="mx-auto grid size-12 place-items-center rounded-full bg-secondary">
               <BrainCircuit className="size-6 text-muted-foreground" />
@@ -899,6 +905,7 @@ export function ChatPanel({
           </button>
         )}
       </div>
+      )}
 
       {/* Поиск по чату */}
       {searchOpen && projectId && <ChatSearch projectId={projectId} lang={i18n.language} onJump={jumpTo} onClose={() => setSearchOpen(false)} />}

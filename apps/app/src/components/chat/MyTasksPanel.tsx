@@ -146,31 +146,32 @@ export function MyTasksPanel({ onOpen }: { onOpen?: () => void }) {
           }}
           className="w-full rounded-lg border bg-card p-2.5 text-start transition-colors hover:bg-accent"
         >
-          <div className="flex items-center gap-2">
-            {withProject && task.project && (
-              <>
-                <ProjectBadge
-                  name={task.project.name}
-                  color={task.project.color}
-                  logoUrl={task.project.logoUrl}
-                  size={18}
-                />
-                <span className="truncate text-[11px] text-muted-foreground">{task.project.name}</span>
-              </>
-            )}
-            <span className={cn('shrink-0 font-mono text-[10px] text-muted-foreground', withProject && 'ms-auto')}>
-              {task.number}
-            </span>
-          </div>
+          {/* Проект — отдельной строкой только в сквозном списке: в секциях
+              он уже назван в заголовке. */}
+          {withProject && task.project && (
+            <div className="mb-1 flex items-center gap-2">
+              <ProjectBadge
+                name={task.project.name}
+                color={task.project.color}
+                logoUrl={task.project.logoUrl}
+                size={18}
+              />
+              <span className="truncate text-[11px] text-muted-foreground">{task.project.name}</span>
+            </div>
+          )}
 
-          <p className="mt-1 line-clamp-2 text-sm leading-snug">{task.title}</p>
+          <p className="line-clamp-2 text-sm leading-snug">{task.title}</p>
 
+          {/* Номер, автор, дата и просрочка — одной строкой. Номер стоял
+              отдельным рядом, оставляя рядом с собой пустоту, а карточка
+              росла до трёх рядов там, где хватает двух. */}
           <div className="mt-1.5 flex items-center gap-2 text-[11px] text-muted-foreground">
+            <span className="shrink-0 font-mono text-[10px]">{task.number}</span>
             {/* Кто поставил: в чужой задаче это первое, что хочется знать. */}
             {task.author && (
               <Avatar name={task.author.name} src={task.author.avatarUrl} size={16} title={task.author.name} />
             )}
-            <span>{new Date(task.createdAt).toLocaleDateString(i18n.language)}</span>
+            <span className="truncate">{new Date(task.createdAt).toLocaleDateString(i18n.language)}</span>
             {late > 0 && (
               <span className="ms-auto shrink-0 rounded-full bg-destructive/10 px-1.5 py-0.5 font-medium text-destructive">
                 {t('myTasks.overdue', { count: late })}
@@ -183,10 +184,11 @@ export function MyTasksPanel({ onOpen }: { onOpen?: () => void }) {
   }
 
   return (
-    <div className="p-2">
-      {/* Переключатель раскладки. Сверху и всегда виден: он объясняет, ПОЧЕМУ
-          список выглядит именно так — без него порядок кажется случайным. */}
-      <div className="mb-2 flex items-center gap-1 rounded-lg bg-secondary/60 p-1">
+    <div className="flex min-h-0 flex-1 flex-col">
+      {/* Переключатель закреплён, а список едет под ним: он объясняет, ПОЧЕМУ
+          список выглядит именно так, и уехав вместе с ним под шапку, оставлял
+          порядок без объяснения. */}
+      <div className="flex shrink-0 items-center gap-1 rounded-lg bg-secondary/60 p-1 m-2 mb-1">
         {([
           { key: true, icon: LayoutList, label: 'myTasks.byProject' },
           { key: false, icon: ListOrdered, label: 'myTasks.byUrgency' },
@@ -211,6 +213,7 @@ export function MyTasksPanel({ onOpen }: { onOpen?: () => void }) {
         ))}
       </div>
 
+      <div className="min-h-0 flex-1 overflow-y-auto px-2 pb-2">
       {grouped ? (
         <div className="space-y-3">
           {groups.map((g) => {
@@ -228,7 +231,9 @@ export function MyTasksPanel({ onOpen }: { onOpen?: () => void }) {
                       return next
                     })
                   }
-                  className="sticky top-0 z-10 mb-1 flex w-full items-center gap-2 rounded-md bg-card/95 px-1.5 py-1 text-start backdrop-blur transition-colors hover:bg-accent"
+                  // -mt-2 pt-2: липкий заголовок липнет к САМОМУ верху, без
+                  // просвета, в котором проступала карточка под ним.
+                  className="sticky -top-2 z-10 -mt-2 mb-1 flex w-full items-center gap-2 rounded-md bg-card px-1.5 pb-1 pt-2 text-start transition-colors hover:bg-accent"
                 >
                   {shut ? (
                     <ChevronRight className="size-3.5 shrink-0 text-muted-foreground rtl:-scale-x-100" />
@@ -256,6 +261,7 @@ export function MyTasksPanel({ onOpen }: { onOpen?: () => void }) {
       ) : (
         <ul className="space-y-1">{items.map((task) => row(task, true))}</ul>
       )}
+      </div>
     </div>
   )
 }

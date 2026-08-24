@@ -79,7 +79,41 @@ describe('секции', () => {
 
   it('заголовок секции липкий', () => {
     // В длинном списке иначе не понять, чей проект сейчас перед тобой.
-    expect(panel).toMatch(/sticky top-0/)
+    //
+    // Отрицательный отступ намеренно: заголовок липнет к самому верху, без
+    // просвета, в котором проступала карточка под ним.
+    expect(panel).toMatch(/sticky -top-2/)
+  })
+})
+
+describe('прокрутка', () => {
+  it('переключатель закреплён, едет только список', () => {
+    /**
+     * Панель лежала внутри общей ленты чата и прокручивалась вместе с ней —
+     * переключатель уезжал под шапку. А он объясняет, ПОЧЕМУ список выглядит
+     * именно так: без него порядок кажется случайным.
+     */
+    expect(panel, 'переключатель снова прокручивается').toMatch(/flex shrink-0 items-center gap-1 rounded-lg bg-secondary/)
+    expect(panel, 'у списка нет своей прокрутки').toMatch(/min-h-0 flex-1 overflow-y-auto/)
+  })
+
+  it('панель вынесена из ленты чата', () => {
+    const chat = readFileSync(
+      join(import.meta.dirname, '../../../app/src/components/chat/ChatPanel.tsx'),
+      'utf8',
+    )
+    // Своя колонка со своей прокруткой, а не блок внутри общей ленты.
+    expect(chat).toMatch(/\{showTasks && \(\s*\n\s*<div data-tour="my-tasks" className="flex min-h-0 flex-1 flex-col/)
+    expect(chat, 'лента чата снова рисуется поверх задач').toMatch(/\{!showTasks && \(\s*\n\s*<div ref=\{scrollRef\}/)
+  })
+})
+
+describe('карточка задачи', () => {
+  it('номер стоит в строке с датой, а не отдельным рядом', () => {
+    // Отдельный ряд оставлял рядом с собой пустоту, и карточка росла до трёх
+    // рядов там, где хватает двух.
+    const rowFn = panel.match(/const row = \(task: MyTask[\s\S]*?\n  \}/)?.[0] ?? ''
+    expect(rowFn).toMatch(/\{task\.number\}<\/span>[\s\S]{0,400}?toLocaleDateString/)
   })
 })
 
