@@ -248,7 +248,8 @@
     "status": {
       "todo": "לביצוע",
       "in_progress": "בתהליך",
-      "review": "בבדיקה",
+      "review": "ממתין לבדיקה",
+      "verified": "עבר בדיקות",
       "done": "בוצע"
     },
     "priority": {

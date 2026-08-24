@@ -121,7 +121,7 @@ inboxRoute.get('/tasks', async (c) => {
  */
 inboxRoute.patch(
   '/tasks/:taskId',
-  zValidator('json', z.object({ status: z.enum(['todo', 'in_progress', 'review', 'done']) })),
+  zValidator('json', z.object({ status: z.enum(['todo', 'in_progress', 'review', 'verified', 'done']) })),
   async (c) => {
     const { sub } = c.get('session')
     const { status } = c.req.valid('json')

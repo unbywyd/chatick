@@ -73,7 +73,7 @@ async function runReminder(r: typeof taskReminders.$inferSelect) {
   const project = await db.query.projects.findFirst({ where: eq(projects.id, r.projectId) })
   if (!project) return
 
-  const statuses = r.statuses.split(',').filter(Boolean) as ('todo' | 'in_progress' | 'review' | 'done')[]
+  const statuses = r.statuses.split(',').filter(Boolean) as ('todo' | 'in_progress' | 'review' | 'verified' | 'done')[]
   if (!statuses.length) return
 
   const openTasks = await db.query.tasks.findMany({
@@ -206,7 +206,9 @@ async function sweepDueTasks() {
         isNull(tasks.deletedAt),
         lte(tasks.dueDate, horizon),
         // Сделанную задачу срок уже не касается.
-        inArray(tasks.status, ['todo', 'in_progress', 'review']),
+        // verified тоже незакрыт: проверку прошёл, но закрыть ещё не успели —
+        // забыть его здесь значит молча перестать напоминать про такие задачи.
+        inArray(tasks.status, ['todo', 'in_progress', 'review', 'verified']),
       ),
       limit: 500,
     })

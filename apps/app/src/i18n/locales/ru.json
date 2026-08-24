@@ -249,7 +249,8 @@
     "status": {
       "todo": "К выполнению",
       "in_progress": "В работе",
-      "review": "Ревью",
+      "review": "Ждёт проверки",
+      "verified": "Проверено",
       "done": "Готово"
     },
     "priority": {

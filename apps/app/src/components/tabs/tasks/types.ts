@@ -1,6 +1,6 @@
-import { Circle, CircleCheck, CircleDot, Eye } from 'lucide-react'
+import { Circle, CircleCheck, CircleDot, Eye, ShieldCheck } from 'lucide-react'
 
-export const STATUSES = ['todo', 'in_progress', 'review', 'done'] as const
+export const STATUSES = ['todo', 'in_progress', 'review', 'verified', 'done'] as const
 export const PRIORITIES = ['low', 'normal', 'high', 'urgent'] as const
 export type Status = (typeof STATUSES)[number]
 export type Priority = (typeof PRIORITIES)[number]
@@ -65,14 +65,17 @@ export const STATUS_ICON: Record<Status, typeof Circle> = {
   todo: Circle,
   in_progress: CircleDot,
   review: Eye,
+  verified: ShieldCheck,
   done: CircleCheck,
 }
 
-// Цвета статусов: путь задачи серый → жёлтый → голубой → зелёный
+// Цвета статусов: путь задачи серый → жёлтый → голубой → бирюзовый → зелёный.
+// verified между review и done и по цвету: проверку прошёл, но не закрыт.
 export const STATUS_COLOR: Record<Status, string> = {
   todo: 'text-muted-foreground',
   in_progress: 'text-amber-500',
   review: 'text-sky-500',
+  verified: 'text-teal-500',
   done: 'text-emerald-600',
 }
 
@@ -89,12 +92,14 @@ export const STATUS_COLOR: Record<Status, string> = {
  * подложке того же тона, иначе светло-жёлтая плашка выжигает глаз.
  *
  * Цвета взяты по смыслу, а не по «пути»: серый — ещё не трогали, жёлтый — в
- * работе, голубой — ждёт чужого действия, зелёный — закрыто.
+ * работе, голубой — ждёт чужого действия, бирюзовый — проверку прошло, но не
+ * закрыто, зелёный — закрыто.
  */
 export const STATUS_BADGE: Record<Status, string> = {
   todo: 'bg-muted text-foreground/80 dark:bg-muted dark:text-foreground/80',
   in_progress: 'bg-amber-100 text-amber-950 dark:bg-amber-500/20 dark:text-amber-200',
   review: 'bg-sky-100 text-sky-950 dark:bg-sky-500/20 dark:text-sky-200',
+  verified: 'bg-teal-100 text-teal-950 dark:bg-teal-500/20 dark:text-teal-200',
   done: 'bg-emerald-100 text-emerald-950 dark:bg-emerald-500/20 dark:text-emerald-200',
 }
 
@@ -103,6 +108,7 @@ export const STATUS_DOT: Record<Status, string> = {
   todo: 'bg-muted-foreground/50',
   in_progress: 'bg-amber-500',
   review: 'bg-sky-500',
+  verified: 'bg-teal-500',
   done: 'bg-emerald-600',
 }
 

@@ -51,7 +51,8 @@ import { DueDot } from './DueDot'
 type SortKey = 'number' | 'title' | 'status' | 'priority' | 'estimate' | 'assignee' | 'refs' | 'deps' | 'due'
 type SortDir = 'asc' | 'desc'
 
-const STATUS_RANK: Record<Status, number> = { todo: 0, in_progress: 1, review: 2, done: 3 }
+// Порядок сортировки — порядок работы: verified между review и done.
+const STATUS_RANK: Record<Status, number> = { todo: 0, in_progress: 1, review: 2, verified: 3, done: 4 }
 const PRIORITY_RANK: Record<Priority, number> = { low: 0, normal: 1, high: 2, urgent: 3 }
 
 /**

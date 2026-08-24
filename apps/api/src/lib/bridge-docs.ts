@@ -25,7 +25,13 @@ function endpointCatalog(q: string): string {
   // Первый параметр в строке запроса: у компанейского уже занят ?project=
   const amp = q ? '&' : '?'
   return `  GET    /x/tasks${q}${amp}assignee=me&status=todo&q=text&sprint=<sprintId>&limit=50
-         status: todo | in_progress | review | done
+         status: todo | in_progress | review | verified | done
+         The ladder is the order of work, and each rung belongs to someone
+         else. Move to in_progress BEFORE you start. When the work is done,
+         move it to review — not to done: you are handing it over, and
+         closing your own work skips the person who has to check it.
+         verified belongs to whoever did the checking; never set it on your
+         own work. done comes after that.
          fields=brief — number, title, status, priority, refs, sprint, assignee
          and no description or attachments. Use it whenever you are picking
          tasks rather than reading them: descriptions are the bulk of the

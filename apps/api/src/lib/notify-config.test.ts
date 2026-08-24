@@ -113,7 +113,13 @@ describe('уведомление о сроке', () => {
   })
 
   it('сделанные задачи не напоминают о себе', () => {
-    expect(reminders).toMatch(/inArray\(tasks\.status, \['todo', 'in_progress', 'review'\]\)/)
+    /**
+     * Список НЕЗАКРЫТЫХ, а не «всех кроме done»: verified тоже незакрыт —
+     * проверку прошёл, но закрыть не успели, и напоминать про него надо.
+     * Забыть его здесь значило бы молча перестать это делать.
+     */
+    expect(reminders).toMatch(/inArray\(tasks\.status, \['todo', 'in_progress', 'review', 'verified'\]\)/)
+    expect(reminders, 'done снова попал в напоминания').not.toMatch(/'verified', 'done'\]\)/)
   })
 
   it('метка ставится даже когда некому слать', () => {

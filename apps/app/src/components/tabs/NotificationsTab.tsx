@@ -29,7 +29,7 @@ const EVENTS = [
 ] as const
 type Event = (typeof EVENTS)[number]
 
-const STATUSES = ['todo', 'in_progress', 'review', 'done'] as const
+const STATUSES = ['todo', 'in_progress', 'review', 'verified', 'done'] as const
 
 type Reminder = {
   enabled: boolean

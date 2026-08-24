@@ -528,7 +528,14 @@ export const messages = pgTable(
 // Tasks (минимальный таск-менеджер)
 // ---------------------------------------------------------------------------
 
-export const taskStatus = pgEnum('task_status', ['todo', 'in_progress', 'review', 'done'])
+/**
+ * Порядок значений — это порядок работы, и он читается сверху вниз.
+ *
+ * verified между review и done: раньше review означал сразу два состояния —
+ * «сдал, жду проверки» и «проверено, жду закрытия». По доске не было видно,
+ * чей ход, и команда на это жаловалась.
+ */
+export const taskStatus = pgEnum('task_status', ['todo', 'in_progress', 'review', 'verified', 'done'])
 export const taskPriority = pgEnum('task_priority', ['low', 'normal', 'high', 'urgent'])
 
 // Группы задач = спринты (SPEC §8.6): имя + цвет, ручной порядок групп.

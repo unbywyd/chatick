@@ -22,7 +22,7 @@ import { normalizeRefs, MAX_REFS_LENGTH } from '../lib/task-refs.js'
 export const tasksRoute = new Hono<ProjectEnv>()
 tasksRoute.use('*', requireProject)
 
-const STATUSES = ['todo', 'in_progress', 'review', 'done'] as const
+const STATUSES = ['todo', 'in_progress', 'review', 'verified', 'done'] as const
 const PRIORITIES = ['low', 'normal', 'high', 'urgent'] as const
 
 const taskShape = {

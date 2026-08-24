@@ -486,7 +486,7 @@ server.registerTool(
     inputSchema: {
       project: z.string(),
       assignee: z.string().optional().describe('"me" or a user id'),
-      status: z.enum(['todo', 'in_progress', 'review', 'done']).optional(),
+      status: z.enum(['todo', 'in_progress', 'review', 'verified', 'done']).optional(),
       q: z.string().optional().describe('Search in title'),
       fields: z.enum(['brief']).optional(),
       limit: z.number().max(200).optional(),
@@ -573,7 +573,7 @@ server.registerTool(
     inputSchema: {
       project: z.string(),
       task: z.string(),
-      status: z.enum(['todo', 'in_progress', 'review', 'done']).optional(),
+      status: z.enum(['todo', 'in_progress', 'review', 'verified', 'done']).optional(),
       assignee: z.string().optional(),
       estimateMinutes: z.number().int().positive().optional(),
       dueDate: z

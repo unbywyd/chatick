@@ -225,7 +225,7 @@ export function memoryTools(projectId: string, actorUserId: string): { tools: To
     {
       name: 'list_tasks',
       description: 'List project tasks (number, title, status, priority, assignee, due date).',
-      parameters: { type: 'object', properties: { status: { type: 'string', enum: ['todo', 'in_progress', 'review', 'done'] } } },
+      parameters: { type: 'object', properties: { status: { type: 'string', enum: ['todo', 'in_progress', 'review', 'verified', 'done'] } } },
     },
     {
       name: 'get_task',
@@ -287,7 +287,7 @@ export function memoryTools(projectId: string, actorUserId: string): { tools: To
           title: { type: 'string' },
           description: { type: 'string' },
           priority: { type: 'string', enum: ['low', 'normal', 'high', 'urgent'] },
-          status: { type: 'string', enum: ['todo', 'in_progress', 'review', 'done'] },
+          status: { type: 'string', enum: ['todo', 'in_progress', 'review', 'verified', 'done'] },
           assignee: { type: 'string', description: 'member name or email to assign; omit for unassigned' },
           dueDate: { type: 'string', description: 'due date, ISO or YYYY-MM-DD' },
           estimateMinutes: { type: 'number', description: 'REQUIRED: time estimate in minutes assuming the person works WITH an AI assistant (realistic, usually shorter)' },
@@ -313,7 +313,7 @@ export function memoryTools(projectId: string, actorUserId: string): { tools: To
           title: { type: 'string' },
           description: { type: 'string' },
           priority: { type: 'string', enum: ['low', 'normal', 'high', 'urgent'] },
-          status: { type: 'string', enum: ['todo', 'in_progress', 'review', 'done'] },
+          status: { type: 'string', enum: ['todo', 'in_progress', 'review', 'verified', 'done'] },
           assignee: { type: 'string', description: 'member name/email, or "none" to unassign' },
           dueDate: { type: 'string', description: 'ISO or YYYY-MM-DD, or "none" to clear' },
           estimateMinutes: { type: 'number' },
@@ -327,7 +327,7 @@ export function memoryTools(projectId: string, actorUserId: string): { tools: To
       description: 'Change task status by number. Requires tasks.changeStatus.',
       parameters: {
         type: 'object',
-        properties: { number: { type: 'string' }, status: { type: 'string', enum: ['todo', 'in_progress', 'review', 'done'] } },
+        properties: { number: { type: 'string' }, status: { type: 'string', enum: ['todo', 'in_progress', 'review', 'verified', 'done'] } },
         required: ['number', 'status'],
       },
     },
@@ -353,7 +353,7 @@ export function memoryTools(projectId: string, actorUserId: string): { tools: To
                 title: { type: 'string' },
                 description: { type: 'string' },
                 priority: { type: 'string', enum: ['low', 'normal', 'high', 'urgent'] },
-                status: { type: 'string', enum: ['todo', 'in_progress', 'review', 'done'] },
+                status: { type: 'string', enum: ['todo', 'in_progress', 'review', 'verified', 'done'] },
                 assignee: { type: 'string' },
                 dueDate: { type: 'string' },
                 estimateMinutes: { type: 'number' },
@@ -378,7 +378,7 @@ export function memoryTools(projectId: string, actorUserId: string): { tools: To
             type: 'object',
             description: 'Alternative to numbers: select tasks by criteria',
             properties: {
-              status: { type: 'string', enum: ['todo', 'in_progress', 'review', 'done'] },
+              status: { type: 'string', enum: ['todo', 'in_progress', 'review', 'verified', 'done'] },
               assignee: { type: 'string', description: 'member name/email, or "me" for the author' },
               sprint: { type: 'string', description: 'sprint name' },
             },
@@ -387,7 +387,7 @@ export function memoryTools(projectId: string, actorUserId: string): { tools: To
             type: 'object',
             description: 'What to set on every selected task',
             properties: {
-              status: { type: 'string', enum: ['todo', 'in_progress', 'review', 'done'] },
+              status: { type: 'string', enum: ['todo', 'in_progress', 'review', 'verified', 'done'] },
               priority: { type: 'string', enum: ['low', 'normal', 'high', 'urgent'] },
               assignee: { type: 'string', description: 'member name/email, or "none" to unassign' },
               dueDate: { type: 'string', description: 'ISO or YYYY-MM-DD, or "none" to clear' },
@@ -410,7 +410,7 @@ export function memoryTools(projectId: string, actorUserId: string): { tools: To
           filter: {
             type: 'object',
             properties: {
-              status: { type: 'string', enum: ['todo', 'in_progress', 'review', 'done'] },
+              status: { type: 'string', enum: ['todo', 'in_progress', 'review', 'verified', 'done'] },
               assignee: { type: 'string' },
               sprint: { type: 'string' },
             },
@@ -887,7 +887,7 @@ export function memoryTools(projectId: string, actorUserId: string): { tools: To
 
     const conds = [eq(tasks.projectId, projectId), sql`${tasks.deletedAt} is null`]
     if (numbers.length) conds.push(inArray(tasks.number, numbers))
-    if (typeof filter.status === 'string' && ['todo', 'in_progress', 'review', 'done'].includes(filter.status)) {
+    if (typeof filter.status === 'string' && ['todo', 'in_progress', 'review', 'verified', 'done'].includes(filter.status)) {
       conds.push(eq(tasks.status, filter.status as 'todo'))
     }
     if (filter.assignee !== undefined) {
@@ -978,7 +978,7 @@ export function memoryTools(projectId: string, actorUserId: string): { tools: To
         title: String(args.title ?? '').slice(0, 300),
         description: String(args.description ?? '').slice(0, 10_000),
         priority: (['low', 'normal', 'high', 'urgent'].includes(String(args.priority)) ? args.priority : 'normal') as 'normal',
-        status: (['todo', 'in_progress', 'review', 'done'].includes(String(args.status)) ? args.status : 'todo') as 'todo',
+        status: (['todo', 'in_progress', 'review', 'verified', 'done'].includes(String(args.status)) ? args.status : 'todo') as 'todo',
         assigneeId: assigneeId ?? null,
         groupId: groupId ?? null,
         dueDate: due ?? null,
@@ -1308,7 +1308,7 @@ export function memoryTools(projectId: string, actorUserId: string): { tools: To
       if (typeof args.title === 'string') patch.title = args.title.slice(0, 300)
       if (typeof args.description === 'string') patch.description = args.description.slice(0, 10_000)
       if (['low', 'normal', 'high', 'urgent'].includes(String(args.priority))) patch.priority = args.priority
-      if (['todo', 'in_progress', 'review', 'done'].includes(String(args.status))) patch.status = args.status
+      if (['todo', 'in_progress', 'review', 'verified', 'done'].includes(String(args.status))) patch.status = args.status
       const assigneeId = await resolveAssignee(args.assignee)
       if (assigneeId !== undefined) patch.assigneeId = assigneeId
       const groupId = await resolveSprint(args.sprint)
@@ -1334,7 +1334,7 @@ export function memoryTools(projectId: string, actorUserId: string): { tools: To
       const t = await findTask(String(args.number ?? ''))
       if (!t) return 'Task not found.'
       const status = String(args.status ?? '')
-      if (!['todo', 'in_progress', 'review', 'done'].includes(status)) return 'Invalid status.'
+      if (!['todo', 'in_progress', 'review', 'verified', 'done'].includes(status)) return 'Invalid status.'
       await db.update(tasks).set({ status: status as 'todo' }).where(eq(tasks.id, t.id))
       broadcast(projectId, 'tasks_changed', {})
       return `${t.number} → ${status}.`
@@ -1405,7 +1405,7 @@ export function memoryTools(projectId: string, actorUserId: string): { tools: To
 
       const patch: Record<string, unknown> = {}
       if (['low', 'normal', 'high', 'urgent'].includes(String(changes.priority))) patch.priority = changes.priority
-      if (['todo', 'in_progress', 'review', 'done'].includes(String(changes.status))) patch.status = changes.status
+      if (['todo', 'in_progress', 'review', 'verified', 'done'].includes(String(changes.status))) patch.status = changes.status
       const assigneeId = await resolveAssignee(changes.assignee)
       if (assigneeId !== undefined) patch.assigneeId = assigneeId
       const groupId = await resolveSprint(changes.sprint)

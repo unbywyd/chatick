@@ -324,6 +324,7 @@ projectsRoute.get('/', zValidator('query', z.object({ companyId: z.string().min(
         // но и сколько в работе / на ревью / ещё не начато
         inProgress: sql<number>`count(*) filter (where ${tasks.status} = 'in_progress')::int`,
         review: sql<number>`count(*) filter (where ${tasks.status} = 'review')::int`,
+        verified: sql<number>`count(*) filter (where ${tasks.status} = 'verified')::int`,
         todo: sql<number>`count(*) filter (where ${tasks.status} = 'todo')::int`,
       })
       .from(tasks)

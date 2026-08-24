@@ -130,7 +130,7 @@ const reminderSchema = z.object({
   hourOfDay: z.number().int().min(0).max(23),
   dayOfWeek: z.number().int().min(0).max(6),
   audience: z.enum(['all_members', 'assignees']),
-  statuses: z.array(z.enum(['todo', 'in_progress', 'review', 'done'])).min(1),
+  statuses: z.array(z.enum(['todo', 'in_progress', 'review', 'verified', 'done'])).min(1),
 })
 
 notificationsRoute.put('/reminders', zValidator('json', reminderSchema), async (c) => {

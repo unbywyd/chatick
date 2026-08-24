@@ -248,7 +248,8 @@
     "status": {
       "todo": "To do",
       "in_progress": "In progress",
-      "review": "Review",
+      "review": "Awaiting review",
+      "verified": "Verified",
       "done": "Done"
     },
     "priority": {

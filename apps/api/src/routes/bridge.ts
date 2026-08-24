@@ -672,6 +672,7 @@ bridgeRoute.get('/context', async (c) => {
       todo: sql<number>`count(*) filter (where ${tasks.status} = 'todo')::int`,
       inProgress: sql<number>`count(*) filter (where ${tasks.status} = 'in_progress')::int`,
       review: sql<number>`count(*) filter (where ${tasks.status} = 'review')::int`,
+      verified: sql<number>`count(*) filter (where ${tasks.status} = 'verified')::int`,
       done: sql<number>`count(*) filter (where ${tasks.status} = 'done')::int`,
       mine: sql<number>`count(*) filter (where ${tasks.assigneeId} = ${id.userId} and ${tasks.status} <> 'done')::int`,
     })
@@ -1552,7 +1553,7 @@ bridgeRoute.get('/tasks', async (c) => {
   }
   const status = c.req.query('status')
   if (status) {
-    const list = status.split(',').filter(Boolean) as ('todo' | 'in_progress' | 'review' | 'done')[]
+    const list = status.split(',').filter(Boolean) as ('todo' | 'in_progress' | 'review' | 'verified' | 'done')[]
     conds.push(inArray(tasks.status, list))
   }
   const sprint = c.req.query('sprint')
@@ -1681,7 +1682,7 @@ bridgeRoute.patch('/tasks/bulk', async (c) => {
   const patch: Record<string, unknown> = {}
   if (typeof set.title === 'string') patch.title = set.title.slice(0, 300)
   if (typeof set.description === 'string') patch.description = richText(set.description)
-  if ((['todo', 'in_progress', 'review', 'done'] as const).includes(set.status as never)) patch.status = set.status
+  if ((['todo', 'in_progress', 'review', 'verified', 'done'] as const).includes(set.status as never)) patch.status = set.status
   if ((['low', 'normal', 'high', 'urgent'] as const).includes(set.priority as never)) patch.priority = set.priority
   if (set.estimateMinutes !== undefined) patch.estimateMinutes = set.estimateMinutes == null ? null : String(set.estimateMinutes)
   {
@@ -1960,7 +1961,7 @@ bridgeRoute.post('/tasks', async (c) => {
       number: `TASK-${next}`,
       title: title.slice(0, 300),
       description: typeof b.description === 'string' ? richText(b.description) : '',
-      status: (['todo', 'in_progress', 'review', 'done'] as const).includes(b.status as never)
+      status: (['todo', 'in_progress', 'review', 'verified', 'done'] as const).includes(b.status as never)
         ? (b.status as 'todo')
         : 'todo',
       priority: (['low', 'normal', 'high', 'urgent'] as const).includes(b.priority as never)
@@ -2031,7 +2032,7 @@ bridgeRoute.patch('/tasks/:id', async (c) => {
   const patch: Record<string, unknown> = {}
   if (typeof b.title === 'string') patch.title = b.title.slice(0, 300)
   if (typeof b.description === 'string') patch.description = richText(b.description)
-  if ((['todo', 'in_progress', 'review', 'done'] as const).includes(b.status as never)) patch.status = b.status
+  if ((['todo', 'in_progress', 'review', 'verified', 'done'] as const).includes(b.status as never)) patch.status = b.status
   if ((['low', 'normal', 'high', 'urgent'] as const).includes(b.priority as never)) patch.priority = b.priority
   if (b.estimateMinutes !== undefined) patch.estimateMinutes = b.estimateMinutes == null ? null : String(b.estimateMinutes)
   {
