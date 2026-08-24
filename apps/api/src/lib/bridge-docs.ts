@@ -24,7 +24,17 @@ const base = () => (process.env.API_PUBLIC_URL || 'https://api.chatick.com').rep
 function endpointCatalog(q: string): string {
   // Первый параметр в строке запроса: у компанейского уже занят ?project=
   const amp = q ? '&' : '?'
-  return `  GET    /x/tasks${q}${amp}assignee=me&status=todo&q=text&sprint=<sprintId>&limit=50
+  return `  GET    /x/open${q}${amp}link=<link or TASK-81>
+         The task behind whatever a person pasted: a short link
+         (https://chatick.com/t-abc12), a full app URL (.../p/<id>/tasks/<id>)
+         or a bare number. Use it the moment someone drops a link — do not
+         pull the project and id out of the URL yourself.
+         A short link cannot be read from outside at all: it carries only a
+         code, and what stands behind it is known to the server.
+         The reply names the project it landed in. A bare number needs one:
+         pass ?project= or use a project tunnel.
+
+  GET    /x/tasks${q}${amp}assignee=me&status=todo&q=text&sprint=<sprintId>&limit=50
          status: todo | in_progress | review | verified | done
          The ladder is the order of work, and each rung belongs to someone
          else. Move to in_progress BEFORE you start. When the work is done,

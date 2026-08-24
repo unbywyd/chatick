@@ -502,6 +502,40 @@ server.registerTool(
 )
 
 server.registerTool(
+  'chatick_task_by_link',
+  {
+    title: 'Open a task by link',
+    description:
+      'Read a task from whatever the person pasted: a short link (https://chatick.com/t-abc12), a full app URL ' +
+      '(.../p/<project>/tasks/<id>) or a bare number (TASK-81). Use this the moment someone drops a link and asks ' +
+      'about it — do NOT try to pull the project and id out of the URL yourself. A short link cannot be read from ' +
+      'the outside at all: it carries only a code, and what stands behind it is known to the server. ' +
+      'The reply names the project it landed in, so the next call has what it needs. ' +
+      'A bare number needs the project: pass it, or use this inside a project tunnel.',
+    inputSchema: {
+      link: z.string().describe('A task link or TASK-81'),
+      project: z.string().optional().describe('Only for a bare number — links carry the project themselves'),
+    },
+  },
+  async ({ link, project }) => {
+    try {
+      const scope = await need()
+      return json(
+        await call(
+          { ...scope, ...(project ? { projectId: project } : {}) },
+          'GET',
+          '/open',
+          undefined,
+          { link },
+        ),
+      )
+    } catch (e) {
+      return fail(e)
+    }
+  },
+)
+
+server.registerTool(
   'chatick_task',
   {
     title: 'Read one task',

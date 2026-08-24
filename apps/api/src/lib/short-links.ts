@@ -135,3 +135,36 @@ export async function resolveShortCode(type: string, code: string) {
   })
   return row ?? null
 }
+
+/**
+ * Разобрать ссылку на задачу — короткую, длинную или просто номер.
+ *
+ * Человек кидает ассистенту то, что у него под рукой: адрес из строки
+ * браузера, короткую ссылку из чата или «TASK-81» из разговора. Заставлять
+ * его разбирать это самому — значит требовать работы, которую машина делает
+ * надёжнее.
+ *
+ * Короткая ссылка непроницаема снаружи: в ней только код, и проект с задачей
+ * известны лишь базе. Поэтому разрешать её умеет только сервер — сам
+ * ассистент из «t-cDfWe» не выведет ничего.
+ */
+export function parseTaskRef(raw: string): { kind: 'short'; code: string } | { kind: 'long'; projectId: string; taskId: string } | { kind: 'number'; number: string } | null {
+  const v = raw.trim()
+  if (!v) return null
+
+  // Короткая: https://chatick.com/t-cDfWe или просто t-cDfWe
+  const short = parseShortPath(v.replace(/^https?:\/\/[^/]+\//, ''))
+  if (short && short.type === 'task') return { kind: 'short', code: short.code }
+
+  // Длинная: .../#/c/<company>/p/<project>/tasks/<taskId>
+  // Компанию не берём: проект её однозначно определяет, а лишний параметр —
+  // лишний повод разойтись.
+  const long = /\/p\/([\w-]+)\/tasks\/([\w-]+)/.exec(v)
+  if (long) return { kind: 'long', projectId: long[1]!, taskId: long[2]! }
+
+  // Голый номер: TASK-81. Раз уж разбираем ссылки, разберём и его.
+  const num = /^([A-Za-z]+-\d+)$/.exec(v)
+  if (num) return { kind: 'number', number: num[1]!.toUpperCase() }
+
+  return null
+}

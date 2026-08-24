@@ -69,7 +69,7 @@ import { fetchSiteIcon, nameFromUrl } from '../lib/site-icon.js'
 import { encrypt } from '../lib/crypto.js'
 import { membersLockedForProject, MEMBERS_LOCKED } from '../lib/members-locked.js'
 import { broadcast, sendToUserAnywhere, tasksChanged } from '../ws.js'
-import { shortUrlFor } from '../lib/short-links.js'
+import { shortUrlFor, parseTaskRef, resolveShortCode } from '../lib/short-links.js'
 import { BUILD_TYPES, buildType, firstStage, isLiveStage, isValidStage } from '../lib/release-stages.js'
 import { isFeatureEnabled } from '../lib/features.js'
 import { REPORT_KINDS, submitAssistantReport, type ReportKind } from '../lib/assistant-report.js'
@@ -1884,6 +1884,101 @@ bridgeRoute.delete('/tasks/bulk', async (c) => {
     items: deleted,
     errors: failed,
     restorableForDays: 7,
+  })
+})
+
+/**
+ * Открыть задачу по ссылке — короткой, длинной или по номеру.
+ *
+ * Человек кидает ассистенту то, что у него под рукой: адрес из строки
+ * браузера, короткую ссылку из чата, «TASK-81» из разговора. Раньше ассистент
+ * должен был разобрать это сам и позвать GET /x/tasks/<id> с проектом — а из
+ * короткой ссылки проект не выводится вообще: в ней только код, и что за ним
+ * стоит, знает лишь база. Свою же ссылку ассистент прочитать не мог.
+ *
+ * Проект определяем ИЗ ССЫЛКИ, а не требуем параметром: он там уже есть, и
+ * спрашивать его второй раз — просить человека сделать работу за машину.
+ *
+ * Права проверяются как везде: ссылка не даёт доступа к чужому проекту, она
+ * лишь избавляет от ручного разбора.
+ */
+bridgeRoute.get('/open', async (c) => {
+  const id = auth(c as never)
+  const raw = c.req.query('link') || c.req.query('url') || ''
+  const ref = parseTaskRef(raw)
+  if (!ref) {
+    return c.json(
+      {
+        error:
+          'Could not read that as a task. Pass a task link (https://chatick.com/t-abc12 or .../p/<project>/tasks/<id>) or a number like TASK-81.',
+      },
+      400,
+    )
+  }
+
+  // Куда смотреть: короткая ссылка знает проект, длинная называет его, номер —
+  // нет, и тогда нужен открытый туннель проекта или ?project=.
+  let projectId: string
+  let key: string
+  if (ref.kind === 'short') {
+    const link = await resolveShortCode('task', ref.code)
+    if (!link) return c.json({ error: 'That short link does not exist or has expired' }, 404)
+    projectId = link.projectId
+    key = link.entityId
+  } else if (ref.kind === 'long') {
+    projectId = ref.projectId
+    key = ref.taskId
+  } else {
+    const scope = await resolveProject(c as never)
+    if ('error' in scope) return c.json({ error: scope.error }, scope.status)
+    projectId = scope.projectId
+    key = ref.number
+  }
+
+  // Членство проверяем ВСЕГДА, в том числе для ссылки: она сокращает путь, а
+  // не открывает двери. Чужую задачу по чужой ссылке не покажем.
+  if (!(await memberDomains(projectId, id.userId))) {
+    return c.json({ error: 'You are not a member of that project' }, 403)
+  }
+  const denied = await require(c as never, 'tasks.read', projectId)
+  if (denied) return c.json(denied, 403)
+
+  const row = await db
+    .select({ t: tasks, u: users })
+    .from(tasks)
+    .leftJoin(users, eq(users.id, tasks.assigneeId))
+    .where(
+      and(
+        or(eq(tasks.id, key), eq(tasks.number, key.toUpperCase()))!,
+        eq(tasks.projectId, projectId),
+        isNull(tasks.deletedAt),
+      ),
+    )
+    .limit(1)
+  if (!row.length) return c.json({ error: 'Not found' }, 404)
+
+  const attached = await attachmentsFor(
+    files.taskId,
+    [row[0]!.t.id],
+    projectId,
+    new Map([[row[0]!.t.id, row[0]!.t.description]]),
+  )
+  const linkedReleases = await releasesOfTask(row[0]!.t.id)
+  const taskLinkList = await linksOfTask(row[0]!.t.id)
+  return c.json({
+    ...taskView(
+      row[0]!.t,
+      row[0]!.u,
+      attached.get(row[0]!.t.id),
+      undefined,
+      await companyOf(projectId),
+      await shortUrlFor('task', row[0]!.t.id, projectId, id.userId),
+    ),
+    // Проект называем явно: ассистент пришёл по ссылке и мог не знать, где
+    // оказался, — а следующий его вызов потребует projectId.
+    projectId,
+    ...(linkedReleases.length ? { releases: linkedReleases } : {}),
+    ...taskLinkList,
   })
 })
 
