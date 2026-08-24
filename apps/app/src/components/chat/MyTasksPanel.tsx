@@ -4,9 +4,10 @@ import { useTranslation } from 'react-i18next'
 import { useNavigate, useParams } from 'react-router-dom'
 import { api } from '@/lib/api'
 import { cn } from '@/lib/utils'
-import { ChevronDown, ChevronRight, LayoutList, ListOrdered } from 'lucide-react'
+import { ChevronDown, ChevronRight, Flag, LayoutList, ListOrdered } from 'lucide-react'
 import { Avatar } from '@/components/ui/avatar'
 import { ProjectBadge } from '@/components/ui/project-badge'
+import { STATUS_COLOR, STATUS_ICON, PRIORITY_COLOR, type Priority, type Status } from '@/components/tabs/tasks/types'
 import { Skeleton } from '@/components/ui/skeleton'
 
 /**
@@ -22,8 +23,8 @@ type MyTask = {
   id: string
   number: string
   title: string
-  status: string
-  priority: string
+  status: Status
+  priority: Priority
   dueDate: string | null
   createdAt: string
   projectId: string
@@ -136,6 +137,7 @@ export function MyTasksPanel({ onOpen }: { onOpen?: () => void }) {
   /** Строка задачи. Имя проекта показываем только вне группировки. */
   const row = (task: MyTask, withProject: boolean) => {
     const late = overdueDays(task.dueDate)
+    const StatusIcon = STATUS_ICON[task.status]
     return (
       <li key={task.id}>
         <button
@@ -166,7 +168,15 @@ export function MyTasksPanel({ onOpen }: { onOpen?: () => void }) {
               отдельным рядом, оставляя рядом с собой пустоту, а карточка
               росла до трёх рядов там, где хватает двух. */}
           <div className="mt-1.5 flex items-center gap-2 text-[11px] text-muted-foreground">
-            <span className="shrink-0 font-mono text-[10px]">{task.number}</span>
+            {/* Статус — значком в его цвете: слово заняло бы место, которого в
+                узкой колонке нет, а цвет считывается боковым зрением. */}
+            <StatusIcon className={cn('size-3.5 shrink-0', STATUS_COLOR[task.status])} />
+            {/* Флажок только у срочного и важного: у обычной задачи он был бы
+                шумом — их большинство, и метка на большинстве ничего не метит. */}
+            {(task.priority === 'urgent' || task.priority === 'high') && (
+              <Flag className={cn('size-3 shrink-0', PRIORITY_COLOR[task.priority])} />
+            )}
+            <span className="shrink-0 font-mono text-[10px] font-semibold text-foreground/70">{task.number}</span>
             {/* Кто поставил: в чужой задаче это первое, что хочется знать. */}
             {task.author && (
               <Avatar name={task.author.name} src={task.author.avatarUrl} size={16} title={task.author.name} />
