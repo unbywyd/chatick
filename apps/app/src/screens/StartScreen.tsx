@@ -3,7 +3,7 @@ import { useNavigate, useParams, useSearchParams } from 'react-router-dom'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { useTranslation } from 'react-i18next'
 import { toast } from 'sonner'
-import { Building2, ChevronRight, Plus, FolderKanban, Check, Mail, MoreVertical, Search, Settings, X } from 'lucide-react'
+import { Archive, ArchiveRestore, Building2, ChevronRight, Plus, FolderKanban, Check, Mail, MoreVertical, Search, Settings, X } from 'lucide-react'
 import { ProfileMenu } from '@/components/ProfileMenu'
 import { Avatar } from '@/components/ui/avatar'
 import { AvatarGroup } from '@/components/ui/avatar-group'
@@ -818,9 +818,33 @@ function ProjectsTab({
   const [settingsFor, setSettingsFor] = useState<{ id: string; name: string; owner: boolean } | null>(null)
   const [deleting, setDeleting] = useState<{ id: string; name: string } | null>(null)
 
+  /**
+   * Показывать архив вместо живых проектов.
+   *
+   * Именно вместо: список один, и подмешивать законченные значило бы вернуть
+   * ту самую кашу, ради ухода от которой архив и заводили.
+   */
+  const [showArchived, setShowArchived] = useState(false)
+
   const projectsQ = useQuery({
-    queryKey: ['projects', company.id],
-    queryFn: () => api<ProjectListItem[]>(`/api/v1/projects?companyId=${company.id}`),
+    queryKey: ['projects', company.id, showArchived],
+    queryFn: () =>
+      api<ProjectListItem[]>(
+        `/api/v1/projects?companyId=${company.id}${showArchived ? '&archived=1' : ''}`,
+      ),
+  })
+
+  /** Убрать проект с глаз или вернуть. Ничего не удаляет. */
+  const archive = useMutation({
+    mutationFn: ({ id, archived }: { id: string; archived: boolean }) =>
+      api(`/api/v1/projects/${id}/archive`, { method: archived ? 'POST' : 'DELETE' }),
+    onSuccess: () => {
+      // Сбрасываем оба списка: проект переезжает из одного в другой.
+      qc.invalidateQueries({ queryKey: ['projects', company.id] })
+      qc.invalidateQueries({ queryKey: ['sidebar-projects'] })
+      qc.invalidateQueries({ queryKey: ['tray-projects'] })
+    },
+    onError: (e) => toast.error(e instanceof Error ? e.message : String(e)),
   })
 
   const filtered = useMemo(() => {
@@ -889,10 +913,23 @@ function ProjectsTab({
           <Search className="pointer-events-none absolute start-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
           <Input value={q} onChange={(e) => setQ(e.target.value)} placeholder={t('start.searchProjects')} className="ps-9" />
         </div>
+        {/* Архив: показывается только когда там что-то есть либо когда его уже
+            открыли. Пустая кнопка «Архив» в компании без архивных проектов —
+            обещание раздела, которого нет. */}
+        {(showArchived || (projectsQ.data?.length ?? 0) > 0) && (
+          <Button
+            variant={showArchived ? 'outline' : 'ghost'}
+            onClick={() => setShowArchived((v) => !v)}
+            title={t(showArchived ? 'start.showActive' : 'start.showArchived')}
+          >
+            <Archive className="size-4" />
+            <span className="hidden sm:inline">{t(showArchived ? 'start.showActive' : 'start.showArchived')}</span>
+          </Button>
+        )}
         {/* Компания решила, что проекты приходят из внешней системы — кнопки
             быть не должно. Сервер такой запрос всё равно отклонит, но человеку
             незачем это выяснять нажатием. */}
-        {canManage && !creating && !company.projectsViaApiOnly && (
+        {canManage && !creating && !showArchived && !company.projectsViaApiOnly && (
           <Button variant="brand" onClick={() => setCreating(true)}>
             <Plus className="size-4" />
             {t('start.createProject')}
@@ -975,6 +1012,15 @@ function ProjectsTab({
                               setSettingsFor({ id: p.id, name: p.name, owner: p.myRole === 'owner' || canManage })}>
                               <Settings className="size-4" />
                               {t('tabs.settings')}
+                            </DropdownMenuItem>
+                            {/* Архив рядом с настройками, а не в опасной зоне:
+                                он обратим и ничего не удаляет. Смешивать его с
+                                удалением значит пугать там, где бояться нечего. */}
+                            <DropdownMenuItem
+                              onSelect={() => archive.mutate({ id: p.id, archived: !p.archived })}
+                            >
+                              {p.archived ? <ArchiveRestore className="size-4" /> : <Archive className="size-4" />}
+                              {t(p.archived ? 'start.unarchive' : 'start.archive')}
                             </DropdownMenuItem>
                           </DropdownMenuContent>
                         </DropdownMenu>

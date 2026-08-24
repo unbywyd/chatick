@@ -194,6 +194,8 @@ export type ProjectListItem = {
   chatRules: string
   isMember: boolean
   myRole: 'owner' | 'admin' | 'member' | null
+  /** Проект убран с глаз. Не удалён: данные на месте, ссылка работает. */
+  archived?: boolean
   members?: { id: string; name: string; avatarUrl: string | null }[]
   memberCount?: number
   // последнее сообщение — список проектов работает как список чатов (SPEC §8.29)

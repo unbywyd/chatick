@@ -221,16 +221,23 @@ bridgeRoute.get('/projects', async (c) => {
   const id = auth(c as never)
 
   // Мастер: берём проекты по членству — компанией он не ограничен.
+  //
+  // Архивные из СПИСКОВ убираем: ассистент выбирает, где работать, и
+  // законченный проект в этом выборе только мешает. А вот адресный запрос по
+  // projectId отдаём как есть — по прямой ссылке архивный проект открывается,
+  // иначе «убрали с глаз» превратилось бы в «отобрали доступ».
   const rows = id.scopeAll
     ? (
         await db
           .select({ p: projects })
           .from(projectMembers)
           .innerJoin(projects, eq(projects.id, projectMembers.projectId))
-          .where(eq(projectMembers.userId, id.userId))
+          .where(and(eq(projectMembers.userId, id.userId), isNull(projects.archivedAt)))
       ).map((r) => r.p)
     : id.companyId
-      ? await db.query.projects.findMany({ where: eq(projects.companyId, id.companyId) })
+      ? await db.query.projects.findMany({
+          where: and(eq(projects.companyId, id.companyId), isNull(projects.archivedAt)),
+        })
       : id.projectId
         ? await db.query.projects.findMany({ where: eq(projects.id, id.projectId) })
         : []

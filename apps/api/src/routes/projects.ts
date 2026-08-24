@@ -1,7 +1,7 @@
 import { Hono } from 'hono'
 import { zValidator } from '@hono/zod-validator'
 import { z } from 'zod'
-import { and, eq, inArray, isNull, sql } from 'drizzle-orm'
+import { and, eq, inArray, isNotNull, isNull, sql } from 'drizzle-orm'
 import { nanoid } from 'nanoid'
 import sharp from 'sharp'
 import { db } from '../db/client.js'
@@ -291,13 +291,34 @@ export async function companyRoleOf(companyId: string, userId: string) {
 export const canCreateProjects = (role: string | null) => role === 'admin' || role === 'manager'
 
 // Список проектов компании, где юзер участник (или все — для admin/manager)
-projectsRoute.get('/', zValidator('query', z.object({ companyId: z.string().min(1) })), async (c) => {
+projectsRoute.get(
+  '/',
+  zValidator(
+    'query',
+    z.object({
+      companyId: z.string().min(1),
+      /**
+       * Показать архив вместо живых проектов.
+       *
+       * Именно вместо, а не вдобавок: список один и кормит сайдбар, дашборд и
+       * переключатель проектов. Подмешивать туда законченные значило бы
+       * вернуть ровно ту кашу, из-за которой архив и понадобился.
+       */
+      archived: z.enum(['1']).optional(),
+    }),
+  ),
+  async (c) => {
   const { sub } = c.get('session')
-  const { companyId } = c.req.valid('query')
+  const { companyId, archived } = c.req.valid('query')
   const role = await companyRoleOf(companyId, sub)
   if (!role) return c.json({ error: 'Forbidden' }, 403)
 
-  const all = await db.query.projects.findMany({ where: eq(projects.companyId, companyId) })
+  const all = await db.query.projects.findMany({
+    where: and(
+      eq(projects.companyId, companyId),
+      archived === '1' ? isNotNull(projects.archivedAt) : isNull(projects.archivedAt),
+    ),
+  })
   const my = await db.query.projectMembers.findMany({ where: eq(projectMembers.userId, sub) })
   const myByProject = new Map(my.map((m) => [m.projectId, m]))
 
@@ -409,6 +430,9 @@ projectsRoute.get('/', zValidator('query', z.object({ companyId: z.string().min(
       chatRules: p.chatRules,
       isMember: myByProject.has(p.id),
       myRole: myByProject.get(p.id)?.role ?? null,
+      // Список запрашивается либо живой, либо архивный, но признак нужен
+      // самой карточке: по нему она решает, что предложить — убрать или вернуть.
+      archived: Boolean(p.archivedAt),
       rulesAccepted: Boolean(myByProject.get(p.id)?.rulesAcceptedAt),
       members: (membersByProject.get(p.id) ?? []).slice(0, 8),
       lastMessage: lastMessage.get(p.id) ?? null,
@@ -804,6 +828,71 @@ projectsRoute.delete('/:projectId/logo', async (c) => {
  *
  * Ассистенту через мост эта операция НЕ доступна намеренно.
  */
+/**
+ * Кто распоряжается архивом: начальство проекта либо админ компании.
+ *
+ * Та же тройка, что и у правки настроек проекта. Архив обратим, но список
+ * проектов — общий, и убирать оттуда чужую работу рядовой участник не должен.
+ */
+async function mayArchive(projectId: string, userId: string): Promise<{ ok: false; status: 403 | 404 } | { ok: true; project: typeof projects.$inferSelect }> {
+  const project = await db.query.projects.findFirst({ where: eq(projects.id, projectId) })
+  if (!project) return { ok: false, status: 404 }
+  const membership = await projectRoleOf(projectId, userId)
+  const companyRole = await companyRoleOf(project.companyId, userId)
+  const allowed = membership?.role === 'owner' || membership?.role === 'admin' || canCreateProjects(companyRole)
+  return allowed ? { ok: true, project } : { ok: false, status: 403 }
+}
+
+/**
+ * Убрать проект с глаз. Ничего не удаляет.
+ *
+ * Задачи, переписка, файлы и часы остаются нетронутыми — проект просто
+ * перестаёт занимать место там, где смотрят на текущую работу. Открыть его
+ * по прямой ссылке можно как раньше.
+ */
+projectsRoute.post('/:projectId/archive', async (c) => {
+  const { sub } = c.get('session')
+  const projectId = c.req.param('projectId')
+  const check = await mayArchive(projectId, sub)
+  if (!check.ok) return c.json({ error: check.status === 404 ? 'Not found' : 'Forbidden' }, check.status)
+
+  // Повторный вызов не сдвигает дату: «когда убрали» — это факт, и
+  // переписывать его вторым нажатием незачем.
+  if (!check.project.archivedAt) {
+    await db.update(projects).set({ archivedAt: new Date() }).where(eq(projects.id, projectId))
+  }
+  await logActivity({
+    projectId,
+    actorId: sub,
+    action: 'update',
+    entityType: 'project',
+    entityId: projectId,
+    entityLabel: check.project.name,
+    meta: { archived: true },
+  })
+  return c.json({ ok: true, archived: true })
+})
+
+/** Вернуть проект в работу. */
+projectsRoute.delete('/:projectId/archive', async (c) => {
+  const { sub } = c.get('session')
+  const projectId = c.req.param('projectId')
+  const check = await mayArchive(projectId, sub)
+  if (!check.ok) return c.json({ error: check.status === 404 ? 'Not found' : 'Forbidden' }, check.status)
+
+  await db.update(projects).set({ archivedAt: null }).where(eq(projects.id, projectId))
+  await logActivity({
+    projectId,
+    actorId: sub,
+    action: 'update',
+    entityType: 'project',
+    entityId: projectId,
+    entityLabel: check.project.name,
+    meta: { archived: false },
+  })
+  return c.json({ ok: true, archived: false })
+})
+
 projectsRoute.delete('/:projectId', async (c) => {
   const { sub } = c.get('session')
   const projectId = c.req.param('projectId')

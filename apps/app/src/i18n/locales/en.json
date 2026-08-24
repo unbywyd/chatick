@@ -88,7 +88,11 @@
     "projectsCount_one": "{{count}} project",
     "projectsCount_other": "{{count}} projects",
     "leaveDangerHint": "You will lose access to every project of this company, along with their tasks, files and conversations. Getting back requires a new invitation from an administrator — you cannot restore yourself.",
-    "allCompanies": "All companies"
+    "allCompanies": "All companies",
+    "showArchived": "Archive",
+    "showActive": "Active",
+    "archive": "Archive project",
+    "unarchive": "Restore from archive"
   },
   "companyTabs": {
     "projects": "Projects",

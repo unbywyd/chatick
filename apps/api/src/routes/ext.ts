@@ -77,12 +77,19 @@ const serializeProject = (p: typeof projects.$inferSelect) => ({
   slug: p.slug,
   about: p.about,
   color: p.color,
+  // Признак архива в каждом ответе: иначе внешней системе пришлось бы делать
+  // второй запрос, чтобы узнать, применилось ли то, что она только что
+  // попросила.
+  archived: Boolean(p.archivedAt),
+  archivedAt: p.archivedAt,
   createdAt: p.createdAt,
 })
 
 // --- проекты -----------------------------------------------------------------
 
 extRoute.get('/projects', guard('read:all'), async (c) => {
+  // Архивные отдаём тоже: внешняя система ведёт свой учёт и должна видеть
+  // всё, что у нас есть. Признак archived у каждого — пусть решает сама.
   const rows = await db.select().from(projects).where(eq(projects.companyId, c.get('companyId')))
   return c.json({ items: rows.map(serializeProject), count: rows.length })
 })
@@ -309,6 +316,42 @@ extRoute.get('/projects/:externalId/members', guard('read:all'), async (c) => {
     // Люди компании, которых в этом проекте ещё нет, — кандидаты на добавление.
     available: inCompany.filter((r) => !memberIds.has(r.user.id)).map((r) => person(r.user)),
   })
+})
+
+/**
+ * Архивация проекта из внешней системы.
+ *
+ * Отдельные ручки, а не флаг в PATCH: архив — это состояние, а не поле.
+ * «Переименовал и случайно заархивировал» — тот класс ошибок, который потом
+ * ищут часами.
+ *
+ * И не DELETE: там семантика уже занята дважды — отвязка от внешней системы,
+ * а с флагом deleteProject ещё и удаление. Третий смысл туда не помещается.
+ */
+extRoute.post('/projects/:externalId/archive', guard('projects:write'), async (c) => {
+  const companyId = c.get('companyId')
+  const project = await db.query.projects.findFirst({
+    where: and(eq(projects.companyId, companyId), eq(projects.externalId, c.req.param('externalId'))),
+  })
+  if (!project) return c.json({ error: 'Project not found' }, 404)
+
+  // Повторный вызов не сдвигает дату: «когда убрали» — это факт.
+  if (!project.archivedAt) {
+    await db.update(projects).set({ archivedAt: new Date() }).where(eq(projects.id, project.id))
+  }
+  return c.json({ archived: true, project: serializeProject({ ...project, archivedAt: project.archivedAt ?? new Date() }) })
+})
+
+/** Вернуть проект в работу. */
+extRoute.delete('/projects/:externalId/archive', guard('projects:write'), async (c) => {
+  const companyId = c.get('companyId')
+  const project = await db.query.projects.findFirst({
+    where: and(eq(projects.companyId, companyId), eq(projects.externalId, c.req.param('externalId'))),
+  })
+  if (!project) return c.json({ error: 'Project not found' }, 404)
+
+  await db.update(projects).set({ archivedAt: null }).where(eq(projects.id, project.id))
+  return c.json({ archived: false, project: serializeProject({ ...project, archivedAt: null }) })
 })
 
 extRoute.post('/projects/:externalId/members', guard('users:write'), async (c) => {

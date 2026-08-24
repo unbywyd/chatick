@@ -1535,7 +1535,9 @@ tasksMineRoute.get('/', async (c) => {
     .select({ id: projects.id, name: projects.name, color: projects.color, logoUrl: projects.logoUrl })
     .from(projects)
     .innerJoin(projectMembers, eq(projectMembers.projectId, projects.id))
-    .where(and(eq(projects.companyId, companyId), eq(projectMembers.userId, sub)))
+    // Архивные не в счёт: панель показывает текущую работу, а законченный
+    // проект убрали с глаз именно затем, чтобы он её не разбавлял.
+    .where(and(eq(projects.companyId, companyId), eq(projectMembers.userId, sub), isNull(projects.archivedAt)))
   if (!mine.length) return c.json({ items: [] })
 
   const rows = await db
