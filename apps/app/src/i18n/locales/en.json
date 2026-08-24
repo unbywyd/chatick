@@ -90,9 +90,10 @@
     "leaveDangerHint": "You will lose access to every project of this company, along with their tasks, files and conversations. Getting back requires a new invitation from an administrator — you cannot restore yourself.",
     "allCompanies": "All companies",
     "showArchived": "Archive",
-    "showActive": "Active",
+    "showActive": "All projects",
     "archive": "Archive project",
-    "unarchive": "Restore from archive"
+    "unarchive": "Restore from archive",
+    "archiveEmpty": "The archive is empty"
   },
   "companyTabs": {
     "projects": "Projects",

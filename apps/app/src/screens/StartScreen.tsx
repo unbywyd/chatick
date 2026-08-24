@@ -3,7 +3,7 @@ import { useNavigate, useParams, useSearchParams } from 'react-router-dom'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { useTranslation } from 'react-i18next'
 import { toast } from 'sonner'
-import { Archive, ArchiveRestore, Building2, ChevronRight, Plus, FolderKanban, Check, Mail, MoreVertical, Search, Settings, X } from 'lucide-react'
+import { Archive, ArchiveRestore, ArrowLeft, Building2, ChevronRight, Plus, FolderKanban, Check, Mail, MoreVertical, Search, Settings, X } from 'lucide-react'
 import { ProfileMenu } from '@/components/ProfileMenu'
 import { Avatar } from '@/components/ui/avatar'
 import { AvatarGroup } from '@/components/ui/avatar-group'
@@ -922,7 +922,11 @@ function ProjectsTab({
             onClick={() => setShowArchived((v) => !v)}
             title={t(showArchived ? 'start.showActive' : 'start.showArchived')}
           >
-            <Archive className="size-4" />
+            {/* Значок меняется вместе с действием. С одним и тем же «архивом»
+                в обоих состояниях кнопка не читалась как выход: человек уже в
+                архиве, а на кнопке снова архив. Стрелка назад говорит прямо,
+                куда она ведёт. */}
+            {showArchived ? <ArrowLeft className="size-4 rtl:-scale-x-100" /> : <Archive className="size-4" />}
             <span className="hidden sm:inline">{t(showArchived ? 'start.showActive' : 'start.showArchived')}</span>
           </Button>
         )}
@@ -1089,9 +1093,11 @@ function ProjectsTab({
         })}
       </ul>
 
+      {/* «Проектов пока нет» в пустом архиве было бы враньём: человек их
+          только что видел и всего лишь заглянул в другой раздел. */}
       {!projectsQ.isLoading && filtered.length === 0 && (
         <p className="rounded-lg border border-dashed p-6 text-center text-sm text-muted-foreground">
-          {q ? t('start.nothingFound') : t('start.noProjects')}
+          {q ? t('start.nothingFound') : t(showArchived ? 'start.archiveEmpty' : 'start.noProjects')}
         </p>
       )}
 
