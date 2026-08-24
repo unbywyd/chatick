@@ -129,6 +129,40 @@ describe('поведение', () => {
   })
 })
 
+describe('архив в настройках проекта', () => {
+  it('доступен из самих настроек, а не только со списка компании', () => {
+    /**
+     * Закончить проект идут в его настройки — искать эту кнопку на другом
+     * экране никто не станет.
+     */
+    const form = app('components/ProjectSettingsForm.tsx')
+    expect(form, 'нет действия архивации').toMatch(/onClick=\{onArchive\}/)
+    expect(form, 'состояние архива не учитывается').toMatch(/archived \? 'start\.unarchive' : 'start\.archive'/)
+  })
+
+  it('НЕ в опасной зоне и не красным', () => {
+    /**
+     * Красное в этой модалке значит «необратимо»: отвязка рвёт связь
+     * навсегда, удаление стирает данные. Архив отменяется одним нажатием.
+     *
+     * Уравняв их по виду, мы приучили бы бояться безобидного — и заодно
+     * перестать бояться удаления, которое стоит рядом.
+     */
+    const form = app('components/ProjectSettingsForm.tsx')
+    const block = form.match(/\{projectId && onArchive && \([\s\S]*?\n          \)\}/)?.[0] ?? ''
+    expect(block, 'блок архивации не найден').not.toBe('')
+    expect(block, 'архив покрашен как необратимое').not.toMatch(/destructive|DangerAction/)
+  })
+
+  it('переключение сбрасывает списки, где проект показан', () => {
+    // Иначе он останется висеть в сайдбаре и трее до перезагрузки.
+    const dlg = app('components/ProjectSettingsDialog.tsx')
+    const mut = dlg.slice(dlg.indexOf('const archive = useMutation'))
+    expect(mut.slice(0, 900)).toMatch(/queryKey: \['sidebar-projects'\]/)
+    expect(mut.slice(0, 900)).toMatch(/queryKey: \['tray-projects'\]/)
+  })
+})
+
 describe('интерфейс', () => {
   it('переключатель запрашивает архивный список', () => {
     expect(app('screens/StartScreen.tsx')).toMatch(/showArchived \? '&archived=1' : ''/)

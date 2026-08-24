@@ -3,7 +3,7 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { api } from '@/lib/api'
 import { useTranslation } from 'react-i18next'
 import { toast } from 'sonner'
-import { ChevronDown, HardDrive } from 'lucide-react'
+import { Archive, ArchiveRestore, ChevronDown, HardDrive } from 'lucide-react'
 import { DangerZone, DangerAction } from '@/components/company/DangerZone'
 import { AiBehaviorFields } from '@/components/AiBehaviorFields'
 import { Switch } from '@/components/ui/switch'
@@ -87,6 +87,8 @@ export function ProjectSettingsForm({
   onLogoUpload,
   onLogoRemove,
   onDelete,
+  onArchive,
+  archived,
   onOpenAiPage,
 }: {
   value: ProjectSettings
@@ -100,6 +102,10 @@ export function ProjectSettingsForm({
   onLogoRemove?: () => void
   /** Удаление проекта — отдельной вкладкой, если человеку оно вообще доступно. */
   onDelete?: () => void
+  /** Убрать проект с глаз или вернуть. Не удаление: данные остаются. */
+  onArchive?: () => void
+  /** Проект сейчас в архиве — от этого зависит и текст, и действие. */
+  archived?: boolean
   /**
    * Уйти на страницу ИИ проекта: там источник, ключ и расход.
    *
@@ -276,6 +282,27 @@ export function ProjectSettingsForm({
               </DropdownMenuContent>
             </DropdownMenu>
           </div>
+          )}
+
+          {/* Архив — здесь, а не в опасной зоне.
+
+              Красным его красить нельзя: там красное значит «необратимо», а
+              архив отменяется одним нажатием и ничего не трогает. Уравняв их,
+              мы приучим бояться безобидного — и заодно перестать бояться
+              удаления, которое рядом. */}
+          {projectId && onArchive && (
+            <div className="flex flex-wrap items-center justify-between gap-3 rounded-lg border p-3">
+              <div className="min-w-0">
+                <p className="text-sm font-medium">{t(archived ? 'project.unarchiveTitle' : 'project.archiveTitle')}</p>
+                <p className="mt-0.5 text-xs text-muted-foreground">
+                  {t(archived ? 'project.unarchiveHint' : 'project.archiveHint')}
+                </p>
+              </div>
+              <Button variant="outline" size="sm" className="shrink-0" onClick={onArchive}>
+                {archived ? <ArchiveRestore className="size-3.5" /> : <Archive className="size-3.5" />}
+                {t(archived ? 'start.unarchive' : 'start.archive')}
+              </Button>
+            </div>
           )}
         </div>
       )}

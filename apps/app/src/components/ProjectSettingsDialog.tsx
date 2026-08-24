@@ -27,6 +27,8 @@ type ProjectDetails = {
   color?: string
   logoUrl?: string | null
   storageLimit?: string | number | null
+  /** Отметка архива: null — проект живой. */
+  archivedAt?: string | null
 }
 
 export function ProjectSettingsDialog({
@@ -77,6 +79,30 @@ export function ProjectSettingsDialog({
       },
     )
   }, [projectQ.data])
+
+  /**
+   * Убрать проект с глаз или вернуть.
+   *
+   * Не в опасной зоне и не красным: операция обратима одним нажатием и
+   * ничего не удаляет. Уравняв её с удалением по виду, мы приучили бы
+   * бояться безобидного — а заодно перестать бояться того, что рядом.
+   */
+  const archive = useMutation({
+    mutationFn: () =>
+      api(`/api/v1/projects/${projectId}/archive`, {
+        method: projectQ.data?.archivedAt ? 'DELETE' : 'POST',
+      }),
+    onSuccess: () => {
+      toast.success(t(projectQ.data?.archivedAt ? 'project.unarchiveDone' : 'project.archiveDone'))
+      // Проект переезжает между списками: без сброса он останется висеть в
+      // сайдбаре и трее до перезагрузки.
+      qc.invalidateQueries({ queryKey: ['project', projectId] })
+      qc.invalidateQueries({ queryKey: ['projects'] })
+      qc.invalidateQueries({ queryKey: ['sidebar-projects'] })
+      qc.invalidateQueries({ queryKey: ['tray-projects'] })
+    },
+    onError: (e) => toast.error(e instanceof Error ? e.message : String(e)),
+  })
 
   const save = useMutation({
     mutationFn: (v: ProjectSettings) => api(`/api/v1/projects/${projectId}`, { method: 'PATCH', body: JSON.stringify(v) }),
@@ -145,6 +171,8 @@ export function ProjectSettingsDialog({
               // новой страницы и клик читается как не сработавший.
               // companyId из адреса: модалка открывается только внутри проекта,
               // и тащить его отдельным свойством через все места незачем.
+              archived={Boolean(projectQ.data?.archivedAt)}
+              onArchive={() => archive.mutate()}
               onOpenAiPage={
                 companyId
                   ? () => {

@@ -527,7 +527,13 @@
     "unlinkDone": "Project disconnected",
     "dangerEmpty": "Nothing here for you: deleting a project is up to its owner or a company admin.",
     "notMemberTitle": "You are not in this project",
-    "notMemberText": "It exists, but only its team can open it. Ask one of its admins to add you."
+    "notMemberText": "It exists, but only its team can open it. Ask one of its admins to add you.",
+    "archiveTitle": "Move to archive",
+    "archiveHint": "The project disappears from lists and the sidebar but stays intact: tasks, chat, files and hours remain. You can bring it back at any time.",
+    "unarchiveTitle": "Project is archived",
+    "unarchiveHint": "Bring it back to lists and the sidebar.",
+    "archiveDone": "Project archived",
+    "unarchiveDone": "Project restored from archive"
   },
   "about": {
     "noDescription": "No description yet.",
