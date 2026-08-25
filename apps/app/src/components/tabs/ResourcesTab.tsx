@@ -630,10 +630,14 @@ function ResourceForm({ projectId, editing, onClose }: { projectId: string; edit
               }} />
             ))}
             {newSecrets.map((s, i) => (
-              <li key={i} className="flex items-center gap-1.5">
-                <Input value={s.label} onChange={(e) => setNewSecrets((p) => p.map((x, j) => (j === i ? { ...x, label: e.target.value } : x)))} placeholder={t('resources.secretLabel')} className="h-8 w-32 text-xs" />
-                <Input type="password" value={s.value} onChange={(e) => setNewSecrets((p) => p.map((x, j) => (j === i ? { ...x, value: e.target.value } : x)))} placeholder={t('resources.secretValue')} className="h-8 flex-1 text-xs" autoComplete="off" />
-                <Button variant="ghost" size="icon" onClick={() => setNewSecrets((p) => p.filter((_, j) => j !== i))}><X className="size-3.5" /></Button>
+              // На узкой панели название и значение делят строку, и названию
+              // доставалось 128 пикселей: «Логин от Cardcom» в них не влезал, и
+              // человек не видел, что печатает. Ниже sm кладём их друг под
+              // друга — места хватает обоим.
+              <li key={i} className="flex flex-wrap items-center gap-1.5 sm:flex-nowrap">
+                <Input value={s.label} onChange={(e) => setNewSecrets((p) => p.map((x, j) => (j === i ? { ...x, label: e.target.value } : x)))} placeholder={t('resources.secretLabel')} className="h-8 w-full text-xs sm:w-40" />
+                <Input type="password" value={s.value} onChange={(e) => setNewSecrets((p) => p.map((x, j) => (j === i ? { ...x, value: e.target.value } : x)))} placeholder={t('resources.secretValue')} className="h-8 min-w-0 flex-1 text-xs" autoComplete="off" />
+                <Button variant="ghost" size="icon" className="shrink-0" onClick={() => setNewSecrets((p) => p.filter((_, j) => j !== i))}><X className="size-3.5" /></Button>
               </li>
             ))}
           </ul>
@@ -713,17 +717,43 @@ function ExistingSecret({ label, onReveal, onDelete }: { label: string; onReveal
   const { t } = useTranslation()
   const [value, setValue] = useState<string | null>(null)
   return (
-    <li className="flex items-center gap-2 rounded-md border px-2.5 py-1.5 text-xs">
-      <KeyRound className="size-3.5 shrink-0 text-muted-foreground" />
-      <span className="w-28 shrink-0 truncate">{label || t('resources.secret')}</span>
-      <span className="flex-1 truncate font-mono">{value ?? '••••••••'}</span>
-      <Button variant="ghost" size="icon" title={value ? t('creds.hide') : t('creds.reveal')} onClick={async () => setValue(value ? null : await onReveal())}>
+    <li className="flex items-start gap-2 rounded-md border px-2.5 py-1.5 text-xs">
+      <KeyRound className="mt-1 size-3.5 shrink-0 text-muted-foreground" />
+      <div className="flex min-w-0 flex-1 flex-col gap-0.5">
+        {/* Название ключа целиком, а не в полосе шириной 112 пикселей.
+            «Логин» туда влезал, «Логин от Cardcom» — уже нет, и человек видел
+            обрубок вместо того, за чем пришёл. */}
+        {/* Название копируется само по себе: логин нужен так же часто, как
+            пароль, и перепечатывать его руками — надёжный способ ошибиться в
+            одном символе. Кнопка внизу копирует значение, а не название. */}
+        <button
+          type="button"
+          title={t('creds.copy')}
+          onClick={async () => {
+            await navigator.clipboard.writeText(label)
+            toast.success(t('creds.copied'))
+          }}
+          className="group flex items-start gap-1.5 text-start"
+        >
+          <span className="break-words font-medium">{label || t('resources.secret')}</span>
+          {label && (
+            <Copy className="mt-0.5 size-3 shrink-0 text-muted-foreground opacity-0 transition-opacity group-hover:opacity-100" />
+          )}
+        </button>
+        {/* Раскрытое значение переносим, а не обрезаем: его показывают ровно
+            затем, чтобы прочитать глазами. Скрытые точки оставляем строкой —
+            им переноситься незачем. */}
+        <span className={cn('font-mono text-muted-foreground', value ? 'break-all' : 'truncate')}>
+          {value ?? '••••••••'}
+        </span>
+      </div>
+      <Button variant="ghost" size="icon" className="shrink-0" title={value ? t('creds.hide') : t('creds.reveal')} onClick={async () => setValue(value ? null : await onReveal())}>
         {value ? <EyeOff className="size-3.5" /> : <Eye className="size-3.5" />}
       </Button>
-      <Button variant="ghost" size="icon" title={t('creds.copy')} onClick={async () => { await navigator.clipboard.writeText(await onReveal()); toast.success(t('creds.copied')) }}>
+      <Button variant="ghost" size="icon" className="shrink-0" title={t('creds.copy')} onClick={async () => { await navigator.clipboard.writeText(await onReveal()); toast.success(t('creds.copied')) }}>
         <Copy className="size-3.5" />
       </Button>
-      <Button variant="ghost" size="icon" title={t('files.delete')} onClick={onDelete}>
+      <Button variant="ghost" size="icon" className="shrink-0" title={t('files.delete')} onClick={onDelete}>
         <Trash2 className="size-3.5 text-muted-foreground hover:text-destructive" />
       </Button>
     </li>
