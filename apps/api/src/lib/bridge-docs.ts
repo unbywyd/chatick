@@ -1096,7 +1096,7 @@ a company admin can still invite them in one call — the invite carries this
 project with it, so accepting the invite joins both. Anyone below company admin
 gets 403 for outsiders and should invite through the interface.
 
-Permission levels per domain (tasks, files, resources, documents, notes):
+Permission levels per domain (tasks, files, resources, documents, notes, releases):
 
   none | read | write | crud
 
@@ -1108,9 +1108,11 @@ changed.
   PATCH /x/members/<id>  {"permissions": {"files": "crud", "resources": "read"}}
   PATCH /x/members/<id>  {"jobTitle": "Backend developer", "responsibility": "API and deploys"}
 
-Removing a person from a project is NOT available here — do it in the
-interface. It is irreversible, sends them an email, and closes their tunnels.
-To take away access without removing them, set every domain to "none".
+Removing a person is DELETE /x/members/<id> — out of this project only, never
+out of the company. Ask the human first: it closes their tunnels, and putting
+them back does not restore what they were doing. To take away access without
+removing them, set every domain to "none" — reversible, and their history stays
+attached to a person who is still in the team.
 
 ## Project settings
 
