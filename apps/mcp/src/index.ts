@@ -417,23 +417,63 @@ server.registerTool(
   },
 )
 
+/**
+ * Домены прав. Дубль списка из PERMISSION_DOMAINS (apps/api/routes/projects.ts):
+ * mcp — отдельный пакет и импортировать оттуда не может.
+ *
+ * За расхождением следит member-role-domains.test.ts: домен, добавленный на
+ * сервере и забытый здесь, роняет тест. Без этого сторожа повторилась бы уже
+ * случившаяся история с releases — поле молча выбрасывалось, ручка отвечала
+ * ok, а уровень не менялся.
+ */
+const PERMISSION_DOMAINS = ['tasks', 'files', 'resources', 'documents', 'notes', 'releases'] as const
+const levelEnum = z.enum(['none', 'read', 'write', 'crud'])
+
 server.registerTool(
   'chatick_member_role',
   {
     title: 'Change what someone may do',
     description:
-      'Changes a project role and, with it, the default permission levels. The project owner cannot be ' +
-      'changed — every project has exactly one, and in many of them they are the only person who can hand ' +
-      'rights back.',
+      'Changes a project role, per-area access levels, job title and area of responsibility. ' +
+      'Pass only what changes — everything omitted stays as it was. ' +
+      'Levels per area: none (does not even see the tab) < read < write (create and edit) < crud (also delete). ' +
+      'CHANGING role RESETS every level to that role\'s defaults, so pass permissions in the SAME call to keep ' +
+      'exceptions — a separate later call would be overwritten. Current values come from chatick_members. ' +
+      'The project owner cannot be changed — every project has exactly one, and in many of them they are the ' +
+      'only person who can hand rights back.',
     inputSchema: {
       project: z.string().describe('Project id'),
       userId: z.string().describe('Who to change — id from chatick_members'),
-      role: z.enum(['admin', 'member']).describe('New role in the project'),
+      role: z.enum(['admin', 'member']).optional().describe('New role in the project; resets levels to its defaults'),
+      permissions: z
+        .object(Object.fromEntries(PERMISSION_DOMAINS.map((d) => [d, levelEnum.optional()])) as Record<
+          (typeof PERMISSION_DOMAINS)[number],
+          z.ZodOptional<typeof levelEnum>
+        >)
+        .optional()
+        .describe('Access level per area; omitted areas keep their level'),
+      jobTitle: z.string().optional().describe('Job title in this project; empty string falls back to the company one'),
+      responsibility: z
+        .string()
+        .optional()
+        .describe('What this person answers for here; empty string falls back to the company one'),
     },
   },
-  async ({ project, userId, role }) => {
+  async ({ project, userId, role, permissions, jobTitle, responsibility }) => {
+    // Пустой вызов сервер отвергает ошибкой «Nothing to change» — не тратим
+    // на него поход по сети и говорим то же самое сразу.
+    if (role === undefined && !permissions && jobTitle === undefined && responsibility === undefined) {
+      return fail(new Error('Nothing to change: pass role, permissions, jobTitle or responsibility'))
+    }
     try {
-      return json(await call({ ...(await need()), projectId: project }, 'PATCH', `/members/${userId}`, { role }))
+      return json(
+        await call({ ...(await need()), projectId: project }, 'PATCH', `/members/${userId}`, {
+          role,
+          permissions,
+          jobTitle,
+          responsibility,
+        }),
+      )
     } catch (e) {
       return fail(e)
     }

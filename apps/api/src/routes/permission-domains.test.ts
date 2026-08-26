@@ -16,7 +16,7 @@ describe('домены прав', () => {
   it('схема тела запроса собирается из списка, а не повторяет его руками', () => {
     // Именно повторение руками и разъехалось. Проверяем не текст схемы, а то,
     // что она выводится из PERMISSION_DOMAINS.
-    expect(src).toMatch(/z\.object\(\s*Object\.fromEntries\(PERMISSION_DOMAINS/)
+    expect(src).toMatch(/z\s*\.object\(\s*Object\.fromEntries\(PERMISSION_DOMAINS/)
   })
 
   it('у каждой роли уровень задан для КАЖДОГО домена', () => {
@@ -33,5 +33,52 @@ describe('домены прав', () => {
     // должно начальство проекта.
     expect(defaultDomainPermissions('member').releases).toBe('read')
     expect(defaultDomainPermissions('admin').releases).toBe('crud')
+  })
+  /**
+   * Четвёртое место с тем же списком — MCP-сервер. Он отдельный пакет и
+   * импортировать PERMISSION_DOMAINS не может, поэтому список там продублирован.
+   *
+   * Дубль без сторожа — это та же история с releases, только через границу
+   * пакета: домен добавят на сервере, в инструменте забудут, и ассистент
+   * просто не сможет выставить по нему уровень. Молча, без единой ошибки.
+   */
+  it('MCP-инструмент знает ТЕ ЖЕ домены, что и сервер', () => {
+    const mcp = readFileSync(join(import.meta.dirname, '../../../mcp/src/index.ts'), 'utf8')
+    const list = mcp.match(/const PERMISSION_DOMAINS = \[([^\]]+)\] as const/)
+    expect(list, 'в MCP не нашёлся список доменов').toBeTruthy()
+    const inMcp = [...(list as RegExpMatchArray)[1].matchAll(/'([a-z]+)'/g)].map((m) => m[1])
+    expect(inMcp.slice().sort()).toEqual([...PERMISSION_DOMAINS].sort())
+  })
+
+  it('MCP-инструмент строит схему из списка, а не перечисляет домены руками', () => {
+    const mcp = readFileSync(join(import.meta.dirname, '../../../mcp/src/index.ts'), 'utf8')
+    expect(mcp).toMatch(/z\s*\.object\(\s*Object\.fromEntries\(PERMISSION_DOMAINS/)
+  })
+
+  it('MCP умеет менять не только роль', () => {
+    // Ручка принимает уровни, должность и зону ответственности, а инструмент
+    // долго слал одну role: ассистент ЧИТАЛ права полностью и не мог поменять.
+    const mcp = readFileSync(join(import.meta.dirname, '../../../mcp/src/index.ts'), 'utf8')
+    const tool = mcp.slice(
+      mcp.indexOf("'chatick_member_role'"),
+      mcp.indexOf("'chatick_member_remove'"),
+    )
+    for (const field of ['permissions', 'jobTitle', 'responsibility']) {
+      expect(tool, `chatick_member_role не пробрасывает ${field}`).toContain(field)
+    }
+  })
+  /**
+   * Пятое место — гайд моста, по которому ассистент работает без MCP.
+   *
+   * Тут расхождение уже жило: releases в списке гайда не было, и ассистент
+   * со скилом просто не знал, что таким уровнем можно управлять. Гайд —
+   * не комментарий, а рабочая инструкция; устаревший, он врёт человеку.
+   */
+  it('гайд моста перечисляет ВСЕ домены', () => {
+    const docs = readFileSync(join(import.meta.dirname, '../lib/bridge-docs.ts'), 'utf8')
+    const line = docs.match(/Permission levels per domain \(([^)]+)\)/)
+    expect(line, 'в гайде не нашлась строка про уровни по доменам').toBeTruthy()
+    const listed = (line as RegExpMatchArray)[1].split(',').map((d) => d.trim())
+    expect(listed.slice().sort()).toEqual([...PERMISSION_DOMAINS].sort())
   })
 })
