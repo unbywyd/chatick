@@ -291,3 +291,91 @@ describe('адреса не считаются языком', () => {
     expect(html).toContain('<ul dir="rtl">')
   })
 })
+
+describe('маркеры одного списка не разъезжаются', () => {
+  // Живой случай: комментарий к задаче на иврите, где часть пунктов начинается
+  // с латиницы — commit, package.json, названия файлов. Считая направление
+  // пункта отдельно, мы ставили одному ltr, другому rtl, и точки списка
+  // оказывались по РАЗНЫЕ стороны от текста. Человеку это видно как случайный
+  // сбой: «то так, то сяк».
+  const html = richText(
+    ['- commit 6bc6e49 ב-master + tag v1.1.0 (repo marketwise-agent)', '- גרסה הועלתה 1.0.0 → 1.1.0'].join('\n'),
+  )
+
+  it('список — ивритский', () => {
+    expect(html).toContain('<ul dir="rtl">')
+  })
+
+  it('пункт с латинским началом НЕ уводит свой маркер на другую сторону', () => {
+    // Саботаж: вернуть li в общую ветку dirOf — пункт получит ltr, и точка
+    // уедет влево, тогда как у соседнего пункта останется справа.
+    const dirs = [...html.matchAll(/<li dir="(rtl|ltr)"/g)].map((m) => m[1])
+    expect(dirs.length, 'пункты без направления').toBeGreaterThan(1)
+    expect(new Set(dirs).size, `пункты разъехались: ${dirs.join(', ')}`).toBe(1)
+  })
+
+  it('пункты идут в ту же сторону, что и сам список', () => {
+    expect(html).toContain('<li dir="rtl"')
+    expect(html).not.toContain('<li dir="ltr"')
+  })
+
+  it('латинский список остаётся латинским целиком', () => {
+    // Обратная сторона: правило не должно тянуть в rtl там, где его нет.
+    const en = richText('- build passed\n- tests green')
+    expect(en).toContain('<ul dir="ltr">')
+    expect(en).not.toContain('<li dir="rtl"')
+  })
+
+  it('вложенный список судится по СВОЕМУ направлению, а не по внешнему', () => {
+    // Иначе ивритский пункт внутри латинского списка получил бы ltr от
+    // родителя — маркер снова разошёлся бы с текстом, только на уровень ниже.
+    const nested = richText('- outer item\n    - שלום עולם\n    - עוד שורה בעברית')
+    const inner = nested.slice(nested.indexOf('<ul', 1))
+    expect(inner).toContain('dir="rtl"')
+  })
+
+  it('нумерованный список ведёт себя так же', () => {
+    // Номер уезжает заметнее точки: «1.» у левого края при тексте справа.
+    const ol = richText('1. exclude: excludeFolders מדלג על תיקיות\n2. עוד שורה')
+    expect(ol).toContain('<ol dir="rtl">')
+    expect(ol).not.toContain('<li dir="ltr"')
+  })
+
+  it('пункт вне списка судится по себе', () => {
+    // Осторожность: одиночный <li> в присланном HTML не должен ломать разбор.
+    expect(() => richText('<li>שלום</li>')).not.toThrow()
+  })
+})
+
+describe('латиница в ивритской строке — имена, а не язык', () => {
+  it('ивритский пункт про сборку остаётся ивритским', () => {
+    // Живой случай со скриншота. Латинских БУКВ здесь 84 против 30 ивритских —
+    // по буквам выходило ltr, и маркеры вставали слева при тексте справа.
+    // Считаем слова: «marketwise-agent» весит столько же, сколько «גם».
+    const html = richText(
+      '- מתקין Windows נבנה: "MarketWise Agent Setup 1.1.0.exe" (~82MB, NSIS). גם בינארי CLI ל-win/linux ב-bin/.',
+    )
+    expect(html).toContain('<ul dir="rtl">')
+  })
+
+  it('ивритский пункт, начинающийся с латинской команды', () => {
+    // «exclude: excludeFolders: string[] — מדלג על תיקיות לפי שם»
+    const html = richText('1. exclude: excludeFolders: string[] — מדלג על תיקיות לפי שם\n2. עוד שורה')
+    expect(html).toContain('<ol dir="rtl">')
+    expect(html).not.toContain('<li dir="ltr"')
+  })
+
+  it('английская фраза с парой ивритских терминов остаётся английской', () => {
+    // Обратная сторона порога: сдвинув его к нулю, мы развернули бы вправо
+    // любой текст, где иврит просто упоминается.
+    const html = richText('the quick brown fox jumps over שלום תודה lazy dog today')
+    expect(html).toContain('dir="ltr"')
+  })
+
+  it('длинное латинское название не перевешивает короткое ивритское слово', () => {
+    // Суть перехода с букв на слова. «marketwise-agent-installer» — одно имя,
+    // а не шестнадцать голосов за латиницу.
+    const html = richText('marketwise-agent-installer נבנה')
+    expect(html).toContain('dir="rtl"')
+  })
+})
