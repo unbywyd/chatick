@@ -11,7 +11,7 @@
 // Правит ТОЛЬКО атрибут dir у блочных тегов: applyDirection не трогает ни
 // текст, ни другие атрибуты. Направление, выставленное человеком руками,
 // переживает пересчёт — эта проверка внутри самой функции.
-import { Client } from 'pg'
+import postgres from 'postgres'
 import { readFileSync } from 'node:fs'
 import { applyDirection } from '../dist/lib/markdown.js'
 
@@ -48,23 +48,22 @@ const BLOCKS = /<(p|h[1-6]|li|blockquote|ul|ol|td|th|div)((?:\s[^>]*)?)>/gi
 const strip = (html) =>
   html.replace(BLOCKS, (_m, name, attrs) => `<${name}${(attrs ?? '').replace(/\sdir\s*=\s*("[^"]*"|'[^']*'|[^\s>]+)/gi, '')}>`)
 
-const client = new Client({ connectionString: url })
-await client.connect()
+const sql = postgres(url, { max: 1 })
 
 let total = 0
 for (const [table, column] of TARGETS) {
-  const { rows } = await client.query(`SELECT id, ${column} AS body FROM ${table} WHERE ${column} LIKE '%<%'`)
+  const rows = await sql.unsafe(`SELECT id, ${column} AS body FROM ${table} WHERE ${column} LIKE '%<%'`)
   let changed = 0
   for (const r of rows) {
     if (!r.body) continue
     const next = applyDirection(strip(r.body))
     if (next === r.body) continue
     changed++
-    if (apply) await client.query(`UPDATE ${table} SET ${column} = $1 WHERE id = $2`, [next, r.id])
+    if (apply) await sql.unsafe(`UPDATE ${table} SET ${column} = $1 WHERE id = $2`, [next, r.id])
   }
   total += changed
   console.log(`${table}.${column}: ${changed} из ${rows.length}`)
 }
 
 console.log(apply ? `\nЗаписано: ${total}` : `\nБудет изменено: ${total} (запуск с --apply)`)
-await client.end()
+await sql.end()
