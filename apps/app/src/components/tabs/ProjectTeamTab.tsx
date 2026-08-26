@@ -32,6 +32,12 @@ type Member = {
   domains: Record<Domain, Level>
   jobTitle: string
   responsibility: string
+  /**
+   * Что записано у САМОГО проекта; пусто — значит унаследовано от компании.
+   * jobTitle выше — уже разрешённое значение, с подстановкой компанейского.
+   */
+  ownJobTitle?: string
+  ownResponsibility?: string
   user: { id: string; name: string; email: string; avatarUrl: string | null }
 }
 type CompanyMember = {
@@ -359,9 +365,20 @@ function ProfileFields({
   onSave: (jobTitle: string, responsibility: string) => void
 }) {
   const { t } = useTranslation()
-  const [jobTitle, setJobTitle] = useState(member.jobTitle)
-  const [responsibility, setResponsibility] = useState(member.responsibility)
-  const dirty = jobTitle !== member.jobTitle || responsibility !== member.responsibility
+  /**
+   * Правим СВОЁ поле проекта, а не разрешённое.
+   *
+   * Подставив унаследованное, форма записала бы его как собственное при
+   * первом же сохранении — наследование оборвалось бы руками человека,
+   * который ничего не менял, и должность перестала бы следовать за
+   * компанией. Пустое поле с компанейской подсказкой в плейсхолдере
+   * читается верно: «здесь не задано, берётся оттуда».
+   */
+  const own = member.ownJobTitle ?? member.jobTitle
+  const ownResp = member.ownResponsibility ?? member.responsibility
+  const [jobTitle, setJobTitle] = useState(own)
+  const [responsibility, setResponsibility] = useState(ownResp)
+  const dirty = jobTitle !== own || responsibility !== ownResp
 
   return (
     <div className="space-y-2 rounded-md bg-muted/30 p-2.5">
@@ -373,7 +390,7 @@ function ProfileFields({
             disabled={!canEdit}
             maxLength={200}
             onChange={(e) => setJobTitle(e.target.value)}
-            placeholder={t('projTeam.jobTitlePlaceholder')}
+            placeholder={member.jobTitle && !own ? member.jobTitle : t('projTeam.jobTitlePlaceholder')}
             className="h-8 w-full rounded border bg-background px-2 text-sm outline-none focus:ring-2 focus:ring-ring disabled:opacity-70"
           />
         </label>
@@ -384,12 +401,17 @@ function ProfileFields({
             disabled={!canEdit}
             maxLength={400}
             onChange={(e) => setResponsibility(e.target.value)}
-            placeholder={t('projTeam.responsibilityPlaceholder')}
+            placeholder={member.responsibility && !ownResp ? member.responsibility : t('projTeam.responsibilityPlaceholder')}
             className="h-8 w-full rounded border bg-background px-2 text-sm outline-none focus:ring-2 focus:ring-ring disabled:opacity-70"
           />
         </label>
       </div>
       <p className="text-xs text-muted-foreground">{t('projTeam.profileAiNote')}</p>
+      {/* Только когда наследование реально работает: иначе подсказка про
+          компанию появлялась бы там, где должность не задана нигде. */}
+      {(member.jobTitle && !own) || (member.responsibility && !ownResp) ? (
+        <p className="text-xs text-muted-foreground">{t('projTeam.profileInherited')}</p>
+      ) : null}
       {canEdit && dirty && (
         <Button variant="brand" size="sm" onClick={() => onSave(jobTitle, responsibility)}>
           {t('projectForm.save')}

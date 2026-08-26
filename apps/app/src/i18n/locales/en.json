@@ -802,6 +802,7 @@
     "responsibility": "Responsible for",
     "responsibilityPlaceholder": "e.g. API & deployments",
     "profileAiNote": "Shared with the AI so it knows who does what.",
+    "profileInherited": "Empty means inherited from the company. Fill it in to set a project-specific one.",
     "roleChanged": "Role changed",
     "promoteConfirm": "Make {{name}} a project admin?",
     "demoteConfirm": "Move {{name}} back to member?",

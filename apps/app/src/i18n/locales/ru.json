@@ -808,6 +808,7 @@
     "responsibility": "Отвечает за",
     "responsibilityPlaceholder": "напр. API и деплой",
     "profileAiNote": "Передаётся ИИ, чтобы он знал, кто за что отвечает.",
+    "profileInherited": "Пусто — берётся из компании. Заполните, чтобы задать своё для этого проекта.",
     "roleChanged": "Роль изменена",
     "promoteConfirm": "Сделать {{name}} админом проекта?",
     "demoteConfirm": "Перевести {{name}} в участники?",

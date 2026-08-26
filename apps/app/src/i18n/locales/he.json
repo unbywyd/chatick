@@ -803,6 +803,7 @@
     "responsibility": "אחראי/ת על",
     "responsibilityPlaceholder": "למשל API ופריסות",
     "profileAiNote": "משותף עם ה-AI כדי שיֵדע מי אחראי על מה.",
+    "profileInherited": "ריק — נלקח מהחברה. מלאו כדי לקבוע ערך משלכם לפרויקט הזה.",
     "roleChanged": "התפקיד שונה",
     "promoteConfirm": "להפוך את {{name}} למנהל הפרויקט?",
     "demoteConfirm": "להעביר את {{name}} בחזרה לחבר צוות?",

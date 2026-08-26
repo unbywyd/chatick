@@ -16,6 +16,7 @@ import { requireSession, requireProject, signProjectToken, type SessionEnv, type
 import { sendAddedToProjectMail, sendDeletedMail, sendRemovedFromProjectMail } from '../lib/mails.js'
 import { companyLlm } from '../lib/llm.js'
 import { stripMentions } from '../lib/notify.js'
+import { profilesForProject } from '../lib/job-title.js'
 import { s3Client, s3Bucket, getObjectStream, deleteObject, isCustomStorage, resolveStorage, S3_KEY_PREFIX } from '../lib/s3.js'
 
 /**
@@ -1008,16 +1009,35 @@ projectsRoute.get('/:projectId/members', async (c) => {
     .from(projectMembers)
     .innerJoin(users, eq(users.id, projectMembers.userId))
     .where(eq(projectMembers.projectId, projectId))
+  /**
+   * Должность — РАЗРЕШЁННАЯ, с наследованием от компании.
+   *
+   * Читали сырое поле проекта, и список показывал пусто у всех, кому
+   * должность задали на уровне компании. Ассистент при этом её знал: мост и
+   * контекст ИИ давно зовут profilesForProject. Одни и те же данные,
+   * разный ответ — а человек видит «не сохранилось» и вбивает должность
+   * заново, уже в проект. С этого мгновения наследование для него мертво:
+   * проектное значение сильнее, и смена в компании его больше не догонит.
+   *
+   * ownJobTitle отдаём отдельно — это то, что записано у САМОГО проекта.
+   * Форме правки нужно именно оно: подставив унаследованное, она сохранила
+   * бы его как собственное и оборвала наследование тем же способом, только
+   * руками человека, который ничего не менял.
+   */
+  const profiles = await profilesForProject(projectId)
   return c.json(
     rows.map((r) => {
       const domains = resolveDomains(r.role, r.permissions)
+      const profile = profiles.get(r.user.id)
       return {
         id: r.id,
         role: r.role,
         domains, // {tasks,files,resources}: уровень — основной формат для UI
         permissions: expandPermissions(domains), // плоские булевы — совместимость
-        jobTitle: r.jobTitle,
-        responsibility: r.responsibility,
+        jobTitle: profile?.jobTitle || '',
+        responsibility: profile?.responsibility || '',
+        ownJobTitle: r.jobTitle,
+        ownResponsibility: r.responsibility,
         user: { id: r.user.id, name: r.user.name, email: r.user.email, avatarUrl: r.user.avatarUrl },
       }
     }),
