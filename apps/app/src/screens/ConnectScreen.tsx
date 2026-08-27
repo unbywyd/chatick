@@ -5,7 +5,7 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { useTranslation } from 'react-i18next'
 import { toast } from 'sonner'
 import { ArrowLeft, Bot, Check, ChevronDown, Copy, Plug, ShieldCheck, X, Search, Building2, FolderKanban } from 'lucide-react'
-import { api, API_URL, getSessionToken, type Company, type ProjectListItem } from '@/lib/api'
+import { api, ApiError, API_URL, getSessionToken, setReturnTo, type Company, type ProjectListItem } from '@/lib/api'
 import { cn } from '@/lib/utils'
 import { Logo } from '@/components/Logo'
 import { Button } from '@/components/ui/button'
@@ -45,7 +45,12 @@ export function ConnectPanel({ onClose }: { onClose?: () => void }) {
   const [copied, setCopied] = useState(false)
 
   useEffect(() => {
-    if (!getSessionToken()) navigate('/login', { replace: true })
+    if (getSessionToken()) return
+    // Запоминаем, куда шли, вместе с кодом в адресе: ассистент даёт ссылку
+    // вида /connect?code=…, и без этого после входа человек оказывался на
+    // общем экране, а код приходилось искать в переписке заново.
+    setReturnTo(`/connect${window.location.hash.split('?')[1] ? `?${window.location.hash.split('?')[1]}` : ''}`)
+    navigate('/login', { replace: true })
   }, [navigate])
 
   // строка, которую человек вставляет в Claude Code — без токена, безопасно
@@ -126,12 +131,23 @@ export function ConnectPanel({ onClose }: { onClose?: () => void }) {
   }, [awaiting, sessions.data])
 
   // проверяем код, чтобы показать, КТО просит доступ
+  //
+  // Без сессии НЕ спрашиваем. Ручка требует вход и отвечает 401, а экран
+  // показывал на любую ошибку «код неверный» — человек получал код от
+  // ассистента, вставлял правильный и читал, что тот не существует. Искал
+  // причину в коде, а причина была в том, что он не вошёл.
+  //
+  // Редирект в useEffect ниже от этого не спасает: он срабатывает ПОСЛЕ
+  // первого рендера, а запрос уходит уже на нём.
   const pending = useQuery({
     queryKey: ['bridge-code', code],
-    enabled: code.trim().length >= 8,
+    enabled: code.trim().length >= 8 && Boolean(getSessionToken()),
     retry: false,
     queryFn: () => api<{ clientName: string }>(`/api/v1/auth/bridge/code/${encodeURIComponent(code.trim())}`),
   })
+  // 401 — это «войдите», а не «код плохой». Различаем: одинаковый текст на
+  // две разные беды посылает человека чинить не то.
+  const needsLogin = pending.error instanceof ApiError && pending.error.status === 401
 
   const approve = useMutation({
     mutationFn: () =>
@@ -358,7 +374,9 @@ export function ConnectPanel({ onClose }: { onClose?: () => void }) {
             </div>
           )}
           {code.trim().length >= 8 && pending.isError && (
-            <p className="mt-2 text-xs text-destructive">{t('connect.badCode')}</p>
+            <p className="mt-2 text-xs text-destructive">
+              {needsLogin ? t('connect.signInFirst') : t('connect.badCode')}
+            </p>
           )}
         </section>
 
