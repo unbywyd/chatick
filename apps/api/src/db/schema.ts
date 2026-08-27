@@ -1465,6 +1465,32 @@ export const aiUsageLog = pgTable(
   (t) => [index('ai_usage_project_idx').on(t.projectId, t.createdAt)],
 )
 
+/**
+ * Отметки об отправленных предупреждениях о тратах.
+ *
+ * Планировщик тикает каждые пять минут. Без отметки письмо «траты за месяц
+ * перевалили за порог» уходило бы 288 раз в сутки, и человек отключил бы его
+ * на второй день — вместе с настоящими предупреждениями.
+ *
+ * Отдельная таблица, а не колонка у компании: порог считается по ВСЕМ тратам
+ * сервера. Уникальность по (period, kind) живёт в базе, а не в коде: два
+ * процесса тикают независимо, и проверка «посмотрели, потом вставили»
+ * пропустила бы второе письмо между этими шагами.
+ */
+export const spendAlerts = pgTable(
+  'spend_alerts',
+  {
+    id: id(),
+    /** «2026-08» — месяц, за который считались траты. */
+    period: text('period').notNull(),
+    kind: text('kind').notNull().default('monthly_threshold'),
+    amountUsd: text('amount_usd').notNull(),
+    sentTo: text('sent_to').notNull(),
+    createdAt: createdAt(),
+  },
+  (t) => [uniqueIndex('spend_alerts_period_idx').on(t.period, t.kind)],
+)
+
 // Прайсинг моделей: цена за 1M токенов (USD). Глобальный дефолт (projectId=null) +
 // per-project override. Известные модели — сидятся; для неизвестных цены нет, пока не зададут.
 export const modelPricing = pgTable(

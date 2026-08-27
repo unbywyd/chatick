@@ -84,9 +84,17 @@ const envSchema = z.object({
   SMTP_USER: z.string().optional(),
   SMTP_PASSWORD: z.string().optional(),
   SMTP_FROM_EMAIL: z.string().optional(),
-  // Куда писать о событиях площадки — пока только о регистрациях.
+  // Куда писать о событиях площадки — регистрации и траты на ИИ.
   // Не задан — писем нет: на локальной машине они только мешают.
   ADMIN_EMAIL: z.string().optional(),
+  /**
+   * Порог трат на ИИ за месяц, в долларах. Перевалили — уходит одно письмо на
+   * ADMIN_EMAIL.
+   *
+   * Значение по умолчанию небольшое намеренно: счёт за модели растёт тихо, и
+   * узнать о нём из письма лучше, чем из выписки. Отключается нулём.
+   */
+  AI_SPEND_ALERT_USD: z.coerce.number().default(5),
   SMTP_FROM_NAME: z.string().optional(), // отображаемое имя отправителя
   SMTP_REPLY_TO: z.string().optional(), // куда уходят ответы (не на noreply)
 

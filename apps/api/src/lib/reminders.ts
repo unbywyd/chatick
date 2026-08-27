@@ -15,6 +15,7 @@ import { companyOf, projectPath, projectUrl } from './links.js'
 import { runDueBackups } from './auto-backup.js'
 import { localeFor } from './locale.js'
 import { notifyConfigForProject } from './notify-config.js'
+import { checkSpendAlert } from './spend-alert.js'
 
 // Планировщик напоминаний об открытых задачах (SPEC §8.9).
 // Тик раз в 5 минут: для каждого включённого конфига проверяем, наступил ли срок,
@@ -339,6 +340,9 @@ export function startReminderScheduler() {
       // события — чужой сервер может лежать, и ждать его никто не должен.
       void flushWebhooks().catch(() => {})
       void sweepDeliveries().catch(() => {})
+      // Траты на ИИ за месяц. Сам решает, писать ли: одно письмо на период,
+      // отметка в базе — тик частый, а порог переходят один раз.
+      void checkSpendAlert().catch(() => {})
     }, TICK_MS)
   }, 60_000)
   console.log('⏰ task-reminder scheduler started')
