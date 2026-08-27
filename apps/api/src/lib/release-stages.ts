@@ -59,6 +59,7 @@ export const BUILD_TYPES: BuildType[] = [
     label: 'iOS',
     stages: [
       { key: 'building', label: 'Building', tone: 'neutral', hint: 'Сборка идёт' },
+      { key: 'built', label: 'Build ready', tone: 'neutral', hint: 'Сборка готова и лежит в EAS — никуда не отправлена' },
       { key: 'testflight', label: 'TestFlight', tone: 'testing', hint: 'Доступна тестировщикам, в магазине не видна' },
       { key: 'in_review', label: 'Waiting for Apple review', tone: 'waiting', hint: 'Отправлена в Apple, ждём проверки' },
       { key: 'released', label: 'App Store', live: true, tone: 'live', hint: 'Опубликована, доступна всем' },
@@ -69,6 +70,7 @@ export const BUILD_TYPES: BuildType[] = [
     label: 'Android',
     stages: [
       { key: 'building', label: 'Building', tone: 'neutral', hint: 'Сборка идёт' },
+      { key: 'built', label: 'Build ready', tone: 'neutral', hint: 'Сборка готова и лежит в EAS — никуда не отправлена' },
       { key: 'internal', label: 'Internal track', tone: 'testing', hint: 'Внутренний канал Google Play: только свои тестировщики, в магазине не видна' },
       // Google проверяет сборку так же, как Apple, — просто быстрее и тише.
       // Без этой ступени «отправили и ждём» было некуда поставить, и версия
@@ -82,6 +84,7 @@ export const BUILD_TYPES: BuildType[] = [
     label: 'Web',
     stages: [
       { key: 'building', label: 'Building', tone: 'neutral', hint: 'Сборка идёт' },
+      { key: 'built', label: 'Build ready', tone: 'neutral', hint: 'Сборка готова — никуда не выкачена' },
       { key: 'staging', label: 'Staging', tone: 'testing', hint: 'Выкачено на тестовый стенд' },
       { key: 'released', label: 'Production', live: true, tone: 'live', hint: 'Выкачено в прод' },
     ],
@@ -91,6 +94,7 @@ export const BUILD_TYPES: BuildType[] = [
     label: 'Backend',
     stages: [
       { key: 'building', label: 'Building', tone: 'neutral', hint: 'Сборка идёт' },
+      { key: 'built', label: 'Build ready', tone: 'neutral', hint: 'Сборка готова — никуда не выкачена' },
       { key: 'staging', label: 'Staging', tone: 'testing', hint: 'Выкачено на тестовый стенд' },
       { key: 'released', label: 'Production', live: true, tone: 'live', hint: 'Выкачено в прод' },
     ],
@@ -100,6 +104,7 @@ export const BUILD_TYPES: BuildType[] = [
     label: 'Desktop',
     stages: [
       { key: 'building', label: 'Building', tone: 'neutral', hint: 'Сборка идёт' },
+      { key: 'built', label: 'Build ready', tone: 'neutral', hint: 'Сборка готова — никуда не выкачена' },
       { key: 'beta', label: 'Beta', tone: 'testing', hint: 'Бета-канал: обновление получают только подписавшиеся' },
       { key: 'released', label: 'Released', live: true, tone: 'live', hint: 'Обновление уходит всем' },
     ],

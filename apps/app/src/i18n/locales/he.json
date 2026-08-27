@@ -1750,6 +1750,7 @@
     "createdAt": "נוצרה",
     "stage": {
       "building": "בבנייה",
+      "built": "הבילד מוכן",
       "testflight": "TestFlight",
       "in_review": "ממתין לבדיקת החנות",
       "released": "שוחררה",

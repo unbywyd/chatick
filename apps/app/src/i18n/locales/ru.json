@@ -1768,6 +1768,7 @@
     "createdAt": "Заведена",
     "stage": {
       "building": "Собирается",
+      "built": "Собрана",
       "testflight": "TestFlight",
       "in_review": "Ждём проверки магазина",
       "released": "Опубликована",

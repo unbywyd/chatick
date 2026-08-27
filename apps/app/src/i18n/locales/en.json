@@ -1749,6 +1749,7 @@
     "createdAt": "Created",
     "stage": {
       "building": "Building",
+      "built": "Build ready",
       "testflight": "TestFlight",
       "in_review": "Waiting for store review",
       "released": "Released",
