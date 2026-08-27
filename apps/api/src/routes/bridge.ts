@@ -58,7 +58,7 @@ import { canPublish, createShare, locate, revokeShare, type ShareEntityType } fr
 import { notifyChatMentions } from './messages.js'
 import { notify, extractMentions, commentWatchers } from '../lib/notify.js'
 import { setDue } from '../lib/notify-config.js'
-import { notifyTask, unassignNotice, dependentsOf, blockersOf } from './tasks.js'
+import { notifyTask, unassignNotice, dependentsOf, blockersOf, checklistAnswerNotice } from './tasks.js'
 import { projectPath, projectUrl, companyOf } from '../lib/links.js'
 import { htmlToText, sanitizeHtml } from '../lib/sanitize-html.js'
 import { searchInDocument, searchInText, DEFAULT_CONTEXT } from '../lib/doc-search.js'
@@ -726,6 +726,31 @@ bridgeRoute.get('/context', async (c) => {
  */
 const MENTION_EVENTS = ['chat_mention', 'task_mention', 'comment_mention', 'note_mention', 'task_assigned'] as const
 
+/**
+ * Событие → ветка сводки инбокса.
+ *
+ * Человек спрашивает «что мне ответили?», и ассистент начинал искать: точек
+ * входа было две, и они спорили друг с другом. У /x/mentions в гайде стояло
+ * «CHECK THIS BEFORE /x/inbox», у /x/inbox — «start every check here». Лечили
+ * инструкцией, а инструкцию можно не прочитать.
+ *
+ * Ветки решают это не текстом, а формой ответа: видно, ЧТО ждёт и сколько
+ * его, — и переходить есть смысл только туда, где счётчик больше нуля.
+ *
+ * Порядок здесь — это и есть приоритет. Модель читает сверху вниз, и первым
+ * стоит то, где человек ждёт ответа. Отдельного поля «важность» нет: его она
+ * всё равно не прочтёт, а порядок прочтёт.
+ */
+const INBOX_BRANCHES = [
+  { kind: 'mentions', events: MENTION_EVENTS, next: 'GET /x/mentions' },
+  { kind: 'answers', events: ['checklist_answer'], next: 'GET /x/tasks/<id> — ответы в чек-листе' },
+  { kind: 'comments', events: ['task_comment'], next: 'GET /x/tasks/<id>/comments' },
+  { kind: 'tasks', events: ['task_status', 'task_due'], next: 'GET /x/tasks/<id>' },
+  { kind: 'releases', events: ['release_status'], next: 'GET /x/releases' },
+  { kind: 'notes', events: ['note_reminder'], next: 'GET /x/notes' },
+  { kind: 'timers', events: ['timer_running'], next: 'GET /x/timer' },
+] as const satisfies readonly { kind: string; events: readonly string[]; next: string }[]
+
 bridgeRoute.get('/mentions', async (c) => {
   const id = auth(c as never)
   const onlyUnread = c.req.query('unread') !== '0'
@@ -796,8 +821,29 @@ bridgeRoute.get('/inbox', async (c) => {
     .orderBy(desc(notifications.createdAt))
     .limit(limit)
 
+  // Ветки считаем агрегатом по тем же условиям: тридцать строк в ответе не
+  // говорят, сколько всего ждёт, — а «сколько» и есть первый вопрос.
+  const counts = await db
+    .select({ event: notifications.event, n: sql<number>`count(*)::int` })
+    .from(notifications)
+    .where(and(...conds))
+    .groupBy(notifications.event)
+  const byEvent = new Map(counts.map((r) => [r.event as string, r.n]))
+
+  const branches = INBOX_BRANCHES.map((b) => ({
+    kind: b.kind,
+    count: b.events.reduce((sum, e) => sum + (byEvent.get(e) ?? 0), 0),
+    next: b.next,
+  })).filter((b) => b.count > 0) // пустую ветку не пишем: «count: 0» читается как «я проверил» и на этом успокаивает
+
   return c.json({
+    // Сколько всего ждёт. Не сумма веток: если событие когда-нибудь выпадет из
+    // INBOX_BRANCHES, расхождение скажет об этом вслух, а не спрячет.
+    unreadTotal: counts.reduce((s, r) => s + r.n, 0),
+    branches,
     items: rows.map((r) => ({
+      // id остаётся: им гасят через POST /x/inbox/read. Без него ассистент
+      // видит, что работа есть, и не может отметить её сделанной.
       id: r.n.id,
       event: r.n.event,
       title: r.n.title,
@@ -814,7 +860,7 @@ bridgeRoute.get('/inbox', async (c) => {
       createdAt: r.n.createdAt,
     })),
     hint:
-      'For entityType="message" call GET /x/messages/<entityId>/context to see the surrounding conversation, then reply with POST /x/messages (replyToId=<entityId>). Mark handled ones read with POST /x/inbox/read. Things addressed to you personally are also available on their own at GET /x/mentions — check that first, it is a short list. Pass since=<ISO> here to ask only for what is new.',
+      'Start here — this is the one place that says what is waiting. "branches" lists it by kind, most urgent first, and only kinds that actually have something; go to a branch\'s "next" only when its count is above zero. "items" carries the newest in full: whatIsAsked says what the person is expected to do. For entityType="task" read GET /x/tasks/<entityId>; for entityType="message" call GET /x/messages/<entityId>/context and answer with POST /x/messages (replyToId=<entityId>). The "answers" branch means someone replied inside a task checklist — GET /x/tasks/<id> shows the counts, GET /x/tasks/<id>/checklist the answers themselves. Mark handled ones read with POST /x/inbox/read; {"entityType":"task","entityId":"<id>"} clears every notification about one task at once. Pass since=<ISO> to ask only for what is new.',
   })
 })
 
@@ -1207,6 +1253,40 @@ async function releasesOfTask(taskId: string) {
     isLive: isLiveStage(r.buildType, r.status),
     referenceUrl: r.referenceUrl,
   }))
+}
+
+/**
+ * Состояние чек-листа: сколько всего, сколько закрыто, на сколько ОТВЕТИЛИ.
+ *
+ * Задача с чек-листом выглядела задачей без него: GET /x/tasks/<id> отдавал
+ * вложения, версии и связи, а чек-лист — нет. Ответы на десять вопросов лежали
+ * в задаче и не были видны нигде: ни здесь, ни в комментариях, ни в инбоксе.
+ *
+ * Третье число, answered, и есть суть. done значит «сделано», answered — «на
+ * пункт ответили, но галочку не поставили», и второе означает «мне ответили».
+ * Без него «7 из 10» говорит только о работе, а не о разговоре.
+ *
+ * Числами, а не строкой «7/10»: модель разбирает такую строку обратно и
+ * иногда ошибается. И третье число в неё не влезает.
+ *
+ * Счётчик, а не сам список. Довод «версии показываем всегда» (см. GET
+ * /tasks/:id) применим к ФАКТУ наличия чек-листа, но не к содержимому: у
+ * версии это две строки, у пункта — заметка до четырёх тысяч символов, а
+ * ручку зовут по любому поводу. Содержимое читается отдельно, через
+ * GET /x/tasks/<id>/checklist.
+ *
+ * Один агрегат, без выборки строк: покрыт индексом task_checklist_task_idx.
+ */
+async function checklistCounts(taskId: string) {
+  const [row] = await db
+    .select({
+      total: sql<number>`count(*)::int`,
+      done: sql<number>`count(*) filter (where ${taskChecklist.done})::int`,
+      answered: sql<number>`count(*) filter (where ${taskChecklist.note} <> '')::int`,
+    })
+    .from(taskChecklist)
+    .where(eq(taskChecklist.taskId, taskId))
+  return row && row.total > 0 ? row : null
 }
 
 /**
@@ -1965,6 +2045,10 @@ bridgeRoute.get('/open', async (c) => {
   )
   const linkedReleases = await releasesOfTask(row[0]!.t.id)
   const taskLinkList = await linksOfTask(row[0]!.t.id)
+  // Чек-лист — здесь, а не в taskView: тот зовётся построчно на списках, и
+  // запрос внутри превратился бы в полсотни одинаковых. Пустой не показываем,
+  // как и версии: у большинства задач его нет.
+  const checklist = await checklistCounts(row[0]!.t.id)
   return c.json({
     ...taskView(
       row[0]!.t,
@@ -1978,6 +2062,7 @@ bridgeRoute.get('/open', async (c) => {
     // оказался, — а следующий его вызов потребует projectId.
     projectId,
     ...(linkedReleases.length ? { releases: linkedReleases } : {}),
+    ...(checklist ? { checklist } : {}),
     ...taskLinkList,
   })
 })
@@ -2016,6 +2101,9 @@ bridgeRoute.get('/tasks/:id', async (c) => {
   // второй запрос.
   const linkedReleases = await releasesOfTask(row[0]!.t.id)
   const taskLinkList = await linksOfTask(row[0]!.t.id)
+  // Чек-лист — по тому же доводу, что и версии выше. Задача с десятью
+  // вопросами выглядела задачей без них, и ответы были не видны нигде.
+  const checklist = await checklistCounts(row[0]!.t.id)
   return c.json({
     ...taskView(
       row[0]!.t,
@@ -2026,6 +2114,7 @@ bridgeRoute.get('/tasks/:id', async (c) => {
       await shortUrlFor('task', row[0]!.t.id, scope.projectId, id.userId),
     ),
     ...(linkedReleases.length ? { releases: linkedReleases } : {}),
+    ...(checklist ? { checklist } : {}),
     ...taskLinkList,
   })
 })
@@ -3289,6 +3378,17 @@ bridgeRoute.patch('/tasks/:id/checklist/:itemId', async (c) => {
   if (Object.keys(patch).length === 1) return c.json({ error: 'Nothing to change. Supported: text, note, done.' }, 400)
 
   const [row] = await db.update(taskChecklist).set(patch).where(eq(taskChecklist.id, existing.id)).returning()
+  // Ответ под пунктом — событие; та же функция, что и на веб-пути. Условие
+  // одно: заметка непуста и изменилась. См. checklistAnswerNotice.
+  if (typeof patch.note === 'string' && patch.note && patch.note !== existing.note) {
+    void checklistAnswerNotice({
+      projectId: scope.projectId,
+      task,
+      actorId: id.userId,
+      itemText: row!.text,
+      note: patch.note,
+    })
+  }
   tasksChanged(scope.projectId, [task.assigneeId, task.createdById])
   return c.json({ id: row!.id, text: row!.text, note: row!.note || undefined, done: row!.done })
 })

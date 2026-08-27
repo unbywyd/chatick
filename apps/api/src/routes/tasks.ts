@@ -10,7 +10,7 @@ import { requireProject, requireSession, type ProjectEnv, type SessionEnv } from
 import { hasPermission, ownsOrManages } from './projects.js'
 import { improveTask, validateTask, generateTaskNotes } from '../lib/llm.js'
 import { buildTeamContext } from '../lib/memory.js'
-import { notify, extractMentions, dropNotice, commentWatchers } from '../lib/notify.js'
+import { notify, extractMentions, dropNotice, commentWatchers, checklistAnswerWatchers } from '../lib/notify.js'
 import { setDue } from '../lib/notify-config.js'
 import { broadcast, tasksChanged } from '../ws.js'
 import { logActivity } from '../lib/audit.js'
@@ -53,6 +53,71 @@ export function unassignNotice(userId: string, taskId: string): Promise<void> {
     event: 'task_assigned',
     entityId: taskId,
     dedupeKey: `task_assigned:${taskId}:${userId}`,
+  })
+}
+
+/**
+ * На пункт чек-листа ответили — сказать тем, кто задачу ведёт.
+ *
+ * Раньше не говорили никому. У checklistAccess это записано допущением:
+ * «человек и так смотрит на свою задачу». Верно, пока задачу ведёт человек;
+ * задачу, заведённую ассистентом, не «смотрит» никто, и ответ оставался в
+ * пункте навсегда. Отвечавшему приходилось писать отдельный комментарий «я
+ * ответил в пунктах» — когда человек дублирует уведомление руками, механизма
+ * нет.
+ *
+ * ОДНА запись на задачу, а не на пункт. Ответ на десять вопросов — это десять
+ * заметок за минуту, и десять строк в колокольчике про одну задачу похоронили
+ * бы всё остальное. Ключ дедупа общий на задачу, поэтому dropNotice сначала:
+ * при занятом ключе notify молча пропускает повтор (см. `continue` в notify),
+ * и человек навсегда остался бы с текстом ПЕРВОГО ответа.
+ *
+ * Прочитанное dropNotice не трогает — и это правильно: человек уже видел ту
+ * запись, она была правдой. Ключ при этом освобождается, и следующий ответ
+ * заводит новую. Свёртка работает там, где нужна: пока не смотрели.
+ *
+ * Ключ БЕЗ userId: и notify, и dropNotice доклеивают его сами. С ним вышло бы
+ * `checklist_answer:task:user:user`, и dropNotice не нашёл бы ничего — молча.
+ *
+ * Одна функция на оба пути записи: веб (форма задачи) и мост (ассистент).
+ */
+export async function checklistAnswerNotice(input: {
+  projectId: string
+  task: typeof tasks.$inferSelect
+  actorId: string
+  /** Текст пункта — попадёт в заголовок: «ответили в TASK-81» не говорит, на что. */
+  itemText: string
+  /** Сам ответ, размеченный: превью очистит notify. */
+  note: string
+}): Promise<void> {
+  const { projectId, task, actorId, itemText, note } = input
+  const recipients = checklistAnswerWatchers({
+    assigneeId: task.assigneeId,
+    createdById: task.createdById,
+    actorId,
+  })
+  if (!recipients.length) return
+
+  const dedupeKey = `checklist_answer:${task.id}`
+  for (const userId of recipients) {
+    await dropNotice({ userId, event: 'checklist_answer', entityId: task.id, dedupeKey })
+  }
+
+  const actor = await db.query.users.findFirst({ where: eq(users.id, actorId) })
+  await notify({
+    projectId,
+    event: 'checklist_answer',
+    recipientIds: recipients,
+    actorId,
+    actorName: actor?.name || 'Someone',
+    dedupeKey,
+    entityType: 'task',
+    entityId: task.id,
+    link: projectPath((await companyOf(projectId)) ?? '', projectId, `/tasks/${task.id}`),
+    preview: note,
+    // Длинный пункт в заголовке не читается — обрезаем здесь, а не в шаблоне:
+    // шаблон один на три языка, а правило обрезки одно на все шаблоны.
+    vars: { ref: task.number, item: itemText.length > 60 ? `${itemText.slice(0, 60)}…` : itemText },
   })
 }
 
@@ -651,8 +716,13 @@ async function commentFiles(commentIds: string[]) {
 // --- чек-лист задачи (SPEC §8.37) -------------------------------------------
 //
 // Права те же, что у самой задачи: чек-лист — её часть, а не отдельная
-// сущность со своим доступом. Отдельных уведомлений нет: человек и так
-// смотрит на свою задачу.
+// сущность со своим доступом.
+//
+// Уведомление есть ровно одно — «на пункт ответили» (checklistAnswerNotice).
+// Раньше не было ни одного, с доводом «человек и так смотрит на свою задачу».
+// Довод оказался неверен: задачу, заведённую ассистентом, не смотрит никто, и
+// ответ оставался в пункте навсегда. Галочка и правка текста уведомлений
+// по-прежнему не создают — это не сообщение никому.
 //
 // Отметить галочку и написать ответ может каждый, кто задачу ВИДИТ. Чек-лист
 // здесь — способ спросить: «каким ключом подписывать?» пишет один, а знает
@@ -808,6 +878,20 @@ tasksRoute.patch(
 
     const [row] = await db.update(taskChecklist).set(patch).where(eq(taskChecklist.id, existing.id)).returning()
     const who = row!.doneById ? await db.query.users.findFirst({ where: eq(users.id, row!.doneById) }) : null
+
+    // Ответ под пунктом — событие. Только когда он ИЗМЕНИЛСЯ и непуст:
+    // updatedAt здесь ставится безусловно, и снятие галочки или повторное
+    // сохранение того же текста иначе дёргали бы людей ни за чем. Стирание
+    // ответа тоже не событие — richText('') даёт пустую строку.
+    if (typeof patch.note === 'string' && patch.note && patch.note !== existing.note) {
+      void checklistAnswerNotice({
+        projectId,
+        task: access.task,
+        actorId: sub,
+        itemText: row!.text,
+        note: patch.note,
+      })
+    }
 
     tasksChanged(projectId, [access.task.assigneeId, access.task.createdById])
     return c.json(checklistItem(row!, who ?? null))

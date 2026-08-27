@@ -137,11 +137,12 @@ server.registerTool(
   {
     title: 'Where I was asked personally',
     description:
-      'Only the things addressed to this person directly — mentions in comments, chat and notes, plus tasks assigned ' +
-      'to them. CHECK THIS FIRST, before chatick_inbox: "someone closed their own task" and "a person asked me a ' +
-      'question and is waiting" carry different weight, and in one shared list the second drowns in the first. ' +
-      'Every item carries a ready url. Once you have handled one, clear it with chatick_inbox_read — anything you ' +
-      'leave here stays on the person as an unread counter for work you already did.',
+      'The "mentions" branch of chatick_inbox, on its own: things addressed to this person directly — mentions in ' +
+      'comments, chat and notes, plus tasks assigned to them. These are the ones with someone waiting on the other ' +
+      'end, so they are worth reading in full. Start at chatick_inbox anyway — its branch counts tell you whether ' +
+      'there is anything here before you ask. Every item carries a ready url. Once you have handled one, clear it ' +
+      'with chatick_inbox_read — anything you leave here stays on the person as an unread counter for work you ' +
+      'already did.',
     inputSchema: {
       unread: z.boolean().optional().describe('Only unanswered ones (default true)'),
       since: z.string().optional().describe('ISO timestamp — only what came after it'),
@@ -161,9 +162,12 @@ server.registerTool(
   {
     title: 'What concerns me right now',
     description:
-      'Everything waiting for this person, across every project. Each item carries whatIsAsked — one sentence written ' +
-      'for you, and a ready url. Start here for "what is on my plate" rather than listing tasks project by project — ' +
-      'but for "did anyone ask ME something" use chatick_mentions, which is a much shorter list. ' +
+      'THE entry point for "what is waiting for me", "did anyone answer me", "anything new" — one call, every ' +
+      'project. Do not go looking anywhere else first. The answer opens with "branches": what kind of thing is ' +
+      'waiting, how much of it, and the call that opens each kind — most urgent first, and only kinds that ' +
+      'actually have something. Open a branch only when its count says there is something in it. ' +
+      'branch "answers" means someone replied inside a task checklist — those replies surface nowhere else. ' +
+      '"items" carries the newest in full: whatIsAsked is one sentence saying what the person is expected to do. ' +
       'Pass since to ask only for what arrived after a moment you already saw. ' +
       'Clear whatever you handle with chatick_inbox_read, or the person is left with a counter for finished work.',
     inputSchema: { since: z.string().optional().describe('ISO timestamp — only what came after it') },
@@ -581,7 +585,10 @@ server.registerTool(
     title: 'Read one task',
     description:
       'A task with its description, attachments and dependency counts. Accepts the number ("TASK-81") or the id. ' +
-      'Includes "shortUrl" — the link to give a person when they ask where the task is.',
+      'Includes "shortUrl" — the link to give a person when they ask where the task is. ' +
+      'When the task has a checklist you also get "checklist": {total, done, answered}. "answered" above "done" ' +
+      'means questions in it were answered but the boxes are still open — read those answers with ' +
+      'chatick_checklist; they appear nowhere else.',
     inputSchema: { project: z.string(), task: z.string().describe('TASK-81 or the id') },
   },
   async ({ project, task }) => {
@@ -721,6 +728,34 @@ server.registerTool(
 )
 
 // --- Чек-лист ----------------------------------------------------------------
+
+/**
+ * Читать чек-лист было НЕЧЕМ.
+ *
+ * Инструменты умели добавить пункт и отметить его, а прочитать — нет. Ручка
+ * существовала, но добраться до неё можно было только сырым curl, зная о ней
+ * заранее. Из-за этого ответы под пунктами оказались недостижимы: человек
+ * ответил на десять вопросов, и достать их было не через что. Ему пришлось
+ * отдельно писать комментарий «я ответил в пунктах».
+ */
+server.registerTool(
+  'chatick_checklist',
+  {
+    title: 'Read a task checklist',
+    description:
+      'The items of a task checklist WITH the answers written under them. A checklist item is often a question — ' +
+      '"which key do we sign with?" — and the answer lives in its note, not in the comments. chatick_task reports ' +
+      'the counts (total, done, answered); when "answered" is above zero, the answers are here and nowhere else.',
+    inputSchema: { project: z.string().describe('Project id'), task: z.string().describe('Task id or number') },
+  },
+  async ({ project, task }) => {
+    try {
+      return json(await call({ ...(await need()), projectId: project }, 'GET', `/tasks/${encodeURIComponent(task)}/checklist`))
+    } catch (e) {
+      return fail(e)
+    }
+  },
+)
 
 server.registerTool(
   'chatick_checklist_add',

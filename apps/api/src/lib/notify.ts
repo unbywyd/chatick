@@ -17,6 +17,7 @@ export type NotificationEvent =
   | 'task_assigned'
   | 'task_status'
   | 'task_comment'
+  | 'checklist_answer'
   | 'note_mention'
   | 'note_reminder'
   | 'timer_running'
@@ -65,6 +66,31 @@ export function commentWatchers(input: {
 }
 
 /**
+ * Кому уходит «ответили на пункт чек-листа».
+ *
+ * Обоим: автору задачи и исполнителю. Вопрос в пункте задаёт один, а знает
+ * ответ обычно другой — и ждут ответа оба. Сужать до автора нельзя: задачу
+ * часто заводит ассистент, и тогда «автор» — это он.
+ *
+ * Отдельная функция, а не commentWatchers: там есть правило «не дёргать автора,
+ * когда двое переписываются между собой», и оно про комментарии — разговор,
+ * который можно вести мимо автора. Ответ на пункт мимо не идёт: пункт стоит в
+ * задаче, и он адресован тем, кто её ведёт.
+ *
+ * Одна функция на оба пути записи — веб и мост. Ровно по доводу соседки:
+ * правило, выписанное дважды, разойдётся.
+ */
+export function checklistAnswerWatchers(input: {
+  assigneeId: string | null
+  createdById: string | null
+  /** Кто отвечает: себе не шлём. */
+  actorId: string
+}): string[] {
+  const { assigneeId, createdById, actorId } = input
+  return [...new Set([assigneeId, createdById].filter((x): x is string => Boolean(x) && x !== actorId))]
+}
+
+/**
  * Извлекает id упомянутых пользователей.
  *
  * Форматов ДВА, и это не избыточность:
@@ -109,6 +135,9 @@ const STR: Record<Lang, Record<string, string>> = {
     task_assigned: '{actor} assigned you a task in {project}',
     task_status: 'Task {ref} status changed to {status} in {project}',
     task_comment: '{actor} commented on {ref} in {project}',
+    // С текстом пункта: «ответили в TASK-81» не говорит, на ЧТО именно —
+    // а в списке из десяти вопросов это и есть главное.
+    checklist_answer: '{actor} answered "{item}" in {ref}',
     note_mention: '{actor} mentioned you in a note in {project}',
     note_reminder: 'Reminder from {project}',
     timer_running: 'Your timer in {project} has been running for {hours}h',
@@ -125,6 +154,7 @@ const STR: Record<Lang, Record<string, string>> = {
     task_assigned: '{actor} назначил(а) вам задачу в проекте «{project}»',
     task_status: 'Статус задачи {ref} изменён на «{status}» в проекте «{project}»',
     task_comment: '{actor} прокомментировал(а) {ref} в проекте «{project}»',
+    checklist_answer: '{actor} ответил(а) на «{item}» в {ref}',
     note_mention: '{actor} упомянул(а) вас в заметке в проекте «{project}»',
     note_reminder: 'Напоминание из проекта «{project}»',
     timer_running: 'Таймер в проекте «{project}» идёт уже {hours} ч',
@@ -140,6 +170,7 @@ const STR: Record<Lang, Record<string, string>> = {
     task_assigned: '{actor} הקצה/תה לך משימה בפרויקט «{project}»',
     task_status: 'סטטוס המשימה {ref} שונה ל-«{status}» בפרויקט «{project}»',
     task_comment: '{actor} הגיב/ה על {ref} בפרויקט «{project}»',
+    checklist_answer: '{actor} השיב/ה על «{item}» ב-{ref}',
     note_mention: '{actor} הזכיר/ה אותך בהערה בפרויקט «{project}»',
     note_reminder: 'תזכורת מפרויקט «{project}»',
     timer_running: 'הטיימר בפרויקט «{project}» פועל כבר {hours} שעות',

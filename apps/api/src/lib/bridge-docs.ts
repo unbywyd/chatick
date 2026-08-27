@@ -656,13 +656,28 @@ ${denied.length ? `\n  NOT ALLOWED: ${denied.join(', ')}\n  Do not attempt these
 
 ## What concerns me — start here
 
-  GET  /x/inbox?unread=1&limit=30    everything addressed to this person
+  GET  /x/inbox?unread=1&limit=30    everything waiting for this person
   POST /x/inbox/read                 {"ids":["..."]}, {"all":true} or
                                      {"entityType":"task","entityId":"..."}
 
-Each item carries \`whatIsAsked\` — one sentence written by our AI describing what
-the reader is actually expected to do ("Send the latest APK build"), plus
-\`entityType\`/\`entityId\` pointing at the thing it is about:
+This is the single entry point — one call answers "what is waiting for me".
+The response opens with \`branches\`: what kind of thing is waiting, how much of
+it, and the call that opens each kind. Most urgent first, and only kinds that
+have something. Read those counts before going anywhere: a branch that is not
+listed has nothing in it, and four calls coming back empty is exactly the
+searching this is meant to end.
+
+  branches: [{ kind: "answers", count: 3, next: "GET /x/tasks/<id> — ..." }, ...]
+
+\`kind: "answers"\` means someone replied inside a task's checklist. That reply
+used to surface nowhere at all: \`GET /x/tasks/<id>\` now carries
+\`checklist: {total, done, answered}\`, and \`answered\` above \`done\` means
+questions were answered but the boxes are still open — read them with
+\`GET /x/tasks/<id>/checklist\`.
+
+Each item in \`items\` carries \`whatIsAsked\` — one sentence written by our AI
+describing what the reader is actually expected to do ("Send the latest APK
+build"), plus \`entityType\`/\`entityId\` pointing at the thing it is about:
 
   entityType="message" -> GET /x/messages/<entityId>/context   read the conversation
                           around it, then answer with POST /x/messages
@@ -1253,22 +1268,29 @@ ${endpointCatalog('?project=<id>')}
          ?scope=company searches notes shared across the whole company — check
          it before debugging something that may already have been solved.
 
-  GET    /x/mentions                    where THIS PERSON was asked, ACROSS ALL projects
-         Mentions in comments, chat and notes, plus tasks assigned to them.
-         CHECK THIS BEFORE /x/inbox. "Someone closed their own task" and "a
-         person asked me a question and is waiting" are events of different
-         weight, and in one shared list the second drowns in the first — a
-         question sitting in a comment took three calls to find.
-         ?unread=0 includes answered ones, ?since=<ISO> only newer ones.
+  GET    /x/inbox                       START HERE. The one entry point.
+         Answers "what is waiting for me" in a single call, ACROSS ALL projects.
+         "branches" says what kind of thing is waiting and how much of it, most
+         urgent first, and lists only kinds that actually have something — each
+         with the call that opens it. "items" carries the newest in full, with
+         whatIsAsked (AI-written), project.id, entityType/entityId and a ready
+         "url". "unreadTotal" is everything outstanding.
+         Go into a branch only when its count is above zero: that is the point
+         of the counts. Reading them first is cheaper than four calls that come
+         back empty.
+         ?since=<ISO> asks only for what arrived after a moment you already saw,
+         instead of pulling the last thirty and eyeballing them for new ones.
 
-  GET    /x/inbox                       what concerns this person, ACROSS ALL projects
   POST   /x/inbox/read                  {"ids":[...]}, {"all":true}, or
          {"entityType":"task","entityId":"<id>"} to clear every notification about
          one task at once — the id you already have, instead of collecting theirs.
-         Each item has whatIsAsked (AI-written), project.id, entityType/entityId
-         and a ready "url". Start every "check what's waiting for me" here.
-         ?since=<ISO> asks only for what arrived after a moment you already saw,
-         instead of pulling the last thirty and eyeballing them for new ones.
+
+  GET    /x/mentions                    the "mentions" branch on its own
+         Mentions in comments, chat and notes, plus tasks assigned to them —
+         the things a person is waiting on the other end of. Worth opening when
+         /x/inbox reports that branch as non-empty; the counts there already
+         tell you whether it is.
+         ?unread=0 includes answered ones, ?since=<ISO> only newer ones.
 
   POST   /x/projects                    {"name","about?","chatRules?"} — new project
   PATCH  /x/projects/<id>               {"name"?,"about"?,"chatRules"?,"color"?}

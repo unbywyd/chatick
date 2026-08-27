@@ -94,3 +94,78 @@ describe('права', () => {
     expect(tasks.indexOf("'/:taskId/checklist/order'")).toBeLessThan(tasks.indexOf("'/:taskId/checklist/:itemId'"))
   })
 })
+
+describe('на ответ под пунктом теперь приходит уведомление', () => {
+  // Раньше не приходило никому. У checklistAccess это было записано доводом:
+  // «человек и так смотрит на свою задачу». Верно, пока задачу ведёт человек;
+  // задачу, заведённую ассистентом, не смотрит никто, и ответ оставался в
+  // пункте навсегда. Отвечавшему приходилось писать отдельный комментарий
+  // «я ответил в пунктах» — когда человек дублирует уведомление руками,
+  // механизма нет.
+
+  it('ОБА пути записи уведомляют, а не один', () => {
+    // Главный путь — веб: им отвечает человек. Уведомление только в мосту
+    // покрыло бы ассистента и пропустило того, ради кого всё делалось.
+    expect(tasks, 'веб-путь молчит').toMatch(/void checklistAnswerNotice\(\{/)
+    expect(bridge, 'мост молчит').toMatch(/void checklistAnswerNotice\(\{/)
+  })
+
+  it('только когда заметка непуста И изменилась', () => {
+    // updatedAt здесь ставится безусловно, поэтому снятие галочки или
+    // повторное сохранение того же текста иначе дёргали бы людей ни за чем.
+    for (const [src, name] of [
+      [tasks, 'веб'],
+      [bridge, 'мост'],
+    ] as const) {
+      expect(src, `${name}: нет проверки на изменение`).toMatch(
+        /patch\.note && patch\.note !== existing\.note/,
+      )
+    }
+  })
+
+  it('одна запись на задачу: dropNotice ДО notify', () => {
+    // При занятом ключе notify молча пропускает повтор, и человек навсегда
+    // остался бы с текстом ПЕРВОГО ответа.
+    const fn = tasks.slice(tasks.indexOf('export async function checklistAnswerNotice'))
+    const body = fn.slice(0, fn.indexOf('\n}\n'))
+    const drop = body.indexOf('dropNotice')
+    const notif = body.indexOf('await notify(')
+    expect(drop, 'dropNotice не зовётся').toBeGreaterThan(-1)
+    expect(notif, 'notify не зовётся').toBeGreaterThan(-1)
+    expect(drop, 'dropNotice должен идти ДО notify').toBeLessThan(notif)
+  })
+
+  it('ключ дедупа — на задачу и БЕЗ userId', () => {
+    // notify и dropNotice доклеивают `:${user.id}` сами. С userId в базовом
+    // ключе вышло бы `...:user:user`, и dropNotice не нашёл бы ничего — молча.
+    const fn = tasks.slice(tasks.indexOf('export async function checklistAnswerNotice'))
+    expect(fn.slice(0, 2500)).toMatch(/dedupeKey = `checklist_answer:\$\{task\.id\}`/)
+  })
+
+  it('получатели — автор и исполнитель, себе не шлём', () => {
+    const notify = readFileSync(join(import.meta.dirname, '../lib/notify.ts'), 'utf8')
+    const fn = notify.slice(notify.indexOf('export function checklistAnswerWatchers'))
+    expect(fn.slice(0, 700)).toMatch(/\[assigneeId, createdById\]/)
+    expect(fn.slice(0, 700)).toMatch(/x !== actorId/)
+  })
+
+  it('создание пункта сразу с ответом не уведомляет', () => {
+    // Класть пункт может только тот, кто правит задачу, — он же и адресат:
+    // вышло бы «сам себе положил вопрос и получил уведомление о нём».
+    const post = tasks.slice(tasks.indexOf("tasksRoute.post('/:taskId/checklist'"))
+    expect(post.slice(0, 1400)).not.toMatch(/checklistAnswerNotice/)
+  })
+
+  it('событие своё, а не task_comment', () => {
+    // Инбокс группирует по событию: слепив ответы с комментариями, мы не
+    // отделили бы «на мой вопрос ответили» от «кто-то что-то написал».
+    // И заголовок «прокомментировал TASK-81» был бы неправдой.
+    const schema = readFileSync(join(import.meta.dirname, '../db/schema.ts'), 'utf8')
+    expect(schema).toMatch(/'checklist_answer'/)
+    const notify = readFileSync(join(import.meta.dirname, '../lib/notify.ts'), 'utf8')
+    for (const lang of ['en', 'ru', 'he']) {
+      const block = notify.slice(notify.indexOf(`  ${lang}: {`))
+      expect(block.slice(0, 1400), `нет перевода для ${lang}`).toMatch(/checklist_answer:/)
+    }
+  })
+})
