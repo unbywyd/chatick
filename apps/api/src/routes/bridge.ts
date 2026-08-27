@@ -348,6 +348,118 @@ bridgeRoute.get('/companies', async (c) => {
 })
 
 /**
+ * Люди КОМПАНИИ — со своей ролью и должностью.
+ *
+ * Отличается от GET /x/members: там команда одного проекта, здесь все
+ * сотрудники. Должность живёт на уровне компании и наследуется проектами,
+ * поэтому «кто у нас QA» — вопрос отсюда, а не из проекта.
+ */
+bridgeRoute.get('/company/members', async (c) => {
+  const id = auth(c as never)
+  // Компания известна из туннеля; на проектном — берём её у проекта, чтобы
+  // ассистенту не приходилось переподключаться ради должности.
+  let companyId = id.companyId ?? null
+  if (!companyId) {
+    const scope = await resolveProject(c as never)
+    if ('error' in scope) return c.json({ error: scope.error }, scope.status)
+    companyId = await companyOf(scope.projectId)
+  }
+  if (!companyId) return c.json({ error: 'Company unknown' }, 400)
+  const myRole = await companyRoleOf(companyId, id.userId)
+  if (!myRole) return c.json({ error: 'You are not a member of that company' }, 403)
+
+  const rows = await db
+    .select({ m: companyMembers, u: users })
+    .from(companyMembers)
+    .innerJoin(users, eq(users.id, companyMembers.userId))
+    .where(eq(companyMembers.companyId, companyId))
+
+  return c.json({
+    companyId,
+    canManage: myRole === 'admin',
+    members: rows.map((r) => ({
+      userId: r.u.id,
+      name: r.u.name,
+      email: r.u.email,
+      companyRole: r.m.role,
+      jobTitle: r.m.jobTitle || undefined,
+      responsibility: r.m.responsibility || undefined,
+    })),
+    hint: 'jobTitle here is the COMPANY-wide one: every project inherits it unless that project sets its own. Change it with PATCH /x/company/members/<userId>.',
+  })
+})
+
+/**
+ * Должность и роль человека В КОМПАНИИ.
+ *
+ * Ассистент умел менять должность внутри проекта и не умел — в компании.
+ * Просьба «расставь роли всем: Таль — CEO, Ханан — QA» выполнялась по одному
+ * проекту за раз или не выполнялась вовсе, хотя должность по своей природе
+ * общая: человек бэкендер и здесь, и там.
+ *
+ * Роль в компании тоже здесь, но это иной вес: manager и admin видят ВСЕ
+ * проекты компании, включая те, куда человека не звали (см. видимость в
+ * projects.ts). Поэтому менять её может только admin — как и в интерфейсе, —
+ * и в описании инструмента это сказано прямо.
+ */
+bridgeRoute.patch('/company/members/:userId', async (c) => {
+  const id = auth(c as never)
+  // Компания известна из туннеля; на проектном — берём её у проекта, чтобы
+  // ассистенту не приходилось переподключаться ради должности.
+  let companyId = id.companyId ?? null
+  if (!companyId) {
+    const scope = await resolveProject(c as never)
+    if ('error' in scope) return c.json({ error: scope.error }, scope.status)
+    companyId = await companyOf(scope.projectId)
+  }
+  if (!companyId) return c.json({ error: 'Company unknown' }, 400)
+  if ((await companyRoleOf(companyId, id.userId)) !== 'admin') {
+    return c.json({ error: 'Forbidden: only a company admin changes company roles and titles' }, 403)
+  }
+
+  const userId = c.req.param('userId')
+  const target = await db.query.companyMembers.findFirst({
+    where: and(eq(companyMembers.companyId, companyId), eq(companyMembers.userId, userId)),
+  })
+  if (!target) return c.json({ error: 'Not a member of this company' }, 404)
+
+  const parsed = await readJson(c as never)
+  if ('error' in parsed) return c.json(parsed, 400)
+  const body = parsed.body as { role?: string; jobTitle?: string; responsibility?: string }
+
+  const patch: Record<string, unknown> = {}
+  if (body.role !== undefined) {
+    if (!['admin', 'manager', 'member'].includes(body.role)) {
+      return c.json({ error: 'role must be "admin", "manager" or "member"' }, 400)
+    }
+    // Последнего админа не понижаем — иначе компания остаётся без хозяина, и
+    // вернуть права будет некому. Та же проверка стоит в интерфейсе.
+    if (userId === id.userId && body.role !== 'admin') {
+      const admins = await db.query.companyMembers.findMany({
+        where: and(eq(companyMembers.companyId, companyId), eq(companyMembers.role, 'admin')),
+      })
+      if (admins.length <= 1) return c.json({ error: 'Cannot demote the only admin' }, 400)
+    }
+    patch.role = body.role
+  }
+  if (body.jobTitle !== undefined) patch.jobTitle = String(body.jobTitle).trim().slice(0, 120)
+  if (body.responsibility !== undefined) patch.responsibility = String(body.responsibility).trim().slice(0, 300)
+  if (!Object.keys(patch).length) {
+    return c.json({ error: 'Nothing to change. Supported: role, jobTitle, responsibility.' }, 400)
+  }
+
+  await db.update(companyMembers).set(patch).where(eq(companyMembers.id, target.id))
+  return c.json({
+    ok: true,
+    userId,
+    companyRole: patch.role ?? target.role,
+    jobTitle: patch.jobTitle ?? target.jobTitle,
+    responsibility: patch.responsibility ?? target.responsibility,
+    note: 'Company-wide. Projects inherit this unless a project sets its own value for this person.',
+  })
+})
+
+/**
  * Репорт разработчикам Chatick: чего не хватило, что сломалось, о чём попросил
  * человек.
  *

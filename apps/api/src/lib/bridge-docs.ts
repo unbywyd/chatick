@@ -1085,6 +1085,17 @@ Start with GET /x/context if you need to understand the project before acting.
 ## Team
 
   GET    /x/members                    who is in the project, with roles and permission levels
+  GET    /x/company/members            everyone in the COMPANY, with their company role
+         and job title. Different from /x/members, which is one project's team.
+  PATCH  /x/company/members/<userId>   {"jobTitle"?, "responsibility"?, "role"?}
+         Job title set here is COMPANY-wide: every project inherits it unless
+         that project sets its own. This is the one to use for "make Tal CEO,
+         Hadeel QA" — doing it per project means doing it many times and having
+         it drift. Requires company admin.
+         CAUTION with "role": manager and admin see EVERY project of the
+         company, including ones the person was never added to. A title
+         describes, a role grants — ask the human before raising one.
+
   GET    /x/members/available          company people not yet in this project
   POST   /x/members                    {"userId"|"email", "role"?: "admin"|"member"}
   PATCH  /x/members/<userId>           {"role"?, "permissions"?, "jobTitle"?, "responsibility"?}

@@ -506,6 +506,75 @@ server.registerTool(
   },
 )
 
+/**
+ * Роль и должность НА УРОВНЕ КОМПАНИИ.
+ *
+ * Инструментов было два — оба проектные. Просьба «расставь роли всем: Таль —
+ * CEO, Ханан — QA» выполнялась по одному проекту за раз или не выполнялась
+ * вовсе, хотя должность по природе общая: человек бэкендер и здесь, и там.
+ */
+server.registerTool(
+  'chatick_company_members',
+  {
+    title: 'Who is in the company',
+    description:
+      'Everyone in the company with their COMPANY-wide role and job title. Different from chatick_members, which is ' +
+      'the team of one project. Job titles live at company level and every project inherits them, so "who is our QA" ' +
+      'is answered here.',
+    inputSchema: {
+      project: z.string().optional().describe('Any project of the company; needed on a project-scoped connection'),
+    },
+  },
+  async ({ project }) => {
+    try {
+      const scope = await need()
+      return json(await call({ ...scope, projectId: project ?? scope.projectId }, 'GET', '/company/members'))
+    } catch (e) {
+      return fail(e)
+    }
+  },
+)
+
+server.registerTool(
+  'chatick_company_member_role',
+  {
+    title: 'Set a company-wide role or job title',
+    description:
+      'Changes what someone is IN THE COMPANY: job title, area of responsibility, and role. Pass only what changes. ' +
+      'jobTitle set here is inherited by every project that has not set its own — this is the one to use when asked ' +
+      'to give people titles like CEO, PM, QA or Developer. ' +
+      'CAUTION with role: "manager" and "admin" can see EVERY project of the company, including ones the person was ' +
+      'never added to. Job titles describe, roles grant — ask the human before raising one. Requires company admin.',
+    inputSchema: {
+      userId: z.string().describe('Who to change — id from chatick_company_members'),
+      jobTitle: z.string().optional().describe('CEO, PM, QA, Backend developer — inherited by all projects'),
+      responsibility: z.string().optional().describe('What this person answers for across the company'),
+      role: z
+        .enum(['admin', 'manager', 'member'])
+        .optional()
+        .describe('Company role. admin/manager see every project — confirm with the human first'),
+      project: z.string().optional().describe('Any project of the company; needed on a project-scoped connection'),
+    },
+  },
+  async ({ userId, jobTitle, responsibility, role, project }) => {
+    if (jobTitle === undefined && responsibility === undefined && role === undefined) {
+      return fail(new Error('Nothing to change: pass jobTitle, responsibility or role'))
+    }
+    try {
+      const scope = await need()
+      return json(
+        await call({ ...scope, projectId: project ?? scope.projectId }, 'PATCH', `/company/members/${userId}`, {
+          jobTitle,
+          responsibility,
+          role,
+        }),
+      )
+    } catch (e) {
+      return fail(e)
+    }
+  },
+)
+
 server.registerTool(
   'chatick_members_available',
   { title: 'Who could be added', description: 'People in the company who are not in this project yet.', inputSchema: { project: z.string().describe('Project id') } },
