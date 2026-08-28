@@ -796,6 +796,132 @@ server.registerTool(
   },
 )
 
+// --- Журнал проекта / база знаний ---------------------------------------------
+
+/**
+ * Заметок в мосту шесть ручек, а инструментов не было ни одного.
+ *
+ * Ровно та же история, что вчера с чек-листом: ручка есть, добраться до неё
+ * можно только сырым curl, зная о ней заранее. База знаний, в которую нечем
+ * писать и нечего читать, не наполняется — что и подтвердила живая база: на
+ * весь Chatick одна заметка.
+ */
+server.registerTool(
+  'chatick_notes',
+  {
+    title: 'Search the project journal',
+    description:
+      'Solutions, problems, decisions, requirements, gotchas — what the team already learned. ' +
+      'SEARCH UNDERSTANDS MEANING, not just words: "payment fails" finds "Cardcom rejects foreign cards" with ' +
+      'no shared word, and it works the same in Hebrew. Ask in your own words instead of guessing the exact ' +
+      'wording someone used; items found that way are marked matchedBy="meaning". ' +
+      'LOOK HERE BEFORE debugging something — it may already have been solved, in this project or another. ' +
+      'scope="company" searches every project of the company: that is where reusable technical answers live.',
+    inputSchema: {
+      project: z.string().describe('Project id'),
+      query: z.string().optional().describe('Ask in plain words — meaning is matched, not substrings'),
+      type: z.string().optional().describe('Comma separated: bug, requirement, attention, solution, problem, decision, contradiction, mismatch, gap, reminder, business, note'),
+      tag: z.string().optional().describe('Comma separated tags, AND condition'),
+      scope: z.enum(['project', 'company']).optional().describe('company = across every project of the company'),
+      limit: z.number().optional(),
+    },
+  },
+  async ({ project, ...q }) => {
+    try {
+      return json(await call({ ...(await need()), projectId: project }, 'GET', '/notes', undefined, {
+        q: q.query,
+        type: q.type,
+        tag: q.tag,
+        scope: q.scope,
+        limit: q.limit ? String(q.limit) : undefined,
+      }))
+    } catch (e) {
+      return fail(e)
+    }
+  },
+)
+
+server.registerTool(
+  'chatick_note',
+  {
+    title: 'Read one journal entry',
+    description:
+      'Full text of one entry, plus the chat messages quoted as evidence. The search list gives only a ' +
+      '200-character preview — read the entry itself before acting on it.',
+    inputSchema: { project: z.string().describe('Project id'), id: z.string().describe('Note id from chatick_notes') },
+  },
+  async ({ project, id }) => {
+    try {
+      return json(await call({ ...(await need()), projectId: project }, 'GET', `/notes/${encodeURIComponent(id)}`))
+    } catch (e) {
+      return fail(e)
+    }
+  },
+)
+
+server.registerTool(
+  'chatick_note_save',
+  {
+    title: 'Write to the project journal',
+    description:
+      'Record what was learned, ON BEHALF OF the human. Write an entry when you solved something non-obvious, ' +
+      'hit a requirement worth remembering, or found a trap the next person will step into. A fix that lives ' +
+      'only in this conversation is lost the moment it ends. ' +
+      'scope="company" for anything reusable beyond this project — technical answers, gotchas, rules. That is ' +
+      'what makes the next project cheaper. ' +
+      'Tags matter: they narrow a search that meaning alone cannot ("cardcom", "sms", "ios"). ' +
+      'Body is HTML, like documents — not markdown.',
+    inputSchema: {
+      project: z.string().describe('Project id'),
+      title: z.string().describe('Short — what this is about'),
+      body: z.string().describe('HTML'),
+      type: z
+        .enum(['bug', 'requirement', 'attention', 'solution', 'problem', 'decision', 'contradiction', 'mismatch', 'gap', 'reminder', 'business', 'note'])
+        .optional()
+        .describe('solution = a problem AND its fix, the reusable kind; bug = broken and not yet fixed; requirement = a rule to follow; attention = a trap to avoid'),
+      tags: z.array(z.string()).optional(),
+      scope: z.enum(['project', 'company']).optional().describe('company = findable from every project'),
+    },
+  },
+  async ({ project, ...body }) => {
+    try {
+      return json(await call({ ...(await need()), projectId: project }, 'POST', '/notes', body))
+    } catch (e) {
+      return fail(e)
+    }
+  },
+)
+
+server.registerTool(
+  'chatick_note_update',
+  {
+    title: 'Correct a journal entry',
+    description:
+      'Fix or extend an entry that turned out incomplete or wrong. Pass only what changes. ' +
+      'Prefer correcting an existing entry over writing a second one about the same thing: two entries with ' +
+      'different answers to the same question are worse than one outdated.',
+    inputSchema: {
+      project: z.string().describe('Project id'),
+      id: z.string().describe('Note id'),
+      title: z.string().optional(),
+      body: z.string().optional().describe('HTML'),
+      type: z.string().optional(),
+      tags: z.array(z.string()).optional(),
+      scope: z.enum(['project', 'company']).optional(),
+    },
+  },
+  async ({ project, id, ...body }) => {
+    if (!Object.values(body).some((v) => v !== undefined)) {
+      return fail(new Error('Nothing to change: pass title, body, type, tags or scope'))
+    }
+    try {
+      return json(await call({ ...(await need()), projectId: project }, 'PATCH', `/notes/${encodeURIComponent(id)}`, body))
+    } catch (e) {
+      return fail(e)
+    }
+  },
+)
+
 // --- Чек-лист ----------------------------------------------------------------
 
 /**

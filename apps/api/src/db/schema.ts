@@ -787,9 +787,19 @@ export const notes = pgTable(
   'notes',
   {
     id: id(),
-    projectId: text('project_id').notNull().references(() => projects.id, { onDelete: 'cascade' }),
-    // дублируем компанию проекта: поиск scope='company' идёт по ней без джойна
-    companyId: text('company_id').references(() => companies.id, { onDelete: 'cascade' }),
+    /**
+     * Проект — метка ПРОИСХОЖДЕНИЯ, а не граница доступа: «это выяснилось
+     * там». Необязательна: правило компании ни к какому проекту не привязано.
+     *
+     * SET NULL, а не CASCADE: закрыли проект — знание, добытое в нём, обязано
+     * пережить его. Прежний каскад стирал решения вместе с проектом, ровно
+     * наоборот тому, ради чего база знаний заводится.
+     */
+    projectId: text('project_id').references(() => projects.id, { onDelete: 'set null' }),
+    /** Владелец записи. Видят все, кто в компании. */
+    companyId: text('company_id')
+      .notNull()
+      .references(() => companies.id, { onDelete: 'cascade' }),
     // тип задаёт иконку и цвет; теги — свободные, поверх типа
     type: text('type').notNull().default('note'), // note|solution|problem|decision|contradiction|reminder|business
     title: text('title').notNull().default(''),

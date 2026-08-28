@@ -157,7 +157,10 @@ async function sweepNoteReminders() {
       const author = n.authorId ? await db.query.users.findFirst({ where: eq(users.id, n.authorId) }) : null
       const mentioned = JSON.parse(n.mentionedIds) as string[]
       const recipients = [...new Set([n.authorId, ...mentioned].filter(Boolean) as string[])]
-      if (recipients.length) {
+      // Уведомления живут внутри проекта: без него слать некуда, и ссылку
+      // построить не из чего. Запись компании напоминание просто не шлёт —
+      // отметку проставим ниже, чтобы не перебирать её каждый тик.
+      if (recipients.length && n.projectId) {
         await notify({
           projectId: n.projectId,
           event: 'note_reminder',

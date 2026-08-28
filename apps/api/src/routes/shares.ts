@@ -50,7 +50,10 @@ export async function locate(type: Entity, id: string): Promise<{ projectId: str
     }
     case 'note': {
       const r = await db.query.notes.findFirst({ where: and(eq(notes.id, id), isNull(notes.deletedAt)) })
-      return r ? { projectId: r.projectId, title: r.title, authorId: r.authorId } : null
+      // Запись без проекта поделиться публично нельзя: доступ по ссылке
+      // выдаётся ЧЕРЕЗ проект, и без него выдавать его не из чего. Такие
+      // записи — правила компании, они и так видны всем, кто в ней.
+      return r?.projectId ? { projectId: r.projectId, title: r.title, authorId: r.authorId } : null
     }
     case 'resource': {
       const r = await db.query.credentials.findFirst({ where: and(eq(credentials.id, id), isNull(credentials.deletedAt)) })

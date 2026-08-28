@@ -19,10 +19,22 @@ import { broadcast } from '../ws.js'
 export const notesRoute = new Hono<ProjectEnv>()
 notesRoute.use('*', requireProject)
 
-export const NOTE_TYPES = ['note', 'solution', 'problem', 'decision', 'contradiction', 'mismatch', 'gap', 'reminder', 'business'] as const
-// mismatch — реализация разошлась с макетом/докой (есть источник истины и отклонение);
-// gap — в самом макете/спеке чего-то нет (случай не описан, идти к автору).
-// Оба отличаются от contradiction: там спорят люди, а не документы.
+/**
+ * Типы записей базы знаний.
+ *
+ * Раньше их было девять, и они описывали НАБЛЮДЕНИЯ ассистента в чате:
+ * contradiction — люди сказали противоречащее, mismatch — код разошёлся с
+ * макетом, gap — в спеке случай не описан. Это свидетельства о моменте: вне
+ * своего разговора они бессмысленны.
+ *
+ * База знаний отвечает на другой вопрос — не «что я заметил», а «что команде
+ * надо знать». Поэтому четыре типа убраны, а на их место встали те, ради
+ * которых сюда и приходят: сломано, надо соблюдать, не наступи.
+ *
+ * reminder перестал быть типом: напомнить можно о чём угодно, и для этого
+ * есть remindAt.
+ */
+export const NOTE_TYPES = ['solution', 'bug', 'requirement', 'attention', 'decision', 'business', 'note'] as const
 export type NoteType = (typeof NOTE_TYPES)[number]
 
 /** Цитата из чата или откуда угодно. text — копия: сообщение может исчезнуть. */
@@ -246,11 +258,16 @@ export async function createNote(
   const fromChat = await sourcesFromMessages(input.sourceMessageIds, projectId)
   const sources = [...input.sources, ...fromChat]
 
+  // Компания обязательна — она владелец записи. Проекта без компании не
+  // бывает, но если он вдруг пропал, писать заметку в никуда нельзя: она
+  // потеряется молча, не показавшись ни в одном списке.
+  if (!project?.companyId) throw new Error('Project has no company — cannot create a note')
+
   const [row] = await db
     .insert(notes)
     .values({
       projectId,
-      companyId: project?.companyId ?? null,
+      companyId: project.companyId,
       type: input.type,
       title: input.title.slice(0, 300),
       body: sanitizeHtml(input.body),
