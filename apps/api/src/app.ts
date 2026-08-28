@@ -20,7 +20,7 @@ import { activityRoute } from './routes/activity.js'
 import { inboxRoute } from './routes/inbox.js'
 import { reviewsRoute } from './routes/reviews.js'
 import { documentsRoute, documentsPublicRoute } from './routes/documents.js'
-import { notesRoute } from './routes/notes.js'
+import { notesRoute, companyNotesRoute } from './routes/notes.js'
 import { releasesRoute } from './routes/releases.js'
 import { integrationsRoute, expoHookRoute } from './routes/integrations.js'
 import { timeRoute, timeMineRoute, timeCompanyRoute } from './routes/time.js'
@@ -63,6 +63,9 @@ app.route('/api/v1/inbox', inboxRoute)
 app.route('/api/v1/reviews', reviewsRoute)
 app.route('/api/v1/documents', documentsRoute)
 app.route('/api/v1/notes', notesRoute)
+// База знаний компании: сессия вместо проектного токена — на главной
+// компании проекта нет, а знание принадлежит именно ей.
+app.route('/api/v1/company', companyNotesRoute)
 app.route('/api/v1/releases', releasesRoute)
 app.route('/api/v1/integrations', integrationsRoute)
 // Вебхуки внешних систем: без сессии, подлинность по подписи.

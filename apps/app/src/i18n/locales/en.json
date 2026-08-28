@@ -102,7 +102,8 @@
     "connect": "Connect",
     "backup": "Backup",
     "time": "Hours",
-    "overview": "Overview"
+    "overview": "Overview",
+    "knowledge": "Knowledge"
   },
   "llm": {
     "title": "AI provider (LLM)",
@@ -1165,12 +1166,10 @@
     "savedFromChat": "Saved to notes",
     "type": {
       "solution": "Solution",
-      "problem": "Problem",
+      "bug": "Bug",
+      "requirement": "Requirement",
+      "attention": "Heads-up",
       "decision": "Decision",
-      "contradiction": "Contradiction",
-      "mismatch": "Mismatch",
-      "gap": "Gap",
-      "reminder": "Reminder",
       "business": "Business logic",
       "note": "Note"
     },
@@ -1182,7 +1181,9 @@
     "collapse": "Collapse",
     "taskCreated": "Task {{number}} created",
     "concerns": "Who it concerns",
-    "unpick": "Remove from selection"
+    "unpick": "Remove from selection",
+    "saved": "Saved",
+    "created": "Entry created"
   },
   "common": {
     "save": "Save",
@@ -1192,7 +1193,8 @@
     "error": "Something went wrong",
     "saved": "Saved",
     "edit": "Edit",
-    "delete": "Delete"
+    "delete": "Delete",
+    "clear": "Clear"
   },
   "people": {
     "add": "Add people…",
@@ -1883,5 +1885,21 @@
     "overdue_other": "{{count}}d overdue",
     "byProject": "By project",
     "byUrgency": "By urgency"
+  },
+  "knowledge": {
+    "searchPlaceholder": "Ask in your own words — search understands meaning",
+    "allTypes": "All types",
+    "add": "Add",
+    "addFirst": "Write the first entry",
+    "empty": "This is where what the team already figured out collects: solutions, requirements, traps.",
+    "nothingFound": "Nothing found. Try asking differently — search goes by meaning, not by words.",
+    "meaningHint": "Some entries were found by meaning — they may share no word with your query.",
+    "byMeaning": "by meaning",
+    "newTitle": "New entry",
+    "editTitle": "Edit entry",
+    "titlePlaceholder": "What this is about — briefly",
+    "bodyPlaceholder": "What was found out and what to do about it",
+    "tagsPlaceholder": "Tags: cardcom, sms, ios…",
+    "tagsHint": "Tags catch what meaning cannot: \"cardcom\" is Cardcom, not \"something about payments\"."
   }
 }

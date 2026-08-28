@@ -5,9 +5,9 @@ import { and, desc, eq, gte, inArray, lte, or, sql } from 'drizzle-orm'
 import { companyOf, projectPath } from '../lib/links.js'
 import { db } from '../db/client.js'
 import { messages, notes, projects, tasks, users } from '../db/schema.js'
-import { requireProject, type ProjectEnv } from '../auth.js'
+import { requireProject, type ProjectEnv, requireSession, type SessionEnv } from '../auth.js'
 import { hasPermission, ownsOrManages, companyRoleOf } from './projects.js'
-import { enqueue } from '../lib/embeddings.js'
+import { enqueue, searchNoteIds } from '../lib/embeddings.js'
 import { logActivity } from '../lib/audit.js'
 import { htmlToText, sanitizeHtml } from '../lib/sanitize-html.js'
 import { notify } from '../lib/notify.js'
@@ -528,4 +528,181 @@ notesRoute.delete('/:id', async (c) => {
   })
   broadcast(projectId, 'notes', { action: 'delete', id: existing.id })
   return c.json({ ok: true })
+})
+
+// --- База знаний компании ----------------------------------------------------
+
+/**
+ * Заметки на уровне КОМПАНИИ — отдельный маршрут с сессионным токеном.
+ *
+ * Обычные ручки заметок требуют проектный токен: они и заводились как журнал
+ * проекта. Но база знаний принадлежит компании, и попасть в неё надо, не
+ * входя ни в какой проект — на главной компании проекта просто нет.
+ *
+ * Тот же приём, что у «моих задач» (/api/v1/my/tasks): сессия вместо проекта.
+ */
+export const companyNotesRoute = new Hono<SessionEnv>()
+companyNotesRoute.use('*', requireSession)
+
+/** Общая проверка: человек в компании — значит имеет дело с её базой знаний. */
+async function kbAccess(companyId: string | undefined, sub: string) {
+  if (!companyId) return { error: 'companyId required', status: 400 as const }
+  if (!(await canUseKnowledge(companyId, sub))) return { error: 'Forbidden', status: 403 as const }
+  return { companyId }
+}
+
+companyNotesRoute.get('/:companyId/notes', async (c) => {
+  const { sub } = c.get('session')
+  const access = await kbAccess(c.req.param('companyId'), sub)
+  if ('error' in access) return c.json({ error: access.error }, access.status)
+
+  const conds = [alive, eq(notes.companyId, access.companyId)]
+  const types = (c.req.query('type') ?? '').split(',').map((t) => t.trim()).filter(Boolean)
+  if (types.length) conds.push(inArray(notes.type, types))
+  for (const tag of (c.req.query('tag') ?? '').split(',').map((t) => t.trim()).filter(Boolean)) {
+    conds.push(sql`${notes.tags}::jsonb ? ${tag}`)
+  }
+  // Фильтр по проекту — «покажи, что выяснилось здесь». Не граница доступа:
+  // видно всё равно всем в компании, просто иногда хочется сузить.
+  const projectFilter = c.req.query('project')?.trim()
+  if (projectFilter) conds.push(eq(notes.projectId, projectFilter))
+
+  // Поиск понимает смысл — тот же, что у моста и у ассистента.
+  const q = c.req.query('q')?.trim()
+  let order: string[] | null = null
+  const byMeaning = new Set<string>()
+  if (q) {
+    const hybrid = await searchNoteIds({
+      query: q,
+      projectId: projectFilter || '',
+      companyId: access.companyId,
+      companyWide: true,
+      limit: 200,
+    })
+    if (!hybrid.ids.length) return c.json({ items: [] })
+    order = hybrid.ids
+    for (const noteId of hybrid.semanticIds) byMeaning.add(noteId)
+    conds.push(inArray(notes.id, hybrid.ids))
+  }
+
+  const rows = await db
+    .select({ n: notes, author: users, project: projects })
+    .from(notes)
+    .leftJoin(users, eq(users.id, notes.authorId))
+    .leftJoin(projects, eq(projects.id, notes.projectId))
+    .where(and(...conds))
+    .orderBy(desc(notes.createdAt))
+    .limit(Math.min(200, Math.max(1, Number(c.req.query('limit')) || 100)))
+
+  // Порядок поиска сильнее даты: ближайшее по смыслу первым.
+  const ordered = order ? [...rows].sort((a, b) => order.indexOf(a.n.id) - order.indexOf(b.n.id)) : rows
+
+  return c.json({
+    items: ordered.map((r) => ({
+      ...serialize(r.n),
+      author: r.author ? { id: r.author.id, name: r.author.name } : null,
+      project: r.n.projectId ? { id: r.n.projectId, name: r.project?.name ?? '' } : null,
+      matchedByMeaning: byMeaning.has(r.n.id) || undefined,
+    })),
+  })
+})
+
+companyNotesRoute.post('/:companyId/notes', zValidator('json', bodySchema), async (c) => {
+  const { sub } = c.get('session')
+  const access = await kbAccess(c.req.param('companyId'), sub)
+  if ('error' in access) return c.json({ error: access.error }, access.status)
+
+  const input = c.req.valid('json')
+  const projectId = c.req.query('project')?.trim() || null
+  // Проект указали — проверяем, что он этой компании: иначе запись уехала бы
+  // к чужой, и найти её было бы негде.
+  if (projectId) {
+    const p = await db.query.projects.findFirst({ where: eq(projects.id, projectId) })
+    if (!p || p.companyId !== access.companyId) return c.json({ error: 'Project is not in this company' }, 400)
+  }
+
+  const [row] = await db
+    .insert(notes)
+    .values({
+      companyId: access.companyId,
+      projectId,
+      type: input.type,
+      title: input.title.slice(0, 300),
+      body: sanitizeHtml(input.body),
+      tags: JSON.stringify([...new Set(input.tags.map((t) => t.trim().toLowerCase()).filter(Boolean))]),
+      scope: 'company',
+      sources: JSON.stringify(input.sources),
+      mentionedIds: JSON.stringify(input.mentionedIds),
+      remindAt: input.remindAt ? new Date(input.remindAt) : null,
+      authorId: sub,
+      createdVia: 'ui',
+    })
+    .returning()
+
+  // Поиск по смыслу: вектор считается фоном, как и на остальных путях.
+  void enqueue('note', row!.id, projectId)
+  return c.json(serialize(row!), 201)
+})
+
+companyNotesRoute.patch('/:companyId/notes/:id', zValidator('json', bodySchema.partial()), async (c) => {
+  const { sub } = c.get('session')
+  const access = await kbAccess(c.req.param('companyId'), sub)
+  if ('error' in access) return c.json({ error: access.error }, access.status)
+
+  const existing = await db.query.notes.findFirst({
+    where: and(eq(notes.id, c.req.param('id')), eq(notes.companyId, access.companyId), alive),
+  })
+  if (!existing) return c.json({ error: 'Not found' }, 404)
+  if (!(await canEditKnowledge(access.companyId, sub, existing.authorId))) {
+    return c.json({ error: 'Forbidden: you can only edit entries you wrote' }, 403)
+  }
+
+  const p = c.req.valid('json')
+  const patch: Partial<typeof notes.$inferInsert> = { updatedAt: new Date() }
+  if (p.type !== undefined) patch.type = p.type
+  if (p.title !== undefined) patch.title = p.title.slice(0, 300)
+  if (p.body !== undefined) patch.body = sanitizeHtml(p.body)
+  if (p.tags !== undefined) patch.tags = JSON.stringify([...new Set(p.tags.map((t) => t.trim().toLowerCase()).filter(Boolean))])
+  if (p.remindAt !== undefined) {
+    patch.remindAt = p.remindAt ? new Date(p.remindAt) : null
+    patch.remindedAt = null
+  }
+
+  const [row] = await db.update(notes).set(patch).where(eq(notes.id, existing.id)).returning()
+  void enqueue('note', row!.id, row!.projectId)
+  return c.json(serialize(row!))
+})
+
+companyNotesRoute.delete('/:companyId/notes/:id', async (c) => {
+  const { sub } = c.get('session')
+  const access = await kbAccess(c.req.param('companyId'), sub)
+  if ('error' in access) return c.json({ error: access.error }, access.status)
+
+  const existing = await db.query.notes.findFirst({
+    where: and(eq(notes.id, c.req.param('id')), eq(notes.companyId, access.companyId), alive),
+  })
+  if (!existing) return c.json({ error: 'Not found' }, 404)
+  if (!(await canEditKnowledge(access.companyId, sub, existing.authorId))) {
+    return c.json({ error: 'Forbidden' }, 403)
+  }
+
+  await db.update(notes).set({ deletedAt: new Date(), deletedById: sub }).where(eq(notes.id, existing.id))
+  return c.json({ ok: true })
+})
+
+/** Теги компании — для подсказок в форме и фильтра. */
+companyNotesRoute.get('/:companyId/note-tags', async (c) => {
+  const { sub } = c.get('session')
+  const access = await kbAccess(c.req.param('companyId'), sub)
+  if ('error' in access) return c.json({ error: access.error }, access.status)
+
+  const rows = await db
+    .select({ tags: notes.tags })
+    .from(notes)
+    .where(and(alive, eq(notes.companyId, access.companyId)))
+  const counts = new Map<string, number>()
+  for (const r of rows) {
+    for (const tag of JSON.parse(r.tags) as string[]) counts.set(tag, (counts.get(tag) ?? 0) + 1)
+  }
+  return c.json([...counts.entries()].sort((a, b) => b[1] - a[1]).map(([tag, count]) => ({ tag, count })))
 })

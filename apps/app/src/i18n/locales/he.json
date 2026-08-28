@@ -102,7 +102,8 @@
     "connect": "חיבור",
     "backup": "גיבוי",
     "time": "שעות",
-    "overview": "סקירה"
+    "overview": "סקירה",
+    "knowledge": "ידע"
   },
   "llm": {
     "title": "ספק AI (LLM)",
@@ -1166,12 +1167,10 @@
     "savedFromChat": "נשמר בהערות",
     "type": {
       "solution": "פתרון",
-      "problem": "בעיה",
+      "bug": "באג",
+      "requirement": "דרישה",
+      "attention": "לשים לב",
       "decision": "החלטה",
-      "contradiction": "סתירה",
-      "mismatch": "אי-התאמה",
-      "gap": "פער",
-      "reminder": "תזכורת",
       "business": "לוגיקה עסקית",
       "note": "הערה"
     },
@@ -1183,7 +1182,9 @@
     "collapse": "כיווץ",
     "taskCreated": "המשימה {{number}} נוצרה",
     "concerns": "למי זה נוגע",
-    "unpick": "הסרה מהבחירה"
+    "unpick": "הסרה מהבחירה",
+    "saved": "נשמר",
+    "created": "הרשומה נוצרה"
   },
   "common": {
     "save": "שמירה",
@@ -1193,7 +1194,8 @@
     "error": "משהו השתבש",
     "saved": "נשמר",
     "edit": "עריכה",
-    "delete": "מחיקה"
+    "delete": "מחיקה",
+    "clear": "ניקוי"
   },
   "people": {
     "add": "הוספת אנשים…",
@@ -1886,5 +1888,21 @@
     "overdue_other": "איחור {{count}} ימים",
     "byProject": "לפי פרויקט",
     "byUrgency": "לפי דחיפות"
+  },
+  "knowledge": {
+    "searchPlaceholder": "שאלו במילים שלכם — החיפוש מבין משמעות",
+    "allTypes": "כל הסוגים",
+    "add": "הוספה",
+    "addFirst": "כתבו את הרשומה הראשונה",
+    "empty": "כאן נאסף מה שהצוות כבר גילה: פתרונות, דרישות, מלכודות.",
+    "nothingFound": "לא נמצא כלום. נסו לשאול אחרת — החיפוש הולך לפי משמעות, לא לפי מילים.",
+    "meaningHint": "חלק מהרשומות נמצאו לפי משמעות — ייתכן שאין להן מילה משותפת עם השאילתה.",
+    "byMeaning": "לפי משמעות",
+    "newTitle": "רשומה חדשה",
+    "editTitle": "עריכת רשומה",
+    "titlePlaceholder": "על מה מדובר — בקצרה",
+    "bodyPlaceholder": "מה התברר ומה לעשות עם זה",
+    "tagsPlaceholder": "תגיות: cardcom, sms, ios…",
+    "tagsHint": "תגיות תופסות את מה שמשמעות לא תופסת: «cardcom» זה Cardcom, לא «משהו על תשלומים»."
   }
 }

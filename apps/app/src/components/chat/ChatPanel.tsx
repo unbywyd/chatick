@@ -1706,7 +1706,10 @@ function SaveToNoteDialog({
   onSaved: () => void
 }) {
   const { t } = useTranslation()
-  const [type, setType] = useState<NoteType>('contradiction')
+  // attention по умолчанию: сообщение из чата сохраняют, когда на него стоит
+  // обратить внимание. Прежний contradiction («люди сказали противоречащее»)
+  // описывал наблюдение за разговором, а не знание, — тип убран.
+  const [type, setType] = useState<NoteType>('attention')
   const [title, setTitle] = useState('')
   const [tags, setTags] = useState('')
 

@@ -42,18 +42,29 @@ import { DragHandle } from '@/components/ui/drag-handle'
 // Заметки проекта (SPEC §8.31): решения, противоречия, договорённости, напоминания.
 // Одна лента с типами и тегами вместо трёх отдельных разделов.
 
-export const NOTE_TYPES = ['solution', 'problem', 'decision', 'contradiction', 'mismatch', 'gap', 'reminder', 'business', 'note'] as const
+/**
+ * Типы записей базы знаний.
+ *
+ * Было девять, и они описывали НАБЛЮДЕНИЯ ассистента в чате: contradiction —
+ * люди сказали противоречащее, mismatch — код разошёлся с макетом, gap — в
+ * спеке случай не описан. Свидетельства о моменте: вне своего разговора они
+ * бессмысленны.
+ *
+ * База знаний отвечает на другой вопрос — не «что я заметил», а «что команде
+ * надо знать». Отсюда bug, requirement, attention.
+ */
+export const NOTE_TYPES = ['solution', 'bug', 'requirement', 'attention', 'decision', 'business', 'note'] as const
 export type NoteType = (typeof NOTE_TYPES)[number]
 
 /** Иконка и цвет держатся за тип: по ленте видно, что перед тобой, без чтения. */
 export const NOTE_META: Record<NoteType, { icon: typeof Lightbulb; className: string }> = {
   solution: { icon: Lightbulb, className: 'text-emerald-600 dark:text-emerald-400' },
-  problem: { icon: AlertTriangle, className: 'text-amber-600 dark:text-amber-400' },
-  decision: { icon: Gavel, className: 'text-blue-600 dark:text-blue-400' },
-  contradiction: { icon: Split, className: 'text-rose-600 dark:text-rose-400' },
-  mismatch: { icon: GitCompareArrows, className: 'text-orange-600 dark:text-orange-400' },
-  gap: { icon: PuzzleIcon, className: 'text-fuchsia-600 dark:text-fuchsia-400' },
-  reminder: { icon: Bell, className: 'text-violet-600 dark:text-violet-400' },
+  // Красный у бага, янтарный у ловушки: сломанное и опасное различаются с
+  // одного взгляда, не читая.
+  bug: { icon: AlertTriangle, className: 'text-rose-600 dark:text-rose-400' },
+  requirement: { icon: Gavel, className: 'text-blue-600 dark:text-blue-400' },
+  attention: { icon: Bell, className: 'text-amber-600 dark:text-amber-400' },
+  decision: { icon: Split, className: 'text-violet-600 dark:text-violet-400' },
   business: { icon: Briefcase, className: 'text-cyan-600 dark:text-cyan-400' },
   note: { icon: NotebookPen, className: 'text-muted-foreground' },
 }

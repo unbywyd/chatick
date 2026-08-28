@@ -34,6 +34,7 @@ import { LanguageSelect } from '@/components/LanguageSelect'
 import { Input } from '@/components/ui/input'
 import { Button } from '@/components/ui/button'
 import { TeamTab } from '@/components/company/TeamTab'
+import { KnowledgeTab } from '@/components/company/KnowledgeTab'
 import { NotificationBell } from '@/components/NotificationBell'
 import { OnboardingWizard } from '@/components/OnboardingWizard'
 import { CompanyTimeTab } from '@/components/company/CompanyTimeTab'
@@ -454,8 +455,8 @@ function CompanyHome({
     if (companyTab === 'backup') navigate(`/start/${company.id}/settings?s=backup`, { replace: true })
   }, [companyTab, company.id, navigate])
 
-  const tab = (['overview', 'projects', 'team', 'time', 'connect', 'settings'] as const).includes(companyTab as never)
-    ? (companyTab as 'overview' | 'projects' | 'team' | 'time' | 'connect' | 'settings')
+  const tab = (['overview', 'projects', 'team', 'knowledge', 'time', 'connect', 'settings'] as const).includes(companyTab as never)
+    ? (companyTab as 'overview' | 'projects' | 'team' | 'knowledge' | 'time' | 'connect' | 'settings')
     : 'overview'
   const canManage = company.myRole === 'admin' || company.myRole === 'manager'
   const isAdmin = company.myRole === 'admin'
@@ -502,11 +503,13 @@ function CompanyHome({
     )
   }
   // доступ ко всей компании выдают те, кто ей управляет; бэкап — только админ
+  // База знаний — всем, кто в компании: она и заводится ради того, чтобы
+  // ответ нашёл тот, кто на вопрос наткнулся, а не только руководство.
   const tabs = isAdmin
-    ? (['overview', 'projects', 'team', 'time', 'connect', 'settings'] as const)
+    ? (['overview', 'projects', 'team', 'knowledge', 'time', 'connect', 'settings'] as const)
     : canManage
-      ? (['overview', 'projects', 'team', 'time', 'connect', 'settings'] as const)
-      : (['overview', 'projects', 'team', 'settings'] as const)
+      ? (['overview', 'projects', 'team', 'knowledge', 'time', 'connect', 'settings'] as const)
+      : (['overview', 'projects', 'team', 'knowledge', 'settings'] as const)
 
   return (
     <div className="space-y-6">
@@ -564,6 +567,8 @@ function CompanyHome({
         <ProjectsTab company={company} canManage={canManage} onEntered={onEntered} />
       ) : tab === 'team' ? (
         <TeamTab company={company} meId={meId} />
+      ) : tab === 'knowledge' ? (
+        <KnowledgeTab companyId={company.id} meId={meId ?? null} />
       ) : tab === 'time' && canManage ? (
         <>
           {/* Сводка сверху: за ней сюда и приходят — «сколько потрачено» и
