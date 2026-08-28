@@ -7,6 +7,7 @@ import { db } from '../db/client.js'
 import { messages, notes, projects, tasks, users } from '../db/schema.js'
 import { requireProject, type ProjectEnv } from '../auth.js'
 import { hasPermission, ownsOrManages } from './projects.js'
+import { enqueue } from '../lib/embeddings.js'
 import { logActivity } from '../lib/audit.js'
 import { htmlToText, sanitizeHtml } from '../lib/sanitize-html.js'
 import { notify } from '../lib/notify.js'
@@ -272,6 +273,10 @@ export async function createNote(
     entityLabel: row!.title || htmlToText(row!.body).slice(0, 80),
   })
   broadcast(projectId, 'notes', { action: 'create', id: row!.id })
+  // Поиск по смыслу: вектор считается ФОНОМ, а не здесь. Обращение к модели
+  // занимает сотни миллисекунд, и заметка обязана сохраниться, даже если
+  // модель недоступна.
+  void enqueue('note', row!.id, projectId)
 
   // упомянули — предупредим: заметка часто и заводится ради того, чтобы человек её увидел
   if (input.mentionedIds.length) {
@@ -342,6 +347,9 @@ notesRoute.patch('/:id', zValidator('json', bodySchema.partial()), async (c) => 
     meta: { changed: Object.keys(p) },
   })
   broadcast(projectId, 'notes', { action: 'update', id: row!.id })
+  // Текст мог не измениться — очередь это проверит по отпечатку и не станет
+  // тратить деньги на пересчёт.
+  void enqueue('note', row!.id, projectId)
   return c.json(serialize(row!))
 })
 

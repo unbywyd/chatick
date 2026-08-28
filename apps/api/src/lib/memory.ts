@@ -12,6 +12,7 @@ import { htmlToText, sanitizeHtml } from './sanitize-html.js'
 import { searchInDocument, searchInText } from './doc-search.js'
 import { submitAssistantReport, REPORT_KINDS, type ReportKind } from './assistant-report.js'
 import { createNote, noteToTask, NOTE_TYPES } from '../routes/notes.js'
+import { enqueue as enqueueEmbedding } from './embeddings.js'
 import { timeConfigForProject } from '../routes/time.js'
 import { encrypt } from './crypto.js'
 import { notify, extractMentions, commentWatchers } from './notify.js'
@@ -1985,6 +1986,8 @@ export function memoryTools(projectId: string, actorUserId: string): { tools: To
         patch.remindedAt = null
       }
       await db.update(notes).set(patch).where(eq(notes.id, n.id))
+      // Поиск по смыслу: пересчёт фоном, как и на двух других путях правки.
+      void enqueueEmbedding('note', n.id, projectId)
       broadcast(projectId, 'notes', { action: 'update', id: n.id })
       return `Updated note "${n.title}".`
     },

@@ -52,6 +52,7 @@ import { logActivity } from '../lib/audit.js'
 import { sendAddedToProjectMail, sendRemovedFromProjectMail } from '../lib/mails.js'
 import { sendInviteMail } from '../lib/mail-invite.js'
 import { createNote, noteToTask, NOTE_TYPES, type NoteType } from './notes.js'
+import { enqueue as enqueueEmbedding } from '../lib/embeddings.js'
 import { readTimeConfig, maybeTranslate, timeConfigForProject } from './time.js'
 import { readPresence } from './auth.js'
 import { canPublish, createShare, locate, revokeShare, type ShareEntityType } from './shares.js'
@@ -5303,6 +5304,8 @@ bridgeRoute.patch('/notes/:id', async (c) => {
   }
 
   const [row] = await db.update(notes).set(patch).where(eq(notes.id, existing.id)).returning()
+  // Поиск по смыслу: пересчёт фоном. Правка через мост — такая же правка.
+  void enqueueEmbedding('note', row!.id, scope.projectId)
   void logActivity({
     projectId: scope.projectId,
     actorId: id.userId,

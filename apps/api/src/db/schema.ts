@@ -1466,6 +1466,67 @@ export const aiUsageLog = pgTable(
 )
 
 /**
+ * Векторы текстов — поиск по смыслу.
+ *
+ * ОБЩАЯ таблица, а не «векторы заметок»: ассистент ищет не заметку и не
+ * задачу, а ОТВЕТ, и лежать он может в любом из них. Отсюда entity_type +
+ * entity_id, а подключение задач — строка в коде, а не вторая таблица.
+ *
+ * projectId и companyId дублируются сюда намеренно: поиск обязан отсеивать
+ * чужое по правам прямо в запросе, а не после. Джойн на четыре таблицы ради
+ * одного фильтра стоил бы дороже дублирования.
+ */
+export const embeddings = pgTable(
+  'embeddings',
+  {
+    id: id(),
+    entityType: text('entity_type').notNull(),
+    entityId: text('entity_id').notNull(),
+    projectId: text('project_id').references(() => projects.id, { onDelete: 'cascade' }),
+    companyId: text('company_id').references(() => companies.id, { onDelete: 'cascade' }),
+    /** vector(512) — drizzle его не типизирует, работаем через sql. */
+    embedding: text('embedding'),
+    /** Отпечаток текста: правка, не менявшая его, не тратит денег на пересчёт. */
+    contentHash: text('content_hash').notNull(),
+    /** Векторы разных моделей несравнимы — поле говорит, какие устарели. */
+    model: text('model').notNull().default('text-embedding-3-small'),
+    createdAt: createdAt(),
+    updatedAt: updatedAt(),
+  },
+  (t) => [
+    uniqueIndex('embeddings_entity_idx').on(t.entityType, t.entityId),
+    index('embeddings_company_idx').on(t.companyId),
+  ],
+)
+
+/**
+ * Очередь пересчёта векторов.
+ *
+ * Вектор считается ВНЕ запроса пользователя: обращение к модели занимает
+ * сотни миллисекунд, а сохранение заметки должно быть мгновенным. И если
+ * модель недоступна, заметка обязана сохраниться всё равно.
+ *
+ * Без очереди такая запись терялась бы молча: она есть, а поиском не
+ * находится, и узнать об этом можно только не найдя её однажды.
+ */
+export const embeddingQueue = pgTable(
+  'embedding_queue',
+  {
+    id: id(),
+    entityType: text('entity_type').notNull(),
+    entityId: text('entity_id').notNull(),
+    projectId: text('project_id').references(() => projects.id, { onDelete: 'cascade' }),
+    attempts: integer('attempts').notNull().default(0),
+    lastError: text('last_error'),
+    createdAt: createdAt(),
+  },
+  (t) => [
+    uniqueIndex('embedding_queue_entity_idx').on(t.entityType, t.entityId),
+    index('embedding_queue_pick_idx').on(t.attempts, t.createdAt),
+  ],
+)
+
+/**
  * Отметки об отправленных предупреждениях о тратах.
  *
  * Планировщик тикает каждые пять минут. Без отметки письмо «траты за месяц
