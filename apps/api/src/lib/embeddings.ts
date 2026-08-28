@@ -1,5 +1,5 @@
 import { createHash } from 'node:crypto'
-import { and, asc, eq, lt, sql } from 'drizzle-orm'
+import { and, asc, eq, lt, or, sql } from 'drizzle-orm'
 import { db } from '../db/client.js'
 import { embeddings, embeddingQueue, notes, projects } from '../db/schema.js'
 import { env } from '../env.js'
@@ -312,4 +312,81 @@ export async function backfill(companyId?: string): Promise<number> {
     )
   for (const r of rows) await enqueue('note', r.id, r.projectId)
   return rows.length
+}
+
+/**
+ * Гибридный поиск заметок: слова И смысл.
+ *
+ * Одно место на оба пути — мост и ассистент внутри Chatick. Правило, выписанное
+ * дважды, разъедется на первой же правке, и разойдётся молча: две ручки будут
+ * отвечать по-разному на один вопрос.
+ *
+ * Смысловой поиск НЕ заменяет обычный, а дополняет. Точное слово ilike находит
+ * надёжнее любой модели: «Cardcom» — это Cardcom, а не «что-то про платежи».
+ * Зато на «оплата не проходит» ilike не найдёт ничего, а вектор найдёт.
+ *
+ * Порядок: сначала совпадения по словам (они точнее), затем смысловые, каждое
+ * со своей оценкой. Ассистент читает сверху вниз, и то, в чём мы уверены,
+ * должно стоять первым.
+ *
+ * Возвращает id — вызывающий сам решает, что с ними делать: у моста и у
+ * ассистента разные форматы ответа.
+ */
+export async function searchNoteIds(opts: {
+  query: string
+  projectId: string
+  companyId: string | null
+  /** Искать по всей компании, а не только в проекте. */
+  companyWide: boolean
+  limit?: number
+}): Promise<{ ids: string[]; semanticIds: Set<string> }> {
+  const q = opts.query.trim()
+  if (!q) return { ids: [], semanticIds: new Set() }
+
+  const limit = opts.limit ?? 40
+
+  // Слова. Ищем по заголовку, телу и тегам — как искали всегда.
+  const scopeCond = opts.companyWide && opts.companyId
+    ? or(eq(notes.projectId, opts.projectId), and(eq(notes.companyId, opts.companyId), eq(notes.scope, 'company')))!
+    : eq(notes.projectId, opts.projectId)
+  const like = `%${q}%`
+  const exact = await db
+    .select({ id: notes.id })
+    .from(notes)
+    .where(
+      and(
+        sql`${notes.deletedAt} is null`,
+        scopeCond,
+        or(sql`${notes.title} ilike ${like}`, sql`${notes.body} ilike ${like}`, sql`${notes.tags} ilike ${like}`)!,
+      ),
+    )
+    .orderBy(sql`${notes.createdAt} desc`)
+    .limit(limit)
+  const ids = exact.map((r) => r.id)
+
+  // Смысл. Только если ключ есть и в компании — вектор без companyId искать
+  // негде: граница компании жёсткая.
+  const semanticIds = new Set<string>()
+  if (opts.companyId && embeddingsEnabled()) {
+    try {
+      const found = await searchSemantic({
+        query: q,
+        companyId: opts.companyId,
+        entityTypes: ['note'],
+        limit,
+      })
+      for (const r of found) {
+        // Проектная заметка чужого проекта сюда попасть не должна: вектор
+        // ограничен компанией, а видимость — проектом. Проверяем ещё раз.
+        if (!opts.companyWide && r.projectId !== opts.projectId) continue
+        if (!ids.includes(r.entityId)) semanticIds.add(r.entityId)
+      }
+    } catch (err) {
+      // Модель недоступна — отдаём то, что нашли словами. Поиск, упавший
+      // целиком из-за необязательной части, хуже неполного поиска.
+      console.warn('[embeddings] смысловой поиск не сработал:', err instanceof Error ? err.message : err)
+    }
+  }
+
+  return { ids: [...ids, ...semanticIds], semanticIds }
 }

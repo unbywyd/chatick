@@ -1278,6 +1278,10 @@ ${endpointCatalog('?project=<id>')}
          Project journal: solutions, decisions, contradictions, reminders.
          ?scope=company searches notes shared across the whole company — check
          it before debugging something that may already have been solved.
+         SEARCH UNDERSTANDS MEANING, not just words: ?q=payment fails finds
+         "Cardcom rejects foreign cards" with no shared word, and it works the
+         same in Hebrew. Ask in your own words instead of guessing the exact
+         wording someone used. Items found that way carry matchedBy="meaning".
 
   GET    /x/inbox                       START HERE. The one entry point.
          Answers "what is waiting for me" in a single call, ACROSS ALL projects.

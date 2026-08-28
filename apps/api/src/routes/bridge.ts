@@ -52,7 +52,7 @@ import { logActivity } from '../lib/audit.js'
 import { sendAddedToProjectMail, sendRemovedFromProjectMail } from '../lib/mails.js'
 import { sendInviteMail } from '../lib/mail-invite.js'
 import { createNote, noteToTask, NOTE_TYPES, type NoteType } from './notes.js'
-import { enqueue as enqueueEmbedding } from '../lib/embeddings.js'
+import { enqueue as enqueueEmbedding, searchNoteIds } from '../lib/embeddings.js'
 import { readTimeConfig, maybeTranslate, timeConfigForProject } from './time.js'
 import { readPresence } from './auth.js'
 import { canPublish, createShare, locate, revokeShare, type ShareEntityType } from './shares.js'
@@ -5136,9 +5136,35 @@ bridgeRoute.get('/notes', async (c) => {
   for (const tag of (c.req.query('tag') ?? '').split(',').map((t) => t.trim()).filter(Boolean)) {
     conds.push(sql`${notes.tags}::jsonb ? ${tag}`)
   }
+  // Поиск по СМЫСЛУ, а не только по словам.
+  //
+  // «Не проходит оплата» и «Cardcom отклоняет платежи» — один вопрос и ни
+  // одного общего слова. Для иврита это единственный путь: словаря иврита в
+  // Postgres нет, и ilike найдёт только точную форму слова.
+  //
+  // Слова остаются: «Cardcom» надёжнее искать дословно, чем через модель.
+  // Гибрид — сначала точные совпадения, потом смысловые.
+  let semanticOrder: string[] | null = null
+  const semanticSet = new Set<string>()
   if (q) {
-    const like = `%${q}%`
-    conds.push(or(sql`${notes.title} ilike ${like}`, sql`${notes.body} ilike ${like}`, sql`${notes.tags} ilike ${like}`)!)
+    const project = await db.query.projects.findFirst({ where: eq(projects.id, scope.projectId) })
+    const hybrid = await searchNoteIds({
+      query: q,
+      projectId: scope.projectId,
+      companyId: project?.companyId ?? null,
+      companyWide: c.req.query('scope') === 'company',
+      limit: Math.min(100, Math.max(1, Number(c.req.query('limit')) || 50)),
+    })
+    if (hybrid.ids.length) {
+      semanticOrder = hybrid.ids
+      for (const id of hybrid.semanticIds) semanticSet.add(id)
+      conds.push(inArray(notes.id, hybrid.ids))
+    } else {
+      // Ничего не нашли — так и говорим. Прежний ilike в этом месте просто
+      // не добавлял условия и возвращал ВСЕ заметки: ассистент получал
+      // полный список и считал его результатом поиска.
+      conds.push(sql`false`)
+    }
   }
 
   const rows = await db
@@ -5150,8 +5176,15 @@ bridgeRoute.get('/notes', async (c) => {
     .orderBy(desc(notes.createdAt))
     .limit(Math.min(100, Math.max(1, Number(c.req.query('limit')) || 50)))
 
+  // Порядок из гибридного поиска сильнее сортировки по дате: точные
+  // совпадения идут первыми, смысловые следом. Без этого самое близкое по
+  // смыслу тонуло бы среди свежих, но неподходящих.
+  const ordered = semanticOrder
+    ? [...rows].sort((a, b) => semanticOrder!.indexOf(a.n.id) - semanticOrder!.indexOf(b.n.id))
+    : rows
+
   return c.json({
-    items: rows.map((r) => ({
+    items: ordered.map((r) => ({
       id: r.n.id,
       type: r.n.type,
       title: r.n.title,
@@ -5161,10 +5194,13 @@ bridgeRoute.get('/notes', async (c) => {
       project: { id: r.n.projectId, name: r.project?.name ?? '' },
       author: r.author ? { id: r.author.id, name: r.author.name } : null,
       sourceCount: (JSON.parse(r.n.sources) as unknown[]).length,
+      // Найдено по смыслу, а не по слову: общих слов с запросом может не быть
+      // вовсе, и без пометки такой ответ выглядит случайным.
+      ...(semanticSet.has(r.n.id) ? { matchedBy: 'meaning' as const } : {}),
       createdAt: r.n.createdAt,
     })),
     hint:
-      'Add ?scope=company to search notes shared across every project of this company — that is where reusable technical solutions live. GET /x/notes/<id> returns the full body and the quoted sources.',
+      'Search here understands MEANING, not just words: "payment fails" finds "Cardcom rejects foreign cards" with no shared word, and it works the same in Hebrew. Items marked matchedBy="meaning" were found that way. Add ?scope=company to search notes shared across every project of this company — that is where reusable technical solutions live. GET /x/notes/<id> returns the full body and the quoted sources.',
   })
 })
 

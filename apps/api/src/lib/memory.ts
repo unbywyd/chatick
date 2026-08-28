@@ -12,7 +12,7 @@ import { htmlToText, sanitizeHtml } from './sanitize-html.js'
 import { searchInDocument, searchInText } from './doc-search.js'
 import { submitAssistantReport, REPORT_KINDS, type ReportKind } from './assistant-report.js'
 import { createNote, noteToTask, NOTE_TYPES } from '../routes/notes.js'
-import { enqueue as enqueueEmbedding } from './embeddings.js'
+import { enqueue as enqueueEmbedding, searchNoteIds } from './embeddings.js'
 import { timeConfigForProject } from '../routes/time.js'
 import { encrypt } from './crypto.js'
 import { notify, extractMentions, commentWatchers } from './notify.js'
@@ -744,7 +744,7 @@ export function memoryTools(projectId: string, actorUserId: string): { tools: To
     {
       name: 'list_notes',
       description:
-        'Search the project journal (SPEC §8.31): solutions, problems, decisions, contradictions, mismatches, gaps, reminders, business rules. Filter by free text (searches title, body and tags), type or tag. Pass scope="company" to search notes shared across the whole company — do that BEFORE debugging something that may already have been solved in another project.',
+        'Search the project journal (SPEC §8.31): solutions, problems, decisions, contradictions, mismatches, gaps, reminders, business rules. The query understands MEANING, not just words: "payment fails" finds "Cardcom rejects foreign cards" with no shared word, and it works the same in Hebrew — ask in your own words instead of guessing the exact wording. Filter by type or tag. Pass scope="company" to search notes shared across the whole company — do that BEFORE debugging something that may already have been solved in another project.',
       parameters: {
         type: 'object',
         properties: {
@@ -1911,15 +1911,38 @@ export function memoryTools(projectId: string, actorUserId: string): { tools: To
       for (const tag of String(args.tag ?? '').split(',').map((x) => x.trim()).filter(Boolean)) {
         conds.push(sql`${notes.tags}::jsonb ? ${tag}`)
       }
+      // Поиск по СМЫСЛУ, тот же, что и у моста: одна функция на оба пути,
+      // иначе ассистент внутри и ассистент снаружи начнут отвечать по-разному
+      // на один вопрос.
       const q = String(args.query ?? '').trim()
+      let order: string[] | null = null
+      const byMeaning = new Set<string>()
       if (q) {
-        const like = `%${q}%`
-        conds.push(or(sql`${notes.title} ilike ${like}`, sql`${notes.body} ilike ${like}`, sql`${notes.tags} ilike ${like}`)!)
+        const project = await db.query.projects.findFirst({ where: eq(projects.id, projectId) })
+        const hybrid = await searchNoteIds({
+          query: q,
+          projectId,
+          companyId: project?.companyId ?? null,
+          companyWide: String(args.scope ?? '') === 'company',
+        })
+        // Пусто — так и говорим. Прежний ilike в этом случае условия не
+        // добавлял, и «поиск» возвращал ВЕСЬ журнал: модель принимала его за
+        // найденное и отвечала по случайной заметке.
+        if (!hybrid.ids.length) return 'No notes found.'
+        order = hybrid.ids
+        for (const noteId of hybrid.semanticIds) byMeaning.add(noteId)
+        conds.push(inArray(notes.id, hybrid.ids))
       }
       const rows = await db.select().from(notes).where(and(...conds)).orderBy(desc(notes.createdAt)).limit(40)
       if (!rows.length) return 'No notes found.'
-      return rows
-        .map((n) => `[${n.type}] ${n.id} — "${n.title || htmlToText(n.body).slice(0, 60)}" tags=${n.tags}${n.scope === 'company' ? ' (company-wide)' : ''}`)
+      // Порядок гибридного поиска сильнее даты: точные совпадения первыми.
+      const sorted = order ? [...rows].sort((a, b) => order!.indexOf(a.id) - order!.indexOf(b.id)) : rows
+      return sorted
+        .map(
+          (n) =>
+            `[${n.type}] ${n.id} — "${n.title || htmlToText(n.body).slice(0, 60)}" tags=${n.tags}` +
+            `${n.scope === 'company' ? ' (company-wide)' : ''}${byMeaning.has(n.id) ? ' (matched by meaning)' : ''}`,
+        )
         .join('\n')
     },
     read_note: async (args) => {

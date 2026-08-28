@@ -141,3 +141,73 @@ describe('без ключа поиск выключен, а не сломан', 
     }
   })
 })
+
+describe('поиск по смыслу доступен обоим ассистентам', () => {
+  // Ассистент снаружи ходит через мост, ассистент внутри Chatick — через
+  // свои инструменты. Разные пути, один вопрос: ответы обязаны совпадать.
+  it('мост и внутренний ассистент зовут ОДНУ функцию', () => {
+    const bridge = read('../routes/bridge.ts')
+    const memory = read('./memory.ts')
+    expect(bridge, 'мост не ищет по смыслу').toMatch(/searchNoteIds\(\{/)
+    expect(memory, 'внутренний ассистент не ищет по смыслу').toMatch(/searchNoteIds\(\{/)
+  })
+
+  it('обоим сказано, что поиск понимает смысл', () => {
+    // Модель не станет спрашивать своими словами, если думает, что ищется
+    // подстрока: она будет угадывать точную формулировку.
+    const bridge = read('../routes/bridge.ts')
+    const memory = read('./memory.ts')
+    for (const [src, who] of [[bridge, 'мост'], [memory, 'ассистент']] as const) {
+      expect(src, `${who} не объясняет про смысл`).toMatch(/understands MEANING/)
+    }
+  })
+})
+
+describe('пустой результат честен', () => {
+  // Прежний ilike при отсутствии совпадений просто НЕ ДОБАВЛЯЛ условия — и
+  // «поиск» возвращал весь журнал. Ассистент принимал это за найденное и
+  // отвечал по случайной заметке.
+  it('мост отсекает выдачу, когда не нашлось ничего', () => {
+    const bridge = read('../routes/bridge.ts')
+    const at = bridge.indexOf('const hybrid = await searchNoteIds({')
+    expect(at, 'гибридный поиск в мосту не найден').toBeGreaterThan(-1)
+    expect(bridge.slice(at, at + 900)).toMatch(/conds\.push\(sql`false`\)/)
+  })
+
+  it('внутренний ассистент отвечает «не найдено», а не всем журналом', () => {
+    const memory = read('./memory.ts')
+    const at = memory.indexOf('const hybrid = await searchNoteIds({')
+    expect(at, 'гибридный поиск у ассистента не найден').toBeGreaterThan(-1)
+    expect(memory.slice(at, at + 900)).toMatch(/if \(!hybrid\.ids\.length\) return 'No notes found\.'/)
+  })
+})
+
+describe('гибрид: слова и смысл вместе', () => {
+  it('точные совпадения ищутся по-прежнему', () => {
+    // «Cardcom» надёжнее найти дословно, чем через модель. Смысл дополняет
+    // слова, а не заменяет их.
+    const at = lib.indexOf('export async function searchNoteIds')
+    const fn = lib.slice(at)
+    expect(fn).toMatch(/ilike \$\{like\}/)
+    expect(fn).toMatch(/searchSemantic\(\{/)
+  })
+
+  it('точные идут первыми, смысловые следом', () => {
+    const at = lib.indexOf('export async function searchNoteIds')
+    const fn = lib.slice(at)
+    expect(fn).toMatch(/return \{ ids: \[\.\.\.ids, \.\.\.semanticIds\], semanticIds \}/)
+  })
+
+  it('падение модели не роняет поиск целиком', () => {
+    // Неполный поиск лучше упавшего: слова всё равно нашлись.
+    const at = lib.indexOf('export async function searchNoteIds')
+    expect(lib.slice(at)).toMatch(/смысловой поиск не сработал/)
+  })
+
+  it('чужой проект не просачивается через вектор', () => {
+    // Вектор ограничен компанией, а видимость — проектом: без этой проверки
+    // проектная заметка чужого проекта попала бы в выдачу.
+    const at = lib.indexOf('export async function searchNoteIds')
+    expect(lib.slice(at)).toMatch(/if \(!opts\.companyWide && r\.projectId !== opts\.projectId\) continue/)
+  })
+})
