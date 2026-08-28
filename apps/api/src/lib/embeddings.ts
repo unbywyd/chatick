@@ -245,7 +245,16 @@ export async function flushQueue(limit = 50): Promise<{ done: number; failed: nu
  *
  * Порог отсечения нужен: без него запрос всегда вернёт limit записей, даже
  * когда подходящих нет вовсе, — и ассистент примет самое похожее из мусора за
- * ответ. Значение подобрано на живых замерах: явно чужое даёт 0.15–0.20.
+ * ответ.
+ *
+ * 0.32 — не круглое число, а замер. На базе из шести реальных записей
+ * (Cardcom, SendGrid, APNs, деплой) настоящие совпадения дали 0.375–0.514,
+ * а запрос «цвет кнопки в шапке», которому в базе не соответствует ничего,
+ * вытянул ивритскую заметку про платежи на 0.265. Порог 0.25 такой мусор
+ * пропускал.
+ *
+ * Ошибаться лучше в сторону «не нашёл»: ассистент, получивший пусто, скажет
+ * об этом и спросит; получивший чужое — ответит уверенно и неправильно.
  */
 export async function searchSemantic(opts: {
   query: string
@@ -259,7 +268,7 @@ export async function searchSemantic(opts: {
   const vec = vectors?.[0]
   if (!vec) return []
 
-  const min = opts.minScore ?? 0.25
+  const min = opts.minScore ?? 0.32
   const types = opts.entityTypes?.length ? opts.entityTypes : null
   const rows = await db
     .select({
