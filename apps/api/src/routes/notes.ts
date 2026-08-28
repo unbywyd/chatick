@@ -6,7 +6,7 @@ import { companyOf, projectPath } from '../lib/links.js'
 import { db } from '../db/client.js'
 import { messages, notes, projects, tasks, users } from '../db/schema.js'
 import { requireProject, type ProjectEnv } from '../auth.js'
-import { hasPermission, ownsOrManages } from './projects.js'
+import { hasPermission, ownsOrManages, companyRoleOf } from './projects.js'
 import { enqueue } from '../lib/embeddings.js'
 import { logActivity } from '../lib/audit.js'
 import { htmlToText, sanitizeHtml } from '../lib/sanitize-html.js'
@@ -82,6 +82,44 @@ const serialize = (
   updatedAt: n.updatedAt,
 })
 
+/**
+ * Доступ к базе знаний — по членству в КОМПАНИИ, а не по правам проекта.
+ *
+ * Заметки перестали принадлежать проекту: знание про Cardcom нужно всем, кто
+ * с ним столкнётся, а не только тем, кого позвали в проект, где на него
+ * наткнулись первыми.
+ *
+ * Домен notes из проектных прав убран не по прихоти: из 104 участников его не
+ * ограничил НИ ОДИН. Право существовало, им ни разу не воспользовались, а два
+ * источника правды об одном доступе однажды разошлись бы молча — в проекте
+ * «нет», в компании «есть», и поди пойми, что сильнее.
+ *
+ * Правило простое, его можно объяснить одной фразой и человеку, и ассистенту:
+ * состоишь в компании — читаешь и пишешь; правишь и удаляешь своё; чужое
+ * трогает админ.
+ */
+
+/** Состоит ли человек в компании — этого хватает, чтобы читать и писать. */
+export async function canUseKnowledge(companyId: string, userId: string): Promise<boolean> {
+  return Boolean(await companyRoleOf(companyId, userId))
+}
+
+/**
+ * Можно ли ПРАВИТЬ или УДАЛЯТЬ эту запись.
+ *
+ * Своё — всегда. Чужое — только админу компании: запись, на которую сослались
+ * в трёх местах, не должен переписать кто угодно, а стереть чужое знание
+ * необратимо.
+ */
+export async function canEditKnowledge(
+  companyId: string,
+  userId: string,
+  authorId: string | null,
+): Promise<boolean> {
+  if (authorId && authorId === userId) return true
+  return (await companyRoleOf(companyId, userId)) === 'admin'
+}
+
 const alive = sql`${notes.deletedAt} is null`
 
 /**
@@ -102,7 +140,8 @@ const listQuery = z.object({
 
 notesRoute.get('/', zValidator('query', listQuery), async (c) => {
   const { projectId, sub } = c.get('auth')
-  if (!(await hasPermission(projectId, sub, 'notes.read'))) return c.json({ error: 'Forbidden' }, 403)
+  const company = await companyOf(projectId)
+  if (!company || !(await canUseKnowledge(company, sub))) return c.json({ error: 'Forbidden' }, 403)
   const f = c.req.valid('query')
 
   const conds = [alive]
@@ -170,7 +209,8 @@ notesRoute.get('/', zValidator('query', listQuery), async (c) => {
 /** Теги, уже использованные в проекте — для автодополнения и фильтров. */
 notesRoute.get('/tags', async (c) => {
   const { projectId, sub } = c.get('auth')
-  if (!(await hasPermission(projectId, sub, 'notes.read'))) return c.json({ error: 'Forbidden' }, 403)
+  const company = await companyOf(projectId)
+  if (!company || !(await canUseKnowledge(company, sub))) return c.json({ error: 'Forbidden' }, 403)
   const rows = await db.select({ tags: notes.tags }).from(notes).where(and(eq(notes.projectId, projectId), alive)).limit(1000)
   const counts = new Map<string, number>()
   for (const r of rows) for (const t of parseJson<string[]>(r.tags, [])) counts.set(t, (counts.get(t) ?? 0) + 1)
@@ -181,7 +221,8 @@ notesRoute.get('/tags', async (c) => {
 
 notesRoute.get('/:id', async (c) => {
   const { projectId, sub } = c.get('auth')
-  if (!(await hasPermission(projectId, sub, 'notes.read'))) return c.json({ error: 'Forbidden' }, 403)
+  const company = await companyOf(projectId)
+  if (!company || !(await canUseKnowledge(company, sub))) return c.json({ error: 'Forbidden' }, 403)
   const row = await db
     .select({ n: notes, author: users, project: projects, task: tasks })
     .from(notes)
@@ -317,23 +358,27 @@ export async function createNote(
 
 notesRoute.post('/', zValidator('json', bodySchema), async (c) => {
   const { projectId, sub } = c.get('auth')
-  if (!(await hasPermission(projectId, sub, 'notes.write'))) return c.json({ error: 'Forbidden' }, 403)
+  const company = await companyOf(projectId)
+  if (!company || !(await canUseKnowledge(company, sub))) return c.json({ error: 'Forbidden' }, 403)
   const row = await createNote(projectId, sub, c.req.valid('json'), 'ui')
   return c.json(serialize(row), 201)
 })
 
 notesRoute.patch('/:id', zValidator('json', bodySchema.partial()), async (c) => {
   const { projectId, sub } = c.get('auth')
+  const company = await companyOf(projectId)
+  if (!company) return c.json({ error: 'Forbidden' }, 403)
+  // Ищем по КОМПАНИИ, а не по проекту: запись общего правила проекта не имеет,
+  // и поиск по projectId её просто не нашёл бы — «Not found» на существующую.
   const existing = await db.query.notes.findFirst({
-    where: and(eq(notes.id, c.req.param('id')), eq(notes.projectId, projectId), alive),
+    where: and(eq(notes.id, c.req.param('id')), eq(notes.companyId, company), alive),
   })
   if (!existing) return c.json({ error: 'Not found' }, 404)
 
-  // Своя заметка — своя ответственность; чужую переписывать нельзя. Журнал
-  // ценен, только если запись остаётся тем, что написал её автор.
-  if (!(await hasPermission(projectId, sub, 'notes.write'))) return c.json({ error: 'Forbidden' }, 403)
-  if (!(await ownsOrManages(projectId, sub, [existing.authorId]))) {
-    return c.json({ error: 'Forbidden: you can only edit notes you wrote' }, 403)
+  // Своё правит автор, чужое — админ компании: запись, на которую сослались в
+  // трёх местах, не должен переписать кто угодно.
+  if (!(await canEditKnowledge(company, sub, existing.authorId))) {
+    return c.json({ error: 'Forbidden: you can only edit entries you wrote' }, 403)
   }
 
   const p = c.req.valid('json')
@@ -441,7 +486,8 @@ export async function noteToTask(
 
 notesRoute.post('/:id/task', async (c) => {
   const { projectId, sub } = c.get('auth')
-  if (!(await hasPermission(projectId, sub, 'notes.read'))) return c.json({ error: 'Forbidden' }, 403)
+  const company = await companyOf(projectId)
+  if (!company || !(await canUseKnowledge(company, sub))) return c.json({ error: 'Forbidden' }, 403)
   // создаём ЗАДАЧУ — значит и права нужны задачные
   if (!(await hasPermission(projectId, sub, 'tasks.create'))) return c.json({ error: 'Forbidden' }, 403)
 
@@ -458,17 +504,18 @@ notesRoute.post('/:id/task', async (c) => {
 
 notesRoute.delete('/:id', async (c) => {
   const { projectId, sub } = c.get('auth')
+  const company = await companyOf(projectId)
+  if (!company) return c.json({ error: 'Forbidden' }, 403)
   const existing = await db.query.notes.findFirst({
-    where: and(eq(notes.id, c.req.param('id')), eq(notes.projectId, projectId), alive),
+    where: and(eq(notes.id, c.req.param('id')), eq(notes.companyId, company), alive),
   })
   if (!existing) return c.json({ error: 'Not found' }, 404)
 
-  // Свою заметку участник убирает сам; чужую — только с notes.delete.
-  const canDeleteAny = await hasPermission(projectId, sub, 'notes.delete')
-  const canDeleteOwn =
-    (await hasPermission(projectId, sub, 'notes.write')) &&
-    (await ownsOrManages(projectId, sub, [existing.authorId]))
-  if (!canDeleteAny && !canDeleteOwn) return c.json({ error: 'Forbidden' }, 403)
+  // Своё убирает автор, чужое — админ компании: стереть чужое знание
+  // необратимо, и решение это не рядовое.
+  if (!(await canEditKnowledge(company, sub, existing.authorId))) {
+    return c.json({ error: 'Forbidden' }, 403)
+  }
 
   await db.update(notes).set({ deletedAt: new Date(), deletedById: sub }).where(eq(notes.id, existing.id))
   void logActivity({

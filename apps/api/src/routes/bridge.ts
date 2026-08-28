@@ -51,7 +51,7 @@ import { connectDoc, guideDoc } from '../lib/bridge-docs.js'
 import { logActivity } from '../lib/audit.js'
 import { sendAddedToProjectMail, sendRemovedFromProjectMail } from '../lib/mails.js'
 import { sendInviteMail } from '../lib/mail-invite.js'
-import { createNote, noteToTask, NOTE_TYPES, type NoteType } from './notes.js'
+import { createNote, noteToTask, NOTE_TYPES, canUseKnowledge, canEditKnowledge, type NoteType } from './notes.js'
 import { enqueue as enqueueEmbedding, searchNoteIds } from '../lib/embeddings.js'
 import { readTimeConfig, maybeTranslate, timeConfigForProject } from './time.js'
 import { readPresence } from './auth.js'
@@ -5113,8 +5113,12 @@ bridgeRoute.get('/time/report', async (c) => {
 bridgeRoute.get('/notes', async (c) => {
   const scope = await resolveProject(c as never)
   if ('error' in scope) return c.json({ error: scope.error }, scope.status)
-  const denied = await require(c as never, 'notes.read', scope.projectId)
-  if (denied) return c.json(denied, 403)
+  // База знаний принадлежит КОМПАНИИ: доступ даёт членство в ней, а не права
+  // в проекте. Знание про Cardcom нужно всем, кто с ним столкнётся.
+  const kbCompany = await companyOf(scope.projectId)
+  if (!kbCompany || !(await canUseKnowledge(kbCompany, auth(c as never).userId))) {
+    return c.json({ error: 'You are not a member of this company' }, 403)
+  }
 
   const q = c.req.query('q')?.trim()
   const conds = [isNull(notes.deletedAt)]
@@ -5207,8 +5211,12 @@ bridgeRoute.get('/notes', async (c) => {
 bridgeRoute.get('/notes/:id', async (c) => {
   const scope = await resolveProject(c as never)
   if ('error' in scope) return c.json({ error: scope.error }, scope.status)
-  const denied = await require(c as never, 'notes.read', scope.projectId)
-  if (denied) return c.json(denied, 403)
+  // База знаний принадлежит КОМПАНИИ: доступ даёт членство в ней, а не права
+  // в проекте. Знание про Cardcom нужно всем, кто с ним столкнётся.
+  const kbCompany = await companyOf(scope.projectId)
+  if (!kbCompany || !(await canUseKnowledge(kbCompany, auth(c as never).userId))) {
+    return c.json({ error: 'You are not a member of this company' }, 403)
+  }
 
   const row = await db.query.notes.findFirst({
     where: and(eq(notes.id, c.req.param('id')), isNull(notes.deletedAt)),
@@ -5249,8 +5257,12 @@ bridgeRoute.post('/notes', async (c) => {
   const id = auth(c as never)
   const scope = await resolveProject(c as never)
   if ('error' in scope) return c.json({ error: scope.error }, scope.status)
-  const denied = await require(c as never, 'notes.write', scope.projectId)
-  if (denied) return c.json(denied, 403)
+  // База знаний принадлежит КОМПАНИИ: доступ даёт членство в ней, а не права
+  // в проекте. Знание про Cardcom нужно всем, кто с ним столкнётся.
+  const kbCompany = await companyOf(scope.projectId)
+  if (!kbCompany || !(await canUseKnowledge(kbCompany, auth(c as never).userId))) {
+    return c.json({ error: 'You are not a member of this company' }, 403)
+  }
 
   const parsed_b = await readJson(c as never)
   if ('error' in parsed_b) return c.json(parsed_b, 400)
@@ -5288,16 +5300,22 @@ bridgeRoute.patch('/notes/:id', async (c) => {
   const id = auth(c as never)
   const scope = await resolveProject(c as never)
   if ('error' in scope) return c.json({ error: scope.error }, scope.status)
-  const denied = await require(c as never, 'notes.write', scope.projectId)
-  if (denied) return c.json(denied, 403)
+  // База знаний принадлежит КОМПАНИИ: доступ даёт членство в ней, а не права
+  // в проекте. Знание про Cardcom нужно всем, кто с ним столкнётся.
+  const kbCompany = await companyOf(scope.projectId)
+  if (!kbCompany || !(await canUseKnowledge(kbCompany, auth(c as never).userId))) {
+    return c.json({ error: 'You are not a member of this company' }, 403)
+  }
 
   const existing = await db.query.notes.findFirst({
-    where: and(eq(notes.id, c.req.param('id')), eq(notes.projectId, scope.projectId), isNull(notes.deletedAt)),
+    where: and(eq(notes.id, c.req.param('id')), eq(notes.companyId, kbCompany), isNull(notes.deletedAt)),
   })
   if (!existing) return c.json({ error: 'Note not found' }, 404)
-  // Чужую заметку не переписываем — как в интерфейсе
-  if (!(await ownsOrManages(scope.projectId, id.userId, [existing.authorId]))) {
-    return c.json({ error: 'Forbidden: you can only edit notes you wrote' }, 403)
+  // Своё правит автор, чужое — админ компании. Роль в ПРОЕКТЕ здесь не
+  // подходит: у записи общего правила проекта нет вовсе, и спрашивать роль в
+  // нём было бы не у чего.
+  if (!(await canEditKnowledge(kbCompany, id.userId, existing.authorId))) {
+    return c.json({ error: 'Forbidden: you can only edit entries you wrote' }, 403)
   }
 
   const parsed_b = await readJson(c as never)
@@ -5358,7 +5376,13 @@ bridgeRoute.post('/notes/:id/task', async (c) => {
   const id = auth(c as never)
   const scope = await resolveProject(c as never)
   if ('error' in scope) return c.json({ error: scope.error }, scope.status)
-  const denied = (await require(c as never, 'notes.read', scope.projectId)) ?? (await require(c as never, 'tasks.create', scope.projectId))
+  // Читать запись — по членству в компании; создавать задачу — по правам
+  // ПРОЕКТА: задача рождается в проекте, и это его правила.
+  const kbCompany = await companyOf(scope.projectId)
+  if (!kbCompany || !(await canUseKnowledge(kbCompany, id.userId))) {
+    return c.json({ error: 'You are not a member of this company' }, 403)
+  }
+  const denied = await require(c as never, 'tasks.create', scope.projectId)
   if (denied) return c.json(denied, 403)
 
   const parsed_b = await readJson(c as never)
@@ -5380,15 +5404,18 @@ bridgeRoute.delete('/notes/:id', async (c) => {
   const id = auth(c as never)
   const scope = await resolveProject(c as never)
   if ('error' in scope) return c.json({ error: scope.error }, scope.status)
+  const kbCompany = await companyOf(scope.projectId)
+  if (!kbCompany) return c.json({ error: 'You are not a member of this company' }, 403)
   const existing = await db.query.notes.findFirst({
-    where: and(eq(notes.id, c.req.param('id')), eq(notes.projectId, scope.projectId), isNull(notes.deletedAt)),
+    where: and(eq(notes.id, c.req.param('id')), eq(notes.companyId, kbCompany), isNull(notes.deletedAt)),
   })
   if (!existing) return c.json({ error: 'Note not found' }, 404)
 
-  // Свою заметку убирает и участник; чужую — только с notes.delete
-  const own = await ownsOrManages(scope.projectId, id.userId, [existing.authorId])
-  const denied = await require(c as never, own ? 'notes.write' : 'notes.delete', scope.projectId)
-  if (denied) return c.json(denied, 403)
+  // Своё убирает автор, чужое — админ компании: стереть чужое знание
+  // необратимо, и решение это не рядовое.
+  if (!(await canEditKnowledge(kbCompany, id.userId, existing.authorId))) {
+    return c.json({ error: 'Forbidden: only the author or a company admin can delete an entry' }, 403)
+  }
   await db.update(notes).set({ deletedAt: new Date(), deletedById: id.userId }).where(eq(notes.id, existing.id))
   void logActivity({
     projectId: scope.projectId,
