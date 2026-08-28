@@ -52,7 +52,7 @@ import { logActivity } from '../lib/audit.js'
 import { sendAddedToProjectMail, sendRemovedFromProjectMail } from '../lib/mails.js'
 import { sendInviteMail } from '../lib/mail-invite.js'
 import { createNote, noteToTask, NOTE_TYPES, canUseKnowledge, canEditKnowledge, type NoteType } from './notes.js'
-import { enqueue as enqueueEmbedding, searchNoteIds } from '../lib/embeddings.js'
+import { enqueue as enqueueEmbedding, searchNoteIds, searchTaskIds } from '../lib/embeddings.js'
 import { readTimeConfig, maybeTranslate, timeConfigForProject } from './time.js'
 import { readPresence } from './auth.js'
 import { canPublish, createShare, locate, revokeShare, type ShareEntityType } from './shares.js'
@@ -2177,6 +2177,79 @@ bridgeRoute.get('/open', async (c) => {
     ...(linkedReleases.length ? { releases: linkedReleases } : {}),
     ...(checklist ? { checklist } : {}),
     ...taskLinkList,
+  })
+})
+
+/**
+ * Поиск по задачам и их обсуждениям — во ВСЕХ проектах человека.
+ *
+ * «Где та таска, где я писал» — типичный вопрос, и он не про один проект: в
+ * StartPlan люди состоят в 8–20 проектах, и перебирать их руками никто не
+ * станет. Обычный GET /x/tasks ищет внутри одного — этого мало.
+ *
+ * Поиск понимает СМЫСЛ: «оплата не проходит» находит ивритскую задачу
+ * «תיקון ה-iframe של התשלום» без единого общего слова. Комментарии
+ * индексируются вместе с задачей: ответ чаще в обсуждении, чем в заголовке.
+ *
+ * Граница — проекты, где человек СОСТОИТ. Не компания: задача принадлежит
+ * проекту, и показать её тому, кого туда не звали, значит показать чужое —
+ * молча, без всякой ошибки.
+ */
+bridgeRoute.get('/search/tasks', async (c) => {
+  const id = auth(c as never)
+  const q = c.req.query('q')?.trim()
+  if (!q) return c.json({ error: 'q is required', hint: 'Ask in plain words — meaning is matched, not substrings.' }, 400)
+
+  // Компания из туннеля; на проектном — из проекта, чтобы не переподключаться
+  // ради поиска.
+  let companyId = id.companyId ?? null
+  const askedProject = c.req.query('project')?.trim() || null
+  if (!companyId) {
+    const scope = await resolveProject(c as never)
+    if ('error' in scope) return c.json({ error: scope.error }, scope.status)
+    companyId = await companyOf(scope.projectId)
+  }
+  if (!companyId) return c.json({ error: 'Company unknown' }, 400)
+
+  const found = await searchTaskIds({
+    query: q,
+    userId: id.userId,
+    companyId,
+    projectId: askedProject,
+    limit: Math.min(50, Math.max(1, Number(c.req.query('limit')) || 20)),
+  })
+  if (!found.ids.length) {
+    return c.json({
+      items: [],
+      hint: 'Nothing matched. The search goes by meaning, so rephrasing rarely helps — more likely it is simply not there.',
+    })
+  }
+
+  const rows = await db
+    .select({ t: tasks, u: users, p: projects })
+    .from(tasks)
+    .leftJoin(users, eq(users.id, tasks.assigneeId))
+    .leftJoin(projects, eq(projects.id, tasks.projectId))
+    .where(inArray(tasks.id, found.ids))
+
+  // Порядок поиска сильнее выборки: ближайшее по смыслу первым.
+  const ordered = [...rows].sort((a, b) => found.ids.indexOf(a.t.id) - found.ids.indexOf(b.t.id))
+
+  return c.json({
+    items: ordered.map((r) => ({
+      id: r.t.id,
+      number: r.t.number,
+      title: r.t.title,
+      status: r.t.status,
+      project: { id: r.t.projectId, name: r.p?.name ?? '' },
+      assignee: r.u ? { id: r.u.id, name: r.u.name } : null,
+      // Найдено по смыслу: общих слов с запросом может не быть вовсе, и без
+      // пометки такой ответ выглядит случайным.
+      ...(found.semanticIds.has(r.t.id) ? { matchedBy: 'meaning' as const } : {}),
+      updatedAt: r.t.updatedAt,
+    })),
+    hint:
+      'Searched across every project you are in. Comments are indexed together with their task, so "where did we discuss X" lands on the task that holds the discussion. Read one with GET /x/tasks/<id>?project=<projectId> — take projectId from the item.',
   })
 })
 

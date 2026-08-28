@@ -796,6 +796,44 @@ server.registerTool(
   },
 )
 
+/**
+ * «Где та таска, где я писал» — вопрос, на который до этого ответить было
+ * нечем: chatick_tasks ищет внутри одного проекта, а люди состоят в 8-20.
+ */
+server.registerTool(
+  'chatick_search_tasks',
+  {
+    title: 'Find a task by what it was about',
+    description:
+      'Finds a task ACROSS EVERY PROJECT this person is in, by MEANING rather than words: "payment fails" finds a ' +
+      'Hebrew task about a broken payment iframe with no shared word. ' +
+      'Comments are indexed together with their task, so "where did we discuss X", "which task was that in", ' +
+      '"I wrote about it somewhere" land on the task holding the discussion — that is what this is for. ' +
+      'Use chatick_tasks instead when you already know the project and want to list or filter its tasks; use this ' +
+      'when the project is exactly what you are trying to remember. Items found by meaning carry ' +
+      'matchedBy="meaning" — they may share no word with your query.',
+    inputSchema: {
+      query: z.string().describe('Ask in plain words — do not guess the exact wording someone used'),
+      project: z.string().optional().describe('Narrow to one project; omit to search all of them'),
+      limit: z.number().optional(),
+    },
+  },
+  async ({ query, project, limit }) => {
+    try {
+      const scope = await need()
+      return json(
+        await call(scope, 'GET', '/search/tasks', undefined, {
+          q: query,
+          project,
+          limit: limit ? String(limit) : undefined,
+        }),
+      )
+    } catch (e) {
+      return fail(e)
+    }
+  },
+)
+
 // --- Журнал проекта / база знаний ---------------------------------------------
 
 /**

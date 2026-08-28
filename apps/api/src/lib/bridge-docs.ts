@@ -1085,6 +1085,14 @@ Start with GET /x/context if you need to understand the project before acting.
 ## Team
 
   GET    /x/members                    who is in the project, with roles and permission levels
+  GET    /x/search/tasks?q=...          find a task by MEANING, across every
+         project you are in. "payment fails" finds a Hebrew task about a broken
+         payment iframe with no shared word. Comments are indexed together with
+         their task, so "where did we discuss X" lands on the task holding the
+         discussion — that is the question this answers.
+         ?project=<id> narrows to one. Items found by meaning carry
+         matchedBy="meaning". Ask in plain words; do not guess exact wording.
+
   GET    /x/company/members            everyone in the COMPANY, with their company role
          and job title. Different from /x/members, which is one project's team.
   PATCH  /x/company/members/<userId>   {"jobTitle"?, "responsibility"?, "role"?}

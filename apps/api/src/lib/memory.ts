@@ -12,7 +12,7 @@ import { htmlToText, sanitizeHtml } from './sanitize-html.js'
 import { searchInDocument, searchInText } from './doc-search.js'
 import { submitAssistantReport, REPORT_KINDS, type ReportKind } from './assistant-report.js'
 import { createNote, noteToTask, NOTE_TYPES } from '../routes/notes.js'
-import { enqueue as enqueueEmbedding, searchNoteIds } from './embeddings.js'
+import { enqueue as enqueueEmbedding, searchNoteIds, searchTaskIds } from './embeddings.js'
 import { timeConfigForProject } from '../routes/time.js'
 import { encrypt } from './crypto.js'
 import { notify, extractMentions, commentWatchers } from './notify.js'
@@ -227,6 +227,19 @@ export function memoryTools(projectId: string, actorUserId: string): { tools: To
       name: 'list_tasks',
       description: 'List project tasks (number, title, status, priority, assignee, due date).',
       parameters: { type: 'object', properties: { status: { type: 'string', enum: ['todo', 'in_progress', 'review', 'verified', 'done'] } } },
+    },
+    {
+      name: 'search_tasks',
+      description:
+        'Find a task ACROSS EVERY PROJECT this person is in, by MEANING rather than words: "payment fails" finds a Hebrew task about a broken payment iframe with no shared word. Comments are indexed together with their task, so "where did we discuss X", "which task was that in", "I wrote about it somewhere" land on the task holding the discussion — that is what this is for. Use list_tasks for the current project; use this when the project is exactly what they are trying to remember.',
+      parameters: {
+        type: 'object',
+        properties: {
+          query: { type: 'string', description: 'Ask in plain words — do not guess the exact wording' },
+          allProjects: { type: 'boolean', description: 'Default true; false narrows to the current project' },
+        },
+        required: ['query'],
+      },
     },
     {
       name: 'get_task',
@@ -1892,6 +1905,36 @@ export function memoryTools(projectId: string, actorUserId: string): { tools: To
           .sort((a, b) => b.minutes - a.minutes)
           .map((r) => `  ${r.number ? `${r.number} ${r.title}` : '(no task)'}: ${fmt(r.minutes)}`),
       ].join('\n')
+    },
+    search_tasks: async (args) => {
+      const q = String(args.query ?? '').trim()
+      if (!q) return 'Pass query — ask in plain words.'
+      const project = await db.query.projects.findFirst({ where: eq(projects.id, projectId) })
+      if (!project?.companyId) return 'No company context.'
+      const found = await searchTaskIds({
+        query: q,
+        userId: actorUserId,
+        companyId: project.companyId,
+        // По умолчанию ищем везде: «где та таска» — вопрос как раз о том, что
+        // проект забыт. Сузить можно явно.
+        projectId: args.allProjects === false ? projectId : null,
+        limit: 15,
+      })
+      if (!found.ids.length) return 'Nothing matched. The search goes by meaning, so rephrasing rarely helps — more likely it is simply not there.'
+      const rows = await db
+        .select({ t: tasks, p: projects })
+        .from(tasks)
+        .leftJoin(projects, eq(projects.id, tasks.projectId))
+        .where(inArray(tasks.id, found.ids))
+      const ordered = [...rows].sort((a, b) => found.ids.indexOf(a.t.id) - found.ids.indexOf(b.t.id))
+      return ordered
+        .map(
+          (r) =>
+            `${r.t.number} [${r.t.status}] ${r.t.title}` +
+            `${r.t.projectId !== projectId ? ` — project: ${r.p?.name ?? '?'}` : ''}` +
+            `${found.semanticIds.has(r.t.id) ? ' (matched by meaning)' : ''}`,
+        )
+        .join('\n')
     },
     list_notes: async (args) => {
       if (!(await hasPermission(projectId, actorUserId, 'notes.read'))) return 'PERMISSION DENIED: the author cannot read notes.'
