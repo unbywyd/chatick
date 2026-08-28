@@ -211,3 +211,25 @@ describe('гибрид: слова и смысл вместе', () => {
     expect(lib.slice(at)).toMatch(/if \(!opts\.companyWide && r\.projectId !== opts\.projectId\) continue/)
   })
 })
+
+describe('массивы в SQL передаются так, как их понимает драйвер', () => {
+  it('фильтр по типам — через inArray, а не sql`= any(...)`', () => {
+    // Ровно на этом поиск заметок падал НА КАЖДОМ запросе: drizzle
+    // разворачивает массив в отдельные параметры, и any() получал строку.
+    //
+    // Наружу это выглядело как «ничего не найдено»: ошибку глушил catch,
+    // поставленный на случай недоступной модели. Типы такого не ловят, а
+    // тесты на границы проходили — ошибка живёт в самом SQL.
+    const at = lib.indexOf('export async function searchSemantic')
+    const fn = lib.slice(at)
+    expect(fn, 'снова sql`= any(...)` — запрос упадёт на живых данных').not.toMatch(/= any\(\$\{types\}\)/)
+    expect(fn).toMatch(/inArray\(embeddings\.entityType, types\)/)
+  })
+
+  it('и в поиске задач тоже', () => {
+    const at = lib.indexOf('export async function searchTaskIds')
+    const fn = lib.slice(at)
+    expect(fn).toMatch(/inArray\(embeddings\.projectId, allowedIds\)/)
+    expect(fn).not.toMatch(/= any\(/)
+  })
+})
