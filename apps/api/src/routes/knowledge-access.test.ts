@@ -111,3 +111,44 @@ describe('знание переживает проект', () => {
     expect(block).toMatch(/companyId: text\('company_id'\)\s*\.notNull\(\)/)
   })
 })
+
+describe('поиск по умолчанию смотрит на всю компанию', () => {
+  // Умолчание «только этот проект» осталось от времён, когда заметки были
+  // журналом проекта. Оно прятало ровно то, ради чего база заводилась:
+  // решение, найденное в соседнем проекте.
+  it('мост ищет по компании, если не сказано иначе', () => {
+    const at = bridge.indexOf("bridgeRoute.get('/notes'")
+    const fn = bridge.slice(at, at + 2500)
+    // Два места, и оба должны смотреть на компанию: прямой отбор без запроса
+    // и гибридный поиск с запросом. Первая версия этой проверки смотрела
+    // только на первое — и саботаж, вернувший старое умолчание в гибридный
+    // поиск, прошёл мимо.
+    expect(fn, 'прямой отбор не по компании').toMatch(/conds\.push\(eq\(notes\.companyId, kbCompany\)\)/)
+    expect(fn, 'сужение до проекта не по scope=project').toMatch(/scope'\) === 'project'/)
+    expect(fn, 'гибридный поиск сузили до проекта по умолчанию').toMatch(/companyWide: c\.req\.query\('scope'\) !== 'project'/)
+  })
+
+  it('внутренний ассистент — так же', () => {
+    const memory = read('../lib/memory.ts')
+    const at = memory.indexOf('const hybrid = await searchNoteIds({')
+    expect(memory.slice(at, at + 500)).toMatch(/!== 'project'/)
+  })
+
+  it('условия по notes.scope нигде не осталось', () => {
+    // Поле осталось от прежнего устройства и больше ничего не значит. Пока
+    // оно стояло в отборе, запись, созданная из проекта (scope='project'), не
+    // находилась НИКОГДА — даже с ?scope=company.
+    const lib = read('../lib/embeddings.ts')
+    for (const [src, who] of [[bridge, 'мост'], [lib, 'помощник поиска']] as const) {
+      expect(src, `${who} всё ещё отбирает по notes.scope`).not.toMatch(/eq\(notes\.scope, 'company'\)/)
+    }
+  })
+
+  it('ассистентам сказано про новое умолчание', () => {
+    const memory = read('../lib/memory.ts')
+    const mcp = readFileSync(join(import.meta.dirname, '../../../mcp/src/index.ts'), 'utf8')
+    for (const [src, who] of [[memory, 'ассистент'], [mcp, 'MCP']] as const) {
+      expect(src, `${who} не объясняет умолчание`).toMatch(/WHOLE COMPANY by default/)
+    }
+  })
+})

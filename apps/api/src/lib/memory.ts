@@ -159,7 +159,7 @@ async function buildIndexContext(projectId: string): Promise<string> {
     const shown = journal.slice(0, INDEX_LIMIT)
     if (parts.length) parts.push('')
     parts.push(
-      'PROJECT JOURNAL — decisions, solutions, contradictions (read_note to open; list_notes scope="company" searches other projects too):',
+      'KNOWLEDGE BASE — solutions, requirements, traps the team already learned (read_note to open; list_notes searches the whole company, including other projects):',
       ...shown.map((n) => `- [${n.id}] ${n.type} "${n.title || '—'}" (${n.createdAt.toISOString().slice(0, 10)})`),
       ...(journal.length > INDEX_LIMIT ? ['  …and older ones — list_notes query="…" searches all of them.'] : []),
     )
@@ -757,7 +757,7 @@ export function memoryTools(projectId: string, actorUserId: string): { tools: To
     {
       name: 'list_notes',
       description:
-        'Search the project journal (SPEC §8.31): solutions, problems, decisions, contradictions, mismatches, gaps, reminders, business rules. The query understands MEANING, not just words: "payment fails" finds "Cardcom rejects foreign cards" with no shared word, and it works the same in Hebrew — ask in your own words instead of guessing the exact wording. Filter by type or tag. Pass scope="company" to search notes shared across the whole company — do that BEFORE debugging something that may already have been solved in another project.',
+        'Search the project journal (SPEC §8.31): solutions, problems, decisions, contradictions, mismatches, gaps, reminders, business rules. The query understands MEANING, not just words: "payment fails" finds "Cardcom rejects foreign cards" with no shared word, and it works the same in Hebrew — ask in your own words instead of guessing the exact wording. Filter by type or tag. Searches the WHOLE COMPANY by default — look here BEFORE debugging something that may already have been solved, possibly in another project. scope="project" narrows to the current one.',
       parameters: {
         type: 'object',
         properties: {
@@ -776,7 +776,7 @@ export function memoryTools(projectId: string, actorUserId: string): { tools: To
     {
       name: 'create_note',
       description:
-        'Write something into the project journal, ON BEHALF OF the user. Use when asked to "save this", "remember how we fixed it", "log that this contradicts what was said". Types: solution (a problem and its fix — the reusable kind), problem, decision, contradiction (people said conflicting things), mismatch (the build deviates from the design/docs), gap (the design/spec does not cover the case), reminder, business, note. Body is HTML like documents, not markdown. Set scope="company" for technical solutions so other projects can find them. sourceMessageIds quotes chat messages IN THE ORDER THEY WERE SENT — the chain is the evidence; their text is copied, so it survives the messages being deleted. assigneeIds marks who the note concerns; they get notified.',
+        'Write something into the project journal, ON BEHALF OF the user. Use when asked to "save this", "remember how we fixed it", "log that this contradicts what was said". Types: solution (a problem AND its fix — the reusable kind, the most valuable), bug (broken, not yet fixed), requirement (a rule to follow), attention (a trap the next person will step into), decision (we chose this over that, and why), business (a company rule), note. Body is HTML like documents, not markdown. Entries belong to the company and are findable from every project — no scope to set. sourceMessageIds quotes chat messages IN THE ORDER THEY WERE SENT — the chain is the evidence; their text is copied, so it survives the messages being deleted. assigneeIds marks who the note concerns; they get notified.',
       parameters: {
         type: 'object',
         properties: {
@@ -1966,7 +1966,9 @@ export function memoryTools(projectId: string, actorUserId: string): { tools: To
           query: q,
           projectId,
           companyId: project?.companyId ?? null,
-          companyWide: String(args.scope ?? '') === 'company',
+          // По умолчанию вся компания: решение из соседнего проекта — это
+          // ровно то, ради чего база знаний и заводилась.
+          companyWide: String(args.scope ?? '') !== 'project',
         })
         // Пусто — так и говорим. Прежний ilike в этом случае условия не
         // добавлял, и «поиск» возвращал ВЕСЬ журнал: модель принимала его за

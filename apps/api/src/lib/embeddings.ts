@@ -389,8 +389,11 @@ export async function searchNoteIds(opts: {
   const limit = opts.limit ?? 40
 
   // Слова. Ищем по заголовку, телу и тегам — как искали всегда.
+  // Записи принадлежат КОМПАНИИ, и условие по notes.scope убрано: поле
+  // осталось от прежнего устройства и больше ничего не значит. Пока оно
+  // стояло в отборе, запись, созданная из проекта, не находилась никогда.
   const scopeCond = opts.companyWide && opts.companyId
-    ? or(eq(notes.projectId, opts.projectId), and(eq(notes.companyId, opts.companyId), eq(notes.scope, 'company')))!
+    ? eq(notes.companyId, opts.companyId)
     : eq(notes.projectId, opts.projectId)
   const like = `%${q}%`
   const exact = await db

@@ -130,7 +130,9 @@ describe('оглавление в контексте', () => {
     // Про историю чата оглавление было, про документы — ничего: ассистент не
     // знал, что они есть, и отвечал по чату, не открыв документ с ответом.
     expect(src).toMatch(/DOCUMENTS in this project/)
-    expect(src).toMatch(/PROJECT JOURNAL/)
+    // Раздел переименован из PROJECT JOURNAL: заметки перестали быть журналом
+    // проекта и стали базой знаний компании.
+    expect(src).toMatch(/KNOWLEDGE BASE/)
     // Существования функции мало — она должна быть ВЫЗВАНА из сборки
     // контекста и попасть в parts. Иначе оглавление есть в коде и нет в ответе.
     const fn = src.slice(src.indexOf('export async function buildMemoryContext'))

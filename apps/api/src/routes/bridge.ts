@@ -5196,17 +5196,20 @@ bridgeRoute.get('/notes', async (c) => {
   const q = c.req.query('q')?.trim()
   const conds = [isNull(notes.deletedAt)]
 
-  // company-поиск существует ради «в прошлом проекте это уже решали»
-  if (c.req.query('scope') === 'company') {
-    const project = await db.query.projects.findFirst({ where: eq(projects.id, scope.projectId) })
-    conds.push(
-      project?.companyId
-        ? or(eq(notes.projectId, scope.projectId), and(eq(notes.companyId, project.companyId), eq(notes.scope, 'company')))!
-        : eq(notes.projectId, scope.projectId),
-    )
-  } else {
-    conds.push(eq(notes.projectId, scope.projectId))
-  }
+  /**
+   * По умолчанию — ВСЯ КОМПАНИЯ. Сузить до проекта можно явно.
+   *
+   * Раньше было наоборот, и это осталось от времён, когда заметки были
+   * журналом проекта. Теперь они принадлежат компании, и умолчание «только
+   * этот проект» прятало ровно то, ради чего база заводилась: решение,
+   * найденное в соседнем проекте.
+   *
+   * Условие по notes.scope убрано: поле осталось от прежнего устройства и
+   * больше ничего не значит. Пока оно стояло в отборе, запись, созданная из
+   * проекта (scope='project'), не находилась НИКОГДА — даже с ?scope=company.
+   */
+  conds.push(eq(notes.companyId, kbCompany))
+  if (c.req.query('scope') === 'project') conds.push(eq(notes.projectId, scope.projectId))
 
   const types = (c.req.query('type') ?? '').split(',').map((t) => t.trim()).filter(Boolean)
   if (types.length) conds.push(inArray(notes.type, types))
@@ -5229,7 +5232,8 @@ bridgeRoute.get('/notes', async (c) => {
       query: q,
       projectId: scope.projectId,
       companyId: project?.companyId ?? null,
-      companyWide: c.req.query('scope') === 'company',
+      // По умолчанию вся компания: сузить до проекта — явно.
+      companyWide: c.req.query('scope') !== 'project',
       limit: Math.min(100, Math.max(1, Number(c.req.query('limit')) || 50)),
     })
     if (hybrid.ids.length) {

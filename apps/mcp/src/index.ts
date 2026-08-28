@@ -854,13 +854,14 @@ server.registerTool(
       'no shared word, and it works the same in Hebrew. Ask in your own words instead of guessing the exact ' +
       'wording someone used; items found that way are marked matchedBy="meaning". ' +
       'LOOK HERE BEFORE debugging something — it may already have been solved, in this project or another. ' +
-      'scope="company" searches every project of the company: that is where reusable technical answers live.',
+      'Searches the WHOLE COMPANY by default: an answer found in a neighbouring project is exactly the point. ' +
+      'scope="project" narrows to the current one, and you rarely want that.',
     inputSchema: {
       project: z.string().describe('Project id'),
       query: z.string().optional().describe('Ask in plain words — meaning is matched, not substrings'),
       type: z.string().optional().describe('Comma separated: bug, requirement, attention, solution, problem, decision, contradiction, mismatch, gap, reminder, business, note'),
       tag: z.string().optional().describe('Comma separated tags, AND condition'),
-      scope: z.enum(['project', 'company']).optional().describe('company = across every project of the company'),
+      scope: z.enum(['project', 'company']).optional().describe('Default: whole company. "project" narrows to the current one'),
       limit: z.number().optional(),
     },
   },
