@@ -600,13 +600,13 @@ Base URL: ${b}/x
 ## Your permissions in this project
 
   tasks: ${permissions.tasks}   files: ${permissions.files}   resources: ${permissions.resources}
-  documents: ${permissions.documents}   notes: ${permissions.notes}
+  documents: ${permissions.documents}   releases: ${permissions.releases}
 
   create/edit tasks .... ${can('tasks.create')} / ${can('tasks.edit')}
   delete tasks ......... ${can('tasks.delete')}
   upload/delete files .. ${can('files.upload')} / ${can('files.delete')}
   write/delete docs .... ${can('documents.write')} / ${can('documents.delete')}
-  write/delete notes ... ${can('notes.write')} / ${can('notes.delete')}
+  (the knowledge base is company-wide — no per-project note permission)
   manage resources ..... ${can('resources.manage')}
 ${denied.length ? `\n  NOT ALLOWED: ${denied.join(', ')}\n  Do not attempt these — they return 403.` : ''}
 
@@ -1140,7 +1140,7 @@ a company admin can still invite them in one call — the invite carries this
 project with it, so accepting the invite joins both. Anyone below company admin
 gets 403 for outsiders and should invite through the interface.
 
-Permission levels per domain (tasks, files, resources, documents, notes, releases):
+Permission levels per domain (tasks, files, resources, documents, releases):
 
   none | read | write | crud
 

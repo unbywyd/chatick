@@ -13,7 +13,9 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { useConfirm } from '@/components/ui/confirm'
 
 // Таб «Команда» проекта: участники + доменные права инлайн + добавление из компании (SPEC §3.2, §4.3, §8)
-const DOMAINS = ['tasks', 'files', 'resources', 'documents', 'notes', 'releases'] as const
+// notes убран: база знаний принадлежит компании, и доступ к ней даёт членство
+// в ней. Переключатель здесь был бы враньём — «Нет» ничего не закрывало.
+const DOMAINS = ['tasks', 'files', 'resources', 'documents', 'releases'] as const
 type Domain = (typeof DOMAINS)[number]
 
 /**

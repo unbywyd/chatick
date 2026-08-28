@@ -14,6 +14,7 @@ import { submitAssistantReport, REPORT_KINDS, type ReportKind } from './assistan
 import { createNote, noteToTask, NOTE_TYPES } from '../routes/notes.js'
 import { enqueue as enqueueEmbedding, searchNoteIds, searchTaskIds } from './embeddings.js'
 import { announce } from './announce.js'
+import { canUseKnowledge } from '../routes/notes.js'
 import { richText } from './markdown.js'
 import { timeConfigForProject } from '../routes/time.js'
 import { encrypt } from './crypto.js'
@@ -1985,7 +1986,13 @@ export function memoryTools(projectId: string, actorUserId: string): { tools: To
         .join('\n')
     },
     list_notes: async (args) => {
-      if (!(await hasPermission(projectId, actorUserId, 'notes.read'))) return 'PERMISSION DENIED: the author cannot read notes.'
+      // База знаний принадлежит КОМПАНИИ: доступ даёт членство в ней. Проверка
+      // по правам проекта отказала бы в доступе к записи, у которой проекта
+      // нет вовсе.
+      const kbProject = await db.query.projects.findFirst({ where: eq(projects.id, projectId) })
+      if (!kbProject?.companyId || !(await canUseKnowledge(kbProject.companyId, actorUserId))) {
+        return 'PERMISSION DENIED: you are not a member of this company.'
+      }
       const conds = [sql`${notes.deletedAt} is null`]
       if (String(args.scope ?? '') === 'company') {
         const project = await db.query.projects.findFirst({ where: eq(projects.id, projectId) })
@@ -2039,7 +2046,13 @@ export function memoryTools(projectId: string, actorUserId: string): { tools: To
         .join('\n')
     },
     read_note: async (args) => {
-      if (!(await hasPermission(projectId, actorUserId, 'notes.read'))) return 'PERMISSION DENIED: the author cannot read notes.'
+      // База знаний принадлежит КОМПАНИИ: доступ даёт членство в ней. Проверка
+      // по правам проекта отказала бы в доступе к записи, у которой проекта
+      // нет вовсе.
+      const kbProject = await db.query.projects.findFirst({ where: eq(projects.id, projectId) })
+      if (!kbProject?.companyId || !(await canUseKnowledge(kbProject.companyId, actorUserId))) {
+        return 'PERMISSION DENIED: you are not a member of this company.'
+      }
       const n = await db.query.notes.findFirst({
         where: and(eq(notes.id, String(args.id ?? '')), sql`${notes.deletedAt} is null`),
       })
@@ -2059,7 +2072,13 @@ export function memoryTools(projectId: string, actorUserId: string): { tools: To
         .join('\n')
     },
     create_note: async (args) => {
-      if (!(await hasPermission(projectId, actorUserId, 'notes.write'))) return 'PERMISSION DENIED: the author cannot write notes.'
+      // База знаний принадлежит КОМПАНИИ: доступ даёт членство в ней. Проверка
+      // по правам проекта отказала бы в доступе к записи, у которой проекта
+      // нет вовсе.
+      const kbProject = await db.query.projects.findFirst({ where: eq(projects.id, projectId) })
+      if (!kbProject?.companyId || !(await canUseKnowledge(kbProject.companyId, actorUserId))) {
+        return 'PERMISSION DENIED: you are not a member of this company.'
+      }
       const type = String(args.type ?? 'note')
       if (!(NOTE_TYPES as readonly string[]).includes(type)) return `Unknown type. Use one of: ${NOTE_TYPES.join(', ')}.`
       const title = String(args.title ?? '').slice(0, 300)
@@ -2083,7 +2102,13 @@ export function memoryTools(projectId: string, actorUserId: string): { tools: To
       return `Saved a ${type} note "${row.title}" (id=${row.id})${row.scope === 'company' ? ', visible across the company' : ''}.`
     },
     update_note: async (args) => {
-      if (!(await hasPermission(projectId, actorUserId, 'notes.write'))) return 'PERMISSION DENIED: the author cannot write notes.'
+      // База знаний принадлежит КОМПАНИИ: доступ даёт членство в ней. Проверка
+      // по правам проекта отказала бы в доступе к записи, у которой проекта
+      // нет вовсе.
+      const kbProject = await db.query.projects.findFirst({ where: eq(projects.id, projectId) })
+      if (!kbProject?.companyId || !(await canUseKnowledge(kbProject.companyId, actorUserId))) {
+        return 'PERMISSION DENIED: you are not a member of this company.'
+      }
       const n = await db.query.notes.findFirst({
         where: and(eq(notes.id, String(args.id ?? '')), eq(notes.projectId, projectId), sql`${notes.deletedAt} is null`),
       })

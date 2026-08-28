@@ -107,7 +107,18 @@ export const PROJECT_COLORS = [
   '#64748b', // slate
 ] as const
 
-export const PERMISSION_DOMAINS = ['tasks', 'files', 'resources', 'documents', 'notes', 'releases'] as const
+/**
+ * Домены прав ПРОЕКТА.
+ *
+ * notes отсюда убран: база знаний принадлежит компании, и доступ к ней даёт
+ * членство в компании. Переключатель остался бы враньём — человек ставит
+ * «Нет», думая, что закрыл доступ, а записи всё равно видны.
+ *
+ * Из 104 участников этот домен не ограничил НИ ОДИН: право существовало, им
+ * ни разу не воспользовались. Сохранённые значения в базе не трогаем —
+ * лишний ключ разбор просто игнорирует.
+ */
+export const PERMISSION_DOMAINS = ['tasks', 'files', 'resources', 'documents', 'releases'] as const
 export type PermissionDomain = (typeof PERMISSION_DOMAINS)[number]
 
 // none < read < write < crud. write = создавать/менять свои, crud = + удалять/чужое.
@@ -132,9 +143,6 @@ export const PROJECT_PERMISSIONS = [
   'documents.read',
   'documents.write',
   'documents.delete',
-  'notes.read',
-  'notes.write',
-  'notes.delete',
   'releases.read', // видеть вкладку и сводку «что сейчас в проде»
   'releases.manage', // заводить версии и двигать стадии
   // legacy-алиасы (совместимость со старым кодом/данными)
@@ -160,9 +168,6 @@ const ACTION_REQUIREMENT: Record<ProjectPermission, [PermissionDomain, Permissio
   'documents.read': ['documents', 'read'],
   'documents.write': ['documents', 'write'],
   'documents.delete': ['documents', 'crud'],
-  'notes.read': ['notes', 'read'],
-  'notes.write': ['notes', 'write'],
-  'notes.delete': ['notes', 'crud'],
   'credentials.read': ['resources', 'read'],
   'credentials.manage': ['resources', 'write'],
 }
@@ -205,8 +210,8 @@ export function defaultDomainPermissions(role: 'owner' | 'admin' | 'member'): Do
   //
   // Кому нужно иначе, ставит уровни руками: они на то и есть.
   if (role === 'member')
-    return { tasks: 'write', files: 'write', resources: 'write', documents: 'write', notes: 'write', releases: 'write' }
-  return { tasks: 'crud', files: 'crud', resources: 'crud', documents: 'crud', notes: 'crud', releases: 'crud' }
+    return { tasks: 'write', files: 'write', resources: 'write', documents: 'write', releases: 'write' }
+  return { tasks: 'crud', files: 'crud', resources: 'crud', documents: 'crud', releases: 'crud' }
 }
 
 /**

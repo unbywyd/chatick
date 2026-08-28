@@ -29,7 +29,9 @@ type Entity = 'file' | 'note' | 'resource' | 'message' | 'task'
 /** Право, без которого делиться нельзя: делятся тем, что имеют право читать. */
 const READ_PERMISSION: Record<Entity, ProjectPermission | null> = {
   file: 'files.read',
-  note: 'notes.read',
+  // База знаний принадлежит компании, проектного права на неё больше нет —
+  // как и у чата. Доступ проверяется отдельно, по членству в компании.
+  note: null,
   resource: 'resources.read',
   // Чат читают все участники проекта — отдельного права на него нет.
   message: null,

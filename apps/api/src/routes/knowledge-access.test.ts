@@ -152,3 +152,32 @@ describe('поиск по умолчанию смотрит на всю комп
     }
   })
 })
+
+describe('переключателя прав на заметки нет нигде', () => {
+  // Он остался бы враньём: человек ставит «Нет», думая, что закрыл доступ, а
+  // записи всё равно видны — их даёт членство в компании. Хуже отсутствия
+  // настройки только настройка, которая ничего не делает.
+  it('домена notes нет в правах проекта', () => {
+    const projects = read('projects.ts')
+    const at = projects.indexOf('export const PERMISSION_DOMAINS')
+    const line = projects.slice(at, projects.indexOf('\n', at))
+    expect(line, 'домен notes вернулся в права проекта').not.toContain("'notes'")
+  })
+
+  it('и в интерфейсе команды проекта', () => {
+    const tab = readFileSync(
+      join(import.meta.dirname, '../../../app/src/components/tabs/ProjectTeamTab.tsx'),
+      'utf8',
+    )
+    const at = tab.indexOf('const DOMAINS')
+    const line = tab.slice(at, tab.indexOf('\n', at))
+    expect(line, 'переключатель заметок вернулся в интерфейс').not.toContain("'notes'")
+  })
+
+  it('и действий notes.* не осталось', () => {
+    const projects = read('projects.ts')
+    for (const perm of ['notes.read', 'notes.write', 'notes.delete']) {
+      expect(projects, `право ${perm} вернулось`).not.toContain(`'${perm}'`)
+    }
+  })
+})

@@ -430,7 +430,7 @@ server.registerTool(
  * случившаяся история с releases — поле молча выбрасывалось, ручка отвечала
  * ok, а уровень не менялся.
  */
-const PERMISSION_DOMAINS = ['tasks', 'files', 'resources', 'documents', 'notes', 'releases'] as const
+const PERMISSION_DOMAINS = ['tasks', 'files', 'resources', 'documents', 'releases'] as const
 const levelEnum = z.enum(['none', 'read', 'write', 'crud'])
 
 server.registerTool(
