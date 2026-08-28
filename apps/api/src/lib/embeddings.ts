@@ -320,7 +320,11 @@ export async function searchSemantic(opts: {
     .where(
       and(
         eq(embeddings.companyId, opts.companyId),
-        types ? sql`${embeddings.entityType} = any(${types})` : undefined,
+        // inArray, а не sql`= any(...)`: drizzle разворачивает массив в
+        // отдельные параметры, и any() получал строку вместо массива —
+        // запрос падал на КАЖДОМ поиске заметок. Типы это не ловят, а тест
+        // на наличие фильтра по компании проходил: ошибка живёт в SQL.
+        types ? inArray(embeddings.entityType, types) : undefined,
         sql`1 - (${embeddings.embedding} <=> ${toVector(vec)}::vector) >= ${min}`,
       ),
     )
