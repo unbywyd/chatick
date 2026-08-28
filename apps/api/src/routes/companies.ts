@@ -496,6 +496,67 @@ companiesRoute.get('/:companyId/time-config', async (c) => {
   return c.json({ config: readTimeConfig(company.timeConfig), canEdit: (await memberRoleIn(companyId, sub)) === 'admin' })
 })
 
+/**
+ * Просроченные задачи компании — списком, а не числом.
+ *
+ * На обзоре стоит цифра «Просрочено: 7», и она отвечает «сколько», не отвечая
+ * «где». Человек шёл смотреть проект за проектом.
+ *
+ * Показываем ВСЕ просроченные компании, но помечаем, где человек не состоит:
+ * знать, что в соседнем проекте горит, полезно даже без доступа туда — а вот
+ * открыть её он не сможет, и об этом лучше сказать заранее, чем упереться в
+ * отказ по клику.
+ */
+companiesRoute.get('/:companyId/overdue', async (c) => {
+  const { sub } = c.get('session')
+  const companyId = c.req.param('companyId')
+  const membership = await db.query.companyMembers.findFirst({
+    where: and(eq(companyMembers.companyId, companyId), eq(companyMembers.userId, sub)),
+  })
+  if (!membership) return c.json({ error: 'Forbidden' }, 403)
+
+  const rows = await db
+    .select({ t: tasks, p: projects, u: users })
+    .from(tasks)
+    .innerJoin(projects, eq(projects.id, tasks.projectId))
+    .leftJoin(users, eq(users.id, tasks.assigneeId))
+    .where(
+      and(
+        eq(projects.companyId, companyId),
+        isNull(tasks.deletedAt),
+        // Тот же признак, что и в счётчике на обзоре: цифра и список обязаны
+        // сходиться, иначе «Просрочено: 7» откроет шесть задач.
+        sql`${tasks.status} <> 'done'`,
+        sql`${tasks.dueDate} < now()`,
+      ),
+    )
+    .orderBy(sql`${tasks.dueDate} asc`)
+    .limit(200)
+
+  const myMemberships = await db
+    .select({ projectId: projectMembers.projectId })
+    .from(projectMembers)
+    .where(eq(projectMembers.userId, sub))
+  const mine = new Set(myMemberships.map((m) => m.projectId))
+
+  return c.json({
+    items: rows.map((r) => ({
+      id: r.t.id,
+      number: r.t.number,
+      title: r.t.title,
+      status: r.t.status,
+      dueDate: r.t.dueDate,
+      // Сколько дней горит: «просрочено на 12 дней» говорит больше, чем дата,
+      // которую надо вычитать из сегодняшней в уме.
+      overdueDays: r.t.dueDate ? Math.floor((Date.now() - new Date(r.t.dueDate).getTime()) / 86_400_000) : 0,
+      project: { id: r.p.id, name: r.p.name, color: r.p.color },
+      assignee: r.u ? { id: r.u.id, name: r.u.name, avatarUrl: r.u.avatarUrl } : null,
+      // Куда человек не войдёт — говорим сразу, а не отказом по клику.
+      isMember: mine.has(r.p.id),
+    })),
+  })
+})
+
 companiesRoute.patch(
   '/:companyId/time-config',
   zValidator('json', timeConfigSchema.partial()),

@@ -1285,7 +1285,8 @@
     "startOnTask": "Start timer on this task",
     "startedOnTask": "Timer started on the task",
     "stopped": "Timer stopped",
-    "resetFilters": "Reset filters"
+    "resetFilters": "Reset filters",
+    "allHours": "All my hours"
   },
   "period": {
     "today": "Today",
@@ -1318,7 +1319,14 @@
     "allProjects": "All projects ({{count}})",
     "noProjectMatch": "No projects match",
     "askForAccess": "You are not in this project. Ask {{names}} for access",
-    "notMember": "You are not in this project"
+    "notMember": "You are not in this project",
+    "details": "Details",
+    "toHours": "To hours",
+    "toTeam": "To team",
+    "toProject": "Open project",
+    "overdueTitle": "{{count}} overdue",
+    "overdueDays": "{{count}}d",
+    "noOverdue": "Nothing is overdue"
   },
   "desktop": {
     "start": "Start timer",

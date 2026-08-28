@@ -561,6 +561,12 @@ function CompanyHome({
                 `&from=${encodeURIComponent(period.from)}&to=${encodeURIComponent(period.to)}`,
             )
           }
+          // Карточки-цифры ведут туда, где эти цифры раскрываются: часы — на
+          // вкладку часов, люди — в команду. Цифра, за которой нельзя пойти,
+          // заставляет искать её источник руками.
+          onOpenHours={canManage ? () => navigate(`/start/${company.id}/time`) : undefined}
+          onOpenTeam={() => navigate(`/start/${company.id}/team`)}
+          onOpenTask={(projectId, taskId) => navigate(`/c/${company.id}/p/${projectId}/tasks/${taskId}`)}
         />
         </>
       ) : tab === 'projects' ? (

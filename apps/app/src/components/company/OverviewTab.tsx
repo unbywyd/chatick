@@ -1,7 +1,7 @@
 import { useState } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import { useTranslation } from 'react-i18next'
-import { AlertTriangle, CheckCircle2, Clock, Download, FolderKanban, Lock, MessageSquare, Users } from 'lucide-react'
+import { AlertTriangle, CheckCircle2, ChevronRight, Clock, Download, FolderKanban, Lock, MessageSquare, Users, X } from 'lucide-react'
 import {
   Area,
   AreaChart,
@@ -17,6 +17,7 @@ import { api } from '@/lib/api'
 import { cn } from '@/lib/utils'
 import { PeriodPicker, resolvePreset, type Period } from '@/components/ui/period-picker'
 import { Avatar } from '@/components/ui/avatar'
+import { Button } from '@/components/ui/button'
 import { ProjectBadge } from '@/components/ui/project-badge'
 import { ChartBox } from '@/components/ui/chart-box'
 import { formatDuration } from '@/lib/time-parse'
@@ -47,6 +48,20 @@ type ProjectStat = {
   /** Непрочитанные уведомления мне — по ним проект помечается на обзоре. */
   unread: number
 }
+type OverdueTask = {
+  id: string
+  number: string
+  title: string
+  status: string
+  dueDate: string | null
+  /** Сколько дней горит — считает сервер, чтобы клиент не вычитал даты. */
+  overdueDays: number
+  project: { id: string; name: string; color: string | null }
+  assignee: { id: string; name: string; avatarUrl: string | null } | null
+  /** Человек в этом проекте — иначе открыть задачу он не сможет. */
+  isMember: boolean
+}
+
 type Overview = {
   projects: ProjectStat[]
   totals: {
@@ -85,6 +100,9 @@ export function OverviewTab({
   onOpenProject,
   onOpenAllProjects,
   onOpenReport,
+  onOpenHours,
+  onOpenTeam,
+  onOpenTask,
 }: {
   companyId: string
   onOpenProject?: (id: string) => void
@@ -92,7 +110,15 @@ export function OverviewTab({
   onOpenAllProjects?: () => void
   /** отчёт по человеку за тот же период — на вкладке «Часы» */
   onOpenReport?: (userId: string, period: Period) => void
+  /** Вкладка «Часы» целиком — с карточки «Отработано». */
+  onOpenHours?: () => void
+  /** Вкладка «Команда» — с карточки «Людей». */
+  onOpenTeam?: () => void
+  /** Открыть конкретную задачу в её проекте — из списка просроченных. */
+  onOpenTask?: (projectId: string, taskId: string) => void
 }) {
+  // Модалка просроченных: цифра отвечает «сколько», список — «где».
+  const [overdueOpen, setOverdueOpen] = useState(false)
   const { t, i18n } = useTranslation()
 
   // По умолчанию — текущий месяц: за него смотрят и по нему платят.
@@ -160,7 +186,13 @@ export function OverviewTab({
 
       {/* Цифры, за которыми приходят в первую очередь */}
       <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
-        <Metric icon={Clock} label={t('overview.hours')} value={formatDuration(totals?.minutes ?? 0)} />
+        <Metric
+          icon={Clock}
+          label={t('overview.hours')}
+          value={formatDuration(totals?.minutes ?? 0)}
+          onClick={onOpenHours}
+          actionLabel={onOpenHours ? t('overview.toHours') : undefined}
+        />
         <Metric
           icon={CheckCircle2}
           label={t('overview.tasks')}
@@ -173,9 +205,34 @@ export function OverviewTab({
           value={String(totals?.overdue ?? 0)}
           // просрочка — единственное, что здесь стоит подсвечивать тревожно
           tone={totals?.overdue ? 'warn' : undefined}
+          // Клик только когда есть что показывать: пустая модалка на нуле —
+          // обещание, за которым ничего нет.
+          onClick={totals?.overdue ? () => setOverdueOpen(true) : undefined}
+          actionLabel={totals?.overdue ? t('overview.details') : undefined}
         />
-        <Metric icon={Users} label={t('overview.people')} value={String(totals?.people ?? 0)} />
+        <Metric
+          icon={Users}
+          label={t('overview.people')}
+          value={String(totals?.people ?? 0)}
+          onClick={onOpenTeam}
+          actionLabel={onOpenTeam ? t('overview.toTeam') : undefined}
+        />
       </div>
+
+      {overdueOpen && (
+        <OverdueDialog
+          companyId={companyId}
+          onClose={() => setOverdueOpen(false)}
+          onOpenProject={(id) => {
+            setOverdueOpen(false)
+            onOpenProject?.(id)
+          }}
+          onOpenTask={(projectId, taskId) => {
+            setOverdueOpen(false)
+            onOpenTask?.(projectId, taskId)
+          }}
+        />
+      )}
 
       <section className="rounded-lg border bg-card p-4">
         {/* Поиск появляется, когда список перестаёт читаться с одного взгляда.
@@ -480,15 +537,37 @@ function Metric({
   value,
   hint,
   tone,
+  onClick,
+  actionLabel,
 }: {
   icon: typeof Clock
   label: string
   value: string
   hint?: string
   tone?: 'warn'
+  /** Карточка ведёт куда-то — тогда она становится кнопкой. */
+  onClick?: () => void
+  /** Что будет по клику: «Подробнее», «К часам». Видно СРАЗУ, а не по наведению. */
+  actionLabel?: string
 }) {
+  /**
+   * Кликабельность должна быть видна до наведения.
+   *
+   * Курсор и подсветка на hover работают только для того, кто уже навёл — а
+   * навести можно лишь туда, где ждёшь ответа. Поэтому подпись действия и
+   * стрелка стоят в карточке постоянно, а hover их только подчёркивает.
+   *
+   * Кнопка, а не div с onClick: клавиатура и скринридер иначе проходят мимо.
+   */
+  const Tag = onClick ? 'button' : 'div'
   return (
-    <div className="rounded-lg border bg-card p-3">
+    <Tag
+      {...(onClick ? { type: 'button' as const, onClick } : {})}
+      className={cn(
+        'rounded-lg border bg-card p-3 text-start',
+        onClick && 'group w-full cursor-pointer transition-colors hover:border-brand/60 hover:bg-accent/40',
+      )}
+    >
       <p className="flex items-center gap-1.5 text-xs text-muted-foreground">
         <Icon className={cn('size-3.5', tone === 'warn' && 'text-amber-500')} />
         {label}
@@ -513,6 +592,142 @@ function Metric({
         <span>{value}</span>
         {hint && <span className="font-sans text-xs font-normal text-muted-foreground">{hint}</span>}
       </p>
+      {actionLabel && (
+        <p className="mt-1.5 flex items-center gap-1 text-xs text-muted-foreground transition-colors group-hover:text-brand-ink">
+          {actionLabel}
+          {/* Стрелка по направлению чтения: в иврите она смотрит влево. */}
+          <ChevronRight className="size-3 rtl:rotate-180" />
+        </p>
+      )}
+    </Tag>
+  )
+}
+
+/**
+ * Просроченные задачи — списком.
+ *
+ * Цифра на карточке отвечает «сколько», не отвечая «где». Человек шёл
+ * смотреть проект за проектом, и чем больше проектов, тем дольше.
+ *
+ * Группируем по проектам: просрочка редко бывает равномерной, обычно горит
+ * один-два — и это первое, что нужно увидеть.
+ */
+function OverdueDialog({
+  companyId,
+  onClose,
+  onOpenProject,
+  onOpenTask,
+}: {
+  companyId: string
+  onClose: () => void
+  onOpenProject: (id: string) => void
+  onOpenTask: (projectId: string, taskId: string) => void
+}) {
+  const { t } = useTranslation()
+  const list = useQuery({
+    queryKey: ['company-overdue', companyId],
+    queryFn: () => api<{ items: OverdueTask[] }>(`/api/v1/companies/${companyId}/overdue`),
+  })
+
+  const items = list.data?.items ?? []
+  // Группировка по проекту: горит обычно не везде, а в одном-двух местах.
+  const byProject = new Map<string, { name: string; isMember: boolean; tasks: OverdueTask[] }>()
+  for (const task of items) {
+    const found = byProject.get(task.project.id)
+    if (found) found.tasks.push(task)
+    else byProject.set(task.project.id, { name: task.project.name, isMember: task.isMember, tasks: [task] })
+  }
+  // Свои проекты первыми: в чужие человек всё равно не войдёт.
+  const groups = [...byProject.entries()].sort(
+    (a, b) => (a[1].isMember === b[1].isMember ? b[1].tasks.length - a[1].tasks.length : a[1].isMember ? -1 : 1),
+  )
+
+  return (
+    <div
+      className="fixed inset-0 z-50 flex items-start justify-center overflow-y-auto bg-black/40 p-4 pt-16"
+      onClick={onClose}
+    >
+      <div
+        className="w-full max-w-2xl rounded-xl border bg-card shadow-lg"
+        onClick={(e) => e.stopPropagation()}
+      >
+        <div className="flex items-center justify-between border-b p-4">
+          <h2 className="flex items-center gap-2 text-lg font-bold">
+            <AlertTriangle className="size-5 text-amber-500" />
+            {t('overview.overdueTitle', { count: items.length })}
+          </h2>
+          <Button variant="ghost" size="icon" onClick={onClose}>
+            <X className="size-4" />
+          </Button>
+        </div>
+
+        <div className="max-h-[70vh] overflow-y-auto p-4">
+          {list.isLoading ? (
+            <p className="py-8 text-center text-sm text-muted-foreground">{t('common.loading')}</p>
+          ) : !items.length ? (
+            <p className="py-8 text-center text-sm text-muted-foreground">{t('overview.noOverdue')}</p>
+          ) : (
+            <div className="space-y-4">
+              {groups.map(([projectId, group]) => (
+                <section key={projectId}>
+                  <div className="mb-1.5 flex items-center justify-between gap-2">
+                    <h3 className="flex items-center gap-1.5 text-sm font-medium">
+                      <FolderKanban className="size-3.5 text-muted-foreground" />
+                      {group.name}
+                      <span className="text-xs font-normal text-muted-foreground">{group.tasks.length}</span>
+                    </h3>
+                    {group.isMember ? (
+                      <button
+                        type="button"
+                        onClick={() => onOpenProject(projectId)}
+                        className="flex items-center gap-1 text-xs text-muted-foreground transition-colors hover:text-brand-ink"
+                      >
+                        {t('overview.toProject')}
+                        <ChevronRight className="size-3 rtl:rotate-180" />
+                      </button>
+                    ) : (
+                      // Не в команде — говорим сразу, а не отказом по клику.
+                      <span className="flex items-center gap-1 text-xs text-muted-foreground">
+                        <Lock className="size-3" />
+                        {t('overview.notMember')}
+                      </span>
+                    )}
+                  </div>
+
+                  <ul className="space-y-1">
+                    {group.tasks.map((task) => (
+                      <li key={task.id}>
+                        <button
+                          type="button"
+                          disabled={!group.isMember}
+                          onClick={() => onOpenTask(projectId, task.id)}
+                          className={cn(
+                            'flex w-full items-center gap-2 rounded-md border px-2.5 py-1.5 text-start text-sm',
+                            group.isMember
+                              ? 'transition-colors hover:border-brand/60 hover:bg-accent/40'
+                              : 'cursor-default opacity-60',
+                          )}
+                        >
+                          <span className="font-mono text-xs text-muted-foreground">{task.number}</span>
+                          <span className="min-w-0 flex-1 truncate">{task.title}</span>
+                          {/* Дней просрочки, а не дата: «12 дней» читается сразу,
+                              дату надо вычитать из сегодняшней в уме. */}
+                          <span className="shrink-0 text-xs text-amber-600 dark:text-amber-500">
+                            {t('overview.overdueDays', { count: task.overdueDays })}
+                          </span>
+                          {task.assignee && (
+                            <Avatar name={task.assignee.name} src={task.assignee.avatarUrl} className="size-5 shrink-0" />
+                          )}
+                        </button>
+                      </li>
+                    ))}
+                  </ul>
+                </section>
+              ))}
+            </div>
+          )}
+        </div>
+      </div>
     </div>
   )
 }

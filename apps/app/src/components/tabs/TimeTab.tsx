@@ -6,6 +6,7 @@ import {
   BarChart3,
   CalendarDays,
   CalendarRange,
+  ChevronRight,
   Clock,
   Download,
   FolderOpen,
@@ -15,6 +16,7 @@ import {
   User,
   X,
 } from 'lucide-react'
+import { useNavigate, useParams } from 'react-router-dom'
 import { ProjectBadge } from '@/components/ui/project-badge'
 import {
   DropdownMenu,
@@ -91,6 +93,9 @@ const isoDay = (d: Date) =>
 
 export function TimeTab({ projectId }: { projectId: string }) {
   const { t } = useTranslation()
+  // Компания — из адреса: /c/<companyId>/p/<projectId>/time.
+  const { companyId } = useParams()
+  const navigate = useNavigate()
   const qc = useQueryClient()
   const [tab, setTab] = useState<Tab>('week')
 
@@ -113,12 +118,23 @@ export function TimeTab({ projectId }: { projectId: string }) {
 
   return (
     <div className="page-w space-y-4 p-6">
-      <div>
-        <h1 className="flex items-center gap-2 text-xl font-bold tracking-tight">
-          <Clock className="size-5" />
-          {t('time.title')}
-        </h1>
-        <p className="mt-1 text-sm text-muted-foreground">{t('time.subtitle')}</p>
+      <div className="flex flex-wrap items-start justify-between gap-3">
+        <div>
+          <h1 className="flex items-center gap-2 text-xl font-bold tracking-tight">
+            <Clock className="size-5" />
+            {t('time.title')}
+          </h1>
+          <p className="mt-1 text-sm text-muted-foreground">{t('time.subtitle')}</p>
+        </div>
+        {/* Здесь только часы ЭТОГО проекта, а человек работает в нескольких.
+            Без этой кнопки «сколько я всего наработал» приходилось собирать,
+            обойдя проекты по одному. */}
+        {companyId && (
+          <Button variant="outline" onClick={() => navigate(`/start/${companyId}/time`)}>
+            {t('time.allHours')}
+            <ChevronRight className="size-4 rtl:rotate-180" />
+          </Button>
+        )}
       </div>
 
       <div className="flex gap-1 border-b">

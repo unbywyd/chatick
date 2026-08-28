@@ -1291,7 +1291,8 @@
     "startOnTask": "Запустить таймер по задаче",
     "startedOnTask": "Таймер запущен по задаче",
     "stopped": "Таймер остановлен",
-    "resetFilters": "Сбросить фильтры"
+    "resetFilters": "Сбросить фильтры",
+    "allHours": "Все мои часы"
   },
   "period": {
     "today": "Сегодня",
@@ -1324,7 +1325,14 @@
     "allProjects": "Все проекты ({{count}})",
     "noProjectMatch": "Ничего не найдено",
     "askForAccess": "Вы не в команде проекта. Доступ можно попросить у {{names}}",
-    "notMember": "Вы не в команде этого проекта"
+    "notMember": "Вы не в команде этого проекта",
+    "details": "Подробнее",
+    "toHours": "К часам",
+    "toTeam": "К команде",
+    "toProject": "В проект",
+    "overdueTitle": "Просрочено: {{count}}",
+    "overdueDays": "{{count}} дн.",
+    "noOverdue": "Просроченных задач нет"
   },
   "desktop": {
     "start": "Запустить таймер",

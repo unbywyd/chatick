@@ -1286,7 +1286,8 @@
     "startOnTask": "הפעלת טיימר על המשימה",
     "startedOnTask": "הטיימר הופעל על המשימה",
     "stopped": "הטיימר נעצר",
-    "resetFilters": "איפוס מסננים"
+    "resetFilters": "איפוס מסננים",
+    "allHours": "כל השעות שלי"
   },
   "period": {
     "today": "היום",
@@ -1319,7 +1320,14 @@
     "allProjects": "כל הפרויקטים ({{count}})",
     "noProjectMatch": "לא נמצאו פרויקטים",
     "askForAccess": "אינכם בצוות הפרויקט. אפשר לבקש גישה מ{{names}}",
-    "notMember": "אינכם בצוות הפרויקט הזה"
+    "notMember": "אינכם בצוות הפרויקט הזה",
+    "details": "פרטים",
+    "toHours": "לשעות",
+    "toTeam": "לצוות",
+    "toProject": "לפרויקט",
+    "overdueTitle": "{{count}} באיחור",
+    "overdueDays": "{{count}} ימים",
+    "noOverdue": "אין משימות באיחור"
   },
   "desktop": {
     "start": "הפעלת טיימר",
