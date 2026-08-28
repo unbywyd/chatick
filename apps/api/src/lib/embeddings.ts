@@ -1,7 +1,7 @@
 import { createHash } from 'node:crypto'
-import { and, asc, eq, lt, or, sql } from 'drizzle-orm'
+import { and, asc, eq, inArray, lt, or, sql } from 'drizzle-orm'
 import { db } from '../db/client.js'
-import { embeddings, embeddingQueue, notes, projects } from '../db/schema.js'
+import { embeddings, embeddingQueue, notes, projects, projectMembers, tasks, taskComments } from '../db/schema.js'
 import { env } from '../env.js'
 import { htmlToText } from './sanitize-html.js'
 import { logAiUsage } from './ai-usage.js'
@@ -135,6 +135,45 @@ async function textOf(entityType: EmbeddableType, entityId: string): Promise<{ t
       projectId: n.projectId,
     }
   }
+
+  if (entityType === 'task') {
+    const t = await db.query.tasks.findFirst({ where: eq(tasks.id, entityId) })
+    if (!t || t.deletedAt) return null
+
+    /**
+     * Задача и её комментарии — ОДНА запись в индексе.
+     *
+     * «Где та таска, где я писал» — вопрос про разговор, а не про заголовок:
+     * ответ чаще в комментарии, чем в описании. Но индексировать комментарии
+     * порознь нельзя: «сделал», «проверь», «ок» сами по себе бессмысленны, а
+     * в выдаче они забили бы собой всё остальное.
+     *
+     * Вместе они дают то, что человек и помнит: задачу, в которой это
+     * обсуждали.
+     */
+    const comments = await db
+      .select({ body: taskComments.body })
+      .from(taskComments)
+      .where(eq(taskComments.taskId, t.id))
+      .orderBy(asc(taskComments.createdAt))
+      // Предел на случай длинной переписки: дальше текст всё равно упрётся в
+      // MAX_CHARS, а лишние строки — лишние запросы.
+      .limit(100)
+
+    const project = await db.query.projects.findFirst({
+      where: eq(projects.id, t.projectId),
+      columns: { companyId: true },
+    })
+    return {
+      // Номер тоже в текст: «TASK-81» ищут дословно, и вектор должен его знать.
+      text: [t.number, t.title, htmlToText(t.description), ...comments.map((c) => htmlToText(c.body))]
+        .filter(Boolean)
+        .join('\n'),
+      companyId: project?.companyId ?? null,
+      projectId: t.projectId,
+    }
+  }
+
   return null
 }
 
@@ -389,4 +428,131 @@ export async function searchNoteIds(opts: {
   }
 
   return { ids: [...ids, ...semanticIds], semanticIds }
+}
+
+/**
+ * Поиск по задачам и их обсуждениям.
+ *
+ * Отдельно от заметок, и это не дублирование. Вопросы разные: «где та таска,
+ * где я писал» — про работу, которую вспоминают; «как чинили Cardcom» — про
+ * знание, которое ищут. Смешав их в одну выдачу, мы утопили бы десяток
+ * заметок в сотнях задач.
+ *
+ * ГРАНИЦА — проекты, где человек СОСТОИТ, а не компания. Для заметок такой
+ * заботы нет: они принадлежат компании и видны всем. Задача принадлежит
+ * проекту, и человек, которого туда не звали, видеть её не должен — а поиск
+ * по компании показал бы её молча, без всякой ошибки.
+ *
+ * Живой довод, что искать надо шире одного проекта: в StartPlan люди состоят
+ * в 8–20 проектах. «Где я это писал» для человека из двадцати проектов —
+ * вопрос без ответа, если поиск ограничен одним.
+ */
+export async function searchTaskIds(opts: {
+  query: string
+  userId: string
+  companyId: string
+  /** Сузить до одного проекта — когда человек знает, где искать. */
+  projectId?: string | null
+  limit?: number
+}): Promise<{ ids: string[]; semanticIds: Set<string> }> {
+  const q = opts.query.trim()
+  if (!q) return { ids: [], semanticIds: new Set() }
+  const limit = opts.limit ?? 40
+
+  // Проекты человека в этой компании. Пусто — искать негде, и это не ошибка:
+  // человек может состоять в компании, не входя ни в один проект.
+  const mine = await db
+    .select({ id: projects.id })
+    .from(projectMembers)
+    .innerJoin(projects, eq(projects.id, projectMembers.projectId))
+    .where(and(eq(projectMembers.userId, opts.userId), eq(projects.companyId, opts.companyId)))
+  const allowed = opts.projectId ? mine.filter((p) => p.id === opts.projectId) : mine
+  if (!allowed.length) return { ids: [], semanticIds: new Set() }
+  const allowedIds = allowed.map((p) => p.id)
+
+  // Слова: номер задачи ищут дословно, и «TASK-81» надёжнее найти так.
+  const like = `%${q}%`
+  const exact = await db
+    .select({ id: tasks.id })
+    .from(tasks)
+    .where(
+      and(
+        sql`${tasks.deletedAt} is null`,
+        inArray(tasks.projectId, allowedIds),
+        or(sql`${tasks.title} ilike ${like}`, sql`${tasks.number} ilike ${like}`, sql`${tasks.description} ilike ${like}`)!,
+      ),
+    )
+    .orderBy(sql`${tasks.updatedAt} desc`)
+    .limit(limit)
+  const ids = exact.map((r) => r.id)
+
+  // Смысл. Фильтр по проектам — В ЗАПРОСЕ: отсеивать после выборки значит
+  // сначала достать чужое, а потом надеяться, что мы его выбросили.
+  const semanticIds = new Set<string>()
+  if (embeddingsEnabled()) {
+    try {
+      const vectors = await embed([q])
+      const vec = vectors?.[0]
+      if (vec) {
+        const rows = await db
+          .select({ entityId: embeddings.entityId })
+          .from(embeddings)
+          .where(
+            and(
+              eq(embeddings.entityType, 'task'),
+              inArray(embeddings.projectId, allowedIds),
+              sql`1 - (${embeddings.embedding} <=> ${toVector(vec)}::vector) >= 0.32`,
+            ),
+          )
+          .orderBy(sql`${embeddings.embedding} <=> ${toVector(vec)}::vector`)
+          .limit(limit)
+        for (const r of rows) if (!ids.includes(r.entityId)) semanticIds.add(r.entityId)
+      }
+    } catch (err) {
+      // Модель недоступна — отдаём найденное словами. Неполный поиск лучше
+      // упавшего.
+      console.warn('[embeddings] смысловой поиск задач не сработал:', err instanceof Error ? err.message : err)
+    }
+  }
+
+  return { ids: [...ids, ...semanticIds], semanticIds }
+}
+
+/**
+ * Найти задачи, чей вектор устарел, и поставить в очередь.
+ *
+ * Точек, где задача меняется, больше десятка: создание и правка в интерфейсе,
+ * в мосту и у ассистента, смена статуса, новый комментарий, восстановление из
+ * корзины. Подключать enqueue к каждой — значит однажды одну пропустить, и
+ * пропуск будет тихим: задача есть, поиском не находится, и узнать об этом
+ * можно только не найдя её.
+ *
+ * Поэтому не подключаем, а ДОГОНЯЕМ: планировщик сам сверяет время правки с
+ * временем вектора. Задача, изменённая любым способом, попадёт сюда — включая
+ * те способы, которых ещё нет.
+ *
+ * Цена — задержка до одного тика (пять минут). Для поиска по обсуждениям это
+ * несущественно: их ищут не через секунду после написания.
+ */
+export async function sweepStaleTasks(limit = 200): Promise<number> {
+  if (!embeddingsEnabled()) return 0
+  const rows = await db.execute<{ id: string; project_id: string }>(sql`
+    select t.id, t.project_id
+    from tasks t
+    left join embeddings e on e.entity_type = 'task' and e.entity_id = t.id
+    where t.deleted_at is null
+      and (
+        e.id is null
+        or e.updated_at < t.updated_at
+        -- Комментарий тоже меняет текст задачи: они одна запись в индексе.
+        or e.updated_at < (select max(c.created_at) from task_comments c where c.task_id = t.id)
+      )
+      and not exists (
+        select 1 from embedding_queue q where q.entity_type = 'task' and q.entity_id = t.id
+      )
+    limit ${limit}
+  `)
+  const list = (rows as unknown as { rows?: { id: string; project_id: string }[] }).rows ?? (rows as unknown as { id: string; project_id: string }[])
+  for (const r of list) await enqueue('task', r.id, r.project_id)
+  return list.length
 }

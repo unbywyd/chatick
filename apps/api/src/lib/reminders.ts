@@ -16,7 +16,7 @@ import { runDueBackups } from './auto-backup.js'
 import { localeFor } from './locale.js'
 import { notifyConfigForProject } from './notify-config.js'
 import { checkSpendAlert } from './spend-alert.js'
-import { flushQueue as flushEmbeddingQueue } from './embeddings.js'
+import { flushQueue as flushEmbeddingQueue, sweepStaleTasks } from './embeddings.js'
 
 // Планировщик напоминаний об открытых задачах (SPEC §8.9).
 // Тик раз в 5 минут: для каждого включённого конфига проверяем, наступил ли срок,
@@ -349,6 +349,10 @@ export function startReminderScheduler() {
       void checkSpendAlert().catch(() => {})
       // Векторы для поиска по смыслу. Разбираем очередь пачкой: один вызов
       // модели на пятьдесят записей дешевле и быстрее, чем пятьдесят вызовов.
+      // Задачи, изменённые любым путём, догоняем сверкой времени: точек
+      // правки больше десятка, и подключать enqueue к каждой значит однажды
+      // одну пропустить — молча.
+      void sweepStaleTasks().catch(() => {})
       void flushEmbeddingQueue().catch(() => {})
     }, TICK_MS)
   }, 60_000)
