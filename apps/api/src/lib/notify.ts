@@ -23,6 +23,7 @@ export type NotificationEvent =
   | 'timer_running'
   | 'release_status'
   | 'task_due'
+  | 'announcement'
 
 /**
  * Кому уходит «новый комментарий к задаче».

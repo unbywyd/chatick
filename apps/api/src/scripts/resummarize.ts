@@ -95,6 +95,9 @@ async function main() {
   let done = 0
   let failed = 0
   for (const r of rows) {
+    // Объявление компании проекта не имеет, а модель берётся из проекта —
+    // пересчитывать нечем. Пропускаем молча: это не ошибка.
+    if (!r.projectId) continue
     const lang = (localeOf.get(r.userId) ?? 'en').slice(0, 2)
     try {
       await summarizeAsk(

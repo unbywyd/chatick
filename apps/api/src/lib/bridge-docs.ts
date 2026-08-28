@@ -1085,6 +1085,16 @@ Start with GET /x/context if you need to understand the project before acting.
 ## Team
 
   GET    /x/members                    who is in the project, with roles and permission levels
+  POST   /x/announce                    {"title", "body"?, "project"?, "users"?, "email"?}
+         Tell people something that is NOT about a task: "we are off tomorrow",
+         "the policy changed", "the server moves on Saturday". Reaches everyone
+         in the company by default; "project" narrows to one team, "users" to
+         named people. "email": true also sends mail — use it when waiting for
+         someone to open the app is too slow.
+         COMPANY ADMIN ONLY, and deliberately: an announcement cannot be turned
+         off by the person receiving it. Ask the human before sending one — it
+         interrupts everybody.
+
   GET    /x/search/tasks?q=...          find a task by MEANING, across every
          project you are in. "payment fails" finds a Hebrew task about a broken
          payment iframe with no shared word. Comments are indexed together with

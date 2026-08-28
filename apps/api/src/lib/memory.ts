@@ -3,16 +3,18 @@ import { companyOf, projectPath } from './links.js'
 import { shortUrlFor } from './short-links.js'
 import { profilesForProject } from './job-title.js'
 import { db } from '../db/client.js'
-import { chatSummaries, credentials, documents, files, messages, notes, projectMembers, projects, resourceSecrets, taskComments, taskGroups, taskBlockers, taskResources, dbConnections, dbTablePolicies, tasks, timeEntries, users } from '../db/schema.js'
+import { chatSummaries, credentials, documents, files, messages, notes, projectMembers, projects, resourceSecrets, taskComments, taskGroups, taskBlockers, taskResources, dbConnections, dbTablePolicies, tasks, timeEntries, users, companies } from '../db/schema.js'
 import { dependentsOf } from '../routes/tasks.js'
 import { readFromConnection } from '../routes/db-connections.js'
-import { hasPermission } from '../routes/projects.js'
+import { hasPermission, companyRoleOf } from '../routes/projects.js'
 import { snapshot } from '../routes/documents.js'
 import { htmlToText, sanitizeHtml } from './sanitize-html.js'
 import { searchInDocument, searchInText } from './doc-search.js'
 import { submitAssistantReport, REPORT_KINDS, type ReportKind } from './assistant-report.js'
 import { createNote, noteToTask, NOTE_TYPES } from '../routes/notes.js'
 import { enqueue as enqueueEmbedding, searchNoteIds, searchTaskIds } from './embeddings.js'
+import { announce } from './announce.js'
+import { richText } from './markdown.js'
 import { timeConfigForProject } from '../routes/time.js'
 import { encrypt } from './crypto.js'
 import { notify, extractMentions, commentWatchers } from './notify.js'
@@ -227,6 +229,22 @@ export function memoryTools(projectId: string, actorUserId: string): { tools: To
       name: 'list_tasks',
       description: 'List project tasks (number, title, status, priority, assignee, due date).',
       parameters: { type: 'object', properties: { status: { type: 'string', enum: ['todo', 'in_progress', 'review', 'verified', 'done'] } } },
+    },
+    {
+      name: 'announce',
+      description:
+        'Tell the company something that is NOT about a task: "we are off tomorrow", "the policy changed", "the server moves on Saturday". Reaches everyone in the company by default; pass project to narrow it to this project team, or users to name people. ASK THE HUMAN BEFORE SENDING — it interrupts everybody and cannot be turned off by those receiving it. email: true also sends mail, for things that cannot wait until they open the app. Company admin only.',
+      parameters: {
+        type: 'object',
+        properties: {
+          title: { type: 'string', description: 'One line saying what happened' },
+          body: { type: 'string', description: 'Details, if a line is not enough' },
+          project: { type: 'boolean', description: 'true = only this project team, not the whole company' },
+          users: { type: 'array', items: { type: 'string' }, description: 'Named people instead of everyone' },
+          email: { type: 'boolean', description: 'Also send mail' },
+        },
+        required: ['title'],
+      },
     },
     {
       name: 'search_tasks',
@@ -1905,6 +1923,36 @@ export function memoryTools(projectId: string, actorUserId: string): { tools: To
           .sort((a, b) => b.minutes - a.minutes)
           .map((r) => `  ${r.number ? `${r.number} ${r.title}` : '(no task)'}: ${fmt(r.minutes)}`),
       ].join('\n')
+    },
+    announce: async (args) => {
+      const title = String(args.title ?? '').trim()
+      if (!title) return 'Pass title — one line saying what happened.'
+      const project = await db.query.projects.findFirst({ where: eq(projects.id, projectId) })
+      if (!project?.companyId) return 'No company context.'
+      // Только админ компании: от объявления нельзя отписаться, и право
+      // рассылать неотключаемое сообщение — это право, а не удобство.
+      if ((await companyRoleOf(project.companyId, actorUserId)) !== 'admin') {
+        return 'PERMISSION DENIED: only a company admin can send an announcement. Say so plainly — it reaches everyone and cannot be turned off.'
+      }
+      const company = await db.query.companies.findFirst({ where: eq(companies.id, project.companyId) })
+      const actor = await db.query.users.findFirst({ where: eq(users.id, actorUserId) })
+      const users_ = Array.isArray(args.users) ? args.users.map(String) : []
+      const res = await announce({
+        companyId: project.companyId,
+        companyName: company?.name ?? '',
+        actorId: actorUserId,
+        actorName: actor?.name || 'Someone',
+        title,
+        body: typeof args.body === 'string' ? richText(args.body) : undefined,
+        target: args.project === true
+          ? { kind: 'project', projectId }
+          : users_.length
+            ? { kind: 'users', userIds: users_ }
+            : { kind: 'company' },
+        email: args.email === true,
+      })
+      if (!res.sent) return 'Nobody matched — nothing was sent. Check who you meant.'
+      return `Announced to ${res.sent} people${res.emailed ? `, ${res.emailed} by email as well` : ''}.`
     },
     search_tasks: async (args) => {
       const q = String(args.query ?? '').trim()

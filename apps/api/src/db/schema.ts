@@ -1367,6 +1367,10 @@ export const notificationEvent = pgEnum('notification_event', [
   'timer_running', // таймер идёт слишком долго — не забыли ли выключить
   'release_status', // версия сдвинулась по стадиям — автору и тем, кого это касается
   'task_due', // срок задачи на подходе — предупреждаем заранее
+  // Объявление компании: «завтра отдыхаем», «изменили политику». Первое
+  // событие без повода внутри проекта — оттого и project_id стал
+  // необязательным.
+  'announcement',
 ])
 
 // Подписки: строка = (user, project, event) отключён. По умолчанию всё включено;
@@ -1390,7 +1394,16 @@ export const notifications = pgTable(
   {
     id: id(),
     userId: text('user_id').notNull().references(() => users.id, { onDelete: 'cascade' }),
-    projectId: text('project_id').notNull().references(() => projects.id, { onDelete: 'cascade' }),
+    /**
+     * Проект — у всего, кроме объявлений компании: «вам назначили задачу» без
+     * задачи бессмысленно, а «завтра отдыхаем» к проекту не привязано вовсе.
+     */
+    projectId: text('project_id').references(() => projects.id, { onDelete: 'cascade' }),
+    /**
+     * Компания. Раньше выводилась из проекта; у объявления проекта нет, а
+     * знать, чьё оно, необходимо — инбокс группирует по компаниям.
+     */
+    companyId: text('company_id').references(() => companies.id, { onDelete: 'cascade' }),
     event: notificationEvent('event').notNull(),
     actorId: text('actor_id').references(() => users.id, { onDelete: 'set null' }), // null = ИИ/система
     title: text('title').notNull(), // «Artyom упомянул вас»

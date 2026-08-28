@@ -53,6 +53,7 @@ import { sendAddedToProjectMail, sendRemovedFromProjectMail } from '../lib/mails
 import { sendInviteMail } from '../lib/mail-invite.js'
 import { createNote, noteToTask, NOTE_TYPES, canUseKnowledge, canEditKnowledge, type NoteType } from './notes.js'
 import { enqueue as enqueueEmbedding, searchNoteIds, searchTaskIds } from '../lib/embeddings.js'
+import { announce, type AnnounceTarget } from '../lib/announce.js'
 import { readTimeConfig, maybeTranslate, timeConfigForProject } from './time.js'
 import { readPresence } from './auth.js'
 import { canPublish, createShare, locate, revokeShare, type ShareEntityType } from './shares.js'
@@ -855,6 +856,9 @@ const MENTION_EVENTS = ['chat_mention', 'task_mention', 'comment_mention', 'note
  * всё равно не прочтёт, а порядок прочтёт.
  */
 const INBOX_BRANCHES = [
+  // Объявления первыми: «завтра отдыхаем» важнее любого комментария, и
+  // отписаться от них нельзя — значит и в сводке они не должны тонуть.
+  { kind: 'announcements', events: ['announcement'], next: 'уже здесь, в items — читать целиком' },
   { kind: 'mentions', events: MENTION_EVENTS, next: 'GET /x/mentions' },
   { kind: 'answers', events: ['checklist_answer'], next: 'GET /x/tasks/<id> — ответы в чек-листе' },
   { kind: 'comments', events: ['task_comment'], next: 'GET /x/tasks/<id>/comments' },
@@ -2195,6 +2199,85 @@ bridgeRoute.get('/open', async (c) => {
  * проекту, и показать её тому, кого туда не звали, значит показать чужое —
  * молча, без всякой ошибки.
  */
+/**
+ * Объявление компании: «завтра отдыхаем», «изменили политику».
+ *
+ * То, что не выросло ни из задачи, ни из проекта — и потому не помещалось ни
+ * в одно уведомление. Такое писали в мессенджер, а через неделю никто не
+ * помнил, кому написали и дошло ли.
+ *
+ * Только админ компании. Не из осторожности ради осторожности: от объявлений
+ * НЕЛЬЗЯ отписаться, и право рассылать неотключаемое сообщение всей компании
+ * — это право, а не удобство.
+ */
+bridgeRoute.post('/announce', async (c) => {
+  const id = auth(c as never)
+
+  // Компания из туннеля; на проектном — из проекта, чтобы ассистенту не
+  // приходилось переподключаться ради одного объявления.
+  let companyId = id.companyId ?? null
+  if (!companyId) {
+    const scope = await resolveProject(c as never)
+    if ('error' in scope) return c.json({ error: scope.error }, scope.status)
+    companyId = await companyOf(scope.projectId)
+  }
+  if (!companyId) return c.json({ error: 'Company unknown' }, 400)
+
+  if ((await companyRoleOf(companyId, id.userId)) !== 'admin') {
+    return c.json(
+      {
+        error: 'Forbidden: only a company admin can send an announcement',
+        hint: 'It reaches everyone and cannot be turned off — that is why it is limited to admins.',
+      },
+      403,
+    )
+  }
+
+  const parsed = await readJson(c as never)
+  if ('error' in parsed) return c.json(parsed, 400)
+  const b = parsed.body as { title?: string; body?: string; project?: string; users?: string[]; email?: boolean }
+
+  const title = String(b.title ?? '').trim()
+  if (!title) return c.json({ error: 'title is required — one line saying what happened' }, 400)
+
+  // Цель: проект, поимённо или вся компания. Порядок проверки — от узкого к
+  // широкому, чтобы «всем» не срабатывало случайно.
+  let target: AnnounceTarget
+  if (b.project) {
+    const p = await db.query.projects.findFirst({ where: eq(projects.id, b.project) })
+    if (!p || p.companyId !== companyId) return c.json({ error: 'Project is not in this company' }, 400)
+    target = { kind: 'project', projectId: b.project }
+  } else if (Array.isArray(b.users) && b.users.length) {
+    target = { kind: 'users', userIds: b.users.map(String) }
+  } else {
+    target = { kind: 'company' }
+  }
+
+  const company = await db.query.companies.findFirst({ where: eq(companies.id, companyId) })
+  const actor = await db.query.users.findFirst({ where: eq(users.id, id.userId) })
+
+  const res = await announce({
+    companyId,
+    companyName: company?.name ?? '',
+    actorId: id.userId,
+    actorName: actor?.name || 'Someone',
+    title,
+    body: typeof b.body === 'string' ? richText(b.body) : undefined,
+    target,
+    email: b.email === true,
+  })
+
+  return c.json({
+    ...res,
+    // Говорим, скольким дошло: «отправлено» без числа не отличить от
+    // «отправлено никому», а список получателей мог оказаться пустым.
+    note:
+      res.sent === 0
+        ? 'Nobody matched — check the target: an empty list is not an error, but nothing was sent either.'
+        : `Delivered to ${res.sent} people${res.emailed ? `, ${res.emailed} by email as well` : ''}.`,
+  })
+})
+
 bridgeRoute.get('/search/tasks', async (c) => {
   const id = auth(c as never)
   const q = c.req.query('q')?.trim()

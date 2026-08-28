@@ -386,7 +386,8 @@ projectsRoute.get(
       .from(notifications)
       .where(and(inArray(notifications.projectId, ids), eq(notifications.userId, sub), isNull(notifications.readAt)))
       .groupBy(notifications.projectId)
-    for (const r of notifRows) unread.set(r.projectId, r.count)
+    // Объявления компании проекта не имеют — в счётчик по проектам не идут.
+    for (const r of notifRows) if (r.projectId) unread.set(r.projectId, r.count)
 
     // участники проектов — для аватарок на карточке
     const memberRows = await db

@@ -796,6 +796,35 @@ server.registerTool(
   },
 )
 
+server.registerTool(
+  'chatick_announce',
+  {
+    title: 'Tell the company something',
+    description:
+      'Sends an announcement that is NOT about a task: "we are off tomorrow", "the policy changed", "the server ' +
+      'moves on Saturday". Reaches everyone in the company by default; pass project to narrow it to one team, or ' +
+      'users to name people. ' +
+      'ASK THE HUMAN BEFORE SENDING. This interrupts everybody and cannot be turned off by the people receiving ' +
+      'it — that is the point of an announcement, and the reason not to send one on your own judgement. ' +
+      'email: true also sends mail; use it when waiting for someone to open the app is too slow. ' +
+      'Company admin only.',
+    inputSchema: {
+      title: z.string().describe('One line saying what happened — this is what people see first'),
+      body: z.string().optional().describe('Details, if a line is not enough. Markdown.'),
+      project: z.string().optional().describe('Narrow to one project team'),
+      users: z.array(z.string()).optional().describe('Narrow to named people — ids from chatick_company_members'),
+      email: z.boolean().optional().describe('Also send mail. For things that cannot wait until they open the app'),
+    },
+  },
+  async (body) => {
+    try {
+      return json(await call(await need(), 'POST', '/announce', body))
+    } catch (e) {
+      return fail(e)
+    }
+  },
+)
+
 /**
  * «Где та таска, где я писал» — вопрос, на который до этого ответить было
  * нечем: chatick_tasks ищет внутри одного проекта, а люди состоят в 8-20.

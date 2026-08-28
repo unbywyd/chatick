@@ -291,7 +291,10 @@ companiesRoute.get('/:companyId/overview', async (c) => {
     .where(and(inArray(notifications.projectId, ids), eq(notifications.userId, sub)))
     .groupBy(notifications.projectId)
 
-  const byId = <T extends { projectId: string }>(rows: T[]) => new Map(rows.map((r) => [r.projectId, r]))
+  // projectId допускает null: объявления компании не привязаны к проекту.
+  // Такие строки в разбивку по проектам не идут — им там не место.
+  const byId = <T extends { projectId: string | null }>(rows: T[]) =>
+    new Map(rows.filter((r) => r.projectId).map((r) => [r.projectId!, r]))
   const totalTimeMap = byId(totalTimeRows)
   const taskMap = byId(taskRows)
   const memberMap = byId(memberRows)
