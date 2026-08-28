@@ -323,7 +323,7 @@ export function ReleasesTab({ projectId, canManage }: { projectId: string; canMa
   )
 }
 
-type SortKey = 'app' | 'version' | 'buildType' | 'profile' | 'status' | 'owner' | 'released' | 'tasks'
+type SortKey = 'app' | 'version' | 'buildType' | 'profile' | 'status' | 'created' | 'released' | 'tasks'
 type SortDir = 'asc' | 'desc'
 
 /**
@@ -386,8 +386,8 @@ function ReleasesTable({
           // который человек имеет в виду, а не алфавит ключей.
           d = stageIndex(buildTypes, a) - stageIndex(buildTypes, b)
           break
-        case 'owner':
-          d = (a.owner?.name ?? '').localeCompare(b.owner?.name ?? '')
+        case 'created':
+          d = new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime()
           break
         case 'released':
           d = new Date(a.releasedAt ?? 0).getTime() - new Date(b.releasedAt ?? 0).getTime()
@@ -407,8 +407,14 @@ function ReleasesTable({
     { key: 'profile', label: t('releases.buildProfile'), className: 'hidden md:table-cell' },
     { key: 'status', label: t('releases.status') },
     { key: 'tasks', label: t('releases.linkedTasks') },
-    { key: 'released', label: t('releases.releasedAt'), className: 'hidden sm:table-cell' },
-    { key: 'owner', label: t('releases.owner'), className: 'w-10' },
+    // Когда собрали — отдельно от «когда выкатили»: это разные даты, и
+    // расходятся они на недели. В таблице стояла только вторая, а она у
+    // большинства версий пуста — колонка была прочерками, и узнать, когда
+    // собрали, было негде.
+    { key: 'created', label: t('releases.createdAt'), className: 'hidden sm:table-cell' },
+    { key: 'released', label: t('releases.releasedAt'), className: 'hidden lg:table-cell' },
+    // Автора в таблице нет намеренно: здесь смотрят, ЧТО за версия и где она,
+    // а не кто её завёл. Автор остался на странице версии, где он и к месту.
   ]
 
   return (
@@ -565,11 +571,16 @@ function ReleasesTable({
                     {!r.tasks.length && <span className="text-xs text-muted-foreground">—</span>}
                   </div>
                 </td>
+                {/* Дата И время: в один день собирают по нескольку раз, и
+                    без времени две сборки 27-го неотличимы. */}
                 <td className="hidden whitespace-nowrap px-2 py-1.5 align-middle text-xs text-muted-foreground sm:table-cell">
-                  {r.releasedAt ? new Date(r.releasedAt).toLocaleDateString(locale) : '—'}
+                  {new Date(r.createdAt).toLocaleDateString(locale)}
+                  <span className="ms-1 opacity-70">
+                    {new Date(r.createdAt).toLocaleTimeString(locale, { hour: '2-digit', minute: '2-digit' })}
+                  </span>
                 </td>
-                <td className="px-2 py-1.5 align-middle">
-                  {r.owner && <Avatar name={r.owner.name} src={r.owner.avatarUrl} size={22} />}
+                <td className="hidden whitespace-nowrap px-2 py-1.5 align-middle text-xs text-muted-foreground lg:table-cell">
+                  {r.releasedAt ? new Date(r.releasedAt).toLocaleDateString(locale) : '—'}
                 </td>
                 {/* Только переход по ссылке. Правка переехала на страницу
                     версии: в таблице столбца ссылки нет, и карандаш здесь
