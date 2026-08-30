@@ -1912,5 +1912,28 @@
     "bodyPlaceholder": "מה התברר ומה לעשות עם זה",
     "tagsPlaceholder": "תגיות: cardcom, sms, ios…",
     "tagsHint": "תגיות תופסות את מה שמשמעות לא תופסת: «cardcom» זה Cardcom, לא «משהו על תשלומים»."
+  },
+  "worklog": {
+    "title": "יומן עבודה",
+    "subtitle": "מה עשית ואיפה עצרת. טיוטה גלויה רק לך.",
+    "yourDraft": "הטיוטה שלך",
+    "newEntry": "רשומה חדשה",
+    "draftPrivate": "גלוי רק לך",
+    "placeholder": "מה עשית, איפה עצרת, מה הלאה…",
+    "saveDraft": "שמירת טיוטה",
+    "publish": "פרסום",
+    "published": "הרשומה פורסמה",
+    "edit": "עריכה",
+    "delete": "מחיקה",
+    "deleteConfirm": "למחוק את הרשומה? רשומה שפורסמה לא ניתן להחזיר.",
+    "deleteDraftConfirm": "למחוק את הטיוטה?",
+    "everyone": "כולם",
+    "from": "מתאריך",
+    "to": "עד תאריך",
+    "resetFilters": "איפוס",
+    "empty": "עדיין לא פורסם דבר.",
+    "saveFailed": "השמירה נכשלה",
+    "publishFailed": "הפרסום נכשל",
+    "deleteFailed": "המחיקה נכשלה"
   }
 }

@@ -1909,5 +1909,28 @@
     "bodyPlaceholder": "What was found out and what to do about it",
     "tagsPlaceholder": "Tags: cardcom, sms, ios…",
     "tagsHint": "Tags catch what meaning cannot: \"cardcom\" is Cardcom, not \"something about payments\"."
+  },
+  "worklog": {
+    "title": "Work log",
+    "subtitle": "What you did and where you stopped. Drafts are visible only to you.",
+    "yourDraft": "Your draft",
+    "newEntry": "New entry",
+    "draftPrivate": "Only you can see this",
+    "placeholder": "What you did, where you stopped, what comes next…",
+    "saveDraft": "Save draft",
+    "publish": "Publish",
+    "published": "Entry published",
+    "edit": "Edit",
+    "delete": "Delete",
+    "deleteConfirm": "Delete this entry? Published entries cannot be restored.",
+    "deleteDraftConfirm": "Delete this draft?",
+    "everyone": "Everyone",
+    "from": "From",
+    "to": "To",
+    "resetFilters": "Reset",
+    "empty": "Nothing published yet.",
+    "saveFailed": "Could not save",
+    "publishFailed": "Could not publish",
+    "deleteFailed": "Could not delete"
   }
 }

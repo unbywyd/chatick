@@ -33,6 +33,7 @@ import { ProjectTeamTab } from './components/tabs/ProjectTeamTab'
 import { NotificationsTab } from './components/tabs/NotificationsTab'
 import { AiUsageTab } from './components/tabs/AiUsageTab'
 import { HistoryTab } from './components/tabs/HistoryTab'
+import { WorkLogTab } from './components/tabs/WorkLogTab'
 import { DocumentsTab } from './components/tabs/DocumentsTab'
 import { ReleasesTab } from './components/tabs/ReleasesTab'
 import { ReleasePage as ReleaseDetailsTab } from './components/tabs/ReleasePage'
@@ -303,6 +304,18 @@ function DocumentsPage() {
   const { id } = useParams()
   return id ? <DocumentsTab projectId={id} meId={meId} /> : null
 }
+/**
+ * Журнал работы — страница проекта, но НЕ вкладка.
+ *
+ * Тот же приём, что у трекинга времени: в ряду вкладок ему не место — туда
+ * заходят не каждый день, а ряд и так длинный. Попадают из меню на задачах.
+ */
+function WorkLogPage() {
+  const { meId } = useProjectCtx()
+  const { id } = useParams()
+  return id ? <WorkLogTab projectId={id} meId={meId} /> : null
+}
+
 function HistoryPage() {
   const { project } = useProjectCtx()
   const { id } = useParams()
@@ -373,6 +386,9 @@ createRoot(document.getElementById('root')!).render(
                     открываться она должна сразу нужным табом */}
                 <Route path="ai/:aiTab?" element={<AiPage />} />
                 <Route path="history" element={<HistoryPage />} />
+                {/* журнал работы — страница проекта, но НЕ вкладка: попадают
+                    из меню на странице задач */}
+                <Route path="worklog" element={<WorkLogPage />} />
                 <Route path="documents/:documentId?" element={<DocumentsPage />} />
                 <Route path="notes/:noteId?" element={<NotesPage />} />
                 {/* вкладка есть, только если функция включена в проекте */}

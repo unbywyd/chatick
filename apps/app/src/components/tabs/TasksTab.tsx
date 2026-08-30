@@ -3,7 +3,7 @@ import { useNavigate, useParams, useSearchParams } from 'react-router-dom'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { useTranslation } from 'react-i18next'
 import { toast } from 'sonner'
-import { CalendarClock, CalendarDays, ChevronDown, Download, FileSpreadsheet, Flag, LayoutList, Link2, MoreHorizontal, Paperclip, Plus, Search, Table2, Timer, Trash2, Upload, User, X } from 'lucide-react'
+import { BookText, CalendarClock, CalendarDays, ChevronDown, Download, FileSpreadsheet, Flag, LayoutList, Link2, MoreHorizontal, Paperclip, Plus, Search, Table2, Timer, Trash2, Upload, User, X } from 'lucide-react'
 import { api, previewUrl } from '@/lib/api'
 import { cn } from '@/lib/utils'
 import { Input } from '@/components/ui/input'
@@ -14,6 +14,7 @@ import {
   DropdownMenuContent,
   DropdownMenuCheckItem,
   DropdownMenuItem,
+  DropdownMenuSeparator,
 } from '@/components/ui/dropdown-menu'
 import { Avatar } from '@/components/ui/avatar'
 import { Popover, PopoverTrigger, PopoverContent } from '@/components/ui/popover'
@@ -702,6 +703,14 @@ export function TasksTab({ projectId, meId }: { projectId: string; meId?: string
 
                 </>
               )}
+              <DropdownMenuSeparator />
+              {/* Журнал работы. Вкладки у него нет намеренно: заходят туда
+                  не каждый день, а ряд вкладок и без того длинный. Здесь же
+                  собрано «всё редкое», и он встаёт в этот ряд ровно. */}
+              <DropdownMenuItem onSelect={() => navigate(`/c/${companyId}/p/${projectId}/worklog`)}>
+                <BookText className="size-3.5" />
+                {t('worklog.title')}
+              </DropdownMenuItem>
             </DropdownMenuContent>
           </DropdownMenu>
           </form>
