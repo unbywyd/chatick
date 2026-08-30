@@ -1958,5 +1958,26 @@
     "saveFailed": "Не удалось сохранить",
     "publishFailed": "Не удалось опубликовать",
     "deleteFailed": "Не удалось удалить"
+  },
+  "taskHistory": {
+    "title": "История",
+    "empty": "Пока ничего не записано.",
+    "system": "ИИ / система",
+    "created": "завёл(а) задачу",
+    "deleted": "удалил(а) задачу",
+    "restored": "восстановил(а) задачу",
+    "statusTo": "перевёл(а) в «{{status}}»",
+    "statusChanged": "сменил(а) статус",
+    "assignedTo": "назначил(а) на {{name}}",
+    "unassigned": "снял(а) исполнителя",
+    "assignChanged": "сменил(а) исполнителя",
+    "dueTo": "поставил(а) срок {{date}}",
+    "dueCleared": "убрал(а) срок",
+    "dueChanged": "изменил(а) срок",
+    "priorityTo": "поставил(а) важность «{{priority}}»",
+    "priorityChanged": "изменил(а) важность",
+    "estimateChanged": "изменил(а) оценку",
+    "sprintChanged": "перенёс(ла) в другой спринт",
+    "updated": "изменил(а) задачу"
   }
 }

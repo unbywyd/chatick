@@ -1935,5 +1935,26 @@
     "saveFailed": "Could not save",
     "publishFailed": "Could not publish",
     "deleteFailed": "Could not delete"
+  },
+  "taskHistory": {
+    "title": "History",
+    "empty": "Nothing recorded yet.",
+    "system": "AI / system",
+    "created": "created the task",
+    "deleted": "deleted the task",
+    "restored": "restored the task",
+    "statusTo": "moved it to “{{status}}”",
+    "statusChanged": "changed the status",
+    "assignedTo": "assigned it to {{name}}",
+    "unassigned": "removed the assignee",
+    "assignChanged": "changed the assignee",
+    "dueTo": "set the due date to {{date}}",
+    "dueCleared": "cleared the due date",
+    "dueChanged": "changed the due date",
+    "priorityTo": "set priority to “{{priority}}”",
+    "priorityChanged": "changed the priority",
+    "estimateChanged": "changed the estimate",
+    "sprintChanged": "moved it to another sprint",
+    "updated": "updated the task"
   }
 }

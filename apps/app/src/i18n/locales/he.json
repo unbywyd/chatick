@@ -1938,5 +1938,26 @@
     "saveFailed": "השמירה נכשלה",
     "publishFailed": "הפרסום נכשל",
     "deleteFailed": "המחיקה נכשלה"
+  },
+  "taskHistory": {
+    "title": "היסטוריה",
+    "empty": "עדיין לא נרשם דבר.",
+    "system": "AI / מערכת",
+    "created": "יצר/ה את המשימה",
+    "deleted": "מחק/ה את המשימה",
+    "restored": "שחזר/ה את המשימה",
+    "statusTo": "העביר/ה ל”{{status}}”",
+    "statusChanged": "שינה/תה סטטוס",
+    "assignedTo": "הקצה/תה ל{{name}}",
+    "unassigned": "הסיר/ה את האחראי",
+    "assignChanged": "שינה/תה אחראי",
+    "dueTo": "קבע/ה תאריך יעד {{date}}",
+    "dueCleared": "הסיר/ה את תאריך היעד",
+    "dueChanged": "שינה/תה תאריך יעד",
+    "priorityTo": "קבע/ה עדיפות ”{{priority}}”",
+    "priorityChanged": "שינה/תה עדיפות",
+    "estimateChanged": "שינה/תה הערכת זמן",
+    "sprintChanged": "העביר/ה לספרינט אחר",
+    "updated": "עדכן/ה את המשימה"
   }
 }

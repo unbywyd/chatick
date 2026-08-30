@@ -5,7 +5,7 @@ import { and, asc, desc, eq, inArray, isNull, or, sql } from 'drizzle-orm'
 import { buildType, isLiveStage } from '../lib/release-stages.js'
 import { companyOf, projectPath } from '../lib/links.js'
 import { db } from '../db/client.js'
-import { credentials, files, projectMembers, projects, taskBlockers, taskChecklist, taskComments, taskGroups, taskLinks, taskNotes, taskResources, tasks, users, taskReleases, releases } from '../db/schema.js'
+import { activityLog, credentials, files, projectMembers, projects, taskBlockers, taskChecklist, taskComments, taskGroups, taskLinks, taskNotes, taskResources, tasks, users, taskReleases, releases } from '../db/schema.js'
 import { requireProject, requireSession, type ProjectEnv, type SessionEnv } from '../auth.js'
 import { hasPermission, ownsOrManages } from './projects.js'
 import { improveTask, validateTask, generateTaskNotes } from '../lib/llm.js'
@@ -512,7 +512,50 @@ tasksRoute.patch(
       void unassignNotice(task.assigneeId, task.id)
     tasksChanged(projectId, [row!.assigneeId, row!.createdById, task.assigneeId])
     const act = body.status !== undefined && body.status !== task.status ? 'status' : body.assigneeId !== undefined ? 'assign' : 'update'
-    void logActivity({ projectId, actorId: sub, action: act, entityType: 'task', entityId: row!.id, entityLabel: `${row!.number}: ${row!.title}`, meta: { changed: Object.keys(patch) } })
+    /**
+     * Пишем не только ЧТО менялось, но и НА ЧТО.
+     *
+     * Раньше в журнал ложилось `{changed:["status"]}` — «сменил статус», и ни
+     * слова о том, на какой. Для ленты изменений этого мало: «Алекс сменил
+     * статус» не отвечает на вопрос, ради которого туда смотрят.
+     *
+     * Оба значения лежат прямо здесь — task это до, row это после, — и стоило
+     * их просто не выбросить. Старые записи так и останутся без значений:
+     * задним числом их взять неоткуда.
+     *
+     * Только вехи: статус, исполнитель, срок, важность. Текст описания сюда не
+     * кладём — он бывает в тысячи знаков, а журнал не хранилище версий.
+     */
+    const before: Record<string, unknown> = {}
+    const after: Record<string, unknown> = {}
+    if (body.status !== undefined && body.status !== task.status) {
+      before.status = task.status
+      after.status = row!.status
+    }
+    if (body.assigneeId !== undefined && body.assigneeId !== task.assigneeId) {
+      before.assigneeId = task.assigneeId
+      after.assigneeId = row!.assigneeId
+    }
+    if (body.priority !== undefined && body.priority !== task.priority) {
+      before.priority = task.priority
+      after.priority = row!.priority
+    }
+    if (body.dueDate !== undefined && String(body.dueDate ?? '') !== String(task.dueDate ?? '')) {
+      before.dueDate = task.dueDate
+      after.dueDate = row!.dueDate
+    }
+    void logActivity({
+      projectId,
+      actorId: sub,
+      action: act,
+      entityType: 'task',
+      entityId: row!.id,
+      entityLabel: `${row!.number}: ${row!.title}`,
+      meta: {
+        changed: Object.keys(patch),
+        ...(Object.keys(after).length ? { before, after } : {}),
+      },
+    })
 
     // Автосообщения в чат о событиях задач (SPEC §8.23)
     if (body.status === 'done' && task.status !== 'done') void postTaskDone(projectId, sub, row!)
@@ -751,6 +794,71 @@ const checklistItem = (r: typeof taskChecklist.$inferSelect, who?: { id: string;
   doneBy: who ? { id: who.id, name: who.name } : null,
   doneAt: r.doneAt,
   sortOrder: r.sortOrder,
+})
+
+/**
+ * История задачи: путь от «завели» до «сдана».
+ *
+ * Только ВЕХИ. Перетаскивание в списке и правка описания сюда не попадают:
+ * у TASK-1 девять записей «изменил» подряд за две минуты — это мышь двигала
+ * задачу по списку, и в ленте это шум, за которым не видно настоящих шагов.
+ *
+ * Значения (было → стало) есть только у записей после этой правки: раньше в
+ * журнал ложилось лишь имя поля. Старые показываем как есть — «сменил
+ * статус», без подробностей; врать о них нечем.
+ */
+tasksRoute.get('/:taskId/history', async (c) => {
+  const { projectId, sub } = c.get('auth')
+  const access = await checklistAccess(projectId, c.req.param('taskId'), sub)
+  if ('error' in access) return c.json({ error: access.error }, access.status)
+
+  const rows = await db
+    .select({ a: activityLog, actor: users })
+    .from(activityLog)
+    .leftJoin(users, eq(users.id, activityLog.actorId))
+    .where(
+      and(
+        eq(activityLog.projectId, projectId),
+        eq(activityLog.entityType, 'task'),
+        eq(activityLog.entityId, access.task.id),
+      ),
+    )
+    .orderBy(asc(activityLog.createdAt))
+    .limit(200)
+
+  /** Правка, не менявшая ничего значимого, — это перетаскивание или текст. */
+  const isMilestone = (action: string, meta: { changed?: string[] } | null) => {
+    if (action !== 'update') return true
+    const changed = meta?.changed ?? []
+    return changed.some((f) => ['status', 'assigneeId', 'dueDate', 'priority', 'groupId', 'estimateMinutes'].includes(f))
+  }
+
+  const items = rows
+    .map((r) => ({
+      id: r.a.id,
+      action: r.a.action,
+      meta: (r.a.meta ? JSON.parse(r.a.meta) : null) as
+        | { changed?: string[]; before?: Record<string, unknown>; after?: Record<string, unknown> }
+        | null,
+      createdAt: r.a.createdAt,
+      // actor = null означает ИИ или систему — так же, как в общем журнале.
+      actor: r.actor ? { id: r.actor.id, name: r.actor.name, avatarUrl: r.actor.avatarUrl } : null,
+    }))
+    .filter((x) => isMilestone(x.action, x.meta))
+
+  // Имена людей из before/after: в журнале лежат id, а читать надо имена.
+  const ids = new Set<string>()
+  for (const x of items) {
+    for (const side of [x.meta?.before, x.meta?.after]) {
+      const v = side?.assigneeId
+      if (typeof v === 'string') ids.add(v)
+    }
+  }
+  const people = ids.size
+    ? await db.select({ id: users.id, name: users.name }).from(users).where(inArray(users.id, [...ids]))
+    : []
+
+  return c.json({ items, people: Object.fromEntries(people.map((p) => [p.id, p.name])) })
 })
 
 tasksRoute.get('/:taskId/checklist', async (c) => {

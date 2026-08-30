@@ -41,6 +41,7 @@ import { Avatar } from '@/components/ui/avatar'
 import { TaskComments } from './TaskComments'
 import { TaskNotes } from './TaskNotes'
 import { TaskChecklist } from './TaskChecklist'
+import { TaskHistory } from './TaskHistory'
 import { TaskBlockers } from './TaskBlockers'
 import { TaskLinks } from './TaskLinks'
 import { TaskResources } from './TaskResources'
@@ -1141,6 +1142,11 @@ export function TaskDrawer({
           <div>
             <TaskComments taskId={task.id} members={members} lang={i18n.language} meId={meId} onFilesChanged={refresh} />
           </div>
+
+          {/* Путь задачи: кто завёл, кто назначил, кто двигал по статусам.
+              В самом низу и свёрнуто: приходят сюда за описанием и
+              обсуждением, а «кто это закрыл» спрашивают изредка. */}
+          <TaskHistory taskId={task.id} />
         </div>
 
         {/* Правая колонка — свойства задачи (скрыта до «Редактировать»).
