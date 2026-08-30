@@ -220,6 +220,44 @@ describe('связь с задачей', () => {
   })
 })
 
+describe('ассистент в чате — третий путь к тем же записям', () => {
+  const memory = readFileSync(join(import.meta.dirname, '../lib/memory.ts'), 'utf8')
+  const at = memory.indexOf('read_work_log: async')
+  const fn = memory.slice(at, memory.indexOf('write_work_log: async'))
+
+  it('чужой черновик не отдаётся и здесь', () => {
+    // Третье место, где это правило можно нарушить: интерфейс, мост, чат.
+    // Забыть в одном из трёх — и приватность черновика держится на двух.
+    expect(at, 'инструмент read_work_log не найден').toBeGreaterThan(-1)
+    expect(fn.replace(/\s+/g, ' '), 'граница видимости не собрана в одно выражение').toContain(
+      "or(eq(workLog.authorId, actorUserId), eq(workLog.status, 'published'))!",
+    )
+  })
+
+  it('участник заперт на себе, что бы ни просил', () => {
+    expect(fn.replace(/\s+/g, ' ')).toContain('if (!seesEveryone) conds.push(eq(workLog.authorId, actorUserId))')
+  })
+
+  it('черновик помечен в выдаче — чтобы модель не пересказала его в чат', () => {
+    // Модель видит СВОЙ черновик и должна понимать, что он приватный.
+    expect(fn).toMatch(/DRAFT — private to them/)
+  })
+
+  it('публикация — только своя запись и только черновик', () => {
+    const pubAt = memory.indexOf('publish_work_log: async')
+    const pub = memory.slice(pubAt, memory.indexOf('create_document: async', pubAt))
+    expect(pub).toMatch(/if \(row\.authorId !== actorUserId\)/)
+    expect(pub).toMatch(/if \(row\.status !== 'draft'\)/)
+  })
+
+  it('удаления у ассистента в чате нет вовсе', () => {
+    // В мосту ЛЛМ стирает свой черновик осознанно, отдельным инструментом.
+    // Здесь инструмента нет: разговор в чате идёт быстрее, а «удали» в нём
+    // слишком легко сказать мимоходом.
+    expect(memory, 'появился инструмент удаления записи журнала').not.toMatch(/delete_work_log/)
+  })
+})
+
 describe('лента', () => {
   it('стоит по времени публикации, а не создания', () => {
     // Черновик пишут в понедельник, публикуют в пятницу: в ленте он должен

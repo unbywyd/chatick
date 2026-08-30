@@ -3,7 +3,7 @@ import { companyOf, projectPath } from './links.js'
 import { shortUrlFor } from './short-links.js'
 import { profilesForProject } from './job-title.js'
 import { db } from '../db/client.js'
-import { chatSummaries, credentials, documents, files, messages, notes, projectMembers, projects, resourceSecrets, taskComments, taskGroups, taskBlockers, taskResources, dbConnections, dbTablePolicies, tasks, timeEntries, users, companies } from '../db/schema.js'
+import { chatSummaries, credentials, documents, files, messages, notes, projectMembers, projects, resourceSecrets, taskComments, taskGroups, taskBlockers, taskResources, dbConnections, dbTablePolicies, tasks, timeEntries, users, companies, workLog } from '../db/schema.js'
 import { dependentsOf } from '../routes/tasks.js'
 import { readFromConnection } from '../routes/db-connections.js'
 import { hasPermission, companyRoleOf } from '../routes/projects.js'
@@ -837,6 +837,38 @@ export function memoryTools(projectId: string, actorUserId: string): { tools: To
         properties: { id: { type: 'string' }, title: { type: 'string' }, assignee: { type: 'string' } },
         required: ['id'],
       },
+    },
+    {
+      name: 'read_work_log',
+      description:
+        'Where people stopped working, in their own words — "TASK-81 done bar the tests, retries fail on 429, next is the idempotency key". Call this when asked "where did I leave off", "what was I doing", "what has Alex been up to", or before picking up work that was paused. Different from notes: a note is knowledge that outlives the month ("Cardcom rejects foreign cards"), a log entry is the state of work, read tomorrow. The reply opens with the ASKING PERSON\'s latest entry — their own draft if they have one. Drafts belong to their author alone and are never shown to anyone else, so never repeat one back into the chat when it is not theirs. Project admins see everyone; members see only themselves.',
+      parameters: {
+        type: 'object',
+        properties: {
+          author: { type: 'string', description: 'name or "me" — admins only; members always get their own' },
+          from: { type: 'string', description: 'ISO date' },
+          to: { type: 'string', description: 'ISO date' },
+        },
+      },
+    },
+    {
+      name: 'write_work_log',
+      description:
+        'Record where the work stands, ON BEHALF OF the user. Saves as a DRAFT that only they can see, so it is safe to write a half-finished state. Use when they say "запиши где я остановился", "отметь что сделал", or at the end of a working session. KEEP IT SHORT — three or four lines of fact: what changed, where it stopped, what is next. Not a retelling of the conversation and not a summary of code; a long entry is one nobody reads. One open draft per person per project: if one exists this extends it instead of starting a second. Body is HTML like documents, not markdown.',
+      parameters: {
+        type: 'object',
+        properties: {
+          body: { type: 'string', description: 'HTML — what was done, where it stopped, what is next' },
+          taskId: { type: 'string', description: 'optional task this is about' },
+        },
+        required: ['body'],
+      },
+    },
+    {
+      name: 'publish_work_log',
+      description:
+        'Make the user\'s draft visible to the project. IRREVERSIBLE — a published entry can never be edited or unpublished, only deleted. Ask before doing it: a draft is theirs and may be private on purpose.',
+      parameters: { type: 'object', properties: { id: { type: 'string' } }, required: ['id'] },
     },
     {
       name: 'list_documents',
@@ -2143,6 +2175,123 @@ export function memoryTools(projectId: string, actorUserId: string): { tools: To
       return res.already
         ? `That note already has task ${res.task.number} — not creating a duplicate.`
         : `Created ${res.task.number} "${res.task.title}" from the note.`
+    },
+    /**
+     * Журнал работы у ассистента в чате.
+     *
+     * Граница видимости та же, что в интерфейсе и в мосту, и держится на
+     * actorUserId — он привязан к спрашивающему при создании инструментов, и
+     * подделать его из разговора нечем.
+     *
+     * Чужой черновик не отдаётся никогда: условие стоит в запросе, а не в
+     * отборе после.
+     */
+    read_work_log: async (args) => {
+      const member = await db.query.projectMembers.findFirst({
+        where: and(eq(projectMembers.projectId, projectId), eq(projectMembers.userId, actorUserId)),
+      })
+      if (!member) return 'PERMISSION DENIED: you are not a member of this project.'
+      const seesEveryone = member.role === 'owner' || member.role === 'admin'
+
+      const conds = [
+        eq(workLog.projectId, projectId),
+        sql`${workLog.deletedAt} is null`,
+        // Своё — любое, чужое — только опубликованное. Одним выражением:
+        // два условия по очереди легко складываются в «все черновики».
+        or(eq(workLog.authorId, actorUserId), eq(workLog.status, 'published'))!,
+      ]
+      if (!seesEveryone) conds.push(eq(workLog.authorId, actorUserId))
+      else if (args.author) {
+        const who = String(args.author).toLowerCase() === 'me' ? actorUserId : await resolveAssignee(args.author)
+        if (!who) return `No such person: ${String(args.author)}.`
+        conds.push(eq(workLog.authorId, who))
+      }
+      if (args.from) conds.push(gte(workLog.createdAt, new Date(String(args.from))))
+      if (args.to) {
+        // «По 15 марта» включает весь день: дата без времени — это полночь.
+        const to = String(args.to)
+        conds.push(lte(workLog.createdAt, new Date(to.length <= 10 ? `${to}T23:59:59.999` : to)))
+      }
+
+      const rows = await db
+        .select({ r: workLog, author: { name: users.name }, task: { number: tasks.number } })
+        .from(workLog)
+        .innerJoin(users, eq(users.id, workLog.authorId))
+        .leftJoin(tasks, eq(tasks.id, workLog.taskId))
+        .where(and(...conds))
+        .orderBy(desc(sql`coalesce(${workLog.publishedAt}, ${workLog.createdAt})`))
+        .limit(30)
+      if (!rows.length) return 'The work log is empty — nothing recorded here yet.'
+
+      const line = (x: (typeof rows)[number]) =>
+        `${x.r.id} — ${x.author.name}, ${new Date(x.r.publishedAt ?? x.r.createdAt).toISOString().slice(0, 10)}` +
+        `${x.r.status === 'draft' ? ' [DRAFT — private to them]' : ''}${x.task?.number ? ` (${x.task.number})` : ''}\n` +
+        htmlToText(x.r.body).slice(0, 600)
+
+      // Своя последняя запись — отдельной строкой, а не первой в списке:
+      // среди чужих её можно и не заметить. Свой черновик важнее своего
+      // опубликованного, даже если он старше: черновик — незаконченная мысль.
+      const mine = rows.filter((x) => x.r.authorId === actorUserId)
+      const latestOwn = mine.find((x) => x.r.status === 'draft') ?? mine[0]
+
+      return (
+        (latestOwn ? `WHERE THIS PERSON LEFT OFF:\n${line(latestOwn)}\n\n` : '') +
+        `WORK LOG:\n${rows.map(line).join('\n\n')}`
+      )
+    },
+    write_work_log: async (args) => {
+      const member = await db.query.projectMembers.findFirst({
+        where: and(eq(projectMembers.projectId, projectId), eq(projectMembers.userId, actorUserId)),
+      })
+      if (!member) return 'PERMISSION DENIED: you are not a member of this project.'
+      const body = String(args.body ?? '').trim()
+      if (!body) return 'Body is required.'
+
+      // Черновик один: если открытый есть — дописываем его, а не заводим
+      // второй. База откажет всё равно, но модели нужен понятный ответ.
+      const open = await db.query.workLog.findFirst({
+        where: and(
+          eq(workLog.projectId, projectId),
+          eq(workLog.authorId, actorUserId),
+          eq(workLog.status, 'draft'),
+          sql`${workLog.deletedAt} is null`,
+        ),
+      })
+      if (open) {
+        await db
+          .update(workLog)
+          .set({ body: sanitizeHtml(body), updatedAt: new Date(), ...(args.taskId ? { taskId: String(args.taskId) } : {}) })
+          .where(eq(workLog.id, open.id))
+        return `Updated your open draft (id=${open.id}). Only you can see it — publish_work_log shares it with the project.`
+      }
+
+      const [row] = await db
+        .insert(workLog)
+        .values({
+          projectId,
+          authorId: actorUserId,
+          body: sanitizeHtml(body),
+          taskId: args.taskId ? String(args.taskId) : null,
+          status: 'draft',
+        })
+        .returning()
+      return `Saved as a draft (id=${row!.id}) — only you can see it. publish_work_log shares it with the project.`
+    },
+    publish_work_log: async (args) => {
+      const row = await db.query.workLog.findFirst({
+        where: and(eq(workLog.id, String(args.id ?? '')), eq(workLog.projectId, projectId), sql`${workLog.deletedAt} is null`),
+      })
+      if (!row) return 'Entry not found.'
+      if (row.authorId !== actorUserId) return 'PERMISSION DENIED: you can only publish your own entries.'
+      if (row.status !== 'draft') return 'Already published — and published entries cannot be changed.'
+      if (!htmlToText(row.body).trim()) return 'Cannot publish an empty entry.'
+
+      await db
+        .update(workLog)
+        .set({ status: 'published', publishedAt: new Date(), updatedAt: new Date() })
+        .where(eq(workLog.id, row.id))
+      void enqueueEmbedding('work_log', row.id, projectId)
+      return 'Published — the project can see it now, and it is final: it can be deleted but never edited.'
     },
     create_document: async (args) => {
       if (!(await hasPermission(projectId, actorUserId, 'documents.write'))) return 'PERMISSION DENIED: the author cannot write documents.'
