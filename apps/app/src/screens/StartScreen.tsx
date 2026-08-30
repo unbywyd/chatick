@@ -43,6 +43,7 @@ import { MyRecentTime } from '@/components/company/MyRecentTime'
 import { CompanyTimeSettings } from '@/components/company/CompanyTimeSettings'
 import { CompanyNotifySettings } from '@/components/company/CompanyNotifySettings'
 import { OverviewTab } from '@/components/company/OverviewTab'
+import { PeopleStats } from '@/components/company/PeopleStats'
 import { LlmSettings } from '@/components/company/LlmSettings'
 import { MailSettings } from '@/components/company/MailSettings'
 import { CompanyStorageCard } from '@/components/company/CompanyStorageCard'
@@ -1111,6 +1112,10 @@ function ProjectsTab({
           {q ? t('start.nothingFound') : t(showArchived ? 'start.archiveEmpty' : 'start.noProjects')}
         </p>
       )}
+
+      {/* Люди — под проектами. В архиве не показываем: там смотрят на
+          законченное, а статистика всегда про сегодняшнюю работу. */}
+      {!showArchived && <PeopleStats companyId={company.id} />}
 
       {settingsFor && (
         <ProjectSettingsDialog

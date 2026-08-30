@@ -1197,11 +1197,16 @@
     "clear": "Clear"
   },
   "people": {
-    "add": "Add people…",
-    "search": "Search by name",
-    "noMatches": "Nobody found",
-    "allPicked": "Everyone is already added",
-    "anyone": "Anyone"
+    "title": "People",
+    "search": "Find a person",
+    "lastActive": "Last action: {{when}}",
+    "neverActive": "No actions yet",
+    "open": "open",
+    "done": "done",
+    "hoursThisMonth": "h this month",
+    "activeDays": "Active days in the last 90: {{count}}",
+    "showAll": "Show everyone ({{count}})",
+    "noneFound": "Nobody found"
   },
   "time": {
     "title": "Time",

@@ -1198,11 +1198,16 @@
     "clear": "ניקוי"
   },
   "people": {
-    "add": "הוספת אנשים…",
-    "search": "חיפוש לפי שם",
-    "noMatches": "לא נמצא אף אחד",
-    "allPicked": "כולם כבר נוספו",
-    "anyone": "כל אחד"
+    "title": "אנשים",
+    "search": "חיפוש אדם",
+    "lastActive": "פעולה אחרונה: {{when}}",
+    "neverActive": "עדיין לא בוצעו פעולות",
+    "open": "פתוחות",
+    "done": "הושלמו",
+    "hoursThisMonth": "ש' החודש",
+    "activeDays": "ימי פעילות ב-90 הימים האחרונים: {{count}}",
+    "showAll": "הצגת כולם ({{count}})",
+    "noneFound": "לא נמצא אף אחד"
   },
   "time": {
     "title": "זמן",
