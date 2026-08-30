@@ -1203,11 +1203,19 @@
     "clear": "Очистить"
   },
   "people": {
-    "add": "Добавить людей…",
-    "search": "Поиск по имени",
-    "noMatches": "Никого не найдено",
-    "allPicked": "Все уже добавлены",
-    "anyone": "Любой"
+    "title": "Люди",
+    "search": "Найти человека",
+    "lastActive": "Последнее действие: {{when}}",
+    "neverActive": "Действий пока не было",
+    "open": "открыто",
+    "done": "сделано",
+    "hoursThisMonth": "ч в этом месяце",
+    "activeDays": "Активных дней: {{count}} из {{days}}",
+    "showAll": "Показать всех ({{count}})",
+    "noneFound": "Никого не нашлось",
+    "dayActive": "работал",
+    "dayIdle": "без действий",
+    "report": "Отчёт"
   },
   "time": {
     "title": "Время",
@@ -1318,7 +1326,7 @@
     "projects": "Проекты",
     "empty": "Проектов пока нет",
     "weekOf": "Неделя с {{date}}",
-    "overdueShort": "просрочено: {{count}}",
+    "overdueShort": "просрочено",
     "reportFor": "Отчёт по часам: {{name}}",
     "totalHoursHint": "Всё время, затраченное на проект",
     "findProject": "Найти проект",
@@ -1332,7 +1340,10 @@
     "toProject": "В проект",
     "overdueTitle": "Просрочено: {{count}}",
     "overdueDays": "{{count}} дн.",
-    "noOverdue": "Просроченных задач нет"
+    "noOverdue": "Просроченных задач нет",
+    "collapseProjects": "Свернуть",
+    "blockedShort": "стоят",
+    "noTasksYet": "задач пока нет"
   },
   "desktop": {
     "start": "Запустить таймер",

@@ -186,7 +186,7 @@ companiesRoute.get('/:companyId/overview', async (c) => {
     return c.json({ projects: [], totals: { projects: 0, people: 0, tasksTotal: 0, tasksDone: 0, hours: 0, messages: 0 }, weeks: [], topPeople: [] })
   }
 
-  const [taskRows, memberRows, timeRows, msgRows, weekRows] = await Promise.all([
+  const [taskRows, memberRows, timeRows, msgRows, weekRows, blockedRows] = await Promise.all([
     db
       .select({
         projectId: tasks.projectId,
@@ -230,6 +230,26 @@ companiesRoute.get('/:companyId/overview', async (c) => {
         and ${timeEntries.startedAt} <= ${period.to}::timestamptz
       group by date_trunc('week', ${timeEntries.startedAt})
       order by date_trunc('week', ${timeEntries.startedAt})
+    `),
+
+    /**
+     * Задачи, которые СТОЯТ: ждут другую незакрытую задачу.
+     *
+     * «Сколько задач» и «какой прогресс» не отвечают на вопрос «почему не
+     * движется». Здесь — ровно он: работа есть, но упёрлась.
+     *
+     * Считаем distinct по ждущей задаче: одну задачу могут держать несколько
+     * блокеров, и считать её трижды значило бы пугать числом на пустом месте.
+     */
+    db.execute(sql`
+      select b.project_id as "projectId", count(distinct b.blocked_task_id)::int as count
+        from task_blockers b
+        join tasks bt on bt.id = b.blocker_task_id
+        join tasks t on t.id = b.blocked_task_id
+       where b.project_id in ${ids}
+         and bt.status <> 'done' and bt.deleted_at is null
+         and t.status <> 'done' and t.deleted_at is null
+       group by b.project_id
     `),
   ])
 
@@ -327,6 +347,12 @@ companiesRoute.get('/:companyId/overview', async (c) => {
     leadMap.set(r.projectId, list)
   }
 
+  // Заблокированные задачи по проектам: db.execute отдаёт rows либо массив —
+  // форма зависит от драйвера, поэтому разбираем оба случая, как и рядом.
+  const blockedList = (blockedRows as unknown as { rows?: { projectId: string; count: number }[] }).rows
+    ?? (blockedRows as unknown as { projectId: string; count: number }[])
+  const blockedMap = new Map((blockedList ?? []).map((r) => [r.projectId, Number(r.count)]))
+
   const list = projectRows.map((p) => {
     const t = taskMap.get(p.id)
     return {
@@ -343,6 +369,8 @@ companiesRoute.get('/:companyId/overview', async (c) => {
       overdue: t?.overdue ?? 0,
       progress: t?.total ? Math.round(((t.done ?? 0) / t.total) * 100) : 0,
       members: memberMap.get(p.id)?.count ?? 0,
+      /** Задачи, которые ждут другую незакрытую задачу: работа упёрлась. */
+      blocked: blockedMap.get(p.id) ?? 0,
       minutes: timeMap.get(p.id)?.minutes ?? 0,
       totalMinutes: totalTimeMap.get(p.id)?.minutes ?? 0,
       messages: msgMap.get(p.id)?.count ?? 0,
@@ -373,8 +401,26 @@ companiesRoute.get('/:companyId/overview', async (c) => {
      * уведомления ко мне сортируются часами, как раньше: для них это
      * единственный признак, что там вообще идёт работа.
      */
+    /**
+     * Порядок отвечает на «куда мне зайти» — и «где горит».
+     *
+     * 1. Свои проекты выше чужих: в чужой всё равно не пустят.
+     * 2. Дальше — где ЕСТЬ ПРОБЛЕМА: просрочка или застрявшие задачи.
+     *    Раньше этой ступени не было, и проект с четырьмя стоящими задачами
+     *    оказывался пятым, а тихий — вторым, потому что в нём просто свежее
+     *    уведомление. Пока карточка показывала только имя и часы, это было
+     *    незаметно; теперь она показывает, что горит, и порядок расходился с
+     *    тем, что на ней написано.
+     * 3. Потом свежесть того, что меня коснулось, — и часы для тех, кого не
+     *    касалось вовсе.
+     *
+     * Просрочку и застрявшее считаем ОДНОЙ мерой: и то и другое значит
+     * «работа не движется», а какая беда хуже — вопрос без общего ответа.
+     */
     projects: list.sort((a, b) => {
       if (a.isMember !== b.isMember) return a.isMember ? -1 : 1
+      const trouble = (p: { overdue: number; blocked: number }) => p.overdue + p.blocked
+      if (trouble(a) !== trouble(b)) return trouble(b) - trouble(a)
       if (a.lastTouchedAt && b.lastTouchedAt) return b.lastTouchedAt.localeCompare(a.lastTouchedAt)
       if (a.lastTouchedAt) return -1
       if (b.lastTouchedAt) return 1
@@ -507,6 +553,159 @@ companiesRoute.get('/:companyId/time-config', async (c) => {
  * открыть её он не сможет, и об этом лучше сказать заранее, чем упереться в
  * отказ по клику.
  */
+/**
+ * Статистика по людям компании.
+ *
+ * Кто чем занят, кто когда в последний раз что-то СДЕЛАЛ, сколько наработал за
+ * месяц. Админ видит всех, остальные — только себя.
+ *
+ * Считаем подзапросами, а не join'ами. Первая версия соединяла задачи и записи
+ * времени в одном запросе, и строки перемножились: у Артёма вышло 1561 задача
+ * вместо 82 и 4369 часов вместо 179. Врёт такое правдоподобно — числа выглядят
+ * как настоящие, просто больше.
+ */
+companiesRoute.get('/:companyId/people', async (c) => {
+  const { sub } = c.get('session')
+  const companyId = c.req.param('companyId')
+  const role = await memberRoleIn(companyId, sub)
+  if (!role) return c.json({ error: 'Forbidden' }, 403)
+  const seesEveryone = role === 'admin' || role === 'manager'
+
+  const members = await db
+    .select({ id: users.id, name: users.name, avatarUrl: users.avatarUrl, role: companyMembers.role })
+    .from(companyMembers)
+    .innerJoin(users, eq(users.id, companyMembers.userId))
+    .where(
+      and(
+        eq(companyMembers.companyId, companyId),
+        // Участник видит только себя — что бы ни запросил.
+        seesEveryone ? undefined : eq(companyMembers.userId, sub),
+      ),
+    )
+  if (!members.length) return c.json({ items: [], seesEveryone })
+
+  const ids = members.map((m) => m.id)
+  /**
+   * Список id для SQL — через sql.join, а не `= any(...)`.
+   *
+   * drizzle разворачивает массив в отдельные параметры: получается
+   * `any(($1, $2))` — кортеж вместо массива, и запрос падает целиком. Ровно на
+   * это уже наступали в поиске заметок, где ошибку глушил catch, и выглядело
+   * оно как «ничего не нашлось». Здесь проверено запуском, а не глазами.
+   */
+  const idList = sql.join(ids.map((x) => sql`${x}`), sql`, `)
+
+  /**
+   * Последнее ДЕЙСТВИЕ — из трёх источников сразу.
+   *
+   * Журнала мало: он пишет задачи, файлы и ресурсы, но не чат. На живых данных
+   * у Даниэля журнал показывал 13:52, тогда как комментарий он оставил в 14:38,
+   * а Марселя в журнале нет вовсе — он только пишет в чат.
+   *
+   * Чтение сюда не входит намеренно: открытая вкладка не работа.
+   */
+  const activity = await db.execute<{ uid: string; last_at: string; days: string }>(sql`
+    with acts as (
+      select a.actor_id as uid, a.created_at as ts
+        from activity_log a join projects p on p.id = a.project_id
+       where p.company_id = ${companyId} and a.actor_id in (${idList})
+      union all
+      select m.author_id, m.created_at
+        from messages m join projects p on p.id = m.project_id
+       where p.company_id = ${companyId} and m.author_id in (${idList})
+      union all
+      select tc.author_id, tc.created_at
+        from task_comments tc
+        join tasks t on t.id = tc.task_id
+        join projects p on p.id = t.project_id
+       where p.company_id = ${companyId} and tc.author_id in (${idList})
+    )
+    select uid,
+           max(ts) as last_at,
+           -- Дни с активностью за 90 суток: полоска в карточке. Отдаём только
+           -- даты, без счётчиков — насыщенность считать не по чему, а «был
+           -- день или нет» отвечает на вопрос «работал ли человек».
+           coalesce(json_agg(distinct ts::date) filter (where ts > now() - interval '90 days'), '[]') as days
+      from acts group by uid
+  `)
+  const actRows = (activity as unknown as { rows?: { uid: string; last_at: string; days: string }[] }).rows
+    ?? (activity as unknown as { uid: string; last_at: string; days: string }[])
+  const byUser = new Map(actRows.map((r) => [r.uid, r]))
+
+  const stats = await db.execute<{
+    uid: string
+    open_tasks: string
+    done_tasks: string
+    minutes_month: string
+  }>(sql`
+    select u.id as uid,
+      (select count(*) from tasks t join projects p on p.id = t.project_id
+        where t.assignee_id = u.id and p.company_id = ${companyId}
+          and t.status <> 'done' and t.deleted_at is null) as open_tasks,
+      (select count(*) from tasks t join projects p on p.id = t.project_id
+        where t.assignee_id = u.id and p.company_id = ${companyId}
+          and t.status = 'done' and t.deleted_at is null) as done_tasks,
+      -- Минуты, а не часы: округление до часа на сервере съело бы 40 минут,
+      -- а показать «0,7 ч» клиент сможет сам.
+      coalesce((select sum(extract(epoch from (te.ended_at - te.started_at)))/60
+        from time_entries te join projects p on p.id = te.project_id
+        where te.user_id = u.id and p.company_id = ${companyId}
+          and te.ended_at is not null
+          and te.started_at >= date_trunc('month', now())), 0) as minutes_month
+    from users u where u.id in (${idList})
+  `)
+  const statRows = (stats as unknown as { rows?: Record<string, string>[] }).rows
+    ?? (stats as unknown as Record<string, string>[])
+  const byStats = new Map(statRows.map((r) => [r.uid as string, r]))
+
+  const items = members.map((m) => {
+    const a = byUser.get(m.id)
+    const s = byStats.get(m.id)
+    return {
+      id: m.id,
+      name: m.name,
+      avatarUrl: m.avatarUrl,
+      role: m.role,
+      lastActiveAt: a?.last_at ?? null,
+      activeDays: a?.days ? (typeof a.days === 'string' ? JSON.parse(a.days) : a.days) : [],
+      openTasks: Number(s?.open_tasks ?? 0),
+      doneTasks: Number(s?.done_tasks ?? 0),
+      minutesThisMonth: Math.round(Number(s?.minutes_month ?? 0)),
+    }
+  })
+
+  // Сверху те, кто занят: у кого больше открытых задач. Люди без задач вовсе
+  // (в этой компании таких половина) уезжают вниз, а не мешают сверху.
+  items.sort((a, b) => b.openTasks - a.openTasks || (b.lastActiveAt ?? '').localeCompare(a.lastActiveAt ?? ''))
+
+  /**
+   * С какого дня у компании вообще есть история — но не глубже 90 суток.
+   *
+   * Полоска активности рисуется от этого дня, а не от жёстких 90. Иначе у
+   * молодой компании две трети полосы — пустые клетки, которые читаются как
+   * «человек не работал», хотя на деле «нас тогда здесь не было»: в живой
+   * компании вся история 26 дней против нарисованных девяноста.
+   *
+   * Считает сервер: клиент видит только своих людей и первый день по ним
+   * определил бы неверно — у каждого он свой.
+   */
+  const since = await db.execute<{ first_at: string | null }>(sql`
+    select greatest(
+             least(
+               (select min(a.created_at) from activity_log a
+                  join projects p on p.id = a.project_id where p.company_id = ${companyId}),
+               (select min(m.created_at) from messages m
+                  join projects p on p.id = m.project_id where p.company_id = ${companyId})
+             ),
+             now() - interval '90 days'
+           ) as first_at
+  `)
+  const sinceRows = (since as unknown as { rows?: { first_at: string | null }[] }).rows
+    ?? (since as unknown as { first_at: string | null }[])
+
+  return c.json({ items, seesEveryone, activitySince: sinceRows[0]?.first_at ?? null })
+})
+
 companiesRoute.get('/:companyId/overdue', async (c) => {
   const { sub } = c.get('session')
   const companyId = c.req.param('companyId')

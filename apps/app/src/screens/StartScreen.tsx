@@ -551,8 +551,6 @@ function CompanyHome({
         <OverviewTab
           companyId={company.id}
           onOpenProject={onEntered}
-          // «Все проекты» — на соседнюю вкладку, где список полный и с поиском.
-          onOpenAllProjects={() => navigate(`/start/${company.id}/projects`)}
           // Фильтры едут в адресе: ссылку можно переслать, и вкладка «Часы»
           // прочитает их сама, даже если уже была смонтирована.
           onOpenReport={(userId, period) =>
@@ -1111,6 +1109,7 @@ function ProjectsTab({
           {q ? t('start.nothingFound') : t(showArchived ? 'start.archiveEmpty' : 'start.noProjects')}
         </p>
       )}
+
 
       {settingsFor && (
         <ProjectSettingsDialog
