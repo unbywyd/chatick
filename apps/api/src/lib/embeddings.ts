@@ -1,7 +1,7 @@
 import { createHash } from 'node:crypto'
 import { and, asc, eq, inArray, lt, or, sql } from 'drizzle-orm'
 import { db } from '../db/client.js'
-import { embeddings, embeddingQueue, notes, projects, projectMembers, tasks, taskComments } from '../db/schema.js'
+import { embeddings, embeddingQueue, notes, projects, projectMembers, tasks, taskComments, workLog } from '../db/schema.js'
 import { env } from '../env.js'
 import { htmlToText } from './sanitize-html.js'
 import { logAiUsage } from './ai-usage.js'
@@ -25,7 +25,7 @@ const MAX_CHARS = 8000
 /** Сколько раз пробуем, прежде чем отступиться: модель может отвечать отказом (лимит, кончились деньги). */
 const MAX_ATTEMPTS = 5
 
-export type EmbeddableType = 'note' | 'task' | 'task_comment' | 'document'
+export type EmbeddableType = 'note' | 'task' | 'task_comment' | 'document' | 'work_log'
 
 /** Ключ доступен — без него поиск по смыслу просто выключен, а не сломан. */
 export const embeddingsEnabled = (): boolean => Boolean(env.EMBEDDING_API_KEY?.trim())
@@ -171,6 +171,32 @@ async function textOf(entityType: EmbeddableType, entityId: string): Promise<{ t
         .join('\n'),
       companyId: project?.companyId ?? null,
       projectId: t.projectId,
+    }
+  }
+
+  if (entityType === 'work_log') {
+    const w = await db.query.workLog.findFirst({ where: eq(workLog.id, entityId) })
+    if (!w || w.deletedAt) return null
+    /**
+     * Черновик в индекс не попадает НИКОГДА.
+     *
+     * Не «отсеивается при выдаче» — не индексируется вовсе. Фильтр на выдаче
+     * пришлось бы повторить в каждом месте, откуда ищут, и однажды забыть в
+     * одном из них. Здесь забывать нечего: чего нет в индексе, то не найдётся
+     * никаким путём.
+     *
+     * Ставит запись в очередь публикация (worklog.ts), снимает — удаление.
+     */
+    if (w.status !== 'published') return null
+
+    const project = await db.query.projects.findFirst({
+      where: eq(projects.id, w.projectId),
+      columns: { companyId: true },
+    })
+    return {
+      text: htmlToText(w.body),
+      companyId: project?.companyId ?? null,
+      projectId: w.projectId,
     }
   }
 
@@ -519,6 +545,83 @@ export async function searchTaskIds(opts: {
       // Модель недоступна — отдаём найденное словами. Неполный поиск лучше
       // упавшего.
       console.warn('[embeddings] смысловой поиск задач не сработал:', err instanceof Error ? err.message : err)
+    }
+  }
+
+  return { ids: [...ids, ...semanticIds], semanticIds }
+}
+
+/**
+ * Поиск по журналу работы.
+ *
+ * Отдельно от задач и заметок по тому же доводу, по которому разведены они
+ * сами: вопросы разные. «Где та таска» — про работу, которую вспоминают;
+ * «как чинили Cardcom» — про знание; «чем Алекс занимался в марте» — про
+ * человека и время.
+ *
+ * ЧУЖОЙ ЧЕРНОВИК НЕ НАЙДЁТСЯ НИКОГДА, и это держится двумя замками, а не
+ * одним: черновик не попадает в индекс вовсе (textOf), и здесь же, в отборе
+ * по словам, стоит то же условие. Один замок сломать легче: включи кто-нибудь
+ * однажды индексацию черновиков ради «своего поиска» — и словесная выдача
+ * осталась бы единственной защитой.
+ */
+export async function searchWorkLogIds(opts: {
+  query: string
+  userId: string
+  projectId: string
+  limit?: number
+}): Promise<{ ids: string[]; semanticIds: Set<string> }> {
+  const q = opts.query.trim()
+  if (!q) return { ids: [], semanticIds: new Set() }
+  const limit = opts.limit ?? 40
+
+  /**
+   * Видимость одним выражением: чужое — только опубликованное, своё — любое.
+   *
+   * Не двумя условиями по очереди: «опубликованное» и «моё» в паре легко
+   * складываются в «все черновики», стоит поставить между ними не тот союз.
+   */
+  const visible = or(eq(workLog.authorId, opts.userId), eq(workLog.status, 'published'))!
+
+  const like = `%${q}%`
+  const exact = await db
+    .select({ id: workLog.id })
+    .from(workLog)
+    .where(
+      and(
+        sql`${workLog.deletedAt} is null`,
+        eq(workLog.projectId, opts.projectId),
+        visible,
+        sql`${workLog.body} ilike ${like}`,
+      ),
+    )
+    .orderBy(sql`coalesce(${workLog.publishedAt}, ${workLog.createdAt}) desc`)
+    .limit(limit)
+  const ids = exact.map((r) => r.id)
+
+  // Смысл — только по опубликованному: черновиков в индексе нет.
+  const semanticIds = new Set<string>()
+  if (embeddingsEnabled()) {
+    try {
+      const vectors = await embed([q])
+      const vec = vectors?.[0]
+      if (vec) {
+        const rows = await db
+          .select({ entityId: embeddings.entityId })
+          .from(embeddings)
+          .where(
+            and(
+              eq(embeddings.entityType, 'work_log'),
+              eq(embeddings.projectId, opts.projectId),
+              sql`1 - (${embeddings.embedding} <=> ${toVector(vec)}::vector) >= 0.32`,
+            ),
+          )
+          .orderBy(sql`${embeddings.embedding} <=> ${toVector(vec)}::vector`)
+          .limit(limit)
+        for (const r of rows) if (!ids.includes(r.entityId)) semanticIds.add(r.entityId)
+      }
+    } catch (err) {
+      console.warn('[embeddings] смысловой поиск журнала не сработал:', err instanceof Error ? err.message : err)
     }
   }
 

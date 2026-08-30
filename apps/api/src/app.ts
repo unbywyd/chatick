@@ -21,6 +21,7 @@ import { inboxRoute } from './routes/inbox.js'
 import { reviewsRoute } from './routes/reviews.js'
 import { documentsRoute, documentsPublicRoute } from './routes/documents.js'
 import { notesRoute, companyNotesRoute } from './routes/notes.js'
+import { worklogRoute } from './routes/worklog.js'
 import { releasesRoute } from './routes/releases.js'
 import { integrationsRoute, expoHookRoute } from './routes/integrations.js'
 import { timeRoute, timeMineRoute, timeCompanyRoute } from './routes/time.js'
@@ -63,6 +64,7 @@ app.route('/api/v1/inbox', inboxRoute)
 app.route('/api/v1/reviews', reviewsRoute)
 app.route('/api/v1/documents', documentsRoute)
 app.route('/api/v1/notes', notesRoute)
+app.route('/api/v1/worklog', worklogRoute)
 // База знаний компании: сессия вместо проектного токена — на главной
 // компании проекта нет, а знание принадлежит именно ей.
 app.route('/api/v1/company', companyNotesRoute)
