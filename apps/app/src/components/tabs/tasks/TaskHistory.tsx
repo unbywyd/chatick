@@ -127,12 +127,19 @@ export function TaskHistory({ taskId }: { taskId: string }) {
               <li key={e.id} className="relative">
                 <span
                   className={cn(
-                    'absolute -start-5 top-1.5 size-2.5 rounded-full border-2 border-background',
+                    // top-1/2 с подъёмом на половину себя: точка встаёт против
+                    // середины строки, где теперь стоит и аватарка. При
+                    // фиксированном top она разъезжалась со строкой, стоило
+                    // тексту перенестись на вторую строку.
+                    'absolute -start-5 top-1/2 -translate-y-1/2 size-2.5 rounded-full border-2 border-background',
                     e.action === 'create' ? 'bg-brand' : e.action === 'status' ? 'bg-foreground/60' : 'bg-muted-foreground/40',
                   )}
                   aria-hidden
                 />
-                <div className="flex flex-wrap items-baseline gap-x-2 gap-y-0.5 text-sm">
+                {/* items-center, а не items-baseline: у картинки базовая линия
+                    идёт по нижнему краю, и текст рядом с аватаркой съезжал
+                    вверх. Выравниваем по центру строки. */}
+                <div className="flex flex-wrap items-center gap-x-2 gap-y-0.5 text-sm">
                   <span className="inline-flex items-center gap-1.5">
                     {e.actor ? (
                       <>
