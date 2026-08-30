@@ -1,14 +1,12 @@
 import { useState } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import { useTranslation } from 'react-i18next'
-import { AlertTriangle, CheckCircle2, ChevronRight, Clock, Download, FolderKanban, Lock, MessageSquare, Users, X } from 'lucide-react'
+import { AlertTriangle, CheckCircle2, ChevronRight, Clock, FolderKanban, Lock, MessageSquare, Users, X } from 'lucide-react'
 import {
   Area,
   AreaChart,
   Bar,
-  BarChart,
   CartesianGrid,
-  Cell,
   Tooltip,
   XAxis,
   YAxis,
@@ -16,6 +14,7 @@ import {
 import { api } from '@/lib/api'
 import { cn } from '@/lib/utils'
 import { PeriodPicker, resolvePreset, type Period } from '@/components/ui/period-picker'
+import { PeopleStats } from './PeopleStats'
 import { Avatar } from '@/components/ui/avatar'
 import { Button } from '@/components/ui/button'
 import { ProjectBadge } from '@/components/ui/project-badge'
@@ -33,6 +32,8 @@ type ProjectStat = {
   tasksTotal: number
   tasksDone: number
   overdue: number
+  /** Задачи, ждущие другую незакрытую задачу: работа упёрлась. */
+  blocked: number
   progress: number
   members: number
   /** Я в команде этого проекта. Нет — содержимое закрыто, войти не выйдет. */
@@ -74,7 +75,6 @@ type Overview = {
     messages: number
   }
   weeks: { week: string; minutes: number }[]
-  topPeople: { userId: string; name: string; avatarUrl: string | null; minutes: number }[]
 }
 
 const CHART_STYLE = {
@@ -98,7 +98,6 @@ const CHART_LABEL_STYLE = { color: 'var(--muted-foreground)' }
 export function OverviewTab({
   companyId,
   onOpenProject,
-  onOpenAllProjects,
   onOpenReport,
   onOpenHours,
   onOpenTeam,
@@ -106,8 +105,6 @@ export function OverviewTab({
 }: {
   companyId: string
   onOpenProject?: (id: string) => void
-  /** Показать все проекты компании — уводит на вкладку «Проекты». */
-  onOpenAllProjects?: () => void
   /** отчёт по человеку за тот же период — на вкладке «Часы» */
   onOpenReport?: (userId: string, period: Period) => void
   /** Вкладка «Часы» целиком — с карточки «Отработано». */
@@ -119,6 +116,13 @@ export function OverviewTab({
 }) {
   // Модалка просроченных: цифра отвечает «сколько», список — «где».
   const [overdueOpen, setOverdueOpen] = useState(false)
+  /**
+   * Шторка развёрнута: показываем все проекты прямо здесь.
+   *
+   * Раньше «Все проекты» уводило на соседнюю вкладку — человек терял место, к
+   * которому шёл, и возвращался кнопкой «назад». Разворачиваем на месте.
+   */
+  const [allProjects, setAllProjects] = useState(false)
   const { t, i18n } = useTranslation()
 
   // По умолчанию — текущий месяц: за него смотрят и по нему платят.
@@ -143,21 +147,20 @@ export function OverviewTab({
     : (d?.projects ?? [])
 
   /**
-   * На обзоре — только то, куда человек пойдёт; остальное на вкладке.
+   * На обзоре — только то, куда человек пойдёт; остальное под шторкой.
    *
    * В компании с двумя десятками проектов список занимал всю страницу, и
    * нужный искали глазами — хотя заходят в проекты почти всегда именно
    * отсюда. Сервер уже отдал их в порядке «где меня коснулось свежее
    * всего», поэтому здесь достаточно отрезать хвост.
    *
-   * Порог и предел совпадают: пока проектов не больше десяти, показываем
-   * все и кнопку не рисуем — прятать три проекта за «показать все» значит
-   * добавить шаг на ровном месте.
+   * Пять, а не десять: обзор — это верхушка, а под ним теперь ещё и люди.
+   * Десять карточек отодвигали всё остальное за нижний край экрана.
    */
-  const TOP_PROJECTS = 10
+  const TOP_PROJECTS = 5
   // При поиске предел снимаем: человек ищет конкретный проект, и «найдено,
   // но не показано» — худшее, что можно ответить.
-  const overLimit = !needle && shownProjects.length > TOP_PROJECTS
+  const overLimit = !needle && !allProjects && shownProjects.length > TOP_PROJECTS
   const visibleProjects = overLimit ? shownProjects.slice(0, TOP_PROJECTS) : shownProjects
 
   if (q.isLoading) return <p className="py-16 text-center text-sm text-muted-foreground">…</p>
@@ -174,7 +177,6 @@ export function OverviewTab({
    * строку и говорит «никуда». Список ниже показывает ВСЕ проекты — это его
    * работа, там ноль часов у нового проекта осмыслен.
    */
-  const withTime = (d?.projects ?? []).filter((p) => p.minutes > 0)
 
   return (
     <div className="space-y-5">
@@ -334,18 +336,32 @@ export function OverviewTab({
             </li>
           ))}
         </ul>
-        {/* Кнопка появляется, только когда что-то действительно скрыто, и
-            говорит сколько: «Все проекты» без числа не даёт понять, стоит
-            ли туда идти. */}
+        {/* Шторка: разворачиваем список ЗДЕСЬ, а не уводим на вкладку —
+            человек шёл в конкретный проект, и терять место незачем. Число в
+            подписи: «Все проекты» без него не говорит, стоит ли открывать. */}
         {overLimit && (
           <button
-            onClick={onOpenAllProjects}
+            onClick={() => setAllProjects(true)}
             className="mt-3 w-full rounded-md border border-dashed py-2 text-xs text-muted-foreground transition-colors hover:border-solid hover:text-foreground"
           >
             {t('overview.allProjects', { count: shownProjects.length })}
           </button>
         )}
+        {/* Развернули — даём свернуть обратно: иначе длинный список остаётся
+            навсегда, и обзор перестаёт быть обзором. */}
+        {allProjects && !needle && shownProjects.length > TOP_PROJECTS && (
+          <button
+            onClick={() => setAllProjects(false)}
+            className="mt-3 w-full rounded-md border border-dashed py-2 text-xs text-muted-foreground transition-colors hover:border-solid hover:text-foreground"
+          >
+            {t('overview.collapseProjects')}
+          </button>
+        )}
       </section>
+
+      {/* Люди — сразу под проектами: «что делается» и «кто делает» стоят
+          рядом, а не через весь экран друг от друга. */}
+      <PeopleStats companyId={companyId} onOpenReport={onOpenReport} />
 
       {/* Ритм: по неделям видно, набирает компания обороты или затухает */}
       <section className="rounded-lg border bg-card p-4">
@@ -401,133 +417,145 @@ export function OverviewTab({
         )}
       </section>
 
-      {/* Обе секции во всю ширину, а не в две колонки.
-          Столбики здесь горизонтальные, и подпись — это название проекта или
-          имя человека: в половинной колонке они обрезаются, и график перестаёт
-          отвечать на свой же вопрос «куда уходит время». */}
-      <div className="grid gap-4">
-        {/* Куда уходит время: столбики в цветах проектов — узнаются с одного взгляда */}
-        <section className="rounded-lg border bg-card p-4">
-          <h2 className="mb-3 text-sm font-semibold">{t('overview.byProject')}</h2>
-          {/* Ни одного проекта со временем — пустая рамка с осями отвечает
-              хуже, чем строчка текста. */}
-          {!withTime.length ? (
-            <p className="py-8 text-center text-sm text-muted-foreground">{t('time.noData')}</p>
-          ) : (
-          <ChartBox height={Math.max(160, withTime.length * 44)}>
-            <BarChart data={withTime} layout="vertical" margin={{ top: 0, right: 8, bottom: 0, left: 0 }}>
-              <CartesianGrid horizontal={false} strokeDasharray="3 3" className="stroke-border" />
-              <XAxis
-                type="number"
-                tickFormatter={(m: number) => String(Math.round(m / 60))}
-                tickLine={false}
-                axisLine={false}
-                className="text-[10px]"
-                stroke="currentColor"
-                opacity={0.5}
-              />
-              {/*
-                Названия проектов бывают двуязычными и длинными — «פשוט לגעת -
-                Simply Touch (רון דגן & עמית נוה)». Recharts переносит такие на
-                три строки, они наезжают на соседние и обрезаются сверху.
-                Расширять ось бессмысленно: она съест сам график, а название
-                всё равно не влезет. Поэтому одна строка с многоточием, а
-                целиком имя показывает подсказка.
-              */}
-              <YAxis
-                type="category"
-                dataKey="name"
-                width={260}
-                tickLine={false}
-                axisLine={false}
-                className="text-[9px]"
-                stroke="currentColor"
-                opacity={0.7}
-                interval={0}
-                // width тика ДОЛЖЕН совпадать с шириной оси: иначе подпись
-                // переносилась по 132px внутри 220px слота — три-четыре строки,
-                // наезжающие на соседние. Одна строка и многоточие, остальное
-                // показывает подсказка.
-                tick={{ width: 250 }}
-                tickFormatter={(name: string) => (name.length > 42 ? `${name.slice(0, 41)}…` : name)}
-              />
-              <Tooltip
-                cursor={{ fill: 'currentColor', opacity: 0.06 }}
-                contentStyle={CHART_STYLE}
-                itemStyle={CHART_ITEM_STYLE}
-                labelStyle={CHART_LABEL_STYLE}
-                // Метка обрезана — подсказка обязана давать полное имя, иначе
-                // два похожих проекта не различить.
-                labelFormatter={(_l, p) => (p?.[0]?.payload as { name?: string } | undefined)?.name ?? ''}
-                formatter={(m) => [formatDuration(Number(m)), t('time.total')]}
-              />
-              {/* Столбик ведёт в проект — как и строка списка ниже. Человек
-                  видит на графике, куда ушло время, и логично тычет туда же;
-                  требовать после этого найти проект в списке — лишний шаг. */}
-              <Bar
-                dataKey="minutes"
-                radius={[0, 4, 4, 0]}
-                maxBarSize={28}
-                cursor={onOpenProject ? 'pointer' : undefined}
-                onClick={(data: unknown) => {
-                  const id = (data as { payload?: { id?: string } })?.payload?.id
-                  if (id) onOpenProject?.(id)
-                }}
-              >
-                {withTime.map((p) => (
-                  <Cell key={p.id} fill={p.color || 'var(--brand)'} />
-                ))}
-              </Bar>
-            </BarChart>
-          </ChartBox>
-          )}
-        </section>
+      {/* Что происходит в проектах: прогресс, просрочка и что стоит.
 
-        {/* Время команды: сколько наработал каждый.
-
-            Называлось «Кто тянет» — читалось как оценка людей: раз кто-то
-            тянет, значит кто-то и нет. Секция же просто показывает часы. */}
-        <section className="rounded-lg border bg-card p-4">
-          <h2 className="mb-3 text-sm font-semibold">{t('overview.byPerson')}</h2>
-          {!d.topPeople.length ? (
-            <p className="py-8 text-center text-sm text-muted-foreground">{t('time.noData')}</p>
-          ) : (
-            <ul className="space-y-2">
-              {d.topPeople.map((p) => {
-                const max = Math.max(1, ...d.topPeople.map((x) => x.minutes))
-                return (
-                  <li key={p.userId} className="flex items-center gap-3">
-                    <Avatar name={p.name} src={p.avatarUrl} size={24} />
-                    {/* Шире, чем было: секция теперь во всю ширину, и резать
-                        имя на 32 символах больше незачем. */}
-                    <span className="w-48 shrink-0 truncate text-sm">{p.name}</span>
-                    <span className="h-2 flex-1 overflow-hidden rounded-full bg-secondary">
-                      <span className="block h-full rounded-full bg-brand" style={{ width: `${(p.minutes / max) * 100}%` }} />
-                    </span>
-                    <span className="w-16 shrink-0 text-end font-mono text-sm tabular-nums">
-                      {formatDuration(p.minutes)}
-                    </span>
-                    {/* Отчёт за тот же период, что на экране: собирать его
-                        заново на другой вкладке — лишняя работа. */}
-                    {onOpenReport && (
-                      <button
-                        onClick={() => onOpenReport(p.userId, period)}
-                        title={t('overview.reportFor', { name: p.name })}
-                        className="shrink-0 rounded p-1 text-muted-foreground hover:bg-accent hover:text-foreground"
-                      >
-                        <Download className="size-3.5" />
-                      </button>
-                    )}
-                  </li>
-                )
-              })}
-            </ul>
-          )}
-        </section>
-      </div>
+          Здесь был график «куда уходит время» — столбики по проектам. Он
+          занимал пол-экрана и отвечал на один вопрос, где часы, ничего не
+          говоря ни о прогрессе, ни о том, что застряло. Карточки отвечают на
+          вопрос, ради которого на обзор и заходят: как идут дела. */}
+      <ActiveProjects
+        projects={visibleProjects}
+        onOpenProject={onOpenProject}
+        overLimit={overLimit}
+        total={shownProjects.length}
+        onShowAll={() => setAllProjects(true)}
+        expanded={allProjects && !needle && shownProjects.length > TOP_PROJECTS}
+        onCollapse={() => setAllProjects(false)}
+      />
 
       {/* Проекты таблицей: прогресс, просрочка, часы и активность рядом */}
     </div>
+  )
+}
+
+/**
+ * Карточки проектов: как идут дела.
+ *
+ * Заменили график «куда уходит время». Тот занимал пол-экрана и отвечал на
+ * один вопрос — где часы, — молча о том, ради чего на обзор заходят: что с
+ * прогрессом и что застряло.
+ *
+ * По четыре в ряд, как карточки людей ниже: одна сетка на весь обзор
+ * читается спокойнее, чем каждая секция по-своему.
+ */
+function ActiveProjects({
+  projects,
+  onOpenProject,
+  overLimit,
+  total,
+  onShowAll,
+  expanded,
+  onCollapse,
+}: {
+  projects: ProjectStat[]
+  onOpenProject?: (projectId: string) => void
+  overLimit: boolean
+  total: number
+  onShowAll: () => void
+  expanded: boolean
+  onCollapse: () => void
+}) {
+  const { t } = useTranslation()
+  if (!projects.length) return null
+
+  return (
+    <section className="space-y-3">
+      <h2 className="text-sm font-semibold">{t('overview.projects')}</h2>
+
+      <div className="grid gap-2 sm:grid-cols-2">
+        {projects.map((p) => {
+          // В чужой проект не пустят: карточка не кликается, и это видно по
+          // курсору, а не по отказу после нажатия.
+          const Tag = p.isMember && onOpenProject ? 'button' : 'div'
+          return (
+            <Tag
+              key={p.id}
+              {...(Tag === 'button' ? { onClick: () => onOpenProject!(p.id), type: 'button' as const } : {})}
+              className={cn(
+                'rounded-xl border bg-card p-3 text-start',
+                p.isMember && onOpenProject && 'transition-colors hover:border-brand/40 hover:bg-accent/40',
+              )}
+            >
+              <div className="flex items-center gap-2">
+                {/* Логотип, если он есть; иначе ProjectBadge сам рисует
+                    цветную заглушку с буквой — проект узнаётся в обоих
+                    случаях, и карточки не разъезжаются по высоте. */}
+                <ProjectBadge name={p.name} color={p.color} logoUrl={p.logoUrl} size={24} />
+                <p className="min-w-0 flex-1 truncate text-sm font-medium">{p.name}</p>
+                {/* Непрочитанное — то, из-за чего сюда стоит зайти прямо
+                    сейчас; поэтому оно, а не часы, стоит первым справа. */}
+                {p.unread > 0 && (
+                  <span className="shrink-0 rounded-full bg-brand px-1.5 text-[11px] font-medium text-brand-fg tabular-nums">
+                    {p.unread}
+                  </span>
+                )}
+              </div>
+
+              {/* Прогресс: полоса и числа рядом. Одна полоса без чисел не
+                  говорит, велика ли работа — 90% из десяти задач и из двухсот
+                  это разные новости. */}
+              <div className="mt-2.5 flex items-center gap-2">
+                <span className="h-1.5 flex-1 overflow-hidden rounded-full bg-secondary">
+                  <span className="block h-full rounded-full bg-brand" style={{ width: `${p.progress}%` }} />
+                </span>
+                <span className="shrink-0 text-[11px] tabular-nums text-muted-foreground">
+                  {p.tasksDone}/{p.tasksTotal}
+                </span>
+              </div>
+
+              <div className="mt-2 flex flex-wrap items-center gap-x-3 gap-y-1 text-[11px]">
+                {/* Просрочка и застрявшее — только когда они есть. Ноль рядом
+                    с «просрочено» глаз всё равно читает как тревогу. */}
+                {p.overdue > 0 && (
+                  <span className="text-rose-600 dark:text-rose-400">
+                    <span className="font-semibold tabular-nums">{p.overdue}</span> {t('overview.overdueShort')}
+                  </span>
+                )}
+                {p.blocked > 0 && (
+                  <span className="text-amber-600 dark:text-amber-400">
+                    <span className="font-semibold tabular-nums">{p.blocked}</span> {t('overview.blockedShort')}
+                  </span>
+                )}
+                {p.minutes > 0 && (
+                  <span className="text-muted-foreground">{formatDuration(p.minutes)}</span>
+                )}
+                {/* Проект без единой задачи: пустая карточка иначе выглядит
+                    как поломка, а не как «работа ещё не заведена». */}
+                {p.tasksTotal === 0 && <span className="text-muted-foreground">{t('overview.noTasksYet')}</span>}
+              </div>
+            </Tag>
+          )
+        })}
+      </div>
+
+      {/* Шторка: разворачиваем здесь, а не уводим на вкладку. */}
+      {overLimit && (
+        <button
+          onClick={onShowAll}
+          className="w-full rounded-md border border-dashed py-2 text-xs text-muted-foreground transition-colors hover:border-solid hover:text-foreground"
+        >
+          {t('overview.allProjects', { count: total })}
+        </button>
+      )}
+      {expanded && (
+        <button
+          onClick={onCollapse}
+          className="w-full rounded-md border border-dashed py-2 text-xs text-muted-foreground transition-colors hover:border-solid hover:text-foreground"
+        >
+          {t('overview.collapseProjects')}
+        </button>
+      )}
+    </section>
   )
 }
 

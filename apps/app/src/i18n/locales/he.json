@@ -1205,9 +1205,12 @@
     "open": "פתוחות",
     "done": "הושלמו",
     "hoursThisMonth": "ש' החודש",
-    "activeDays": "ימי פעילות ב-90 הימים האחרונים: {{count}}",
+    "activeDays": "{{count}} ימי פעילות מתוך {{days}}",
     "showAll": "הצגת כולם ({{count}})",
-    "noneFound": "לא נמצא אף אחד"
+    "noneFound": "לא נמצא אף אחד",
+    "dayActive": "עבד",
+    "dayIdle": "ללא פעילות",
+    "report": "דוח"
   },
   "time": {
     "title": "זמן",
@@ -1318,7 +1321,7 @@
     "projects": "פרויקטים",
     "empty": "אין עדיין פרויקטים",
     "weekOf": "שבוע מ-{{date}}",
-    "overdueShort": "באיחור: {{count}}",
+    "overdueShort": "באיחור",
     "reportFor": "דוח שעות: {{name}}",
     "totalHoursHint": "סך כל הזמן שנרשם בפרויקט, מאז ומתמיד",
     "findProject": "חיפוש פרויקט",
@@ -1332,7 +1335,10 @@
     "toProject": "לפרויקט",
     "overdueTitle": "{{count}} באיחור",
     "overdueDays": "{{count}} ימים",
-    "noOverdue": "אין משימות באיחור"
+    "noOverdue": "אין משימות באיחור",
+    "collapseProjects": "כיווץ",
+    "blockedShort": "תקועות",
+    "noTasksYet": "אין עדיין משימות"
   },
   "desktop": {
     "start": "הפעלת טיימר",

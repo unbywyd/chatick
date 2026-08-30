@@ -186,7 +186,7 @@ companiesRoute.get('/:companyId/overview', async (c) => {
     return c.json({ projects: [], totals: { projects: 0, people: 0, tasksTotal: 0, tasksDone: 0, hours: 0, messages: 0 }, weeks: [], topPeople: [] })
   }
 
-  const [taskRows, memberRows, timeRows, msgRows, weekRows] = await Promise.all([
+  const [taskRows, memberRows, timeRows, msgRows, weekRows, blockedRows] = await Promise.all([
     db
       .select({
         projectId: tasks.projectId,
@@ -230,6 +230,26 @@ companiesRoute.get('/:companyId/overview', async (c) => {
         and ${timeEntries.startedAt} <= ${period.to}::timestamptz
       group by date_trunc('week', ${timeEntries.startedAt})
       order by date_trunc('week', ${timeEntries.startedAt})
+    `),
+
+    /**
+     * Задачи, которые СТОЯТ: ждут другую незакрытую задачу.
+     *
+     * «Сколько задач» и «какой прогресс» не отвечают на вопрос «почему не
+     * движется». Здесь — ровно он: работа есть, но упёрлась.
+     *
+     * Считаем distinct по ждущей задаче: одну задачу могут держать несколько
+     * блокеров, и считать её трижды значило бы пугать числом на пустом месте.
+     */
+    db.execute(sql`
+      select b.project_id as "projectId", count(distinct b.blocked_task_id)::int as count
+        from task_blockers b
+        join tasks bt on bt.id = b.blocker_task_id
+        join tasks t on t.id = b.blocked_task_id
+       where b.project_id in ${ids}
+         and bt.status <> 'done' and bt.deleted_at is null
+         and t.status <> 'done' and t.deleted_at is null
+       group by b.project_id
     `),
   ])
 
@@ -327,6 +347,12 @@ companiesRoute.get('/:companyId/overview', async (c) => {
     leadMap.set(r.projectId, list)
   }
 
+  // Заблокированные задачи по проектам: db.execute отдаёт rows либо массив —
+  // форма зависит от драйвера, поэтому разбираем оба случая, как и рядом.
+  const blockedList = (blockedRows as unknown as { rows?: { projectId: string; count: number }[] }).rows
+    ?? (blockedRows as unknown as { projectId: string; count: number }[])
+  const blockedMap = new Map((blockedList ?? []).map((r) => [r.projectId, Number(r.count)]))
+
   const list = projectRows.map((p) => {
     const t = taskMap.get(p.id)
     return {
@@ -343,6 +369,8 @@ companiesRoute.get('/:companyId/overview', async (c) => {
       overdue: t?.overdue ?? 0,
       progress: t?.total ? Math.round(((t.done ?? 0) / t.total) * 100) : 0,
       members: memberMap.get(p.id)?.count ?? 0,
+      /** Задачи, которые ждут другую незакрытую задачу: работа упёрлась. */
+      blocked: blockedMap.get(p.id) ?? 0,
       minutes: timeMap.get(p.id)?.minutes ?? 0,
       totalMinutes: totalTimeMap.get(p.id)?.minutes ?? 0,
       messages: msgMap.get(p.id)?.count ?? 0,
@@ -632,7 +660,32 @@ companiesRoute.get('/:companyId/people', async (c) => {
   // (в этой компании таких половина) уезжают вниз, а не мешают сверху.
   items.sort((a, b) => b.openTasks - a.openTasks || (b.lastActiveAt ?? '').localeCompare(a.lastActiveAt ?? ''))
 
-  return c.json({ items, seesEveryone })
+  /**
+   * С какого дня у компании вообще есть история — но не глубже 90 суток.
+   *
+   * Полоска активности рисуется от этого дня, а не от жёстких 90. Иначе у
+   * молодой компании две трети полосы — пустые клетки, которые читаются как
+   * «человек не работал», хотя на деле «нас тогда здесь не было»: в живой
+   * компании вся история 26 дней против нарисованных девяноста.
+   *
+   * Считает сервер: клиент видит только своих людей и первый день по ним
+   * определил бы неверно — у каждого он свой.
+   */
+  const since = await db.execute<{ first_at: string | null }>(sql`
+    select greatest(
+             least(
+               (select min(a.created_at) from activity_log a
+                  join projects p on p.id = a.project_id where p.company_id = ${companyId}),
+               (select min(m.created_at) from messages m
+                  join projects p on p.id = m.project_id where p.company_id = ${companyId})
+             ),
+             now() - interval '90 days'
+           ) as first_at
+  `)
+  const sinceRows = (since as unknown as { rows?: { first_at: string | null }[] }).rows
+    ?? (since as unknown as { first_at: string | null }[])
+
+  return c.json({ items, seesEveryone, activitySince: sinceRows[0]?.first_at ?? null })
 })
 
 companiesRoute.get('/:companyId/overdue', async (c) => {

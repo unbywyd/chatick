@@ -1204,9 +1204,12 @@
     "open": "open",
     "done": "done",
     "hoursThisMonth": "h this month",
-    "activeDays": "Active days in the last 90: {{count}}",
+    "activeDays": "{{count}} active days of {{days}}",
     "showAll": "Show everyone ({{count}})",
-    "noneFound": "Nobody found"
+    "noneFound": "Nobody found",
+    "dayActive": "worked",
+    "dayIdle": "no activity",
+    "report": "Report"
   },
   "time": {
     "title": "Time",
@@ -1317,7 +1320,7 @@
     "projects": "Projects",
     "empty": "No projects yet",
     "weekOf": "Week of {{date}}",
-    "overdueShort": "{{count}} overdue",
+    "overdueShort": "overdue",
     "reportFor": "Hours report for {{name}}",
     "totalHoursHint": "Total time tracked on this project, all time",
     "findProject": "Find a project",
@@ -1331,7 +1334,10 @@
     "toProject": "Open project",
     "overdueTitle": "{{count}} overdue",
     "overdueDays": "{{count}}d",
-    "noOverdue": "Nothing is overdue"
+    "noOverdue": "Nothing is overdue",
+    "collapseProjects": "Collapse",
+    "blockedShort": "blocked",
+    "noTasksYet": "no tasks yet"
   },
   "desktop": {
     "start": "Start timer",
