@@ -135,6 +135,17 @@ export function OverviewTab({
       api<Overview>(
         `/api/v1/companies/${companyId}/overview?from=${encodeURIComponent(period.from)}&to=${encodeURIComponent(period.to)}`,
       ),
+    /**
+     * При смене периода держим прежние данные на экране.
+     *
+     * Период входит в ключ запроса, и без этого react-query считает новый
+     * период новыми данными: q.data становится undefined, срабатывает
+     * заглушка «…», и вся страница мигает целиком — включая просрочку,
+     * прогресс и людей, которые от периода не зависят вовсе.
+     *
+     * Теперь меняются только числа, которым положено меняться.
+     */
+    placeholderData: (prev) => prev,
   })
 
   const d = q.data
@@ -154,10 +165,13 @@ export function OverviewTab({
    * отсюда. Сервер уже отдал их в порядке «где меня коснулось свежее
    * всего», поэтому здесь достаточно отрезать хвост.
    *
-   * Пять, а не десять: обзор — это верхушка, а под ним теперь ещё и люди.
+   * Шесть, а не десять: обзор — это верхушка, а под ним теперь ещё и люди.
    * Десять карточек отодвигали всё остальное за нижний край экрана.
+   *
+   * Именно шесть, а не пять: сетка в две колонки, и нечётное число оставляет
+   * дыру в последнем ряду.
    */
-  const TOP_PROJECTS = 5
+  const TOP_PROJECTS = 6
   // При поиске предел снимаем: человек ищет конкретный проект, и «найдено,
   // но не показано» — худшее, что можно ответить.
   const overLimit = !needle && !allProjects && shownProjects.length > TOP_PROJECTS
@@ -180,21 +194,18 @@ export function OverviewTab({
 
   return (
     <div className="space-y-5">
-      {/* Период сверху: цифры без указания срока читаются как «за всё время»,
-          а смотрят обычно за месяц. */}
-      <div className="flex justify-end">
-        <PeriodPicker value={period} onChange={setPeriod} className="w-52" />
-      </div>
+      {/*
+        Цифры, за которыми приходят в первую очередь.
 
-      {/* Цифры, за которыми приходят в первую очередь */}
-      <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
-        <Metric
-          icon={Clock}
-          label={t('overview.hours')}
-          value={formatDuration(totals?.minutes ?? 0)}
-          onClick={onOpenHours}
-          actionLabel={onOpenHours ? t('overview.toHours') : undefined}
-        />
+        ВСЕ ТРИ — про «сейчас», и переключателя периода здесь нет намеренно.
+        Он висел над этим рядом и выглядел как период всей страницы, хотя
+        правил двумя показателями из девяти: «просрочено» и «прогресс»
+        прошлого не имеют вовсе — за июль их не восстановить, статусы с тех
+        пор менялись, и истории у них нет.
+
+        Переключатель уехал внутрь секции часов — туда, где он и работает.
+      */}
+      <div className="grid gap-3 sm:grid-cols-3">
         <Metric
           icon={CheckCircle2}
           label={t('overview.tasks')}
@@ -251,91 +262,88 @@ export function OverviewTab({
             />
           )}
         </div>
-        <ul className="space-y-2">
-          {shownProjects.length === 0 && (
-            <li className="py-6 text-center text-sm text-muted-foreground">{t('overview.noProjectMatch')}</li>
-          )}
-          {visibleProjects.map((p) => (
-            // Строка кликается целиком: на обзоре видно, где что происходит,
-            // и уходить за этим в список проектов — лишний шаг.
-            <li
-              key={p.id}
-              onClick={() => onOpenProject?.(p.id)}
-              className={cn(
-                '-mx-2 flex items-center gap-3 rounded-md px-2 py-1 transition-colors',
-                onOpenProject && 'cursor-pointer hover:bg-accent',
-              )}
-            >
-              <ProjectBadge name={p.name} color={p.color} logoUrl={p.logoUrl} size={28} />
-              <div className="min-w-0 flex-1">
-                <div className="flex items-baseline gap-2">
-                  <span className="truncate text-sm font-medium">{p.name}</span>
-                  {/* Непрочитанное мне — счётчиком у имени. Проект уже стоит
-                      наверху по свежести, но без метки непонятно, почему он
-                      там: порядок объясняет сам себя. */}
-                  {p.unread > 0 && (
-                    <span className="shrink-0 rounded-full bg-brand/15 px-1.5 py-0.5 text-[10px] font-medium tabular-nums text-brand">
-                      {p.unread}
-                    </span>
+        {shownProjects.length === 0 ? (
+          <p className="py-6 text-center text-sm text-muted-foreground">{t('overview.noProjectMatch')}</p>
+        ) : (
+          <div className="grid gap-2 sm:grid-cols-2">
+            {visibleProjects.map((p) => {
+              // В чужой проект не пустят: карточка не кликается, и это видно
+              // по курсору, а не по отказу после нажатия.
+              const Tag = p.isMember && onOpenProject ? 'button' : 'div'
+              return (
+                <Tag
+                  key={p.id}
+                  {...(Tag === 'button' ? { onClick: () => onOpenProject!(p.id), type: 'button' as const } : {})}
+                  className={cn(
+                    'rounded-xl border bg-card p-3 text-start',
+                    p.isMember && onOpenProject && 'transition-colors hover:border-brand/40 hover:bg-accent/40',
                   )}
-                  {/* Замок — заранее видно, что внутрь не пустят: без него
-                      человек кликает и упирается в отказ, гадая, что сломалось. */}
-                  {!p.isMember && (
-                    <span
-                      className="flex shrink-0 items-center gap-1 text-[10px] text-muted-foreground"
-                      title={
-                        p.leads.length
-                          ? t('overview.askForAccess', { names: p.leads.map((l) => l.name).join(', ') })
-                          : t('overview.notMember')
-                      }
-                    >
-                      <Lock className="size-3" />
-                      {/* Имя того, кого просить: замок без адресата оставляет
-                          человека с вопросом «а к кому идти». */}
-                      {p.leads[0] && <span className="hidden max-w-28 truncate sm:inline">{p.leads[0].name}</span>}
+                >
+                  <div className="flex items-center gap-2">
+                    <ProjectBadge name={p.name} color={p.color} logoUrl={p.logoUrl} size={24} />
+                    <p className="min-w-0 flex-1 truncate text-sm font-medium">{p.name}</p>
+                    {/* Непрочитанное — то, из-за чего стоит зайти прямо
+                        сейчас; поэтому оно, а не числа, стоит первым справа. */}
+                    {p.unread > 0 && (
+                      <span className="shrink-0 rounded-full bg-brand px-1.5 text-[11px] font-medium text-brand-fg tabular-nums">
+                        {p.unread}
+                      </span>
+                    )}
+                    {/* Чужой проект: видно заранее, что внутрь не пустят. */}
+                    {!p.isMember && <Lock className="size-3 shrink-0 text-muted-foreground" />}
+                  </div>
+
+                  {/* Полоса и числа рядом: одна полоса не говорит, велика ли
+                      работа — 90% из десяти задач и из двухсот это разные
+                      новости. */}
+                  <div className="mt-2.5 flex items-center gap-2">
+                    <span className="h-1.5 flex-1 overflow-hidden rounded-full bg-secondary">
+                      <span className="block h-full rounded-full bg-brand" style={{ width: `${p.progress}%` }} />
                     </span>
-                  )}
-                  {p.overdue > 0 && (
-                    <span className="shrink-0 text-[10px] text-amber-500">
-                      {t('overview.overdueShort', { count: p.overdue })}
+                    <span dir="ltr" className="shrink-0 text-[11px] tabular-nums text-muted-foreground">
+                      {p.tasksDone}/{p.tasksTotal}
                     </span>
-                  )}
-                </div>
-                <span className="mt-1 block h-1.5 overflow-hidden rounded-full bg-secondary">
-                  <span className="block h-full rounded-full bg-brand/70" style={{ width: `${p.progress}%` }} />
-                </span>
-              </div>
-              {/* dir="ltr": та же дробь, что и в карточке сверху, и так же
-                  переворачивалась бы в иврите — «сделано» и «всего» менялись
-                  бы местами. */}
-              <span dir="ltr" className="w-14 shrink-0 text-end text-xs tabular-nums text-muted-foreground">
-                {p.tasksDone}/{p.tasksTotal}
-              </span>
-              <span className="hidden w-16 shrink-0 items-center justify-end gap-1 text-xs tabular-nums text-muted-foreground sm:flex">
-                <Users className="size-3" />
-                {p.members}
-              </span>
-              <span className="hidden w-20 shrink-0 items-center justify-end gap-1 text-xs tabular-nums text-muted-foreground sm:flex">
-                <MessageSquare className="size-3" />
-                {p.messages}
-              </span>
-              {/* Часы за период и, приглушённо, за всё время. Вторую цифру
-                  показываем только когда она отличается: одинаковые числа
-                  рядом читаются как ошибка, а не как уточнение. */}
-              <span className="flex w-24 shrink-0 items-baseline justify-end gap-1.5">
-                <span className="font-mono text-sm tabular-nums">{formatDuration(p.minutes)}</span>
-                {p.totalMinutes > p.minutes && (
-                  <span
-                    className="font-mono text-[10px] tabular-nums text-muted-foreground"
-                    title={t('overview.totalHoursHint')}
-                  >
-                    {formatDuration(p.totalMinutes)}
-                  </span>
-                )}
-              </span>
-            </li>
-          ))}
-        </ul>
+                  </div>
+
+                  <div className="mt-2 flex flex-wrap items-center gap-x-3 gap-y-1 text-[11px]">
+                    {/* Просрочка и застрявшее — только когда они есть: ноль
+                        рядом со словом «просрочено» глаз читает как тревогу. */}
+                    {p.overdue > 0 && (
+                      <span className="text-rose-600 dark:text-rose-400">
+                        <span className="font-semibold tabular-nums">{p.overdue}</span> {t('overview.overdueShort')}
+                      </span>
+                    )}
+                    {p.blocked > 0 && (
+                      <span className="text-amber-600 dark:text-amber-400">
+                        <span className="font-semibold tabular-nums">{p.blocked}</span> {t('overview.blockedShort')}
+                      </span>
+                    )}
+                    <span className="inline-flex items-center gap-1 text-muted-foreground">
+                      <Users className="size-3" />
+                      {p.members}
+                    </span>
+                    {/* Переписка: показывает, живой проект или тихий. За всё
+                        время, а не за период — от переключателя не зависит. */}
+                    {p.messages > 0 && (
+                      <span className="inline-flex items-center gap-1 text-muted-foreground">
+                        <MessageSquare className="size-3" />
+                        {p.messages}
+                      </span>
+                    )}
+                    {/* Часов здесь НЕТ: они живут отрезком времени, а
+                        переключатель периода стоит ниже, в секции часов.
+                        Число, молча меняющееся от элемента внизу экрана, —
+                        ровно та немота, из-за которой он туда и переехал. */}
+                    {p.tasksTotal === 0 && (
+                      <span className="text-muted-foreground">{t('overview.noTasksYet')}</span>
+                    )}
+                  </div>
+                </Tag>
+              )
+            })}
+          </div>
+        )}
+
         {/* Шторка: разворачиваем список ЗДЕСЬ, а не уводим на вкладку —
             человек шёл в конкретный проект, и терять место незачем. Число в
             подписи: «Все проекты» без него не говорит, стоит ли открывать. */}
@@ -363,9 +371,40 @@ export function OverviewTab({
           рядом, а не через весь экран друг от друга. */}
       <PeopleStats companyId={companyId} onOpenReport={onOpenReport} />
 
-      {/* Ритм: по неделям видно, набирает компания обороты или затухает */}
+      {/*
+        Часы: единственное на обзоре, что живёт ОТРЕЗКОМ ВРЕМЕНИ.
+
+        Переключатель периода стоит здесь, а не в шапке страницы. В шапке он
+        читался как «период всего экрана» и обещал больше, чем делает:
+        просрочка, прогресс и «стоят» отвечают на вопрос «как сейчас», и
+        прошлого у них нет — за июль их не посчитать, потому что статусы с тех
+        пор менялись, а истории у них не ведётся.
+
+        Рядом с переключателем — сумма за тот же период: раньше она стояла
+        метрикой в верхнем ряду, среди чисел «на сейчас», и одна там жила по
+        другим правилам, ничем этого не показывая.
+      */}
       <section className="rounded-lg border bg-card p-4">
-        <h2 className="mb-3 text-sm font-semibold">{t('overview.rhythm')}</h2>
+        <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
+          <div className="flex items-baseline gap-2">
+            <h2 className="text-sm font-semibold">{t('overview.rhythm')}</h2>
+            <span className="font-mono text-sm tabular-nums">{formatDuration(totals?.minutes ?? 0)}</span>
+            {onOpenHours && (
+              <button
+                onClick={onOpenHours}
+                className="text-xs text-muted-foreground transition-colors hover:text-brand-ink"
+              >
+                {t('overview.toHours')}
+              </button>
+            )}
+          </div>
+          <div className="flex items-center gap-2">
+            {/* Пока едут новые числа — приглушаем секцию, а не гасим страницу:
+                видно, что период применился и ответ в пути. */}
+            {q.isFetching && <span className="text-xs text-muted-foreground">…</span>}
+            <PeriodPicker value={period} onChange={setPeriod} className="w-52" />
+          </div>
+        </div>
         {d.weeks.length === 0 ? (
           <p className="py-8 text-center text-sm text-muted-foreground">{t('time.noData')}</p>
         ) : (
@@ -417,145 +456,8 @@ export function OverviewTab({
         )}
       </section>
 
-      {/* Что происходит в проектах: прогресс, просрочка и что стоит.
-
-          Здесь был график «куда уходит время» — столбики по проектам. Он
-          занимал пол-экрана и отвечал на один вопрос, где часы, ничего не
-          говоря ни о прогрессе, ни о том, что застряло. Карточки отвечают на
-          вопрос, ради которого на обзор и заходят: как идут дела. */}
-      <ActiveProjects
-        projects={visibleProjects}
-        onOpenProject={onOpenProject}
-        overLimit={overLimit}
-        total={shownProjects.length}
-        onShowAll={() => setAllProjects(true)}
-        expanded={allProjects && !needle && shownProjects.length > TOP_PROJECTS}
-        onCollapse={() => setAllProjects(false)}
-      />
-
       {/* Проекты таблицей: прогресс, просрочка, часы и активность рядом */}
     </div>
-  )
-}
-
-/**
- * Карточки проектов: как идут дела.
- *
- * Заменили график «куда уходит время». Тот занимал пол-экрана и отвечал на
- * один вопрос — где часы, — молча о том, ради чего на обзор заходят: что с
- * прогрессом и что застряло.
- *
- * По четыре в ряд, как карточки людей ниже: одна сетка на весь обзор
- * читается спокойнее, чем каждая секция по-своему.
- */
-function ActiveProjects({
-  projects,
-  onOpenProject,
-  overLimit,
-  total,
-  onShowAll,
-  expanded,
-  onCollapse,
-}: {
-  projects: ProjectStat[]
-  onOpenProject?: (projectId: string) => void
-  overLimit: boolean
-  total: number
-  onShowAll: () => void
-  expanded: boolean
-  onCollapse: () => void
-}) {
-  const { t } = useTranslation()
-  if (!projects.length) return null
-
-  return (
-    <section className="space-y-3">
-      <h2 className="text-sm font-semibold">{t('overview.projects')}</h2>
-
-      <div className="grid gap-2 sm:grid-cols-2">
-        {projects.map((p) => {
-          // В чужой проект не пустят: карточка не кликается, и это видно по
-          // курсору, а не по отказу после нажатия.
-          const Tag = p.isMember && onOpenProject ? 'button' : 'div'
-          return (
-            <Tag
-              key={p.id}
-              {...(Tag === 'button' ? { onClick: () => onOpenProject!(p.id), type: 'button' as const } : {})}
-              className={cn(
-                'rounded-xl border bg-card p-3 text-start',
-                p.isMember && onOpenProject && 'transition-colors hover:border-brand/40 hover:bg-accent/40',
-              )}
-            >
-              <div className="flex items-center gap-2">
-                {/* Логотип, если он есть; иначе ProjectBadge сам рисует
-                    цветную заглушку с буквой — проект узнаётся в обоих
-                    случаях, и карточки не разъезжаются по высоте. */}
-                <ProjectBadge name={p.name} color={p.color} logoUrl={p.logoUrl} size={24} />
-                <p className="min-w-0 flex-1 truncate text-sm font-medium">{p.name}</p>
-                {/* Непрочитанное — то, из-за чего сюда стоит зайти прямо
-                    сейчас; поэтому оно, а не часы, стоит первым справа. */}
-                {p.unread > 0 && (
-                  <span className="shrink-0 rounded-full bg-brand px-1.5 text-[11px] font-medium text-brand-fg tabular-nums">
-                    {p.unread}
-                  </span>
-                )}
-              </div>
-
-              {/* Прогресс: полоса и числа рядом. Одна полоса без чисел не
-                  говорит, велика ли работа — 90% из десяти задач и из двухсот
-                  это разные новости. */}
-              <div className="mt-2.5 flex items-center gap-2">
-                <span className="h-1.5 flex-1 overflow-hidden rounded-full bg-secondary">
-                  <span className="block h-full rounded-full bg-brand" style={{ width: `${p.progress}%` }} />
-                </span>
-                <span className="shrink-0 text-[11px] tabular-nums text-muted-foreground">
-                  {p.tasksDone}/{p.tasksTotal}
-                </span>
-              </div>
-
-              <div className="mt-2 flex flex-wrap items-center gap-x-3 gap-y-1 text-[11px]">
-                {/* Просрочка и застрявшее — только когда они есть. Ноль рядом
-                    с «просрочено» глаз всё равно читает как тревогу. */}
-                {p.overdue > 0 && (
-                  <span className="text-rose-600 dark:text-rose-400">
-                    <span className="font-semibold tabular-nums">{p.overdue}</span> {t('overview.overdueShort')}
-                  </span>
-                )}
-                {p.blocked > 0 && (
-                  <span className="text-amber-600 dark:text-amber-400">
-                    <span className="font-semibold tabular-nums">{p.blocked}</span> {t('overview.blockedShort')}
-                  </span>
-                )}
-                {p.minutes > 0 && (
-                  <span className="text-muted-foreground">{formatDuration(p.minutes)}</span>
-                )}
-                {/* Проект без единой задачи: пустая карточка иначе выглядит
-                    как поломка, а не как «работа ещё не заведена». */}
-                {p.tasksTotal === 0 && <span className="text-muted-foreground">{t('overview.noTasksYet')}</span>}
-              </div>
-            </Tag>
-          )
-        })}
-      </div>
-
-      {/* Шторка: разворачиваем здесь, а не уводим на вкладку. */}
-      {overLimit && (
-        <button
-          onClick={onShowAll}
-          className="w-full rounded-md border border-dashed py-2 text-xs text-muted-foreground transition-colors hover:border-solid hover:text-foreground"
-        >
-          {t('overview.allProjects', { count: total })}
-        </button>
-      )}
-      {expanded && (
-        <button
-          onClick={onCollapse}
-          className="w-full rounded-md border border-dashed py-2 text-xs text-muted-foreground transition-colors hover:border-solid hover:text-foreground"
-        >
-          {t('overview.collapseProjects')}
-        </button>
-      )}
-    </section>
   )
 }
 
