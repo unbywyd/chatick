@@ -13,17 +13,35 @@ export const inboxRoute = new Hono<SessionEnv>()
 inboxRoute.use('*', requireSession)
 
 // Список уведомлений (по умолчанию — непрочитанные сверху) + счётчики по проектам
-inboxRoute.get('/', zValidator('query', z.object({ onlyUnread: z.string().optional(), limit: z.coerce.number().max(200).default(100) })), async (c) => {
+inboxRoute.get(
+  '/',
+  zValidator(
+    'query',
+    z.object({
+      onlyUnread: z.string().optional(),
+      limit: z.coerce.number().max(200).default(100),
+      /** Компания, чью ленту смотрят. Без неё — всё подряд, как было. */
+      companyId: z.string().optional(),
+    }),
+  ),
+  async (c) => {
   const { sub } = c.get('session')
-  const { onlyUnread, limit } = c.req.valid('query')
+  const { onlyUnread, limit, companyId } = c.req.valid('query')
 
   const conds = [eq(notifications.userId, sub)]
   if (onlyUnread === '1') conds.push(isNull(notifications.readAt))
+  // Лента компании показывала уведомления ВСЕХ компаний человека: на главной
+  // StartPlan висели события «Личных проектов». Своё и чужое различить было
+  // нельзя — проект в подписи есть, а какой он компании, не сказано.
+  if (companyId) conds.push(eq(notifications.companyId, companyId))
 
   const rows = await db
     .select({ n: notifications, project: projects, actor: users })
     .from(notifications)
-    .innerJoin(projects, eq(projects.id, notifications.projectId))
+    // leftJoin, а не inner: у объявления компании проекта нет вовсе, и
+    // внутреннее соединение выбрасывало его из ленты молча — уведомление
+    // создано, человек его не видит.
+    .leftJoin(projects, eq(projects.id, notifications.projectId))
     .leftJoin(users, eq(users.id, notifications.actorId))
     .where(and(...conds))
     .orderBy(desc(notifications.createdAt))
@@ -33,7 +51,15 @@ inboxRoute.get('/', zValidator('query', z.object({ onlyUnread: z.string().option
   const counts = await db
     .select({ projectId: notifications.projectId, count: sql<number>`count(*)::int` })
     .from(notifications)
-    .where(and(eq(notifications.userId, sub), isNull(notifications.readAt)))
+    .where(
+      and(
+        eq(notifications.userId, sub),
+        isNull(notifications.readAt),
+        // Счётчик считает то же, что показывает список: иначе «5» в бейдже
+        // откроет три уведомления, и человек будет искать пропавшие два.
+        companyId ? eq(notifications.companyId, companyId) : undefined,
+      ),
+    )
     .groupBy(notifications.projectId)
 
   const unreadByProject = Object.fromEntries(counts.map((r) => [r.projectId, r.count]))
@@ -45,7 +71,9 @@ inboxRoute.get('/', zValidator('query', z.object({ onlyUnread: z.string().option
     items: rows.map((r) => ({
       id: r.n.id,
       projectId: r.n.projectId,
-      projectName: r.project.name,
+      // Пусто у объявления компании: проекта у него нет, и подставлять сюда
+      // название компании нельзя — человек прочтёт его как проект.
+      projectName: r.project?.name ?? null,
       event: r.n.event,
       title: r.n.title,
       summary: r.n.summary,

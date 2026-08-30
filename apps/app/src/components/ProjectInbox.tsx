@@ -60,8 +60,15 @@ export function ProjectInbox({
   const qc = useQueryClient()
 
   const inbox = useQuery({
-    queryKey: ['inbox'],
-    queryFn: () => api<Inbox>('/api/v1/inbox?onlyUnread=1&limit=100'),
+    // Компания в ключе И в запросе. Без неё лента компании показывала
+    // события ВСЕХ компаний человека: на главной StartPlan висели
+    // уведомления «Личных проектов», а отличить своё от чужого было нельзя —
+    // проект в подписи есть, чья он компания, не сказано.
+    queryKey: ['inbox', companyId ?? 'all'],
+    queryFn: () =>
+      api<Inbox>(
+        `/api/v1/inbox?onlyUnread=1&limit=100${companyId ? `&companyId=${encodeURIComponent(companyId)}` : ''}`,
+      ),
     refetchInterval: 60_000,
   })
 

@@ -811,14 +811,30 @@ server.registerTool(
     inputSchema: {
       title: z.string().describe('One line saying what happened — this is what people see first'),
       body: z.string().optional().describe('Details, if a line is not enough. Markdown.'),
-      project: z.string().optional().describe('Narrow to one project team'),
+      project: z
+        .string()
+        .optional()
+        .describe('Narrow to one project team. On a master connection also tells which company — required there'),
       users: z.array(z.string()).optional().describe('Narrow to named people — ids from chatick_company_members'),
       email: z.boolean().optional().describe('Also send mail. For things that cannot wait until they open the app'),
     },
   },
-  async (body) => {
+  async ({ project, ...body }) => {
     try {
-      return json(await call(await need(), 'POST', '/announce', body))
+      const scope = await need()
+      // project служит двум целям сразу: сузить адресатов до команды проекта
+      // И указать компанию. На мастер-доступе туннель охватывает несколько
+      // компаний, и без этого объявление отправить было нельзя вовсе —
+      // сервер отвечал «pass ?project=», а инструмент этот параметр не
+      // пробрасывал.
+      return json(
+        await call(
+          { ...scope, projectId: project ?? scope.projectId },
+          'POST',
+          '/announce',
+          project ? { ...body, project } : body,
+        ),
+      )
     } catch (e) {
       return fail(e)
     }
