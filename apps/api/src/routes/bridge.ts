@@ -30,6 +30,7 @@ import {
   tasks,
   timeEntries,
   users,
+  workLog,
 } from '../db/schema.js'
 import {
   canCreateProjects,
@@ -5586,6 +5587,184 @@ bridgeRoute.delete('/notes/:id', async (c) => {
     entityLabel: existing.title,
   })
   broadcast(scope.projectId, 'notes', { action: 'delete', id: existing.id })
+  return c.json({ ok: true })
+})
+
+// --- Журнал работы ----------------------------------------------------------
+
+/**
+ * Журнал работы через мост.
+ *
+ * Зачем ассистенту: «на чём я остановился» — вопрос, который задают каждое
+ * утро, и ответ на него человек уже записал вечером. Без журнала ассистент
+ * восстанавливает его по задачам и коммитам, то есть гадает.
+ *
+ * ЧУЖОЙ ЧЕРНОВИК НЕ ОТДАЁТСЯ. Ассистент отвечает конкретному человеку, и
+ * граница видимости здесь та же, что в интерфейсе: своё — любое, чужое —
+ * только опубликованное. Условие стоит в самом запросе, а не в отборе после.
+ */
+bridgeRoute.get('/worklog', async (c) => {
+  const id = auth(c as never)
+  const scope = await resolveProject(c as never)
+  if ('error' in scope) return c.json({ error: scope.error }, scope.status)
+
+  const member = await projectRoleOf(scope.projectId, id.userId)
+  if (!member) return c.json({ error: 'You are not a member of this project' }, 403)
+  const seesEveryone = member.role === 'owner' || member.role === 'admin'
+
+  const conds = [
+    eq(workLog.projectId, scope.projectId),
+    isNull(workLog.deletedAt),
+    // Своё — любое, чужое — только опубликованное. Одним выражением.
+    or(eq(workLog.authorId, id.userId), eq(workLog.status, 'published'))!,
+  ]
+  if (!seesEveryone) conds.push(eq(workLog.authorId, id.userId))
+  else {
+    const who = c.req.query('authorId')?.trim()
+    if (who) conds.push(eq(workLog.authorId, who))
+  }
+  const from = c.req.query('from')?.trim()
+  const to = c.req.query('to')?.trim()
+  if (from) conds.push(gte(workLog.createdAt, new Date(from)))
+  // Дата без времени разбирается как полночь: «по 15 марта» отсекло бы всё,
+  // что записано в этот день. Дотягиваем до конца суток, как в companies.ts.
+  if (to) conds.push(lte(workLog.createdAt, new Date(to.length <= 10 ? `${to}T23:59:59.999` : to)))
+
+  const rows = await db
+    .select({
+      r: workLog,
+      author: { id: users.id, name: users.name },
+      task: { number: tasks.number, title: tasks.title },
+    })
+    .from(workLog)
+    .innerJoin(users, eq(users.id, workLog.authorId))
+    .leftJoin(tasks, eq(tasks.id, workLog.taskId))
+    .where(and(...conds))
+    .orderBy(sql`coalesce(${workLog.publishedAt}, ${workLog.createdAt}) desc`)
+    .limit(Math.min(Number(c.req.query('limit') ?? 30) || 30, 100))
+
+  return c.json({
+    items: rows.map((x) => ({
+      id: x.r.id,
+      status: x.r.status,
+      body: htmlToText(x.r.body),
+      at: x.r.publishedAt ?? x.r.createdAt,
+      author: x.author.name,
+      task: x.task?.number ? { number: x.task.number, title: x.task.title } : null,
+    })),
+    hint: 'Entries marked status="draft" are the asking person\'s own unpublished notes — nobody else can see them. Published entries are the project history: they cannot be edited, only added to. To record where work stopped, POST /x/worklog, then POST /x/worklog/<id>/publish when it is ready to share.',
+  })
+})
+
+/** Завести или дописать черновик. Черновик у человека в проекте один. */
+bridgeRoute.post('/worklog', async (c) => {
+  const id = auth(c as never)
+  const scope = await resolveProject(c as never)
+  if ('error' in scope) return c.json({ error: scope.error }, scope.status)
+  const member = await projectRoleOf(scope.projectId, id.userId)
+  if (!member) return c.json({ error: 'You are not a member of this project' }, 403)
+
+  const parsed = await readJson(c as never)
+  if ('error' in parsed) return c.json(parsed, 400)
+  const b = parsed.body as Record<string, unknown>
+  const body = String(b.body ?? '').trim()
+  if (!body) return c.json({ error: 'body is required' }, 400)
+
+  // Черновик уже есть — дописываем его, а не заводим второй. База откажет
+  // всё равно (частичный уникальный индекс), но ассистенту нужен ответ,
+  // из которого понятно, что делать дальше.
+  const open = await db.query.workLog.findFirst({
+    where: and(
+      eq(workLog.projectId, scope.projectId),
+      eq(workLog.authorId, id.userId),
+      eq(workLog.status, 'draft'),
+      isNull(workLog.deletedAt),
+    ),
+  })
+  if (open) {
+    return c.json(
+      {
+        error: 'You already have an open draft in this project. Edit it with PATCH /x/worklog/<id>, or publish it first.',
+        id: open.id,
+      },
+      409,
+    )
+  }
+
+  const [row] = await db
+    .insert(workLog)
+    .values({
+      projectId: scope.projectId,
+      authorId: id.userId,
+      body: richText(body),
+      taskId: typeof b.taskId === 'string' ? b.taskId : null,
+      status: 'draft',
+    })
+    .returning()
+  return c.json({ id: row!.id, status: row!.status, hint: 'Draft saved — only you can see it. Publish with POST /x/worklog/<id>/publish.' }, 201)
+})
+
+/** Правится ТОЛЬКО свой черновик. Опубликованное неизменно. */
+bridgeRoute.patch('/worklog/:id', async (c) => {
+  const id = auth(c as never)
+  const scope = await resolveProject(c as never)
+  if ('error' in scope) return c.json({ error: scope.error }, scope.status)
+
+  const row = await db.query.workLog.findFirst({
+    where: and(eq(workLog.id, c.req.param('id')), eq(workLog.projectId, scope.projectId), isNull(workLog.deletedAt)),
+  })
+  if (!row) return c.json({ error: 'Entry not found' }, 404)
+  if (row.authorId !== id.userId) return c.json({ error: 'Forbidden: you can only edit your own entries' }, 403)
+  if (row.status !== 'draft') {
+    return c.json({ error: 'Published entries cannot be edited — the log only moves forward. Add a new entry instead.' }, 409)
+  }
+
+  const parsed = await readJson(c as never)
+  if ('error' in parsed) return c.json(parsed, 400)
+  const b = parsed.body as Record<string, unknown>
+  const patch: Partial<typeof workLog.$inferInsert> = { updatedAt: new Date() }
+  if (typeof b.body === 'string') patch.body = richText(b.body)
+  if (b.taskId !== undefined) patch.taskId = typeof b.taskId === 'string' ? b.taskId : null
+
+  await db.update(workLog).set(patch).where(eq(workLog.id, row.id))
+  return c.json({ ok: true })
+})
+
+bridgeRoute.post('/worklog/:id/publish', async (c) => {
+  const id = auth(c as never)
+  const scope = await resolveProject(c as never)
+  if ('error' in scope) return c.json({ error: scope.error }, scope.status)
+
+  const row = await db.query.workLog.findFirst({
+    where: and(eq(workLog.id, c.req.param('id')), eq(workLog.projectId, scope.projectId), isNull(workLog.deletedAt)),
+  })
+  if (!row) return c.json({ error: 'Entry not found' }, 404)
+  if (row.authorId !== id.userId) return c.json({ error: 'Forbidden: you can only publish your own entries' }, 403)
+  if (row.status !== 'draft') return c.json({ error: 'Already published' }, 409)
+  if (!htmlToText(row.body).trim()) return c.json({ error: 'Cannot publish an empty entry' }, 400)
+
+  await db
+    .update(workLog)
+    .set({ status: 'published', publishedAt: new Date(), updatedAt: new Date() })
+    .where(eq(workLog.id, row.id))
+  void enqueueEmbedding('work_log', row.id, scope.projectId)
+  return c.json({ ok: true, hint: 'Published — visible to the project and final. It can be deleted but not edited.' })
+})
+
+/** Удалить можно СВОЁ, и черновик, и опубликованное. Чужое — никакое. */
+bridgeRoute.delete('/worklog/:id', async (c) => {
+  const id = auth(c as never)
+  const scope = await resolveProject(c as never)
+  if ('error' in scope) return c.json({ error: scope.error }, scope.status)
+
+  const row = await db.query.workLog.findFirst({
+    where: and(eq(workLog.id, c.req.param('id')), eq(workLog.projectId, scope.projectId), isNull(workLog.deletedAt)),
+  })
+  if (!row) return c.json({ error: 'Entry not found' }, 404)
+  if (row.authorId !== id.userId) return c.json({ error: 'Forbidden: you can only delete your own entries' }, 403)
+
+  await db.update(workLog).set({ deletedAt: new Date() }).where(eq(workLog.id, row.id))
+  void enqueueEmbedding('work_log', row.id, scope.projectId)
   return c.json({ ok: true })
 })
 

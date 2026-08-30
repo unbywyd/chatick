@@ -1006,6 +1006,128 @@ server.registerTool(
   },
 )
 
+// --- Журнал работы -----------------------------------------------------------
+
+/**
+ * Журнал работы: где человек остановился.
+ *
+ * Отличается от заметок (chatick_notes) вопросом, на который отвечает.
+ * Заметка — знание, живущее годами: «Cardcom не берёт иностранные карты».
+ * Запись журнала — состояние работы: «доделал вебхук, встал на ретраях».
+ * Первое ищут, второе читают подряд и по датам.
+ */
+server.registerTool(
+  'chatick_worklog',
+  {
+    title: 'Read the work log',
+    description:
+      'What people did in this project and where they stopped — written by them, in their own words. ' +
+      'READ THIS AT THE START of a session on unfamiliar work: the answer to "where did I leave off" is usually ' +
+      'already written here, and reconstructing it from tasks and commits is guessing. ' +
+      'Different from chatick_notes: a note is knowledge that lasts ("Cardcom rejects foreign cards"), ' +
+      'a log entry is the state of work ("finished the webhook, stuck on retries"). ' +
+      'Entries with status="draft" are the asking person\'s OWN unpublished notes — nobody else can see them, ' +
+      'not even project admins. Published entries are final: they can be added to, never edited. ' +
+      'Project admins see everyone; members see only themselves.',
+    inputSchema: {
+      project: z.string().describe('Project id'),
+      authorId: z.string().optional().describe('Filter by person — admins only; members always see just themselves'),
+      from: z.string().optional().describe('ISO date — entries from this date'),
+      to: z.string().optional().describe('ISO date — entries up to this date'),
+      limit: z.number().optional(),
+    },
+  },
+  async ({ project, ...q }) => {
+    try {
+      return json(
+        await call({ ...(await need()), projectId: project }, 'GET', '/worklog', undefined, {
+          authorId: q.authorId,
+          from: q.from,
+          to: q.to,
+          limit: q.limit ? String(q.limit) : undefined,
+        }),
+      )
+    } catch (e) {
+      return fail(e)
+    }
+  },
+)
+
+server.registerTool(
+  'chatick_worklog_write',
+  {
+    title: 'Write to the work log',
+    description:
+      'Record where the work stands, ON BEHALF OF the human. Saves as a DRAFT: only they can see it until ' +
+      'they publish, so writing here is safe even when the state is messy or half-thought. ' +
+      'Write at the end of a working session — what got done, what is half-finished, what to pick up next. ' +
+      'One open draft per person per project: if one exists this returns its id, and you extend it with ' +
+      'chatick_worklog_update instead of starting a second. ' +
+      'Body is HTML, like notes and documents — not markdown.',
+    inputSchema: {
+      project: z.string().describe('Project id'),
+      body: z.string().describe('HTML — what was done, where it stopped, what is next'),
+      taskId: z.string().optional().describe('Optional: the task this is about'),
+    },
+  },
+  async ({ project, ...body }) => {
+    try {
+      return json(await call({ ...(await need()), projectId: project }, 'POST', '/worklog', body))
+    } catch (e) {
+      return fail(e)
+    }
+  },
+)
+
+server.registerTool(
+  'chatick_worklog_update',
+  {
+    title: 'Edit the open draft',
+    description:
+      'Extend or rewrite the person\'s own UNPUBLISHED draft. ' +
+      'Published entries cannot be edited by anyone, ever — the log only moves forward. If something published ' +
+      'turned out wrong, write a new entry saying so; do not try to correct the old one.',
+    inputSchema: {
+      project: z.string().describe('Project id'),
+      id: z.string().describe('Entry id from chatick_worklog'),
+      body: z.string().optional().describe('HTML'),
+      taskId: z.string().optional().describe('Task to attach, or empty string to detach'),
+    },
+  },
+  async ({ project, id, ...body }) => {
+    if (!Object.values(body).some((v) => v !== undefined)) {
+      return fail(new Error('Nothing to change: pass body or taskId'))
+    }
+    try {
+      return json(await call({ ...(await need()), projectId: project }, 'PATCH', `/worklog/${encodeURIComponent(id)}`, body))
+    } catch (e) {
+      return fail(e)
+    }
+  },
+)
+
+server.registerTool(
+  'chatick_worklog_publish',
+  {
+    title: 'Publish a work log draft',
+    description:
+      'Make the draft visible to the project. IRREVERSIBLE: a published entry cannot be edited or unpublished, ' +
+      'only deleted. Ask the person before publishing — a draft is theirs, and they may be keeping it private ' +
+      'on purpose.',
+    inputSchema: {
+      project: z.string().describe('Project id'),
+      id: z.string().describe('Draft id from chatick_worklog'),
+    },
+  },
+  async ({ project, id }) => {
+    try {
+      return json(await call({ ...(await need()), projectId: project }, 'POST', `/worklog/${encodeURIComponent(id)}/publish`))
+    } catch (e) {
+      return fail(e)
+    }
+  },
+)
+
 // --- Чек-лист ----------------------------------------------------------------
 
 /**

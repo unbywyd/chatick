@@ -942,6 +942,41 @@ POST /x/notes/<id>/task.
 Worth doing at the start of a debugging session: a past project may already
 carry the answer.
 
+## Work log — where each person stopped
+
+A note is knowledge that outlives the week ("Cardcom rejects foreign cards").
+A work log entry is the STATE OF WORK: "finished the webhook, stuck on the
+retry logic, next is the idempotency key". Different questions, different
+places — do not put one in the other.
+
+  GET    /x/worklog?authorId=<id>&from=<iso>&to=<iso>&limit=30
+  POST   /x/worklog                 {"body","taskId?"} — saves a DRAFT
+  PATCH  /x/worklog/<id>            {"body?","taskId?"} — own draft only
+  POST   /x/worklog/<id>/publish    irreversible
+  DELETE /x/worklog/<id>            own entries, draft or published
+
+Read it at the START of a session on work you did not just finish. "Where did
+I leave off" is a question the person already answered last night; without
+this you would reconstruct it from tasks and commits, which is guessing.
+
+Two rules, and both matter:
+
+  DRAFTS ARE PRIVATE. status="draft" entries belong to the person asking and
+  are invisible to everyone else — project admins included. That privacy is
+  the point: it is where half-formed state gets written honestly. Never
+  publish one without being asked, and do not quote a draft into the chat.
+
+  PUBLISHED IS FINAL. A published entry cannot be edited or unpublished, only
+  deleted. Got something wrong? Write the correction as a NEW entry. The log
+  moves forward only — that is what makes "what was I doing in March" worth
+  asking.
+
+One open draft per person per project. POST when one exists returns 409 with
+its id: extend that draft instead of starting a second.
+
+Who sees what: project owners and admins read everyone's published entries
+and can filter by person and date; members read only their own.
+
 ## Chat
 
   GET    /x/messages?limit=50&before=<iso>
