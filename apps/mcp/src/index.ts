@@ -1128,6 +1128,31 @@ server.registerTool(
   },
 )
 
+server.registerTool(
+  'chatick_worklog_delete',
+  {
+    title: 'Discard a work log draft',
+    description:
+      'Throw away the person\'s own unpublished draft — the "no, scrap that" case, usually for a draft you ' +
+      'just wrote for them. ' +
+      'DRAFTS ONLY: published entries are project history and the server refuses to delete them here, even ' +
+      'though the person can delete their own in the app. Do not offer to work around that. ' +
+      'Discarding loses the text: if there is anything worth keeping, rewrite the draft with ' +
+      'chatick_worklog_update instead.',
+    inputSchema: {
+      project: z.string().describe('Project id'),
+      id: z.string().describe('Draft id from chatick_worklog'),
+    },
+  },
+  async ({ project, id }) => {
+    try {
+      return json(await call({ ...(await need()), projectId: project }, 'DELETE', `/worklog/${encodeURIComponent(id)}`))
+    } catch (e) {
+      return fail(e)
+    }
+  },
+)
+
 // --- Чек-лист ----------------------------------------------------------------
 
 /**

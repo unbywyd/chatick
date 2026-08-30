@@ -953,7 +953,7 @@ places — do not put one in the other.
   POST   /x/worklog                 {"body","taskId?"} — saves a DRAFT
   PATCH  /x/worklog/<id>            {"body?","taskId?"} — own draft only
   POST   /x/worklog/<id>/publish    irreversible
-  DELETE /x/worklog/<id>            own entries, draft or published
+  DELETE /x/worklog/<id>            own DRAFTS only — see below
 
 Read it at the START of a session on work you did not just finish. "Where did
 I leave off" is a question the person already answered last night; without
@@ -973,6 +973,11 @@ Two rules, and both matter:
 
 One open draft per person per project. POST when one exists returns 409 with
 its id: extend that draft instead of starting a second.
+
+Deleting. A draft is yours to discard — often you wrote it, and "no, scrap
+that" is a normal answer. Published entries are refused here: the person can
+delete their own in the app, but stumbling into that from a conversation is
+too easy and the text does not come back.
 
 Who sees what: project owners and admins read everyone's published entries
 and can filter by person and date; members read only their own.

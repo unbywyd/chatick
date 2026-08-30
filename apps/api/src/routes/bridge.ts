@@ -5751,7 +5751,21 @@ bridgeRoute.post('/worklog/:id/publish', async (c) => {
   return c.json({ ok: true, hint: 'Published — visible to the project and final. It can be deleted but not edited.' })
 })
 
-/** Удалить можно СВОЁ, и черновик, и опубликованное. Чужое — никакое. */
+/**
+ * Удалить через мост можно СВОЙ ЧЕРНОВИК — и только его.
+ *
+ * Черновик ассистент чаще всего сам и написал: набросал итог сессии, человек
+ * посмотрел и сказал «не то, сотри». Запрещать это — заставлять человека идти в
+ * интерфейс за тем, что здесь же и появилось.
+ *
+ * А опубликованное отсюда не стирается, хотя в интерфейсе человек стирает
+ * что угодно своё. Разница в цене ошибки: опубликованное прочли, на него
+ * сослались, оно часть истории проекта — и стереть его случайно куда проще,
+ * чем написать. Пусть за таким человек идёт руками.
+ *
+ * Ограничение стоит ЗДЕСЬ, а не в описании инструмента MCP: описание — это
+ * просьба к модели, а не запрет.
+ */
 bridgeRoute.delete('/worklog/:id', async (c) => {
   const id = auth(c as never)
   const scope = await resolveProject(c as never)
@@ -5762,6 +5776,12 @@ bridgeRoute.delete('/worklog/:id', async (c) => {
   })
   if (!row) return c.json({ error: 'Entry not found' }, 404)
   if (row.authorId !== id.userId) return c.json({ error: 'Forbidden: you can only delete your own entries' }, 403)
+  if (row.status !== 'draft') {
+    return c.json(
+      { error: 'Only drafts can be deleted through the bridge. A published entry is part of the project history — the person can delete it themselves in the app.' },
+      403,
+    )
+  }
 
   await db.update(workLog).set({ deletedAt: new Date() }).where(eq(workLog.id, row.id))
   void enqueueEmbedding('work_log', row.id, scope.projectId)
