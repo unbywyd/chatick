@@ -1022,13 +1022,14 @@ server.registerTool(
     title: 'Read the work log',
     description:
       'What people did in this project and where they stopped — written by them, in their own words. ' +
-      'READ THIS AT THE START of a session on unfamiliar work: the answer to "where did I leave off" is usually ' +
-      'already written here, and reconstructing it from tasks and commits is guessing. ' +
+      'CALL THIS FIRST when picking up work you did not just finish: "latestOwn" in the reply is exactly where ' +
+      'this person left off, so read it before asking them what they were doing. Reconstructing that from ' +
+      'tasks and commits is guessing, and making them repeat it wastes their time. ' +
       'Different from chatick_notes: a note is knowledge that lasts ("Cardcom rejects foreign cards"), ' +
       'a log entry is the state of work ("finished the webhook, stuck on retries"). ' +
       'Entries with status="draft" are the asking person\'s OWN unpublished notes — nobody else can see them, ' +
-      'not even project admins. Published entries are final: they can be added to, never edited. ' +
-      'Project admins see everyone; members see only themselves.',
+      'not even project admins, so never quote a draft into the chat. Published entries are final: they can ' +
+      'be added to, never edited. Project admins see everyone; members see only themselves.',
     inputSchema: {
       project: z.string().describe('Project id'),
       authorId: z.string().optional().describe('Filter by person — admins only; members always see just themselves'),
@@ -1060,7 +1061,12 @@ server.registerTool(
     description:
       'Record where the work stands, ON BEHALF OF the human. Saves as a DRAFT: only they can see it until ' +
       'they publish, so writing here is safe even when the state is messy or half-thought. ' +
-      'Write at the end of a working session — what got done, what is half-finished, what to pick up next. ' +
+      'WRITE ONE AT THE END OF EVERY WORKING SESSION — what got done, what is half-finished, what to pick up ' +
+      'next. This is what makes the next session start informed instead of blind. ' +
+      'KEEP IT SHORT: a few lines of fact, the way you would leave a note for yourself. What changed, where it ' +
+      'stopped, what is next. No retelling of the conversation, no summary of code you just wrote, no ' +
+      'restating what the task already says — a long entry does not get read, and the whole point is that ' +
+      'the next person, or you tomorrow, takes it in at a glance. ' +
       'One open draft per person per project: if one exists this returns its id, and you extend it with ' +
       'chatick_worklog_update instead of starting a second. ' +
       'Body is HTML, like notes and documents — not markdown.',
@@ -1084,14 +1090,19 @@ server.registerTool(
   {
     title: 'Edit the open draft',
     description:
-      'Extend or rewrite the person\'s own UNPUBLISHED draft. ' +
+      'Extend or rewrite the person\'s own UNPUBLISHED draft, and attach or detach the task it is about. ' +
       'Published entries cannot be edited by anyone, ever — the log only moves forward. If something published ' +
-      'turned out wrong, write a new entry saying so; do not try to correct the old one.',
+      'turned out wrong, write a new entry saying so; do not try to correct the old one. ' +
+      'Linking a task is optional and often right to skip: "spent the morning on the staging environment" ' +
+      'belongs to no task. Link when the entry is about one task, so it shows up next to that work.',
     inputSchema: {
       project: z.string().describe('Project id'),
       id: z.string().describe('Entry id from chatick_worklog'),
-      body: z.string().optional().describe('HTML'),
-      taskId: z.string().optional().describe('Task to attach, or empty string to detach'),
+      body: z.string().optional().describe('HTML — replaces the current text, so include what you keep'),
+      taskId: z
+        .string()
+        .optional()
+        .describe('Task id to link this entry to. Pass an empty string "" to unlink it and leave the entry standing alone'),
     },
   },
   async ({ project, id, ...body }) => {

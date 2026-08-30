@@ -5643,16 +5643,36 @@ bridgeRoute.get('/worklog', async (c) => {
     .orderBy(sql`coalesce(${workLog.publishedAt}, ${workLog.createdAt}) desc`)
     .limit(Math.min(Number(c.req.query('limit') ?? 30) || 30, 100))
 
+  const items = rows.map((x) => ({
+    id: x.r.id,
+    status: x.r.status,
+    body: htmlToText(x.r.body),
+    at: x.r.publishedAt ?? x.r.createdAt,
+    mine: x.r.authorId === id.userId,
+    author: x.author.name,
+    task: x.task?.number ? { number: x.task.number, title: x.task.title } : null,
+  }))
+
+  /**
+   * Своя последняя запись — ОТДЕЛЬНЫМ полем, а не первой строкой списка.
+   *
+   * «Где я остановился» — главный вопрос к журналу, и ответ на него не должен
+   * зависеть от того, заметит ли модель своё имя среди чужих: в проекте на
+   * десять человек её запись может быть двадцатой сверху.
+   *
+   * Свой черновик важнее своего опубликованного, даже если он старше:
+   * черновик — это незаконченная мысль, оставленная себе, а опубликованное
+   * уже подытожено.
+   */
+  const mine = items.filter((x) => x.mine)
+  const latestOwn = mine.find((x) => x.status === 'draft') ?? mine[0] ?? null
+
   return c.json({
-    items: rows.map((x) => ({
-      id: x.r.id,
-      status: x.r.status,
-      body: htmlToText(x.r.body),
-      at: x.r.publishedAt ?? x.r.createdAt,
-      author: x.author.name,
-      task: x.task?.number ? { number: x.task.number, title: x.task.title } : null,
-    })),
-    hint: 'Entries marked status="draft" are the asking person\'s own unpublished notes — nobody else can see them. Published entries are the project history: they cannot be edited, only added to. To record where work stopped, POST /x/worklog, then POST /x/worklog/<id>/publish when it is ready to share.',
+    latestOwn,
+    items,
+    hint: latestOwn
+      ? `"latestOwn" is where this person left off — read it before asking them. ${latestOwn.status === 'draft' ? 'It is their unpublished draft: extend it with PATCH /x/worklog/<id> rather than starting a new entry, and never quote a draft into the chat.' : 'It is published and final; record new work with POST /x/worklog.'} Published entries are the project history: they can be added to, never edited.`
+      : 'This person has written nothing here yet. When you finish a piece of work, record where it stands with POST /x/worklog — it saves as a draft only they can see, and POST /x/worklog/<id>/publish shares it.',
   })
 })
 
@@ -5724,7 +5744,12 @@ bridgeRoute.patch('/worklog/:id', async (c) => {
   const b = parsed.body as Record<string, unknown>
   const patch: Partial<typeof workLog.$inferInsert> = { updatedAt: new Date() }
   if (typeof b.body === 'string') patch.body = richText(b.body)
-  if (b.taskId !== undefined) patch.taskId = typeof b.taskId === 'string' ? b.taskId : null
+  // Отвязать — это taskId: "" или null. Пустая строка тоже строка, и без
+  // .trim() сюда легло бы «» вместо пустоты: внешний ключ на несуществующую
+  // задачу, то есть ошибка базы вместо отвязки.
+  if (b.taskId !== undefined) {
+    patch.taskId = typeof b.taskId === 'string' && b.taskId.trim() ? b.taskId.trim() : null
+  }
 
   await db.update(workLog).set(patch).where(eq(workLog.id, row.id))
   return c.json({ ok: true })

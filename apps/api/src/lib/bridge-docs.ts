@@ -955,9 +955,24 @@ places — do not put one in the other.
   POST   /x/worklog/<id>/publish    irreversible
   DELETE /x/worklog/<id>            own DRAFTS only — see below
 
-Read it at the START of a session on work you did not just finish. "Where did
-I leave off" is a question the person already answered last night; without
-this you would reconstruct it from tasks and commits, which is guessing.
+Read it at the START of a session on work you did not just finish. The reply
+opens with "latestOwn" — that person's most recent entry, their open draft if
+they have one. That is where they left off, in their own words; asking them to
+repeat it, or rebuilding it from tasks and commits, is worse than reading it.
+
+  latestOwn: { id, status: "draft", body: "...", at, task }
+
+WRITE ONE AT THE END OF EVERY SESSION. It saves as a draft only they can see,
+so there is nothing to be careful about. What changed, where it stopped, what
+is next — a few lines of fact, the way you would leave a note for yourself.
+
+Keep it SHORT. Not a retelling of the conversation, not a summary of the code,
+not a restatement of what the task already says. A long entry does not get
+read, and the whole value is that tomorrow it is taken in at a glance.
+
+Attach a task when the entry is about one — "TASK-81 done bar the tests".
+Leave it off when it is not: "spent the morning fighting staging" belongs to
+no task, and forcing one on it makes both harder to find.
 
 Two rules, and both matter:
 

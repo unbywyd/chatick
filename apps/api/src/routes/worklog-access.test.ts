@@ -172,6 +172,54 @@ describe('черновик один', () => {
   })
 })
 
+describe('«где я остановился» — ответ отдельным полем', () => {
+  const bridge = read('bridge.ts')
+  const at = bridge.indexOf("bridgeRoute.get('/worklog'")
+  const fn = bridge.slice(at, bridge.indexOf('bridgeRoute.post', at))
+
+  it('latestOwn берётся из СВОИХ записей, а не из первой строки списка', () => {
+    // Саботаж: latestOwn = items[0] — в проекте на десять человек это будет
+    // чужая запись, и «где я остановился» ответит про кого-то другого.
+    expect(fn.replace(/\s+/g, ' ')).toContain('const mine = items.filter((x) => x.mine)')
+    expect(fn, 'latestOwn не привязан к своим записям').toMatch(/latestOwn = mine\./)
+  })
+
+  it('свой черновик важнее своего опубликованного, даже если он старше', () => {
+    // Черновик — незаконченная мысль, оставленная себе; опубликованное уже
+    // подытожено. На вопрос «где я встал» отвечает первое.
+    expect(fn.replace(/\s+/g, ' ')).toContain(
+      "const latestOwn = mine.find((x) => x.status === 'draft') ?? mine[0] ?? null",
+    )
+  })
+
+  it('пустой журнал не отдаёт undefined, а говорит, что делать', () => {
+    // `mine[0]` на пустом массиве — undefined, и поле бы просто исчезло из
+    // ответа: модель не отличит «нет записей» от «поле не завезли».
+    expect(fn).toMatch(/\?\? null/)
+    expect(fn, 'нет подсказки для пустого журнала').toMatch(/has written nothing here yet/)
+  })
+
+  it('признак «моё» есть у каждой записи', () => {
+    expect(fn).toMatch(/mine: x\.r\.authorId === id\.userId/)
+  })
+})
+
+describe('связь с задачей', () => {
+  it('отвязка пустой строкой не кладёт «» вместо пустоты', () => {
+    // Пустая строка — тоже строка. Без .trim() сюда легло бы taskId: ''
+    // — внешний ключ на несуществующую задачу, то есть ошибка базы вместо
+    // отвязки.
+    //
+    // Саботаж: вернуть typeof b.taskId === 'string' ? b.taskId : null.
+    const bridge = read('bridge.ts')
+    const at = bridge.indexOf("bridgeRoute.patch('/worklog/:id'")
+    const fn = bridge.slice(at, bridge.indexOf('bridgeRoute.post', at))
+    expect(fn.replace(/\s+/g, ' '), 'пустая строка не превращается в null').toContain(
+      "patch.taskId = typeof b.taskId === 'string' && b.taskId.trim() ? b.taskId.trim() : null",
+    )
+  })
+})
+
 describe('лента', () => {
   it('стоит по времени публикации, а не создания', () => {
     // Черновик пишут в понедельник, публикуют в пятницу: в ленте он должен
