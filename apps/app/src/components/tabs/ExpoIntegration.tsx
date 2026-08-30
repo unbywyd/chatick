@@ -14,7 +14,20 @@ import { useConfirm } from '@/components/ui/confirm'
 // версия появляется сама, со ссылкой на сборку и на страницу логов. Дальше
 // (TestFlight, ревью, магазин) по-прежнему руками: EAS о магазинах не знает.
 
-type State = { connected: boolean; url?: string; secret?: string; lastEventAt?: string | null }
+type State = {
+  connected: boolean
+  /**
+   * Приходило ли от Expo хоть одно событие.
+   *
+   * connected — это только наша половина: секрет заведён. Вторую половину
+   * делают руками в чужой системе (`eas webhook:create`), и знать о ней мы
+   * можем единственным способом — постучались к нам или нет.
+   */
+  live?: boolean
+  url?: string
+  secret?: string
+  lastEventAt?: string | null
+}
 
 /**
  * Логотип Expo — официальный путь, а не нарисованный по памяти.
@@ -62,6 +75,21 @@ export function ExpoIntegration({ projectId, canManage }: { projectId: string; c
   })
 
   const connected = state.data?.connected ?? false
+  /**
+   * Три состояния вместо двух.
+   *
+   * Кнопка говорила «Expo подключён» с той секунды, как её нажали, и не меняла
+   * показаний никогда: она смотрела на наличие секрета, а не на то, работает
+   * ли связь. На живых данных из трёх проектов с интеграцией доходили сборки
+   * от одного — остальные семнадцать дней и три дня показывали «подключён»,
+   * не получив ни одного события.
+   *
+   * Теперь «подключён» значит «сборки доходят», а до первой — честное
+   * ожидание. Нейтральное, без обвинений: может, вебхук не прописан, а может,
+   * просто ещё не собирали.
+   */
+  const live = state.data?.live ?? false
+  const waiting = connected && !live
   const cmd = state.data?.url
     ? `eas webhook:create --event BUILD --url ${state.data.url} --secret ${state.data.secret}`
     : ''
@@ -79,16 +107,20 @@ export function ExpoIntegration({ projectId, canManage }: { projectId: string; c
       <button
         onClick={() => (connected ? setOpen(true) : canManage ? connect.mutate() : setOpen(true))}
         disabled={connect.isPending}
-        title={connected ? t('expo.connectedHint') : t('expo.connectHint')}
+        title={waiting ? t('expo.waitingHint') : connected ? t('expo.connectedHint') : t('expo.connectHint')}
         className={cn(
           'inline-flex shrink-0 items-center gap-1.5 rounded-md border px-2 py-1 text-xs transition-colors',
-          connected
+          // Ярко — только когда сборки реально доходят. Ожидание приглушено:
+          // это не ошибка и не успех, а «ещё не проверено делом».
+          live
             ? 'border-brand/40 bg-brand/10 text-brand-ink'
-            : 'text-muted-foreground hover:bg-accent hover:text-foreground',
+            : waiting
+              ? 'border-dashed text-muted-foreground hover:bg-accent hover:text-foreground'
+              : 'text-muted-foreground hover:bg-accent hover:text-foreground',
         )}
       >
         <ExpoMark className="size-3.5" />
-        {connected ? t('expo.connected') : t('expo.connect')}
+        {waiting ? t('expo.waiting') : connected ? t('expo.connected') : t('expo.connect')}
       </button>
 
       {open && (
@@ -142,6 +174,15 @@ export function ExpoIntegration({ projectId, canManage }: { projectId: string; c
                       человек будет ждать, что версия сама доедет до магазина. */}
                   {t('expo.scope')}
                 </div>
+
+                {/* Пока событий не было, главное на экране — не «когда
+                    последнее», а «связь ещё не проверена делом». Команда выше,
+                    её и надо выполнить. */}
+                {waiting && (
+                  <div className="mb-3 rounded-md border border-dashed p-2 text-xs text-muted-foreground">
+                    {t('expo.waitingExplain')}
+                  </div>
+                )}
 
                 <div className="flex items-center justify-between gap-2 text-xs text-muted-foreground">
                   <span>

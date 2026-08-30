@@ -51,9 +51,23 @@ integrationsRoute.get('/expo', async (c) => {
   const row = await db.query.projectIntegrations.findFirst({
     where: and(eq(projectIntegrations.projectId, g.projectId), eq(projectIntegrations.kind, 'expo')),
   })
-  if (!row) return c.json({ connected: false })
+  if (!row) return c.json({ connected: false, live: false })
   return c.json({
     connected: true,
+    /**
+     * Приходило ли от Expo хоть одно событие.
+     *
+     * connected значит только «мы завели секрет» — это наша половина дела.
+     * Вторую половину делают руками в чужой системе (`eas webhook:create`), и
+     * знать, выполнили ли её, мы можем ровно одним способом: постучались к нам
+     * или нет.
+     *
+     * Без этого признака кнопка говорила «Expo подключён» с той секунды, как
+     * нажали, и не меняла показаний никогда. На живых данных из трёх проектов
+     * с интеграцией работал один: WashMe семнадцать дней показывал
+     * «подключён», не получив ни одного события.
+     */
+    live: Boolean(row.lastEventAt),
     // Адрес и секрет показываем целиком: их вставляют в eas webhook:create, а
     // спрятанный наполовину секрет невозможно скопировать.
     url: `${API()}/hooks/expo/${row.secret}`,
@@ -73,7 +87,12 @@ integrationsRoute.post('/expo', async (c) => {
   // Повторное подключение возвращает тот же секрет, а не выдаёт новый: иначе
   // человек, нажавший кнопку дважды, тихо сломал бы уже настроенный вебхук.
   if (existing) {
-    return c.json({ connected: true, url: `${API()}/hooks/expo/${existing.secret}`, secret: existing.secret })
+    return c.json({
+      connected: true,
+      live: Boolean(existing.lastEventAt),
+      url: `${API()}/hooks/expo/${existing.secret}`,
+      secret: existing.secret,
+    })
   }
 
   // 32 символа: у EAS минимум 16, запас берём вдвое.
@@ -89,7 +108,8 @@ integrationsRoute.post('/expo', async (c) => {
     entityType: 'project',
     entityLabel: 'Expo integration',
   })
-  return c.json({ connected: true, url: `${API()}/hooks/expo/${row!.secret}`, secret: row!.secret }, 201)
+  // Только что созданная: событий по ней не было и быть не могло.
+  return c.json({ connected: true, live: false, url: `${API()}/hooks/expo/${row!.secret}`, secret: row!.secret }, 201)
 })
 
 integrationsRoute.delete('/expo', async (c) => {
@@ -101,7 +121,7 @@ integrationsRoute.delete('/expo', async (c) => {
   await db
     .delete(projectIntegrations)
     .where(and(eq(projectIntegrations.projectId, g.projectId), eq(projectIntegrations.kind, 'expo')))
-  return c.json({ connected: false })
+  return c.json({ connected: false, live: false })
 })
 
 /**
