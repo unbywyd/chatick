@@ -15,11 +15,19 @@ import { join } from 'node:path'
 const src = readFileSync(join(import.meta.dirname, 'tasks.ts'), 'utf8')
 const bridge = readFileSync(join(import.meta.dirname, 'bridge.ts'), 'utf8')
 
-/** Блок уведомления о смене статуса. */
+/**
+ * Блок уведомления о смене статуса.
+ *
+ * Границы ищем по КОДУ, а не отступом в N символов: срез фиксированной длины
+ * сползал от каждого добавленного комментария, и тест падал на исправном
+ * правиле. Берём от объявления получателей до конца вызова notify.
+ */
 const block = (() => {
-  const start = src.indexOf('opts.statusChanged')
+  const start = src.indexOf('const statusRecipients')
   expect(start, 'блок уведомления о смене статуса не найден').toBeGreaterThan(-1)
-  return src.slice(start - 400, start + 900)
+  const end = src.indexOf('if (opts.mentions)', start)
+  expect(end, 'конец блока не найден').toBeGreaterThan(start)
+  return src.slice(start, end)
 })()
 
 describe('смена статуса', () => {
@@ -39,6 +47,47 @@ describe('смена статуса', () => {
     // исполнителем и один из них уведомления не получил бы.
     expect(block).toMatch(/dedupeKey: `task_status:\$\{task\.id\}:\$\{task\.status\}`/)
     expect(block).not.toMatch(/dedupeKey: `task_status:[^`]*assigneeId/)
+  })
+})
+
+describe('«готово» не уведомляет', () => {
+  it('done исключён из уведомлений о статусе', () => {
+    // Остальные переходы значат «нужно твоё участие»; done значит обратное —
+    // участие больше не нужно, и делать с этим нечего.
+    //
+    // Замер на живых данных: из 304 уведомлений о статусе 111 приходились на
+    // done, и 70 из них никто не открыл. У одного человека мимо прошли 95%.
+    // Остальные статусы читают — непрочитанных почти нет.
+    //
+    // Саботаж: убрать !isDone — вернутся 111 уведомлений, которые никто не
+    // читает, и счётчик инбокса снова начнёт расти впустую.
+    expect(block, 'done снова уведомляет').toMatch(/!isDone/)
+    expect(block).toMatch(/const isDone = task\.status === 'done'/)
+  })
+
+  it('то же правило у ассистента в чате', () => {
+    // Ассистент двигает статусы из чата своим путём. Забыв здесь, мы вернули
+    // бы половину шума — и заметили бы это только по счётчику.
+    const memory = readFileSync(join(import.meta.dirname, '../lib/memory.ts'), 'utf8')
+    expect(memory, 'ассистент шлёт уведомление о done').toMatch(
+      /opts\.statusChanged && task\.status !== 'done'/,
+    )
+  })
+})
+
+describe('уведомление знает свою компанию', () => {
+  it('companyId проставляется при создании', () => {
+    // Инбокс отбирает по company_id: без него уведомление не попадает в ленту
+    // НИКОГДА, но исправно считается в счётчике сайдбара. Человек видит «1»,
+    // открывает проект — и не находит ничего.
+    //
+    // Так и случилось: колонку добавили миграцией 0093 и заполнили прошлые
+    // записи, а в notify() проставить забыли. 103 уведомления родились
+    // невидимыми.
+    //
+    // Саботаж: убрать строку — счётчик снова начнёт врать.
+    const notify = readFileSync(join(import.meta.dirname, '../lib/notify.ts'), 'utf8')
+    expect(notify, 'уведомление создаётся без компании').toMatch(/companyId: project\.companyId/)
   })
 })
 

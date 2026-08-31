@@ -1095,7 +1095,11 @@ export function memoryTools(projectId: string, actorUserId: string): { tools: To
     const link = projectPath((await companyOf(pid)) ?? '', pid, `/tasks/${task.id}`)
     if (opts.assigned && task.assigneeId)
       void notify({ projectId: pid, event: 'task_assigned', recipientIds: [task.assigneeId], actorId, actorName, dedupeKey: `task_assigned:${task.id}:${task.assigneeId}`, link, preview: task.title, entityType: 'task', entityId: task.id })
-    if (opts.statusChanged && task.assigneeId)
+    // «Готово» не уведомляет — то же правило, что в tasks.ts: остальные
+    // статусы значат «нужно твоё участие», а done значит обратное. Правило
+    // должно стоять в ОБОИХ путях: этим ассистент двигает статусы из чата, и
+    // забыв здесь, мы вернули бы половину шума.
+    if (opts.statusChanged && task.status !== 'done' && task.assigneeId)
       void notify({ projectId: pid, event: 'task_status', recipientIds: [task.assigneeId], actorId, actorName, dedupeKey: `task_status:${task.id}:${task.status}:${task.assigneeId}`, link, preview: task.title, vars: { ref: task.number, status: task.status }, entityType: 'task', entityId: task.id })
     if (opts.mentions) {
       const mentioned = extractMentions(task.description)
