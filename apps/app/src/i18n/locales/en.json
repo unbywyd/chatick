@@ -321,7 +321,9 @@
     "dueInDays": "in {{count}} days",
     "dueOverdueBy": "{{count}} days late",
     "dueFilter": "Due",
-    "dueFilterHint": "Overdue or due today and tomorrow"
+    "dueFilterHint": "Overdue or due today and tomorrow",
+    "ageDays": "{{count}}d",
+    "createdOn": "Created {{date}}"
   },
   "files": {
     "search": "Search files…",

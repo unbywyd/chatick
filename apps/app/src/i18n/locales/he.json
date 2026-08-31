@@ -321,7 +321,9 @@
     "dueInDays": "בעוד {{count}} ימים",
     "dueOverdueBy": "באיחור {{count}} ימים",
     "dueFilter": "יעדים",
-    "dueFilterHint": "באיחור או ליום-יומיים הקרובים"
+    "dueFilterHint": "באיחור או ליום-יומיים הקרובים",
+    "ageDays": "{{count}} י'",
+    "createdOn": "נוצרה ב-{{date}}"
   },
   "files": {
     "search": "חיפוש קבצים…",

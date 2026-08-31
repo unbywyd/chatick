@@ -322,7 +322,9 @@
     "dueInDays": "через {{count}} дн.",
     "dueOverdueBy": "просрочено на {{count}} дн.",
     "dueFilter": "Сроки",
-    "dueFilterHint": "Просроченные и те, что горят сегодня-завтра"
+    "dueFilterHint": "Просроченные и те, что горят сегодня-завтра",
+    "ageDays": "{{count}}д",
+    "createdOn": "Создана {{date}}"
   },
   "files": {
     "search": "Поиск файлов…",
