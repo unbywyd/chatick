@@ -924,7 +924,9 @@ function ProjectsTab({
   return (
     <div className="space-y-4">
       <div className="flex items-center gap-2">
-        <div className="relative flex-1">
+        {/* min-w-0: без него поле поиска не сжимается уже своего содержимого и
+            выталкивает кнопки за край экрана. */}
+        <div className="relative min-w-0 flex-1">
           <Search className="pointer-events-none absolute start-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
           <Input value={q} onChange={(e) => setQ(e.target.value)} placeholder={t('start.searchProjects')} className="ps-9" />
         </div>
@@ -949,9 +951,12 @@ function ProjectsTab({
             быть не должно. Сервер такой запрос всё равно отклонит, но человеку
             незачем это выяснять нажатием. */}
         {canManage && !creating && !showArchived && !company.projectsViaApiOnly && (
-          <Button variant="brand" onClick={() => setCreating(true)}>
+          <Button variant="brand" onClick={() => setCreating(true)} title={t('start.createProject')}>
             <Plus className="size-4" />
-            {t('start.createProject')}
+            {/* На телефоне только плюс — как у соседней кнопки архива. Текст
+                вместе с полем поиска не помещался в строку, и она распирала
+                страницу вбок. */}
+            <span className="hidden sm:inline">{t('start.createProject')}</span>
           </Button>
         )}
       </div>

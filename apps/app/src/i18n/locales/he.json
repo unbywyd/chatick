@@ -323,7 +323,8 @@
     "dueFilter": "יעדים",
     "dueFilterHint": "באיחור או ליום-יומיים הקרובים",
     "ageDays": "{{count}} י'",
-    "createdOn": "נוצרה ב-{{date}}"
+    "createdOn": "נוצרה ב-{{date}}",
+    "newTask": "משימה חדשה"
   },
   "files": {
     "search": "חיפוש קבצים…",

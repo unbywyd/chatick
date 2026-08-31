@@ -323,7 +323,8 @@
     "dueFilter": "Due",
     "dueFilterHint": "Overdue or due today and tomorrow",
     "ageDays": "{{count}}d",
-    "createdOn": "Created {{date}}"
+    "createdOn": "Created {{date}}",
+    "newTask": "New task"
   },
   "files": {
     "search": "Search files…",

@@ -84,3 +84,50 @@ describe('сетки перестраиваются в одну колонку',
     expect(overview, 'метрики не перестраиваются').toMatch(/grid gap-3 sm:grid-cols-3/)
   })
 })
+
+describe('создание задачи на телефоне', () => {
+  const sheet = read('components/tabs/tasks/NewTaskSheet.tsx')
+  const tab = read('components/tabs/TasksTab.tsx')
+
+  it('строчная форма на телефоне скрыта', () => {
+    // Пять элементов в ряд там не помещаются: полю названия оставалось два
+    // сантиметра, и человек печатал вслепую.
+    expect(tab).toMatch(/className="hidden gap-2 sm:flex"/)
+  })
+
+  it('вместо неё кнопка, и только на телефоне', () => {
+    expect(tab).toMatch(/onClick=\{\(\) => setSheetOpen\(true\)\}/)
+    expect(tab).toMatch(/className="w-full sm:hidden"/)
+  })
+
+  it('лист выезжает снизу, а не по центру', () => {
+    // Клавиатура выезжает снизу и накрывает нижнюю половину экрана. Окно по
+    // центру она закрыла бы вместе с полем, ради которого его открыли.
+    //
+    // Саботаж: заменить justify-end на place-items-center — поле уедет под
+    // клавиатуру.
+    expect(sheet, 'лист не прижат к низу').toMatch(/flex flex-col justify-end/)
+    expect(sheet, 'лист виден на широком экране').toMatch(/sm:hidden/)
+  })
+
+  it('учитывает полосу жеста внизу', () => {
+    // На телефонах без кнопки «домой» кнопка «Создать» попадала бы под неё.
+    expect(sheet).toMatch(/pb-\[max\(1rem,env\(safe-area-inset-bottom\)\)\]/)
+  })
+
+  it('фокус в поле сразу, без лишнего касания', () => {
+    // Иначе клавиатура выезжает только после второго касания.
+    expect(sheet).toMatch(/requestAnimationFrame\(\(\) => inputRef\.current\?\.focus\(\)\)/)
+  })
+
+  it('срок передаётся аргументом, а не через состояние', () => {
+    // Лист держит свою дату у себя; читая newDue, мутация увидела бы значение
+    // до setState — и срок молча терялся бы.
+    //
+    // Саботаж: вернуть create.mutate(title) — задача создастся без срока.
+    expect(tab).toMatch(/onCreate=\{\(title, due\) => create\.mutate\(\{ title, due \}\)\}/)
+    expect(tab, 'мутация читает срок из состояния').toMatch(
+      /mutationFn: \(\{ title, due \}: \{ title: string; due\?: string \}\)/,
+    )
+  })
+})

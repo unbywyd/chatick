@@ -19,6 +19,7 @@ import {
 import { Avatar } from '@/components/ui/avatar'
 import { Popover, PopoverTrigger, PopoverContent } from '@/components/ui/popover'
 import { TaskDrawer } from './tasks/TaskDrawer'
+import { NewTaskSheet } from './tasks/NewTaskSheet'
 import { ProjectSummary } from './tasks/ProjectSummary'
 import { BlockersStrip } from './tasks/BlockersStrip'
 import { TasksTable } from './tasks/TasksTable'
@@ -45,6 +46,8 @@ export function TasksTab({ projectId, meId }: { projectId: string; meId?: string
   const [assigneeFilter, setAssigneeFilter] = useState<string | null>(null) // фильтр по исполнителю
   const [assigneeSearch, setAssigneeSearch] = useState('')
   const [newSprintId, setNewSprintId] = useState<string | null>(null) // спринт для новой задачи
+  /** Лист создания задачи на телефоне: в строку форма там не помещается. */
+  const [sheetOpen, setSheetOpen] = useState(false)
   const [statusFilter, setStatusFilter] = useState<Status | null>(null)
   // Срок: один фильтр на «просрочено или горит». Раздельные «просроченные» и
   // «скоро» дробят и без того длинный ряд фильтров, а спрашивают их вместе —
@@ -265,7 +268,14 @@ export function TasksTab({ projectId, meId }: { projectId: string; meId?: string
   }
 
   const create = useMutation({
-    mutationFn: (title: string) =>
+    /**
+     * Срок приходит АРГУМЕНТОМ, а не читается из состояния.
+     *
+     * Форму на широком экране и лист на телефоне обслуживает одна мутация, но
+     * лист держит свою дату у себя. Читая newDue, мутация видела бы значение
+     * до setState — и срок, выбранный в листе, молча терялся бы.
+     */
+    mutationFn: ({ title, due }: { title: string; due?: string }) =>
       api<Task>(
         '/api/v1/tasks',
         {
@@ -275,7 +285,7 @@ export function TasksTab({ projectId, meId }: { projectId: string; meId?: string
           body: JSON.stringify({
             title,
             groupId: newSprintId,
-            dueDate: newDue ? new Date(`${newDue}T12:00:00`).toISOString() : null,
+            dueDate: (due ?? newDue) ? new Date(`${due ?? newDue}T12:00:00`).toISOString() : null,
           }),
         },
         'project',
@@ -609,12 +619,17 @@ export function TasksTab({ projectId, meId }: { projectId: string; meId?: string
     <div className="relative h-full overflow-hidden">
       <div className="h-full overflow-y-auto">
         <div className="page-w p-6">
-          {/* Быстрое создание */}
+          {/* Быстрое создание.
+
+              На телефоне скрыто целиком: пять элементов в одну строку там не
+              помещаются никогда, и полю названия оставалось два сантиметра —
+              человек печатал вслепую. Вместо строки кнопка ниже, она открывает
+              лист снизу, где у названия вся ширина экрана. */}
           <form
-            className="flex gap-2"
+            className="hidden gap-2 sm:flex"
             onSubmit={(e) => {
               e.preventDefault()
-              if (newTitle.trim()) create.mutate(newTitle.trim())
+              if (newTitle.trim()) create.mutate({ title: newTitle.trim() })
             }}
           >
             {/* выбор спринта для новой задачи — только если есть хотя бы один спринт */}
@@ -714,6 +729,31 @@ export function TasksTab({ projectId, meId }: { projectId: string; meId?: string
             </DropdownMenuContent>
           </DropdownMenu>
           </form>
+
+          {/* Создание на телефоне: кнопка вместо тесной строки. Во всю ширину
+              — она здесь главное действие, и промахнуться по ней нельзя. */}
+          <Button
+            variant="brand"
+            onClick={() => setSheetOpen(true)}
+            className="w-full sm:hidden"
+          >
+            <Plus className="size-4" />
+            {t('tasks.newTask')}
+          </Button>
+          <NewTaskSheet
+            open={sheetOpen}
+            onClose={() => setSheetOpen(false)}
+            /**
+             * Срок кладём в то же состояние, что и у формы на широком экране,
+             * — мутация читает newDue оттуда. Иначе выбранная в листе дата
+             * молча терялась бы: задача создавалась, а срока у неё не было.
+             */
+            onCreate={(title, due) => create.mutate({ title, due })}
+            pending={create.isPending}
+            groups={groupsQ.data ?? []}
+            groupId={newSprintId}
+            onGroupChange={setNewSprintId}
+          />
 
           {/* Прогресс реализации (по активным фильтрам) — SPEC §8.15 */}
           {progress.total > 0 && (
