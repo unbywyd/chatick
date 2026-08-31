@@ -28,6 +28,17 @@ describe('логотип на странице компании', () => {
 
   it('иначе остаётся обычным логотипом', () => {
     // Ветка else обязана рисовать логотип, а не пустоту.
-    expect(screen).toMatch(/> 1 \?[\s\S]{0,600}?\) : \(\s*<Logo \/>\s*\)/)
+    //
+    // Проверяем НАЛИЧИЕ логотипа в ветке, а не точную разметку: прежний
+    // шаблон требовал буквально «<Logo />» и упал, когда логотип обернули в
+    // span, чтобы прятать его на телефоне. Правило при этом не менялось.
+    const at = screen.indexOf('> 1 ?')
+    expect(at, 'ветка выбора компании не найдена').toBeGreaterThan(-1)
+    const branch = screen.slice(at, at + 700)
+    const elseAt = branch.indexOf(') : (')
+    expect(elseAt, 'нет ветки else').toBeGreaterThan(-1)
+    expect(branch.slice(elseAt, elseAt + 200), 'в ветке else нет логотипа').toMatch(/<Logo \/>/)
+    // И он не кликабельный: переход отсюда вернул бы человека обратно.
+    expect(branch.slice(elseAt, elseAt + 200), 'логотип в ветке else кликается').not.toMatch(/onClick/)
   })
 })

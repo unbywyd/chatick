@@ -149,21 +149,27 @@ export function StartScreen() {
               Только когда компаний больше одной: с единственной /start сам
               возвращает обратно (выбирать не из чего), и клик выглядел бы
               сломанным. Тогда логотип остаётся просто логотипом. */}
+          {/* На телефоне логотип и разделитель прячем: «Chatick / <компания>»
+              не помещался, и шапка распирала страницу вбок. Название компании
+              важнее — человек и так знает, в каком он приложении. Переход ко
+              всем компаниям остаётся в самом переключателе. */}
           {company && (companiesQ.data?.companies.length ?? 0) > 1 ? (
             <button
               type="button"
               onClick={() => navigate('/start')}
               title={t('start.allCompanies')}
-              className="rounded-md transition-opacity hover:opacity-70"
+              className="hidden rounded-md transition-opacity hover:opacity-70 sm:block"
             >
               <Logo />
             </button>
           ) : (
-            <Logo />
+            <span className="hidden sm:block">
+              <Logo />
+            </span>
           )}
           {company && (
             <>
-              <span className="text-muted-foreground">/</span>
+              <span className="hidden text-muted-foreground sm:inline">/</span>
               {/* Переключатель вместо ссылки назад: менять компанию, уходя со
                   страницы, на которой работаешь, — лишний шаг. */}
               <CompanySwitcher

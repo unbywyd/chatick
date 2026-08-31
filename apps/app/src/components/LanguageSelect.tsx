@@ -43,8 +43,14 @@ export function LanguageSelect() {
     <DropdownMenu>
       <DropdownMenuTrigger asChild>
         <Button variant="outline" size="sm" aria-label={t('language')} className="gap-1.5">
-          <Languages className="size-3.5" />
-          {current?.label}
+          {/* Иконка только на широком: в шапке телефона она отнимала место у
+              самого языка, а рядом уже стоит стрелка — что это выбор, видно
+              и без второго значка. */}
+          <Languages className="hidden size-3.5 sm:block" />
+          {/* На узком — код языка: «עברית» и «Русский» распирали шапку, а
+              «HE» и «RU» отвечают на тот же вопрос. */}
+          <span className="sm:hidden">{current?.code.toUpperCase()}</span>
+          <span className="hidden sm:inline">{current?.label}</span>
           <ChevronDown className="size-3 text-muted-foreground" />
         </Button>
       </DropdownMenuTrigger>

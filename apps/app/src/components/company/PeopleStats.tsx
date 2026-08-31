@@ -104,7 +104,11 @@ function ActivityStrip({ days, since }: { days: string[]; since: string | null }
 
   return (
     <div>
-      <div className="flex gap-px">
+      {/* min-w-0 на полосе и клетках: без него flex-элемент не сжимается уже
+          своего содержимого, и 28 клеток с зазорами распирали страницу на
+          узком экране — отсюда горизонтальная прокрутка внизу всей страницы.
+          В RTL она же ломала расчёт высоты, и низ содержимого обрезался. */}
+      <div className="flex min-w-0 gap-px">
         {cells.map((c) => (
           <span
             key={c.key}
@@ -112,7 +116,7 @@ function ActivityStrip({ days, since }: { days: string[]; since: string | null }
                оставляет вопрос «и что?» — говорим прямо: работал или нет. */
             title={`${fmt(c.key)} — ${c.active ? t('people.dayActive') : t('people.dayIdle')}`}
             className={cn(
-              'h-4 flex-1 rounded-[1px] transition-colors',
+              'h-4 min-w-0 flex-1 rounded-[1px] transition-colors',
               c.active ? 'bg-brand hover:bg-brand/80' : 'bg-muted-foreground/15 hover:bg-muted-foreground/30',
             )}
           />

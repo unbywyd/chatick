@@ -251,14 +251,17 @@ export function OverviewTab({
         {/* Поиск появляется, когда список перестаёт читаться с одного взгляда.
             При пяти проектах поле только мешает, при двадцати — без него
             нужный ищут глазами по всей странице. */}
-        <div className="mb-3 flex items-center gap-3">
+        {/* flex-wrap и min-w-0: на телефоне заголовок и поле в одной строке
+            не помещались и распирали страницу вбок — отсюда горизонтальная
+            прокрутка внизу. Теперь поле переносится на вторую строку. */}
+        <div className="mb-3 flex flex-wrap items-center gap-3">
           <h2 className="text-sm font-semibold">{t('overview.projects')}</h2>
           {d.projects.length > 7 && (
             <input
               value={projectQuery}
               onChange={(e) => setProjectQuery(e.target.value)}
               placeholder={t('overview.findProject')}
-              className="ms-auto w-40 rounded-md border bg-background px-2.5 py-1 text-xs outline-none transition-colors focus:border-brand sm:w-56"
+              className="ms-auto w-full min-w-0 rounded-md border bg-background px-2.5 py-1 text-xs outline-none transition-colors focus:border-brand sm:w-56"
             />
           )}
         </div>
@@ -402,7 +405,9 @@ export function OverviewTab({
             {/* Пока едут новые числа — приглушаем секцию, а не гасим страницу:
                 видно, что период применился и ответ в пути. */}
             {q.isFetching && <span className="text-xs text-muted-foreground">…</span>}
-            <PeriodPicker value={period} onChange={setPeriod} className="w-52" />
+            {/* На телефоне во всю ширину: 208px рядом с суммой не помещались,
+                и строка распирала карточку. */}
+            <PeriodPicker value={period} onChange={setPeriod} className="w-full sm:w-52" />
           </div>
         </div>
         {d.weeks.length === 0 ? (
