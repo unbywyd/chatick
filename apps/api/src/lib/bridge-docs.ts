@@ -962,13 +962,21 @@ repeat it, or rebuilding it from tasks and commits, is worse than reading it.
 
   latestOwn: { id, status: "draft", body: "...", at, task }
 
-WRITE ONE AT THE END OF EVERY SESSION. It saves as a draft only they can see,
-so there is nothing to be careful about. What changed, where it stopped, what
-is next — a few lines of fact, the way you would leave a note for yourself.
+WRITE AFTER EVERY FINISHED PIECE — committed, deployed, a decision made, a
+direction corrected, something that turned out not to work. Not once "at the
+end of the session": a session has no end, the conversation just continues, and
+later never arrives. When the conversation is gone, this entry is what is left.
 
-Keep it SHORT. Not a retelling of the conversation, not a summary of the code,
-not a restatement of what the task already says. A long entry does not get
-read, and the whole value is that tomorrow it is taken in at a glance.
+It saves as a draft only they can see, so there is nothing to be careful about.
+
+Record TWO things. State: what changed, what is half-done, what is next. And
+DECISIONS with their reason — what was agreed and why, especially when it
+reverses an earlier plan. The reason is the part no commit and no task carries,
+and six weeks later somebody undoes the decision because it was never written.
+
+Facts and movement, no water. Not a retelling of the conversation, not a
+summary of the code, not a restatement of the task. The test: would this help
+someone who never saw the conversation?
 
 Attach a task when the entry is about one — "TASK-81 done bar the tests".
 Leave it off when it is not: "spent the morning fighting staging" belongs to

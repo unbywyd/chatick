@@ -854,7 +854,7 @@ export function memoryTools(projectId: string, actorUserId: string): { tools: To
     {
       name: 'write_work_log',
       description:
-        'Record where the work stands, ON BEHALF OF the user. Saves as a DRAFT that only they can see, so it is safe to write a half-finished state. Use when they say "запиши где я остановился", "отметь что сделал", or at the end of a working session. KEEP IT SHORT — three or four lines of fact: what changed, where it stopped, what is next. Not a retelling of the conversation and not a summary of code; a long entry is one nobody reads. One open draft per person per project: if one exists this extends it instead of starting a second. Body is HTML like documents, not markdown.',
+        'Record where the work stands, ON BEHALF OF the user. Saves as a DRAFT that only they can see, so it is safe to write a half-finished state. Write after every FINISHED PIECE of work — a decision made, a direction corrected, something shipped — not once at the end: a conversation has no end, and when it is gone this entry is all that is left of it. Record two things: state (what changed, what is half-done, what is next) and DECISIONS with their reason — what was agreed and why. The reason is what no task carries, and it is what gets undone later. Facts and movement, no water: three or four lines, not a retelling of the conversation and not a summary of code. One open draft per person per project: if one exists this extends it instead of starting a second. Body is HTML like documents, not markdown.',
       parameters: {
         type: 'object',
         properties: {

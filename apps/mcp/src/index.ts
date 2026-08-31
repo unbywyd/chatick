@@ -1061,12 +1061,17 @@ server.registerTool(
     description:
       'Record where the work stands, ON BEHALF OF the human. Saves as a DRAFT: only they can see it until ' +
       'they publish, so writing here is safe even when the state is messy or half-thought. ' +
-      'WRITE ONE AT THE END OF EVERY WORKING SESSION — what got done, what is half-finished, what to pick up ' +
-      'next. This is what makes the next session start informed instead of blind. ' +
-      'KEEP IT SHORT: a few lines of fact, the way you would leave a note for yourself. What changed, where it ' +
-      'stopped, what is next. No retelling of the conversation, no summary of code you just wrote, no ' +
-      'restating what the task already says — a long entry does not get read, and the whole point is that ' +
-      'the next person, or you tomorrow, takes it in at a glance. ' +
+      'WRITE AFTER EVERY FINISHED PIECE OF WORK — committed, deployed, a decision made, a direction ' +
+      'corrected, something that turned out not to work. Not once "at the end of the session": a session has ' +
+      'no end, the conversation just continues, and later never arrives. When this conversation is gone, this ' +
+      'entry is the only thing left of it. ' +
+      'RECORD TWO THINGS. State: what changed, what is half-done, what is next. And DECISIONS with their ' +
+      'reason — what was agreed and why, especially when it reverses an earlier plan. The reason is the part ' +
+      'no commit and no task carries, and six weeks later someone undoes the decision because it was never ' +
+      'written down. ' +
+      'FACTS AND MOVEMENT, NO WATER: a few lines, the way you would leave a note for yourself. Not a retelling ' +
+      'of the conversation, not a summary of the code you just wrote, not a restatement of the task. The test: ' +
+      'would this help someone who never saw this conversation? ' +
       'One open draft per person per project: if one exists this returns its id, and you extend it with ' +
       'chatick_worklog_update instead of starting a second. ' +
       'Body is HTML, like notes and documents — not markdown.',
