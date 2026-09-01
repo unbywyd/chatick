@@ -797,6 +797,292 @@ server.registerTool(
 )
 
 server.registerTool(
+  'chatick_comment_update',
+  {
+    title: 'Fix your own comment',
+    description:
+      'Correct a comment you wrote — a wrong number, a broken link, a claim that turned out false. ' +
+      'ONLY YOUR OWN: the server refuses a comment written by anyone else, unless the person you act for is a project admin. ' +
+      'Use it to fix YOUR mistake, not to rewrite the discussion: if the comment was already answered, the ' +
+      'answer will look like a reply to something nobody said. In that case add a new comment instead. ' +
+      'The text replaces the old one entirely — include what you keep. Mentions are re-parsed, so @[Name](userId) ' +
+      'added here does notify.',
+    inputSchema: {
+      project: z.string(),
+      task: z.string(),
+      comment: z.string().describe('Comment id from chatick_comments'),
+      text: z.string().min(1).describe('The full new text — it replaces the old one'),
+    },
+  },
+  async ({ project, task, comment, text }) => {
+    try {
+      return json(
+        await call(
+          { ...(await need()), projectId: project },
+          'PATCH',
+          `/tasks/${encodeURIComponent(task)}/comments/${encodeURIComponent(comment)}`,
+          { text },
+        ),
+      )
+    } catch (e) {
+      return fail(e)
+    }
+  },
+)
+
+server.registerTool(
+  'chatick_comment_delete',
+  {
+    title: 'Remove your own comment',
+    description:
+      'Delete a comment you wrote — one posted by mistake, or into the wrong task. ' +
+      'ONLY YOUR OWN, same rule as editing. ' +
+      'Prefer chatick_comment_update: a deleted comment leaves a hole in the discussion, and anyone who replied ' +
+      'to it is left answering nothing. Delete when the comment should never have been there at all; correct it ' +
+      'when it was simply wrong.',
+    inputSchema: {
+      project: z.string(),
+      task: z.string(),
+      comment: z.string().describe('Comment id from chatick_comments'),
+    },
+  },
+  async ({ project, task, comment }) => {
+    try {
+      return json(
+        await call(
+          { ...(await need()), projectId: project },
+          'DELETE',
+          `/tasks/${encodeURIComponent(task)}/comments/${encodeURIComponent(comment)}`,
+        ),
+      )
+    } catch (e) {
+      return fail(e)
+    }
+  },
+)
+
+// --- Блокеры -----------------------------------------------------------------
+
+/**
+ * «Что держит работу» — вопрос, на который ни статус, ни прогресс не отвечают.
+ * В базе таких связей три десятка, а ассистент их не видел вовсе.
+ */
+server.registerTool(
+  'chatick_blockers',
+  {
+    title: 'What is stuck and why',
+    description:
+      'Tasks that cannot move because they wait for another unfinished task. ' +
+      'Ask this before planning a day or reporting status: a task in progress that waits on someone else is not ' +
+      'progress, and neither its status nor its estimate says so. Without a task id, returns everything stuck in ' +
+      'the project.',
+    inputSchema: {
+      project: z.string(),
+      task: z.string().optional().describe('One task — what it waits for and what waits for it'),
+    },
+  },
+  async ({ project, task }) => {
+    try {
+      const scope = { ...(await need()), projectId: project }
+      return json(
+        task
+          ? await call(scope, 'GET', `/tasks/${encodeURIComponent(task)}/blockers`)
+          : await call(scope, 'GET', '/blockers'),
+      )
+    } catch (e) {
+      return fail(e)
+    }
+  },
+)
+
+server.registerTool(
+  'chatick_blocker_add',
+  {
+    title: 'Say what a task waits for',
+    description:
+      'Record that a task is blocked by other tasks, or blocks them. Do it the moment you find out — a blocker ' +
+      'nobody wrote down is rediscovered by the next person from scratch. ' +
+      'side="blockedBy" (default): the listed tasks hold up this one. side="blocking": this one holds up them.',
+    inputSchema: {
+      project: z.string(),
+      task: z.string().describe('The task this is about'),
+      tasks: z.array(z.string()).min(1).describe('Task numbers or ids on the other side of the link'),
+      side: z.enum(['blockedBy', 'blocking']).optional(),
+    },
+  },
+  async ({ project, task, ...body }) => {
+    try {
+      return json(
+        await call({ ...(await need()), projectId: project }, 'POST', `/tasks/${encodeURIComponent(task)}/blockers`, body),
+      )
+    } catch (e) {
+      return fail(e)
+    }
+  },
+)
+
+// --- Спринты -----------------------------------------------------------------
+
+server.registerTool(
+  'chatick_sprints',
+  {
+    title: 'Sprints of a project',
+    description:
+      'Sprints (task groups) with their ids. Needed before putting a task into one: chatick_task_create takes a ' +
+      'sprint NAME, and an unknown name is not created silently — the task simply lands outside any sprint.',
+    inputSchema: { project: z.string() },
+  },
+  async ({ project }) => {
+    try {
+      return json(await call({ ...(await need()), projectId: project }, 'GET', '/sprints'))
+    } catch (e) {
+      return fail(e)
+    }
+  },
+)
+
+server.registerTool(
+  'chatick_sprint_create',
+  {
+    title: 'Create a sprint',
+    description:
+      'Create a sprint (task group). Ask before doing it: sprints shape how the team plans, and an extra one ' +
+      'made on a guess has to be cleaned up by hand.',
+    inputSchema: {
+      project: z.string(),
+      name: z.string().min(1),
+      color: z.string().optional().describe('Hex like #7c3aed'),
+    },
+  },
+  async ({ project, ...body }) => {
+    try {
+      return json(await call({ ...(await need()), projectId: project }, 'POST', '/sprints', body))
+    } catch (e) {
+      return fail(e)
+    }
+  },
+)
+
+// --- Документы ---------------------------------------------------------------
+
+/**
+ * Документов в проекте десятки, а инструментов не было ни одного: спека,
+ * договорённости и описания API лежали там, куда ассистент не мог заглянуть.
+ */
+server.registerTool(
+  'chatick_documents',
+  {
+    title: 'Find a project document',
+    description:
+      'Documents of a project: specs, agreements, API notes — the long-lived text that does not fit in a task. ' +
+      'Pass q to search titles AND bodies, so you can find which document covers something before reading any of ' +
+      'them. Returns titles and sizes, not the text: read one with chatick_document.',
+    inputSchema: { project: z.string(), q: z.string().optional().describe('Searches titles and text') },
+  },
+  async ({ project, q }) => {
+    try {
+      return json(await call({ ...(await need()), projectId: project }, 'GET', '/documents', undefined, { q }))
+    } catch (e) {
+      return fail(e)
+    }
+  },
+)
+
+server.registerTool(
+  'chatick_document',
+  {
+    title: 'Read a document',
+    description:
+      'Full text of one document. Read it before writing code against a spec: the task says what to do, the ' +
+      'document says how it must behave.',
+    inputSchema: { project: z.string(), id: z.string().describe('Document id from chatick_documents') },
+  },
+  async ({ project, id }) => {
+    try {
+      return json(await call({ ...(await need()), projectId: project }, 'GET', `/documents/${encodeURIComponent(id)}`))
+    } catch (e) {
+      return fail(e)
+    }
+  },
+)
+
+server.registerTool(
+  'chatick_document_create',
+  {
+    title: 'Write a document',
+    description:
+      'Create a document, ON BEHALF OF the human. For text that outlives a task: a spec, an agreed approach, ' +
+      'a description of how something works. Anything that is about ONE task belongs in that task instead. ' +
+      'Body is HTML, like notes — not markdown.',
+    inputSchema: {
+      project: z.string(),
+      title: z.string().min(1).describe('Short — what this document is'),
+      content: z.string().optional().describe('HTML'),
+    },
+  },
+  async ({ project, ...body }) => {
+    try {
+      return json(await call({ ...(await need()), projectId: project }, 'POST', '/documents', body))
+    } catch (e) {
+      return fail(e)
+    }
+  },
+)
+
+server.registerTool(
+  'chatick_document_append',
+  {
+    title: 'Add to the end of a document',
+    description:
+      'Append text to a document without touching what is already there. PREFER THIS over rewriting: a document ' +
+      'is usually written by several people, and replacing it wholesale silently drops their work. Use ' +
+      'chatick_document_update only when the human asked to change existing text.',
+    inputSchema: {
+      project: z.string(),
+      id: z.string(),
+      content: z.string().min(1).describe('HTML to add at the end'),
+    },
+  },
+  async ({ project, id, content }) => {
+    try {
+      return json(
+        await call({ ...(await need()), projectId: project }, 'POST', `/documents/${encodeURIComponent(id)}/append`, { content }),
+      )
+    } catch (e) {
+      return fail(e)
+    }
+  },
+)
+
+server.registerTool(
+  'chatick_document_update',
+  {
+    title: 'Rewrite a document',
+    description:
+      'Replace the title or body of a document. The body REPLACES the old one entirely — read it first and ' +
+      'include what you keep, or you will erase work somebody else did. To add at the end, use ' +
+      'chatick_document_append instead. ' +
+      'Every edit is versioned, so a mistake is recoverable — but only if somebody notices it.',
+    inputSchema: {
+      project: z.string(),
+      id: z.string(),
+      title: z.string().optional(),
+      content: z.string().optional().describe('HTML — replaces the whole body'),
+    },
+  },
+  async ({ project, id, ...body }) => {
+    if (!Object.values(body).some((v) => v !== undefined)) {
+      return fail(new Error('Nothing to change: pass title or content'))
+    }
+    try {
+      return json(await call({ ...(await need()), projectId: project }, 'PATCH', `/documents/${encodeURIComponent(id)}`, body))
+    } catch (e) {
+      return fail(e)
+    }
+  },
+)
+
+server.registerTool(
   'chatick_announce',
   {
     title: 'Tell the company something',
