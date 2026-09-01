@@ -339,7 +339,9 @@ export function ProjectSidebar({
               <button
                 onClick={() => open(p.id)}
                 className={cn(
-                  'flex w-full items-center gap-2.5 rounded-lg px-2 py-2 text-start transition-colors',
+                  // pe-10: справа стоит кнопка меню шириной 32px, и без
+                  // отступа название с временем уезжали бы под неё.
+                  'flex w-full items-center gap-2.5 rounded-lg py-2 ps-2 pe-10 text-start transition-colors',
                   active ? 'bg-accent' : 'hover:bg-accent/60',
                 )}
               >
@@ -392,11 +394,22 @@ export function ProjectSidebar({
                     onClick={(e) => e.stopPropagation()}
                     title={t('sidebar.projectActions')}
                     className={cn(
-                      'absolute end-1 top-1/2 -translate-y-1/2 rounded p-1 text-muted-foreground opacity-0 transition-opacity hover:bg-accent hover:text-foreground focus:opacity-100 group-hover/row:opacity-100',
-                      active && 'opacity-100',
+                      /*
+                       * Кнопка видна ВСЕГДА, а не по наведению.
+                       *
+                       * Спрятанное под hover находит только тот, кто уже
+                       * знает, что оно там есть: о самой возможности скрыть
+                       * проект человек так и не узнает. Плюс на телефоне
+                       * наведения нет вовсе — функция была бы недостижима.
+                       *
+                       * Мишень 32px и подложка: кнопка лежит поверх строки с
+                       * логотипом, текстом и полосой прогресса, и без фона
+                       * иконка тонула в этой пестроте.
+                       */
+                      'absolute end-1 top-1/2 grid size-8 -translate-y-1/2 place-items-center rounded-md text-muted-foreground transition-colors hover:bg-accent hover:text-foreground',
                     )}
                   >
-                    <MoreVertical className="size-4" />
+                    <MoreVertical className="size-4 shrink-0" />
                   </button>
                 </DropdownMenuTrigger>
                 <DropdownMenuContent align="end" onClick={(e) => e.stopPropagation()}>
