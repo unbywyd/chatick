@@ -1138,7 +1138,14 @@
     "newProject": "פרויקט חדש",
     "companySettings": "חברה",
     "collapse": "כיווץ הרשימה",
-    "expand": "הרחבת הרשימה"
+    "expand": "הרחבת הרשימה",
+    "working": "בעבודה",
+    "hidden": "מוסתרים",
+    "hide": "הסתרה",
+    "unhide": "החזרה לעבודה",
+    "projectActions": "פעולות על הפרויקט",
+    "hiddenEmpty": "אין פרויקטים מוסתרים",
+    "hiddenNote": "פרויקט מוסתר חוזר מעצמו כשמשהו בו דורש אתכם."
   },
   "journal": {
     "title": "הערות",

@@ -449,6 +449,17 @@ projectsRoute.get(
       // Список запрашивается либо живой, либо архивный, но признак нужен
       // самой карточке: по нему она решает, что предложить — убрать или вернуть.
       archived: Boolean(p.archivedAt),
+      /**
+       * Человек убрал этот проект со своего стола.
+       *
+       * Считаем ЗДЕСЬ, а не на клиенте: непрочитанное возвращает проект в
+       * работу само, и правило должно быть одно на всех — иначе сайдбар,
+       * трей и список компании разойдутся в том, что показывать.
+       *
+       * Скрытый проект с непрочитанным перестаёт быть скрытым: ради этого
+       * скрытие и заводилось — убрать с глаз, но не пропустить, когда позовут.
+       */
+      hidden: Boolean(myByProject.get(p.id)?.hiddenAt) && (unread.get(p.id) ?? 0) === 0,
       rulesAccepted: Boolean(myByProject.get(p.id)?.rulesAcceptedAt),
       members: (membersByProject.get(p.id) ?? []).slice(0, 8),
       lastMessage: lastMessage.get(p.id) ?? null,
@@ -1204,6 +1215,34 @@ projectsRoute.post(
 )
 
 // Убрать участника — письмо постфактум
+/**
+ * Убрать проект со своего стола или вернуть его в работу.
+ *
+ * ЛИЧНОЕ действие: строка в project_members у каждого своя, и скрытие у одного
+ * человека ничего не меняет у остальных. Этим оно отличается от архива
+ * проекта (projects.archived_at) — там ПМ убирает законченный проект у всей
+ * компании. Два разных понятия, поэтому и в интерфейсе они названы
+ * по-разному: «Архив» и «Скрытые».
+ *
+ * Возврат происходит и сам, без этой ручки: скрытый проект, в котором
+ * появилось непрочитанное, снова показывается в работе — см. поле hidden в
+ * списке проектов. Ручка нужна для того, чтобы вернуть его руками.
+ */
+projectsRoute.post('/:projectId/hide', async (c) => {
+  const { sub } = c.get('session')
+  const { projectId } = c.req.param()
+  const me = await projectRoleOf(projectId, sub)
+  if (!me) return c.json({ error: 'You are not a member of this project' }, 400)
+
+  const hide = c.req.query('hide') !== '0'
+  await db
+    .update(projectMembers)
+    .set({ hiddenAt: hide ? new Date() : null })
+    .where(and(eq(projectMembers.projectId, projectId), eq(projectMembers.userId, sub)))
+
+  return c.json({ ok: true, hidden: hide })
+})
+
 /**
  * Выйти из проекта самому.
  *

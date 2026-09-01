@@ -463,6 +463,17 @@ export const projectMembers = pgTable(
     role: memberRole('role').notNull().default('member'),
     // per-user пермишены на задачи и пр. (SPEC.md §4.3); JSON: { "tasks.create": true, ... }
     permissions: text('permissions').notNull().default('{}'),
+    /**
+     * Проект скрыт ЭТИМ человеком: «убрал со стола до завтра».
+     *
+     * Личное состояние, поэтому здесь, а не в projects: я скрыл у себя — у
+     * остальных проект на месте. В projects есть archived_at, но он про
+     * другое — ПМ убирает законченный проект у всей компании.
+     *
+     * Возвращается сам, как только придёт непрочитанное: скрытый проект, в
+     * котором тебя ждут, перестаёт быть скрытым.
+     */
+    hiddenAt: timestamp('hidden_at', { withTimezone: true }),
     // должность и зона ответственности (SPEC §8.12) — короткий текст, опрокидывается в контекст ИИ
     jobTitle: text('job_title').notNull().default(''),
     responsibility: text('responsibility').notNull().default(''),

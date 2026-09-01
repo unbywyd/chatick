@@ -2,9 +2,16 @@ import { useMemo, useState } from 'react'
 import { useSidebarCollapsed } from '@/hooks/useSidebarCollapsed'
 import { useMediaQuery } from '@/hooks/useMediaQuery'
 import { useNavigate, useParams } from 'react-router-dom'
-import { useQuery } from '@tanstack/react-query'
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { useTranslation } from 'react-i18next'
-import { PanelLeftClose, PanelLeftOpen, Search } from 'lucide-react'
+import { EyeOff, Eye, MoreVertical, PanelLeftClose, PanelLeftOpen, Search } from 'lucide-react'
+import { toast } from 'sonner'
+import {
+  DropdownMenu,
+  DropdownMenuTrigger,
+  DropdownMenuContent,
+  DropdownMenuItem,
+} from '@/components/ui/dropdown-menu'
 import { api, type Company, type Me, type ProjectListItem } from '@/lib/api'
 import { cn } from '@/lib/utils'
 import { ProfileMenu } from '@/components/ProfileMenu'
@@ -101,17 +108,48 @@ export function ProjectSidebar({
   // правам всё может.
   const isAdmin = active?.myRole === 'owner' || active?.myRole === 'admin' || company?.myRole === 'admin'
 
+  /**
+   * Рабочие или скрытые.
+   *
+   * Скрытие — личное: «убрал со стола до завтра». Решает человек, а не
+   * правило: показывать «только проекты с открытыми задачами», как просили
+   * дословно, нельзя — у половины команды задач на себе нет вовсе, а проекты
+   * нужны, там переписка и ревью.
+   *
+   * Признак hidden считает СЕРВЕР, и он уже учитывает непрочитанное: проект,
+   * в котором тебя ждут, скрытым не считается. Иначе правило пришлось бы
+   * повторять здесь, в трее и в списке компании — и однажды разойтись.
+   */
+  const qc = useQueryClient()
+  const [tab, setTab] = useState<'work' | 'hidden'>('work')
+
+  const mine = useMemo(() => (projects.data ?? []).filter((p) => p.isMember), [projects.data])
+  const hiddenCount = useMemo(() => mine.filter((p) => p.hidden).length, [mine])
+
   const list = useMemo(() => {
-    const mine = (projects.data ?? []).filter((p) => p.isMember)
     const needle = q.trim().toLowerCase()
-    const filtered = needle ? mine.filter((p) => p.name.toLowerCase().includes(needle)) : mine
+    // При поиске таб не мешает: человек ищет проект, а не раздел, и «нашлось,
+    // но в другой вкладке» — худший ответ.
+    const inTab = needle ? mine : mine.filter((p) => (tab === 'hidden' ? p.hidden : !p.hidden))
+    const filtered = needle ? inTab.filter((p) => p.name.toLowerCase().includes(needle)) : inTab
     // как в мессенджере: свежие разговоры сверху
     return [...filtered].sort((a, b) => {
       const at = a.lastMessage?.at ? Date.parse(a.lastMessage.at) : 0
       const bt = b.lastMessage?.at ? Date.parse(b.lastMessage.at) : 0
       return bt - at
     })
-  }, [projects.data, q])
+  }, [mine, q, tab])
+
+  /** Убрать со стола или вернуть. Список обновляем сразу — иначе непонятно, сработало ли. */
+  const toggleHidden = useMutation({
+    mutationFn: ({ id, hide }: { id: string; hide: boolean }) =>
+      api(`/api/v1/projects/${id}/hide${hide ? '' : '?hide=0'}`, { method: 'POST' }),
+    onSuccess: () => {
+      void qc.invalidateQueries({ queryKey: ['sidebar-projects'] })
+      void qc.invalidateQueries({ queryKey: ['projects'] })
+    },
+    onError: (e) => toast.error(e instanceof Error ? e.message : String(e)),
+  })
 
   // Список загружен по company.id — значит компания открываемого проекта
   // известна и подставляется в адрес без похода за самим проектом.
@@ -260,13 +298,44 @@ export function ProjectSidebar({
         </div>
       )}
 
+      {/* Рабочие / Скрытые — под часами, перед списком.
+          Вкладка скрытых появляется, только когда там что-то есть: пустой
+          раздел обещает содержимое, которого нет. */}
+      {hiddenCount > 0 && (
+        <div className="flex flex-wrap items-center gap-1 border-b px-2 py-1.5">
+          {(['work', 'hidden'] as const).map((k) => (
+            <button
+              key={k}
+              onClick={() => setTab(k)}
+              className={cn(
+                'rounded-md px-2.5 py-1 text-xs transition-colors',
+                tab === k ? 'bg-accent font-medium text-foreground' : 'text-muted-foreground hover:text-foreground',
+              )}
+            >
+              {t(k === 'work' ? 'sidebar.working' : 'sidebar.hidden')}
+              {k === 'hidden' && <span className="ms-1 tabular-nums opacity-60">{hiddenCount}</span>}
+            </button>
+          ))}
+          {/* Главное свойство скрытия — оно не насовсем. Без этой строки
+              человек не знает, вернётся ли проект, и боится скрывать. */}
+          {tab === 'hidden' && (
+            <p className="w-full px-1 pt-1 text-[11px] leading-snug text-muted-foreground">
+              {t('sidebar.hiddenNote')}
+            </p>
+          )}
+        </div>
+      )}
+
       <ul data-tour="projects" className="min-h-0 flex-1 overflow-y-auto px-1 pb-2">
         {projects.isLoading && <p className="px-3 py-2 text-sm text-muted-foreground">…</p>}
         {list.map((p) => {
           const unread = p.stats?.unread ?? 0
           const active = p.id === activeId
           return (
-            <li key={p.id}>
+            // group/row: меню появляется при наведении на строку. Само меню
+            // лежит РЯДОМ с кнопкой, а не внутри неё — вложенные кнопки
+            // ломают разметку и клавиатурный обход.
+            <li key={p.id} className="group/row relative">
               <button
                 onClick={() => open(p.id)}
                 className={cn(
@@ -313,12 +382,38 @@ export function ProjectSidebar({
                   )}
                 </span>
               </button>
+
+              {/* Скрыть со стола или вернуть. Появляется при наведении и у
+                  открытого проекта: постоянная иконка в каждой строке
+                  соревновалась бы за внимание со счётчиком непрочитанного. */}
+              <DropdownMenu>
+                <DropdownMenuTrigger asChild>
+                  <button
+                    onClick={(e) => e.stopPropagation()}
+                    title={t('sidebar.projectActions')}
+                    className={cn(
+                      'absolute end-1 top-1/2 -translate-y-1/2 rounded p-1 text-muted-foreground opacity-0 transition-opacity hover:bg-accent hover:text-foreground focus:opacity-100 group-hover/row:opacity-100',
+                      active && 'opacity-100',
+                    )}
+                  >
+                    <MoreVertical className="size-4" />
+                  </button>
+                </DropdownMenuTrigger>
+                <DropdownMenuContent align="end" onClick={(e) => e.stopPropagation()}>
+                  <DropdownMenuItem
+                    onSelect={() => toggleHidden.mutate({ id: p.id, hide: !p.hidden })}
+                  >
+                    {p.hidden ? <Eye className="size-3.5" /> : <EyeOff className="size-3.5" />}
+                    {t(p.hidden ? 'sidebar.unhide' : 'sidebar.hide')}
+                  </DropdownMenuItem>
+                </DropdownMenuContent>
+              </DropdownMenu>
             </li>
           )
         })}
         {!projects.isLoading && list.length === 0 && (
           <p className="px-3 py-6 text-center text-xs text-muted-foreground">
-            {q ? t('start.nothingFound') : t('start.noProjects')}
+            {q ? t('start.nothingFound') : tab === 'hidden' ? t('sidebar.hiddenEmpty') : t('start.noProjects')}
           </p>
         )}
       </ul>

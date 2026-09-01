@@ -1137,7 +1137,14 @@
     "newProject": "New project",
     "companySettings": "Company",
     "collapse": "Collapse the list",
-    "expand": "Expand the list"
+    "expand": "Expand the list",
+    "working": "Working",
+    "hidden": "Hidden",
+    "hide": "Hide",
+    "unhide": "Back to work",
+    "projectActions": "Project actions",
+    "hiddenEmpty": "Nothing hidden",
+    "hiddenNote": "A hidden project comes back on its own once something there needs you."
   },
   "journal": {
     "title": "Notes",
