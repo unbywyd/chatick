@@ -1233,7 +1233,7 @@
     "empty": "עדיין לא נרשם דבר",
     "running": "פועל",
     "total": "סה״כ",
-    "export": "ייצוא CSV",
+    "export": "ייצוא לאקסל",
     "nothingToExport": "אין מה לייצא לתקופה הזו",
     "searchPlaceholder": "חיפוש בתיאורים",
     "everyone": "כולם",
@@ -1299,7 +1299,16 @@
     "stopped": "הטיימר נעצר",
     "resetFilters": "איפוס מסננים",
     "allHours": "כל השעות שלי",
-    "pickPerson": "בחירת אדם"
+    "pickPerson": "בחירת אדם",
+    "colPerson": "עובד",
+    "colProject": "פרויקט",
+    "colProjects": "פרויקטים",
+    "colDate": "תאריך",
+    "colHours": "שעות",
+    "colMinutes": "דקות",
+    "colDays": "ימי עבודה",
+    "colAvg": "ממוצע ליום (ש')",
+    "colTotal": "סה\"כ"
   },
   "period": {
     "today": "היום",

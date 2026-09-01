@@ -95,7 +95,13 @@ const PRESETS: PresetKey[] = [
   'last30',
   'last90',
   'thisYear',
-  'all',
+  // «Всё время» убрано намеренно. Оно поднимало КАЖДУЮ запись компании: на
+  // молодой это 92 строки, но при дюжине человек, отмечающих время дважды в
+  // день, за пять лет набегает тысяч тридцать — секунды ожидания и лишний
+  // объём по сети ради верхушки, которую и смотрят.
+  //
+  // Максимум теперь «Этот год»; кому нужно глубже, выбирает даты календарём —
+  // осознанно и зная, за что платит ожиданием.
 ]
 
 export function PeriodPicker({
@@ -112,14 +118,29 @@ export function PeriodPicker({
   const { t, i18n } = useTranslation()
   const [open, setOpen] = useState(false)
 
-  // если текущий период совпал с пресетом — показываем его имя, а не даты
-  const activePreset = useMemo(
-    () => PRESETS.find((key) => {
+  /**
+   * Какой вариант выбран сейчас — чтобы показать его имя вместо дат.
+   *
+   * Помним ВЫБРАННЫЙ вариант, а не только вычисляем его из дат. Разные
+   * варианты дают одни и те же даты чаще, чем кажется: 1 сентября «этот
+   * месяц» — это с 1-го по 1-е, то есть буквально «сегодня». Поиск по датам
+   * возвращал первый совпавший из списка, и галочка вставала на «Сегодня» —
+   * человек выбирал «Этот месяц», а выбиралось другое.
+   *
+   * Запомненный вариант сбрасывается, как только даты перестают ему отвечать
+   * (их поменяли снаружи или выбрали календарём).
+   */
+  const [picked, setPicked] = useState<PresetKey | null>(null)
+  const activePreset = useMemo(() => {
+    if (picked) {
+      const p = resolvePreset(picked, weekStart)
+      if (p.from === value.from && p.to === value.to) return picked
+    }
+    return PRESETS.find((key) => {
       const p = resolvePreset(key, weekStart)
       return p.from === value.from && p.to === value.to
-    }),
-    [value, weekStart],
-  )
+    })
+  }, [value, weekStart, picked])
 
   const label = useMemo(() => {
     if (activePreset) return t(`period.${activePreset}`)
@@ -152,6 +173,7 @@ export function PeriodPicker({
               <li key={key}>
                 <button
                   onClick={() => {
+                    setPicked(key)
                     onChange(resolvePreset(key, weekStart))
                     setOpen(false)
                   }}

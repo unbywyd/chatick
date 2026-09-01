@@ -13,6 +13,7 @@ import { Button } from '@/components/ui/button'
 import { DropdownMenu, DropdownMenuTrigger, DropdownMenuContent, DropdownMenuItem } from '@/components/ui/dropdown-menu'
 import { PeriodPicker, resolvePreset, type Period } from '@/components/ui/period-picker'
 import { PeoplePicker } from '@/components/ui/people-picker'
+import * as XLSX from 'xlsx'
 import { formatDuration } from '@/lib/time-parse'
 
 // Часы по всей компании (SPEC §8.32): кто сколько отработал и на каких
@@ -32,8 +33,6 @@ type Person = {
 }
 type Report = { people: Person[]; totalMinutes: number }
 
-/** BOM: без него Excel открывает CSV с кириллицей как мусор. */
-const BOM = '\ufeff'
 type Member = { user: { id: string; name: string; email: string; avatarUrl: string | null } }
 
 export function CompanyTimeTab({ companyId }: { companyId: string }) {
@@ -92,16 +91,46 @@ export function CompanyTimeTab({ companyId }: { companyId: string }) {
   // дублировало его и путало.
   const people = report.data?.people ?? []
 
-  /** Точка с запятой: Excel в русской локали не разбивает запятые. */
-  const download = (rows: string[][], name: string) => {
-    const csv = rows.map((r) => r.map((cell) => `"${String(cell).replace(/"/g, '""')}"`).join(';')).join('\n')
-    const blob = new Blob([BOM + csv], { type: 'text/csv;charset=utf-8' })
-    const a = document.createElement('a')
-    a.href = URL.createObjectURL(blob)
-    a.download = `${name}-${period.from || 'all'}_${period.to || 'now'}.csv`
-    a.click()
-    URL.revokeObjectURL(a.href)
+  /**
+   * Выгрузка — настоящий .xlsx, а не CSV.
+   *
+   * CSV Excel разбирает САМ и угадывает типы по своей локали. Угадывал он
+   * плохо: «6.67» превращалось в «июн.67», «5.50» в «фев.50», а дата
+   * «2026-08-15» — в «########», потому что не влезала в столбец. Человек
+   * открывал файл и видел кашу из дат вместо часов.
+   *
+   * В xlsx тип задан явно: часы — число, дата — дата, ширина столбца своя.
+   * Гадать нечего. Библиотека уже в проекте — ею выгружаются задачи.
+   */
+  const saveXlsx = (
+    header: string[],
+    rows: (string | number)[][],
+    widths: number[],
+    sheet: string,
+    name: string,
+  ) => {
+    const ws = XLSX.utils.aoa_to_sheet([header, ...rows])
+    ws['!cols'] = widths.map((wch) => ({ wch }))
+    const wb = XLSX.utils.book_new()
+    XLSX.utils.book_append_sheet(wb, ws, sheet)
+    XLSX.writeFile(wb, `${name}-${period.from}_${period.to}.xlsx`)
   }
+
+  /** Часы числом, а не строкой: по столбцу должны считаться суммы. */
+  const hours = (minutes: number) => Number((minutes / 60).toFixed(2))
+
+  /**
+   * Дата в местном виде.
+   *
+   * Кладём строкой, а не датой: у Date в ячейке своё представление, и Excel
+   * снова покажет её по-своему — вплоть до «########» в узком столбце.
+   */
+  const day = (iso: string) =>
+    new Date(`${iso}T12:00:00`).toLocaleDateString(i18n.language, {
+      day: '2-digit',
+      month: '2-digit',
+      year: 'numeric',
+    })
 
   /** Свод: человек × проект. По нему считают, кому сколько заплатить. */
   const exportSummary = () => {
@@ -109,24 +138,26 @@ export function CompanyTimeTab({ companyId }: { companyId: string }) {
       toast.error(t('time.nothingToExport'))
       return
     }
-    download(
+    saveXlsx(
+      // Заголовки на языке интерфейса: файл открывает человек, а не машина.
+      [t('time.colPerson'), t('time.colProject'), t('time.colHours'), t('time.colDays'), t('time.colAvg')],
       [
-        ['Person', 'Project', 'Hours', 'Minutes', 'Days worked', 'Avg per day (h)'],
         ...people.flatMap((p) =>
           p.projects.map((pr, i) => [
             p.name,
             pr.name,
-            (pr.minutes / 60).toFixed(2),
-            String(pr.minutes),
+            hours(pr.minutes),
             // дни и среднее относятся к человеку, а не к проекту — ставим их
             // только в первой строке, иначе сумма по столбцу соврёт
-            i === 0 ? String(p.daysWorked) : '',
-            i === 0 ? (p.avgPerDay / 60).toFixed(2) : '',
+            i === 0 ? p.daysWorked : '',
+            i === 0 ? hours(p.avgPerDay) : '',
           ]),
         ),
         [],
-        ['TOTAL', '', ((report.data?.totalMinutes ?? 0) / 60).toFixed(2), String(report.data?.totalMinutes ?? 0), '', ''],
+        [t('time.colTotal'), '', hours(report.data?.totalMinutes ?? 0), '', ''],
       ],
+      [22, 34, 10, 14, 20],
+      t('time.colHours'),
       'hours',
     )
   }
@@ -137,29 +168,31 @@ export function CompanyTimeTab({ companyId }: { companyId: string }) {
       toast.error(t('time.nothingToExport'))
       return
     }
-    download(
-      [
-        ['Person', 'Date', 'Hours', 'Minutes'],
-        ...people.flatMap((p) => p.days.map((d) => [p.name, d.day, (d.minutes / 60).toFixed(2), String(d.minutes)])),
-      ],
+    saveXlsx(
+      [t('time.colPerson'), t('time.colDate'), t('time.colHours')],
+      people.flatMap((p) => p.days.map((d) => [p.name, day(d.day), hours(d.minutes)])),
+      [22, 14, 10],
+      t('time.colHours'),
       'hours-daily',
     )
   }
 
   /** Выгрузка по одному человеку: чаще всего платят именно поштучно. */
   const exportPerson = (p: Person) => {
-    download(
+    saveXlsx(
+      [t('time.colPerson'), t('time.colDate'), t('time.colHours')],
       [
-        ['Person', 'Date', 'Hours', 'Minutes'],
-        ...p.days.map((d) => [p.name, d.day, (d.minutes / 60).toFixed(2), String(d.minutes)]),
+        ...p.days.map((d) => [p.name, day(d.day), hours(d.minutes)]),
         [],
-        ['Projects', '', '', ''],
-        ...p.projects.map((pr) => [pr.name, '', (pr.minutes / 60).toFixed(2), String(pr.minutes)]),
+        [t('time.colProjects'), '', ''],
+        ...p.projects.map((pr) => [pr.name, '', hours(pr.minutes)]),
         [],
-        ['TOTAL', '', (p.minutes / 60).toFixed(2), String(p.minutes)],
-        ['Days worked', '', String(p.daysWorked), ''],
-        ['Avg per day', '', (p.avgPerDay / 60).toFixed(2), String(p.avgPerDay)],
+        [t('time.colTotal'), '', hours(p.minutes)],
+        [t('time.colDays'), '', p.daysWorked],
+        [t('time.colAvg'), '', hours(p.avgPerDay)],
       ],
+      [30, 14, 10],
+      t('time.colHours'),
       `hours-${p.name.replace(/\s+/g, '-').toLowerCase()}`,
     )
   }

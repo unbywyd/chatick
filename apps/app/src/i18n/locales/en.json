@@ -1232,7 +1232,7 @@
     "empty": "Nothing tracked yet",
     "running": "running",
     "total": "Total",
-    "export": "Export CSV",
+    "export": "Export to Excel",
     "nothingToExport": "Nothing to export for this period",
     "searchPlaceholder": "Search in descriptions",
     "everyone": "Everyone",
@@ -1298,7 +1298,16 @@
     "stopped": "Timer stopped",
     "resetFilters": "Reset filters",
     "allHours": "All my hours",
-    "pickPerson": "Pick a person"
+    "pickPerson": "Pick a person",
+    "colPerson": "Person",
+    "colProject": "Project",
+    "colProjects": "Projects",
+    "colDate": "Date",
+    "colHours": "Hours",
+    "colMinutes": "Minutes",
+    "colDays": "Days worked",
+    "colAvg": "Avg per day (h)",
+    "colTotal": "TOTAL"
   },
   "period": {
     "today": "Today",

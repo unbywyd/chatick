@@ -1238,7 +1238,7 @@
     "empty": "Пока ничего не записано",
     "running": "идёт",
     "total": "Всего",
-    "export": "Выгрузить CSV",
+    "export": "Выгрузить Excel",
     "nothingToExport": "За этот период выгружать нечего",
     "searchPlaceholder": "Поиск по описаниям",
     "everyone": "Все",
@@ -1304,7 +1304,16 @@
     "stopped": "Таймер остановлен",
     "resetFilters": "Сбросить фильтры",
     "allHours": "Все мои часы",
-    "pickPerson": "Выбрать человека"
+    "pickPerson": "Выбрать человека",
+    "colPerson": "Человек",
+    "colProject": "Проект",
+    "colProjects": "Проекты",
+    "colDate": "Дата",
+    "colHours": "Часы",
+    "colMinutes": "Минуты",
+    "colDays": "Рабочих дней",
+    "colAvg": "В среднем за день (ч)",
+    "colTotal": "ИТОГО"
   },
   "period": {
     "today": "Сегодня",
