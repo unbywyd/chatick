@@ -575,7 +575,7 @@
     "noLlmTitle": "AI is not connected",
     "noLlmText": "The chat runs on the AI dispatcher. Connect your company's LLM provider to start messaging.",
     "noLlmCta": "Open LLM settings",
-    "noLlmPlaceholder": "Connect an LLM to start chatting…",
+    "noLlmPlaceholder": "Connect an LLM…",
     "connecting": "connecting…",
     "today": "Today",
     "yesterday": "Yesterday",
@@ -585,8 +585,8 @@
     "leaveAiNote": "The assistant is still answering. If you leave, you won't see the reply.",
     "leaveAiOk": "Leave",
     "aiHint": "Private conversation with the project AI",
-    "placeholderGroup": "Message the group… {{key}}+Enter to send",
-    "placeholderAi": "{{key}}+Enter to send",
+    "placeholderGroup": "To the group… {{key}}+Enter",
+    "placeholderAi": "To the assistant… {{key}}+Enter",
     "send": "Send",
     "sendHint": "Ctrl+Enter",
     "attach": "Attach file",
@@ -625,7 +625,8 @@
     "emptyEx1": "Landing page is done, please review",
     "emptyEx2": "@Anna can you take the payment bug?",
     "emptyEx3": "What is left before the release?",
-    "emptyFoot": "Everything here stays inside this project."
+    "emptyFoot": "Everything here stays inside this project.",
+    "sendHintKey": "{{key}}+Enter to send"
   },
   "composer": {
     "dropHere": "Drop to attach",

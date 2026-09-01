@@ -575,7 +575,7 @@
     "noLlmTitle": "ה-AI לא מחובר",
     "noLlmText": "הצ׳אט פועל על מנהל ה-AI. חברו ספק LLM של החברה כדי להתחיל לשוחח.",
     "noLlmCta": "לפתוח הגדרות LLM",
-    "noLlmPlaceholder": "חברו LLM כדי להתחיל…",
+    "noLlmPlaceholder": "חברו LLM…",
     "connecting": "מתחבר…",
     "today": "היום",
     "yesterday": "אתמול",
@@ -585,8 +585,8 @@
     "leaveAiNote": "העוזר עדיין עונה. אם תצאו, לא תראו את התשובה.",
     "leaveAiOk": "לצאת",
     "aiHint": "שיחה פרטית עם ה-AI של הפרויקט",
-    "placeholderGroup": "הודעה לקבוצה… {{key}}+Enter לשליחה",
-    "placeholderAi": "{{key}}+Enter לשליחה",
+    "placeholderGroup": "לקבוצה… {{key}}+Enter",
+    "placeholderAi": "לעוזר… {{key}}+Enter",
     "send": "שליחה",
     "sendHint": "Ctrl+Enter",
     "attach": "צירוף קובץ",
@@ -625,7 +625,8 @@
     "emptyEx1": "דף הנחיתה מוכן, תסתכלו בבקשה",
     "emptyEx2": "@אנה תיקחי את הבאג בתשלום?",
     "emptyEx3": "מה נשאר לפני השחרור?",
-    "emptyFoot": "כל מה שנכתב כאן נשאר בתוך הפרויקט הזה."
+    "emptyFoot": "כל מה שנכתב כאן נשאר בתוך הפרויקט הזה.",
+    "sendHintKey": "{{key}}+Enter לשליחה"
   },
   "composer": {
     "dropHere": "שחררו כדי לצרף",

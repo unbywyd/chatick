@@ -34,6 +34,17 @@ export type PendingAttachment = { id: string; name: string; mime: string; size: 
 export type PinKind = 'task' | 'note' | 'document' | 'resource'
 type Pin = { id: string; kind: PinKind; number?: string; title: string }
 
+/**
+ * Клавиша отправки: на Маке ⌘, в остальном Ctrl.
+ *
+ * Живёт здесь, рядом с кнопкой, которой подсказывает. Раньше подсказка была
+ * зашита строкой «Ctrl+Enter» — на Маке это просто неправда.
+ */
+function sendKeyLabel(): string {
+  if (typeof navigator === 'undefined') return 'Ctrl'
+  return /Mac|iPhone|iPad/.test(navigator.platform || navigator.userAgent) ? '⌘' : 'Ctrl'
+}
+
 export function Composer({
   disabled,
   placeholder,
@@ -556,7 +567,10 @@ export function Composer({
             onClick={() => submit(false)}
             disabled={disabled}
             aria-label={t('chat.send')}
-            title={t('chat.sendHint')}
+            // Комбинация берётся из настройки: на Маке это Cmd, и зашитый
+            // «Ctrl+Enter» там был просто неправдой. Подсказка тем важнее,
+            // что из плейсхолдера её убрали — он не помещался в узкой панели.
+            title={t('chat.sendHintKey', { key: sendKeyLabel() })}
             className="rounded-md bg-brand p-2 text-brand-foreground transition-opacity disabled:opacity-40"
           >
             <SendHorizontal className="size-4 rtl:-scale-x-100" />
