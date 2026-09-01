@@ -1204,6 +1204,52 @@ projectsRoute.post(
 )
 
 // Убрать участника — письмо постфактум
+/**
+ * Выйти из проекта самому.
+ *
+ * Попасть в проект человек мог, а уйти — нет: удаление участника доступно
+ * только начальству, и обычному участнику оставалось просить, чтобы его
+ * убрали. Отдельная ручка, а не «удали сам себя» через существующую: там
+ * проверка прав, и ослаблять её ради этого случая значило бы открыть дыру.
+ *
+ * Ничего не разрушает: задачи, комментарии и отработанные часы остаются на
+ * месте, человека можно вернуть. Уходит только доступ.
+ */
+projectsRoute.post('/:projectId/leave', async (c) => {
+  const { sub } = c.get('session')
+  const { projectId } = c.req.param()
+  const project = await db.query.projects.findFirst({ where: eq(projects.id, projectId) })
+  if (!project) return c.json({ error: 'Not found' }, 404)
+
+  // Состав команды ведётся во внешней системе — выпустить некого: она вернёт
+  // человека при следующей синхронизации, и получится дёрганье.
+  if (project.companyId && (await membersLockedForCompany(project.companyId))) return c.json(MEMBERS_LOCKED, 403)
+
+  const me = await projectRoleOf(projectId, sub)
+  if (!me) return c.json({ error: 'You are not a member of this project' }, 400)
+
+  /**
+   * Владелец выйти не может — та же причина, по которой его нельзя удалить.
+   *
+   * Он в проекте один и часто единственное начальство: уйдя, оставит проект
+   * без того, кто вернёт людей и раздаст права. Сначала передать владение.
+   */
+  if (me.role === 'owner') {
+    return c.json({ error: 'The project owner cannot leave: hand the project over to someone else first' }, 400)
+  }
+
+  await db.delete(projectMembers).where(and(eq(projectMembers.projectId, projectId), eq(projectMembers.userId, sub)))
+  void logActivity({
+    projectId,
+    actorId: sub,
+    action: 'delete',
+    entityType: 'member',
+    entityId: sub,
+    entityLabel: 'left the project',
+  })
+  return c.json({ ok: true })
+})
+
 projectsRoute.delete('/:projectId/members/:userId', async (c) => {
   const { sub } = c.get('session')
   const { projectId, userId } = c.req.param()

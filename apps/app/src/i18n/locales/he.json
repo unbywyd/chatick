@@ -935,7 +935,11 @@
     "email": "דוא״ל",
     "groupCompany": "חברה",
     "groupProject": "פרויקט",
-    "groupPersonal": "אישי"
+    "groupPersonal": "אישי",
+    "leaveProject": "יציאה מהפרויקט",
+    "leaveProjectConfirm": "לצאת מהפרויקט „{{project}}”?",
+    "leaveProjectNote": "המשימות, התגובות והשעות שנרשמו יישארו. הגישה לפרויקט תיסגר — מי שמנהל את הצוות יוכל להחזיר אתכם.",
+    "leftProject": "יצאתם מהפרויקט"
   },
   "projSwitch": {
     "search": "חיפוש פרויקטים…",

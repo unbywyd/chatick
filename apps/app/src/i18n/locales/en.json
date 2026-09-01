@@ -934,7 +934,11 @@
     "email": "Email",
     "groupCompany": "Company",
     "groupProject": "Project",
-    "groupPersonal": "Personal"
+    "groupPersonal": "Personal",
+    "leaveProject": "Leave the project",
+    "leaveProjectConfirm": "Leave “{{project}}”?",
+    "leaveProjectNote": "Your tasks, comments and logged hours stay. You lose access — whoever manages the team can add you back.",
+    "leftProject": "You left the project"
   },
   "projSwitch": {
     "search": "Search projects…",

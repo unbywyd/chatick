@@ -940,7 +940,11 @@
     "email": "Почта",
     "groupCompany": "Компания",
     "groupProject": "Проект",
-    "groupPersonal": "Личное"
+    "groupPersonal": "Личное",
+    "leaveProject": "Выйти из проекта",
+    "leaveProjectConfirm": "Выйти из проекта «{{project}}»?",
+    "leaveProjectNote": "Задачи, комментарии и отработанные часы останутся. Доступ к проекту пропадёт — вернуть вас сможет тот, кто ведёт команду.",
+    "leftProject": "Вы вышли из проекта"
   },
   "projSwitch": {
     "search": "Поиск проектов…",

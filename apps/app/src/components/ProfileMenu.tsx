@@ -3,7 +3,7 @@ import { useNavigate, useSearchParams } from 'react-router-dom'
 import { useQueryClient } from '@tanstack/react-query'
 import { useTranslation } from 'react-i18next'
 import { toast } from 'sonner'
-import { Bell, Bot, Building2, Camera, Check, Compass, Info, Keyboard, LogOut, Pencil, Plug, SlidersHorizontal, User, Users, X, Bug } from 'lucide-react'
+import { Bell, Bot, Building2, Camera, Check, Compass, DoorOpen, Info, Keyboard, LogOut, Pencil, Plug, SlidersHorizontal, User, Users, X, Bug } from 'lucide-react'
 import { api, API_URL, getSessionToken, setSessionToken, setProjectToken, type Me } from '@/lib/api'
 import { Avatar } from '@/components/ui/avatar'
 import {
@@ -31,6 +31,7 @@ export function ProfileMenu({
   projectName,
   companyId,
   isAdmin,
+  isOwner,
 }: {
   me?: Me
   projectId?: string
@@ -38,6 +39,13 @@ export function ProfileMenu({
   projectName?: string
   companyId?: string
   isAdmin?: boolean
+  /**
+   * Владелец проекта. Ему пункт «выйти» не показываем: он в проекте один и
+   * часто единственное начальство — уйдя, оставит проект без того, кто вернёт
+   * людей и раздаст права. Сервер такой запрос отклонит, но предлагать то,
+   * что не сработает, незачем.
+   */
+  isOwner?: boolean
 }) {
   const [connectOpen, setConnectOpen] = useState(false)
   const [aboutOpen, setAboutOpen] = useState(false)
@@ -101,6 +109,36 @@ export function ProfileMenu({
       toast.error(e instanceof Error ? e.message : String(e))
     } finally {
       setUploading(false)
+    }
+  }
+
+  /**
+   * Выйти из проекта.
+   *
+   * Подтверждение обычное, без ввода названия: выход ничего не разрушает —
+   * задачи, комментарии и часы остаются, человека можно вернуть. Ввод имени
+   * ставят там, где потерю не отменить.
+   */
+  const leaveProject = async () => {
+    if (
+      !(await confirm({
+        title: t('profile.leaveProjectConfirm', { project: projectName ?? '' }),
+        description: t('profile.leaveProjectNote'),
+        confirmLabel: t('profile.leaveProject'),
+        destructive: true,
+      }))
+    )
+      return
+    try {
+      await api(`/api/v1/projects/${projectId}/leave`, { method: 'POST' })
+      // Проектный токен больше не действует: доступа нет, и следующий запрос
+      // с ним вернул бы 403 на пустом экране.
+      setProjectToken(null)
+      qc.clear()
+      toast.success(t('profile.leftProject'))
+      navigate('/start')
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : String(e))
     }
   }
 
@@ -325,6 +363,18 @@ export function ProfileMenu({
           <Info className="size-4" />
           {t('about.title')}
         </DropdownMenuItem>
+
+        {/* Выйти из проекта — рядом с выходом из аккаунта, но выше и отдельной
+            группой: это разные вещи, и спутать их дорого. */}
+        {projectId && !isOwner && (
+          <>
+            <DropdownMenuSeparator />
+            <DropdownMenuItem onSelect={leaveProject}>
+              <DoorOpen className="size-4" />
+              {t('profile.leaveProject')}
+            </DropdownMenuItem>
+          </>
+        )}
 
         <DropdownMenuSeparator />
         <DropdownMenuItem onSelect={logout} className="text-destructive focus:text-destructive">
