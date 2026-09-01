@@ -1298,7 +1298,8 @@
     "startedOnTask": "הטיימר הופעל על המשימה",
     "stopped": "הטיימר נעצר",
     "resetFilters": "איפוס מסננים",
-    "allHours": "כל השעות שלי"
+    "allHours": "כל השעות שלי",
+    "pickPerson": "בחירת אדם"
   },
   "period": {
     "today": "היום",

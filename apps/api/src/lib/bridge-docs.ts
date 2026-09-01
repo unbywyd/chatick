@@ -73,7 +73,11 @@ function endpointCatalog(q: string): string {
          in chat and stretches message cards out of shape. Both open the same
          task and neither grants access: rights are checked on arrival.
          Lists omit "shortUrl" — ask for the single task when you need it.
-  POST   /x/tasks${q}              {"title","description?","assignee?","status?","priority?","estimateMinutes?","dueDate?","sprintId?","attachmentIds?","resourceIds?","refs?","links?"}
+  POST   /x/tasks${q}              {"title","assignee","description?","status?","priority?","estimateMinutes?","dueDate?","sprintId?","attachmentIds?","resourceIds?","refs?","links?"}
+         assignee is REQUIRED — "me" or a user id from GET /x/members. A task
+         nobody owns never appears in any task list: it sits on the board and
+         surfaces only when somebody happens to remember it. If the person did
+         not say who, ASK; do not guess and do not leave it out.
   PATCH  /x/tasks/<id>${q}         any subset of the same fields
   PATCH  /x/tasks/bulk${q}         {"tasks":["TASK-4","TASK-7"], "set":{...}, "refs":{"TASK-4":"19.1"}}
   DELETE /x/tasks/<id>${q}

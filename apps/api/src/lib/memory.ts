@@ -309,7 +309,7 @@ export function memoryTools(projectId: string, actorUserId: string): { tools: To
     {
       name: 'create_task',
       description:
-        "Create a task. You can set assignee (by member name or email), due date, time estimate, priority, status and sprint. " +
+        "Create a task. ASSIGNEE IS REQUIRED: a task nobody owns never shows up in anyone's «My tasks» and gets forgotten. If the user did not say who, ASK — do not guess and do not leave it empty. You can also set due date, time estimate, priority, status and sprint. " +
         'To pull someone into the description, write @[Their Name](<userId>) — plain "@Name" is text and notifies nobody. ' +
         "The assignee is notified by being assigned; mention others only when they specifically need to see it. " +
         'When the task is about something the user just showed you — a screenshot, a log — pass its id in attachmentIds (get it from list_chat_images): the file lands in the task AND survives, otherwise chat attachments are deleted within a day. ' +
@@ -321,7 +321,7 @@ export function memoryTools(projectId: string, actorUserId: string): { tools: To
           description: { type: 'string' },
           priority: { type: 'string', enum: ['low', 'normal', 'high', 'urgent'] },
           status: { type: 'string', enum: ['todo', 'in_progress', 'review', 'verified', 'done'] },
-          assignee: { type: 'string', description: 'member name or email to assign; omit for unassigned' },
+          assignee: { type: 'string', description: 'REQUIRED: member name or email. A task nobody owns sits on the board unclaimed — ask who should do it before creating' },
           dueDate: { type: 'string', description: 'due date, ISO or YYYY-MM-DD' },
           estimateMinutes: { type: 'number', description: 'REQUIRED: time estimate in minutes assuming the person works WITH an AI assistant (realistic, usually shorter)' },
           sprint: { type: 'string', description: 'sprint/group name (created if missing is NOT done — use an existing one)' },
@@ -373,7 +373,7 @@ export function memoryTools(projectId: string, actorUserId: string): { tools: To
     {
       name: 'create_tasks',
       description:
-        'Create SEVERAL tasks in one call (max 50). Prefer this over calling create_task repeatedly. Each item takes the same fields as create_task. Requires tasks.create. ALWAYS set estimateMinutes on each item.',
+        'Create SEVERAL tasks in one call (max 50). Prefer this over calling create_task repeatedly. Each item takes the same fields as create_task. Requires tasks.create. ALWAYS set estimateMinutes AND assignee on every item — a task nobody owns gets forgotten, and the whole call is refused if any item is missing an assignee.',
       parameters: {
         type: 'object',
         properties: {
@@ -1343,6 +1343,23 @@ export function memoryTools(projectId: string, actorUserId: string): { tools: To
       if (!(await hasPermission(projectId, actorUserId, 'tasks.create')))
         return 'PERMISSION DENIED: the author does not have the tasks.create permission. Politely refuse.'
       if (!String(args.title ?? '').trim()) return 'A title is required.'
+      /**
+       * Исполнитель обязателен, и это проверка, а не просьба.
+       *
+       * Задача без исполнителя не появляется ни у кого в «Моих задачах»: она
+       * есть на доске, но своей её не считает никто, и всплывает она только
+       * когда о ней вспомнят. На живых данных таких набралось девять, шесть из
+       * них до сих пор открыты.
+       *
+       * Раньше это было написано словом («omit for unassigned»), то есть прямо
+       * разрешено. Описание — просьба к модели, а не запрет: отказываем здесь.
+       *
+       * Ответ говорит, ЧТО делать дальше: список людей и что можно назначить
+       * на самого себя. Иначе модель повторит тот же вызов.
+       */
+      if (!String(args.assignee ?? '').trim()) {
+        return 'REFUSED: a task needs an assignee. Ask the user who should do it — offer the project members (list_tasks or the team you already know), and remember they can take it themselves. Then call create_task again with assignee set.'
+      }
       // Права на вложения проверяем ДО создания задачи: иначе человек получил
       // бы задачу без файла и отказ одной строкой — и не понял, что задача
       // всё-таки завелась.
@@ -1431,6 +1448,19 @@ export function memoryTools(projectId: string, actorUserId: string): { tools: To
       if (!items.length) return 'No tasks provided.'
       if (items.length > BATCH_LIMIT)
         return `Too many tasks: ${items.length}. Maximum per call is ${BATCH_LIMIT} — split into several calls.`
+
+      /**
+       * Исполнитель обязателен и здесь — то же правило, что в create_task.
+       *
+       * Проверяем ВСЮ пачку до создания: иначе половина задач заведётся, а
+       * половина отвалится, и человек получит наполовину сделанную работу,
+       * которую надо разбирать вручную.
+       */
+      const noAssignee = items.filter((x) => !String(x.assignee ?? '').trim())
+      if (noAssignee.length) {
+        const names = noAssignee.map((x) => `«${String(x.title ?? '?').slice(0, 40)}»`).join(', ')
+        return `REFUSED: ${noAssignee.length} of ${items.length} tasks have no assignee (${names}). Nothing was created. A task nobody owns never shows up in anyone's «My tasks». Ask the user who should do each one, then call again.`
+      }
 
       const done: string[] = []
       const failed: string[] = []

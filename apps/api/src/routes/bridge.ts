@@ -2405,6 +2405,27 @@ bridgeRoute.post('/tasks', async (c) => {
   const title = typeof b.title === 'string' ? b.title.trim() : ''
   if (!title) return c.json({ error: 'title is required' }, 400)
 
+  /**
+   * Исполнитель обязателен — то же правило, что у ассистента в чате.
+   *
+   * Задача без исполнителя не появляется ни у кого в «Моих задачах»: она есть
+   * на доске, но своей её не считает никто, и всплывает, только когда о ней
+   * вспомнят. На живых данных таких набралось девять, шесть до сих пор открыты.
+   *
+   * Отказ, а не просьба в описании инструмента: описание модель может и не
+   * прочитать. В ответе сказано, что делать дальше — иначе она повторит тот
+   * же вызов.
+   */
+  if (b.assignee === undefined || !String(b.assignee ?? '').trim()) {
+    return c.json(
+      {
+        error:
+          'assignee is required: a task nobody owns never appears in any task list. Ask the person who should do it — GET /x/members lists the team, and "me" assigns it to yourself.',
+      },
+      400,
+    )
+  }
+
   const assigneeId = await resolveAssignee(id, scope.projectId, b.assignee)
   if (b.assignee !== undefined && assigneeId === undefined) return c.json({ error: `Unknown assignee: ${String(b.assignee)}` }, 400)
 

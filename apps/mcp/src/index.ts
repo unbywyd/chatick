@@ -300,7 +300,7 @@ server.registerTool(
       version: z.string().min(1).describe('"1.4.0" — as the team calls it'),
       appName: z.string().optional().describe('WHICH app: "Client", "Provider"'),
       buildType: z.enum(['ios', 'android', 'web', 'backend', 'desktop', 'other']),
-      assignee: z.string().optional().describe('"me" or a user id from chatick_members'),
+      assignee: z.string().describe('REQUIRED: "me" or a user id from chatick_members — who builds it'),
       comment: z.string().optional().describe('What exactly is needed — goes into the task and the history'),
       buildProfile: z.enum(['development', 'preview', 'production']).optional().describe('What it is built WITH'),
       estimateMinutes: z.number().int().positive().optional(),

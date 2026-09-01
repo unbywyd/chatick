@@ -4,13 +4,12 @@ import { useQuery } from '@tanstack/react-query'
 import { useTranslation } from 'react-i18next'
 import { useNavigate } from 'react-router-dom'
 import { toast } from 'sonner'
-import { Download, Search, X } from 'lucide-react'
+import { Download, X } from 'lucide-react'
 import { api } from '@/lib/api'
 import { cn } from '@/lib/utils'
 import { ProjectBadge } from '@/components/ui/project-badge'
 import { Avatar } from '@/components/ui/avatar'
 import { Button } from '@/components/ui/button'
-import { Input } from '@/components/ui/input'
 import { DropdownMenu, DropdownMenuTrigger, DropdownMenuContent, DropdownMenuItem } from '@/components/ui/dropdown-menu'
 import { PeriodPicker, resolvePreset, type Period } from '@/components/ui/period-picker'
 import { PeoplePicker } from '@/components/ui/people-picker'
@@ -63,7 +62,6 @@ export function CompanyTimeTab({ companyId }: { companyId: string }) {
   }
   const setPeriod = (v: Period) => patchParams({ from: v.from, to: v.to })
   const setUserId = (v: string) => patchParams({ user: v || null })
-  const [q, setQ] = useState('')
 
   const members = useQuery({
     queryKey: ['company-members', companyId],
@@ -90,12 +88,9 @@ export function CompanyTimeTab({ companyId }: { companyId: string }) {
     placeholderData: (prev) => prev,
   })
 
-  const all = report.data?.people ?? []
-  // поиск по имени: на двадцати сотрудниках список уже не проглядеть глазами
-  const people = useMemo(() => {
-    const needle = q.trim().toLowerCase()
-    return needle ? all.filter((p) => p.name.toLowerCase().includes(needle)) : all
-  }, [all, q])
+  // Отбор людей делает выбор в панели: отдельное поле поиска убрано, оно
+  // дублировало его и путало.
+  const people = report.data?.people ?? []
 
   /** Точка с запятой: Excel в русской локали не разбивает запятые. */
   const download = (rows: string[][], name: string) => {
@@ -177,10 +172,9 @@ export function CompanyTimeTab({ companyId }: { companyId: string }) {
   const selectedPerson = (members.data ?? []).find((m) => m.user.id === userId)?.user
   const defaults = resolvePreset('thisMonth')
   const periodChanged = period.from !== defaults.from || period.to !== defaults.to
-  const activeFilters = Boolean(userId) || periodChanged || Boolean(q.trim())
+  const activeFilters = Boolean(userId) || periodChanged
 
   const resetAll = () => {
-    setQ('')
     setParams(new URLSearchParams(), { replace: true })
   }
 
@@ -191,11 +185,13 @@ export function CompanyTimeTab({ companyId }: { companyId: string }) {
           страницы, чтобы фон перекрывал контент под собой целиком. */}
       <div className="sticky -top-8 z-10 -mx-6 -mt-8 flex flex-wrap items-center gap-2 border-b bg-background px-6 pb-3 pt-8">
         <PeriodPicker value={period} onChange={setPeriod} className="w-52" />
-        <div className="relative w-48">
-          <Search className="pointer-events-none absolute start-2.5 top-1/2 size-3.5 -translate-y-1/2 text-muted-foreground" />
-          <Input value={q} onChange={(e) => setQ(e.target.value)} placeholder={t('people.search')} className="h-9 ps-8" />
-        </div>
-        {/* Выбранного показывает строка применённых фильтров ниже — здесь
+        {/* Отдельного поля поиска здесь НЕТ намеренно.
+            Их стояло два подряд, и оба отбирали людей: текстовое по имени и
+            выбор ниже. При этом поиск уже встроен в сам выбор — он виден,
+            стоит его раскрыть. Второе поле не добавляло ничего, кроме
+            вопроса, чем они отличаются.
+
+            Выбранного показывает строка применённых фильтров ниже — здесь
             чипс дублировал бы её. */}
         <PeoplePicker
           single
@@ -204,7 +200,9 @@ export function CompanyTimeTab({ companyId }: { companyId: string }) {
           people={(members.data ?? []).map((m) => m.user)}
           value={userId ? [userId] : []}
           onChange={(ids) => setUserId(ids[0] ?? '')}
-          placeholder={t('time.everyone')}
+          // «Все» описывает состояние, а не действие: непонятно, что
+          // от поля вообще ждут. «Выбрать человека» отвечает прямо.
+          placeholder={t('time.pickPerson')}
           clearLabel={t('time.everyone')}
         />
         <DropdownMenu>
@@ -245,7 +243,6 @@ export function CompanyTimeTab({ companyId }: { companyId: string }) {
               onClear={() => setUserId('')}
             />
           )}
-          {q.trim() && <FilterChip label={`"${q.trim()}"`} onClear={() => setQ('')} />}
 
           <button onClick={resetAll} className="text-xs text-muted-foreground underline-offset-4 hover:underline">
             {t('time.resetFilters')}

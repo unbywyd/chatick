@@ -1297,7 +1297,8 @@
     "startedOnTask": "Timer started on the task",
     "stopped": "Timer stopped",
     "resetFilters": "Reset filters",
-    "allHours": "All my hours"
+    "allHours": "All my hours",
+    "pickPerson": "Pick a person"
   },
   "period": {
     "today": "Today",
