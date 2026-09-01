@@ -79,6 +79,57 @@ describe('спринты', () => {
   })
 })
 
+describe('чат', () => {
+  it('переписку можно прочитать и написать в неё', () => {
+    // 255 сообщений и 30 сводок, которых ассистент не видел. Странность была
+    // вдвойне: инбокс он читал, а сам чат — нет, хотя решения принимаются там.
+    for (const tool of ['chatick_chat_summaries', 'chatick_chat_search', 'chatick_chat_post']) {
+      expect(has(tool), `нет инструмента ${tool}`).toBe(true)
+    }
+  })
+
+  it('сказано, что задачное место — комментарий, а не чат', () => {
+    // Иначе отчёт о работе уедет в ленту, которая прокрутится, вместо задачи,
+    // где он останется рядом с работой.
+    const at = mcp.indexOf("'chatick_chat_post'")
+    expect(mcp.slice(at, at + 1400)).toMatch(/belongs to no task/)
+  })
+})
+
+describe('связи задач', () => {
+  it('их видно и можно поставить', () => {
+    // Связей больше, чем блокеров: «эта выросла из той», «эти две про одно».
+    expect(has('chatick_task_links'), 'нет чтения связей').toBe(true)
+    expect(has('chatick_task_link'), 'нет создания связи').toBe(true)
+  })
+
+  it('сказано связывать при дроблении задачи', () => {
+    // Пять новых задач без ниточки к исходной — потерянный след.
+    const at = mcp.indexOf("'chatick_task_link'")
+    expect(mcp.slice(at, at + 1400)).toMatch(/WHEN YOU SPLIT ONE TASK/)
+  })
+})
+
+describe('файлы', () => {
+  it('файл можно скачать, а не только увидеть имя', () => {
+    // Загрузка была, скачивания нет: «посмотри тот лог» упиралось в то, что
+    // открыть его нечем.
+    expect(has('chatick_file_get'), 'нет скачивания файла').toBe(true)
+    expect(has('chatick_files'), 'нет списка файлов').toBe(true)
+  })
+
+  it('скачивание идёт мимо call() — тот читает ответ текстом', () => {
+    // Картинка или архив, прочитанные как текст, превращаются в мусор.
+    //
+    // Саботаж: перевести на call() — файлы будут скачиваться битыми.
+    const bridge = readFileSync(join(import.meta.dirname, '../../../mcp/src/bridge.ts'), 'utf8')
+    expect(bridge, 'нет отдельной функции скачивания').toMatch(/export async function download/)
+    expect(bridge, 'байты не читаются как байты').toMatch(/new Uint8Array\(await res\.arrayBuffer\(\)\)/)
+    const at = mcp.indexOf("'chatick_file_get'")
+    expect(mcp.slice(at, at + 1500), 'скачивание идёт через call()').toMatch(/await download\(/)
+  })
+})
+
 describe('чего в MCP быть не должно', () => {
   it('удаления проекта нет', () => {
     // Удаление уносит с собой всё и необратимо: решение человека в приложении.

@@ -2,7 +2,7 @@
 import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js'
 import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js'
 import { z } from 'zod'
-import { call, upload, BridgeError, type Scope } from './bridge.js'
+import { call, upload, download, BridgeError, type Scope } from './bridge.js'
 import { currentScope, connectViaDesktop, startDeviceFlow, waitForApproval, acceptToken, forget } from './auth.js'
 
 /**
@@ -855,6 +855,194 @@ server.registerTool(
           `/tasks/${encodeURIComponent(task)}/comments/${encodeURIComponent(comment)}`,
         ),
       )
+    } catch (e) {
+      return fail(e)
+    }
+  },
+)
+
+// --- Файлы -------------------------------------------------------------------
+
+server.registerTool(
+  'chatick_files',
+  {
+    title: 'Files of a project',
+    description:
+      'Files uploaded to the project: builds, screenshots, logs, exports. Attachments of a single task come with ' +
+      'chatick_task already — use this when you need the project as a whole, or the id of a file to download.',
+    inputSchema: { project: z.string() },
+  },
+  async ({ project }) => {
+    try {
+      return json(await call({ ...(await need()), projectId: project }, 'GET', '/files'))
+    } catch (e) {
+      return fail(e)
+    }
+  },
+)
+
+server.registerTool(
+  'chatick_file_get',
+  {
+    title: 'Download a file to this machine',
+    description:
+      'Saves a project file to a local path so you can actually open it. Until now you could see that a log or a ' +
+      'screenshot was attached but not read it — the name told you nothing. ' +
+      'Give an absolute path to save to, including the file name. The reply carries the path and the size.',
+    inputSchema: {
+      project: z.string(),
+      id: z.string().describe('File id from chatick_files or from the task'),
+      saveTo: z.string().describe('Absolute path on this machine, including the file name'),
+    },
+  },
+  async ({ project, id, saveTo }) => {
+    try {
+      return json(
+        await download({ ...(await need()), projectId: project }, `/files/${encodeURIComponent(id)}/content`, saveTo),
+      )
+    } catch (e) {
+      return fail(e)
+    }
+  },
+)
+
+// --- Связи задач -------------------------------------------------------------
+
+/**
+ * «Эта выросла из той», «эти две про одно» — связей в базе больше, чем
+ * блокеров. Без них дробление задачи теряет след: пять новых задач и ни одной
+ * ниточки к той, из которой они появились.
+ */
+server.registerTool(
+  'chatick_task_links',
+  {
+    title: 'What this task is connected to',
+    description:
+      'Related tasks and the ones this grew from. Different from blockers: a blocker HOLDS THE WORK UP, a link ' +
+      'just says these belong together. Read it before splitting or closing a task — the answer may already be ' +
+      'in a sibling.',
+    inputSchema: { project: z.string(), task: z.string() },
+  },
+  async ({ project, task }) => {
+    try {
+      return json(await call({ ...(await need()), projectId: project }, 'GET', `/tasks/${encodeURIComponent(task)}/links`))
+    } catch (e) {
+      return fail(e)
+    }
+  },
+)
+
+server.registerTool(
+  'chatick_task_link',
+  {
+    title: 'Link tasks together',
+    description:
+      'Connect tasks. ALWAYS DO THIS WHEN YOU SPLIT ONE TASK INTO SEVERAL — otherwise the new tasks stand alone ' +
+      'and nobody can tell where they came from or why. ' +
+      'kind="derived": the listed tasks came out of this one (direction="from") or this one came out of them ' +
+      '(direction="into"). kind="related" (default): they simply belong together, no origin implied.',
+    inputSchema: {
+      project: z.string(),
+      task: z.string().describe('The task this is about'),
+      tasks: z.array(z.string()).min(1).describe('Task numbers or ids to link'),
+      kind: z.enum(['related', 'derived']).optional(),
+      direction: z.enum(['from', 'into']).optional().describe('Only for kind="derived"'),
+    },
+  },
+  async ({ project, task, ...body }) => {
+    try {
+      return json(
+        await call({ ...(await need()), projectId: project }, 'POST', `/tasks/${encodeURIComponent(task)}/links`, body),
+      )
+    } catch (e) {
+      return fail(e)
+    }
+  },
+)
+
+// --- Чат ---------------------------------------------------------------------
+
+/**
+ * Переписка проекта: 255 сообщений и 30 сводок, которых ассистент не видел.
+ *
+ * Странность была вдвойне: инбокс он читал, а сам чат — нет. При том что
+ * решения принимаются именно там, а в задачу попадает уже итог.
+ */
+server.registerTool(
+  'chatick_chat_summaries',
+  {
+    title: 'What the chat was about, by day',
+    description:
+      'Daily summaries of the project chat — what was discussed and decided, without reading hundreds of ' +
+      'messages. START HERE when asked "what did we agree", "what happened while I was away": a summary names ' +
+      'the day, and chatick_chat_search then pulls the actual messages from it.',
+    inputSchema: { project: z.string(), limit: z.number().optional() },
+  },
+  async ({ project, limit }) => {
+    try {
+      return json(
+        await call({ ...(await need()), projectId: project }, 'GET', '/chat/summaries', undefined, {
+          limit: limit ? String(limit) : undefined,
+        }),
+      )
+    } catch (e) {
+      return fail(e)
+    }
+  },
+)
+
+server.registerTool(
+  'chatick_chat_search',
+  {
+    title: 'Find messages in the chat',
+    description:
+      'Search the project chat by word and/or date range. Answers "where did we discuss X" and "what was said ' +
+      'on the 14th". Either q or from/to is required — an unbounded dump of the whole chat helps nobody. ' +
+      'Dates come from chatick_chat_summaries when you do not know them.',
+    inputSchema: {
+      project: z.string(),
+      q: z.string().optional().describe('Word to find'),
+      from: z.string().optional().describe('ISO date'),
+      to: z.string().optional().describe('ISO date'),
+      limit: z.number().optional(),
+    },
+  },
+  async ({ project, ...q }) => {
+    try {
+      return json(
+        await call({ ...(await need()), projectId: project }, 'GET', '/chat/messages', undefined, {
+          q: q.q,
+          from: q.from,
+          to: q.to,
+          limit: q.limit ? String(q.limit) : undefined,
+        }),
+      )
+    } catch (e) {
+      return fail(e)
+    }
+  },
+)
+
+server.registerTool(
+  'chatick_chat_post',
+  {
+    title: 'Write in the project chat',
+    description:
+      'Post a message to the project chat AS THE HUMAN, bypassing the AI dispatcher. ' +
+      'Use it when something concerns the team but belongs to no task: a heads-up, an answer to a question ' +
+      'asked in chat, a warning before a deploy. Anything about ONE task goes into that task as a comment ' +
+      'instead — the chat scrolls away, a comment stays with the work. ' +
+      'Mention someone with @[Name](userId); a plain @name is just text and notifies nobody. ' +
+      'Write in the language of the project, not the one the human is speaking to you.',
+    inputSchema: {
+      project: z.string(),
+      text: z.string().min(1),
+      replyToId: z.string().optional().describe('Message id, when answering a specific one'),
+    },
+  },
+  async ({ project, ...body }) => {
+    try {
+      return json(await call({ ...(await need()), projectId: project }, 'POST', '/messages', body))
     } catch (e) {
       return fail(e)
     }

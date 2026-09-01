@@ -132,3 +132,38 @@ export async function upload(
   }
   return data
 }
+
+/**
+ * Скачать файл проекта на эту машину.
+ *
+ * Отдельно от call(): тот читает ответ как ТЕКСТ, и картинка или архив
+ * превратились бы в мусор. Здесь берём байты и кладём на диск — ассистенту
+ * нужен путь, который он сможет открыть, а не содержимое в переписке.
+ */
+export async function download(
+  scope: Scope,
+  path: string,
+  saveTo: string,
+): Promise<{ path: string; bytes: number }> {
+  const url = new URL(`${BASE}/x${path}`)
+  if (scope.projectId) url.searchParams.set('project', scope.projectId)
+
+  const res = await fetch(url, { headers: { authorization: `Bearer ${scope.token}` } })
+  if (!res.ok) {
+    // Ошибку сервер отдаёт JSON'ом, а не файлом — читаем как текст.
+    const text = await res.text().catch(() => '')
+    let msg = `HTTP ${res.status}`
+    try {
+      const j = JSON.parse(text) as { error?: string }
+      if (j.error) msg = j.error
+    } catch {
+      /* не JSON — оставляем код */
+    }
+    throw new BridgeError(res.status, msg)
+  }
+
+  const bytes = new Uint8Array(await res.arrayBuffer())
+  const { writeFile } = await import('node:fs/promises')
+  await writeFile(saveTo, bytes)
+  return { path: saveTo, bytes: bytes.length }
+}
