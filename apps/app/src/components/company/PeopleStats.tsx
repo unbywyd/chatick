@@ -31,7 +31,41 @@ type Person = {
   openTasks: number
   doneTasks: number
   minutesThisMonth: number
+  rhythm: Rhythm
 }
+
+/**
+ * Как человек ОТВЕЧАЕТ на задачи.
+ *
+ * Здесь намеренно нет возраста задачи и «процента доведения»: оба меряют
+ * очередь, а не человека. На живых данных по среднему возрасту открытых задач
+ * худшим выходил самый быстрый исполнитель компании — просто на него заводят
+ * вдвое больше, чем он успевает взять.
+ *
+ * Пороги для flags считает СЕРВЕР: правило, выписанное дважды, однажды
+ * разойдётся. Здесь только выбираем текст.
+ */
+type Rhythm = {
+  openNow: number
+  untouched: number
+  waitAvgDays: number
+  waitWorstDays: number
+  over2w: number
+  /** null — не «ноль», а «не к чему было прикасаться». */
+  reactMedianHours: number | null
+  closed: number
+  medianLifeDays: number | null
+  blocking: number
+  blockingWorstDays: number
+  actions: number
+  comments: number
+  openProjects: number
+  topProject: { name: string; open: number } | null
+  flags: string[]
+}
+
+/** За какой срок считаем ритм. Список закрытый — его же проверяет сервер. */
+const PERIODS = [7, 30, 90] as const
 
 /** Сколько показываем до нажатия «показать всех». */
 const PREVIEW = 4
@@ -130,6 +164,155 @@ function ActivityStrip({ days, since }: { days: string[]; since: string | null }
   )
 }
 
+/**
+ * Часы реакции → «40 мин» / «1.5 ч» / «4.8 дн».
+ *
+ * Единица меняется, потому что «115 часов» человек всё равно делит в уме на
+ * сутки, а «0.01 дня» не читается вовсе.
+ */
+function reactValue(hours: number | null): { value: string; unit: 'min' | 'hour' | 'day' } | null {
+  if (hours === null) return null
+  if (hours < 1) return { value: String(Math.max(1, Math.round(hours * 60))), unit: 'min' }
+  if (hours < 48) return { value: hours.toFixed(1), unit: 'hour' }
+  return { value: (hours / 24).toFixed(1), unit: 'day' }
+}
+
+/** Один показатель в карточке. */
+function Metric({
+  label,
+  value,
+  unit,
+  note,
+  tone,
+}: {
+  label: string
+  value: string
+  unit?: string
+  note?: string
+  tone?: 'ok' | 'warn' | 'bad'
+}) {
+  return (
+    <div className="min-w-0">
+      <p className="truncate text-[10px] uppercase tracking-wide text-muted-foreground/70">{label}</p>
+      <p
+        className={cn(
+          'mt-0.5 text-base font-semibold tabular-nums',
+          tone === 'ok' && 'text-emerald-600 dark:text-emerald-400',
+          tone === 'warn' && 'text-amber-600 dark:text-amber-400',
+          tone === 'bad' && 'text-red-600 dark:text-red-400',
+        )}
+      >
+        {value}
+        {unit && <span className="ms-0.5 text-[11px] font-medium text-muted-foreground">{unit}</span>}
+      </p>
+      {note && <p className="truncate text-[10px] text-muted-foreground/70">{note}</p>}
+    </div>
+  )
+}
+
+/**
+ * Ритм внутри карточки человека.
+ *
+ * Ярлыки объясняют цифру словами: «6 чужих задач стоят 27 дней» — факт, с
+ * которым можно прийти к человеку, в отличие от «работает медленно».
+ */
+function RhythmBlock({ r }: { r: Rhythm }) {
+  const { t } = useTranslation()
+  const react = reactValue(r.reactMedianHours)
+
+  /**
+   * Цвет — по ПРИСЛАННЫМ признакам, а не по своему счёту.
+   *
+   * Пороги («молчит дольше двух недель», «не тронута половина») живут на
+   * сервере. Повторив их здесь, мы получили бы расхождение: сервер молчит,
+   * а карточка красная — или наоборот.
+   */
+  const waitTone = r.flags.includes('stalled')
+    ? 'bad'
+    : r.flags.includes('ignoring')
+      ? 'warn'
+      : r.untouched
+        ? undefined
+        : 'ok'
+
+  const flagText: Record<string, string> = {
+    stalled: t('people.flagStalled', { count: r.over2w, worst: r.waitWorstDays }),
+    blocking: t('people.flagBlocking', { count: r.blocking, worst: r.blockingWorstDays }),
+    ignoring: t('people.flagIgnoring', { untouched: r.untouched, open: r.openNow }),
+    overloadedOne: t('people.flagOverloadedOne', {
+      open: r.openNow,
+      closed: r.closed,
+      project: r.topProject?.name ?? '',
+      top: r.topProject?.open ?? 0,
+    }),
+    overloadedMany: t('people.flagOverloadedMany', {
+      open: r.openNow,
+      closed: r.closed,
+      projects: r.openProjects,
+    }),
+    scattered: t('people.flagScattered', { open: r.openNow, projects: r.openProjects }),
+  }
+  // Красным — только то, что мешает ДРУГИМ. Перегрузка и разброс не претензия,
+  // и цветом о них кричать нельзя: очередь тогда читается как безделье.
+  const loud = new Set(['stalled', 'blocking'])
+
+  return (
+    <>
+      <div className="mt-3 grid grid-cols-2 gap-x-3 gap-y-2 border-t pt-2 sm:grid-cols-4">
+        <Metric
+          label={t('people.waiting')}
+          value={r.openNow ? `${r.untouched}/${r.openNow}` : String(r.untouched)}
+          note={
+            r.untouched
+              ? t('people.waitingNote', { avg: r.waitAvgDays, worst: r.waitWorstDays })
+              : t('people.waitingNone')
+          }
+          tone={waitTone}
+        />
+        <Metric
+          label={t('people.react')}
+          value={react?.value ?? '—'}
+          unit={react ? t(`people.unit.${react.unit}`) : undefined}
+          note={t('people.reactNote')}
+          tone={
+            r.reactMedianHours === null ? undefined : r.reactMedianHours <= 4 ? 'ok' : r.reactMedianHours > 24 ? 'bad' : undefined
+          }
+        />
+        <Metric
+          label={t('people.closed')}
+          value={String(r.closed)}
+          note={
+            r.medianLifeDays === null
+              ? undefined
+              : r.medianLifeDays <= 1
+                ? t('people.closedSameDay')
+                : t('people.closedIn', { days: r.medianLifeDays })
+          }
+        />
+        <Metric
+          label={t('people.actions')}
+          value={String(r.actions)}
+          note={t('people.actionsNote', { count: r.comments })}
+        />
+      </div>
+
+      {r.flags.map((f) => (
+        <p
+          key={f}
+          className={cn(
+            'mt-2 rounded-md px-2 py-1.5 text-[11px] leading-snug',
+            loud.has(f)
+              ? 'bg-red-500/10 text-red-700 dark:text-red-300'
+              : 'bg-muted text-muted-foreground',
+          )}
+        >
+          {flagText[f]}
+        </p>
+      ))}
+    </>
+  )
+}
+
 export function PeopleStats({
   companyId,
   onOpenReport,
@@ -148,11 +331,12 @@ export function PeopleStats({
   const ago = useAgo()
   const [expanded, setExpanded] = useState(false)
   const [q, setQ] = useState('')
+  const [days, setDays] = useState<(typeof PERIODS)[number]>(30)
 
   const peopleQ = useQuery({
-    queryKey: ['company-people', companyId],
+    queryKey: ['company-people', companyId, days],
     queryFn: () => api<{ items: Person[]; seesEveryone: boolean; activitySince: string | null }>(
-        `/api/v1/companies/${companyId}/people`,
+        `/api/v1/companies/${companyId}/people?days=${days}`,
       ),
   })
 
@@ -189,15 +373,34 @@ export function PeopleStats({
           <Users className="size-4" />
           {t('people.title')}
         </h2>
-        {/* Поиск по людям — только тому, кому есть среди кого искать. */}
-        {seesEveryone && all.length > PREVIEW && (
-          <Input
-            value={q}
-            onChange={(e) => setQ(e.target.value)}
-            placeholder={t('people.search')}
-            className="h-8 w-full max-w-56 text-sm"
-          />
-        )}
+        <div className="flex flex-wrap items-center gap-2">
+          {/* За какой срок считан ритм. Возле цифр, а не в шапке страницы:
+              период меняет ровно эти числа и ничего больше. */}
+          <div className="flex rounded-lg border p-0.5">
+            {PERIODS.map((d) => (
+              <button
+                key={d}
+                onClick={() => setDays(d)}
+                aria-pressed={days === d}
+                className={cn(
+                  'rounded-md px-2 py-1 text-xs transition-colors',
+                  days === d ? 'bg-accent font-medium text-foreground' : 'text-muted-foreground hover:text-foreground',
+                )}
+              >
+                {t(`people.period${d}`)}
+              </button>
+            ))}
+          </div>
+          {/* Поиск по людям — только тому, кому есть среди кого искать. */}
+          {seesEveryone && all.length > PREVIEW && (
+            <Input
+              value={q}
+              onChange={(e) => setQ(e.target.value)}
+              placeholder={t('people.search')}
+              className="h-8 w-full max-w-56 text-sm"
+            />
+          )}
+        </div>
       </div>
 
       <div className="grid gap-2 sm:grid-cols-2">
@@ -243,6 +446,11 @@ export function PeopleStats({
             <div className="mt-2">
               <ActivityStrip days={p.activeDays} since={activitySince} />
             </div>
+
+            {/* Ритм показываем только тем, у кого есть о чём говорить: у
+                человека без задач и без действий четыре прочерка отвечают
+                «ничего не известно», а выглядят как «ничего не делал». */}
+            {p.rhythm && (p.rhythm.openNow > 0 || p.rhythm.actions > 0) && <RhythmBlock r={p.rhythm} />}
           </div>
         ))}
       </div>

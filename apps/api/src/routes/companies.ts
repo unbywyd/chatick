@@ -571,6 +571,16 @@ companiesRoute.get('/:companyId/people', async (c) => {
   if (!role) return c.json({ error: 'Forbidden' }, 403)
   const seesEveryone = role === 'admin' || role === 'manager'
 
+  /**
+   * Окно, за которое считается ритм: 7 / 30 / 90 дней.
+   *
+   * Ограничиваем список, а не берём любое число: период попадает прямо в
+   * make_interval, и «сколько угодно дней» превратилось бы в способ заказать
+   * тяжёлый запрос по всей истории компании.
+   */
+  const daysRaw = Number(c.req.query('days') ?? 30)
+  const days = [7, 30, 90].includes(daysRaw) ? daysRaw : 30
+
   const members = await db
     .select({ id: users.id, name: users.name, avatarUrl: users.avatarUrl, role: companyMembers.role })
     .from(companyMembers)
@@ -658,9 +668,158 @@ companiesRoute.get('/:companyId/people', async (c) => {
     ?? (stats as unknown as Record<string, string>[])
   const byStats = new Map(statRows.map((r) => [r.uid as string, r]))
 
+  /**
+   * Ритм работы: как человек ОТВЕЧАЕТ на задачи.
+   *
+   * Здесь намеренно НЕТ возраста задачи и «процента доведения» — оба меряют
+   * не человека, а очередь. Проверено на живых данных: по среднему возрасту
+   * открытых задач худшим в компании выходил самый быстрый исполнитель (82
+   * задачи, 23 дня), он же первый по активности. А «доля закрытых от
+   * заведённых» дала ему 36% против 81% у коллеги — при том, что закрывает он
+   * задачу за 0.1 дня против 0.9. Обе цифры говорили о том, сколько на
+   * человека навалили, и ни одна — о том, как он работает.
+   *
+   * Считаем то, что человек решает сам:
+   *   untouched   — задач, к которым он не прикоснулся НИ РАЗУ (главное);
+   *   react       — медиана времени до первого касания;
+   *   closed/life — сколько закрыл и как быстро обычно закрывает;
+   *   blocking    — сколько ЧУЖИХ задач стоят из-за его незакрытых.
+   *
+   * «Касание» — комментарий, смена статуса или правка САМИМ исполнителем.
+   * Чужие правки не считаются: задачу мог трогать кто угодно, а вопрос в том,
+   * отозвался ли тот, на кого она заведена.
+   */
+  const rhythm = await db.execute<Record<string, string | null>>(sql`
+    with mine as (
+      select t.id, t.assignee_id as uid, t.project_id, t.status, t.created_at, t.updated_at
+        from tasks t join projects p on p.id = t.project_id
+       where p.company_id = ${companyId} and t.deleted_at is null
+         and t.assignee_id in (${idList})
+    ),
+    touched as (
+      select m.id, m.uid, m.status, m.created_at, m.updated_at, m.project_id,
+             least(
+               (select min(c.created_at) from task_comments c
+                 where c.task_id = m.id and c.author_id = m.uid and c.created_at >= m.created_at),
+               (select min(l.created_at) from activity_log l
+                 where l.entity_id = m.id and l.actor_id = m.uid and l.created_at >= m.created_at
+                   and l.action in ('status','update'))
+             ) as first_touch
+        from mine m
+    ),
+    -- Где лежит очередь: 74 задачи в одном проекте и 23 в двенадцати — это
+    -- разные истории, и одним числом они неразличимы.
+    queue as (
+      select uid, project_id, count(*)::int as n
+        from touched where status not in ('done','verified')
+       group by uid, project_id
+    )
+    select t.uid,
+      count(*) filter (where t.status not in ('done','verified')) as open_now,
+      count(*) filter (where t.status not in ('done','verified') and t.first_touch is null) as untouched,
+      coalesce(round(avg(extract(epoch from (now() - t.created_at))/86400)
+        filter (where t.status not in ('done','verified') and t.first_touch is null)::numeric, 1), 0) as wait_avg,
+      coalesce(round(max(extract(epoch from (now() - t.created_at))/86400)
+        filter (where t.status not in ('done','verified') and t.first_touch is null)::numeric, 0), 0) as wait_worst,
+      count(*) filter (where t.status not in ('done','verified') and t.first_touch is null
+        and t.created_at < now() - interval '14 days') as over_2w,
+      round(percentile_cont(0.5) within group (
+        order by extract(epoch from (t.first_touch - t.created_at))/3600
+      ) filter (where t.first_touch is not null)::numeric, 1) as react_h,
+      count(*) filter (where t.status in ('done','verified')
+        and t.updated_at > now() - make_interval(days => ${days})) as closed,
+      round(percentile_cont(0.5) within group (
+        order by extract(epoch from (t.updated_at - t.created_at))/86400
+      ) filter (where t.status in ('done','verified')
+        and t.updated_at > now() - make_interval(days => ${days}))::numeric, 1) as life_days,
+      (select count(distinct project_id) from queue q where q.uid = t.uid) as open_projects,
+      (select q.n from queue q where q.uid = t.uid order by q.n desc limit 1) as top_open,
+      (select p2.name from queue q join projects p2 on p2.id = q.project_id
+        where q.uid = t.uid order by q.n desc limit 1) as top_project
+      from touched t group by t.uid
+  `)
+  const rhythmRows = (rhythm as unknown as { rows?: Record<string, string | null>[] }).rows
+    ?? (rhythm as unknown as Record<string, string | null>[])
+  const byRhythm = new Map(rhythmRows.map((r) => [r.uid as string, r]))
+
+  /**
+   * Сколько ЧУЖИХ задач стоят из-за незакрытых задач человека.
+   *
+   * Единственный показатель про влияние на других — и потому единственный,
+   * который стоит показывать красным. Свои задачи, заблокированные своими же,
+   * не считаем: это не «тормозит команду», а порядок собственной работы.
+   */
+  const blocks = await db.execute<{ uid: string; n: string; worst: string }>(sql`
+    select blocker.assignee_id as uid,
+           count(*) as n,
+           coalesce(round(max(extract(epoch from (now() - b.created_at))/86400)::numeric, 0), 0) as worst
+      from task_blockers b
+      join tasks blocker on blocker.id = b.blocker_task_id
+      join tasks blocked on blocked.id = b.blocked_task_id
+      join projects p on p.id = b.project_id
+     where p.company_id = ${companyId}
+       and blocker.assignee_id in (${idList})
+       and blocker.status not in ('done','verified')
+       and blocker.deleted_at is null and blocked.deleted_at is null
+       and blocked.assignee_id is distinct from blocker.assignee_id
+     group by blocker.assignee_id
+  `)
+  const blockRows = (blocks as unknown as { rows?: { uid: string; n: string; worst: string }[] }).rows
+    ?? (blocks as unknown as { uid: string; n: string; worst: string }[])
+  const byBlocks = new Map(blockRows.map((r) => [r.uid, r]))
+
+  /** Действия за период — «сколько человек сделал», а не «сколько на нём». */
+  const acted = await db.execute<{ uid: string; actions: string; comments: string }>(sql`
+    select u.id as uid,
+      (select count(*) from activity_log a join projects p on p.id = a.project_id
+        where a.actor_id = u.id and p.company_id = ${companyId}
+          and a.created_at > now() - make_interval(days => ${days})) as actions,
+      (select count(*) from task_comments tc
+        join tasks t on t.id = tc.task_id join projects p on p.id = t.project_id
+        where tc.author_id = u.id and p.company_id = ${companyId}
+          and tc.created_at > now() - make_interval(days => ${days})) as comments
+      from users u where u.id in (${idList})
+  `)
+  const actedRows = (acted as unknown as { rows?: { uid: string; actions: string; comments: string }[] }).rows
+    ?? (acted as unknown as { uid: string; actions: string; comments: string }[])
+  const byActed = new Map(actedRows.map((r) => [r.uid, r]))
+
   const items = members.map((m) => {
     const a = byUser.get(m.id)
     const s = byStats.get(m.id)
+    const r = byRhythm.get(m.id)
+    const b = byBlocks.get(m.id)
+    const w = byActed.get(m.id)
+
+    const openNow = Number(r?.open_now ?? 0)
+    const untouched = Number(r?.untouched ?? 0)
+    const over2w = Number(r?.over_2w ?? 0)
+    const closed = Number(r?.closed ?? 0)
+    const blocking = Number(b?.n ?? 0)
+    const topOpen = Number(r?.top_open ?? 0)
+    const openProjects = Number(r?.open_projects ?? 0)
+
+    /**
+     * Признаки — на СЕРВЕРЕ, а не в интерфейсе.
+     *
+     * Пороги («молчит дольше двух недель», «очередь сосредоточена в одном
+     * проекте») — это правило. Правило, выписанное дважды, однажды разойдётся:
+     * в списке компании человек «тормозит», а в своей карточке нет. Клиент
+     * только выбирает, каким текстом показать присланный признак.
+     */
+    const flags: string[] = []
+    if (over2w >= 3) flags.push('stalled')
+    if (blocking >= 3) flags.push('blocking')
+    // Молчание считаем ДОЛЕЙ: два хвоста при 81 задаче — это 2%, а четыре при
+    // четырёх — все сто. По абсолютному числу вышло бы наоборот.
+    if (openNow >= 8 && untouched / openNow > 0.5 && over2w < 3) flags.push('ignoring')
+    // Перегрузка — не претензия: очередь растёт, но человек отвечает почти на
+    // всё. Без этого признака очередь читается как безделье.
+    if (openNow >= 20 && openNow > closed * 1.4 && untouched / Math.max(1, openNow) < 0.15) {
+      flags.push(topOpen / Math.max(1, openNow) >= 0.6 ? 'overloadedOne' : 'overloadedMany')
+    }
+    if (openProjects >= 8 && openNow < 40) flags.push('scattered')
+
     return {
       id: m.id,
       name: m.name,
@@ -671,6 +830,24 @@ companiesRoute.get('/:companyId/people', async (c) => {
       openTasks: Number(s?.open_tasks ?? 0),
       doneTasks: Number(s?.done_tasks ?? 0),
       minutesThisMonth: Math.round(Number(s?.minutes_month ?? 0)),
+      rhythm: {
+        openNow,
+        untouched,
+        waitAvgDays: Number(r?.wait_avg ?? 0),
+        waitWorstDays: Number(r?.wait_worst ?? 0),
+        over2w,
+        // null — не «ноль», а «не к чему было прикасаться»: клиент покажет «—».
+        reactMedianHours: r?.react_h === null || r?.react_h === undefined ? null : Number(r.react_h),
+        closed,
+        medianLifeDays: r?.life_days === null || r?.life_days === undefined ? null : Number(r.life_days),
+        blocking,
+        blockingWorstDays: Number(b?.worst ?? 0),
+        actions: Number(w?.actions ?? 0),
+        comments: Number(w?.comments ?? 0),
+        openProjects,
+        topProject: topOpen ? { name: (r?.top_project as string) ?? '', open: topOpen } : null,
+        flags,
+      },
     }
   })
 
@@ -703,7 +880,7 @@ companiesRoute.get('/:companyId/people', async (c) => {
   const sinceRows = (since as unknown as { rows?: { first_at: string | null }[] }).rows
     ?? (since as unknown as { first_at: string | null }[])
 
-  return c.json({ items, seesEveryone, activitySince: sinceRows[0]?.first_at ?? null })
+  return c.json({ items, seesEveryone, days, activitySince: sinceRows[0]?.first_at ?? null })
 })
 
 companiesRoute.get('/:companyId/overdue', async (c) => {
