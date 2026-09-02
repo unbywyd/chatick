@@ -319,6 +319,27 @@ export function OverviewTab({
                         нечего. Внизу теперь только тревожное, и у спокойного
                         проекта строки нет вовсе. */}
                     <span className="shrink-0 inline-flex items-center gap-2 text-[11px] text-muted-foreground">
+                      {/* Просрочка и застрявшее — ТОЖЕ здесь, цветом.
+                          Отдельная строка под полосой существовала ради двух
+                          чисел, которые есть не всегда, и держала высоту
+                          КАЖДОЙ карточки. Цвет отличает их от серого фона
+                          не хуже, чем отдельная строка, а слово рядом с
+                          числом на своём месте: «4» под именем проекта
+                          прочтут как что угодно.
+                          Нули не показываем: ноль рядом со словом
+                          «просрочено» глаз читает как тревогу. */}
+                      {p.overdue > 0 && (
+                        <span className="inline-flex items-center gap-1 text-rose-600 dark:text-rose-400">
+                          <span className="font-semibold tabular-nums">{p.overdue}</span>
+                          <span className="hidden min-[380px]:inline">{t('overview.overdueShort')}</span>
+                        </span>
+                      )}
+                      {p.blocked > 0 && (
+                        <span className="inline-flex items-center gap-1 text-amber-600 dark:text-amber-400">
+                          <span className="font-semibold tabular-nums">{p.blocked}</span>
+                          <span className="hidden min-[380px]:inline">{t('overview.blockedShort')}</span>
+                        </span>
+                      )}
                       <span className="inline-flex items-center gap-1">
                         <Users className="size-3" />
                         {p.members}
@@ -358,24 +379,11 @@ export function OverviewTab({
                       переключатель периода стоит ниже, в секции часов. Число,
                       молча меняющееся от элемента внизу экрана, — ровно та
                       немота, из-за которой он туда и переехал. */}
-                  {(p.overdue > 0 || p.blocked > 0 || p.tasksTotal === 0) && (
-                    <div className="mt-2 flex flex-wrap items-center gap-x-3 gap-y-1 text-[11px]">
-                      {/* Ноль рядом со словом «просрочено» глаз читает как
-                          тревогу, поэтому нули не показываем вовсе. */}
-                      {p.overdue > 0 && (
-                        <span className="text-rose-600 dark:text-rose-400">
-                          <span className="font-semibold tabular-nums">{p.overdue}</span> {t('overview.overdueShort')}
-                        </span>
-                      )}
-                      {p.blocked > 0 && (
-                        <span className="text-amber-600 dark:text-amber-400">
-                          <span className="font-semibold tabular-nums">{p.blocked}</span> {t('overview.blockedShort')}
-                        </span>
-                      )}
-                      {p.tasksTotal === 0 && (
-                        <span className="text-muted-foreground">{t('overview.noTasksYet')}</span>
-                      )}
-                    </div>
+                  {/* Осталась одна причина для третьей строки: пустой проект.
+                      Полоса прогресса у него ничего не показывает, и без слов
+                      «0/0» читается как «всё сделано». */}
+                  {p.tasksTotal === 0 && (
+                    <p className="mt-2 text-[11px] text-muted-foreground">{t('overview.noTasksYet')}</p>
                   )}
                 </Tag>
               )

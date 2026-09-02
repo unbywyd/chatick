@@ -373,17 +373,20 @@ export function PeopleStats({
           <Users className="size-4" />
           {t('people.title')}
         </h2>
-        <div className="flex flex-wrap items-center gap-2">
+        {/* ms-auto прижимает группу к дальнему краю в ОБОИХ направлениях:
+            justify-between на обёртке работает, только пока строка одна, а
+            перенос оставлял бы её у левого края и в иврите. */}
+        <div className="flex flex-wrap items-center gap-2 ms-auto">
           {/* За какой срок считан ритм. Возле цифр, а не в шапке страницы:
               период меняет ровно эти числа и ничего больше. */}
-          <div className="flex rounded-lg border p-0.5">
+          <div className="flex shrink-0 rounded-lg border p-0.5">
             {PERIODS.map((d) => (
               <button
                 key={d}
                 onClick={() => setDays(d)}
                 aria-pressed={days === d}
                 className={cn(
-                  'rounded-md px-2 py-1 text-xs transition-colors',
+                  'whitespace-nowrap rounded-md px-2 py-1 text-xs transition-colors',
                   days === d ? 'bg-accent font-medium text-foreground' : 'text-muted-foreground hover:text-foreground',
                 )}
               >
@@ -391,13 +394,19 @@ export function PeopleStats({
               </button>
             ))}
           </div>
-          {/* Поиск по людям — только тому, кому есть среди кого искать. */}
+          {/* Поиск по людям — только тому, кому есть среди кого искать.
+              flex-1 вместо w-full: поле по-прежнему занимает всё свободное
+              место (ради этого w-full и ставили — на телефоне оно было
+              нерастяжимым), но больше не ТРЕБУЕТ целой строки и не утаскивает
+              за собой переключатель периода. Из-за этого в иврите вся группа
+              отрывалась от заголовка и уезжала к левому краю.
+              min-w-0 — чтобы плейсхолдер не распирал строку. */}
           {seesEveryone && all.length > PREVIEW && (
             <Input
               value={q}
               onChange={(e) => setQ(e.target.value)}
               placeholder={t('people.search')}
-              className="h-8 w-full max-w-56 text-sm"
+              className="h-8 min-w-0 flex-1 max-w-56 text-sm"
             />
           )}
         </div>
