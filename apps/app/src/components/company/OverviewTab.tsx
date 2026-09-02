@@ -125,8 +125,16 @@ export function OverviewTab({
   const [allProjects, setAllProjects] = useState(false)
   const { t, i18n } = useTranslation()
 
-  // По умолчанию — текущий месяц: за него смотрят и по нему платят.
-  const [period, setPeriod] = useState<Period>(() => resolvePreset('thisMonth'))
+  /**
+   * По умолчанию — ПРОШЛЫЙ месяц, а не текущий.
+   *
+   * Текущий на первых числах пуст: второго сентября «этот месяц» — это два
+   * дня, и график с часами показывал почти нулевую полосу. Человек открывает
+   * обзор и видит спад, которого нет: месяц просто не наступил.
+   *
+   * Прошлый месяц всегда полный, и сравнивать его есть с чем.
+   */
+  const [period, setPeriod] = useState<Period>(() => resolvePreset('lastMonth'))
   const [projectQuery, setProjectQuery] = useState('')
 
   const q = useQuery({
