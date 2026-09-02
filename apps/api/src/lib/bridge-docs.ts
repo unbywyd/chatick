@@ -634,6 +634,11 @@ ${denied.length ? `\n  NOT ALLOWED: ${denied.join(', ')}\n  Do not attempt these
   tables, and a single newline stays a line break. Send HTML if you already have
   it; both end up as the same stored markup. What you must NOT do is send a wall
   of prose because you feared markdown would show up raw — it will not.
+- NEVER ESCAPE THE MARKUP YOU SEND. Write \`<p>text</p>\`, never
+  \`&lt;p&gt;text&lt;/p&gt;\`, and never wrap the body in a \`\`\`html fence.
+  You are WRITING markup here, not showing it. Five knowledge-base entries were
+  saved escaped and every reader — the editor included — showed the raw tags as
+  text. The write returns 201 either way, so nothing warns you.
 - Hebrew, Arabic and other right-to-left text needs nothing special: every
   paragraph takes its direction from its own content, so mixed Russian, Hebrew
   and English in one description each read the right way round.
