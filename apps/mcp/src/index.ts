@@ -363,6 +363,39 @@ server.registerTool(
 )
 
 server.registerTool(
+  'chatick_release_update',
+  {
+    title: 'Fix a version: links, notes, name',
+    description:
+      'Edit a version that already exists — put a link on it, correct the app name or the build profile. Use this ' +
+      'INSTEAD of creating a second version when something is missing: two rows for one build split its history, ' +
+      'and the webhook then updates only one of them. buildPageUrl is the page at the provider (the one with the ' +
+      'logs); referenceUrl is the artifact people download. The EAS webhook normally fills both, so reach for this ' +
+      'when the webhook did not arrive. Pass null to clear a field. The stage is NOT changed here — that is ' +
+      'chatick_release_stage, which demands a comment for the history.',
+    inputSchema: {
+      project: z.string(),
+      release: z.string().describe('Release id from chatick_releases'),
+      version: z.string().optional(),
+      appName: z.string().nullable().optional().describe('Which app: "Client", "Provider"'),
+      referenceUrl: z.string().nullable().optional().describe('The build artifact people download'),
+      buildPageUrl: z.string().nullable().optional().describe('Page at the provider, where the logs are'),
+      notes: z.string().nullable().optional(),
+      buildProfile: z.string().nullable().optional().describe('development | preview | production'),
+    },
+  },
+  async ({ project, release, ...body }) => {
+    try {
+      return json(
+        await call({ ...(await need()), projectId: project }, 'PATCH', `/releases/${encodeURIComponent(release)}`, body),
+      )
+    } catch (e) {
+      return fail(e)
+    }
+  },
+)
+
+server.registerTool(
   'chatick_projects',
   { title: 'Projects I can reach', description: 'Id, name and my permission level per project.', inputSchema: {} },
   async () => {

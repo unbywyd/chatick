@@ -356,7 +356,9 @@ function endpointCatalog(q: string): string {
   GET    /x/releases${q}                   what shipped and where, plus "live"
   GET    /x/releases/<id>${q}              one version with its stage history
   POST   /x/releases/request${q}   {"version","appName?","buildType","assignee?","comment?","buildProfile?","estimateMinutes?"}
-  POST   /x/releases${q}           {"version","appName?","buildType","status?","referenceUrl?","notes?","comment?","buildProfile?"}
+  POST   /x/releases${q}           {"version","appName?","buildType","status?","referenceUrl?","buildPageUrl?","notes?","comment?","buildProfile?"}
+  PATCH  /x/releases/<id>${q}      {"version?","appName?","referenceUrl?","buildPageUrl?","notes?","buildProfile?"}
+                                   Fix a version instead of creating a second one for the same build.
   POST   /x/releases/<id>/stage${q} {"status","comment"}   comment REQUIRED
 
   /x/releases/request is the one you usually want. A manager does not "create a

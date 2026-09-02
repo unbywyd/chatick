@@ -54,6 +54,7 @@ type ReleaseDetails = {
   owner: { id: string; name: string; avatarUrl: string | null } | null
   buildProfile: string | null
   referenceUrl: string | null
+  buildPageUrl: string | null
   notes: string | null
   releasedAt: string | null
   createdAt: string
@@ -249,6 +250,34 @@ export function ReleasePage({ projectId, canManage }: { projectId: string; canMa
                 value={r.referenceUrl ?? ''}
                 placeholder="https://…"
                 onSave={(v) => patch.mutate({ referenceUrl: v.trim() || null })}
+              />
+            )}
+          </div>
+        </Row>
+        {/* Страница сборки у провайдера — та, где логи. Обычно её ставит
+            вебхук EAS, но когда он не дошёл, поставить руками было негде:
+            приходилось заводить вторую версию поверх первой. */}
+        <Row label={t('releases.buildPage')}>
+          <div className="flex items-center gap-2">
+            {r.buildPageUrl ? (
+              <a
+                href={r.buildPageUrl}
+                target="_blank"
+                rel="noreferrer noopener"
+                className="inline-flex min-w-0 items-center gap-1 text-brand-ink hover:underline"
+              >
+                <ExternalLink className="size-3 shrink-0" />
+                <span className="truncate">{r.buildPageUrl}</span>
+              </a>
+            ) : (
+              <span className="text-muted-foreground">—</span>
+            )}
+            {canManage && (
+              <EditPopover
+                title={t('releases.buildPage')}
+                value={r.buildPageUrl ?? ''}
+                placeholder="https://expo.dev/…"
+                onSave={(v) => patch.mutate({ buildPageUrl: v.trim() || null })}
               />
             )}
           </div>

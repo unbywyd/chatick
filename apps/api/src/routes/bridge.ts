@@ -4464,7 +4464,7 @@ bridgeRoute.get('/releases/:id', async (c) => {
   })
 })
 
-const RELEASE_FIELDS = ['version', 'appName', 'buildType', 'status', 'referenceUrl', 'notes', 'comment', 'buildProfile', 'project'] as const
+const RELEASE_FIELDS = ['version', 'appName', 'buildType', 'status', 'referenceUrl', 'buildPageUrl', 'notes', 'comment', 'buildProfile', 'project'] as const
 const REQUEST_FIELDS = ['version', 'appName', 'buildType', 'assignee', 'comment', 'referenceUrl', 'buildProfile', 'estimateMinutes', 'project'] as const
 
 bridgeRoute.post('/releases', async (c) => {
@@ -4493,11 +4493,13 @@ bridgeRoute.post('/releases', async (c) => {
     .values({
       projectId: ready.projectId,
       version,
+      appName: typeof b.appName === 'string' ? b.appName.trim().slice(0, 80) || null : null,
       buildType: type,
       status,
       ownerId: auth(c as never).userId,
       buildProfile: typeof b.buildProfile === 'string' ? b.buildProfile.slice(0, 50) : null,
       referenceUrl: typeof b.referenceUrl === 'string' ? b.referenceUrl.slice(0, 2000) : null,
+      buildPageUrl: typeof b.buildPageUrl === 'string' ? b.buildPageUrl.slice(0, 2000) : null,
       notes: typeof b.notes === 'string' ? b.notes.slice(0, 5000) : null,
       releasedAt: isLiveStage(type, status) ? new Date() : null,
     })
@@ -4631,6 +4633,63 @@ bridgeRoute.post('/releases/request', async (c) => {
     },
     201,
   )
+})
+
+/**
+ * Правка версии: ссылки, заметки, имя приложения, профиль.
+ *
+ * Не было вовсе: версию можно было завести и двигать по стадиям, но
+ * поставить ей ссылку задним числом — нет. А это ровно то, что нужно, когда
+ * вебхук EAS не дошёл: сборка есть, версия есть, а ссылки на неё нет, и
+ * приходилось заводить вторую версию поверх первой.
+ *
+ * Стадия сюда НЕ входит намеренно: у неё своя ручка, требующая комментарий.
+ * Пустив статус и сюда, мы обошли бы это правило — история переходов
+ * перестала бы объяснять, почему версию двигали.
+ */
+const RELEASE_PATCH_FIELDS = ['version', 'appName', 'referenceUrl', 'buildPageUrl', 'notes', 'buildProfile', 'project'] as const
+
+bridgeRoute.patch('/releases/:id', async (c) => {
+  const ready = await releasesReady(c as never, 'releases.manage')
+  if ('error' in ready) return c.json({ error: ready.error }, ready.status)
+  const parsed = await readJson(c as never)
+  if ('error' in parsed) return c.json(parsed, 400)
+  const b = parsed.body as Record<string, unknown>
+  const bad = unknownFields(b, RELEASE_PATCH_FIELDS)
+  if (bad) return c.json({ error: bad }, 400)
+
+  const existing = await db.query.releases.findFirst({
+    where: and(eq(releases.id, c.req.param('id')), eq(releases.projectId, ready.projectId)),
+  })
+  if (!existing) return c.json({ error: 'Not found' }, 404)
+
+  const patch: Record<string, unknown> = { updatedAt: new Date() }
+  if (typeof b.version === 'string' && b.version.trim()) patch.version = b.version.trim().slice(0, 50)
+  if (typeof b.appName === 'string') patch.appName = b.appName.trim().slice(0, 80) || null
+  if (typeof b.referenceUrl === 'string') patch.referenceUrl = b.referenceUrl.slice(0, 2000) || null
+  if (b.referenceUrl === null) patch.referenceUrl = null
+  if (typeof b.buildPageUrl === 'string') patch.buildPageUrl = b.buildPageUrl.slice(0, 2000) || null
+  if (b.buildPageUrl === null) patch.buildPageUrl = null
+  if (typeof b.notes === 'string') patch.notes = b.notes.slice(0, 5000) || null
+  if (b.notes === null) patch.notes = null
+  if (typeof b.buildProfile === 'string') patch.buildProfile = b.buildProfile.slice(0, 50) || null
+  if (b.buildProfile === null) patch.buildProfile = null
+  if (Object.keys(patch).length === 1) {
+    return c.json({ error: 'Nothing to change: pass version, appName, referenceUrl, buildPageUrl, notes or buildProfile' }, 400)
+  }
+
+  const [row] = await db.update(releases).set(patch).where(eq(releases.id, existing.id)).returning()
+  broadcast(ready.projectId, 'releases_changed', {})
+  return c.json({
+    id: row!.id,
+    version: row!.version,
+    appName: row!.appName,
+    buildType: row!.buildType,
+    status: row!.status,
+    referenceUrl: row!.referenceUrl,
+    buildPageUrl: row!.buildPageUrl,
+    buildProfile: row!.buildProfile,
+  })
 })
 
 bridgeRoute.post('/releases/:id/stage', async (c) => {
