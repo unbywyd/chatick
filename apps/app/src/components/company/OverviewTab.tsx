@@ -278,12 +278,21 @@ export function OverviewTab({
                   key={p.id}
                   {...(Tag === 'button' ? { onClick: () => onOpenProject!(p.id), type: 'button' as const } : {})}
                   className={cn(
-                    'rounded-xl border bg-card p-3 text-start',
+                    // min-w-0 на САМОЙ карточке: элемент сетки по умолчанию не
+                    // сжимается уже своего содержимого, и длинное имя проекта
+                    // распирало карточку шире колонки — на 320px она выходила
+                    // за экран на 10px и давала горизонтальную прокрутку всей
+                    // страницы. Та же причина, что была у полоски активности.
+                    'min-w-0 rounded-xl border bg-card p-3 text-start',
                     p.isMember && onOpenProject && 'transition-colors hover:border-brand/40 hover:bg-accent/40',
                   )}
                 >
                   <div className="flex items-center gap-2">
                     <ProjectBadge name={p.name} color={p.color} logoUrl={p.logoUrl} size={24} />
+                    {/* min-w-0 обязателен: без него flex-элемент не сжимается
+                        уже своего текста, и длинное имя выдавливает счётчики
+                        за край карточки — на 320px от «5» оставалась половина
+                        цифры. */}
                     <p className="min-w-0 flex-1 truncate text-sm font-medium">{p.name}</p>
                     {/* Непрочитанное — то, из-за чего стоит зайти прямо
                         сейчас; поэтому оно, а не числа, стоит первым справа. */}
@@ -294,6 +303,30 @@ export function OverviewTab({
                     )}
                     {/* Чужой проект: видно заранее, что внутрь не пустят. */}
                     {!p.isMember && <Lock className="size-3 shrink-0 text-muted-foreground" />}
+
+                    {/* Люди и переписка — В ШАПКЕ, а не внизу карточки.
+                        Это фон проекта: он не меняется от того, как идут
+                        дела, и читать его строкой ниже незачем — она из-за
+                        них жила в каждой карточке, даже когда сказать было
+                        нечего. Внизу теперь только тревожное, и у спокойного
+                        проекта строки нет вовсе. */}
+                    <span className="shrink-0 inline-flex items-center gap-2 text-[11px] text-muted-foreground">
+                      <span className="inline-flex items-center gap-1">
+                        <Users className="size-3" />
+                        {p.members}
+                      </span>
+                      {/* На узком экране переписку прячем: на 320px имени
+                          остаётся 110px, и «Simply Touch (רון דגן…)»
+                          обрезается до пары букв. Люди важнее — по ним видно,
+                          свой проект или чужой; сколько в нём переписки,
+                          видно внутри. */}
+                      {p.messages > 0 && (
+                        <span className="hidden items-center gap-1 min-[380px]:inline-flex">
+                          <MessageSquare className="size-3" />
+                          {p.messages}
+                        </span>
+                      )}
+                    </span>
                   </div>
 
                   {/* Полоса и числа рядом: одна полоса не говорит, велика ли
@@ -308,39 +341,34 @@ export function OverviewTab({
                     </span>
                   </div>
 
-                  <div className="mt-2 flex flex-wrap items-center gap-x-3 gap-y-1 text-[11px]">
-                    {/* Просрочка и застрявшее — только когда они есть: ноль
-                        рядом со словом «просрочено» глаз читает как тревогу. */}
-                    {p.overdue > 0 && (
-                      <span className="text-rose-600 dark:text-rose-400">
-                        <span className="font-semibold tabular-nums">{p.overdue}</span> {t('overview.overdueShort')}
-                      </span>
-                    )}
-                    {p.blocked > 0 && (
-                      <span className="text-amber-600 dark:text-amber-400">
-                        <span className="font-semibold tabular-nums">{p.blocked}</span> {t('overview.blockedShort')}
-                      </span>
-                    )}
-                    <span className="inline-flex items-center gap-1 text-muted-foreground">
-                      <Users className="size-3" />
-                      {p.members}
-                    </span>
-                    {/* Переписка: показывает, живой проект или тихий. За всё
-                        время, а не за период — от переключателя не зависит. */}
-                    {p.messages > 0 && (
-                      <span className="inline-flex items-center gap-1 text-muted-foreground">
-                        <MessageSquare className="size-3" />
-                        {p.messages}
-                      </span>
-                    )}
-                    {/* Часов здесь НЕТ: они живут отрезком времени, а
-                        переключатель периода стоит ниже, в секции часов.
-                        Число, молча меняющееся от элемента внизу экрана, —
-                        ровно та немота, из-за которой он туда и переехал. */}
-                    {p.tasksTotal === 0 && (
-                      <span className="text-muted-foreground">{t('overview.noTasksYet')}</span>
-                    )}
-                  </div>
+                  {/* Строка тревоги — только когда есть о чём тревожиться.
+                      Раньше она стояла всегда, потому что несла людей и
+                      сообщения; те уехали в шапку, и у спокойного проекта
+                      карточка стала на строку ниже.
+
+                      Часов здесь НЕТ: они живут отрезком времени, а
+                      переключатель периода стоит ниже, в секции часов. Число,
+                      молча меняющееся от элемента внизу экрана, — ровно та
+                      немота, из-за которой он туда и переехал. */}
+                  {(p.overdue > 0 || p.blocked > 0 || p.tasksTotal === 0) && (
+                    <div className="mt-2 flex flex-wrap items-center gap-x-3 gap-y-1 text-[11px]">
+                      {/* Ноль рядом со словом «просрочено» глаз читает как
+                          тревогу, поэтому нули не показываем вовсе. */}
+                      {p.overdue > 0 && (
+                        <span className="text-rose-600 dark:text-rose-400">
+                          <span className="font-semibold tabular-nums">{p.overdue}</span> {t('overview.overdueShort')}
+                        </span>
+                      )}
+                      {p.blocked > 0 && (
+                        <span className="text-amber-600 dark:text-amber-400">
+                          <span className="font-semibold tabular-nums">{p.blocked}</span> {t('overview.blockedShort')}
+                        </span>
+                      )}
+                      {p.tasksTotal === 0 && (
+                        <span className="text-muted-foreground">{t('overview.noTasksYet')}</span>
+                      )}
+                    </div>
+                  )}
                 </Tag>
               )
             })}
