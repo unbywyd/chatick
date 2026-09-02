@@ -8,7 +8,7 @@ import { dependentsOf } from '../routes/tasks.js'
 import { readFromConnection } from '../routes/db-connections.js'
 import { hasPermission, companyRoleOf } from '../routes/projects.js'
 import { snapshot } from '../routes/documents.js'
-import { htmlToText, sanitizeHtml } from './sanitize-html.js'
+import { htmlToText } from './sanitize-html.js'
 import { searchInDocument, searchInText } from './doc-search.js'
 import { submitAssistantReport, REPORT_KINDS, type ReportKind } from './assistant-report.js'
 import { createNote, noteToTask, NOTE_TYPES } from '../routes/notes.js'
@@ -795,13 +795,13 @@ export function memoryTools(projectId: string, actorUserId: string): { tools: To
     {
       name: 'create_note',
       description:
-        'Write something into the project journal, ON BEHALF OF the user. Use when asked to "save this", "remember how we fixed it", "log that this contradicts what was said". Types: solution (a problem AND its fix — the reusable kind, the most valuable), bug (broken, not yet fixed), requirement (a rule to follow), attention (a trap the next person will step into), decision (we chose this over that, and why), business (a company rule), note. Body is HTML like documents, not markdown. Entries belong to the company and are findable from every project — no scope to set. sourceMessageIds quotes chat messages IN THE ORDER THEY WERE SENT — the chain is the evidence; their text is copied, so it survives the messages being deleted. assigneeIds marks who the note concerns; they get notified.',
+        'Write something into the project journal, ON BEHALF OF the user. Use when asked to "save this", "remember how we fixed it", "log that this contradicts what was said". Types: solution (a problem AND its fix — the reusable kind, the most valuable), bug (broken, not yet fixed), requirement (a rule to follow), attention (a trap the next person will step into), decision (we chose this over that, and why), business (a company rule), note. Write the body in MARKDOWN — headings, lists, bold, code fences, links. It is converted on our side. Do not send HTML tags and never escape them. Entries belong to the company and are findable from every project — no scope to set. sourceMessageIds quotes chat messages IN THE ORDER THEY WERE SENT — the chain is the evidence; their text is copied, so it survives the messages being deleted. assigneeIds marks who the note concerns; they get notified.',
       parameters: {
         type: 'object',
         properties: {
           type: { type: 'string' },
           title: { type: 'string' },
-          body: { type: 'string', description: 'HTML' },
+          body: { type: 'string', description: 'markdown' },
           tags: { type: 'array', items: { type: 'string' } },
           scope: { type: 'string', enum: ['project', 'company'] },
           sourceMessageIds: { type: 'array', items: { type: 'string' } },
@@ -813,7 +813,7 @@ export function memoryTools(projectId: string, actorUserId: string): { tools: To
     },
     {
       name: 'update_note',
-      description: 'Update a note by id: any of type, title, body (HTML), tags, scope, remindAt. Requires notes.write.',
+      description: 'Update a note by id: any of type, title, body (markdown), tags, scope, remindAt. Requires notes.write.',
       parameters: {
         type: 'object',
         properties: {
@@ -854,11 +854,11 @@ export function memoryTools(projectId: string, actorUserId: string): { tools: To
     {
       name: 'write_work_log',
       description:
-        'Record where the work stands, ON BEHALF OF the user. Saves as a DRAFT that only they can see, so it is safe to write a half-finished state. Write after every FINISHED PIECE of work — a decision made, a direction corrected, something shipped — not once at the end: a conversation has no end, and when it is gone this entry is all that is left of it. Record two things: state (what changed, what is half-done, what is next) and DECISIONS with their reason — what was agreed and why. The reason is what no task carries, and it is what gets undone later. Facts and movement, no water: three or four lines, not a retelling of the conversation and not a summary of code. One open draft per person per project: if one exists this extends it instead of starting a second. Body is HTML like documents, not markdown.',
+        'Record where the work stands, ON BEHALF OF the user. Saves as a DRAFT that only they can see, so it is safe to write a half-finished state. Write after every FINISHED PIECE of work — a decision made, a direction corrected, something shipped — not once at the end: a conversation has no end, and when it is gone this entry is all that is left of it. Record two things: state (what changed, what is half-done, what is next) and DECISIONS with their reason — what was agreed and why. The reason is what no task carries, and it is what gets undone later. Facts and movement, no water: three or four lines, not a retelling of the conversation and not a summary of code. One open draft per person per project: if one exists this extends it instead of starting a second. Write the body in MARKDOWN — headings, lists, bold, code fences, links. It is converted on our side. Do not send HTML tags and never escape them.',
       parameters: {
         type: 'object',
         properties: {
-          body: { type: 'string', description: 'HTML — what was done, where it stopped, what is next' },
+          body: { type: 'string', description: 'markdown — what was done, where it stopped, what is next' },
           taskId: { type: 'string', description: 'optional task this is about' },
         },
         required: ['body'],
@@ -896,7 +896,7 @@ export function memoryTools(projectId: string, actorUserId: string): { tools: To
     {
       name: 'create_document',
       description:
-        'Create a project document. Content is HTML (the editor is rich text): use <h1>/<h2>/<h3>, <p>, <ul>/<ol>/<li>, <strong>, <em>, <blockquote>, <pre><code>, <table>. Do NOT send markdown. Requires documents.write.',
+        'Create a project document. Write the content in MARKDOWN — headings, lists, bold, code fences, tables. It is converted on our side. Do not send HTML tags and never escape them. Requires documents.write.',
       parameters: {
         type: 'object',
         properties: { title: { type: 'string' }, content: { type: 'string' } },
@@ -906,7 +906,7 @@ export function memoryTools(projectId: string, actorUserId: string): { tools: To
     {
       name: 'update_document',
       description:
-        'Replace a document title and/or its whole content by id. Content is HTML, not markdown. Requires documents.write. For adding to the end use append_to_document. Destructive — ask the user to confirm first.',
+        'Replace a document title and/or its whole content by id. Content is markdown. Requires documents.write. For adding to the end use append_to_document. Destructive — ask the user to confirm first.',
       parameters: {
         type: 'object',
         properties: { id: { type: 'string' }, title: { type: 'string' }, content: { type: 'string' } },
@@ -915,7 +915,7 @@ export function memoryTools(projectId: string, actorUserId: string): { tools: To
     },
     {
       name: 'append_to_document',
-      description: 'Append HTML to the END of a document (safe for long docs — no need to resend the whole text). Requires documents.write.',
+      description: 'Append markdown to the END of a document (safe for long docs — no need to resend the whole text). Requires documents.write.',
       parameters: { type: 'object', properties: { id: { type: 'string' }, content: { type: 'string' } }, required: ['id', 'content'] },
     },
     {
@@ -2185,7 +2185,10 @@ export function memoryTools(projectId: string, actorUserId: string): { tools: To
         patch.type = args.type
       }
       if (typeof args.title === 'string') patch.title = args.title.slice(0, 300)
-      if (typeof args.body === 'string') patch.body = sanitizeHtml(args.body)
+      // Разбор обязателен: правка приходит тем же markdown-ом, что и создание.
+      // Одна лишь чистка разметки markdown не понимает — «## Заголовок» лёг бы
+      // в базу решёткой, и запись, созданная правильно, портилась бы правкой.
+      if (typeof args.body === 'string') patch.body = richText(args.body)
       if (Array.isArray(args.tags)) patch.tags = JSON.stringify((args.tags as unknown[]).map((x) => String(x).toLowerCase()))
       if (args.scope === 'company' || args.scope === 'project') patch.scope = args.scope
       if (typeof args.remindAt === 'string') {
@@ -2294,7 +2297,7 @@ export function memoryTools(projectId: string, actorUserId: string): { tools: To
       if (open) {
         await db
           .update(workLog)
-          .set({ body: sanitizeHtml(body), updatedAt: new Date(), ...(args.taskId ? { taskId: String(args.taskId) } : {}) })
+          .set({ body: richText(body), updatedAt: new Date(), ...(args.taskId ? { taskId: String(args.taskId) } : {}) })
           .where(eq(workLog.id, open.id))
         return `Updated your open draft (id=${open.id}). Only you can see it — publish_work_log shares it with the project.`
       }
@@ -2304,7 +2307,7 @@ export function memoryTools(projectId: string, actorUserId: string): { tools: To
         .values({
           projectId,
           authorId: actorUserId,
-          body: sanitizeHtml(body),
+          body: richText(body),
           taskId: args.taskId ? String(args.taskId) : null,
           status: 'draft',
         })
@@ -2333,7 +2336,7 @@ export function memoryTools(projectId: string, actorUserId: string): { tools: To
       if (!title) return 'Title is required.'
       const [row] = await db
         .insert(documents)
-        .values({ projectId, title, content: String(args.content ?? '').slice(0, 500_000), createdById: actorUserId, updatedById: actorUserId })
+        .values({ projectId, title, content: richText(String(args.content ?? '')).slice(0, 500_000), createdById: actorUserId, updatedById: actorUserId })
         .returning()
       void logActivity({ projectId, actorId: actorUserId, action: 'create', entityType: 'document', entityId: row!.id, entityLabel: title })
       broadcast(projectId, 'documents_changed', {})
@@ -2345,7 +2348,7 @@ export function memoryTools(projectId: string, actorUserId: string): { tools: To
       if (!d) return 'Document not found.'
       const patch: Record<string, unknown> = { updatedById: actorUserId }
       if (typeof args.title === 'string') patch.title = args.title.slice(0, 300)
-      if (typeof args.content === 'string') patch.content = args.content.slice(0, 500_000)
+      if (typeof args.content === 'string') patch.content = richText(args.content).slice(0, 500_000)
       if (Object.keys(patch).length === 1) return 'Nothing to update.'
       // правку ИИ обязательно версионируем: перезапись всего документа должна быть обратима
       await snapshot(d.id, d.title, d.content, actorUserId, 'before AI edit').catch(() => {})
@@ -2358,7 +2361,10 @@ export function memoryTools(projectId: string, actorUserId: string): { tools: To
       if (!(await hasPermission(projectId, actorUserId, 'documents.write'))) return 'PERMISSION DENIED: the author cannot write documents.'
       const d = await db.query.documents.findFirst({ where: and(eq(documents.id, String(args.id ?? '')), eq(documents.projectId, projectId)) })
       if (!d) return 'Document not found.'
-      const add = String(args.content ?? '')
+      // Разбираем ДОБАВЛЯЕМЫЙ кусок отдельно, до склейки: разбор целого
+      // документа перетряхнул бы уже сохранённую разметку, а нам нужно
+      // дописать в конец, ничего не трогая выше.
+      const add = richText(String(args.content ?? ''))
       if (!add) return 'Nothing to append.'
       const next = `${d.content}${add}`.slice(0, 500_000)
       await snapshot(d.id, d.title, d.content, actorUserId, 'before AI append').catch(() => {})
