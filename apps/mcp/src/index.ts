@@ -906,6 +906,28 @@ server.registerTool(
   },
 )
 
+server.registerTool(
+  'chatick_task_history',
+  {
+    title: 'Who did what to this task',
+    description:
+      'The path of a task: who created it, who assigned it, who moved it through statuses, when. ' +
+      'ASK THIS BEFORE ANSWERING "why was this returned to me" or "who closed it" — the task object alone does ' +
+      'not say, and a guess passed off as an answer is worse than "I do not know". That is not hypothetical: it ' +
+      'already happened, and the guess was wrong. ' +
+      'Milestones only — reordering and description edits are left out. Older entries name the field that ' +
+      'changed but not its new value: say what changed, do not invent what it became.',
+    inputSchema: { project: z.string(), task: z.string() },
+  },
+  async ({ project, task }) => {
+    try {
+      return json(await call({ ...(await need()), projectId: project }, 'GET', `/tasks/${encodeURIComponent(task)}/history`))
+    } catch (e) {
+      return fail(e)
+    }
+  },
+)
+
 // --- Связи задач -------------------------------------------------------------
 
 /**

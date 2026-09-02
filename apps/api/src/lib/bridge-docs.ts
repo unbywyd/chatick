@@ -79,6 +79,9 @@ function endpointCatalog(q: string): string {
          surfaces only when somebody happens to remember it. If the person did
          not say who, ASK; do not guess and do not leave it out.
   PATCH  /x/tasks/<id>${q}         any subset of the same fields
+  GET    /x/tasks/<id>/history${q} who created it, assigned it, moved its status
+         Milestones only. Ask before answering "why was this returned to me" —
+         the task itself does not say, and a guess is worse than "I don't know".
   PATCH  /x/tasks/bulk${q}         {"tasks":["TASK-4","TASK-7"], "set":{...}, "refs":{"TASK-4":"19.1"}}
   DELETE /x/tasks/<id>${q}
   DELETE /x/tasks/bulk${q}         {"tasks":["TASK-4","TASK-7"]}

@@ -1665,6 +1665,20 @@ const taskView = (
   // Без этих чисел ассистент предлагает браться за работу, которую нельзя
   // начать, — а узнать об этом можно было только запросом на каждую задачу.
   ...(deps ? { openBlockers: deps.openBlockers, blocking: deps.blocking } : {}),
+  /**
+   * Кто завёл задачу и когда.
+   *
+   * Их не было — только updatedAt, и ассистент не мог ответить на простое
+   * «почему эту задачу вернули на меня»: ни автора, ни даты создания в ответе.
+   * По живому репорту он в таком случае выдал догадку за факт — сказал, что
+   * задачу никто не возвращал, хотя её вернул ПМ комментарием.
+   *
+   * Отдаём id, а не имя: taskView зовётся на каждую строку списка, и запрос
+   * за именем автора превратился бы в полсотни одинаковых. Имя достаётся из
+   * GET /x/members, который у ассистента и так под рукой.
+   */
+  createdById: t.createdById,
+  createdAt: t.createdAt,
   updatedAt: t.updatedAt,
 })
 
@@ -3412,6 +3426,64 @@ bridgeRoute.delete('/tasks/:id/resources/:resourceId', async (c) => {
  * проставляет derived. Ручки намеренно отдельны от блокеров: связь ничего не
  * держит, и смешать их значило бы позволить «похожей задаче» гасить работу.
  */
+
+/**
+ * История задачи: кто завёл, кто назначил, кто двигал по статусам.
+ *
+ * В вебе она есть, а в мосту её не было — и ассистент не мог ответить на
+ * «почему эту задачу вернули на меня». По живому репорту он в таком случае
+ * выдал догадку за факт: сказал, что задачу никто не возвращал, хотя её вернул
+ * ПМ.
+ *
+ * Только ВЕХИ, как и в интерфейсе: перетаскивание в списке пишет запись на
+ * каждое движение мыши, и настоящие шаги утонули бы в этом шуме.
+ */
+bridgeRoute.get('/tasks/:id/history', async (c) => {
+  const scope = await resolveProject(c as never)
+  if ('error' in scope) return c.json({ error: scope.error }, scope.status)
+  const denied = await require(c as never, 'tasks.read', scope.projectId)
+  if (denied) return c.json(denied, 403)
+
+  const task = await taskByKey(scope.projectId, c.req.param('id'))
+  if (!task) return c.json({ error: 'Task not found' }, 404)
+
+  const rows = await db
+    .select({ a: activityLog, actor: { name: users.name } })
+    .from(activityLog)
+    .leftJoin(users, eq(users.id, activityLog.actorId))
+    .where(
+      and(
+        eq(activityLog.projectId, scope.projectId),
+        eq(activityLog.entityType, 'task'),
+        eq(activityLog.entityId, task.id),
+      ),
+    )
+    .orderBy(asc(activityLog.createdAt))
+    .limit(200)
+
+  const MILESTONE = ['status', 'assigneeId', 'dueDate', 'priority', 'groupId', 'estimateMinutes']
+  const items = rows
+    .map((r) => {
+      const meta = (r.a.meta ? JSON.parse(r.a.meta) : null) as
+        | { changed?: string[]; before?: Record<string, unknown>; after?: Record<string, unknown> }
+        | null
+      return {
+        action: r.a.action,
+        at: r.a.createdAt,
+        // actor = null означает ИИ или систему, а не человека.
+        actor: r.actor?.name ?? null,
+        changed: meta?.changed ?? [],
+        before: meta?.before,
+        after: meta?.after,
+      }
+    })
+    .filter((x) => x.action !== 'update' || x.changed.some((f) => MILESTONE.includes(f)))
+
+  return c.json({
+    items,
+    hint: 'Milestones only: reordering in the list and description edits are left out, they would drown the real steps. Entries older than the change that started recording values carry "changed" but no before/after — say what changed, not what it became, rather than guessing.',
+  })
+})
 
 bridgeRoute.get('/tasks/:id/links', async (c) => {
   const scope = await resolveProject(c as never)
