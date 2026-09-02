@@ -1223,11 +1223,11 @@ server.registerTool(
     description:
       'Create a document, ON BEHALF OF the human. For text that outlives a task: a spec, an agreed approach, ' +
       'a description of how something works. Anything that is about ONE task belongs in that task instead. ' +
-      'Markdown or HTML — both are converted on our side, so write whichever is natural. Do NOT escape the tags: send <p>text</p>, never &lt;p&gt;.',
+      'Write in MARKDOWN — headings, lists, bold, code fences, links, tables. It is converted on our side. Do not send HTML tags and never escape them.',
     inputSchema: {
       project: z.string(),
       title: z.string().min(1).describe('Short — what this document is'),
-      content: z.string().optional().describe('Markdown or HTML'),
+      content: z.string().optional().describe('markdown'),
     },
   },
   async ({ project, ...body }) => {
@@ -1250,7 +1250,7 @@ server.registerTool(
     inputSchema: {
       project: z.string(),
       id: z.string(),
-      content: z.string().min(1).describe('Markdown or HTML to add at the end'),
+      content: z.string().min(1).describe('markdown to add at the end'),
     },
   },
   async ({ project, id, content }) => {
@@ -1277,7 +1277,7 @@ server.registerTool(
       project: z.string(),
       id: z.string(),
       title: z.string().optional(),
-      content: z.string().optional().describe('Markdown or HTML — replaces the whole body'),
+      content: z.string().optional().describe('markdown — replaces the whole body'),
     },
   },
   async ({ project, id, ...body }) => {
@@ -1450,11 +1450,11 @@ server.registerTool(
       'scope="company" for anything reusable beyond this project — technical answers, gotchas, rules. That is ' +
       'what makes the next project cheaper. ' +
       'Tags matter: they narrow a search that meaning alone cannot ("cardcom", "sms", "ios"). ' +
-      'Markdown or HTML — both are converted on our side, so write whichever is natural. Do NOT escape the tags: send <p>text</p>, never &lt;p&gt;.',
+      'Write in MARKDOWN — headings, lists, bold, code fences, links, tables. It is converted on our side. Do not send HTML tags and never escape them.',
     inputSchema: {
       project: z.string().describe('Project id'),
       title: z.string().describe('Short — what this is about'),
-      body: z.string().describe('Markdown or HTML'),
+      body: z.string().describe('markdown'),
       type: z
         .enum(['bug', 'requirement', 'attention', 'solution', 'problem', 'decision', 'contradiction', 'mismatch', 'gap', 'reminder', 'business', 'note'])
         .optional()
@@ -1484,7 +1484,7 @@ server.registerTool(
       project: z.string().describe('Project id'),
       id: z.string().describe('Note id'),
       title: z.string().optional(),
-      body: z.string().optional().describe('Markdown or HTML'),
+      body: z.string().optional().describe('markdown'),
       type: z.string().optional(),
       tags: z.array(z.string()).optional(),
       scope: z.enum(['project', 'company']).optional(),
@@ -1570,10 +1570,10 @@ server.registerTool(
       'would this help someone who never saw this conversation? ' +
       'One open draft per person per project: if one exists this returns its id, and you extend it with ' +
       'chatick_worklog_update instead of starting a second. ' +
-      'Markdown or HTML — both are converted on our side, so write whichever is natural. Do NOT escape the tags: send <p>text</p>, never &lt;p&gt;.',
+      'Write in MARKDOWN — headings, lists, bold, code fences, links, tables. It is converted on our side. Do not send HTML tags and never escape them.',
     inputSchema: {
       project: z.string().describe('Project id'),
-      body: z.string().describe('Markdown or HTML — what was done, where it stopped, what is next'),
+      body: z.string().describe('markdown — what was done, where it stopped, what is next'),
       taskId: z.string().optional().describe('Optional: the task this is about'),
     },
   },
@@ -1599,7 +1599,7 @@ server.registerTool(
     inputSchema: {
       project: z.string().describe('Project id'),
       id: z.string().describe('Entry id from chatick_worklog'),
-      body: z.string().optional().describe('Markdown or HTML — replaces the current text, so include what you keep'),
+      body: z.string().optional().describe('markdown — replaces the current text, so include what you keep'),
       taskId: z
         .string()
         .optional()

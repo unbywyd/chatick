@@ -629,16 +629,16 @@ ${denied.length ? `\n  NOT ALLOWED: ${denied.join(', ')}\n  Do not attempt these
 - Destructive actions (delete, bulk status changes) need explicit human
   confirmation first. Ask, then act.
 - Write content in the project's language, not the language of the request.
-- MARKDOWN IS FINE. Task descriptions, comments, notes and documents accept
-  markdown and it is converted on our side — headings, lists, bold, code, links,
-  tables, and a single newline stays a line break. Send HTML if you already have
-  it; both end up as the same stored markup. What you must NOT do is send a wall
-  of prose because you feared markdown would show up raw — it will not.
-- NEVER ESCAPE THE MARKUP YOU SEND. Write \`<p>text</p>\`, never
-  \`&lt;p&gt;text&lt;/p&gt;\`, and never wrap the body in a \`\`\`html fence.
-  You are WRITING markup here, not showing it. Five knowledge-base entries were
-  saved escaped and every reader — the editor included — showed the raw tags as
-  text. The write returns 201 either way, so nothing warns you.
+- WRITE MARKDOWN. Task descriptions, comments, notes, work log and documents all
+  take markdown and it is converted on our side — headings, lists, bold, code,
+  links, tables, and a single newline stays a line break. Do not send a wall of
+  prose because you feared markdown would show up raw: it will not.
+- DO NOT SEND HTML, AND NEVER ESCAPE IT. Write \`## Heading\`, not
+  \`<h2>Heading</h2>\` and least of all \`&lt;h2&gt;Heading&lt;/h2&gt;\`.
+  Hand-written HTML is exactly what went wrong: five knowledge-base entries
+  arrived escaped, and every reader — the editor included — showed the raw tags
+  as text. Markdown cannot fail this way, because there is nothing to escape.
+  The write returns 201 either way, so nothing warns you.
 - Hebrew, Arabic and other right-to-left text needs nothing special: every
   paragraph takes its direction from its own content, so mixed Russian, Hebrew
   and English in one description each read the right way round.
@@ -806,7 +806,7 @@ ${endpointCatalog('')}
          Then read around a hit with ?offset=<its offset>.
   GET    /x/documents/<id>?format=text|html&offset=0&limit=4000
          Long documents are read in chunks; the response says whether more remains.
-  POST   /x/documents          {"title","content"}   content is HTML
+  POST   /x/documents          {"title","content"}   content is markdown
   PATCH  /x/documents/<id>     {"title?","content?"}
   POST   /x/documents/<id>/append  {"content"}       safe for long docs
 
