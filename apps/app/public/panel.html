@@ -180,7 +180,15 @@
         font-size: 10px; font-weight: 700; line-height: 16px;
       }
       .group-chev { flex: 0 0 auto; color: var(--muted); transition: transform .12s; }
+      /* Закрытая группа: стрелка указывает ТУДА, КУДА РАСКРОЕТСЯ.
+         В латинице это вправо (−90° от «вниз»), в иврите — влево, иначе она
+         показывает за пределы списка и читается как «уйти отсюда». */
       .group-head.closed .group-chev { transform: rotate(-90deg); }
+      [dir='rtl'] .group-head.closed .group-chev { transform: rotate(90deg); }
+      /* Стрелка, нарисованная вправо в разметке: в иврите зеркалим. Класс
+         отдельный, потому что у этих групп нет состояния closed — они всегда
+         свёрнуты, и поворачивать нечего, только отразить. */
+      [dir='rtl'] .rtl-flip { transform: scaleX(-1); }
       .filter-wrap { padding: 4px 4px 6px; }
       /* Кем вошли: маленький ответ на большой вопрос «от чьего имени всё это». */
       /* Аватар ведёт в профиль: имя и фото человек правит отсюда чаще
@@ -980,7 +988,7 @@ ${T('openProfile', 'Profile')}`
                   ${companyNameOf(p) ? `<span class="group-sub">${escape(companyNameOf(p))}</span>` : ''}
                 </span>
                 ${right}
-                <svg class="group-chev" width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="m9 6 6 6-6 6"/></svg>
+                <svg class="group-chev rtl-flip" width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="m9 6 6 6-6 6"/></svg>
               </div>`
 
           for (const p of nonEmpty) {

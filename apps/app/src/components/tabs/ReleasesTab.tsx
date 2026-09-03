@@ -615,8 +615,10 @@ function ReleasesTable({
                       </a>
                     )}
                     {/* Шеврон в конце строки: без него строка выглядит как
-                        данные, а не как переход, и в неё не тыкают. */}
-                    <ChevronRight className="size-4 shrink-0 text-muted-foreground/60 group-hover/row:text-brand-ink" />
+                        данные, а не как переход, и в неё не тыкают.
+                        В иврите разворачиваем: стрелка вправо там указывает
+                        назад, то есть ровно в обратную сторону от перехода. */}
+                    <ChevronRight className="size-4 shrink-0 text-muted-foreground/60 group-hover/row:text-brand-ink rtl:rotate-180" />
                   </div>
                 </td>
               </tr>
