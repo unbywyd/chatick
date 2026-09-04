@@ -1734,7 +1734,16 @@
     "filterFree": "זמינות לעבודה",
     "cycleHint": "משימות שתלויות בזו אינן מוצגות: קישור היה סוגר לולאה, ואי אפשר היה להשלים אף אחת מהן.",
     "stripHolding_one": "מעכבות משימה {{count}}",
-    "stripHolding_other": "מעכבות {{count}} משימות"
+    "stripHolding_other": "מעכבות {{count}} משימות",
+    "stripWorst_one": "מעכב את הפרויקט יום אחד",
+    "stripWorst_two": "מעכב את הפרויקט יומיים",
+    "stripWorst_other": "מעכב את הפרויקט {{count}} ימים",
+    "stripAge_one": "יום",
+    "stripAge_two": "יומיים",
+    "stripAge_other": "{{count}} י'",
+    "stripTaskAge_one": "המשימה בת יום",
+    "stripTaskAge_two": "המשימה בת יומיים",
+    "stripTaskAge_other": "המשימה בת {{count}} ימים"
   },
   "links": {
     "derivedFrom": "צמחה מתוך",

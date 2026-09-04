@@ -1755,7 +1755,16 @@
     "cycleHint": "Задачи, которые зависят от этой, не показаны: связь замкнула бы кольцо, и ни одну из них нельзя было бы завершить.",
     "stripHolding_one": "держат {{count}} задачу",
     "stripHolding_few": "держат {{count}} задачи",
-    "stripHolding_many": "держат {{count}} задач"
+    "stripHolding_many": "держат {{count}} задач",
+    "stripWorst_one": "{{count}} день тормозит проект",
+    "stripWorst_few": "{{count}} дня тормозит проект",
+    "stripWorst_many": "{{count}} дней тормозит проект",
+    "stripAge_one": "{{count}} д",
+    "stripAge_few": "{{count}} д",
+    "stripAge_many": "{{count}} д",
+    "stripTaskAge_one": "задаче {{count}} день",
+    "stripTaskAge_few": "задаче {{count}} дня",
+    "stripTaskAge_many": "задаче {{count}} дней"
   },
   "links": {
     "derivedFrom": "Выросла из",

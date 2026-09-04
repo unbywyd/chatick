@@ -1734,7 +1734,13 @@
     "filterFree": "Ready to take",
     "cycleHint": "Tasks that depend on this one are not shown: linking them would close a loop, and neither task could ever be finished.",
     "stripHolding_one": "holding back {{count}} task",
-    "stripHolding_other": "holding back {{count}} tasks"
+    "stripHolding_other": "holding back {{count}} tasks",
+    "stripWorst_one": "holding the project up for {{count}} day",
+    "stripWorst_other": "holding the project up for {{count}} days",
+    "stripAge_one": "{{count}}d",
+    "stripAge_other": "{{count}}d",
+    "stripTaskAge_one": "task is {{count}} day old",
+    "stripTaskAge_other": "task is {{count}} days old"
   },
   "links": {
     "derivedFrom": "Grew out of",
