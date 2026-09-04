@@ -242,7 +242,12 @@ companiesRoute.get('/:companyId/overview', async (c) => {
      * блокеров, и считать её трижды значило бы пугать числом на пустом месте.
      */
     db.execute(sql`
-      select b.project_id as "projectId", count(distinct b.blocked_task_id)::int as count
+      select b.project_id as "projectId", count(distinct b.blocked_task_id)::int as count,
+             -- Сколько уже стоит самая давняя связка. Число «3 стоят» не
+             -- отвечает на главный вопрос: три дня — это работа, три недели —
+             -- это забыли. Без возраста строка одинаково выглядит в обоих
+             -- случаях, а на живых данных разброс от 2 до 29 дней.
+             coalesce(round(max(extract(epoch from (now() - b.created_at))/86400)::numeric, 0), 0)::int as "worstDays"
         from task_blockers b
         join tasks bt on bt.id = b.blocker_task_id
         join tasks t on t.id = b.blocked_task_id
@@ -349,9 +354,11 @@ companiesRoute.get('/:companyId/overview', async (c) => {
 
   // Заблокированные задачи по проектам: db.execute отдаёт rows либо массив —
   // форма зависит от драйвера, поэтому разбираем оба случая, как и рядом.
-  const blockedList = (blockedRows as unknown as { rows?: { projectId: string; count: number }[] }).rows
-    ?? (blockedRows as unknown as { projectId: string; count: number }[])
+  type BlockedRow = { projectId: string; count: number; worstDays: number }
+  const blockedList = (blockedRows as unknown as { rows?: BlockedRow[] }).rows
+    ?? (blockedRows as unknown as BlockedRow[])
   const blockedMap = new Map((blockedList ?? []).map((r) => [r.projectId, Number(r.count)]))
+  const blockedAge = new Map((blockedList ?? []).map((r) => [r.projectId, Number(r.worstDays)]))
 
   const list = projectRows.map((p) => {
     const t = taskMap.get(p.id)
@@ -371,6 +378,8 @@ companiesRoute.get('/:companyId/overview', async (c) => {
       members: memberMap.get(p.id)?.count ?? 0,
       /** Задачи, которые ждут другую незакрытую задачу: работа упёрлась. */
       blocked: blockedMap.get(p.id) ?? 0,
+      /** Сколько дней стоит самая давняя связка: «3 дня» и «29 дней» — разное. */
+      blockedDays: blockedAge.get(p.id) ?? 0,
       minutes: timeMap.get(p.id)?.minutes ?? 0,
       totalMinutes: totalTimeMap.get(p.id)?.minutes ?? 0,
       messages: msgMap.get(p.id)?.count ?? 0,

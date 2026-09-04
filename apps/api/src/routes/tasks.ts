@@ -267,6 +267,23 @@ tasksRoute.get('/', async (c) => {
         join ${tasks} dt on dt.id = b.blocked_task_id
         where b.blocker_task_id = "tasks"."id" and dt.deleted_at is null
       )`,
+      // С КАКИХ ПОР держит: дата самой давней ЖИВОЙ связки.
+      //
+      // Не возраст самой задачи: он врёт ровно там, где интереснее всего.
+      // На живых данных TASK-49 заведена 7 дней назад, а блокером стала 2 дня
+      // назад — по возрасту задачи вышло бы «тормозит 7 дней», хотя пять из
+      // них она никого не держала. Расходятся именно те блокеры, что выявили
+      // по ходу работы, а они и есть самое важное.
+      //
+      // Связки к закрытым — не в счёт: связь переживает закрытие задачи
+      // намеренно (см. схему task_blockers), и без фильтра давно снятая
+      // блокировка вечно показывала бы месячный возраст.
+      blockingSince: sql<string | null>`(
+        select min(b.created_at) from ${taskBlockers} b
+        join ${tasks} dt on dt.id = b.blocked_task_id
+        where b.blocker_task_id = "tasks"."id"
+          and dt.deleted_at is null and dt.status <> 'done'
+      )`,
     })
     .from(tasks)
     .leftJoin(users, eq(users.id, tasks.assigneeId))
@@ -332,6 +349,11 @@ tasksRoute.get('/', async (c) => {
       attachmentsCount: r.attachmentsCount,
       blockedBy: r.blockedBy,
       blocking: r.blocking,
+      // null и при нуле связок, и когда все ждущие уже закрыты: во втором
+      // случае задача числится блокирующей (blocking считает связи независимо
+      // от статуса — это история), но никого больше не держит, и возраст
+      // блокировки показывать не о чем.
+      blockingSince: r.blockingSince ? new Date(r.blockingSince).toISOString() : null,
       resources: byTask.get(r.task.id) ?? [],
       releases: releasesByTask.get(r.task.id) ?? [],
     })),
