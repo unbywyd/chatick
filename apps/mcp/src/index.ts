@@ -169,7 +169,10 @@ server.registerTool(
       'branch "answers" means someone replied inside a task checklist — those replies surface nowhere else. ' +
       '"items" carries the newest in full: whatIsAsked is one sentence saying what the person is expected to do. ' +
       'Pass since to ask only for what arrived after a moment you already saw. ' +
-      'Clear whatever you handle with chatick_inbox_read, or the person is left with a counter for finished work.',
+      'Clear whatever you handle with chatick_inbox_read, or the person is left with a counter for finished work. ' +
+      '"recentlyRead" is what the person already read in the last 30 minutes — not work waiting for you, but ' +
+      'usually what they are asking about: they saw it in the app, it stopped being unread, and without this ' +
+      'section you would answer "nothing new" to "what did they just write me?". Read it before saying you see nothing.',
     inputSchema: { since: z.string().optional().describe('ISO timestamp — only what came after it') },
   },
   async ({ since }) => {

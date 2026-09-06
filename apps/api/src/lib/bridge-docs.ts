@@ -1390,6 +1390,12 @@ ${endpointCatalog('?project=<id>')}
          back empty.
          ?since=<ISO> asks only for what arrived after a moment you already saw,
          instead of pulling the last thirty and eyeballing them for new ones.
+         "recentlyRead" is what the person read in the app in the last 30
+         minutes. It is NOT work waiting for you — it is already handled — but
+         it is usually what they are asking about: they read it, it stopped
+         being unread, and without this you would answer "nothing new" to "what
+         did they just write me?". Read it before saying you see nothing.
+         Empty when ?since is given: that question is about new things only.
 
   POST   /x/inbox/read                  {"ids":[...]}, {"all":true}, or
          {"entityType":"task","entityId":"<id>"} to clear every notification about

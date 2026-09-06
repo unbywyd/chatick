@@ -954,6 +954,49 @@ bridgeRoute.get('/inbox', async (c) => {
     next: b.next,
   })).filter((b) => b.count > 0) // пустую ветку не пишем: «count: 0» читается как «я проверил» и на этом успокаивает
 
+  /**
+   * Недавно прочитанное — отдельной секцией.
+   *
+   * Человек читает уведомление в интерфейсе, оно гаснет, и для ассистента
+   * перестаёт существовать. «Что мне там написали?» через минуту после
+   * прочтения — вопрос без ответа: искать нечего и негде.
+   *
+   * Ручка умеет unread=0 с самого начала, но MCP этот параметр не отдаёт, а
+   * без него ассистент о такой возможности не знает вовсе.
+   *
+   * ОТДЕЛЬНОЙ секцией, а не вперемешку с items: смешать значило бы сказать
+   * «тебя ждут пятеро», когда четверо уже разобраны. Здесь ровно обратное —
+   * это контекст, а не работа.
+   *
+   * Полчаса: медиана времени до прочтения у живого человека 29 минут, то есть
+   * окно покрывает разговор, который идёт прямо сейчас. Сутки натащили бы
+   * вчерашнее, к которому вопрос уже не относится.
+   *
+   * Не запрашиваем при since — там спрашивают «что нового с момента X», и
+   * прочитанное в такой ответ не входит по смыслу.
+   */
+  const RECENTLY_READ_MINUTES = 30
+  const recentlyRead = since
+    ? []
+    : await db
+        .select({ n: notifications, actor: users, project: projects })
+        .from(notifications)
+        .leftJoin(users, eq(users.id, notifications.actorId))
+        .innerJoin(projects, eq(projects.id, notifications.projectId))
+        .where(
+          and(
+            eq(notifications.userId, id.userId),
+            ...(id.projectId ? [eq(notifications.projectId, id.projectId)] : []),
+            sql`${notifications.readAt} is not null`,
+            sql`${notifications.readAt} > now() - make_interval(mins => ${RECENTLY_READ_MINUTES})`,
+          ),
+        )
+        .orderBy(desc(notifications.readAt))
+        // Берём с запасом: строки схлопываются по сущности, и без запаса
+        // десяток уведомлений об одной задаче вытеснил бы всё остальное.
+        // На выходе после группировки остаётся заметно меньше.
+        .limit(40)
+
   return c.json({
     // Сколько всего ждёт. Не сумма веток: если событие когда-нибудь выпадет из
     // INBOX_BRANCHES, расхождение скажет об этом вслух, а не спрячет.
@@ -977,8 +1020,48 @@ bridgeRoute.get('/inbox', async (c) => {
       unread: !r.n.readAt,
       createdAt: r.n.createdAt,
     })),
+    /**
+     * Прочитано человеком за последние полчаса — контекст, а не работа.
+     * Пусто в ответе на since: там спрашивают только про новое.
+     */
+    recentlyRead: (() => {
+      /**
+       * По одной строке на СУЩНОСТЬ, а не на уведомление.
+       *
+       * На одну задачу их накапливается несколько — назначили, упомянули,
+       * прокомментировали. На живых данных три из пяти прочитанных вели на
+       * TASK-34, и тремя строками ассистент решил бы, что речь о трёх разных
+       * делах.
+       *
+       * Держим самое свежее по каждой сущности и говорим, сколько их было:
+       * «прокомментировал, всего 3 события» — это и есть ответ на «что там
+       * происходило».
+       */
+      const seen = new Map<string, { row: (typeof recentlyRead)[number]; count: number }>()
+      for (const r of recentlyRead) {
+        const key = r.n.entityType && r.n.entityId ? `${r.n.entityType}:${r.n.entityId}` : r.n.id
+        const found = seen.get(key)
+        if (found) found.count += 1
+        else seen.set(key, { row: r, count: 1 })
+      }
+      return [...seen.values()].slice(0, 10).map(({ row: r, count }) => ({
+        id: r.n.id,
+        event: r.n.event,
+        title: r.n.title,
+        whatIsAsked: r.n.summary,
+        from: r.actor ? { id: r.actor.id, name: r.actor.name } : { id: 'ai', name: 'AI' },
+        project: { id: r.project.id, name: r.project.name },
+        entityType: r.n.entityType,
+        entityId: r.n.entityId,
+        url: `${APP()}/#${r.n.link}`,
+        /** Сколько уведомлений об этой сущности человек прочитал за окно. */
+        events: count,
+        createdAt: r.n.createdAt,
+        readAt: r.n.readAt,
+      }))
+    })(),
     hint:
-      'Start here — this is the one place that says what is waiting. "branches" lists it by kind, most urgent first, and only kinds that actually have something; go to a branch\'s "next" only when its count is above zero. "items" carries the newest in full: whatIsAsked says what the person is expected to do. For entityType="task" read GET /x/tasks/<entityId>; for entityType="message" call GET /x/messages/<entityId>/context and answer with POST /x/messages (replyToId=<entityId>). The "answers" branch means someone replied inside a task checklist — GET /x/tasks/<id> shows the counts, GET /x/tasks/<id>/checklist the answers themselves. Mark handled ones read with POST /x/inbox/read; {"entityType":"task","entityId":"<id>"} clears every notification about one task at once. Pass since=<ISO> to ask only for what is new.',
+      'Start here — this is the one place that says what is waiting. "branches" lists it by kind, most urgent first, and only kinds that actually have something; go to a branch\'s "next" only when its count is above zero. "items" carries the newest in full: whatIsAsked says what the person is expected to do. For entityType="task" read GET /x/tasks/<entityId>; for entityType="message" call GET /x/messages/<entityId>/context and answer with POST /x/messages (replyToId=<entityId>). The "answers" branch means someone replied inside a task checklist — GET /x/tasks/<id> shows the counts, GET /x/tasks/<id>/checklist the answers themselves. Mark handled ones read with POST /x/inbox/read; {"entityType":"task","entityId":"<id>"} clears every notification about one task at once. Pass since=<ISO> to ask only for what is new. "recentlyRead" is what the person read in the last 30 minutes: NOT work waiting for you — it is already handled — but it is what they are most likely asking about ("what did they write me?", "what was that about?"). Read it before saying you see nothing.',
   })
 })
 
