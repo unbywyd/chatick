@@ -1395,7 +1395,12 @@
     "noOverdue": "אין משימות באיחור",
     "collapseProjects": "כיווץ",
     "blockedShort": "תקועות",
-    "noTasksYet": "אין עדיין משימות"
+    "noTasksYet": "אין עדיין משימות",
+    "blocking": "חוסמות עבודה",
+    "blockingTitle_one": "משימה {{count}} חוסמת אחרות",
+    "blockingTitle_two": "{{count}} משימות חוסמות אחרות",
+    "blockingTitle_other": "{{count}} משימות חוסמות אחרות",
+    "noBlocking": "שום דבר לא חוסם עבודה"
   },
   "desktop": {
     "start": "הפעלת טיימר",

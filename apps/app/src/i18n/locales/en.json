@@ -1394,7 +1394,11 @@
     "noOverdue": "Nothing is overdue",
     "collapseProjects": "Collapse",
     "blockedShort": "blocked",
-    "noTasksYet": "no tasks yet"
+    "noTasksYet": "no tasks yet",
+    "blocking": "Blocking",
+    "blockingTitle_one": "{{count}} task is blocking others",
+    "blockingTitle_other": "{{count}} tasks are blocking others",
+    "noBlocking": "Nothing is blocking work"
   },
   "desktop": {
     "start": "Start timer",

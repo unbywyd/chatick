@@ -186,7 +186,7 @@ companiesRoute.get('/:companyId/overview', async (c) => {
     return c.json({ projects: [], totals: { projects: 0, people: 0, tasksTotal: 0, tasksDone: 0, hours: 0, messages: 0 }, weeks: [], topPeople: [] })
   }
 
-  const [taskRows, memberRows, timeRows, msgRows, weekRows, blockedRows] = await Promise.all([
+  const [taskRows, memberRows, timeRows, msgRows, weekRows, blockedRows, blockerRows] = await Promise.all([
     db
       .select({
         projectId: tasks.projectId,
@@ -243,6 +243,10 @@ companiesRoute.get('/:companyId/overview', async (c) => {
      */
     db.execute(sql`
       select b.project_id as "projectId", count(distinct b.blocked_task_id)::int as count,
+             -- Задачи, которые ДЕРЖАТ. Это не то же, что count выше: там
+             -- сколько работы стоит, здесь — сколько узлов расшивать. На
+             -- живых данных 4 задачи держат 7 других, и обе цифры нужны.
+             count(distinct b.blocker_task_id)::int as "blockers",
              -- Сколько уже стоит самая давняя связка. Число «3 стоят» не
              -- отвечает на главный вопрос: три дня — это работа, три недели —
              -- это забыли. Без возраста строка одинаково выглядит в обоих
@@ -255,6 +259,23 @@ companiesRoute.get('/:companyId/overview', async (c) => {
          and bt.status <> 'done' and bt.deleted_at is null
          and t.status <> 'done' and t.deleted_at is null
        group by b.project_id
+    `),
+    /**
+     * Уникальные задачи-блокеры по компании — для тотала.
+     *
+     * Отдельным запросом, потому что суммировать по проектам нельзя: связка
+     * лежит в проекте ЖДУЩЕЙ задачи, и блокер, держащий работу в двух
+     * проектах, посчитался бы дважды. Строк здесь единицы (на живых данных
+     * 7), так что дешевле честного пересчёта не придумать.
+     */
+    db.execute(sql`
+      select distinct b.blocker_task_id as "blockerTaskId"
+        from task_blockers b
+        join tasks bt on bt.id = b.blocker_task_id
+        join tasks t on t.id = b.blocked_task_id
+       where b.project_id in ${ids}
+         and bt.status <> 'done' and bt.deleted_at is null
+         and t.status <> 'done' and t.deleted_at is null
     `),
   ])
 
@@ -354,11 +375,15 @@ companiesRoute.get('/:companyId/overview', async (c) => {
 
   // Заблокированные задачи по проектам: db.execute отдаёт rows либо массив —
   // форма зависит от драйвера, поэтому разбираем оба случая, как и рядом.
-  type BlockedRow = { projectId: string; count: number; worstDays: number }
+  type BlockedRow = { projectId: string; count: number; blockers: number; worstDays: number }
   const blockedList = (blockedRows as unknown as { rows?: BlockedRow[] }).rows
     ?? (blockedRows as unknown as BlockedRow[])
   const blockedMap = new Map((blockedList ?? []).map((r) => [r.projectId, Number(r.count)]))
   const blockedAge = new Map((blockedList ?? []).map((r) => [r.projectId, Number(r.worstDays)]))
+  const blockerMap = new Map((blockedList ?? []).map((r) => [r.projectId, Number(r.blockers)]))
+  type BlockerPair = { blockerTaskId: string }
+  const blockerPairs = (blockerRows as unknown as { rows?: BlockerPair[] }).rows
+    ?? (blockerRows as unknown as BlockerPair[])
 
   const list = projectRows.map((p) => {
     const t = taskMap.get(p.id)
@@ -380,6 +405,8 @@ companiesRoute.get('/:companyId/overview', async (c) => {
       blocked: blockedMap.get(p.id) ?? 0,
       /** Сколько дней стоит самая давняя связка: «3 дня» и «29 дней» — разное. */
       blockedDays: blockedAge.get(p.id) ?? 0,
+      /** Задачи проекта, которые держат другие: их и расшивают. */
+      blockers: blockerMap.get(p.id) ?? 0,
       minutes: timeMap.get(p.id)?.minutes ?? 0,
       totalMinutes: totalTimeMap.get(p.id)?.minutes ?? 0,
       messages: msgMap.get(p.id)?.count ?? 0,
@@ -441,6 +468,17 @@ companiesRoute.get('/:companyId/overview', async (c) => {
       tasksTotal: list.reduce((sum, p) => sum + p.tasksTotal, 0),
       tasksDone: list.reduce((sum, p) => sum + p.tasksDone, 0),
       overdue: list.reduce((sum, p) => sum + p.overdue, 0),
+      /**
+       * Держат работу — по всей компании.
+       *
+       * НЕ сумма по проектам: связка живёт в проекте ждущей задачи, поэтому
+       * блокер, держащий работу в двух проектах, попал бы в сумму дважды. А
+       * это то же самое число, что откроет модалка, — разойдись они, и
+       * «Держат: 5» показало бы четыре задачи.
+       */
+      blockers: new Set(
+        (blockerPairs ?? []).map((r) => r.blockerTaskId),
+      ).size,
       minutes: list.reduce((sum, p) => sum + p.minutes, 0),
       messages: list.reduce((sum, p) => sum + p.messages, 0),
     },
@@ -860,9 +898,53 @@ companiesRoute.get('/:companyId/people', async (c) => {
     }
   })
 
-  // Сверху те, кто занят: у кого больше открытых задач. Люди без задач вовсе
-  // (в этой компании таких половина) уезжают вниз, а не мешают сверху.
-  items.sort((a, b) => b.openTasks - a.openTasks || (b.lastActiveAt ?? '').localeCompare(a.lastActiveAt ?? ''))
+  /**
+   * Сверху тот, у кого хуже, — а не тот, у кого задач больше.
+   *
+   * Сортировка по числу открытых поднимала наверх самого загруженного, и это
+   * ровно наоборот: человек с полусотней задач, который на всё отвечает,
+   * стоял выше того, кто месяц молчит на трёх. Начальство читает список
+   * сверху вниз и первым видело того, к кому вопросов нет.
+   *
+   * Считаем по ТЕМ ЖЕ флагам, что показываем: цена флага — его порядок в
+   * списке выше, где они выписаны от тяжёлого к лёгкому. Второе правило
+   * («кто плохой») разошлось бы с первым («что подсветить»), и человек с
+   * красной плашкой оказался бы в середине.
+   *
+   * Перегрузка — не вина: её флаги ставятся как раз тем, кто отвечает почти
+   * на всё, и наверх они не двигают.
+   */
+  const WEIGHT: Record<string, number> = {
+    stalled: 100, // молчит на трёх и дольше двух недель
+    blocking: 60, // держит чужую работу
+    ignoring: 40, // больше половины очереди не тронуто
+    scattered: 10, // размазан по проектам — скорее повод спросить
+  }
+  const badness = (x: (typeof items)[number]) => {
+    const flags = x.rhythm.flags
+    let score = flags.reduce((sum, f) => sum + (WEIGHT[f] ?? 0), 0)
+    /**
+     * Внутри одного флага — по ДОЛЕ застрявшего, а не по числу.
+     *
+     * Тот же довод, что этажом выше у «ignoring»: три застрявших из трёх —
+     * это вся очередь, три из пятидесяти одной — шесть процентов. По голому
+     * числу оба получали ровно 109 очков и стояли рядом, хотя у первого
+     * не движется ничего, а у второго почти всё в порядке.
+     */
+    if (x.rhythm.openNow > 0) {
+      score += Math.round((x.rhythm.over2w / x.rhythm.openNow) * 30)
+    }
+    // Держит чужую работу — по числу: три ждущих человека это три человека,
+    // сколько у держателя своих задач, им безразлично.
+    score += Math.min(20, x.rhythm.blocking * 4)
+    return score
+  }
+  items.sort((a, b) => {
+    const diff = badness(b) - badness(a)
+    if (diff) return diff
+    // Дальше — как раньше: занятые выше пустых, при равенстве свежие выше.
+    return b.openTasks - a.openTasks || (b.lastActiveAt ?? '').localeCompare(a.lastActiveAt ?? '')
+  })
 
   /**
    * С какого дня у компании вообще есть история — но не глубже 90 суток.
@@ -938,6 +1020,83 @@ companiesRoute.get('/:companyId/overdue', async (c) => {
       assignee: r.u ? { id: r.u.id, name: r.u.name, avatarUrl: r.u.avatarUrl } : null,
       // Куда человек не войдёт — говорим сразу, а не отказом по клику.
       isMember: mine.has(r.p.id),
+    })),
+  })
+})
+
+/**
+ * Задачи, которые держат другие, — по всей компании.
+ *
+ * Считаем БЛОКЕРОВ, а не ждущих: на обзоре уже есть счётчик «заблокировано»
+ * (сколько задач упёрлись), и он отвечает на вопрос «сколько работы стоит».
+ * Здесь вопрос другой — «что расшить», а расшивают блокер. Числа не совпадают
+ * и не должны: на живых данных 4 задачи держат 7 других.
+ *
+ * Обе задачи живые: закрытый блокер никого не держит, даже если связь
+ * осталась (она переживает закрытие намеренно), а закрытая ждущая уже
+ * дождалась.
+ */
+companiesRoute.get('/:companyId/blocking', async (c) => {
+  const { sub } = c.get('session')
+  const companyId = c.req.param('companyId')
+  const membership = await db.query.companyMembers.findFirst({
+    where: and(eq(companyMembers.companyId, companyId), eq(companyMembers.userId, sub)),
+  })
+  if (!membership) return c.json({ error: 'Forbidden' }, 403)
+
+  // Одним запросом: блокер, кого держит и с какого дня. Раскладываем в
+  // группы уже здесь — по задаче на строку клиенту пришлось бы склеивать.
+  const rows = await db.execute(sql`
+    select
+      bt.id, bt.number, bt.title, bt.status,
+      p.id as "projectId", p.name as "projectName", p.color as "projectColor",
+      u.id as "assigneeId", u.name as "assigneeName", u.avatar_url as "assigneeAvatar",
+      count(*)::int as "holds",
+      extract(epoch from (now() - min(b.created_at)))/86400 as "days",
+      json_agg(json_build_object('id', dt.id, 'number', dt.number, 'title', dt.title)
+               order by dt.number) as "waiting"
+    from task_blockers b
+    join tasks bt on bt.id = b.blocker_task_id and bt.status <> 'done' and bt.deleted_at is null
+    join tasks dt on dt.id = b.blocked_task_id and dt.status <> 'done' and dt.deleted_at is null
+    join projects p on p.id = b.project_id and p.company_id = ${companyId}
+    left join users u on u.id = bt.assignee_id
+    group by bt.id, bt.number, bt.title, bt.status, p.id, p.name, p.color,
+             u.id, u.name, u.avatar_url
+    order by min(b.created_at) asc
+    limit 200
+  `)
+  type Row = {
+    id: string; number: string; title: string; status: string
+    projectId: string; projectName: string; projectColor: string | null
+    assigneeId: string | null; assigneeName: string | null; assigneeAvatar: string | null
+    holds: number; days: number
+    waiting: { id: string; number: string; title: string }[]
+  }
+  const list = (rows as unknown as { rows?: Row[] }).rows ?? (rows as unknown as Row[])
+
+  const myMemberships = await db
+    .select({ projectId: projectMembers.projectId })
+    .from(projectMembers)
+    .where(eq(projectMembers.userId, sub))
+  const mine = new Set(myMemberships.map((m) => m.projectId))
+
+  return c.json({
+    items: (list ?? []).map((r) => ({
+      id: r.id,
+      number: r.number,
+      title: r.title,
+      status: r.status,
+      /** Сколько задач ждут именно её. */
+      holds: Number(r.holds),
+      /** С какого дня держит — от даты связки, а не создания задачи. */
+      blockingDays: Math.max(0, Math.floor(Number(r.days))),
+      waiting: r.waiting ?? [],
+      project: { id: r.projectId, name: r.projectName, color: r.projectColor },
+      assignee: r.assigneeId
+        ? { id: r.assigneeId, name: r.assigneeName!, avatarUrl: r.assigneeAvatar }
+        : null,
+      // Куда человек не войдёт — говорим сразу, а не отказом по клику.
+      isMember: mine.has(r.projectId),
     })),
   })
 })

@@ -1403,7 +1403,12 @@
     "noOverdue": "Просроченных задач нет",
     "collapseProjects": "Свернуть",
     "blockedShort": "стоят",
-    "noTasksYet": "задач пока нет"
+    "noTasksYet": "задач пока нет",
+    "blocking": "Держат работу",
+    "blockingTitle_one": "{{count}} задача держит другие",
+    "blockingTitle_few": "{{count}} задачи держат другие",
+    "blockingTitle_many": "{{count}} задач держат другие",
+    "noBlocking": "Ничего не держит работу"
   },
   "desktop": {
     "start": "Запустить таймер",

@@ -1,7 +1,7 @@
 import { useState } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import { useTranslation } from 'react-i18next'
-import { AlertTriangle, CheckCircle2, ChevronRight, Clock, FolderKanban, Lock, MessageSquare, Users, X } from 'lucide-react'
+import { AlertTriangle, Ban, CheckCircle2, ChevronRight, Clock, FolderKanban, Lock, MessageSquare, Users, X } from 'lucide-react'
 import {
   Area,
   AreaChart,
@@ -63,6 +63,22 @@ type OverdueTask = {
   isMember: boolean
 }
 
+type BlockingTask = {
+  id: string
+  number: string
+  title: string
+  status: string
+  /** Сколько задач ждут именно её. */
+  holds: number
+  /** С какого дня держит — от даты связки, а не создания задачи. */
+  blockingDays: number
+  /** Кого держит: показываем прямо в строке, ради этого модалку и открывают. */
+  waiting: { id: string; number: string; title: string }[]
+  project: { id: string; name: string; color: string | null }
+  assignee: { id: string; name: string; avatarUrl: string | null } | null
+  isMember: boolean
+}
+
 type Overview = {
   projects: ProjectStat[]
   totals: {
@@ -71,6 +87,8 @@ type Overview = {
     tasksTotal: number
     tasksDone: number
     overdue: number
+    /** Задачи, которые держат другие: их расшивают. Не сумма по проектам. */
+    blockers: number
     minutes: number
     messages: number
   }
@@ -116,6 +134,7 @@ export function OverviewTab({
 }) {
   // Модалка просроченных: цифра отвечает «сколько», список — «где».
   const [overdueOpen, setOverdueOpen] = useState(false)
+  const [blockingOpen, setBlockingOpen] = useState(false)
   /**
    * Шторка развёрнута: показываем все проекты прямо здесь.
    *
@@ -213,7 +232,10 @@ export function OverviewTab({
 
         Переключатель уехал внутрь секции часов — туда, где он и работает.
       */}
-      <div className="grid gap-3 sm:grid-cols-3">
+      {/* Четыре метрики: на планшете 2×2, на мониторе в ряд. В три колонки
+          четвёртая карточка ушла бы на свою строку одна и выглядела бы
+          обрубком. */}
+      <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
         <Metric
           icon={CheckCircle2}
           label={t('overview.tasks')}
@@ -231,6 +253,18 @@ export function OverviewTab({
           onClick={totals?.overdue ? () => setOverdueOpen(true) : undefined}
           actionLabel={totals?.overdue ? t('overview.details') : undefined}
         />
+        {/* Держат работу — рядом с просрочкой, потому что это соседние беды:
+            там сроки прошли, здесь работу нельзя даже начать. Считаем
+            БЛОКЕРЫ, а не ждущих: расшивают блокер, и число «4» отвечает на
+            «сколько узлов развязать», а не «сколько людей ждут». */}
+        <Metric
+          icon={Ban}
+          label={t('overview.blocking')}
+          value={String(totals?.blockers ?? 0)}
+          tone={totals?.blockers ? 'warn' : undefined}
+          onClick={totals?.blockers ? () => setBlockingOpen(true) : undefined}
+          actionLabel={totals?.blockers ? t('overview.details') : undefined}
+        />
         <Metric
           icon={Users}
           label={t('overview.people')}
@@ -239,6 +273,21 @@ export function OverviewTab({
           actionLabel={onOpenTeam ? t('overview.toTeam') : undefined}
         />
       </div>
+
+      {blockingOpen && (
+        <BlockingDialog
+          companyId={companyId}
+          onClose={() => setBlockingOpen(false)}
+          onOpenProject={(id) => {
+            setBlockingOpen(false)
+            onOpenProject?.(id)
+          }}
+          onOpenTask={(projectId, taskId) => {
+            setBlockingOpen(false)
+            onOpenTask?.(projectId, taskId)
+          }}
+        />
+      )}
 
       {overdueOpen && (
         <OverdueDialog
@@ -579,6 +628,139 @@ function Metric({
         </p>
       )}
     </Tag>
+  )
+}
+
+/**
+ * Задачи, которые держат работу, — списком.
+ *
+ * Не группируем по проектам, в отличие от просрочки: блокеров единицы (на
+ * живых данных четыре на всю компанию), и группировка добавила бы заголовков
+ * больше, чем строк. Сортировка по возрасту приходит с сервера — самый давний
+ * узел первым, его и расшивать.
+ *
+ * У каждой строки видно, КОГО она держит: без этого «держит 3» заставляет
+ * открывать задачу, чтобы узнать то, ради чего сюда и пришли.
+ */
+function BlockingDialog({
+  companyId,
+  onClose,
+  onOpenProject,
+  onOpenTask,
+}: {
+  companyId: string
+  onClose: () => void
+  onOpenProject: (id: string) => void
+  onOpenTask: (projectId: string, taskId: string) => void
+}) {
+  const { t } = useTranslation()
+  const list = useQuery({
+    queryKey: ['company-blocking', companyId],
+    queryFn: () => api<{ items: BlockingTask[] }>(`/api/v1/companies/${companyId}/blocking`),
+  })
+  const items = list.data?.items ?? []
+
+  return (
+    <div
+      className="fixed inset-0 z-50 flex items-start justify-center overflow-y-auto bg-black/40 p-4 pt-16"
+      onClick={onClose}
+    >
+      <div className="w-full max-w-2xl rounded-xl border bg-card shadow-lg" onClick={(e) => e.stopPropagation()}>
+        <div className="flex items-center justify-between border-b p-4">
+          <h2 className="flex items-center gap-2 text-lg font-bold">
+            <Ban className="size-5 text-orange-500" />
+            {t('overview.blockingTitle', { count: items.length })}
+          </h2>
+          <Button variant="ghost" size="icon" onClick={onClose}>
+            <X className="size-4" />
+          </Button>
+        </div>
+
+        <div className="max-h-[70vh] overflow-y-auto p-4">
+          {list.isLoading ? (
+            <p className="py-8 text-center text-sm text-muted-foreground">{t('common.loading')}</p>
+          ) : !items.length ? (
+            <p className="py-8 text-center text-sm text-muted-foreground">{t('overview.noBlocking')}</p>
+          ) : (
+            <ul className="space-y-2">
+              {items.map((task) => (
+                <li key={task.id} className="rounded-lg border p-2.5">
+                  {/* Сам блокер. */}
+                  <div className="flex items-center gap-2">
+                    <button
+                      type="button"
+                      disabled={!task.isMember}
+                      onClick={() => onOpenTask(task.project.id, task.id)}
+                      className={cn(
+                        'flex min-w-0 flex-1 items-center gap-2 text-start text-sm',
+                        task.isMember ? 'hover:text-brand-ink' : 'cursor-default opacity-60',
+                      )}
+                    >
+                      <span className="font-mono text-xs text-muted-foreground">{task.number}</span>
+                      <span className="min-w-0 flex-1 truncate font-medium">{task.title}</span>
+                    </button>
+                    {/* Сколько уже держит — жирным: это и есть мера беды.
+                        Оранжевым от двух недель, как в полосе блокеров. */}
+                    <span
+                      className={cn(
+                        'shrink-0 text-xs font-semibold tabular-nums',
+                        task.blockingDays >= 14 ? 'text-orange-600 dark:text-orange-400' : 'text-foreground',
+                      )}
+                    >
+                      {t('blockers.stripWorst', { count: task.blockingDays })}
+                    </span>
+                    {task.assignee && (
+                      <Avatar
+                        name={task.assignee.name}
+                        src={task.assignee.avatarUrl}
+                        className="size-5 shrink-0"
+                      />
+                    )}
+                  </div>
+
+                  {/* Кого держит и где. */}
+                  <div className="mt-1.5 flex flex-wrap items-center gap-x-2 gap-y-1 ps-1 text-xs text-muted-foreground">
+                    <button
+                      type="button"
+                      disabled={!task.isMember}
+                      onClick={() => onOpenProject(task.project.id)}
+                      className={cn(
+                        'flex shrink-0 items-center gap-1',
+                        task.isMember ? 'hover:text-brand-ink' : 'cursor-default',
+                      )}
+                    >
+                      {task.isMember ? (
+                        <FolderKanban className="size-3" />
+                      ) : (
+                        <Lock className="size-3" />
+                      )}
+                      {task.project.name}
+                    </button>
+                    <span aria-hidden>·</span>
+                    <span className="shrink-0">{t('blockers.stripHolding', { count: task.holds })}</span>
+                    {task.waiting.map((w) => (
+                      <button
+                        key={w.id}
+                        type="button"
+                        disabled={!task.isMember}
+                        title={w.title}
+                        onClick={() => onOpenTask(task.project.id, w.id)}
+                        className={cn(
+                          'max-w-[12rem] truncate rounded border px-1.5 py-0.5 font-mono',
+                          task.isMember ? 'transition-colors hover:border-brand/60 hover:bg-accent/40' : 'cursor-default opacity-60',
+                        )}
+                      >
+                        {w.number}
+                      </button>
+                    ))}
+                  </div>
+                </li>
+              ))}
+            </ul>
+          )}
+        </div>
+      </div>
+    </div>
   )
 }
 
