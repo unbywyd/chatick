@@ -2049,7 +2049,7 @@
     "state": {
       "idle": "אין משימות",
       "stuck": "הכול חסום",
-      "ready": "פנוי לקחת",
+      "waiting": "ממתין לסגירה",
       "working": "בעבודה"
     },
     "tasks_one": "משימה",
@@ -2062,12 +2062,15 @@
     "blocked_one": "משימה {{count}} חסומה",
     "blocked_two": "{{count}} משימות חסומות",
     "blocked_other": "{{count}} משימות חסומות",
-    "sumOpen": "בעבודה",
+    "sumOpen": "עבודה עצמית",
     "sumHours": "שעות",
     "sumBlocked": "חסום",
     "byProject_one": "פרויקט {{count}}",
     "byProject_two": "{{count}} פרויקטים",
     "byProject_other": "{{count}} פרויקטים",
-    "noTasks": "אין משימות פתוחות"
+    "noTasks": "אין משימות פתוחות",
+    "waiting_one": "משימה {{count}} אושרה, ממתינה לסגירה",
+    "waiting_two": "{{count}} אושרו, ממתינות לסגירה",
+    "waiting_other": "{{count}} אושרו, ממתינות לסגירה"
   }
 }

@@ -2042,7 +2042,7 @@
     "state": {
       "idle": "no tasks",
       "stuck": "all blocked",
-      "ready": "ready to take",
+      "waiting": "awaiting sign-off",
       "working": "in progress"
     },
     "tasks_one": "task",
@@ -2052,11 +2052,13 @@
     "noEstimate_other": "{{count}} unestimated",
     "blocked_one": "{{count}} task blocked",
     "blocked_other": "{{count}} tasks blocked",
-    "sumOpen": "open",
+    "sumOpen": "own work",
     "sumHours": "hours",
     "sumBlocked": "blocked",
     "byProject_one": "{{count}} project",
     "byProject_other": "{{count}} projects",
-    "noTasks": "No open tasks"
+    "noTasks": "No open tasks",
+    "waiting_one": "{{count}} accepted, awaiting close",
+    "waiting_other": "{{count}} accepted, awaiting close"
   }
 }

@@ -664,6 +664,11 @@ companiesRoute.get('/:companyId/workload', async (c) => {
       count(m.id) filter (where m.blocked)::int as "blockedTasks",
       count(m.id) filter (where not m.blocked)::int as "freeTasks",
       count(m.id) filter (where m.status = 'in_progress')::int as "doingTasks",
+      -- Принято проверяющим и ждёт закрытия: с человека снято. Только
+      -- verified — review остаётся на нём, правки после проверки делает он же.
+      count(m.id) filter (where m.status = 'verified')::int as "waitingTasks",
+      -- Собственно его работа: то, что он может делать прямо сейчас.
+      count(m.id) filter (where m.status in ('todo', 'in_progress', 'review') and not m.blocked)::int as "actionableTasks",
       count(distinct m.project_id)::int as "projectCount",
       -- Минуты, а не часы: округление до часов на клиенте, чтобы «0.5 ч» не
       -- превращалось в ноль ещё на сервере.
@@ -688,6 +693,7 @@ companiesRoute.get('/:companyId/workload', async (c) => {
   type Row = {
     id: string; name: string; avatarUrl: string | null; role: string
     openTasks: number; blockedTasks: number; freeTasks: number; doingTasks: number
+    actionableTasks: number; waitingTasks: number
     projectCount: number; plannedMinutes: number; noEstimate: number
     lastActiveAt: string | null
     projects: { id: string; name: string; color: string | null; tasks: number }[]
@@ -710,17 +716,26 @@ companiesRoute.get('/:companyId/workload', async (c) => {
       const open = Number(r.openTasks)
       const free = Number(r.freeTasks)
       const blocked = Number(r.blockedTasks)
+      const actionable = Number(r.actionableTasks)
+      const waiting = Number(r.waitingTasks)
       /**
-       * Состояние — одно из четырёх, в порядке срочности для начальства.
+       * Состояние — по тому, что человек может делать САМ.
        *
-       * «Стоит» важнее «свободен»: свободному дают работу, а у стоящего она
-       * есть и не двигается — это чужая вина, и разбирать надо её.
+       * Считаем actionable (todo + in_progress + review, за вычетом
+       * заблокированных), а не всю очередь. Статус verified означает, что
+       * работа принята и ждёт закрытия — она уже не на исполнителе, и держать
+       * её в его загрузке значит приписывать ему чужую. На живых данных у
+       * одного человека 31 задача из 52 именно такая.
+       *
+       * in_progress как признак занятости не годится: в этой компании его
+       * почти не ставят — одна-три задачи на всех. По нему выходило бы, что
+       * не работает никто.
        */
       const state =
-        open === 0 ? 'idle'
-        : free === 0 ? 'stuck'
-        : Number(r.doingTasks) > 0 ? 'working'
-        : 'ready'
+        actionable === 0 && open === 0 ? 'idle'
+        : actionable === 0 && blocked > 0 ? 'stuck'
+        : actionable === 0 ? 'waiting'
+        : 'working'
       return {
         id: r.id,
         name: r.name,
@@ -731,6 +746,10 @@ companiesRoute.get('/:companyId/workload', async (c) => {
         freeTasks: free,
         blockedTasks: blocked,
         doingTasks: Number(r.doingTasks),
+        /** Что человек может делать сам: todo + in_progress + review, без заблокированных. */
+        actionableTasks: actionable,
+        /** Принято и ждёт закрытия — с человека уже снято. */
+        waitingTasks: waiting,
         projectCount: Number(r.projectCount),
         plannedMinutes: Number(r.plannedMinutes),
         /** Сколько задач без оценки: без этого числа часам нельзя верить. */
@@ -747,11 +766,13 @@ companiesRoute.get('/:companyId/workload', async (c) => {
    * Затем стоящие: работа есть, но не двигается. Остальные ниже, между собой
    * по загрузке.
    */
-  const RANK: Record<string, number> = { idle: 0, stuck: 1, ready: 2, working: 3 }
+  const RANK: Record<string, number> = { idle: 0, stuck: 1, waiting: 2, working: 3 }
   items.sort(
     (a, b) =>
       RANK[a.state]! - RANK[b.state]! ||
-      b.openTasks - a.openTasks ||
+      // Внутри состояния — по СОБСТВЕННОЙ работе, а не по всей очереди:
+      // иначе наверху окажется тот, у кого больше задач ждёт чужой приёмки.
+      b.actionableTasks - a.actionableTasks ||
       a.name.localeCompare(b.name),
   )
 

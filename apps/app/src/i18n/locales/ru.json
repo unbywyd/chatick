@@ -2072,7 +2072,7 @@
     "state": {
       "idle": "нет задач",
       "stuck": "всё заблокировано",
-      "ready": "готов взять",
+      "waiting": "ждёт приёмки",
       "working": "в работе"
     },
     "tasks_one": "задача",
@@ -2085,12 +2085,15 @@
     "blocked_one": "{{count}} задача заблокирована",
     "blocked_few": "{{count}} задачи заблокированы",
     "blocked_many": "{{count}} задач заблокированы",
-    "sumOpen": "в работе",
+    "sumOpen": "своя работа",
     "sumHours": "часов",
     "sumBlocked": "заблокировано",
     "byProject_one": "{{count}} проект",
     "byProject_few": "{{count}} проекта",
     "byProject_many": "{{count}} проектов",
-    "noTasks": "Открытых задач нет"
+    "noTasks": "Открытых задач нет",
+    "waiting_one": "{{count}} принята, ждёт закрытия",
+    "waiting_few": "{{count}} приняты, ждут закрытия",
+    "waiting_many": "{{count}} принято, ждут закрытия"
   }
 }

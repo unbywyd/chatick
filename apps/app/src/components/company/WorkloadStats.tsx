@@ -30,11 +30,15 @@ type Person = {
    * Правило, выписанное дважды, однажды разойдётся: в списке человек
    * «свободен», а в карточке нет.
    */
-  state: 'idle' | 'stuck' | 'ready' | 'working'
+  state: 'idle' | 'stuck' | 'waiting' | 'working'
   openTasks: number
   /** Незаблокированные: их можно взять прямо сейчас. */
   freeTasks: number
   blockedTasks: number
+  /** Что человек может делать сам: todo + in_progress + review, без заблокированных. */
+  actionableTasks: number
+  /** Принято и ждёт закрытия — с человека уже снято. */
+  waitingTasks: number
   doingTasks: number
   projectCount: number
   plannedMinutes: number
@@ -97,8 +101,8 @@ function PersonCard({ person: p, onOpen }: { person: Person; onOpen: () => void 
   const tone =
     p.state === 'idle' ? 'text-muted-foreground'
     : p.state === 'stuck' ? 'text-orange-600 dark:text-orange-400'
-    : p.state === 'working' ? 'text-brand-ink'
-    : 'text-foreground'
+    : p.state === 'waiting' ? 'text-muted-foreground'
+    : 'text-brand-ink'
 
   const StateIcon = p.state === 'stuck' ? Ban : p.state === 'working' ? Play : CircleDashed
 
@@ -121,8 +125,8 @@ function PersonCard({ person: p, onOpen }: { person: Person; onOpen: () => void 
           все, говорим об этом сразу: иначе по неполному числу планируют. */}
       <div className="flex flex-wrap items-baseline gap-x-3 gap-y-0.5 text-xs text-muted-foreground">
         <span>
-          <b className="text-sm font-semibold tabular-nums text-foreground">{p.openTasks}</b>{' '}
-          {t('workload.tasks', { count: p.openTasks })}
+          <b className="text-sm font-semibold tabular-nums text-foreground">{p.actionableTasks}</b>{' '}
+          {t('workload.tasks', { count: p.actionableTasks })}
         </span>
         {p.plannedMinutes > 0 && (
           <span>
@@ -136,6 +140,16 @@ function PersonCard({ person: p, onOpen }: { person: Person; onOpen: () => void 
           </span>
         )}
       </div>
+
+      {/* Принято и ждёт закрытия — приглушённо и только когда есть.
+          Объясняет разницу между главным числом и полной очередью: у одного
+          человека 31 задача из 52 уже принята, своей работы 19. Без этой
+          строки «19 задач» выглядело бы потерей трёх десятков. */}
+      {p.waitingTasks > 0 && (
+        <div className="text-xs text-muted-foreground">
+          {t('workload.waiting', { count: p.waitingTasks })}
+        </div>
+      )}
 
       {/* Заблокированные — отдельной строкой и только когда есть: это не
           «часть очереди», а работа, которую человек взять не может. */}
@@ -187,7 +201,8 @@ function PersonDialog({ person: p, onClose }: { person: Person; onClose: () => v
           {/* Сводка теми же числами, что на карточке: расхождение между
               карточкой и её же модалкой — худшее, что можно показать. */}
           <div className="mb-4 grid grid-cols-3 gap-2 text-center">
-            <Sum value={String(p.openTasks)} label={t('workload.sumOpen')} />
+            <Sum value={String(p.actionableTasks)} label={t('workload.sumOpen')}
+              note={p.waitingTasks > 0 ? t('workload.waiting', { count: p.waitingTasks }) : undefined} />
             <Sum
               value={p.plannedMinutes > 0 ? hours(p.plannedMinutes) : '—'}
               label={t('workload.sumHours')}

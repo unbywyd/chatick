@@ -105,9 +105,48 @@ describe('«свободен» не приписывают тем, кто не �
     const at = handler.indexOf('const RANK')
     const rank = handler.slice(at, at + 120)
     expect(rank, 'порядок состояний не задан').toMatch(/idle: 0/)
-    expect(rank, 'стоящие не выше готовых').toMatch(/stuck: 1/)
-    expect(rank, 'готовые не выше занятых').toMatch(/ready: 2/)
+    expect(rank, 'стоящие не выше ждущих приёмки').toMatch(/stuck: 1/)
+    expect(rank, 'ждущие приёмки не выше занятых').toMatch(/waiting: 2/)
     expect(rank, 'занятые не последние').toMatch(/working: 3/)
+  })
+})
+
+describe('загрузка меряется собственной работой', () => {
+  it('verified не считается загрузкой, а review считается', () => {
+    // verified — принято проверяющим, с человека снято. review остаётся на
+    // нём: правки после проверки делает он же.
+    //
+    // На живых данных у одного человека 31 задача из 52 в verified — по
+    // полной очереди он выглядел вторым по загрузке, хотя своей работы у него
+    // 19 против 40 у коллеги.
+    //
+    // Саботаж: добавить 'review' в waitingTasks — тест падает.
+    expect(handler, 'ждущим считается не только verified').toContain(
+      `filter (where m.status = 'verified')::int as "waitingTasks"`,
+    )
+    expect(handler, 'своя работа посчитана без review').toContain(
+      `'todo', 'in_progress', 'review') and not m.blocked)::int as "actionableTasks"`,
+    )
+  })
+
+  it('состояние считается по своей работе, а не по in_progress', () => {
+    // in_progress в этой компании почти не ставят — одна-три задачи на всех.
+    // По нему выходило бы, что не работает никто, а человек с 52 задачами
+    // получал ярлык «готов взять».
+    //
+    // Саботаж: вернуть doingTasks в расчёт state — тест падает.
+    const at = handler.indexOf('const state =')
+    const block = handler.slice(at, at + 260)
+    expect(block, 'состояние опирается на in_progress').not.toMatch(/doingTasks|doing > 0/)
+    expect(block, 'состояние не опирается на свою работу').toMatch(/actionable === 0/)
+  })
+
+  it('главное число на карточке — своя работа', () => {
+    // Саботаж: показать openTasks — тест падает.
+    const card = workload.slice(workload.indexOf('function PersonCard'), workload.indexOf('function PersonDialog'))
+    expect(card, 'на карточке показана вся очередь').toContain('{p.actionableTasks}</b>')
+    // И рядом объяснение разницы, иначе «19 задач» выглядит потерей трёх десятков.
+    expect(card, 'разница с полной очередью не объяснена').toContain("workload.waiting")
   })
 })
 
@@ -120,7 +159,7 @@ describe('переводы секции есть во всех языках', ()
       const w = j.workload
       expect(w, 'нет раздела workload').toBeTruthy()
       // Все четыре состояния, которые может прислать сервер.
-      for (const state of ['idle', 'stuck', 'ready', 'working']) {
+      for (const state of ['idle', 'stuck', 'waiting', 'working']) {
         expect(w.state?.[state], `нет текста для состояния ${state}`).toBeTruthy()
         expect(handler, `сервер не присылает состояние ${state}`).toContain(`'${state}'`)
       }
