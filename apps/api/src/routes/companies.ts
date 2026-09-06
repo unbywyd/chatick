@@ -906,13 +906,15 @@ companiesRoute.get('/:companyId/people', async (c) => {
    */
   const rhythm = await db.execute<Record<string, string | null>>(sql`
     with mine as (
-      select t.id, t.assignee_id as uid, t.project_id, t.status, t.created_at, t.updated_at
+      select t.id, t.assignee_id as uid, t.project_id, t.status, t.created_at, t.updated_at,
+             -- Кто завёл: задача, заведённая себе самому, откликом не является.
+             (t.created_by_id is not distinct from t.assignee_id) as self_made
         from tasks t join projects p on p.id = t.project_id
        where p.company_id = ${companyId} and t.deleted_at is null
          and t.assignee_id in (${idList})
     ),
     touched as (
-      select m.id, m.uid, m.status, m.created_at, m.updated_at, m.project_id,
+      select m.id, m.uid, m.status, m.created_at, m.updated_at, m.project_id, m.self_made,
              least(
                (select min(c.created_at) from task_comments c
                  where c.task_id = m.id and c.author_id = m.uid and c.created_at >= m.created_at),
@@ -938,9 +940,18 @@ companiesRoute.get('/:companyId/people', async (c) => {
         filter (where t.status not in ('done','verified') and t.first_touch is null)::numeric, 0), 0) as wait_worst,
       count(*) filter (where t.status not in ('done','verified') and t.first_touch is null
         and t.created_at < now() - interval '14 days') as over_2w,
+      -- Реакция — отклик на ЧУЖУЮ просьбу, поэтому самозаведённые задачи не
+      -- в счёт. Человек, заводящий задачу себе, трогает её в ту же минуту по
+      -- определению: на живых данных это давало «реакция 1 минута» тому, кто
+      -- не притронулся ни к одной из 32 открытых — все её 31 касание были по
+      -- собственным задачам, дозаполненным через полминуты после создания.
+      -- Медиана была честной, а утверждение — ложным.
       round(percentile_cont(0.5) within group (
         order by extract(epoch from (t.first_touch - t.created_at))/3600
-      ) filter (where t.first_touch is not null)::numeric, 1) as react_h,
+      ) filter (where t.first_touch is not null and not t.self_made)::numeric, 1) as react_h,
+      -- На скольких чужих задачах стоит медиана: по двум откликам её
+      -- показывать нельзя, и клиент должен об этом знать.
+      count(*) filter (where t.first_touch is not null and not t.self_made) as react_n,
       count(*) filter (where t.status in ('done','verified')
         and t.updated_at > now() - make_interval(days => ${days})) as closed,
       round(percentile_cont(0.5) within group (
@@ -1052,7 +1063,20 @@ companiesRoute.get('/:companyId/people', async (c) => {
         waitWorstDays: Number(r?.wait_worst ?? 0),
         over2w,
         // null — не «ноль», а «не к чему было прикасаться»: клиент покажет «—».
-        reactMedianHours: r?.react_h === null || r?.react_h === undefined ? null : Number(r.react_h),
+        /**
+         * Медиана времени до первого касания — по ЧУЖИМ задачам.
+         *
+         * null, когда таких откликов меньше трёх: медиана по одному-двум
+         * числам не медиана, а само это число, и рядом с «32 из 32 не
+         * тронуто» она читалась как опровержение. Клиент на null показывает
+         * прочерк.
+         */
+        reactMedianHours:
+          Number(r?.react_n ?? 0) < 3 || r?.react_h === null || r?.react_h === undefined
+            ? null
+            : Number(r.react_h),
+        /** На скольких откликах стоит медиана — чтобы клиент мог сказать честно. */
+        reactSample: Number(r?.react_n ?? 0),
         closed,
         medianLifeDays: r?.life_days === null || r?.life_days === undefined ? null : Number(r.life_days),
         blocking,

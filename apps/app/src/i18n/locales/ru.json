@@ -1236,7 +1236,7 @@
     "waitingNone": "все тронуты",
     "waitingNote": "в среднем {{avg}} дн, худшая {{worst}}",
     "react": "реакция",
-    "reactNote": "медиана",
+    "reactNote": "медиана по чужим задачам",
     "closed": "закрыто",
     "closedSameDay": "обычно в тот же день",
     "closedIn": "обычно за {{days}} дн",
@@ -1265,7 +1265,11 @@
       "min": "мин",
       "hour": "ч",
       "day": "дн"
-    }
+    },
+    "reactFew_zero": "нет откликов на чужие задачи",
+    "reactFew_one": "мало данных: {{count}} отклик",
+    "reactFew_few": "мало данных: {{count}} отклика",
+    "reactFew_many": "мало данных: {{count}} откликов"
   },
   "time": {
     "title": "Время",

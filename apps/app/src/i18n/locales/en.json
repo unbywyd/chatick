@@ -1230,7 +1230,7 @@
     "waitingNone": "all touched",
     "waitingNote": "{{avg}} d on average, worst {{worst}}",
     "react": "reaction",
-    "reactNote": "median",
+    "reactNote": "median on others tasks",
     "closed": "closed",
     "closedSameDay": "usually same day",
     "closedIn": "usually in {{days}} d",
@@ -1256,7 +1256,10 @@
       "min": "min",
       "hour": "h",
       "day": "d"
-    }
+    },
+    "reactFew_zero": "no replies to others tasks",
+    "reactFew_one": "too little data: {{count}} reply",
+    "reactFew_other": "too little data: {{count}} replies"
   },
   "time": {
     "title": "Time",

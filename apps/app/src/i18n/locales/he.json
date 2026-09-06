@@ -1231,7 +1231,7 @@
     "waitingNone": "כולן נגעו",
     "waitingNote": "בממוצע {{avg}} ימים, הוותיקה {{worst}}",
     "react": "תגובה",
-    "reactNote": "חציון",
+    "reactNote": "חציון במשימות של אחרים",
     "closed": "נסגרו",
     "closedSameDay": "בדרך כלל באותו יום",
     "closedIn": "בדרך כלל תוך {{days}} ימים",
@@ -1257,7 +1257,11 @@
       "min": "דק",
       "hour": "שע",
       "day": "ימ"
-    }
+    },
+    "reactFew_zero": "אין תגובות למשימות של אחרים",
+    "reactFew_one": "מעט נתונים: תגובה {{count}}",
+    "reactFew_two": "מעט נתונים: {{count}} תגובות",
+    "reactFew_other": "מעט נתונים: {{count}} תגובות"
   },
   "time": {
     "title": "זמן",

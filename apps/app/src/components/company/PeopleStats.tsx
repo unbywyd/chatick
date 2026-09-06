@@ -52,7 +52,16 @@ type Rhythm = {
   waitWorstDays: number
   over2w: number
   /** null — не «ноль», а «не к чему было прикасаться». */
+  /**
+   * Медиана времени до первого касания ЧУЖОЙ задачи.
+   *
+   * null — когда таких откликов меньше трёх: медиана по одному-двум числам
+   * это само число, а не медиана. Самозаведённые задачи в счёт не идут — их
+   * трогают в ту же минуту, и они топили метрику у всех.
+   */
   reactMedianHours: number | null
+  /** На скольких откликах стоит медиана: объясняет прочерк. */
+  reactSample: number
   closed: number
   medianLifeDays: number | null
   blocking: number
@@ -273,7 +282,13 @@ function RhythmBlock({ r }: { r: Rhythm }) {
           label={t('people.react')}
           value={react?.value ?? '—'}
           unit={react ? t(`people.unit.${react.unit}`) : undefined}
-          note={t('people.reactNote')}
+          // Прочерк без объяснения выглядит поломкой. Говорим, почему его
+          // нельзя посчитать: откликов на чужие задачи слишком мало.
+          note={
+            r.reactMedianHours === null
+              ? t('people.reactFew', { count: r.reactSample })
+              : t('people.reactNote')
+          }
           tone={
             r.reactMedianHours === null ? undefined : r.reactMedianHours <= 4 ? 'ok' : r.reactMedianHours > 24 ? 'bad' : undefined
           }
