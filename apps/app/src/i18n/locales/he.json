@@ -2042,5 +2042,32 @@
     "estimateChanged": "שינה/תה הערכת זמן",
     "sprintChanged": "העביר/ה לספרינט אחר",
     "updated": "עדכן/ה את המשימה"
+  },
+  "workload": {
+    "title": "מי עובד על מה",
+    "hint": "משימות פתוחות, שעות מוערכות ופרויקטים — לחצו על כרטיס לפרטים",
+    "state": {
+      "idle": "אין משימות",
+      "stuck": "הכול חסום",
+      "ready": "פנוי לקחת",
+      "working": "בעבודה"
+    },
+    "tasks_one": "משימה",
+    "tasks_two": "משימות",
+    "tasks_other": "משימות",
+    "hours": "ש׳ מתוכננות",
+    "noEstimate_one": "{{count}} ללא הערכה",
+    "noEstimate_two": "{{count}} ללא הערכה",
+    "noEstimate_other": "{{count}} ללא הערכה",
+    "blocked_one": "משימה {{count}} חסומה",
+    "blocked_two": "{{count}} משימות חסומות",
+    "blocked_other": "{{count}} משימות חסומות",
+    "sumOpen": "בעבודה",
+    "sumHours": "שעות",
+    "sumBlocked": "חסום",
+    "byProject_one": "פרויקט {{count}}",
+    "byProject_two": "{{count}} פרויקטים",
+    "byProject_other": "{{count}} פרויקטים",
+    "noTasks": "אין משימות פתוחות"
   }
 }

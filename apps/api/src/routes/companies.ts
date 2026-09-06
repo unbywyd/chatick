@@ -611,6 +611,153 @@ companiesRoute.get('/:companyId/time-config', async (c) => {
  * вместо 82 и 4369 часов вместо 179. Врёт такое правдоподобно — числа выглядят
  * как настоящие, просто больше.
  */
+/**
+ * Кто над чем работает прямо сейчас — для планирования.
+ *
+ * Отвечает на вопрос начальства «у кого есть работа, а у кого нет», которого
+ * нет ни в одном другом месте: обзор говорит про проекты, «Люди» — про то,
+ * как человек работает с очередью. Здесь — про саму очередь: свободен,
+ * загружен или стоит заблокированный.
+ *
+ * Часы считаем ТОЛЬКО по проставленным оценкам и отдельно говорим, сколько
+ * задач без оценки. Достроить среднее было бы догадкой, выданной за факт: у
+ * человека с четырнадцатью неоценёнными число выросло бы вдвое, и по нему
+ * стали бы планировать.
+ */
+companiesRoute.get('/:companyId/workload', async (c) => {
+  const { sub } = c.get('session')
+  const companyId = c.req.param('companyId')
+  const membership = await db.query.companyMembers.findFirst({
+    where: and(eq(companyMembers.companyId, companyId), eq(companyMembers.userId, sub)),
+  })
+  if (!membership) return c.json({ error: 'Forbidden' }, 403)
+
+  /**
+   * Одним запросом на всех: людей в компании десятки, и запрос на каждого
+   * означал бы полсотни обращений ради одной секции.
+   *
+   * count(m.id), а НЕ count(*): при left join человек без задач даёт одну
+   * пустую строку, и count(*) насчитал бы ему единицу. Проверено на живых
+   * данных — шестеро получали «1 задачу», которой нет.
+   */
+  const rows = await db.execute(sql`
+    with mine as (
+      select t.id, t.assignee_id, t.project_id, t.status, t.estimate_minutes,
+             exists (
+               select 1 from task_blockers b
+                 join tasks bt on bt.id = b.blocker_task_id
+                where b.blocked_task_id = t.id
+                  and bt.status <> 'done' and bt.deleted_at is null
+             ) as blocked
+        from tasks t
+        join projects p on p.id = t.project_id
+       where p.company_id = ${companyId} and t.deleted_at is null and t.status <> 'done'
+    ),
+    per_project as (
+      select m.assignee_id, m.project_id, p.name, p.color, count(*)::int as n
+        from mine m join projects p on p.id = m.project_id
+       group by m.assignee_id, m.project_id, p.name, p.color
+    )
+    select
+      u.id, u.name, u.avatar_url as "avatarUrl", cm.role,
+      count(m.id)::int as "openTasks",
+      count(m.id) filter (where m.blocked)::int as "blockedTasks",
+      count(m.id) filter (where not m.blocked)::int as "freeTasks",
+      count(m.id) filter (where m.status = 'in_progress')::int as "doingTasks",
+      count(distinct m.project_id)::int as "projectCount",
+      -- Минуты, а не часы: округление до часов на клиенте, чтобы «0.5 ч» не
+      -- превращалось в ноль ещё на сервере.
+      coalesce(sum(case when m.estimate_minutes ~ '^[0-9]+$'
+                        then m.estimate_minutes::int else 0 end), 0)::int as "plannedMinutes",
+      count(m.id) filter (where m.estimate_minutes is null
+                             or m.estimate_minutes !~ '^[0-9]+$')::int as "noEstimate",
+      (select max(l.created_at) from activity_log l where l.actor_id = u.id) as "lastActiveAt",
+      coalesce((
+        select json_agg(json_build_object('id', pp.project_id, 'name', pp.name,
+                                          'color', pp.color, 'tasks', pp.n)
+                        order by pp.n desc, pp.name)
+          from per_project pp where pp.assignee_id = u.id
+      ), '[]'::json) as "projects"
+    from company_members cm
+    join users u on u.id = cm.user_id
+    left join mine m on m.assignee_id = u.id
+   where cm.company_id = ${companyId}
+   group by u.id, u.name, u.avatar_url, cm.role
+  `)
+
+  type Row = {
+    id: string; name: string; avatarUrl: string | null; role: string
+    openTasks: number; blockedTasks: number; freeTasks: number; doingTasks: number
+    projectCount: number; plannedMinutes: number; noEstimate: number
+    lastActiveAt: string | null
+    projects: { id: string; name: string; color: string | null; tasks: number }[]
+  }
+  const list = (rows as unknown as { rows?: Row[] }).rows ?? (rows as unknown as Row[])
+
+  const items = (list ?? [])
+    /**
+     * Приглашённые, которые не начали работать, — вон из списка.
+     *
+     * Ноль задач И ни одного действия за всю историю. Показать их как
+     * «свободен» значило бы обещать начальству шесть свободных рук, которых
+     * нет: в этой компании таких ровно половина состава.
+     *
+     * Человек с нулём задач, но с историей — другое дело: он ОСВОБОДИЛСЯ, и
+     * это самое важное, что секция может сказать.
+     */
+    .filter((r) => Number(r.openTasks) > 0 || r.lastActiveAt)
+    .map((r) => {
+      const open = Number(r.openTasks)
+      const free = Number(r.freeTasks)
+      const blocked = Number(r.blockedTasks)
+      /**
+       * Состояние — одно из четырёх, в порядке срочности для начальства.
+       *
+       * «Стоит» важнее «свободен»: свободному дают работу, а у стоящего она
+       * есть и не двигается — это чужая вина, и разбирать надо её.
+       */
+      const state =
+        open === 0 ? 'idle'
+        : free === 0 ? 'stuck'
+        : Number(r.doingTasks) > 0 ? 'working'
+        : 'ready'
+      return {
+        id: r.id,
+        name: r.name,
+        avatarUrl: r.avatarUrl,
+        role: r.role,
+        state,
+        openTasks: open,
+        freeTasks: free,
+        blockedTasks: blocked,
+        doingTasks: Number(r.doingTasks),
+        projectCount: Number(r.projectCount),
+        plannedMinutes: Number(r.plannedMinutes),
+        /** Сколько задач без оценки: без этого числа часам нельзя верить. */
+        noEstimate: Number(r.noEstimate),
+        lastActiveAt: r.lastActiveAt,
+        projects: r.projects ?? [],
+      }
+    })
+
+  /**
+   * Порядок — по тому, что требует внимания начальства, а не по алфавиту.
+   *
+   * Свободные первыми: незанятый человек — это то, что решают сегодня.
+   * Затем стоящие: работа есть, но не двигается. Остальные ниже, между собой
+   * по загрузке.
+   */
+  const RANK: Record<string, number> = { idle: 0, stuck: 1, ready: 2, working: 3 }
+  items.sort(
+    (a, b) =>
+      RANK[a.state]! - RANK[b.state]! ||
+      b.openTasks - a.openTasks ||
+      a.name.localeCompare(b.name),
+  )
+
+  return c.json({ items })
+})
+
 companiesRoute.get('/:companyId/people', async (c) => {
   const { sub } = c.get('session')
   const companyId = c.req.param('companyId')

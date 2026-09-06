@@ -2035,5 +2035,28 @@
     "estimateChanged": "changed the estimate",
     "sprintChanged": "moved it to another sprint",
     "updated": "updated the task"
+  },
+  "workload": {
+    "title": "Who is working on what",
+    "hint": "Open tasks, estimated hours and projects — click a card for details",
+    "state": {
+      "idle": "no tasks",
+      "stuck": "all blocked",
+      "ready": "ready to take",
+      "working": "in progress"
+    },
+    "tasks_one": "task",
+    "tasks_other": "tasks",
+    "hours": "h planned",
+    "noEstimate_one": "{{count}} unestimated",
+    "noEstimate_other": "{{count}} unestimated",
+    "blocked_one": "{{count}} task blocked",
+    "blocked_other": "{{count}} tasks blocked",
+    "sumOpen": "open",
+    "sumHours": "hours",
+    "sumBlocked": "blocked",
+    "byProject_one": "{{count}} project",
+    "byProject_other": "{{count}} projects",
+    "noTasks": "No open tasks"
   }
 }

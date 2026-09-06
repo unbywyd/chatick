@@ -2065,5 +2065,32 @@
     "estimateChanged": "изменил(а) оценку",
     "sprintChanged": "перенёс(ла) в другой спринт",
     "updated": "изменил(а) задачу"
+  },
+  "workload": {
+    "title": "Кто над чем работает",
+    "hint": "Задачи в работе, часы по оценкам и проекты — нажмите карточку для подробностей",
+    "state": {
+      "idle": "нет задач",
+      "stuck": "всё заблокировано",
+      "ready": "готов взять",
+      "working": "в работе"
+    },
+    "tasks_one": "задача",
+    "tasks_few": "задачи",
+    "tasks_many": "задач",
+    "hours": "ч запланировано",
+    "noEstimate_one": "{{count}} без оценки",
+    "noEstimate_few": "{{count}} без оценки",
+    "noEstimate_many": "{{count}} без оценки",
+    "blocked_one": "{{count}} задача заблокирована",
+    "blocked_few": "{{count}} задачи заблокированы",
+    "blocked_many": "{{count}} задач заблокированы",
+    "sumOpen": "в работе",
+    "sumHours": "часов",
+    "sumBlocked": "заблокировано",
+    "byProject_one": "{{count}} проект",
+    "byProject_few": "{{count}} проекта",
+    "byProject_many": "{{count}} проектов",
+    "noTasks": "Открытых задач нет"
   }
 }

@@ -15,6 +15,7 @@ import { api } from '@/lib/api'
 import { cn } from '@/lib/utils'
 import { PeriodPicker, resolvePreset, type Period } from '@/components/ui/period-picker'
 import { PeopleStats } from './PeopleStats'
+import { WorkloadStats } from './WorkloadStats'
 import { Avatar } from '@/components/ui/avatar'
 import { Button } from '@/components/ui/button'
 import { ProjectBadge } from '@/components/ui/project-badge'
@@ -465,6 +466,11 @@ export function OverviewTab({
 
       {/* Люди — сразу под проектами: «что делается» и «кто делает» стоят
           рядом, а не через весь экран друг от друга. */}
+      {/* Планирование — НАД «Людьми»: сначала «у кого есть работа»,
+          потом «как он с ней справляется». Второе без первого читается как
+          претензия к человеку, у которого просто нечего делать. */}
+      <WorkloadStats companyId={companyId} />
+
       <PeopleStats companyId={companyId} onOpenReport={onOpenReport} />
 
       {/*
