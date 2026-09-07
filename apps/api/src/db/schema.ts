@@ -636,9 +636,25 @@ export const taskComments = pgTable(
     authorId: text('author_id').references(() => users.id, { onDelete: 'set null' }),
     body: text('body').notNull(), // markdown с mention-разметкой @[label](id)
     replyToId: text('reply_to_id'), // ответ на другой комментарий (без FK — переживает удаление)
+    /**
+     * Мягкое удаление — как у задач и файлов.
+     *
+     * Раньше удаление было физическим, и комментарий пропадал бесследно:
+     * ни строки, ни записи в истории. Оставалось только уведомление о нём,
+     * ведущее в задачу, где ничего нет — человек шёл искать несуществующее.
+     *
+     * Теперь строка остаётся, на её месте видно «комментарий удалён», а кто
+     * и когда — в истории задачи. Обсуждение не должно уметь исчезать: по
+     * нему потом восстанавливают, о чём договорились.
+     */
+    deletedAt: timestamp('deleted_at', { withTimezone: true }),
+    deletedById: text('deleted_by_id').references(() => users.id, { onDelete: 'set null' }),
     createdAt: createdAt(),
     updatedAt: updatedAt(),
   },
+  // Частичный индекс task_comments_alive_idx (только живые) заведён миграцией
+  // 0096: drizzle описывает частичные индексы через sql``, а больше их в этой
+  // схеме нет — тянуть импорт ради одной строки дороже, чем помнить про него.
   (t) => [index('task_comments_task_idx').on(t.taskId, t.createdAt)],
 )
 

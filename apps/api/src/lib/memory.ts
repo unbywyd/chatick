@@ -1835,7 +1835,8 @@ export function memoryTools(projectId: string, actorUserId: string): { tools: To
         .select({ c: taskComments, author: users })
         .from(taskComments)
         .leftJoin(users, eq(users.id, taskComments.authorId))
-        .where(and(eq(taskComments.taskId, t.id), eq(taskComments.projectId, projectId)))
+        // Удалённые ассистенту не показываем: их убрали намеренно.
+        .where(and(eq(taskComments.taskId, t.id), eq(taskComments.projectId, projectId), isNull(taskComments.deletedAt)))
         .orderBy(asc(taskComments.createdAt))
         .limit(50)
       if (!rows.length) return `${t.number} has no comments.`

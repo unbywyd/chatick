@@ -324,7 +324,8 @@
     "dueFilterHint": "Overdue or due today and tomorrow",
     "ageDays": "{{count}}d",
     "createdOn": "Created {{date}}",
-    "newTask": "New task"
+    "newTask": "New task",
+    "commentDeleted": "Comment deleted"
   },
   "files": {
     "search": "Search files…",

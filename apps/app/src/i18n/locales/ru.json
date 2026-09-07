@@ -325,7 +325,8 @@
     "dueFilterHint": "Просроченные и те, что горят сегодня-завтра",
     "ageDays": "{{count}}д",
     "createdOn": "Создана {{date}}",
-    "newTask": "Новая задача"
+    "newTask": "Новая задача",
+    "commentDeleted": "Комментарий удалён"
   },
   "files": {
     "search": "Поиск файлов…",

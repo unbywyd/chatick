@@ -1628,14 +1628,29 @@ tasksRoute.get('/:taskId/comments', async (c) => {
     .orderBy(asc(taskComments.createdAt))
   const fileMap = await commentFiles(rows.map((r) => r.comment.id))
   return c.json(
-    rows.map((r) => ({
-      id: r.comment.id,
-      body: r.comment.body,
-      replyToId: r.comment.replyToId,
-      createdAt: r.comment.createdAt,
-      author: r.author ? { id: r.author.id, name: r.author.name, avatarUrl: r.author.avatarUrl } : null,
-      files: fileMap.get(r.comment.id) ?? [],
-    })),
+    rows.map((r) => {
+      /**
+       * Удалённый комментарий остаётся в ленте плашкой «удалён».
+       *
+       * Убрать его совсем значило бы порвать разговор: ответы на него висят
+       * без начала, и «почему он вдруг про это?» не восстановить. Плашка
+       * держит место и говорит правду.
+       *
+       * Тело НЕ отдаём — удалили именно его. Вложения тоже: они были частью
+       * удалённого сообщения.
+       */
+      const deleted = Boolean(r.comment.deletedAt)
+      return {
+        id: r.comment.id,
+        body: deleted ? '' : r.comment.body,
+        deleted,
+        deletedAt: r.comment.deletedAt,
+        replyToId: r.comment.replyToId,
+        createdAt: r.comment.createdAt,
+        author: r.author ? { id: r.author.id, name: r.author.name, avatarUrl: r.author.avatarUrl } : null,
+        files: deleted ? [] : (fileMap.get(r.comment.id) ?? []),
+      }
+    }),
   )
 })
 
@@ -1715,7 +1730,61 @@ tasksRoute.delete('/:taskId/comments/:commentId', async (c) => {
   const comment = await db.query.taskComments.findFirst({ where: and(eq(taskComments.id, commentId), eq(taskComments.projectId, projectId)) })
   if (!comment) return c.json({ error: 'Not found' }, 404)
   if (comment.authorId !== sub && role !== 'owner' && role !== 'admin') return c.json({ error: 'Forbidden' }, 403)
-  await db.delete(taskComments).where(eq(taskComments.id, commentId))
+  // Уже удалён — второй раз не перезаписываем: кто и когда удалил, важнее
+  // последнего нажатия кнопки.
+  if (comment.deletedAt) return c.json({ ok: true })
+
+  /**
+   * Мягкое удаление, а не DELETE.
+   *
+   * Раньше строка исчезала навсегда и в журнал ничего не писалось: комментарий
+   * пропадал бесследно, а уведомление о нём оставалось и вело в задачу, где
+   * ничего нет. Живой случай: человек удалил комментарий в одной задаче и
+   * написал тот же текст в другой — в инбоксе осталась ссылка в пустоту, и
+   * доказать, что комментарий был, оказалось нечем.
+   *
+   * Тело оставляем: «комментарий удалён» рисует клиент, а восстановить
+   * содержимое иногда нужно — по обсуждению потом выясняют, о чём
+   * договорились. Кто удалил и когда — в истории задачи.
+   */
+  await db
+    .update(taskComments)
+    .set({ deletedAt: new Date(), deletedById: sub })
+    .where(eq(taskComments.id, commentId))
+
+  /**
+   * Гасим уведомления об этом комментарии: они ведут в никуда.
+   *
+   * dropNotice работает по одному получателю, а получателей было несколько —
+   * поэтому перебираем тех же, кого звали при создании. Прочитанные он не
+   * трогает сам: это часть истории, стирать её нельзя.
+   *
+   * Ключ тот же, что при отправке (task_comment:<id комментария>), иначе
+   * гасить будет нечего.
+   */
+  const task = await db.query.tasks.findFirst({ where: eq(tasks.id, comment.taskId) })
+  if (task) {
+    const watchers = commentWatchers({
+      assigneeId: task.assigneeId,
+      createdById: task.createdById,
+      actorId: comment.authorId ?? sub,
+      mentioned: extractMentions(comment.body),
+    })
+    for (const userId of watchers) {
+      void dropNotice({ userId, event: 'task_comment', entityId: task.id, dedupeKey: `task_comment:${commentId}` })
+    }
+  }
+
+  void logActivity({
+    projectId,
+    actorId: sub,
+    action: 'delete',
+    entityType: 'comment',
+    entityId: commentId,
+    // Кусок текста в подписи: «удалил комментарий» без содержимого не даёт
+    // понять, о чём речь, а тело в журнал целиком класть незачем.
+    entityLabel: comment.body.replace(/<[^>]*>/g, ' ').replace(/s+/g, ' ').trim().slice(0, 80),
+  })
   broadcast(projectId, 'task_comments_changed', { taskId: comment.taskId })
   return c.json({ ok: true })
 })

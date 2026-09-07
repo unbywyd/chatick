@@ -34,6 +34,13 @@ type Comment = {
   createdAt: string
   author: { id: string; name: string; avatarUrl: string | null } | null
   files: CommentFile[]
+  /**
+   * Удалён автором или админом. Тело и вложения сервер не отдаёт — удалили
+   * именно их, — но строка остаётся: ответы на неё иначе повисли бы без
+   * начала, и разговор стало бы не восстановить.
+   */
+  deleted?: boolean
+  deletedAt?: string | null
 }
 
 // @[Label](id) → @Label для отображения
@@ -186,6 +193,7 @@ export function TaskComments({
                 <span className="text-xs font-medium">{c.author?.name ?? 'AI'}</span>
                 <span className="text-xs text-muted-foreground">{new Date(c.createdAt).toLocaleString(lang)}</span>
                 <div className="ms-auto flex items-center gap-1">
+                  {!c.deleted && (
                   <button
                     className="grid size-7 place-items-center rounded-md text-muted-foreground transition-colors hover:bg-secondary hover:text-foreground"
                     title={t('tasks.reply')}
@@ -193,7 +201,8 @@ export function TaskComments({
                   >
                     <CornerUpLeft className="size-4" />
                   </button>
-                  {mine && (
+                  )}
+                  {mine && !c.deleted && (
                     <button
                       className="grid size-7 place-items-center rounded-md text-muted-foreground transition-colors hover:bg-secondary hover:text-foreground"
                       title={t('about.edit')}
@@ -202,7 +211,7 @@ export function TaskComments({
                       <Pencil className="size-4" />
                     </button>
                   )}
-                  {mine && (
+                  {mine && !c.deleted && (
                     <button
                       className="grid size-7 place-items-center rounded-md text-muted-foreground transition-colors hover:bg-destructive/10 hover:text-destructive"
                       title={t('files.delete')}
@@ -222,7 +231,13 @@ export function TaskComments({
                 </div>
               )}
 
-              {editing === c.id ? (
+              {c.deleted ? (
+                /* Плашка вместо текста: место в разговоре сохранено, а
+                   содержимого больше нет. Кто удалил — в истории задачи. */
+                <div className="rounded-md border border-dashed px-2 py-1 text-sm italic text-muted-foreground">
+                  {t('tasks.commentDeleted')}
+                </div>
+              ) : editing === c.id ? (
                 <EditForm initial={c.body} mentions={mentions} onCancel={() => setEditing(null)} onSave={(b) => saveEdit.mutate({ id: c.id, body: b })} />
               ) : (
                 <div className="msg-md break-words text-sm">

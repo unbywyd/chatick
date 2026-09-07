@@ -1793,7 +1793,8 @@ async function commentActivity(
       createdAt: taskComments.createdAt,
     })
     .from(taskComments)
-    .where(inArray(taskComments.taskId, taskIds))
+    // Удалённые не в счёт: это счётчик живого обсуждения.
+    .where(and(inArray(taskComments.taskId, taskIds), isNull(taskComments.deletedAt)))
     .orderBy(asc(taskComments.createdAt))
 
   for (const row of rows) {
@@ -3941,7 +3942,9 @@ bridgeRoute.get('/tasks/:id/comments', async (c) => {
     // Ограничение по проекту обязательно: id задачи угадывать не нужно, его
     // видно в любой ссылке, и без этого условия туннель в один проект читал
     // бы обсуждения соседнего.
-    .where(and(eq(taskComments.taskId, task.id), eq(taskComments.projectId, scope.projectId)))
+    // Удалённые не отдаём: их убрали намеренно, и ассистент не должен
+    // строить на них выводы. Что комментарий БЫЛ — видно в истории задачи.
+    .where(and(eq(taskComments.taskId, task.id), eq(taskComments.projectId, scope.projectId), isNull(taskComments.deletedAt)))
     .leftJoin(users, eq(users.id, taskComments.authorId))
     .orderBy(taskComments.createdAt)
   // Файлы комментария привязаны к нему через commentId
