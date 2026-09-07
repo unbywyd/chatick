@@ -631,12 +631,20 @@ server.registerTool(
     title: 'List tasks',
     description:
       'Tasks of a project. Use fields="brief" when you are picking tasks rather than reading them — descriptions are ' +
-      'the bulk of the payload. Check "truncated" in the reply before acting on "all of them".',
+      'the bulk of the payload. Check "truncated" in the reply before acting on "all of them". ' +
+      'The trouble filters are how you answer "what is stuck", "what did we forget", "why is this person idle": ' +
+      'blocked=1 is work waiting on someone else, stale=14 is what nobody has touched in that many days, ' +
+      'noEstimate=1 is what cannot be planned, overdue=1 is a missed date. They combine with assignee — ' +
+      'assignee=me&blocked=1 says what is holding YOU up. Each one implies "not finished".',
     inputSchema: {
       project: z.string(),
       assignee: z.string().optional().describe('"me" or a user id'),
       status: z.enum(['todo', 'in_progress', 'review', 'verified', 'done']).optional(),
       q: z.string().optional().describe('Search in title'),
+      blocked: z.enum(['1']).optional().describe('Only tasks waiting on another unfinished task'),
+      stale: z.number().optional().describe('Untouched for at least this many days'),
+      noEstimate: z.enum(['1']).optional().describe('Only tasks with no time estimate'),
+      overdue: z.enum(['1']).optional().describe('Only tasks past their due date'),
       fields: z.enum(['brief']).optional(),
       limit: z.number().max(200).optional(),
     },

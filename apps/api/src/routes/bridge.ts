@@ -1,5 +1,5 @@
 import { Hono } from 'hono'
-import { and, asc, desc, eq, gt, gte, ilike, inArray, isNull, lt, lte, or, sql } from 'drizzle-orm'
+import { and, asc, desc, eq, gt, gte, ilike, inArray, isNull, lt, lte, notInArray, or, sql } from 'drizzle-orm'
 import { db } from '../db/client.js'
 import {
   activityLog,
@@ -1862,6 +1862,51 @@ bridgeRoute.get('/tasks', async (c) => {
   if (sprint) conds.push(eq(tasks.groupId, sprint))
   const q = c.req.query('q')?.trim()
   if (q) conds.push(or(ilike(tasks.title, `%${q}%`), ilike(tasks.description, `%${q}%`))!)
+
+  /**
+   * Фильтры «что не в порядке» — то, ради чего список обычно и открывают.
+   *
+   * Без них ассистент вытягивал полсотни задач и перебирал их сам: на живом
+   * проекте это 223 открытых, из которых просрочены 3, а без оценки 33.
+   * Отбор на стороне базы, а не в голове модели.
+   *
+   * Каждый неявно означает «среди незакрытых»: просроченная закрытая задача
+   * никого не волнует, а «давно не трогали» у сделанной — норма. Но status
+   * НЕ дописываем в conds: если человек спросил status=done вместе с
+   * overdue, честнее вернуть пусто, чем молча показать чужой список.
+   */
+  // Срок прошёл. dueDate есть далеко не у всех (на живых данных 3 задачи из
+  // 223) — это ограничение данных, а не фильтра, и врать о нём нельзя.
+  if (c.req.query('overdue') === '1') {
+    conds.push(sql`${tasks.dueDate} is not null and ${tasks.dueDate} < now()`)
+    conds.push(notInArray(tasks.status, ['done', 'verified']))
+  }
+
+  // Без оценки. estimate_minutes — ТЕКСТ, и пустая строка там встречается
+  // наравне с null: проверяем на число, а не на наличие.
+  if (c.req.query('noEstimate') === '1') {
+    conds.push(sql`(${tasks.estimateMinutes} is null or ${tasks.estimateMinutes} !~ '^[0-9]+$')`)
+    conds.push(notInArray(tasks.status, ['done', 'verified']))
+  }
+
+  // Давно не двигали. Число дней, а не флаг: «застряло» для спринта и для
+  // годового проекта — разные сроки, и придумывать одно за человека незачем.
+  const staleDays = Number(c.req.query('stale'))
+  if (Number.isFinite(staleDays) && staleDays > 0) {
+    conds.push(sql`${tasks.updatedAt} < now() - make_interval(days => ${Math.min(365, Math.floor(staleDays))})`)
+    conds.push(notInArray(tasks.status, ['done', 'verified']))
+  }
+
+  // Стоит из-за чужой незакрытой задачи. Тот же признак, что рисует замочек в
+  // интерфейсе и считает полоса блокеров: расходиться им нельзя.
+  if (c.req.query('blocked') === '1') {
+    conds.push(sql`exists (
+      select 1 from ${taskBlockers} b
+      join ${tasks} bt on bt.id = b.blocker_task_id
+      where b.blocked_task_id = ${tasks.id} and bt.status <> 'done' and bt.deleted_at is null
+    )`)
+    conds.push(notInArray(tasks.status, ['done', 'verified']))
+  }
 
   const limit = Math.min(200, Math.max(1, Number(c.req.query('limit')) || 50))
   const rows = await db

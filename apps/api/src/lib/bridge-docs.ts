@@ -42,6 +42,15 @@ function endpointCatalog(q: string): string {
          closing your own work skips the person who has to check it.
          verified belongs to whoever did the checking; never set it on your
          own work. done comes after that.
+         Trouble filters — how you answer "what is stuck", "what did we
+         forget", "why is this person idle", without pulling the whole board
+         and reading it yourself:
+           blocked=1      waiting on someone else's unfinished task
+           stale=<days>   nobody has touched it in that many days
+           noEstimate=1   no time estimate, so it cannot be planned
+           overdue=1      past its due date
+         Each implies "not finished". They combine with assignee:
+         assignee=me&blocked=1 is what is holding YOU up.
          fields=brief — number, title, status, priority, refs, sprint, assignee
          and no description or attachments. Use it whenever you are picking
          tasks rather than reading them: descriptions are the bulk of the

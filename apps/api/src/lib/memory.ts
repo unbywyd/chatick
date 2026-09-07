@@ -228,8 +228,23 @@ export function memoryTools(projectId: string, actorUserId: string): { tools: To
     },
     {
       name: 'list_tasks',
-      description: 'List project tasks (number, title, status, priority, assignee, due date).',
-      parameters: { type: 'object', properties: { status: { type: 'string', enum: ['todo', 'in_progress', 'review', 'verified', 'done'] } } },
+      description:
+        'List project tasks (number, title, status, priority, assignee, due date). The filters are how you answer ' +
+        '"what is stuck", "who has nothing to do", "what did we forget": assignee="me" or a name narrows to one ' +
+        'person, blocked=true finds work that cannot move until someone else finishes, stale=14 finds what nobody ' +
+        'has touched in that many days, noEstimate=true finds what cannot be planned, overdue=true finds missed ' +
+        'dates. Combine them — assignee plus blocked answers "why is this person idle".',
+      parameters: {
+        type: 'object',
+        properties: {
+          status: { type: 'string', enum: ['todo', 'in_progress', 'review', 'verified', 'done'] },
+          assignee: { type: 'string', description: '"me", a person name, or "none" for unassigned' },
+          blocked: { type: 'boolean', description: 'Only tasks waiting on another unfinished task' },
+          stale: { type: 'number', description: 'Untouched for at least this many days' },
+          noEstimate: { type: 'boolean', description: 'Only tasks with no time estimate' },
+          overdue: { type: 'boolean', description: 'Only tasks past their due date' },
+        },
+      },
     },
     {
       name: 'announce',
@@ -1312,16 +1327,79 @@ export function memoryTools(projectId: string, actorUserId: string): { tools: To
     },
     list_tasks: async (args) => {
       if (!(await hasPermission(projectId, actorUserId, 'tasks.read'))) return 'PERMISSION DENIED: the author cannot read tasks.'
+      /**
+       * Фильтры «что не в порядке» — те же, что у моста.
+       *
+       * Ассистент в интерфейсе отвечает человеку, который смотрит на доску и
+       * спрашивает «почему стоит», «у кого пусто», «что забыли». Без фильтров
+       * он тянул полсотни задач и перебирал их сам — на живом проекте это
+       * 223 открытых ради трёх просроченных.
+       *
+       * Правила совпадают с /x/tasks намеренно: разойдись они, и человек
+       * получил бы разные ответы от бота в чате и от ассистента в редакторе.
+       */
+      const conds = [eq(tasks.projectId, projectId), sql`${tasks.deletedAt} is null`]
       const status = typeof args.status === 'string' ? args.status : null
+      if (status) conds.push(eq(tasks.status, status as 'todo'))
+
+      // Незакрытые: просроченная закрытая задача никого не волнует, а
+      // «давно не трогали» у сделанной — норма. Только когда статус не задан
+      // явно: спросили status=done вместе с overdue — честнее пусто, чем
+      // молча подменённый список.
+      const openOnly = () => {
+        if (!status) conds.push(sql`${tasks.status} not in ('done', 'verified')`)
+      }
+
+      if (args.overdue === true) {
+        conds.push(sql`${tasks.dueDate} is not null and ${tasks.dueDate} < now()`)
+        openOnly()
+      }
+      if (args.noEstimate === true) {
+        // estimate_minutes — ТЕКСТ, пустая строка встречается наравне с null.
+        conds.push(sql`(${tasks.estimateMinutes} is null or ${tasks.estimateMinutes} !~ '^[0-9]+$')`)
+        openOnly()
+      }
+      const staleDays = Number(args.stale)
+      if (Number.isFinite(staleDays) && staleDays > 0) {
+        conds.push(sql`${tasks.updatedAt} < now() - make_interval(days => ${Math.min(365, Math.floor(staleDays))})`)
+        openOnly()
+      }
+      if (args.blocked === true) {
+        conds.push(sql`exists (
+          select 1 from ${taskBlockers} b
+          join ${tasks} bt on bt.id = b.blocker_task_id
+          where b.blocked_task_id = ${tasks.id} and bt.status <> 'done' and bt.deleted_at is null
+        )`)
+        openOnly()
+      }
+
+      // Исполнитель: "me" — сам спрашивающий, "none" — ничьи, иначе по имени.
+      // Имя ищем среди участников проекта: спрашивают «что у Алекса», а не
+      // «что у пользователя nYVwZN6».
+      const who = typeof args.assignee === 'string' ? args.assignee.trim() : ''
+      if (who) {
+        if (who === 'me') conds.push(eq(tasks.assigneeId, actorUserId))
+        else if (who === 'none') conds.push(sql`${tasks.assigneeId} is null`)
+        else {
+          const found = await db
+            .select({ id: users.id })
+            .from(projectMembers)
+            .innerJoin(users, eq(users.id, projectMembers.userId))
+            .where(and(eq(projectMembers.projectId, projectId), ilike(users.name, `%${who}%`)))
+            .limit(2)
+          // Двое подходят под «Даниэль» — переспрашиваем, а не гадаем: не тот
+          // человек в ответе хуже, чем уточняющий вопрос.
+          if (!found.length) return `No project member matches "${who}".`
+          if (found.length > 1) return `More than one member matches "${who}" — use the full name.`
+          conds.push(eq(tasks.assigneeId, found[0]!.id))
+        }
+      }
+
       const rows = await db
         .select({ task: tasks, assignee: users })
         .from(tasks)
         .leftJoin(users, eq(users.id, tasks.assigneeId))
-        .where(
-          status
-            ? and(eq(tasks.projectId, projectId), eq(tasks.status, status as 'todo'), sql`${tasks.deletedAt} is null`)
-            : and(eq(tasks.projectId, projectId), sql`${tasks.deletedAt} is null`),
-        )
+        .where(and(...conds))
         .orderBy(desc(tasks.createdAt))
         .limit(50)
       if (!rows.length) return 'No tasks.'
