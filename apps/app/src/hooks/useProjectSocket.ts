@@ -48,6 +48,29 @@ export type SocketEvents = {
 }
 
 // Realtime проекта: presence + сообщения + пайплайн-события. Реконнект с бэкоффом.
+/**
+ * Отладка пути «ответ ассистента → экран».
+ *
+ * Включается в консоли: localStorage.chatick_debug_ai = '1', выключается
+ * удалением ключа. Флаг, а не постоянный вывод: лог нужен, только пока ловим
+ * конкретную беду, а сорить в консоли у всех ради этого незачем.
+ */
+export function aiDebug(event: string, data?: unknown) {
+  try {
+    // Два способа включить, потому что первый легко сделать неправильно:
+    // localStorage.chatick_debug_ai = '1' в консоли создаёт СВОЙСТВО объекта,
+    // а не ключ хранилища, и лог молча не появляется. ?aidebug=1 в адресе
+    // ошибиться не даёт и сам ставит ключ на будущее.
+    if (new URLSearchParams(location.search).get('aidebug') === '1') {
+      localStorage.setItem('chatick_debug_ai', '1')
+    }
+    if (localStorage.getItem('chatick_debug_ai') !== '1') return
+  } catch {
+    return
+  }
+  console.log(`%c[ai] ${new Date().toLocaleTimeString()} ${event}`, 'color:#8fae2c', data ?? '')
+}
+
 export function useProjectSocket(projectId: string | undefined, events: SocketEvents) {
   const [online, setOnline] = useState<PresenceUser[]>([])
   const [connected, setConnected] = useState(false)
@@ -71,6 +94,7 @@ export function useProjectSocket(projectId: string | undefined, events: SocketEv
       wsRef.current = ws
       ws.onopen = () => {
         const reconnected = attempt > 0
+        aiDebug('ws OPEN', { reconnected, attempt, projectId })
         attempt = 0
         setConnected(true)
         /**
@@ -91,7 +115,11 @@ export function useProjectSocket(projectId: string | undefined, events: SocketEv
         try {
           const { event, payload } = JSON.parse(e.data as string) as { event: string; payload: unknown }
           if (event === 'presence') setOnline(payload as PresenceUser[])
-          if (event === 'message') eventsRef.current.onMessage(payload as ChatMessage)
+          if (event === 'message') {
+            const m = payload as ChatMessage & { mode?: string; author?: unknown }
+            if (m.mode === 'ai') aiDebug('ws MESSAGE ai', { fromAi: !m.author, id: m.id })
+            eventsRef.current.onMessage(payload as ChatMessage)
+          }
           if (event === 'checking') eventsRef.current.onChecking?.(payload as { userId: string; name: string })
           if (event === 'checking_done') eventsRef.current.onCheckingDone?.(payload as { userId: string })
           if (event === 'held') eventsRef.current.onHeld?.(payload as { messageId: string })
@@ -135,7 +163,8 @@ export function useProjectSocket(projectId: string | undefined, events: SocketEv
           /* ignore */
         }
       }
-      ws.onclose = () => {
+      ws.onclose = (e) => {
+        aiDebug('ws CLOSE', { code: e.code, reason: e.reason, wasClean: e.wasClean })
         setConnected(false)
         setOnline([])
         if (!closed) {

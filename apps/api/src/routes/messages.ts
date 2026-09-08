@@ -381,8 +381,16 @@ messagesRoute.post(
             text: answer || AI_FAILED_TEXT,
           })
           .returning()
-        // ai-режим приватный: шлём только автору
-        sendToUser(projectId, sub, 'message', serialize(aiRow!))
+        // ai-режим приватный: шлём только автору.
+        //
+        // Логируем ФАКТ доставки: sendToUser возвращает, дошло ли хоть до
+        // одной открытой вкладки. Ответ, родившийся за две секунды и никуда
+        // не ушедший, с виду неотличим от медленной модели — а чинить это
+        // надо в разных местах.
+        const delivered = sendToUser(projectId, sub, 'message', serialize(aiRow!))
+        if (!delivered) {
+          console.log(`[ai-chat] answer NOT delivered (no open socket) project=${projectId} user=${sub}`)
+        }
       })()
       return c.json({ ...message, redirectedToAi }, 201)
     }

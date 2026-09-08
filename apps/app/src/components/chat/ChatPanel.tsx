@@ -15,7 +15,7 @@ import { DropdownMenu, DropdownMenuTrigger, DropdownMenuContent, DropdownMenuIte
 import { ContextMenu, ContextMenuTrigger, ContextMenuContent, ContextMenuItem, ContextMenuSeparator } from '@/components/ui/context-menu'
 import { Button } from '@/components/ui/button'
 import { useConfirm } from '@/components/ui/confirm'
-import { useProjectSocket, type ChatMessage } from '@/hooks/useProjectSocket'
+import { aiDebug, useProjectSocket, type ChatMessage } from '@/hooks/useProjectSocket'
 import { Composer, AI_MENTION_ID } from './Composer'
 import { SandboxOverlay } from './SandboxOverlay'
 import { AvatarRow } from '@/components/ui/avatar-row'
@@ -175,6 +175,8 @@ export function ChatPanel({
     streamListenerRef.current?.('')
   }, [])
   const [aiThinking, setAiThinking] = useState(false) // ai-режим: ждём ответ
+  // Остановить опрос ленты: живёт, только пока ждём ответа ассистента.
+  const aiPollRef = useRef<(() => void) | null>(null)
   const [searchOpen, setSearchOpen] = useState(false)
   const scrollRef = useRef<HTMLDivElement>(null)
   const bottomRef = useRef<HTMLDivElement>(null)
@@ -236,7 +238,17 @@ export function ChatPanel({
   useEffect(() => setLive([]), [projectId])
 
   const onWsMessage = useCallback((m: ChatMessage) => {
-    if (m.mode === 'ai' && !m.author) setAiThinking(false)
+    /**
+     * Событие только ЛОГИРУЕМ: гасит индикатор эффект ниже, по факту
+     * появления ответа в ленте.
+     *
+     * Раньше здесь стоял setAiThinking(false) и выходила гонка: индикатор
+     * гас от события, эффект следом выходил по проверке aiThinking и не
+     * добирался до остановки опроса. Опрос тикал до 90-секундной страховки —
+     * ровно это видно в отладке: reply arrived via SOCKET, затем poll tick
+     * каждые три секунды и ни одного REPLY SHOWN.
+     */
+    if (m.mode === 'ai' && !m.author) aiDebug('reply arrived via SOCKET', { id: m.id })
     setLive((prev) => {
       // finalize мог обновить текст held-сообщения — заменяем по id
       const idx = prev.findIndex((x) => x.id === m.id)
@@ -345,8 +357,15 @@ export function ChatPanel({
    */
   const lastAi = aiMessages[aiMessages.length - 1]
   useEffect(() => {
-    if (!aiThinking) return
-    if (lastAi && !lastAi.author) setAiThinking(false)
+    // Опрос останавливаем ВСЕГДА при появлении ответа, а не только пока
+    // горит индикатор: иначе он переживает гашение и тикает до страховки.
+    if (lastAi && !lastAi.author) {
+      aiDebug('REPLY SHOWN', { id: lastAi.id })
+      // Ответ дошёл — любым путём, сокетом или опросом. Опрос больше не нужен.
+      aiPollRef.current?.()
+      aiPollRef.current = null
+      setAiThinking(false)
+    }
   }, [lastAi, aiThinking])
 
   // автоскролл вниз только если пользователь у низа; иначе — бейдж «новые»
@@ -469,9 +488,35 @@ export function ChatPanel({
       if (created.redirectedToAi) setMode('ai')
       if (sendMode === 'ai' || created.redirectedToAi) {
         setAiThinking(true)
-        // страховка: если ответ так и не пришёл (сеть, перезапуск сервера),
-        // индикатор гаснет сам — иначе поле ввода заблокировано навсегда
-        window.setTimeout(() => setAiThinking(false), 90_000)
+        /**
+         * Пока ждём — опрашиваем ленту.
+         *
+         * Ответ приходит событием в сокет, и это быстрый путь. Но событие
+         * теряется, если сокет в этот момент переподключался: сон ноутбука,
+         * смена сети, перезапуск сервера при выкатке. Ответ при этом уже
+         * лежит в базе — модель отвечает за секунды, — а на экране висело
+         * «ИИ думает» до 90-секундной страховки. Со стороны неотличимо от
+         * «ассистент тормозит».
+         *
+         * Раз в три секунды перечитываем: цена — один лёгкий запрос, и только
+         * пока человек реально ждёт. Пришедшее по сокету гасит индикатор
+         * раньше, и опрос прекращается вместе с ним.
+         */
+        aiDebug('SENT, waiting for reply', { projectId, mode: sendMode })
+        const pollStarted = Date.now()
+        const poll = window.setInterval(() => {
+          aiDebug('poll tick', { waitedMs: Date.now() - pollStarted })
+          void qc.invalidateQueries({ queryKey: ['messages', projectId] })
+        }, 3000)
+        const stop = () => window.clearInterval(poll)
+        aiPollRef.current?.()
+        aiPollRef.current = stop
+        // Страховка на случай, если ответа нет вовсе (упал вызов модели):
+        // индикатор гаснет сам, иначе поле ввода заблокировано навсегда.
+        window.setTimeout(() => {
+          stop()
+          setAiThinking(false)
+        }, 90_000)
       }
       void mentionIds.includes(AI_MENTION_ID)
     } catch (e) {

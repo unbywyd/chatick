@@ -44,6 +44,76 @@ describe('пропущенный ответ подбирается после р
   })
 })
 
+describe('ответ подбирается опросом, если сокет молчит', () => {
+  const chat = app('components/chat/ChatPanel.tsx')
+
+  it('пока ждём ответа — лента перечитывается', () => {
+    // Событие в сокет — быстрый путь, но он теряется при переподключении.
+    // Ответ при этом уже в базе: модель отвечает за секунды, а человек ждал
+    // 20 и больше.
+    //
+    // Саботаж: убрать setInterval — тест падает.
+    expect(chat, 'опроса ленты нет').toContain('setInterval(')
+    expect(chat, 'опрос перечитывает не ленту').toContain("queryKey: ['messages', projectId]")
+  })
+
+  it('опрос останавливается, когда ответ пришёл', () => {
+    // Иначе он живёт до конца сессии и дёргает сервер впустую.
+    // Саботаж: убрать вызов aiPollRef в эффекте — тест падает.
+    const at = chat.indexOf('if (lastAi && !lastAi.author)')
+    expect(at, 'эффект гашения индикатора исчез').toBeGreaterThan(-1)
+    expect(chat.slice(at, at + 260), 'опрос не останавливается при получении ответа').toMatch(
+      /aiPollRef.current?.()/,
+    )
+  })
+
+  it('страховка на 90 секунд тоже гасит опрос', () => {
+    // Ответа может не быть вовсе — упал вызов модели. Индикатор гаснет, но
+    // интервал без явной остановки останется висеть.
+    const at = chat.indexOf('90_000')
+    expect(at, 'страховки нет').toBeGreaterThan(-1)
+    expect(chat.slice(at - 220, at), 'страховка не останавливает опрос').toMatch(/stop()/)
+  })
+})
+
+describe('гашение индикатора живёт в ОДНОМ месте', () => {
+  const chat = app('components/chat/ChatPanel.tsx')
+
+  it('обработчик сокета не гасит индикатор сам', () => {
+    // Гонка, пойманная в отладке: индикатор гас от ws-события, эффект следом
+    // выходил по проверке aiThinking и не добирался до остановки опроса.
+    // В консоли это выглядело так: reply arrived via SOCKET, затем poll tick
+    // каждые три секунды и ни одного REPLY SHOWN.
+    //
+    // Саботаж: вернуть setAiThinking(false) в onWsMessage — тест падает.
+    const at = chat.indexOf('const onWsMessage')
+    expect(at, 'обработчик сокета исчез').toBeGreaterThan(-1)
+    const handler = chat.slice(at, chat.indexOf('}, [qc, projectId])', at))
+    // Комментарии не в счёт: слово setAiThinking там объясняет, почему его
+    // убрали. Смотрим на КОД.
+    const code = handler.split('\n').filter((l) => !l.trim().startsWith('*') && !l.trim().startsWith('//')).join(' ')
+    expect(code, 'сокет гасит индикатор в обход эффекта').not.toContain('setAiThinking(false)')
+  })
+
+  it('эффект не выходит раньше остановки опроса', () => {
+    // Саботаж: вернуть ранний выход по aiThinking — тест падает.
+    const at = chat.indexOf('if (lastAi && !lastAi.author)')
+    const before = chat.slice(Math.max(0, at - 300), at)
+    expect(before, 'ранний выход мешает остановить опрос').not.toContain('if (!aiThinking) return')
+  })
+})
+describe('недоставленный ответ виден в логе', () => {
+  it('сервер пишет, если ответ не ушёл ни в одну вкладку', () => {
+    // sendToUser возвращает факт доставки, и раньше его никто не смотрел:
+    // ответ, родившийся за две секунды и никуда не ушедший, выглядел как
+    // медленная модель.
+    //
+    // Саботаж: игнорировать результат sendToUser — тест падает.
+    expect(messages, 'факт доставки не проверяется').toContain("const delivered = sendToUser(projectId, sub, 'message'")
+    expect(messages, 'недоставка не логируется').toContain('answer NOT delivered (no open socket)')
+  })
+})
+
 describe('промпт ассистента кешируется', () => {
   it('метка cache_control стоит на инструментах и системном промпте', () => {
     // 64 инструмента ≈ 4000 токенов описаний плюс промпт — на каждом из 12

@@ -23,7 +23,11 @@ describe('индикаторы гаснут по факту, а не по ws-с�
 
   it('«ИИ думает…» гаснет от появления ответа в ленте', () => {
     // Раньше setAiThinking(false) стоял ТОЛЬКО в onWsMessage.
-    expect(panel).toMatch(/if \(lastAi && !lastAi\.author\) setAiThinking\(false\)/)
+    // Проверяем ПРАВИЛО, а не форму: рядом с гашением теперь ещё и
+    // остановка опроса ленты, и дословный шаблон ломался на каждой правке.
+    const at = panel.indexOf('if (lastAi && !lastAi.author)')
+    expect(at, 'индикатор не смотрит на последний ответ в ленте').toBeGreaterThan(-1)
+    expect(panel.slice(at, at + 300), 'индикатор не гаснет').toContain('setAiThinking(false)')
   })
 
   it('ответ ищется по последнему сообщению, а не по их количеству', () => {
@@ -38,6 +42,9 @@ describe('индикаторы гаснут по факту, а не по ws-с�
   it('страховочный таймер остался', () => {
     // Ответа может не быть вовсе — тогда гасит он, иначе ввод заблокирован
     // навсегда. Это последний рубеж, а не основной способ.
-    expect(panel).toMatch(/setTimeout\(\(\) => setAiThinking\(false\), 90_000\)/)
+    // Страховка на месте: ответа может не быть вовсе (упал вызов модели).
+    const t = panel.indexOf('90_000')
+    expect(t, 'страховочный таймер исчез').toBeGreaterThan(-1)
+    expect(panel.slice(t - 260, t), 'страховка не гасит индикатор').toContain('setAiThinking(false)')
   })
 })
