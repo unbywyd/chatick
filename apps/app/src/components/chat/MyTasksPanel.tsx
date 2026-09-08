@@ -38,6 +38,7 @@ type MyTask = {
  *
  * Пусто читаем как «по проектам» — это умолчание.
  */
+const SORT_KEY = 'chatick_mytasks_sort'
 const GROUP_KEY = 'chatick_my_tasks_grouped'
 
 /** Просрочка в днях, если срок прошёл. */
@@ -75,8 +76,37 @@ export function MyTasksPanel({ onOpen }: { onOpen?: () => void }) {
    *
    * Выбор держим в браузере: это привычка человека, а не свойство проекта.
    */
+  /**
+   * Чем сортировать сквозной список.
+   *
+   * urgency — как отдал сервер: сначала просроченное и срочное. Отвечает на
+   * «что горит».
+   * oldest — от старых к новым. Отвечает на другой вопрос, которого раньше
+   * задать было нельзя: «что у меня висит дольше всего». Забытая задача не
+   * обязана быть срочной — по срочности она как раз тонет внизу.
+   * newest — от новых к старым: «что мне накидали только что».
+   */
+  const [sort, setSort] = useState<'urgency' | 'oldest' | 'newest'>(
+    () => (localStorage.getItem(SORT_KEY) as 'urgency' | 'oldest' | 'newest') || 'urgency',
+  )
   const [grouped, setGrouped] = useState(() => localStorage.getItem(GROUP_KEY) !== '0')
   const [closed, setClosed] = useState<Set<string>>(new Set())
+
+  /**
+   * Сквозной список в выбранном порядке.
+   *
+   * urgency оставляем как пришло: сервер уже отсортировал по срочности, и
+   * пересортировать его на клиенте значило бы повторить правило второй раз —
+   * разойдутся при первой же правке.
+   *
+   * Даты сравниваем числами: строки ISO сравнимы лексикографически только
+   * пока часовой пояс один, а сервер отдаёт их с зоной.
+   */
+  const flat = useMemo(() => {
+    if (grouped || sort === 'urgency') return items
+    const dir = sort === 'oldest' ? 1 : -1
+    return [...items].sort((a, b) => dir * (+new Date(a.createdAt) - +new Date(b.createdAt)))
+  }, [items, grouped, sort])
 
   const groups = useMemo(() => {
     if (!grouped) return []
@@ -201,7 +231,7 @@ export function MyTasksPanel({ onOpen }: { onOpen?: () => void }) {
       <div className="flex shrink-0 items-center gap-1 rounded-lg bg-secondary/60 p-1 m-2 mb-1">
         {([
           { key: true, icon: LayoutList, label: 'myTasks.byProject' },
-          { key: false, icon: ListOrdered, label: 'myTasks.byUrgency' },
+          { key: false, icon: ListOrdered, label: 'myTasks.allTasks' },
         ] as const).map(({ key, icon: Icon, label }) => (
           <button
             key={String(key)}
@@ -222,6 +252,36 @@ export function MyTasksPanel({ onOpen }: { onOpen?: () => void }) {
           </button>
         ))}
       </div>
+
+      {/* Порядок — только для сквозного списка: в группировке по проектам
+          порядок задаёт сам проект, и второй переключатель там сбивал бы.
+
+          Строкой ссылок, а не вторым сегментом: это уточнение к уже
+          выбранному режиму, и повторять тяжёлую плашку значит уравнять его
+          в весе с выбором самого режима. */}
+      {!grouped && (
+        <div className="flex shrink-0 items-center gap-2 px-3 pb-1 text-[11px]">
+          <span className="text-muted-foreground">{t('myTasks.sortBy')}</span>
+          {(['urgency', 'oldest', 'newest'] as const).map((k) => (
+            <button
+              key={k}
+              type="button"
+              onClick={() => {
+                setSort(k)
+                localStorage.setItem(SORT_KEY, k)
+              }}
+              className={cn(
+                'cursor-pointer transition-colors',
+                sort === k
+                  ? 'font-medium text-foreground underline underline-offset-2'
+                  : 'text-muted-foreground hover:text-foreground',
+              )}
+            >
+              {t(`myTasks.sort.${k}`)}
+            </button>
+          ))}
+        </div>
+      )}
 
       <div className="min-h-0 flex-1 overflow-y-auto px-2 pb-2">
       {grouped ? (
@@ -269,7 +329,7 @@ export function MyTasksPanel({ onOpen }: { onOpen?: () => void }) {
           })}
         </div>
       ) : (
-        <ul className="space-y-1">{items.map((task) => row(task, true))}</ul>
+        <ul className="space-y-1">{flat.map((task) => row(task, true))}</ul>
       )}
       </div>
     </div>

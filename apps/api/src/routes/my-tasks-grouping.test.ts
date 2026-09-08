@@ -53,7 +53,7 @@ describe('раскладка списка', () => {
      */
     expect(panel).toMatch(/const row = \(task: MyTask, withProject: boolean\)/)
     expect(panel, 'строки в секциях снова с именем проекта').toMatch(/g\.tasks\.map\(\(task\) => row\(task, false\)\)/)
-    expect(panel, 'сквозной список потерял имя проекта').toMatch(/items\.map\(\(task\) => row\(task, true\)\)/)
+    expect(panel, 'сквозной список потерял имя проекта').toContain('flat.map((task) => row(task, true))')
   })
 })
 
@@ -150,9 +150,9 @@ describe('порядок задач', () => {
 
   it('сквозной список идёт как отдал сервер', () => {
     // Сервер сортирует: сначала просроченные, потом от старых к новым.
-    // Пересортировав здесь, мы потеряли бы срочность.
-    const flat = panel.match(/<ul className="space-y-1">\{items\.map[\s\S]{0,120}/)?.[0] ?? ''
-    expect(flat, 'сквозной список не найден').not.toBe('')
-    expect(flat, 'сквозной список пересортирован на клиенте').not.toMatch(/\.sort\(/)
+    // Это ПОРЯДОК ПО УМОЛЧАНИЮ, и пересортировать его на клиенте нельзя —
+    // правило разошлось бы с серверным. Другие порядки человек выбирает
+    // сам, и тогда сортировка законна: см. my-tasks-sort.test.ts.
+    expect(panel, 'срочность пересортирована на клиенте').toContain("sort === 'urgency') return items")
   })
 })

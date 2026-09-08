@@ -2013,7 +2013,14 @@
     "overdue_many": "{{count}} д. просрочки",
     "overdue_other": "{{count}} д. просрочки",
     "byProject": "По проектам",
-    "byUrgency": "По срочности"
+    "byUrgency": "По срочности",
+    "allTasks": "Все задачи",
+    "sortBy": "Порядок:",
+    "sort": {
+      "urgency": "по срочности",
+      "oldest": "сначала старые",
+      "newest": "сначала новые"
+    }
   },
   "knowledge": {
     "searchPlaceholder": "Спросите своими словами — поиск понимает смысл",

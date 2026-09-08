@@ -1990,7 +1990,14 @@
     "overdue_one": "איחור {{count}} ימים",
     "overdue_other": "איחור {{count}} ימים",
     "byProject": "לפי פרויקט",
-    "byUrgency": "לפי דחיפות"
+    "byUrgency": "לפי דחיפות",
+    "allTasks": "כל המשימות",
+    "sortBy": "סדר:",
+    "sort": {
+      "urgency": "לפי דחיפות",
+      "oldest": "ישנות קודם",
+      "newest": "חדשות קודם"
+    }
   },
   "knowledge": {
     "searchPlaceholder": "שאלו במילים שלכם — החיפוש מבין משמעות",

@@ -1981,7 +1981,14 @@
     "overdue_one": "{{count}}d overdue",
     "overdue_other": "{{count}}d overdue",
     "byProject": "By project",
-    "byUrgency": "By urgency"
+    "byUrgency": "By urgency",
+    "allTasks": "All tasks",
+    "sortBy": "Order:",
+    "sort": {
+      "urgency": "by urgency",
+      "oldest": "oldest first",
+      "newest": "newest first"
+    }
   },
   "knowledge": {
     "searchPlaceholder": "Ask in your own words — search understands meaning",
