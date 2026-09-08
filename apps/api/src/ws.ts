@@ -95,11 +95,23 @@ export function tasksChanged(projectId: string, who: (string | null | undefined)
   }
 }
 
-export function sendToUserAnywhere(userId: string, event: string, payload: unknown) {
+/**
+ * Событие человеку во все его вкладки, в каком бы проекте они ни были.
+ *
+ * Возвращает число вкладок, куда ушло. Ноль — человек нигде не смотрит, и
+ * тому, кто строит ответ по факту доставки, надо об этом знать: молча
+ * потерянное событие неотличимо от медленного сервера.
+ */
+export function sendToUserAnywhere(userId: string, event: string, payload: unknown): number {
   const msg = JSON.stringify({ event, payload })
+  let sent = 0
   for (const c of byUser.get(userId) ?? []) {
-    if (c.ws.readyState === WebSocket.OPEN) c.ws.send(msg)
+    if (c.ws.readyState === WebSocket.OPEN) {
+      c.ws.send(msg)
+      sent++
+    }
   }
+  return sent
 }
 
 // --- Блокировка редактирования задачи (эфемерная, в памяти) ---

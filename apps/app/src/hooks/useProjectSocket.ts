@@ -117,7 +117,7 @@ export function useProjectSocket(projectId: string | undefined, events: SocketEv
           if (event === 'presence') setOnline(payload as PresenceUser[])
           if (event === 'message') {
             const m = payload as ChatMessage & { mode?: string; author?: unknown }
-            if (m.mode === 'ai') aiDebug('ws MESSAGE ai', { fromAi: !m.author, id: m.id })
+            aiDebug('ws MESSAGE', { mode: m.mode, fromAi: !m.author, id: m.id, status: (m as { status?: string }).status })
             eventsRef.current.onMessage(payload as ChatMessage)
           }
           if (event === 'checking') eventsRef.current.onChecking?.(payload as { userId: string; name: string })

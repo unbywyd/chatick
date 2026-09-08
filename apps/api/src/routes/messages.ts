@@ -6,7 +6,7 @@ import { companyOf, projectPath } from '../lib/links.js'
 import { db } from '../db/client.js'
 import { chatSummaries, credentials, documents, files, messages, notes, projectMembers, sandboxMessages, tasks, users } from '../db/schema.js'
 import { requireProject, type ProjectEnv } from '../auth.js'
-import { broadcast, sendToUser } from '../ws.js'
+import { broadcast, sendToUser, sendToUserAnywhere } from '../ws.js'
 import { evaluateMessage, sandboxReply, aiChatReply, type ProposedTask } from '../lib/dispatcher.js'
 import { imagesForMessage } from '../lib/vision.js'
 import { maybeCompress, memoryTools } from '../lib/memory.js'
@@ -387,10 +387,23 @@ messagesRoute.post(
         // одной открытой вкладки. Ответ, родившийся за две секунды и никуда
         // не ушедший, с виду неотличим от медленной модели — а чинить это
         // надо в разных местах.
-        const delivered = sendToUser(projectId, sub, 'message', serialize(aiRow!))
-        if (!delivered) {
-          console.log(`[ai-chat] answer NOT delivered (no open socket) project=${projectId} user=${sub}`)
-        }
+        /**
+         * Шлём ЧЕЛОВЕКУ, а не в комнату проекта.
+         *
+         * sendToUser ищет вкладку среди тех, кто сидит в ЭТОМ проекте. Пока
+         * ассистент думал, человек успевал перейти в другой проект — вкладка
+         * покидала комнату, ответ терялся, а «ИИ думает» висело до
+         * 90-секундной страховки. Поймано на живом логе: вопрос задан в
+         * MarketWise, ответ родился за 1.6 секунды и упал в
+         * «answer NOT delivered (no open socket)», потому что вкладка уже
+         * была в AnyApp.
+         *
+         * sendToUserAnywhere доставляет во все вкладки человека независимо от
+         * открытого проекта. Диалог с ассистентом приватный и адресован ему —
+         * привязка к комнате тут ничего не защищала, только теряла ответы.
+         */
+        const delivered = sendToUserAnywhere(sub, 'message', serialize(aiRow!))
+        console.log(`[ai-chat] delivered to ${delivered} tab(s) project=${projectId} user=${sub} msg=${aiRow!.id}`)
       })()
       return c.json({ ...message, redirectedToAi }, 201)
     }

@@ -109,8 +109,14 @@ describe('недоставленный ответ виден в логе', () =>
     // медленная модель.
     //
     // Саботаж: игнорировать результат sendToUser — тест падает.
-    expect(messages, 'факт доставки не проверяется').toContain("const delivered = sendToUser(projectId, sub, 'message'")
-    expect(messages, 'недоставка не логируется').toContain('answer NOT delivered (no open socket)')
+    // Человеку, а не в комнату проекта: пока ассистент думает, человек
+    // успевает перейти в другой проект, вкладка покидает комнату — и ответ
+    // теряется. Поймано на живом логе: ответ родился за 1.6 секунды и упал
+    // в NOT delivered, потому что вкладка была уже в соседнем проекте.
+    //
+    // Саботаж: вернуть sendToUser(projectId, ...) — тест падает.
+    expect(messages, 'ответ шлётся в комнату проекта, а не человеку').toContain("sendToUserAnywhere(sub, 'message'")
+    expect(messages, 'число вкладок не логируется').toContain('delivered to')
   })
 })
 
