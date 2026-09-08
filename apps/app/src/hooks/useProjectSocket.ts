@@ -70,8 +70,22 @@ export function useProjectSocket(projectId: string | undefined, events: SocketEv
       ws = new WebSocket(wsUrl)
       wsRef.current = ws
       ws.onopen = () => {
+        const reconnected = attempt > 0
         attempt = 0
         setConnected(true)
+        /**
+         * После обрыва — перечитать ленту.
+         *
+         * Ответ ассистента приходит ТОЛЬКО событием в сокет; HTTP-ответ на
+         * отправку возвращается сразу, до модели. Если за эти секунды сокет
+         * пересоединялся (сон ноутбука, смена сети, перезапуск сервера),
+         * событие ушло в закрытое соединение и потерялось: ответ лежит в базе,
+         * а на экране «ИИ думает» до 90-секундной страховки. Так и выглядели
+         * «минуты ожидания» при модели, отвечающей за четыре секунды.
+         *
+         * При первом соединении не дёргаем: лента и так грузится.
+         */
+        if (reconnected) qc.invalidateQueries({ queryKey: ['messages', projectId] })
       }
       ws.onmessage = (e) => {
         try {

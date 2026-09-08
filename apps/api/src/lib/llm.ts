@@ -338,11 +338,48 @@ export async function completeWithTools(
         ...(opts.history ?? []).map((h) => ({ role: h.role, content: h.text })),
         { role: 'user', content: userContent },
       ]
+      /**
+       * Кешируем то, что не меняется между кругами: инструкции и описания
+       * инструментов.
+       *
+       * У ассистента 64 инструмента — около 4000 токенов описаний, плюс
+       * системный промпт. Без кеша модель перечитывает их ЗАНОВО на каждом
+       * круге, а кругов до двенадцати: полсотни тысяч токенов на один ответ
+       * человеку. Отсюда и «ИИ думает» минутами.
+       *
+       * Метка ставится на ПОСЛЕДНИЙ инструмент и на системный промпт: всё,
+       * что до неё, считается общим префиксом. Диалог идёт после и в кеш не
+       * попадает — он у каждого свой и меняется каждым сообщением.
+       *
+       * Кеш живёт пять минут и продлевается при попадании, поэтому внутри
+       * одного разговора он почти всегда тёплый. Промах стоит на 25% дороже
+       * обычного запроса, попадание — вдесятеро дешевле; при двенадцати
+       * кругах это окупается на первом же.
+       */
+      const cachedSystem =
+        typeof opts.system === 'string' && opts.system.length > 2000
+          ? [{ type: 'text', text: opts.system, cache_control: { type: 'ephemeral' } }]
+          : opts.system
+      const cachedTools = tools.length
+        ? tools.map((t, idx) =>
+            idx === tools.length - 1 ? { ...(t as object), cache_control: { type: 'ephemeral' } } : t,
+          )
+        : tools
+
       for (let i = 0; i < maxIter; i++) {
         const res = await fetch(`${p.baseUrl}/messages`, {
           method: 'POST',
           headers: { 'x-api-key': cfg.apiKey, 'anthropic-version': '2023-06-01', 'content-type': 'application/json' },
-          body: JSON.stringify({ model: cfg.model, max_tokens: opts.maxTokens ?? 1500, system: opts.system, messages: msgs, tools }),
+          // Провайдер, отвечающий бесконечно, не должен держать человека перед
+          // спиннером навсегда: минуты на круг уже за гранью, две — точно сбой.
+          signal: AbortSignal.timeout(120_000),
+          body: JSON.stringify({
+            model: cfg.model,
+            max_tokens: opts.maxTokens ?? 1500,
+            system: cachedSystem,
+            messages: msgs,
+            tools: cachedTools,
+          }),
         })
         if (!res.ok) {
           console.error('[llm] tools failed:', res.status, await res.text().catch(() => ''))
@@ -356,6 +393,8 @@ export async function completeWithTools(
         accumulate(acc, data.usage)
         if (data.stop_reason !== 'tool_use') {
           flushUsage(cfg, acc)
+          // Круги и токены — чтобы «где лупится» отвечалось из лога, а не из базы.
+          console.log(`[llm] tools done: rounds=${i + 1} in=${acc.tokensIn} out=${acc.tokensOut} model=${cfg.model}`)
           return data.content.find((b) => b.type === 'text')?.text ?? null
         }
         msgs.push({ role: 'assistant', content: data.content })

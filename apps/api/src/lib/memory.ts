@@ -229,7 +229,11 @@ export function memoryTools(projectId: string, actorUserId: string): { tools: To
     {
       name: 'list_tasks',
       description:
-        'List project tasks (number, title, status, priority, assignee, due date). The filters are how you answer ' +
+        'List tasks (number, title, status, priority, assignee, due date). Current project by default; ' +
+        'allProjects=true covers EVERY project this person is in — that is what "my overdue tasks", "what is on me", ' +
+        '"what did I forget" mean. Someone asking about their own work rarely means only the project they happen to ' +
+        'have open, and answering "nothing" from one project when three others are on fire is worse than not answering. ' +
+        'The filters are how you answer ' +
         '"what is stuck", "who has nothing to do", "what did we forget": assignee="me" or a name narrows to one ' +
         'person, blocked=true finds work that cannot move until someone else finishes, stale=14 finds what nobody ' +
         'has touched in that many days, noEstimate=true finds what cannot be planned, overdue=true finds missed ' +
@@ -243,6 +247,10 @@ export function memoryTools(projectId: string, actorUserId: string): { tools: To
           stale: { type: 'number', description: 'Untouched for at least this many days' },
           noEstimate: { type: 'boolean', description: 'Only tasks with no time estimate' },
           overdue: { type: 'boolean', description: 'Only tasks past their due date' },
+          allProjects: {
+            type: 'boolean',
+            description: 'Search every project this person belongs to, not just the current one',
+          },
         },
       },
     },
@@ -1338,7 +1346,24 @@ export function memoryTools(projectId: string, actorUserId: string): { tools: To
        * Правила совпадают с /x/tasks намеренно: разойдись они, и человек
        * получил бы разные ответы от бота в чате и от ассистента в редакторе.
        */
-      const conds = [eq(tasks.projectId, projectId), sql`${tasks.deletedAt} is null`]
+      /**
+       * allProjects — все проекты человека, а не только открытый.
+       *
+       * «Мои просроченные» спросили из проекта, где их нет, — ассистент
+       * ответил «список чист», а два просроченных лежали в двух других. Для
+       * человека это ложь: он спрашивал о СЕБЕ, а не о вкладке.
+       *
+       * Только те проекты, где спрашивающий состоит: чужие доски ему не видны
+       * и через ассистента видны быть не должны.
+       */
+      const scope =
+        args.allProjects === true
+          ? inArray(
+              tasks.projectId,
+              db.select({ id: projectMembers.projectId }).from(projectMembers).where(eq(projectMembers.userId, actorUserId)),
+            )
+          : eq(tasks.projectId, projectId)
+      const conds = [scope, sql`${tasks.deletedAt} is null`]
       const status = typeof args.status === 'string' ? args.status : null
       if (status) conds.push(eq(tasks.status, status as 'todo'))
 
@@ -1385,7 +1410,14 @@ export function memoryTools(projectId: string, actorUserId: string): { tools: To
             .select({ id: users.id })
             .from(projectMembers)
             .innerJoin(users, eq(users.id, projectMembers.userId))
-            .where(and(eq(projectMembers.projectId, projectId), ilike(users.name, `%${who}%`)))
+            .where(
+              and(
+                args.allProjects === true
+                  ? inArray(projectMembers.projectId, db.select({ id: projectMembers.projectId }).from(projectMembers).where(eq(projectMembers.userId, actorUserId)))
+                  : eq(projectMembers.projectId, projectId),
+                ilike(users.name, `%${who}%`),
+              ),
+            )
             .limit(2)
           // Двое подходят под «Даниэль» — переспрашиваем, а не гадаем: не тот
           // человек в ответе хуже, чем уточняющий вопрос.

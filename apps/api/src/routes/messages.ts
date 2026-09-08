@@ -356,6 +356,10 @@ messagesRoute.post(
         // до тех пор, пока не придёт сообщение. Пустой ответ или упавший вызов
         // оставляли индикатор висеть навсегда, и написать заново было нельзя.
         let answer: string | null = null
+        // Замер каждого ответа — в лог. «Отвечает минутами» нельзя было ни
+        // подтвердить, ни опровергнуть: ни времени, ни числа кругов нигде не
+        // писалось, и искать пришлось по временным меткам сообщений в базе.
+        const startedAt = Date.now()
         try {
           // Картинки — только если человек попросил посмотреть. Правило
           // исполняется здесь, а не в промпте: изображение, уехавшее в
@@ -365,6 +369,7 @@ messagesRoute.post(
         } catch (e) {
           console.error('[ai-chat] reply failed:', e)
         }
+        console.log(`[ai-chat] ${Date.now() - startedAt}ms project=${projectId} user=${sub} answer=${answer ? answer.length + ' chars' : 'FAILED'}`)
         const [aiRow] = await db
           .insert(messages)
           .values({
