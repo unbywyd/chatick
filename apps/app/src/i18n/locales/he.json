@@ -1262,7 +1262,11 @@
     "reactFew_zero": "אין תגובות למשימות של אחרים",
     "reactFew_one": "מעט נתונים: תגובה {{count}}",
     "reactFew_two": "מעט נתונים: {{count}} תגובות",
-    "reactFew_other": "מעט נתונים: {{count}} תגובות"
+    "reactFew_other": "מעט נתונים: {{count}} תגובות",
+    "flagEmpty": "אין משימות בקטגוריה זו",
+    "flagDays_one": "יום {{count}}",
+    "flagDays_two": "יומיים",
+    "flagDays_other": "{{count}} ימים"
   },
   "time": {
     "title": "זמן",

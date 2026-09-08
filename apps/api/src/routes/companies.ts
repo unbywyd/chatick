@@ -624,6 +624,102 @@ companiesRoute.get('/:companyId/time-config', async (c) => {
  * человека с четырнадцатью неоценёнными число выросло бы вдвое, и по нему
  * стали бы планировать.
  */
+/**
+ * Задачи за флагом человека — то, о чём говорит плашка под его карточкой.
+ *
+ * «7 задач ждут дольше двух недель» называет число, но не показывает, какие.
+ * Разбирать их человек всё равно пойдёт — вопрос лишь в том, обойдёт ли он
+ * ради этого семь проектов вручную.
+ *
+ * Правило ОДНО с тем, что считает флаг в /people: разойдись они, и плашка
+ * скажет «7», а список покажет пять. Поэтому условия здесь дословно те же,
+ * что в блоке rhythm.
+ */
+companiesRoute.get('/:companyId/people/:userId/flag/:flag', async (c) => {
+  const { sub } = c.get('session')
+  const companyId = c.req.param('companyId')
+  const userId = c.req.param('userId')
+  const flag = c.req.param('flag')
+  const membership = await db.query.companyMembers.findFirst({
+    where: and(eq(companyMembers.companyId, companyId), eq(companyMembers.userId, sub)),
+  })
+  if (!membership) return c.json({ error: 'Forbidden' }, 403)
+
+  // Пока раскрываем два флага: остальные говорят о распределении очереди, а
+  // не о конкретных задачах, и списка за ними нет.
+  if (flag !== 'stalled' && flag !== 'blocking') {
+    return c.json({ error: 'This flag has no task list' }, 400)
+  }
+
+  const rows = await db.execute(sql`
+    select t.id, t.number, t.title, t.status,
+           p.id as "projectId", p.name as "projectName",
+           floor(extract(epoch from (now() - t.created_at))/86400)::int as "days",
+           ${flag === 'blocking' ? sql`(
+             select count(*)::int from task_blockers b
+               join tasks dt on dt.id = b.blocked_task_id
+              where b.blocker_task_id = t.id and dt.status <> 'done' and dt.deleted_at is null
+                and dt.assignee_id is distinct from t.assignee_id
+           )` : sql`0`} as "holds"
+      from tasks t
+      join projects p on p.id = t.project_id and p.company_id = ${companyId}
+     where t.deleted_at is null and t.assignee_id = ${userId}
+       and t.status not in ('done','verified')
+       ${
+         flag === 'stalled'
+           ? // Дословно как over_2w: заведена больше двух недель назад и
+             // исполнитель НИ РАЗУ её не тронул. Не «делает медленно», а
+             // не начинал — в этом вся суть флага.
+             sql`and t.created_at < now() - interval '14 days'
+                 and least(
+                   (select min(c2.created_at) from task_comments c2
+                     where c2.task_id = t.id and c2.author_id = t.assignee_id
+                       and c2.created_at >= t.created_at and c2.deleted_at is null),
+                   (select min(l.created_at) from activity_log l
+                     where l.entity_id = t.id and l.actor_id = t.assignee_id
+                       and l.created_at >= t.created_at and l.action in ('status','update'))
+                 ) is null`
+           : // Держит ЧУЖУЮ работу: свои задачи, ждущие своих же, никого не
+             // задерживают, кроме самого человека.
+             sql`and exists (
+                   select 1 from task_blockers b
+                     join tasks dt on dt.id = b.blocked_task_id
+                    where b.blocker_task_id = t.id and dt.status <> 'done'
+                      and dt.deleted_at is null
+                      and dt.assignee_id is distinct from t.assignee_id
+                 )`
+       }
+     order by t.created_at asc
+     limit 100
+  `)
+
+  type Row = {
+    id: string; number: string; title: string; status: string
+    projectId: string; projectName: string; days: number; holds: number
+  }
+  const list = (rows as unknown as { rows?: Row[] }).rows ?? (rows as unknown as Row[])
+
+  const myMemberships = await db
+    .select({ projectId: projectMembers.projectId })
+    .from(projectMembers)
+    .where(eq(projectMembers.userId, sub))
+  const mine = new Set(myMemberships.map((m) => m.projectId))
+
+  return c.json({
+    items: (list ?? []).map((r) => ({
+      id: r.id,
+      number: r.number,
+      title: r.title,
+      status: r.status,
+      days: Number(r.days),
+      holds: Number(r.holds),
+      project: { id: r.projectId, name: r.projectName },
+      // Куда человек не войдёт — говорим сразу, а не отказом по клику.
+      isMember: mine.has(r.projectId),
+    })),
+  })
+})
+
 companiesRoute.get('/:companyId/workload', async (c) => {
   const { sub } = c.get('session')
   const companyId = c.req.param('companyId')

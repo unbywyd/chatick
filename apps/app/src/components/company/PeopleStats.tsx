@@ -1,11 +1,12 @@
 import { useState } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import { useTranslation } from 'react-i18next'
-import { Download, Users } from 'lucide-react'
+import { ChevronRight, Download, FolderKanban, Lock, Users, X } from 'lucide-react'
 import { api } from '@/lib/api'
 import { cn } from '@/lib/utils'
 import { Avatar } from '@/components/ui/avatar'
 import { Input } from '@/components/ui/input'
+import { Button } from '@/components/ui/button'
 
 /**
  * Статистика по людям компании.
@@ -225,7 +226,135 @@ function Metric({
  * Ярлыки объясняют цифру словами: «6 чужих задач стоят 27 дней» — факт, с
  * которым можно прийти к человеку, в отличие от «работает медленно».
  */
-function RhythmBlock({ r }: { r: Rhythm }) {
+type FlagTask = {
+  id: string
+  number: string
+  title: string
+  status: string
+  /** Сколько дней задача существует и остаётся нетронутой. */
+  days: number
+  /** Сколько ЧУЖИХ задач ждут эту. Только для флага blocking. */
+  holds: number
+  project: { id: string; name: string }
+  /** Я в команде этого проекта — иначе задачу не открыть. */
+  isMember: boolean
+}
+
+/**
+ * Задачи за флагом — списком.
+ *
+ * Плашка называет число («7 ждут дольше двух недель»), но разбирать их всё
+ * равно идти, а по семи проектам это семь заходов. Здесь они одним списком,
+ * с возрастом и проектом.
+ *
+ * Группировки по проектам нет намеренно: задач единицы, а порядок «самая
+ * давняя сверху» отвечает на «с чего начать» лучше, чем алфавит проектов.
+ */
+function FlagTasksDialog({
+  companyId,
+  userId,
+  personName,
+  flag,
+  label,
+  onClose,
+}: {
+  companyId: string
+  userId: string
+  personName: string
+  flag: string
+  label: string
+  onClose: () => void
+}) {
+  const { t } = useTranslation()
+  const q = useQuery({
+    queryKey: ['people-flag', companyId, userId, flag],
+    queryFn: () =>
+      api<{ items: FlagTask[] }>(`/api/v1/companies/${companyId}/people/${userId}/flag/${flag}`),
+  })
+  const items = q.data?.items ?? []
+
+  return (
+    <div
+      className="fixed inset-0 z-50 flex items-start justify-center overflow-y-auto bg-black/40 p-4 pt-16"
+      onClick={onClose}
+    >
+      <div className="w-full max-w-xl rounded-xl border bg-card shadow-lg" onClick={(e) => e.stopPropagation()}>
+        <div className="flex items-start justify-between gap-3 border-b p-4">
+          <div className="min-w-0">
+            <h2 className="truncate text-base font-bold">{personName}</h2>
+            {/* Текст плашки целиком: человек пришёл по ней и должен видеть,
+                на что именно смотрит. */}
+            <p className="mt-0.5 text-xs text-muted-foreground">{label}</p>
+          </div>
+          <Button variant="ghost" size="icon" onClick={onClose}>
+            <X className="size-4" />
+          </Button>
+        </div>
+
+        <div className="max-h-[70vh] overflow-y-auto p-4">
+          {q.isLoading ? (
+            <p className="py-8 text-center text-sm text-muted-foreground">{t('common.loading')}</p>
+          ) : !items.length ? (
+            <p className="py-8 text-center text-sm text-muted-foreground">{t('people.flagEmpty')}</p>
+          ) : (
+            <ul className="space-y-1.5">
+              {items.map((x) => (
+                <li key={x.id}>
+                  <div
+                    className={cn(
+                      'flex min-w-0 items-center gap-2 rounded-md border px-2.5 py-1.5 text-sm',
+                      !x.isMember && 'opacity-60',
+                    )}
+                  >
+                    <span className="shrink-0 font-mono text-xs text-muted-foreground">{x.number}</span>
+                    <span className="min-w-0 flex-1 truncate" title={x.title}>{x.title}</span>
+                    {/* Возраст жирным: он и есть мера беды, и по нему список
+                        отсортирован. Оранжевым от двух недель — как в полосе
+                        блокеров, чтобы пороги не разъезжались по интерфейсу. */}
+                    <span
+                      className={cn(
+                        'shrink-0 text-xs font-semibold tabular-nums',
+                        x.days >= 14 ? 'text-orange-600 dark:text-orange-400' : 'text-foreground',
+                      )}
+                    >
+                      {t('people.flagDays', { count: x.days })}
+                    </span>
+                  </div>
+                  <div className="mt-0.5 flex flex-wrap items-center gap-x-2 gap-y-0.5 ps-1 text-xs text-muted-foreground">
+                    <span className="flex min-w-0 shrink-0 items-center gap-1">
+                      {x.isMember ? <FolderKanban className="size-3" /> : <Lock className="size-3" />}
+                      <span className="truncate">{x.project.name}</span>
+                    </span>
+                    {x.holds > 0 && (
+                      <>
+                        <span aria-hidden>·</span>
+                        <span>{t('blockers.stripHolding', { count: x.holds })}</span>
+                      </>
+                    )}
+                  </div>
+                </li>
+              ))}
+            </ul>
+          )}
+        </div>
+      </div>
+    </div>
+  )
+}
+
+function RhythmBlock({
+  r,
+  companyId,
+  userId,
+  personName,
+}: {
+  r: Rhythm
+  companyId: string
+  userId: string
+  personName: string
+}) {
+  // Какой флаг раскрыт списком. null — модалка закрыта.
+  const [flagOpen, setFlagOpen] = useState<string | null>(null)
   const { t } = useTranslation()
   const react = reactValue(r.reactMedianHours)
 
@@ -311,19 +440,42 @@ function RhythmBlock({ r }: { r: Rhythm }) {
         />
       </div>
 
-      {r.flags.map((f) => (
-        <p
-          key={f}
-          className={cn(
-            'mt-2 rounded-md px-2 py-1.5 text-[11px] leading-snug',
-            loud.has(f)
-              ? 'bg-red-500/10 text-red-700 dark:text-red-300'
-              : 'bg-muted text-muted-foreground',
-          )}
-        >
-          {flagText[f]}
-        </p>
-      ))}
+      {r.flags.map((f) => {
+        /**
+         * За «stalled» и «blocking» стоят конкретные задачи — их и открываем.
+         *
+         * Остальные флаги говорят о РАСПРЕДЕЛЕНИИ очереди («очередь растёт»,
+         * «размазан по проектам»), и списка за ними нет: показывать по клику
+         * все сорок задач человека значит обещать ответ и не дать его.
+         */
+        const openable = f === 'stalled' || f === 'blocking'
+        const cls = cn(
+          'mt-2 flex w-full items-start gap-1.5 rounded-md px-2 py-1.5 text-start text-[11px] leading-snug',
+          loud.has(f) ? 'bg-red-500/10 text-red-700 dark:text-red-300' : 'bg-muted text-muted-foreground',
+          openable && 'transition-colors hover:brightness-95 dark:hover:brightness-125',
+        )
+        if (!openable) return <p key={f} className={cls}>{flagText[f]}</p>
+        return (
+          <button key={f} type="button" className={cls} onClick={() => setFlagOpen(f)}>
+            <span className="min-w-0 flex-1">{flagText[f]}</span>
+            {/* Стрелка — единственный признак, что плашка кликабельна:
+                курсор на телефоне не наведёшь. rtl:rotate-180 — в иврите
+                «дальше» это влево. */}
+            <ChevronRight className="mt-0.5 size-3.5 shrink-0 rtl:rotate-180" />
+          </button>
+        )
+      })}
+
+      {flagOpen && (
+        <FlagTasksDialog
+          companyId={companyId}
+          userId={userId}
+          personName={personName}
+          flag={flagOpen}
+          label={flagText[flagOpen] ?? ''}
+          onClose={() => setFlagOpen(null)}
+        />
+      )}
     </>
   )
 }
@@ -474,7 +626,9 @@ export function PeopleStats({
             {/* Ритм показываем только тем, у кого есть о чём говорить: у
                 человека без задач и без действий четыре прочерка отвечают
                 «ничего не известно», а выглядят как «ничего не делал». */}
-            {p.rhythm && (p.rhythm.openNow > 0 || p.rhythm.actions > 0) && <RhythmBlock r={p.rhythm} />}
+            {p.rhythm && (p.rhythm.openNow > 0 || p.rhythm.actions > 0) && (
+              <RhythmBlock r={p.rhythm} companyId={companyId} userId={p.id} personName={p.name} />
+            )}
           </div>
         ))}
       </div>

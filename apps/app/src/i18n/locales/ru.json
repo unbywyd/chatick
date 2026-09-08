@@ -1270,7 +1270,11 @@
     "reactFew_zero": "нет откликов на чужие задачи",
     "reactFew_one": "мало данных: {{count}} отклик",
     "reactFew_few": "мало данных: {{count}} отклика",
-    "reactFew_many": "мало данных: {{count}} откликов"
+    "reactFew_many": "мало данных: {{count}} откликов",
+    "flagEmpty": "Задач по этому признаку нет",
+    "flagDays_one": "{{count}} день",
+    "flagDays_few": "{{count}} дня",
+    "flagDays_many": "{{count}} дней"
   },
   "time": {
     "title": "Время",

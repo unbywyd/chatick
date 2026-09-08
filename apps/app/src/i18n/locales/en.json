@@ -1260,7 +1260,10 @@
     },
     "reactFew_zero": "no replies to others tasks",
     "reactFew_one": "too little data: {{count}} reply",
-    "reactFew_other": "too little data: {{count}} replies"
+    "reactFew_other": "too little data: {{count}} replies",
+    "flagEmpty": "No tasks match this flag",
+    "flagDays_one": "{{count}} day",
+    "flagDays_other": "{{count}} days"
   },
   "time": {
     "title": "Time",
