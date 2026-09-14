@@ -421,13 +421,35 @@ function looksLikeHtml(s: string): boolean {
 }
 
 /** @deprecated см. serializeToMarkdown — конвертация больше не нужна. */
+/**
+ * Разметка упоминания → живой узел редактора.
+ *
+ * Формат @[Имя](id) хранится в базе одинаково для всех текстов. Tiptap
+ * понимает его только как <span data-type="mention">, иначе показывает
+ * буквально — «@[Hadeel Massarwa](-3j8w…)» прямо в тексте.
+ *
+ * Вынесено отдельно, потому что нужно ОБОИМ путям: и markdown, и готовому
+ * HTML. Раньше замена жила только в markdown-ветке, а всё, что пишет ИИ,
+ * приходит уже размеченным HTML и выходило из функции строкой выше — до
+ * замены дело не доходило.
+ */
+function restoreMentions(html: string): string {
+  return html.replace(
+    /@\[([^\]]+)\]\(([^)]+)\)/g,
+    '<span data-type="mention" data-id="$2" data-label="$1">@$1</span>',
+  )
+}
+
 function markdownToHtml(md: string): string {
   if (!md) return ''
 
   // Часть текстов уже хранится размеченным HTML (заметки, документы, всё, что
   // пишет ИИ через мост). Экранировать их значит показать теги буквально —
   // Tiptap разбирает HTML сам, поэтому такое содержимое отдаём как есть.
-  if (looksLikeHtml(md)) return md
+  // Готовый HTML отдаём как есть — но упоминания в нём всё равно хранятся
+  // разметкой @[Имя](id), и их надо превратить в узлы. Иначе комментарий от
+  // ИИ показывает сырую разметку, а в редакторе она видна буквально.
+  if (looksLikeHtml(md)) return restoreMentions(md)
 
   // экранируем, затем базовые инлайн-замены; блоки — по строкам как параграфы
   const esc = (s: string) => s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
@@ -469,7 +491,7 @@ function markdownToHtml(md: string): string {
       const img = block.match(/^!\[([^\]]*)\]\(([^)]+)\)$/)
       if (img) return `<img src="${esc(img[2]!)}" alt="${esc(img[1] ?? '')}">`
       let b = esc(block)
-      b = b.replace(/@\[([^\]]+)\]\(([^)]+)\)/g, '<span data-type="mention" data-id="$2" data-label="$1">@$1</span>')
+      b = restoreMentions(b)
       // картинки — строго до ссылок, иначе ссылочная замена съест ![...](...)
       b = b.replace(/!\[([^\]]*)\]\(([^)]+)\)/g, '<img src="$2" alt="$1">')
       b = b.replace(/\[([^\]]+)\]\(([^)]+)\)/g, '<a href="$2">$1</a>')
