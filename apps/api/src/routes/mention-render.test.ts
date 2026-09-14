@@ -20,6 +20,30 @@ const editor = readFileSync(
   'utf8',
 ).replace(/\r\n/g, '\n')
 
+describe('просмотр комментария подсвечивает упоминание', () => {
+  const comments = readFileSync(
+    join(import.meta.dirname, '../../../app/src/components/tabs/tasks/TaskComments.tsx'),
+    'utf8',
+  )
+
+  it('тело уходит в редактор нетронутым', () => {
+    // renderMentions заранее вырезал id и оставлял голый текст «@Имя» —
+    // поэтому в просмотре имя не подсвечивалось, а по «редактировать»
+    // подсветка появлялась: туда тело уходило как есть.
+    //
+    // Саботаж: вернуть renderMentions(c.body) — тест падает.
+    expect(comments, 'просмотр ломает разметку до отрисовки').toContain(
+      '<RichEditor value={c.body} onChange={() => {}} mentions={[]} preset="minimal" readOnly />',
+    )
+  })
+
+  it('для цитаты простой текст остаётся уместным', () => {
+    // Цитата над ответом — одна строка без разметки, живому узлу там не место.
+    // Функцию не удаляем, только перестаём звать её в просмотре.
+    expect(comments, 'цитата потеряла упрощение').toContain('plainText(renderMentions(parent.body))')
+  })
+})
+
 describe('упоминания превращаются в узлы', () => {
   it('замена вынесена в одну функцию', () => {
     // Правило, выписанное дважды, однажды разойдётся: в markdown упоминание
