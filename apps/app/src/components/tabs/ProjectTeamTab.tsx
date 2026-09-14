@@ -384,7 +384,9 @@ function ProfileFields({
 
   return (
     <div className="space-y-2 rounded-md bg-muted/30 p-2.5">
-      <div className="grid gap-2 sm:grid-cols-2">
+      {/* [&>*]:min-w-0 — колонки грида не сжимаются ниже содержимого, и
+          длинное имя или почта распирают сетку вбок. */}
+      <div className="grid gap-2 sm:grid-cols-2 [&>*]:min-w-0">
         <label className="block">
           <span className="mb-0.5 block text-xs text-muted-foreground">{t('projTeam.jobTitle')}</span>
           <input

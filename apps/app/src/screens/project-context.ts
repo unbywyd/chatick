@@ -20,6 +20,13 @@ export type ProjectDetails = {
   id: string
   companyId: string
   name: string
+  /**
+   * Цвет и логотип проекта: ими помечена шапка, чтобы «где я» читалось
+   * боковым зрением. Сервер отдаёт всю строку таблицы, так что поля есть —
+   * в типе их просто не было.
+   */
+  color: string | null
+  logoUrl: string | null
   about: string
   chatRules: string
   aiConfig: Record<string, unknown>

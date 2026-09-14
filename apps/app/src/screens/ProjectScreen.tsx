@@ -11,6 +11,7 @@ import { useChatCollapsed } from '@/hooks/useChatCollapsed'
 import { Tour, type TourStep } from '@/components/Tour'
 import { TourWelcome } from '@/components/TourWelcome'
 import { useProjectTour } from '@/hooks/useProjectTour'
+import { ProjectBadge } from '@/components/ui/project-badge'
 import { useSidebarCollapsed } from '@/hooks/useSidebarCollapsed'
 import { useMediaQuery } from '@/hooks/useMediaQuery'
 import { ChatPanel, type ChatPanelHandle } from '@/components/chat/ChatPanel'
@@ -352,6 +353,53 @@ export function ProjectLayout() {
 
       {/* КОЛОНКА 3 — рабочая зона. Ниже xl показывается вместо чата. */}
       <div className={cn('min-w-0 flex-1 flex-col', isChatTab ? 'hidden xl:flex' : 'flex')}>
+        {/**
+          * Какой проект открыт — в шапке, над вкладками.
+          *
+          * Единственным указателем был сайдбар: активный проект подсвечен там,
+          * и чтобы его увидеть, приходилось отводить взгляд от работы. В
+          * свёрнутом сайдбаре остаются одни иконки, и выделенную среди них
+          * попросту не разглядеть.
+          *
+          * Длинное имя обрезаем: заголовок не должен отжимать вкладки, ради
+          * которых сюда и смотрят. Полное имя остаётся в title.
+          */}
+        <div className="relative flex min-w-0 items-center gap-2 border-b px-3 py-2">
+          {/**
+            * Цвет проекта тонкой полосой под шапкой.
+            *
+            * Имя отвечает на «где я», но читать его каждый раз — работа.
+            * Цвет узнаётся боковым зрением: переключился не туда — заметил,
+            * не вчитываясь.
+            *
+            * Полоса, а не заливка фона: у проектов насыщенные цвета (#e11d48,
+            * #f97316), и даже слабый оттенок под всем экраном спорит с
+            * содержимым и мешает читать. Тонкая линия у края даёт тот же
+            * сигнал и ничего не перекрашивает.
+            */}
+          {project.data?.color && (
+            <span
+              aria-hidden
+              className="pointer-events-none absolute inset-x-0 bottom-0 h-0.5"
+              style={{ background: project.data.color }}
+            />
+          )}
+          {project.data && (
+            <>
+              <ProjectBadge
+                name={project.data.name}
+                color={project.data.color}
+                logoUrl={project.data.logoUrl}
+                size={22}
+                className="shrink-0"
+              />
+              <h1 className="min-w-0 truncate text-sm font-semibold" title={project.data.name}>
+                {project.data.name}
+              </h1>
+            </>
+          )}
+        </div>
+
         <nav data-tour="tabs" className="flex items-center gap-1 border-b px-2 py-2">
           {/* назад в чат — когда чат не помещается рядом */}
           {!isChatTab && (

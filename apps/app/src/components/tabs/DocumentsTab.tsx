@@ -138,8 +138,17 @@ export function DocumentsTab({ projectId, meId }: { projectId: string; meId?: st
       <ul className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
         {list.isLoading && <p className="text-sm text-muted-foreground">…</p>}
         {(list.data ?? []).map((d) => (
+          /**
+           * min-w-0 обязателен: колонка грида не сжимается ниже своего
+           * содержимого, и одно длинное слово в заголовке распирает ВСЮ
+           * сетку вбок. Замер на 390px: без него страница уезжает до 577px
+           * и внизу появляется горизонтальная прокрутка, с ним — 366px.
+           *
+           * truncate у самого заголовка от этого не спасает: он обрезает
+           * текст только когда родителю уже задана ширина.
+           */
           // group — чтобы «три точки» проявлялись при наведении на карточку
-          <li key={d.id} className="group relative">
+          <li key={d.id} className="group relative min-w-0">
             <button
               // Перетаскивание в чат: документ — такой же предмет разговора,
               // как задача или файл, и ссылку на него хочется бросить сразу.

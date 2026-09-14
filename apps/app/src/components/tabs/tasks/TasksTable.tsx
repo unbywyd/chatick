@@ -530,7 +530,11 @@ function GroupTable({
 
   return (
     <section ref={group ? sortable.setNodeRef : undefined} style={style} className={cn(sortable.isDragging && 'invisible')}>
-      <div className="mb-1.5 flex items-center gap-2">
+      {/* flex-wrap: на телефоне прогресс уезжает на вторую строку вместо
+          того, чтобы выдавливать имя спринта за край. min-w-0 — чтобы имя
+          вообще могло сжиматься: без него флекс-элемент держит ширину по
+          содержимому и распирает строку. */}
+      <div className="mb-1.5 flex min-w-0 flex-wrap items-center gap-x-2 gap-y-1">
         {group && canEdit && (
           <button className="cursor-grab text-muted-foreground hover:text-foreground" {...sortable.attributes} {...sortable.listeners}>
             <GripVertical className="size-4" />
@@ -562,7 +566,7 @@ function GroupTable({
                 // При наведении подсвечиваем стрелку, а не текст: лайм на
                 // светлом фоне почти не читается, и заголовок пропадал ровно в
                 // тот момент, когда на него смотрят.
-                className="group/title inline-flex items-center gap-1.5 text-sm font-semibold"
+                className="group/title inline-flex min-w-0 items-center gap-1.5 text-sm font-semibold"
               >
                 <ChevronDown
                   className={cn(
@@ -570,8 +574,10 @@ function GroupTable({
                     collapsed && '-rotate-90 rtl:rotate-90',
                   )}
                 />
-                {group.name}
-                <span className="text-xs font-normal tabular-nums text-muted-foreground">({tasks.length})</span>
+                {/* Длинное имя обрезаем: счётчик и кнопки правее нужнее
+                    хвоста названия, а целиком оно есть в title. */}
+                <span className="min-w-0 truncate" title={group.name}>{group.name}</span>
+                <span className="shrink-0 text-xs font-normal tabular-nums text-muted-foreground">({tasks.length})</span>
               </button>
             )}
             {editing && <span className="text-xs tabular-nums text-muted-foreground">({tasks.length})</span>}
@@ -609,7 +615,7 @@ function GroupTable({
         {/* Прогресс — у противоположного края шапки: место там свободно, а
             вопрос «сколько осталось» задают, не открывая список. */}
         {tasks.length > 0 && (
-          <span className="ms-auto flex shrink-0 items-center gap-2">
+          <span className="flex w-full shrink-0 items-center gap-2 sm:ms-auto sm:w-auto">
             <span className="h-1.5 w-24 overflow-hidden rounded-full bg-secondary">
               <span
                 className={cn('block h-full transition-all', pct === 100 ? 'bg-brand' : 'bg-brand/70')}

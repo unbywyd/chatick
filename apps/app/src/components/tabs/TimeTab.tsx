@@ -547,11 +547,23 @@ function EntryRow({
   const end = entry.endedAt ? new Date(entry.endedAt) : null
   const offset = end ? dayOffset(start, end) : 0
 
+  /**
+   * На телефоне запись идёт в ДВЕ строки, на sm и выше — в одну, как было.
+   *
+   * В одну строку втиснуто семеро: аватар, описание с проектом, время
+   * начала, его дата, тире, время конца, его дата, итог и меню. На 390px
+   * это не помещается физически — итог справа обрезался, а имя проекта
+   * наезжало на время.
+   *
+   * Делим по смыслу: сверху «что делал», снизу «когда и сколько». Второй
+   * ряд отбит слева на ширину аватара, чтобы читался как продолжение той же
+   * записи, а не как отдельная.
+   */
   return (
-    <li className="group flex items-center gap-3 px-3 py-2">
+    <li className="group flex flex-wrap items-center gap-x-3 gap-y-1 px-3 py-2 sm:flex-nowrap">
       {entry.user && <Avatar name={entry.user.name} src={entry.user.avatarUrl} size={22} />}
 
-      <div className="min-w-0 flex-1">
+      <div className="min-w-0 flex-1 basis-full sm:basis-auto">
         <input
           defaultValue={entry.description}
           onBlur={(e) => {

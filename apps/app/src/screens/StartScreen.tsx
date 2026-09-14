@@ -40,6 +40,7 @@ import { OnboardingWizard } from '@/components/OnboardingWizard'
 import { CompanyTimeTab } from '@/components/company/CompanyTimeTab'
 import { ProjectInbox } from '@/components/ProjectInbox'
 import { MyRecentTime } from '@/components/company/MyRecentTime'
+import { MyRunningTimer } from '@/components/company/MyRunningTimer'
 import { CompanyTimeSettings } from '@/components/company/CompanyTimeSettings'
 import { CompanyNotifySettings } from '@/components/company/CompanyNotifySettings'
 import { OverviewTab } from '@/components/company/OverviewTab'
@@ -545,6 +546,12 @@ function CompanyHome({
         ))}
       </nav>
 
+      {/* Идущий таймер — над всем остальным и на любой вкладке.
+          Забытый таймер капает часы независимо от того, что человек сейчас
+          смотрит, и остановка должна быть в одно касание, а не «зайди в
+          проект». Компонент сам ничего не рисует, когда таймера нет. */}
+      <MyRunningTimer />
+
       {tab === 'overview' ? (
         <>
         {/* Что меня касается — первым на «Обзоре», а не над табами: над ними
@@ -995,7 +1002,9 @@ function ProjectsTab({
         {filtered.map((p) => {
           const unread = p.stats?.unread ?? 0
           return (
-            <li key={p.id}>
+            // min-w-0: без него длинное имя проекта распирает колонку грида,
+            // и весь список уезжает вбок вместе со страницей.
+            <li key={p.id} className="min-w-0">
               <div
                 className={cn(
                   'flex h-full flex-col gap-3 rounded-xl border bg-card p-4 transition-colors',

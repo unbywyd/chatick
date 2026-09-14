@@ -92,8 +92,12 @@ export function ProjectSummary({ projectId, canEdit }: { projectId: string; canE
     <div className="mt-3 flex flex-wrap items-center gap-x-4 gap-y-2 text-xs">
       {/* Часы: план, остаток, факт. Показываем, только если кто-то оценивал
           задачи или включал таймер — иначе это строка из нулей. */}
+      {/* flex-wrap ВНУТРИ блока часов, а не только снаружи: план, остаток,
+          факт и отклонение были сцеплены в один неразрывный кусок. На 360px
+          он занимал 317px и выталкивал остальное — полоса разваливалась на
+          три ряда. Теперь числа переносятся между собой. */}
       {(planned > 0 || spent > 0) && (
-        <span className="flex items-center gap-1.5 text-muted-foreground">
+        <span className="flex flex-wrap items-center gap-x-1.5 gap-y-1 text-muted-foreground">
           <Clock className="size-3.5 shrink-0" />
           {planned > 0 && (
             <>
@@ -140,7 +144,9 @@ export function ProjectSummary({ projectId, canEdit }: { projectId: string; canE
       )}
 
       {/* Срок и меню — прижаты к концу строки */}
-      <span className="ms-auto flex items-center gap-1.5">
+      {/* На телефоне срок занимает свою строку целиком: ms-auto там ничего
+          не прижимает — прижимать не к чему, всё и так перенеслось. */}
+      <span className="flex w-full items-center gap-1.5 sm:ms-auto sm:w-auto">
         {s.deadline ? (
           <Popover open={picking} onOpenChange={canEdit ? setPicking : undefined}>
             <PopoverTrigger asChild disabled={!canEdit}>

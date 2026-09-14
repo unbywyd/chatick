@@ -697,7 +697,8 @@ function NoteEditor({
         />
       </div>
 
-      <div className="grid gap-3 sm:grid-cols-3">
+      {/* [&>*]:min-w-0 — иначе длинный заголовок заметки распирает сетку. */}
+      <div className="grid gap-3 sm:grid-cols-3 [&>*]:min-w-0">
         <div>
           <p className="mb-1 text-xs font-medium">{t('journal.tags')}</p>
           <TagInput value={tags} onChange={setTags} suggestions={tagSuggestions} placeholder="dns, docker" />
