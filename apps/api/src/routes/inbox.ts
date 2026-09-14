@@ -22,11 +22,21 @@ inboxRoute.get(
       limit: z.coerce.number().max(200).default(100),
       /** Компания, чью ленту смотрят. Без неё — всё подряд, как было. */
       companyId: z.string().optional(),
+      /**
+       * Проект, чью полосу показывают.
+       *
+       * Отбор ОБЯЗАН идти здесь, а не на клиенте: клиент брал сотню самых
+       * свежих и отфильтровывал из неё нужный проект. У человека с двумя
+       * сотнями непрочитанных старые уведомления в сотню не попадали — и
+       * полоса в проекте пропадала целиком, хотя бейдж рядом честно показывал
+       * их число. Проверено: 15 уведомлений занимали позиции 133–173.
+       */
+      projectId: z.string().optional(),
     }),
   ),
   async (c) => {
   const { sub } = c.get('session')
-  const { onlyUnread, limit, companyId } = c.req.valid('query')
+  const { onlyUnread, limit, companyId, projectId } = c.req.valid('query')
 
   const conds = [eq(notifications.userId, sub)]
   if (onlyUnread === '1') conds.push(isNull(notifications.readAt))
@@ -34,6 +44,7 @@ inboxRoute.get(
   // StartPlan висели события «Личных проектов». Своё и чужое различить было
   // нельзя — проект в подписи есть, а какой он компании, не сказано.
   if (companyId) conds.push(eq(notifications.companyId, companyId))
+  if (projectId) conds.push(eq(notifications.projectId, projectId))
 
   const rows = await db
     .select({ n: notifications, project: projects, actor: users })
@@ -58,6 +69,9 @@ inboxRoute.get(
         // Счётчик считает то же, что показывает список: иначе «5» в бейдже
         // откроет три уведомления, и человек будет искать пропавшие два.
         companyId ? eq(notifications.companyId, companyId) : undefined,
+        // Тот же отбор, что и в списке: иначе бейдж снова разойдётся с тем,
+        // что человек видит.
+        projectId ? eq(notifications.projectId, projectId) : undefined,
       ),
     )
     .groupBy(notifications.projectId)

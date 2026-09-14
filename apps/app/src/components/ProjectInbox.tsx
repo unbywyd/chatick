@@ -64,10 +64,23 @@ export function ProjectInbox({
     // события ВСЕХ компаний человека: на главной StartPlan висели
     // уведомления «Личных проектов», а отличить своё от чужого было нельзя —
     // проект в подписи есть, чья он компания, не сказано.
-    queryKey: ['inbox', companyId ?? 'all'],
+    queryKey: ['inbox', companyId ?? 'all', projectId ?? 'company'],
     queryFn: () =>
       api<Inbox>(
-        `/api/v1/inbox?onlyUnread=1&limit=100${companyId ? `&companyId=${encodeURIComponent(companyId)}` : ''}`,
+        `/api/v1/inbox?onlyUnread=1&limit=100` +
+          (companyId ? `&companyId=${encodeURIComponent(companyId)}` : '') +
+          /**
+           * Проект просим у СЕРВЕРА, а не отбираем из полученного.
+           *
+           * Раньше брали сотню самых свежих и фильтровали её здесь. У человека
+           * с двумя сотнями непрочитанных старые уведомления в сотню не
+           * попадали, массив после фильтра оказывался пустым — и полоса
+           * исчезала целиком, хотя бейдж рядом показывал их число.
+           *
+           * Живой случай: 15 уведомлений проекта занимали в общем списке
+           * позиции 133–173 при лимите 100.
+           */
+          (projectId ? `&projectId=${encodeURIComponent(projectId)}` : ''),
       ),
     refetchInterval: 60_000,
   })
@@ -84,9 +97,9 @@ export function ProjectInbox({
     },
   })
 
-  // Внутри проекта — только он: человек открыл его, чужие дела здесь шум.
-  // На уровне компании — всё, ради того и заходят: «что меня касается».
-  const items = (inbox.data?.items ?? []).filter((n) => (projectId ? n.projectId === projectId : true) && !n.readAt)
+  // Отбор по проекту сделал сервер (см. запрос выше). Здесь остаётся только
+  // отсечь прочитанное: его могли погасить в другой вкладке, пока ответ шёл.
+  const items = (inbox.data?.items ?? []).filter((n) => !n.readAt)
 
   /**
    * Прочитанным уведомление делает только человек.

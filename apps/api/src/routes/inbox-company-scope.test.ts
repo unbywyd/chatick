@@ -46,7 +46,12 @@ describe('лента компании показывает только её с�
   it('клиент передаёт компанию и держит её в ключе', () => {
     // Без компании в ключе переключение компаний покажет старые данные из
     // кэша — и это выглядит тем же багом.
-    expect(inbox).toMatch(/queryKey: \['inbox', companyId \?\? 'all'\]/)
+    // Ключ проверяем по СОДЕРЖАНИЮ, а не дословно: рядом с компанией там
+    // теперь и проект (см. inbox-project-scope.test.ts), и жёсткий шаблон
+    // падал на здоровом коде.
+    const at = inbox.indexOf("queryKey: ['inbox'")
+    expect(at, 'ключа запроса нет').toBeGreaterThan(-1)
+    expect(inbox.slice(at, at + 90), 'компания не в ключе кеша').toContain("companyId ?? 'all'")
     expect(inbox).toMatch(/companyId=\$\{encodeURIComponent\(companyId\)\}/)
   })
 })
