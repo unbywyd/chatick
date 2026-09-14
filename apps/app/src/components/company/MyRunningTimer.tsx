@@ -1,10 +1,16 @@
 import { useEffect, useState } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { useTranslation } from 'react-i18next'
-import { Square } from 'lucide-react'
+import { Play, Square } from 'lucide-react'
 import { api } from '@/lib/api'
 import { toast } from 'sonner'
 import { ProjectBadge } from '@/components/ui/project-badge'
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from '@/components/ui/dropdown-menu'
 
 /**
  * Идущий таймер — вверху стартового экрана компании.
@@ -72,7 +78,80 @@ export function MyRunningTimer() {
     onError: (e: unknown) => toast.error(e instanceof Error ? e.message : String(e)),
   })
 
-  if (!items.length) return null
+  /**
+   * Куда запускать. Берём проекты из последних записей: человек почти всегда
+   * продолжает то, чем занимался, а полный список из трёх десятков проектов
+   * превращает одно нажатие в поиск.
+   */
+  const recent = useQuery({
+    queryKey: ['my-time-recent'],
+    queryFn: () => api<{ projects: { id: string; name: string }[] }>('/api/v1/my/time/recent?limit=10'),
+    // Список нужен, только когда таймера нет: иначе кнопки запуска и не видно.
+    enabled: !running.data?.items.length,
+  })
+
+  const start = useMutation({
+    mutationFn: (projectId: string) =>
+      api('/api/v1/my/time/start', { method: 'POST', body: JSON.stringify({ projectId, description: '' }) }),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['my-time-running'] })
+      qc.invalidateQueries({ queryKey: ['my-time-recent'] })
+      qc.invalidateQueries({ queryKey: ['company-time'] })
+    },
+    // Сервер отвечает 409, когда таймер уже идёт: показываем его текст, он
+    // называет проект, в котором надо сначала остановить.
+    onError: (e: unknown) => toast.error(e instanceof Error ? e.message : String(e)),
+  })
+
+  const projects = recent.data?.projects ?? []
+
+  /**
+   * Таймера нет — предлагаем запустить.
+   *
+   * Останавливать с главной уже умели, а запускать приходилось идти в проект:
+   * несимметрично. Первый проект — кнопкой, остальные под стрелкой: почти
+   * всегда продолжают последнее, и ради этого случая не должно быть выбора.
+   */
+  if (!items.length) {
+    if (!projects.length) return null
+    const first = projects[0]!
+    return (
+      <section className="mb-4 flex min-w-0 flex-wrap items-center gap-2">
+        <button
+          type="button"
+          onClick={() => start.mutate(first.id)}
+          disabled={start.isPending}
+          className="flex min-w-0 items-center gap-2 rounded-lg border px-3 py-1.5 text-sm transition-colors hover:border-brand/60 hover:bg-accent disabled:opacity-50"
+        >
+          <Play className="size-3.5 shrink-0 fill-current text-brand-ink" />
+          <span className="text-muted-foreground">{t('time.start')}</span>
+          <span className="min-w-0 truncate font-medium" title={first.name}>{first.name}</span>
+        </button>
+
+        {projects.length > 1 && (
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+              <button
+                type="button"
+                title={t('time.start')}
+                className="rounded-lg border px-2 py-1.5 text-sm text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
+              >
+                …
+              </button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="start">
+              {projects.slice(1).map((pr) => (
+                <DropdownMenuItem key={pr.id} onSelect={() => start.mutate(pr.id)}>
+                  <Play className="size-3 fill-current" />
+                  <span className="truncate">{pr.name}</span>
+                </DropdownMenuItem>
+              ))}
+            </DropdownMenuContent>
+          </DropdownMenu>
+        )}
+      </section>
+    )
+  }
 
   return (
     <section className="mb-4 space-y-2">

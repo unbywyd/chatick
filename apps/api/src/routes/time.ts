@@ -656,7 +656,30 @@ timeRoute.post(
   async (c) => {
     const { projectId: tokenProject, sub } = c.get('auth')
     const body = c.req.valid('json')
+    return startTimer(c, sub, tokenProject, body)
+  },
+)
 
+/**
+ * Запуск таймера — одним телом для обеих ручек.
+ *
+ * Их две: проектная (с project-токеном) и сессионная — для главной, где
+ * проектного токена нет вовсе. Правила при этом ОДНИ: членство в проекте,
+ * лимит параллельных таймеров, проверка задачи, оба уведомления.
+ *
+ * Вынесено в функцию, а не скопировано: лимит таймеров и проверка членства —
+ * это правила, и выписанные дважды они однажды разойдутся. Тогда с главной
+ * можно будет то, чего нельзя из проекта.
+ */
+async function startTimer(
+  // Контекст нужен ровно ради c.json — описываем именно это, а не весь Hono:
+  // точный generic здесь тянет за собой типы маршрута и ничего не добавляет.
+  c: { json: (body: unknown, status?: number) => Response },
+  sub: string,
+  tokenProject: string | null,
+  body: { taskId?: string | null; description: string; startedAt?: string; projectId?: string },
+) {
+  {
     // членство обязательно: иначе можно завести часы в чужом проекте
     let projectId = tokenProject
     if (body.projectId && body.projectId !== tokenProject) {
@@ -664,6 +687,8 @@ timeRoute.post(
       if (!membership) return c.json({ error: 'You are not a member of that project' }, 403)
       projectId = body.projectId
     }
+    // На сессионной ручке токенного проекта нет: проект обязан прийти в теле.
+    if (!projectId) return c.json({ error: 'projectId is required' }, 400)
 
     const cfg = await timeConfigForProject(projectId)
 
@@ -713,6 +738,30 @@ timeRoute.post(
     sendToUserAnywhere(sub, 'time', { action: 'start', id: row!.id })
     void maybeTranslate(projectId, row!.id, row!.description).catch(() => {})
     return c.json((await hydrate([row!]))[0], 201)
+  }
+}
+
+/**
+ * Старт с главной: проектного токена там нет, проект приходит в теле.
+ *
+ * Раньше запустить таймер можно было, только зайдя в проект — а останавливать
+ * его уже умели с главной. Несимметрично: забыл включить, увидел на главной,
+ * и всё равно идёшь внутрь.
+ */
+timeMineRoute.post(
+  '/start',
+  zValidator(
+    'json',
+    z.object({
+      taskId: z.string().nullable().optional(),
+      description: z.string().max(500).default(''),
+      startedAt: z.string().optional(),
+      projectId: z.string(),
+    }),
+  ),
+  async (c) => {
+    const { sub } = c.get('session')
+    return startTimer(c, sub, null, c.req.valid('json'))
   },
 )
 
