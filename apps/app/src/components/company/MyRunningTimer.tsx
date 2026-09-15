@@ -116,7 +116,7 @@ export function MyRunningTimer() {
     if (!projects.length) return null
     const first = projects[0]!
     return (
-      <section className="mb-4 flex min-w-0 flex-wrap items-center gap-2">
+      <section className="flex min-w-0 flex-wrap items-center gap-2 py-2">
         <button
           type="button"
           onClick={() => start.mutate(first.id)}
@@ -154,7 +154,7 @@ export function MyRunningTimer() {
   }
 
   return (
-    <section className="mb-4 space-y-2">
+    <section className="space-y-2 py-2">
       {items.map((r) => (
         /* flex-wrap и min-w-0: длинное имя проекта не должно выдавливать
            кнопку «стоп» за край — ради неё блок и существует. */

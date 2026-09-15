@@ -13,6 +13,7 @@ import type { Period } from '@/components/ui/period-picker'
 import { DangerZone, DangerAction } from '@/components/company/DangerZone'
 import { DeleteProjectDialog } from '@/components/DeleteProjectDialog'
 import { useConfirm } from '@/components/ui/confirm'
+import { useStickyHeight } from '@/hooks/useStickyHeight'
 import { DropdownMenu, DropdownMenuTrigger, DropdownMenuContent, DropdownMenuItem } from '@/components/ui/dropdown-menu'
 import { ProjectSettingsDialog } from '@/components/ProjectSettingsDialog'
 import {
@@ -512,6 +513,14 @@ function CompanyHome({
   // доступ ко всей компании выдают те, кто ей управляет; бэкап — только админ
   // База знаний — всем, кто в компании: она и заводится ради того, чтобы
   // ответ нашёл тот, кто на вопрос наткнулся, а не только руководство.
+  // Полоса вкладок липкая, и всё, что липнет под ней, должно знать её
+  // высоту: на телефоне вкладки переносятся в два ряда, и зашитое число
+  // оставило бы блок под шапкой либо под ней, либо с дырой.
+  const tabsRef = useStickyHeight("--tabs-h")
+  // Идущий таймер тоже липкий, и фильтры часов встают уже под него: иначе они
+  // делили бы с ним одну полосу и уезжали под таймер, пока он идёт.
+  const timerRef = useStickyHeight("--timer-h")
+
   const tabs = isAdmin
     ? (['overview', 'projects', 'team', 'knowledge', 'time', 'connect', 'settings'] as const)
     : canManage
@@ -519,7 +528,7 @@ function CompanyHome({
       : (['overview', 'projects', 'team', 'knowledge', 'settings'] as const)
 
   return (
-    <div className="space-y-6">
+    <div data-sticky-root className="space-y-6">
       {/* Липкие табы: страница компании длинная (сводка, графики, списки), и
           переключиться, не прокрутив её обратно наверх, было нельзя.
           Фон обязателен — иначе содержимое просвечивает сквозь них при
@@ -529,7 +538,7 @@ function CompanyHome({
           вместе с pt-8 внутри неё появляется что прокручивать — у полосы табов
           вырастал собственный скролл. Узкий экран разруливаем переносом
           (flex-wrap), а не прокруткой: табов немного. */}
-      <nav className="sticky top-0 z-20 -mx-6 -mt-8 flex flex-wrap gap-1 border-b bg-background px-6 pb-0 pt-8">
+      <nav ref={tabsRef as React.RefObject<HTMLElement>} className="sticky top-0 z-20 -mx-6 -mt-8 flex flex-wrap gap-1 border-b bg-background px-6 pb-0 pt-8">
         {tabs.map((key) => (
           <button
             key={key}
@@ -550,7 +559,16 @@ function CompanyHome({
           Забытый таймер капает часы независимо от того, что человек сейчас
           смотрит, и остановка должна быть в одно касание, а не «зайди в
           проект». Компонент сам ничего не рисует, когда таймера нет. */}
-      <MyRunningTimer />
+      {/* Своя липкая полоса под вкладками. Раньше таймер был обычным блоком
+          между двумя липкими панелями — вкладками сверху и фильтрами часов
+          снизу — и обе наезжали на него своим непрозрачным фоном: на вкладке
+          «Часы» от строки было видно только середину.
+          top считается от высоты вкладок: на телефоне они в два ряда.
+          Компонент сам рисует null, когда таймера нет, — обёртка тогда
+          схлопывается в ноль и полосы под вкладками не видно. */}
+      <div ref={timerRef as React.RefObject<HTMLDivElement>} className="sticky z-[15] -mx-6 bg-background px-6 [&:not(:has(section))]:hidden" style={{ top: "var(--tabs-h, 0px)" }}>
+        <MyRunningTimer />
+      </div>
 
       {tab === 'overview' ? (
         <>
