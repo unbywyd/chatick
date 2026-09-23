@@ -1369,7 +1369,13 @@
     "colMinutes": "Минуты",
     "colDays": "Рабочих дней",
     "colAvg": "В среднем за день (ч)",
-    "colTotal": "ИТОГО"
+    "colTotal": "ИТОГО",
+    "groupBy": "Свод по",
+    "byPeople": "Людям",
+    "byProjects": "Проектам",
+    "exportProject": "Выгрузить по этому проекту",
+    "peopleOnProject": "людей: {{count}}",
+    "entriesCount": "записей: {{count}}"
   },
   "period": {
     "today": "Сегодня",

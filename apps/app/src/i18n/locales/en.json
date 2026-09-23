@@ -1358,7 +1358,13 @@
     "colMinutes": "Minutes",
     "colDays": "Days worked",
     "colAvg": "Avg per day (h)",
-    "colTotal": "TOTAL"
+    "colTotal": "TOTAL",
+    "groupBy": "Group by",
+    "byPeople": "People",
+    "byProjects": "Projects",
+    "exportProject": "Export this project",
+    "peopleOnProject": "people: {{count}}",
+    "entriesCount": "entries: {{count}}"
   },
   "period": {
     "today": "Today",

@@ -1361,7 +1361,13 @@
     "colMinutes": "דקות",
     "colDays": "ימי עבודה",
     "colAvg": "ממוצע ליום (ש')",
-    "colTotal": "סה\"כ"
+    "colTotal": "סה\"כ",
+    "groupBy": "קיבוץ לפי",
+    "byPeople": "אנשים",
+    "byProjects": "פרויקטים",
+    "exportProject": "ייצוא עבור פרויקט זה",
+    "peopleOnProject": "אנשים: {{count}}",
+    "entriesCount": "רשומות: {{count}}"
   },
   "period": {
     "today": "היום",

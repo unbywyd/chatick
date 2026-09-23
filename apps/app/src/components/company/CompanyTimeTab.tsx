@@ -31,7 +31,19 @@ type Person = {
   daysWorked: number
   avgPerDay: number
 }
-type Report = { people: Person[]; totalMinutes: number }
+type ProjectRow = {
+  id: string
+  name: string
+  color: string | null
+  logoUrl: string | null
+  minutes: number
+  entries: number
+  people: { userId: string; name: string; avatarUrl: string | null; minutes: number }[]
+}
+type Report = { people: Person[]; projects: ProjectRow[]; totalMinutes: number }
+
+/** По кому свод. Хранится в адресе — ссылкой на отчёт делятся. */
+type GroupBy = 'people' | 'projects'
 
 type Member = { user: { id: string; name: string; email: string; avatarUrl: string | null } }
 
@@ -50,6 +62,11 @@ export function CompanyTimeTab({ companyId }: { companyId: string }) {
     to: params.get('to') || resolvePreset('thisMonth').to,
   }
   const userId = params.get('user') ?? ''
+  // Свод по проектам — не отдельный экран, а тот же отчёт, сложенный иначе.
+  // «Сколько часов занял проект» спрашивают снаружи: заказчик, счёт, оценка
+  // следующего этапа. По разбивке на людей на это отвечали, складывая строки
+  // из нескольких карточек руками.
+  const groupBy: GroupBy = params.get('by') === 'projects' ? 'projects' : 'people'
 
   const patchParams = (next: Record<string, string | null>) => {
     const p = new URLSearchParams(params)
@@ -90,6 +107,8 @@ export function CompanyTimeTab({ companyId }: { companyId: string }) {
   // Отбор людей делает выбор в панели: отдельное поле поиска убрано, оно
   // дублировало его и путало.
   const people = report.data?.people ?? []
+  const projectRows = report.data?.projects ?? []
+  const maxProjectMinutes = Math.max(1, ...projectRows.map((pr) => pr.minutes))
 
   /**
    * Выгрузка — настоящий .xlsx, а не CSV.
@@ -197,6 +216,25 @@ export function CompanyTimeTab({ companyId }: { companyId: string }) {
     )
   }
 
+  /**
+   * Выгрузка по одному проекту: ровно тот лист, который отправляют заказчику
+   * в ответ на «сколько ушло часов». Внутри — кто сколько списал: счёт почти
+   * всегда просят обосновать.
+   */
+  const exportProject = (pr: ProjectRow) => {
+    saveXlsx(
+      [t('time.colPerson'), t('time.colHours')],
+      [
+        ...pr.people.map((u) => [u.name, hours(u.minutes)]),
+        [],
+        [t('time.colTotal'), hours(pr.minutes)],
+      ],
+      [30, 12],
+      t('time.colHours'),
+      `hours-${pr.name.replace(/s+/g, '-').toLowerCase()}`,
+    )
+  }
+
   const maxMinutes = Math.max(1, ...people.map((p) => p.minutes))
 
   // Что сейчас применено — строкой под панелью. Фильтр может прийти из
@@ -226,6 +264,27 @@ export function CompanyTimeTab({ companyId }: { companyId: string }) {
           пустая полоса. Без слагаемого таймера панель делила бы с ним одну
           полосу и уезжала под него, пока он идёт. */}
       <div className="sticky z-10 -mx-6 -mt-8 flex flex-wrap items-center gap-2 border-b bg-background px-6 pb-3 pt-8" style={{ top: "calc(var(--tabs-h, 32px) + var(--timer-h, 0px) - 32px)" }}>
+        {/* Переключатель свода. Стоит ПЕРЕД периодом: он отвечает на вопрос
+            «про что отчёт», а период уточняет «за когда». Две кнопки, а не
+            выпадающий список: вариантов ровно два, и оба должны быть видны —
+            иначе про свод по проектам не узнают, как не узнавали до сих пор. */}
+        <div className="flex shrink-0 rounded-lg border p-0.5" role="group" aria-label={t('time.groupBy')}>
+          {(['people', 'projects'] as const).map((key) => (
+            <button
+              key={key}
+              type="button"
+              aria-pressed={groupBy === key}
+              onClick={() => patchParams({ by: key === 'projects' ? 'projects' : null })}
+              className={cn(
+                'rounded-md px-3 py-1 text-sm font-medium transition-colors',
+                groupBy === key ? 'bg-brand text-brand-ink' : 'text-muted-foreground hover:text-foreground',
+              )}
+            >
+              {t(`time.by${key === 'people' ? 'People' : 'Projects'}`)}
+            </button>
+          ))}
+        </div>
+
         <PeriodPicker value={period} onChange={setPeriod} className="w-52" />
         {/* Отдельного поля поиска здесь НЕТ намеренно.
             Их стояло два подряд, и оба отбирали людей: текстовое по имени и
@@ -296,6 +355,54 @@ export function CompanyTimeTab({ companyId }: { companyId: string }) {
         <p className="py-10 text-center text-sm text-muted-foreground">…</p>
       ) : !people.length ? (
         <p className="py-10 text-center text-sm text-muted-foreground">{t('time.noData')}</p>
+      ) : groupBy === 'projects' ? (
+        /* Тот же отчёт, свёрнутый по проектам. Внутри карточки — кто работал:
+           разбивка ровно обратная той, что в своде по людям, и берётся из тех
+           же строк, без второго запроса. */
+        <ul className="space-y-2">
+          {projectRows.map((pr) => (
+            <li key={pr.id} className="rounded-lg border bg-card p-3">
+              <div className="flex items-center gap-3">
+                <ProjectBadge name={pr.name} color={pr.color} logoUrl={pr.logoUrl} size={28} />
+                <span className="min-w-0 flex-1 truncate text-sm font-medium" title={pr.name}>{pr.name}</span>
+                <span className="hidden h-2 w-32 overflow-hidden rounded-full bg-secondary sm:block">
+                  <span className="block h-full rounded-full bg-brand" style={{ width: `${(pr.minutes / maxProjectMinutes) * 100}%` }} />
+                </span>
+                <span className="w-20 shrink-0 text-end font-mono text-base tabular-nums">{formatDuration(pr.minutes)}</span>
+                <button
+                  onClick={() => exportProject(pr)}
+                  title={t('time.exportProject')}
+                  className="shrink-0 rounded p-1.5 text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
+                >
+                  <Download className="size-3.5" />
+                </button>
+              </div>
+
+              <p className="mt-1 text-xs text-muted-foreground">
+                {t('time.peopleOnProject', { count: pr.people.length })} · {t('time.entriesCount', { count: pr.entries })}
+              </p>
+
+              {/* Кто работал над проектом. Строка ведёт на этого человека в
+                  том же отчёте: «кто эти часы списал» — следующий вопрос
+                  после «сколько всего». */}
+              <ul className="mt-2 overflow-hidden rounded-md border text-xs">
+                {pr.people.map((u, i) => (
+                  <li key={u.userId} className={cn(i % 2 === 1 && 'bg-muted/40')}>
+                    <button
+                      onClick={() => patchParams({ user: u.userId, by: null })}
+                      title={u.name}
+                      className="flex w-full items-center gap-2 px-2 py-1.5 text-start transition-colors hover:bg-accent"
+                    >
+                      <Avatar name={u.name} src={u.avatarUrl} size={14} />
+                      <span className="min-w-0 flex-1 truncate">{u.name}</span>
+                      <span className="font-mono tabular-nums text-muted-foreground">{formatDuration(u.minutes)}</span>
+                    </button>
+                  </li>
+                ))}
+              </ul>
+            </li>
+          ))}
+        </ul>
       ) : (
         <ul className="space-y-2">
           {people.map((p) => (

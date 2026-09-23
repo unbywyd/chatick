@@ -151,8 +151,37 @@ timeCompanyRoute.get(
       .filter((u) => u.minutes > 0)
       .sort((a, b) => b.minutes - a.minutes)
 
+    // Тот же rows, свёрнутый по проектам. Второго запроса не делаем: строки
+    // уже сгруппированы по паре «человек × проект», и обе разбивки — это одни
+    // и те же числа, сложенные в разном порядке.
+    //
+    // Зачем нужна: «сколько часов занял проект» — вопрос, который задают
+    // снаружи (заказчику, в счёт), и по разбивке на людей на него отвечали
+    // вручную, складывая строки из нескольких карточек.
+    const byProject = new Map<string, { id: string; name: string; color: string | null; logoUrl: string | null; minutes: number; entries: number; people: { userId: string; name: string; avatarUrl: string | null; minutes: number }[] }>()
+    for (const r of rows) {
+      const entry = byProject.get(r.projectId) ?? {
+        id: r.projectId,
+        name: r.projectName,
+        color: r.projectColor,
+        logoUrl: r.projectLogoUrl,
+        minutes: 0,
+        entries: 0,
+        people: [],
+      }
+      entry.minutes += r.minutes
+      entry.entries += r.entries
+      entry.people.push({ userId: r.userId, name: r.userName, avatarUrl: r.avatarUrl, minutes: r.minutes })
+      byProject.set(r.projectId, entry)
+    }
+
+    const projectList = [...byProject.values()]
+      .map((pr) => ({ ...pr, people: pr.people.sort((a, b) => b.minutes - a.minutes) }))
+      .sort((a, b) => b.minutes - a.minutes)
+
     return c.json({
       people,
+      projects: projectList,
       totalMinutes: people.reduce((sum, u) => sum + u.minutes, 0),
     })
   },
