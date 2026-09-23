@@ -161,7 +161,12 @@ export function OverviewTab({
     queryKey: ['company-overview', companyId, period.from, period.to],
     queryFn: () =>
       api<Overview>(
-        `/api/v1/companies/${companyId}/overview?from=${encodeURIComponent(period.from)}&to=${encodeURIComponent(period.to)}`,
+        // Пустые даты = «за всё время». Помечаем их ключом: без него сервер
+        // не отличит этот выбор от «период не прислали» и молча подставит
+        // текущий месяц — экран показал бы его под подписью «за всё время».
+        !period.from && !period.to
+          ? `/api/v1/companies/${companyId}/overview?period=all`
+          : `/api/v1/companies/${companyId}/overview?from=${encodeURIComponent(period.from)}&to=${encodeURIComponent(period.to)}`,
       ),
     /**
      * При смене периода держим прежние данные на экране.

@@ -59,10 +59,24 @@ export function CompanyTimeTab({ companyId }: { companyId: string }) {
   // По умолчанию — текущий месяц: открывают отчёт, чтобы посмотреть, что
   // происходит сейчас, а не подвести итог позапрошлому. За прошлый месяц
   // заходят раз в месяц и выбирают его руками.
-  const period: Period = {
-    from: params.get('from') || resolvePreset('thisMonth').from,
-    to: params.get('to') || resolvePreset('thisMonth').to,
-  }
+  /**
+   * «За всё время» — это ПУСТЫЕ даты, и в адресе его приходится отмечать явно.
+   *
+   * Иначе выбор не переживал круг «записали в адрес → прочитали обратно»:
+   * пустые from/to удалялись из строки запроса как любое пустое значение, а
+   * при чтении пустота неотличима от «ничего не выбрано» — и подставлялся
+   * текущий месяц. Человек выбирал «всё время», получал сентябрь.
+   *
+   * Отдельный ключ разводит эти два случая: period=all значит «выбрал всё
+   * время», отсутствие ключа — «не выбирал ничего».
+   */
+  const allTime = params.get('period') === 'all'
+  const period: Period = allTime
+    ? { from: '', to: '' }
+    : {
+        from: params.get('from') || resolvePreset('thisMonth').from,
+        to: params.get('to') || resolvePreset('thisMonth').to,
+      }
   const userId = params.get('user') ?? ''
   // Свод по проектам — не отдельный экран, а тот же отчёт, сложенный иначе.
   // «Сколько часов занял проект» спрашивают снаружи: заказчик, счёт, оценка
@@ -79,7 +93,12 @@ export function CompanyTimeTab({ companyId }: { companyId: string }) {
     }
     setParams(p, { replace: true })
   }
-  const setPeriod = (v: Period) => patchParams({ from: v.from, to: v.to })
+  // Пустые даты означают «всё время» — помечаем их ключом, иначе они
+  // выпадут из адреса и прочитаются как «ничего не выбрано».
+  const setPeriod = (v: Period) =>
+    !v.from && !v.to
+      ? patchParams({ period: 'all', from: null, to: null })
+      : patchParams({ period: null, from: v.from, to: v.to })
   const setUserId = (v: string) => patchParams({ user: v || null })
 
   /**
