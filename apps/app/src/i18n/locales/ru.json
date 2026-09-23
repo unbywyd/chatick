@@ -1375,7 +1375,9 @@
     "byProjects": "Проектам",
     "exportProject": "Выгрузить по этому проекту",
     "peopleOnProject": "людей: {{count}}",
-    "entriesCount": "записей: {{count}}"
+    "entriesCount": "записей: {{count}}",
+    "allProjects": "Все проекты",
+    "pickProject": "Выбрать проект"
   },
   "period": {
     "today": "Сегодня",

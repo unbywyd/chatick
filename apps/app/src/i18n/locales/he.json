@@ -1367,7 +1367,9 @@
     "byProjects": "פרויקטים",
     "exportProject": "ייצוא עבור פרויקט זה",
     "peopleOnProject": "אנשים: {{count}}",
-    "entriesCount": "רשומות: {{count}}"
+    "entriesCount": "רשומות: {{count}}",
+    "allProjects": "כל הפרויקטים",
+    "pickProject": "בחירת פרויקט"
   },
   "period": {
     "today": "היום",

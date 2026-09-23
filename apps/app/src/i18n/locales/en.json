@@ -1364,7 +1364,9 @@
     "byProjects": "Projects",
     "exportProject": "Export this project",
     "peopleOnProject": "people: {{count}}",
-    "entriesCount": "entries: {{count}}"
+    "entriesCount": "entries: {{count}}",
+    "allProjects": "All projects",
+    "pickProject": "Pick a project"
   },
   "period": {
     "today": "Today",

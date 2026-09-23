@@ -31,7 +31,18 @@ timeCompanyRoute.use('*', requireSession)
 
 timeCompanyRoute.get(
   '/company/:companyId',
-  zValidator('query', z.object({ from: z.string().optional(), to: z.string().optional(), userId: z.string().optional() })),
+  zValidator(
+    'query',
+    z.object({
+      from: z.string().optional(),
+      to: z.string().optional(),
+      userId: z.string().optional(),
+      // Отбор по проекту. Нужен ровно там же, где отбор по человеку: «сколько
+      // занял этот проект» — вопрос, который задают про ОДИН проект, а не про
+      // все сразу, и листать список из тридцати штук ради него незачем.
+      projectId: z.string().optional(),
+    }),
+  ),
   async (c) => {
     const { sub } = c.get('session')
     const companyId = c.req.param('companyId')
@@ -45,6 +56,7 @@ timeCompanyRoute.get(
 
     const conds = [eq(projects.companyId, companyId), sql`${timeEntries.endedAt} is not null`]
     if (f.userId) conds.push(eq(timeEntries.userId, f.userId))
+    if (f.projectId) conds.push(eq(timeEntries.projectId, f.projectId))
     // берём пересекающиеся записи, а лишнее отрежем — иначе смена через полночь
     // на границе месяца попадёт в отчёт целиком
     if (periodFrom) conds.push(sql`${timeEntries.endedAt} >= ${periodFrom.toISOString()}::timestamptz`)

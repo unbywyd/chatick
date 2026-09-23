@@ -89,3 +89,65 @@ describe('часы компании сводятся по проектам', () 
     }
   })
 })
+
+describe('отбор по проекту и «за всё время»', () => {
+  const picker = readFileSync(
+    join(import.meta.dirname, '../../../app/src/components/ui/period-picker.tsx'),
+    'utf8',
+  ).replace(CRLF, LF)
+
+  it('сервер умеет отбирать по проекту', () => {
+    // Без этого «сколько занял ОДИН проект» приходится искать глазами в
+    // списке из тридцати карточек.
+    //
+    // Саботаж: убрать projectId из схемы — тест падает.
+    expect(time, 'projectId не принимается').toContain('projectId: z.string().optional()')
+    expect(time, 'projectId не применяется').toContain('eq(timeEntries.projectId, f.projectId)')
+  })
+
+  it('«за всё время» доступно из меню', () => {
+    // Оно существовало, но было спрятано из опасения поднять каждую запись
+    // компании. Свод считает СУБД — наружу едет строка на пару «человек ×
+    // проект», а не на запись. Замер на проде: 0.19 мс.
+    //
+    // Саботаж: убрать 'all' из PRESETS — тест падает.
+    // Отсчёт от `= [`, а не от первой `[`: в строке объявления стоит
+    // `PresetKey[]`, и срез по ней давал пустой `[]`.
+    const at = picker.indexOf('= [', picker.indexOf('const PRESETS'))
+    const list = picker.slice(at, picker.indexOf(']', at))
+    expect(list, '«за всё время» спрятано из меню').toContain("'all'")
+  })
+
+  it('пустой период не превращается в Invalid Date', () => {
+    // За всё время дат нет вовсе: new Date('') дало бы «Invalid Date» и в
+    // чипсе фильтра, и в имени выгружаемого файла.
+    expect(tab, 'чипс периода падает на пустых датах').toContain("period.from || period.to")
+    expect(tab, 'имя файла не учитывает пустой период').toContain("period.from || period.to ?")
+  })
+
+  it('список проектов берётся не из отчёта', () => {
+    // Отчёт уже отфильтрован: выбрав проект, человек получил бы список из
+    // одного пункта и не смог бы сменить выбор.
+    //
+    // Саботаж: собрать options из report.data.projects — тест падает.
+    expect(tab, 'проекты для отбора берутся из отчёта').toContain("queryKey: ['company-projects'")
+    expect(tab, 'использована несуществующая ручка').toContain('/api/v1/projects?companyId=')
+  })
+
+  it('выбранный проект виден и снимается', () => {
+    // Фильтр может приехать ссылкой — иначе список выглядит необъяснимо
+    // урезанным.
+    expect(tab, 'проект не попадает в запрос').toContain("p.set('projectId', projectId)")
+    expect(tab, 'проект не учтён в строке фильтров').toContain('Boolean(projectId)')
+  })
+
+  it('смена проекта перезапрашивает отчёт', () => {
+    // useMemo с неполным списком зависимостей вернул бы старую строку
+    // запроса, и отчёт молча остался бы прежним.
+    //
+    // Саботаж: убрать projectId из зависимостей — тест падает.
+    const at = tab.indexOf('const query = useMemo')
+    const tail = tab.slice(at, tab.indexOf('const report', at))
+    expect(tail, 'projectId не в зависимостях useMemo').toContain('[period, userId, projectId]')
+  })
+})

@@ -13,8 +13,10 @@ import { Button } from '@/components/ui/button'
 import { DropdownMenu, DropdownMenuTrigger, DropdownMenuContent, DropdownMenuItem } from '@/components/ui/dropdown-menu'
 import { PeriodPicker, resolvePreset, type Period } from '@/components/ui/period-picker'
 import { PeoplePicker } from '@/components/ui/people-picker'
+import { Combobox } from '@/components/ui/combobox'
 import * as XLSX from 'xlsx'
 import { formatDuration } from '@/lib/time-parse'
+import type { ProjectListItem } from '@/lib/api'
 
 // Часы по всей компании (SPEC §8.32): кто сколько отработал и на каких
 // проектах. Нужно для расчётов с людьми, поэтому строки — «человек × проект»
@@ -67,6 +69,7 @@ export function CompanyTimeTab({ companyId }: { companyId: string }) {
   // следующего этапа. По разбивке на людей на это отвечали, складывая строки
   // из нескольких карточек руками.
   const groupBy: GroupBy = params.get('by') === 'projects' ? 'projects' : 'people'
+  const projectId = params.get('project') ?? ''
 
   const patchParams = (next: Record<string, string | null>) => {
     const p = new URLSearchParams(params)
@@ -78,6 +81,22 @@ export function CompanyTimeTab({ companyId }: { companyId: string }) {
   }
   const setPeriod = (v: Period) => patchParams({ from: v.from, to: v.to })
   const setUserId = (v: string) => patchParams({ user: v || null })
+
+  /**
+   * Проекты для отбора — отдельным запросом.
+   *
+   * Из отчёта их брать нельзя: он уже отфильтрован, и стоит выбрать проект,
+   * как список свернётся до одного пункта — сменить выбор станет нечем.
+   * Ровно так же устроен выбор человека рядом.
+   */
+  const projectOptions = useQuery({
+    queryKey: ['company-projects', companyId],
+    // Та же ручка, что у переключателя проектов и сайдбара: отдаёт массив,
+    // а не { items }. Ошибиться тут легко — соседний /companies/:id/members
+    // устроен именно так, и на этом уже попадались.
+    queryFn: () => api<ProjectListItem[]>(`/api/v1/projects?companyId=${companyId}`),
+    staleTime: 5 * 60_000,
+  })
 
   const members = useQuery({
     queryKey: ['company-members', companyId],
@@ -91,8 +110,9 @@ export function CompanyTimeTab({ companyId }: { companyId: string }) {
     if (period.from) p.set('from', period.from)
     if (period.to) p.set('to', period.to)
     if (userId) p.set('userId', userId)
+    if (projectId) p.set('projectId', projectId)
     return p.toString()
-  }, [period, userId])
+  }, [period, userId, projectId])
 
   const report = useQuery({
     queryKey: ['company-time', companyId, query],
@@ -132,7 +152,9 @@ export function CompanyTimeTab({ companyId }: { companyId: string }) {
     ws['!cols'] = widths.map((wch) => ({ wch }))
     const wb = XLSX.utils.book_new()
     XLSX.utils.book_append_sheet(wb, ws, sheet)
-    XLSX.writeFile(wb, `${name}-${period.from}_${period.to}.xlsx`)
+    // За всё время дат нет вовсе — иначе имя вышло бы «hours-проект-_.xlsx».
+    const span = period.from || period.to ? `-${period.from}_${period.to}` : `-${t('period.all')}`
+    XLSX.writeFile(wb, `${name}${span}.xlsx`)
   }
 
   /** Часы числом, а не строкой: по столбцу должны считаться суммы. */
@@ -243,7 +265,8 @@ export function CompanyTimeTab({ companyId }: { companyId: string }) {
   const selectedPerson = (members.data ?? []).find((m) => m.user.id === userId)?.user
   const defaults = resolvePreset('thisMonth')
   const periodChanged = period.from !== defaults.from || period.to !== defaults.to
-  const activeFilters = Boolean(userId) || periodChanged
+  const selectedProject = (projectOptions.data ?? []).find((pr) => pr.id === projectId)
+  const activeFilters = Boolean(userId) || Boolean(projectId) || periodChanged
 
   const resetAll = () => {
     setParams(new URLSearchParams(), { replace: true })
@@ -306,6 +329,21 @@ export function CompanyTimeTab({ companyId }: { companyId: string }) {
           placeholder={t('time.pickPerson')}
           clearLabel={t('time.everyone')}
         />
+        {/* Отбор по проекту — рядом с отбором по человеку: оба отвечают на
+            «про кого отчёт». С поиском, а не простым списком: проектов у
+            компании десятки, и названия у них длинные и на трёх языках.
+
+            Пустое значение = все проекты, как и у выбора человека. */}
+        <Combobox
+          className="w-52"
+          options={[
+            { value: '', label: t('time.allProjects') },
+            ...(projectOptions.data ?? []).map((pr) => ({ value: pr.id, label: pr.name })),
+          ]}
+          value={projectId}
+          onChange={(v) => patchParams({ project: v || null })}
+          placeholder={t('time.pickProject')}
+        />
         <DropdownMenu>
           <DropdownMenuTrigger asChild>
             <Button variant="outline" size="sm">
@@ -333,7 +371,12 @@ export function CompanyTimeTab({ companyId }: { companyId: string }) {
         <div className="flex flex-wrap items-center gap-2 text-xs">
           {periodChanged && (
             <FilterChip
-              label={`${new Date(period.from).toLocaleDateString(i18n.language)} — ${new Date(period.to).toLocaleDateString(i18n.language)}`}
+              // За всё время дат нет: new Date('') дал бы «Invalid Date».
+              label={
+                period.from || period.to
+                  ? `${new Date(period.from).toLocaleDateString(i18n.language)} — ${new Date(period.to).toLocaleDateString(i18n.language)}`
+                  : t('period.all')
+              }
               onClear={() => setPeriod(resolvePreset('thisMonth'))}
             />
           )}
@@ -342,6 +385,13 @@ export function CompanyTimeTab({ companyId }: { companyId: string }) {
               label={selectedPerson?.name ?? userId}
               avatar={selectedPerson ? { name: selectedPerson.name, src: selectedPerson.avatarUrl } : undefined}
               onClear={() => setUserId('')}
+            />
+          )}
+
+          {projectId && (
+            <FilterChip
+              label={selectedProject?.name ?? projectId}
+              onClear={() => patchParams({ project: null })}
             />
           )}
 
