@@ -325,7 +325,14 @@
     "ageDays": "{{count}}d",
     "createdOn": "Created {{date}}",
     "newTask": "New task",
-    "commentDeleted": "Comment deleted"
+    "commentDeleted": "Comment deleted",
+    "emptyTitle": "No tasks yet",
+    "emptyLead": "Tasks are the unit of work here: the board, time tracking and reports all build on them. There are two ways to add the first one.",
+    "emptyManualTitle": "Add one yourself",
+    "emptyManualHint": "Title, assignee, estimate. Takes half a minute — you can fill in the rest later.",
+    "emptyAiTitle": "Let your AI assistant do it",
+    "emptyAiHint": "Copy this line into Claude Code, ChatGPT or Cursor. The assistant reads the guide, asks you to approve access, and then creates and runs tasks itself.",
+    "emptyAiCopy": "Copy the line for the assistant"
   },
   "files": {
     "search": "Search files…",

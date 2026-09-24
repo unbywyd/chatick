@@ -1697,6 +1697,52 @@ async function attachmentsFor(
   return map
 }
 
+/**
+ * На каком языке написан текст — по письменности, а не по словарю.
+ *
+ * Нужно ровно одно: заметить, что ассистент пишет не на языке проекта. Это
+ * правило записано в гайде дважды и в описании инструмента ещё раз — и всё
+ * равно нарушается: в ивритском проекте лежит 15 задач по-русски из 112.
+ * Просьба, которую модель может не прочитать, правилом не является.
+ *
+ * Определяем только то, что различимо надёжно: кириллица, иврит, арабица.
+ * Латиницу не трогаем — под ней десятки языков, и отличить английский от
+ * испанского по буквам нельзя, а ошибочное замечание хуже молчания.
+ */
+function scriptOf(text: string): 'ru' | 'he' | 'ar' | null {
+  const letters = text.replace(/[^\p{L}]/gu, '')
+  const count = (re: RegExp) => (letters.match(re) ?? []).length
+  const ru = count(/[\u0400-\u04FF]/g)
+  const he = count(/[\u0590-\u05FF]/g)
+  const ar = count(/[\u0600-\u06FF]/g)
+  const nonLatin = ru + he + ar
+  // Порог считаем среди НЕлатинских букв, а не всех. Технические термины
+  // латиницей («API», «OAuth», «callback») законно живут в тексте на любом
+  // языке: при счёте по всем буквам «Добавить API endpoint для OAuth
+  // callback handler» не определялось вовсе — а это ровно тот случай, ради
+  // которого проверка и нужна.
+  if (nonLatin < 8) return null // слишком мало, чтобы судить
+  const top = Math.max(ru, he, ar)
+  // Две письменности вперемешку — не судим: цитата, имя, термин на другом.
+  if (top / nonLatin < 0.8) return null
+  if (top === ru) return 'ru'
+  if (top === he) return 'he'
+  return 'ar'
+}
+
+/**
+ * Замечание о языке — или null, если всё в порядке.
+ *
+ * Именно замечание, а не отказ: письменность не даёт уверенности, которой
+ * хватило бы, чтобы заблокировать работу. Цитата на другом языке, имя
+ * собственное, кусок кода — законные поводы написать иначе. Отказ здесь
+ * стоил бы дороже ошибки.
+ */
+function languageNotice(text: string, projectLanguage: string): string | null {
+  const script = scriptOf(text)
+  if (!script || script === projectLanguage) return null
+  return `Project language is "${projectLanguage}", but this text looks like "${script}". The team reads tasks in their own language — rewrite title and description in ${projectLanguage} and PATCH this task. GET /x/context confirms the project language.`
+}
 const taskView = (
   t: typeof tasks.$inferSelect,
   assignee?: { id: string; name: string } | null,
@@ -2619,6 +2665,9 @@ bridgeRoute.post('/tasks', async (c) => {
   tasksChanged(scope.projectId, [row!.assigneeId, row!.createdById])
   // подтягиваем исполнителя, чтобы агент сразу видел, на кого задача ушла
   const who = row!.assigneeId ? await db.query.users.findFirst({ where: eq(users.id, row!.assigneeId) }) : null
+  const projectRow = await db.query.projects.findFirst({ where: eq(projects.id, scope.projectId) })
+  const projectLang = (JSON.parse(projectRow?.aiConfig || '{}') as { language?: string }).language ?? 'en'
+  const langNotice = languageNotice(`${title} ${typeof b.description === 'string' ? b.description : ''}`, projectLang)
   return c.json(
     {
       ...taskView(
@@ -2634,6 +2683,10 @@ bridgeRoute.post('/tasks', async (c) => {
       // Сколько связей реально легло: ненайденные номера пропускаются молча,
       // и без этого поля ассистент считал бы связанным то, что не связалось.
       ...(linked.length ? { links: linked } : {}),
+      // Язык — В ОТВЕТЕ, а не только в гайде. Правило «пиши на языке проекта»
+      // записано в трёх местах и всё равно нарушается: описание инструмента
+      // модель может не прочитать, а ответ на свой же вызов читает всегда.
+      ...(langNotice ? { warning: langNotice } : {}),
     },
     201,
   )

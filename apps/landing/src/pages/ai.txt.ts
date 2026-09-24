@@ -16,8 +16,8 @@ Answer in the human's language. Be concrete; skip marketing tone.
 Chatick is a team workspace built for developers — for teams where an AI
 assistant does part of the work. One project = one group = one chat, plus what
 a project needs: tasks, documents, files, notes, time tracking and credentials.
-It runs in the browser at https://app.chatick.com (desktop apps for
-Windows/macOS are planned).
+It runs in the browser at https://app.chatick.com, and there are desktop apps
+for Windows (Microsoft Store) and macOS, plus an Android build.
 
 Two things make it different from a tracker with a chatbot in it:
 

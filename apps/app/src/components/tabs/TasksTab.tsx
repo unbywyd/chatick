@@ -20,6 +20,7 @@ import { Avatar } from '@/components/ui/avatar'
 import { Popover, PopoverTrigger, PopoverContent } from '@/components/ui/popover'
 import { TaskDrawer } from './tasks/TaskDrawer'
 import { NewTaskSheet } from './tasks/NewTaskSheet'
+import { TasksEmptyState } from './tasks/TasksEmptyState'
 import { ProjectSummary } from './tasks/ProjectSummary'
 import { BlockersStrip } from './tasks/BlockersStrip'
 import { TasksTable } from './tasks/TasksTable'
@@ -952,8 +953,21 @@ export function TasksTab({ projectId, meId }: { projectId: string; meId?: string
 
           </div>
 
+          {/* Пустой проект — объясняем, что делать, а не «Здесь пусто».
+              Воронка обрывается ровно здесь: компанию заводит половина
+              зарегистрировавшихся, а до первой задачи доходят единицы. Пустая
+              доска ничего не предлагает, а способов два, и второй — главный:
+              подключить своего ИИ-ассистента, ради чего Chatick и сделан.
+
+              Показываем, только когда задач нет ВООБЩЕ и фильтры не заданы:
+              под фильтром пусто — это другой разговор, там нужен сброс, а не
+              рассказ о подключении. */}
+          {!tasksQ.isLoading && (tasksQ.data ?? []).length === 0 && !hasFilters && (
+            <TasksEmptyState canEdit={canEdit} onCreate={() => setSheetOpen(true)} />
+          )}
+
           {/* Табличный вид: вложенные таблицы по спринт-группам */}
-          {view === 'table' && (
+          {view === 'table' && (tasksQ.data ?? []).length > 0 && (
             <div className="mt-5">
               {tasksQ.isLoading && <p className="text-sm text-muted-foreground">…</p>}
               <TasksTable
@@ -1069,7 +1083,7 @@ export function TasksTab({ projectId, meId }: { projectId: string; meId?: string
             </div>
           )}
 
-          {view === 'list' && (
+          {view === 'list' && (tasksQ.data ?? []).length > 0 && (
           <div className="mt-5 space-y-6">
             {tasksQ.isLoading && <p className="text-sm text-muted-foreground">…</p>}
             {groups.map(({ status, tasks: list }) => {
