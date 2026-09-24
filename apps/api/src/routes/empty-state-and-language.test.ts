@@ -103,3 +103,38 @@ describe('язык проекта проверяется в ответе, а н�
     expect(body, 'порог считается не среди нелатинских').toContain('top / nonLatin')
   })
 })
+
+describe('кнопка «создать» на пустой доске ведёт к полю ввода', () => {
+  const sheet = app('components/tabs/tasks/NewTaskSheet.tsx')
+
+  it('лист снизу — только для телефона, и это учтено', () => {
+    // Лист помечен sm:hidden И снаружи, и внутри себя. На широком экране он
+    // открывался НЕВИДИМЫМ: кнопка нажималась, состояние менялось, на экране
+    // не происходило ничего.
+    //
+    // Саботаж: звать setSheetOpen напрямую из плашки — тест падает.
+    expect(sheet, 'лист перестал быть мобильным').toContain('sm:hidden')
+    expect(tab, 'плашка зовёт лист напрямую').not.toContain('onCreate={() => setSheetOpen(true)}')
+    expect(tab, 'нет разводки по ширине').toContain('const startCreating = ()')
+  })
+
+  it('на широком экране ведёт в строку создания, а не в лист', () => {
+    // Строка над доской видна при sm:flex и на пустой доске тоже — её я не
+    // прятал по числу задач. Фокус, а не создание пустой записи: задачу
+    // заводит название, тот же довод, что у горячей клавиши.
+    const at = tab.indexOf('const startCreating = ()')
+    const body = tab.slice(at, tab.indexOf('}', tab.indexOf('newTitleRef.current?.scrollIntoView', at)))
+    expect(body, 'ширина не проверяется').toContain('max-width: 639px')
+    expect(body, 'на десктопе не ставится фокус в поле').toContain('newTitleRef.current?.focus()')
+  })
+
+  it('строка создания не спрятана на пустой доске', () => {
+    // Если её скрыть по числу задач, фокусироваться станет не на чем, и
+    // кнопка снова перестанет что-либо делать.
+    //
+    // Саботаж: добавить условие по длине списка к форме — тест падает.
+    const at = tab.indexOf('<form')
+    expect(tab.slice(at - 400, at), 'форма скрыта по числу задач').not.toContain('length > 0 && (')
+    expect(tab.slice(at, at + 120), 'форма больше не видна на десктопе').toContain('sm:flex')
+  })
+})

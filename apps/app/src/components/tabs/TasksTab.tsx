@@ -503,6 +503,26 @@ export function TasksTab({ projectId, meId }: { projectId: string; meId?: string
   // ?create=1 — сюда приходит горячая клавиша «новая задача». Задачу заводит
   // название, поэтому ставим фокус в поле, а не создаём пустую запись.
   const newTitleRef = useRef<HTMLInputElement>(null)
+
+  /**
+   * «Создать задачу» с пустой доски.
+   *
+   * Два разных способа ввода на двух ширинах: на телефоне — лист снизу, на
+   * широком экране — строка над доской. Лист помечен sm:hidden И СНАРУЖИ, и
+   * внутри себя, поэтому на десктопе он открывался невидимым: кнопка
+   * нажималась, состояние менялось, на экране не происходило ничего.
+   *
+   * Поэтому ведём туда, где поле реально есть. Фокус, а не создание пустой
+   * записи: задачу заводит название — тот же довод, что у горячей клавиши.
+   */
+  const startCreating = () => {
+    if (window.matchMedia('(max-width: 639px)').matches) {
+      setSheetOpen(true)
+      return
+    }
+    newTitleRef.current?.focus()
+    newTitleRef.current?.scrollIntoView({ block: 'center', behavior: 'smooth' })
+  }
   useEffect(() => {
     if (searchParams.get('create') !== '1') return
     // Кадром позже: поле появляется вместе со вкладкой, до этого его нет.
@@ -963,7 +983,7 @@ export function TasksTab({ projectId, meId }: { projectId: string; meId?: string
               под фильтром пусто — это другой разговор, там нужен сброс, а не
               рассказ о подключении. */}
           {!tasksQ.isLoading && (tasksQ.data ?? []).length === 0 && !hasFilters && (
-            <TasksEmptyState canEdit={canEdit} onCreate={() => setSheetOpen(true)} />
+            <TasksEmptyState canEdit={canEdit} onCreate={startCreating} />
           )}
 
           {/* Табличный вид: вложенные таблицы по спринт-группам */}
