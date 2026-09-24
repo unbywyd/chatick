@@ -237,6 +237,25 @@ export function ChatPanel({
   const [live, setLive] = useState<ChatMessage[]>([])
   useEffect(() => setLive([]), [projectId])
 
+  /**
+   * Убрать сообщение из ленты — ОДНИМ правилом на оба случая.
+   *
+   * Лента склеена из двух источников: live (пришло сокетом при открытой
+   * панели) и история (подгружена запросом). Сообщение лежит ровно в одном
+   * из них, и какое где — зависит от того, был ли человек на экране, когда
+   * его отправили.
+   *
+   * Поэтому чистить надо оба: правило, выписанное для одного источника,
+   * работает через раз и выглядит как «кнопка иногда не срабатывает».
+   */
+  const dropMessage = useCallback(
+    (messageId: string) => {
+      setLive((prev) => prev.filter((m) => m.id !== messageId))
+      qc.invalidateQueries({ queryKey: ['messages', projectId] })
+    },
+    [qc, projectId],
+  )
+
   const onWsMessage = useCallback((m: ChatMessage) => {
     /**
      * Событие только ЛОГИРУЕМ: гасит индикатор эффект ниже, по факту
@@ -300,10 +319,7 @@ export function ChatPanel({
       if (!path || path.startsWith('/') || path.includes('..') || path.includes('://')) return
       navigate(`/c/${companyId}/p/${projectId}/${path}`)
     },
-    onMessageDeleted: ({ messageId }) => {
-      setLive((prev) => prev.filter((m) => m.id !== messageId))
-      qc.invalidateQueries({ queryKey: ['messages', projectId] })
-    },
+    onMessageDeleted: ({ messageId }) => dropMessage(messageId),
   })
 
   // история + live, дедуп по id; в ленте только delivered (SPEC §5.5.1 — до вердикта не показываем)
@@ -570,8 +586,23 @@ export function ChatPanel({
 
   const deleteMessage = useMutation({
     mutationFn: (id: string) => api(`/api/v1/messages/${id}/remove`, { method: 'POST' }, 'project'),
-    onSuccess: (_r, id) => setLive((prev) => prev.filter((m) => m.id !== id)),
-    onError: (e) => toast.error(e instanceof Error ? e.message : String(e)),
+    // Тем же путём, что и чужое удаление: лента состоит из ДВУХ источников —
+    // live и история. Раньше здесь чистился только live, и удалённое своей
+    // рукой оставалось на экране до следующего опроса истории: нажимаешь
+    // «удалить» — тишина, нажимаешь второй раз — «Not found», потому что на
+    // сервере его уже нет.
+    onSuccess: (_r, id) => dropMessage(id),
+    onError: (e, id) => {
+      // «Not found» на удалении означает, что удалять уже нечего: сообщения
+      // на сервере нет. Для человека это не ошибка, а достигнутая цель —
+      // молча убираем строку из ленты вместо красного окошка.
+      const msg = e instanceof Error ? e.message : String(e)
+      if (/not found/i.test(msg)) {
+        dropMessage(id)
+        return
+      }
+      toast.error(msg)
+    },
   })
 
   const mentionItems = useMemo(
