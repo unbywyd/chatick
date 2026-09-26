@@ -496,7 +496,9 @@
     "removeConfirm": "Remove {{name}} from the company?",
     "memberRemoved": "Member removed",
     "managedExternally": "People are added and removed in {{system}}. You can still change roles and permissions here — that part is ours.",
-    "yourSystem": "your system"
+    "yourSystem": "your system",
+    "inviteSelf": "You are already in this company",
+    "inviteAlreadyMember": "This person is already in the company"
   },
   "rules": {
     "title": "Rules of “{{project}}”",

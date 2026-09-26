@@ -104,6 +104,29 @@ export function TeamTab({ company, meId }: { company: Company; meId?: string }) 
     onError: onErr,
   })
 
+  /**
+   * Кого приглашать уже некуда: себя и тех, кто в компании.
+   *
+   * Проверяем ЗДЕСЬ, а не только на сервере. Сервер тоже отказывает — правило
+   * должно жить там, где его нельзя обойти, — но человек к моменту отказа уже
+   * нажал «Пригласить» и ждал ответа. Сказать до нажатия дешевле.
+   *
+   * В нижнем регистре: адрес вводят как придётся, а «Ivan@Mail.ru» и
+   * «ivan@mail.ru» — один человек.
+   */
+  const takenEmails = useMemo(
+    () => new Set((members.data ?? []).map((m) => m.user.email.toLowerCase())),
+    [members.data],
+  )
+  const inviteProblem = useMemo(() => {
+    const value = email.trim().toLowerCase()
+    if (!value) return null
+    const mine = (members.data ?? []).find((m) => m.user.id === meId)?.user.email.toLowerCase()
+    if (mine && value === mine) return t('team.inviteSelf')
+    if (takenEmails.has(value)) return t('team.inviteAlreadyMember')
+    return null
+  }, [email, members.data, meId, takenEmails, t])
+
   const filteredMembers = useMemo(() => {
     const list = members.data ?? []
     const needle = q.trim().toLowerCase()
@@ -141,7 +164,7 @@ export function TeamTab({ company, meId }: { company: Company; meId?: string }) 
         className="flex flex-wrap gap-2"
         onSubmit={(e) => {
           e.preventDefault()
-          if (email.trim()) invite.mutate()
+          if (email.trim() && !inviteProblem) invite.mutate()
         }}
       >
         <Input
@@ -152,10 +175,13 @@ export function TeamTab({ company, meId }: { company: Company; meId?: string }) 
           className="min-w-44 flex-1"
         />
         <RolePicker value={inviteRole} onChange={setInviteRole} />
-        <Button variant="brand" type="submit" disabled={!email.trim() || invite.isPending}>
+        {/* Кнопка гаснет ВМЕСТЕ с надписью ниже, а не молча: неактивная
+            кнопка без объяснения — это «не работает», а не «нельзя». */}
+        <Button variant="brand" type="submit" disabled={!email.trim() || invite.isPending || Boolean(inviteProblem)}>
           <UserPlus className="size-4" />
           {t('team.send')}
         </Button>
+        {inviteProblem && <p className="w-full text-xs text-destructive">{inviteProblem}</p>}
       </form>
       )}
 

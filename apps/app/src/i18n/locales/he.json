@@ -496,7 +496,9 @@
     "removeConfirm": "להסיר את {{name}} מהחברה?",
     "memberRemoved": "החבר הוסר",
     "managedExternally": "אנשים נוספים ומוסרים ב{{system}}. תפקידים והרשאות עדיין נקבעים כאן — זה החלק שלנו.",
-    "yourSystem": "מערכת שלכם"
+    "yourSystem": "מערכת שלכם",
+    "inviteSelf": "אתם כבר בחברה הזו",
+    "inviteAlreadyMember": "האדם הזה כבר בחברה"
   },
   "rules": {
     "title": "כללי «{{project}}»",

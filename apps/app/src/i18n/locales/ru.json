@@ -497,7 +497,9 @@
     "removeConfirm": "Убрать {{name}} из компании?",
     "memberRemoved": "Участник удалён",
     "managedExternally": "Людей добавляют и убирают в {{system}}. Роли и права по-прежнему меняются здесь — это наша часть.",
-    "yourSystem": "вашей системе"
+    "yourSystem": "вашей системе",
+    "inviteSelf": "Вы уже в этой компании",
+    "inviteAlreadyMember": "Этот человек уже в компании"
   },
   "rules": {
     "title": "Правила «{{project}}»",

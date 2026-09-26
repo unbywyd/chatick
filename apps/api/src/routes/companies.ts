@@ -2452,6 +2452,38 @@ companiesRoute.post(
 // Состав команды ведётся во внешней системе (SPEC §8.42).
     if (await membersLockedForCompany(companyId)) return c.json(MEMBERS_LOCKED, 403)
 
+    /**
+     * Себя приглашать некуда — я уже здесь.
+     *
+     * Письмо уходило, ссылка вела на «принять приглашение», а принимать было
+     * нечего. На живых данных такое нашлось: человек позвал сам себя, чтобы
+     * посмотреть, как выглядит приглашение.
+     *
+     * Сравниваем в нижнем регистре: zod уже привёл входящий адрес
+     * (.toLowerCase()), а в базе он хранится как ввели при регистрации —
+     * «Ivan@Mail.ru» и «ivan@mail.ru» это один человек.
+     */
+    const me = await db.query.users.findFirst({ where: eq(users.id, sub) })
+    if (me?.email && me.email.toLowerCase() === email) {
+      return c.json({ error: 'You are already in this company' }, 400)
+    }
+
+    /**
+     * Кто уже в компании — тоже не приглашаем.
+     *
+     * То же письмо в никуда, только адресат чужой: нажмёт «принять» и увидит,
+     * что принимать нечего. Ищем по адресу, а не по членству напрямую:
+     * приглашают по почте, и человека с таким адресом может вовсе не быть в
+     * системе — тогда и проверять нечего.
+     */
+    const already = await db
+      .select({ id: companyMembers.id })
+      .from(companyMembers)
+      .innerJoin(users, eq(users.id, companyMembers.userId))
+      .where(and(eq(companyMembers.companyId, companyId), sql`lower(${users.email}) = ${email}`))
+      .limit(1)
+    if (already.length) return c.json({ error: 'This person is already in the company' }, 400)
+
     const existing = await db.query.companyInvites.findFirst({
       where: and(eq(companyInvites.companyId, companyId), eq(companyInvites.email, email), eq(companyInvites.status, 'pending')),
     })
