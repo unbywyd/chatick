@@ -1,3 +1,4 @@
+import { closedSql } from '../lib/task-status.js'
 import { Hono } from 'hono'
 import { zValidator } from '@hono/zod-validator'
 import { z } from 'zod'
@@ -354,7 +355,7 @@ projectsRoute.get(
     const rows = await db
       .select({
         projectId: tasks.projectId,
-        total: sql<number>`count(*)::int`,
+        total: sql<number>`count(*) filter (where ${tasks.status} <> 'cancelled')::int`,
         done: sql<number>`count(*) filter (where ${tasks.status} = 'done')::int`,
         // разбивка по статусам: менеджеру важно видеть не только «сделано»,
         // но и сколько в работе / на ревью / ещё не начато
@@ -378,7 +379,7 @@ projectsRoute.get(
     const myRows = await db
       .select({
         projectId: tasks.projectId,
-        total: sql<number>`count(*)::int`,
+        total: sql<number>`count(*) filter (where ${tasks.status} <> 'cancelled')::int`,
         done: sql<number>`count(*) filter (where ${tasks.status} = 'done')::int`,
       })
       .from(tasks)
@@ -676,15 +677,15 @@ projectsRoute.get('/:projectId/summary', async (c) => {
 
   // estimate_minutes хранится строкой — приводим в SQL, иначе sum() сложит
   // текст и упадёт. Пустая строка и мусор дают NULL и в сумму не попадают.
-  const est = sql<number>`coalesce(sum(nullif(${tasks.estimateMinutes}, '')::int), 0)::int`
+  const est = sql<number>`coalesce(sum(nullif(${tasks.estimateMinutes}, '')::int) filter (where ${tasks.status} <> 'cancelled'), 0)::int`
   const [totals] = await db
     .select({
-      total: sql<number>`count(*)::int`,
+      total: sql<number>`count(*) filter (where ${tasks.status} <> 'cancelled')::int`,
       done: sql<number>`count(*) filter (where ${tasks.status} = 'done')::int`,
       planned: est,
       plannedDone: sql<number>`coalesce(sum(nullif(${tasks.estimateMinutes}, '')::int) filter (where ${tasks.status} = 'done'), 0)::int`,
       noEstimate: sql<number>`count(*) filter (where ${tasks.estimateMinutes} is null or ${tasks.estimateMinutes} = '')::int`,
-      noEstimateOpen: sql<number>`count(*) filter (where (${tasks.estimateMinutes} is null or ${tasks.estimateMinutes} = '') and ${tasks.status} <> 'done')::int`,
+      noEstimateOpen: sql<number>`count(*) filter (where (${tasks.estimateMinutes} is null or ${tasks.estimateMinutes} = '') and ${tasks.status} not in ${closedSql})::int`,
     })
     .from(tasks)
     .where(and(eq(tasks.projectId, projectId), isNull(tasks.deletedAt)))

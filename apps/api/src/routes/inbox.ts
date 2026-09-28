@@ -1,3 +1,4 @@
+import { TASK_STATUSES, closedSql } from '../lib/task-status.js'
 import { Hono } from 'hono'
 import { zValidator } from '@hono/zod-validator'
 import { z } from 'zod'
@@ -134,7 +135,7 @@ inboxRoute.get('/tasks', async (c) => {
       and(
         eq(tasks.assigneeId, sub),
         isNull(tasks.deletedAt),
-        or(sql`${tasks.status} <> 'done'`, gte(tasks.updatedAt, sql`now() - interval '3 days'`)),
+        or(sql`${tasks.status} not in ${closedSql}`, gte(tasks.updatedAt, sql`now() - interval '3 days'`)),
       ),
     )
     .orderBy(desc(tasks.updatedAt))
@@ -163,7 +164,7 @@ inboxRoute.get('/tasks', async (c) => {
  */
 inboxRoute.patch(
   '/tasks/:taskId',
-  zValidator('json', z.object({ status: z.enum(['todo', 'in_progress', 'review', 'verified', 'done']) })),
+  zValidator('json', z.object({ status: z.enum(TASK_STATUSES) })),
   async (c) => {
     const { sub } = c.get('session')
     const { status } = c.req.valid('json')

@@ -1,3 +1,4 @@
+import { closedSql, settledSql } from '../lib/task-status.js'
 import { Hono } from 'hono'
 import { zValidator } from '@hono/zod-validator'
 import { z } from 'zod'
@@ -208,9 +209,9 @@ companiesRoute.get('/:companyId/overview', async (c) => {
     db
       .select({
         projectId: tasks.projectId,
-        total: sql<number>`count(*)::int`,
+        total: sql<number>`count(*) filter (where ${tasks.status} <> 'cancelled')::int`,
         done: sql<number>`count(*) filter (where ${tasks.status} = 'done')::int`,
-        overdue: sql<number>`count(*) filter (where ${tasks.status} <> 'done' and ${tasks.dueDate} < now())::int`,
+        overdue: sql<number>`count(*) filter (where ${tasks.status} not in ${closedSql} and ${tasks.dueDate} < now())::int`,
       })
       .from(tasks)
       .where(and(inArray(tasks.projectId, ids), isNull(tasks.deletedAt)))
@@ -274,8 +275,8 @@ companiesRoute.get('/:companyId/overview', async (c) => {
         join tasks bt on bt.id = b.blocker_task_id
         join tasks t on t.id = b.blocked_task_id
        where b.project_id in ${ids}
-         and bt.status <> 'done' and bt.deleted_at is null
-         and t.status <> 'done' and t.deleted_at is null
+         and bt.status not in ${closedSql} and bt.deleted_at is null
+         and t.status not in ${closedSql} and t.deleted_at is null
        group by b.project_id
     `),
     /**
@@ -292,8 +293,8 @@ companiesRoute.get('/:companyId/overview', async (c) => {
         join tasks bt on bt.id = b.blocker_task_id
         join tasks t on t.id = b.blocked_task_id
        where b.project_id in ${ids}
-         and bt.status <> 'done' and bt.deleted_at is null
-         and t.status <> 'done' and t.deleted_at is null
+         and bt.status not in ${closedSql} and bt.deleted_at is null
+         and t.status not in ${closedSql} and t.deleted_at is null
     `),
   ])
 
@@ -676,13 +677,13 @@ companiesRoute.get('/:companyId/people/:userId/flag/:flag', async (c) => {
            ${flag === 'blocking' ? sql`(
              select count(*)::int from task_blockers b
                join tasks dt on dt.id = b.blocked_task_id
-              where b.blocker_task_id = t.id and dt.status <> 'done' and dt.deleted_at is null
+              where b.blocker_task_id = t.id and dt.status not in ${closedSql} and dt.deleted_at is null
                 and dt.assignee_id is distinct from t.assignee_id
            )` : sql`0`} as "holds"
       from tasks t
       join projects p on p.id = t.project_id and p.company_id = ${companyId}
      where t.deleted_at is null and t.assignee_id = ${userId}
-       and t.status not in ('done','verified')
+       and t.status not in ${settledSql}
        ${
          flag === 'stalled'
            ? // Дословно как over_2w: заведена больше двух недель назад и
@@ -702,7 +703,7 @@ companiesRoute.get('/:companyId/people/:userId/flag/:flag', async (c) => {
              sql`and exists (
                    select 1 from task_blockers b
                      join tasks dt on dt.id = b.blocked_task_id
-                    where b.blocker_task_id = t.id and dt.status <> 'done'
+                    where b.blocker_task_id = t.id and dt.status not in ${closedSql}
                       and dt.deleted_at is null
                       and dt.assignee_id is distinct from t.assignee_id
                  )`
@@ -761,11 +762,11 @@ companiesRoute.get('/:companyId/workload', async (c) => {
                select 1 from task_blockers b
                  join tasks bt on bt.id = b.blocker_task_id
                 where b.blocked_task_id = t.id
-                  and bt.status <> 'done' and bt.deleted_at is null
+                  and bt.status not in ${closedSql} and bt.deleted_at is null
              ) as blocked
         from tasks t
         join projects p on p.id = t.project_id
-       where p.company_id = ${companyId} and t.deleted_at is null and t.status <> 'done'
+       where p.company_id = ${companyId} and t.deleted_at is null and t.status not in ${closedSql}
     ),
     per_project as (
       select m.assignee_id, m.project_id, p.name, p.color, count(*)::int as n
@@ -980,7 +981,7 @@ companiesRoute.get('/:companyId/people', async (c) => {
     select u.id as uid,
       (select count(*) from tasks t join projects p on p.id = t.project_id
         where t.assignee_id = u.id and p.company_id = ${companyId}
-          and t.status <> 'done' and t.deleted_at is null) as open_tasks,
+          and t.status not in ${closedSql} and t.deleted_at is null) as open_tasks,
       (select count(*) from tasks t join projects p on p.id = t.project_id
         where t.assignee_id = u.id and p.company_id = ${companyId}
           and t.status = 'done' and t.deleted_at is null) as done_tasks,
@@ -1042,17 +1043,17 @@ companiesRoute.get('/:companyId/people', async (c) => {
     -- разные истории, и одним числом они неразличимы.
     queue as (
       select uid, project_id, count(*)::int as n
-        from touched where status not in ('done','verified')
+        from touched where status not in ${settledSql}
        group by uid, project_id
     )
     select t.uid,
-      count(*) filter (where t.status not in ('done','verified')) as open_now,
-      count(*) filter (where t.status not in ('done','verified') and t.first_touch is null) as untouched,
+      count(*) filter (where t.status not in ${settledSql}) as open_now,
+      count(*) filter (where t.status not in ${settledSql} and t.first_touch is null) as untouched,
       coalesce(round(avg(extract(epoch from (now() - t.created_at))/86400)
-        filter (where t.status not in ('done','verified') and t.first_touch is null)::numeric, 1), 0) as wait_avg,
+        filter (where t.status not in ${settledSql} and t.first_touch is null)::numeric, 1), 0) as wait_avg,
       coalesce(round(max(extract(epoch from (now() - t.created_at))/86400)
-        filter (where t.status not in ('done','verified') and t.first_touch is null)::numeric, 0), 0) as wait_worst,
-      count(*) filter (where t.status not in ('done','verified') and t.first_touch is null
+        filter (where t.status not in ${settledSql} and t.first_touch is null)::numeric, 0), 0) as wait_worst,
+      count(*) filter (where t.status not in ${settledSql} and t.first_touch is null
         and t.created_at < now() - interval '14 days') as over_2w,
       -- Реакция — отклик на ЧУЖУЮ просьбу, поэтому самозаведённые задачи не
       -- в счёт. Человек, заводящий задачу себе, трогает её в ту же минуту по
@@ -1099,7 +1100,7 @@ companiesRoute.get('/:companyId/people', async (c) => {
       join projects p on p.id = b.project_id
      where p.company_id = ${companyId}
        and blocker.assignee_id in (${idList})
-       and blocker.status not in ('done','verified')
+       and blocker.status not in ${settledSql}
        and blocker.deleted_at is null and blocked.deleted_at is null
        and blocked.assignee_id is distinct from blocker.assignee_id
      group by blocker.assignee_id
@@ -1298,8 +1299,9 @@ companiesRoute.get('/:companyId/overdue', async (c) => {
         eq(projects.companyId, companyId),
         isNull(tasks.deletedAt),
         // Тот же признак, что и в счётчике на обзоре: цифра и список обязаны
-        // сходиться, иначе «Просрочено: 7» откроет шесть задач.
-        sql`${tasks.status} <> 'done'`,
+        // сходиться, иначе «Просрочено: 7» откроет шесть задач. Отменённая не
+        // просрочена — как и сделанная.
+        sql`${tasks.status} not in ${closedSql}`,
         sql`${tasks.dueDate} < now()`,
       ),
     )
@@ -1362,8 +1364,8 @@ companiesRoute.get('/:companyId/blocking', async (c) => {
       json_agg(json_build_object('id', dt.id, 'number', dt.number, 'title', dt.title)
                order by dt.number) as "waiting"
     from task_blockers b
-    join tasks bt on bt.id = b.blocker_task_id and bt.status <> 'done' and bt.deleted_at is null
-    join tasks dt on dt.id = b.blocked_task_id and dt.status <> 'done' and dt.deleted_at is null
+    join tasks bt on bt.id = b.blocker_task_id and bt.status not in ${closedSql} and bt.deleted_at is null
+    join tasks dt on dt.id = b.blocked_task_id and dt.status not in ${closedSql} and dt.deleted_at is null
     join projects p on p.id = b.project_id and p.company_id = ${companyId}
     left join users u on u.id = bt.assignee_id
     group by bt.id, bt.number, bt.title, bt.status, p.id, p.name, p.color,

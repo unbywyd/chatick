@@ -36,7 +36,7 @@ describe('цифры считаются раздельно, а не через j
     // и заметить это можно только сверив с базой вручную.
     const norm = fn.replace(/\s+/g, ' ')
     expect(norm, 'открытые задачи считаются не подзапросом').toMatch(
-      /\(select count\(\*\) from tasks t join projects p on p\.id = t\.project_id[^)]*t\.status <> 'done'/,
+      /\(select count\(\*\) from tasks t join projects p on p\.id = t\.project_id[^)]*t\.status not in \$\{closedSql\}/,
     )
     expect(norm, 'часы считаются не подзапросом').toMatch(
       /\(select sum\(extract\(epoch from \(te\.ended_at - te\.started_at\)\)\)\/60/,
@@ -44,7 +44,7 @@ describe('цифры считаются раздельно, а не через j
   })
 
   it('удалённые задачи в счёт не идут', () => {
-    expect(fn.replace(/\s+/g, ' ')).toContain("t.status <> 'done' and t.deleted_at is null")
+    expect(fn.replace(/\s+/g, ' ')).toContain("t.status not in ${closedSql} and t.deleted_at is null")
     expect(fn.replace(/\s+/g, ' ')).toContain("t.status = 'done' and t.deleted_at is null")
   })
 

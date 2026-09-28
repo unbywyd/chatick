@@ -1,3 +1,4 @@
+import { isClosed } from './types'
 import { useTranslation } from 'react-i18next'
 import { CircleDashed, Lock, TriangleAlert } from 'lucide-react'
 import { cn } from '@/lib/utils'
@@ -16,7 +17,7 @@ export function matchesBlockerFilter(task: Task, f: BlockerFilterValue): boolean
   if (!f.size) return true
   // Завершённая задача не блокирует и не заблокирована: связи у неё остаются,
   // но фильтр отвечает на вопрос «что сейчас», а не «что было».
-  const done = task.status === 'done'
+  const done = isClosed(task.status)
   const blocked = !done && (task.blockedBy ?? 0) > 0
   const blocking = !done && (task.blocking ?? 0) > 0
   if (f.has('blocked') && blocked) return true

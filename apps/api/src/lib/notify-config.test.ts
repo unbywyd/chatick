@@ -184,7 +184,7 @@ describe('срок и номер задачи на иврите', () => {
     const types = app('components/tabs/tasks/types.ts')
     const fn = types.slice(types.indexOf('export function dueLevel'))
     const body = fn.slice(0, fn.indexOf('\n}\n'))
-    expect(body).toMatch(/t\.status === 'done'/)
+    expect(body).toMatch(/isClosed\(t\.status\)/)
     for (const level of ['overdue', 'urgent', 'soon', 'far']) {
       expect(body, level).toMatch(new RegExp(`'${level}'`))
     }

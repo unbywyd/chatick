@@ -1,3 +1,4 @@
+import { TASK_STATUSES, SETTLED_STATUSES, closedSql, isClosed, type TaskStatus } from '../lib/task-status.js'
 import { Hono } from 'hono'
 import { and, asc, desc, eq, gt, gte, ilike, inArray, isNull, lt, lte, notInArray, or, sql } from 'drizzle-orm'
 import { db } from '../db/client.js'
@@ -796,7 +797,8 @@ bridgeRoute.get('/context', async (c) => {
       review: sql<number>`count(*) filter (where ${tasks.status} = 'review')::int`,
       verified: sql<number>`count(*) filter (where ${tasks.status} = 'verified')::int`,
       done: sql<number>`count(*) filter (where ${tasks.status} = 'done')::int`,
-      mine: sql<number>`count(*) filter (where ${tasks.assigneeId} = ${id.userId} and ${tasks.status} <> 'done')::int`,
+      cancelled: sql<number>`count(*) filter (where ${tasks.status} = 'cancelled')::int`,
+      mine: sql<number>`count(*) filter (where ${tasks.assigneeId} = ${id.userId} and ${tasks.status} not in ${closedSql})::int`,
     })
     .from(tasks)
     .where(and(eq(tasks.projectId, scope.projectId), isNull(tasks.deletedAt)))
@@ -1743,6 +1745,31 @@ function languageNotice(text: string, projectLanguage: string): string | null {
   if (!script || script === projectLanguage) return null
   return `Project language is "${projectLanguage}", but this text looks like "${script}". The team reads tasks in their own language — rewrite title and description in ${projectLanguage} and PATCH this task. GET /x/context confirms the project language.`
 }
+/**
+ * Замечание о длине — или null, если описание короткое.
+ *
+ * Команда попросила словами: «не пишите много текста, не понимаем, что в
+ * итоге нужно». Замер за 60 дней: описания от ассистента в 4 раза длиннее
+ * человеческих (медиана 581 против 152), 98 штук длиннее 2000 символов,
+ * рекорд 11 775. Порог 1500 — между человеческим p90 (438) и
+ * ассистентским (2023).
+ *
+ * Замечание, а не отказ: длинный текст бывает нужен по-настоящему, и решать
+ * это человеку. Вход не ограничиваем — говорим до (в гайде и описании
+ * инструмента) и после (здесь, в ответе на свой же вызов).
+ */
+function lengthNotice(description: string): string | null {
+  const len = description.trim().length
+  if (len <= 1500) return null
+  return 'Description is ' + len + ' characters. The team asked for short tasks: what to do and how to check it, readable without scrolling. Move the details to a comment, a checklist or a document and PATCH the description down; people will ask if they need more.'
+}
+
+/**
+ * Отмена — решение человека, не ассистента. Проверить это на сервере нельзя,
+ * поэтому напоминаем в ответе: своё же действие модель перечитывает всегда.
+ */
+const CANCEL_NOTICE =
+  "Cancelled: this is the person's call, not yours. If they did not ask to drop this task, put the status back and leave a comment instead — a cancelled task leaves every list, count and blocker chain at once."
 const taskView = (
   t: typeof tasks.$inferSelect,
   assignee?: { id: string; name: string } | null,
@@ -1872,7 +1899,7 @@ async function depCounts(taskIds: string[]): Promise<Map<string, { openBlockers:
       (select count(*)::int from ${taskBlockers} b
         join ${tasks} bt on bt.id = b.blocker_task_id
         where b.blocked_task_id = outer_t.id
-          and bt.status <> 'done' and bt.deleted_at is null) as open_blockers,
+          and bt.status not in ${closedSql} and bt.deleted_at is null) as open_blockers,
       (select count(*)::int from ${taskBlockers} b
         join ${tasks} dt on dt.id = b.blocked_task_id
         where b.blocker_task_id = outer_t.id
@@ -1902,7 +1929,7 @@ bridgeRoute.get('/tasks', async (c) => {
   }
   const status = c.req.query('status')
   if (status) {
-    const list = status.split(',').filter(Boolean) as ('todo' | 'in_progress' | 'review' | 'verified' | 'done')[]
+    const list = status.split(',').filter(Boolean) as TaskStatus[]
     conds.push(inArray(tasks.status, list))
   }
   const sprint = c.req.query('sprint')
@@ -1926,14 +1953,14 @@ bridgeRoute.get('/tasks', async (c) => {
   // 223) — это ограничение данных, а не фильтра, и врать о нём нельзя.
   if (c.req.query('overdue') === '1') {
     conds.push(sql`${tasks.dueDate} is not null and ${tasks.dueDate} < now()`)
-    conds.push(notInArray(tasks.status, ['done', 'verified']))
+    conds.push(notInArray(tasks.status, SETTLED_STATUSES))
   }
 
   // Без оценки. estimate_minutes — ТЕКСТ, и пустая строка там встречается
   // наравне с null: проверяем на число, а не на наличие.
   if (c.req.query('noEstimate') === '1') {
     conds.push(sql`(${tasks.estimateMinutes} is null or ${tasks.estimateMinutes} !~ '^[0-9]+$')`)
-    conds.push(notInArray(tasks.status, ['done', 'verified']))
+    conds.push(notInArray(tasks.status, SETTLED_STATUSES))
   }
 
   // Давно не двигали. Число дней, а не флаг: «застряло» для спринта и для
@@ -1941,7 +1968,7 @@ bridgeRoute.get('/tasks', async (c) => {
   const staleDays = Number(c.req.query('stale'))
   if (Number.isFinite(staleDays) && staleDays > 0) {
     conds.push(sql`${tasks.updatedAt} < now() - make_interval(days => ${Math.min(365, Math.floor(staleDays))})`)
-    conds.push(notInArray(tasks.status, ['done', 'verified']))
+    conds.push(notInArray(tasks.status, SETTLED_STATUSES))
   }
 
   // Стоит из-за чужой незакрытой задачи. Тот же признак, что рисует замочек в
@@ -1950,9 +1977,9 @@ bridgeRoute.get('/tasks', async (c) => {
     conds.push(sql`exists (
       select 1 from ${taskBlockers} b
       join ${tasks} bt on bt.id = b.blocker_task_id
-      where b.blocked_task_id = ${tasks.id} and bt.status <> 'done' and bt.deleted_at is null
+      where b.blocked_task_id = ${tasks.id} and bt.status not in ${closedSql} and bt.deleted_at is null
     )`)
-    conds.push(notInArray(tasks.status, ['done', 'verified']))
+    conds.push(notInArray(tasks.status, SETTLED_STATUSES))
   }
 
   const limit = Math.min(200, Math.max(1, Number(c.req.query('limit')) || 50))
@@ -2076,7 +2103,7 @@ bridgeRoute.patch('/tasks/bulk', async (c) => {
   const patch: Record<string, unknown> = {}
   if (typeof set.title === 'string') patch.title = set.title.slice(0, 300)
   if (typeof set.description === 'string') patch.description = richText(set.description)
-  if ((['todo', 'in_progress', 'review', 'verified', 'done'] as const).includes(set.status as never)) patch.status = set.status
+  if ((TASK_STATUSES as readonly string[]).includes(set.status as never)) patch.status = set.status
   if ((['low', 'normal', 'high', 'urgent'] as const).includes(set.priority as never)) patch.priority = set.priority
   if (set.estimateMinutes !== undefined) patch.estimateMinutes = set.estimateMinutes == null ? null : String(set.estimateMinutes)
   {
@@ -2632,7 +2659,7 @@ bridgeRoute.post('/tasks', async (c) => {
       number: `TASK-${next}`,
       title: title.slice(0, 300),
       description: typeof b.description === 'string' ? richText(b.description) : '',
-      status: (['todo', 'in_progress', 'review', 'verified', 'done'] as const).includes(b.status as never)
+      status: (TASK_STATUSES as readonly string[]).includes(b.status as never)
         ? (b.status as 'todo')
         : 'todo',
       priority: (['low', 'normal', 'high', 'urgent'] as const).includes(b.priority as never)
@@ -2667,7 +2694,11 @@ bridgeRoute.post('/tasks', async (c) => {
   const who = row!.assigneeId ? await db.query.users.findFirst({ where: eq(users.id, row!.assigneeId) }) : null
   const projectRow = await db.query.projects.findFirst({ where: eq(projects.id, scope.projectId) })
   const projectLang = (JSON.parse(projectRow?.aiConfig || '{}') as { language?: string }).language ?? 'en'
-  const langNotice = languageNotice(`${title} ${typeof b.description === 'string' ? b.description : ''}`, projectLang)
+  const notices = [
+    languageNotice(`${title} ${typeof b.description === 'string' ? b.description : ''}`, projectLang),
+    lengthNotice(typeof b.description === 'string' ? b.description : ''),
+  ].filter((x): x is string => Boolean(x))
+  const langNotice = notices.length ? notices.join('\n') : null
   return c.json(
     {
       ...taskView(
@@ -2710,7 +2741,7 @@ bridgeRoute.patch('/tasks/:id', async (c) => {
   const patch: Record<string, unknown> = {}
   if (typeof b.title === 'string') patch.title = b.title.slice(0, 300)
   if (typeof b.description === 'string') patch.description = richText(b.description)
-  if ((['todo', 'in_progress', 'review', 'verified', 'done'] as const).includes(b.status as never)) patch.status = b.status
+  if ((TASK_STATUSES as readonly string[]).includes(b.status as never)) patch.status = b.status
   if ((['low', 'normal', 'high', 'urgent'] as const).includes(b.priority as never)) patch.priority = b.priority
   if (b.estimateMinutes !== undefined) patch.estimateMinutes = b.estimateMinutes == null ? null : String(b.estimateMinutes)
   {
@@ -2786,6 +2817,15 @@ bridgeRoute.patch('/tasks/:id', async (c) => {
   if (assigneeChanged && existing.assigneeId) void unassignNotice(existing.assigneeId, existing.id)
   tasksChanged(scope.projectId, [row!.assigneeId, row!.createdById, existing.assigneeId, existing.createdById])
   const who = row!.assigneeId ? await db.query.users.findFirst({ where: eq(users.id, row!.assigneeId) }) : null
+  // Те же замечания, что при создании: правка описания проходит здесь, и
+  // «перепиши короче / на языке проекта» без них повисло бы в воздухе.
+  const patchProject = await db.query.projects.findFirst({ where: eq(projects.id, scope.projectId) })
+  const patchLang = (JSON.parse(patchProject?.aiConfig || '{}') as { language?: string }).language ?? 'en'
+  const patchNotices = [
+    typeof b.description === 'string' ? languageNotice(`${typeof b.title === 'string' ? b.title : ''} ${b.description}`, patchLang) : null,
+    typeof b.description === 'string' ? lengthNotice(b.description) : null,
+    patch.status === 'cancelled' ? CANCEL_NOTICE : null,
+  ].filter((x): x is string => Boolean(x))
   return c.json({
     ...taskView(
       row!,
@@ -2799,6 +2839,7 @@ bridgeRoute.patch('/tasks/:id', async (c) => {
     ...(b.resourceIds !== undefined ? { resources } : {}),
     ...(b.releaseIds !== undefined ? { releases: taskReleaseList } : {}),
     ...(linkedNow.length ? { links: linkedNow } : {}),
+    ...(patchNotices.length ? { warning: patchNotices.join('\n') } : {}),
   })
 })
 
@@ -3118,8 +3159,8 @@ bridgeRoute.get('/blockers', async (c) => {
         sql`blocked.deleted_at is null`,
         // Закрытая задача никого не держит: связь остаётся историей, но в
         // «что мешает сейчас» ей не место.
-        sql`${tasks.status} <> 'done'`,
-        sql`blocked.status <> 'done'`,
+        sql`${tasks.status} not in ${closedSql}`,
+        sql`blocked.status not in ${closedSql}`,
       ),
     )
 
@@ -3222,7 +3263,7 @@ bridgeRoute.get('/tasks/:id/blockers', async (c) => {
     // Кого держит она сама.
     blocking: blocking.map((r) => ({ ...linkedView(r.t), linkId: r.linkId })),
     /** Сколько НЕзакрытых блокеров: ноль — задачу можно брать. */
-    openBlockers: blockers.filter((r) => r.t.status !== 'done').length,
+    openBlockers: blockers.filter((r) => !isClosed(r.t.status)).length,
   })
 })
 

@@ -51,7 +51,7 @@ import { DueDate } from './DueDate'
 import { DatePicker } from '@/components/ui/date-picker'
 import { usePasteFiles } from '@/hooks/usePasteFiles'
 import { useProjectSocket } from '@/hooks/useProjectSocket'
-import { STATUSES, PRIORITIES, PRIORITY_DOT, fmtEstimate, type Task, type Member, type TaskGroup } from './types'
+import { STATUSES, PRIORITIES, PRIORITY_DOT, fmtEstimate, type Task, type Member, type TaskGroup, isClosed } from './types'
 import { parseDuration } from '@/lib/time-parse'
 import { ShareDialog } from '@/components/ShareDialog'
 import { UploadDialog, hasImages } from '@/components/UploadDialog'
@@ -461,7 +461,7 @@ export function TaskDrawer({
                   placeholder={t('tasks.dueNone')}
                   className="w-40"
                 />
-                {task.dueDate && <DueDate due={task.dueDate} done={task.status === 'done'} />}
+                {task.dueDate && <DueDate due={task.dueDate} done={isClosed(task.status)} />}
               </div>
             </PropRow>
 

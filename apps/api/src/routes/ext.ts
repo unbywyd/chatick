@@ -1,3 +1,4 @@
+import { closedSql } from '../lib/task-status.js'
 import { Hono } from 'hono'
 import { createMiddleware } from 'hono/factory'
 import { and, desc, eq, gte, inArray, isNull, lte, sql } from 'drizzle-orm'
@@ -880,9 +881,9 @@ extRoute.get('/stats/summary', guard('read:all'), async (c) => {
   const taskStats = await db
     .select({
       projectId: tasks.projectId,
-      total: sql<number>`count(*)::int`,
+      total: sql<number>`count(*) filter (where ${tasks.status} <> 'cancelled')::int`,
       done: sql<number>`count(*) filter (where ${tasks.status} = 'done')::int`,
-      overdue: sql<number>`count(*) filter (where ${tasks.status} <> 'done' and ${tasks.dueDate} < now())::int`,
+      overdue: sql<number>`count(*) filter (where ${tasks.status} not in ${closedSql} and ${tasks.dueDate} < now())::int`,
     })
     .from(tasks)
     .where(and(inArray(tasks.projectId, ids), isNull(tasks.deletedAt)))

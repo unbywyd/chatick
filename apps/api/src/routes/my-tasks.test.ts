@@ -33,7 +33,7 @@ describe('мои задачи: сервер', () => {
 
   it('сделанные не показываются', () => {
     // Иначе панель утонет в закрытых.
-    expect(handler).toMatch(/<> 'done'/)
+    expect(handler).toContain('not in ${closedSql}')
   })
 
   it('порядок считает база, а не фронт', () => {

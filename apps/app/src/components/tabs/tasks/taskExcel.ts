@@ -83,6 +83,12 @@ export async function parseTasksFromExcel(
   }
   const mapStatus = (v: string): Status => {
     const s = v.toLowerCase().replace(/\s+/g, '_')
+    // Статус в файле пишут словом на своём языке, а не ключом.
+    const aliases: Record<string, Status> = {
+      canceled: 'cancelled', отменено: 'cancelled', отменена: 'cancelled', отменён: 'cancelled', отменен: 'cancelled',
+      בוטל: 'cancelled', בוטלה: 'cancelled', מבוטל: 'cancelled',
+    }
+    if (aliases[s]) return aliases[s]
     return (STATUSES as readonly string[]).includes(s) ? (s as Status) : 'todo'
   }
   const mapPriority = (v: string): Priority => {

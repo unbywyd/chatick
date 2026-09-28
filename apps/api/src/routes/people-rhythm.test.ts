@@ -75,7 +75,7 @@ describe('молчание считается честно', () => {
     const q = rhythmQuery()
     const at = q.indexOf('as untouched')
     const line = q.slice(q.lastIndexOf('count(*)', at), at)
-    expect(line, 'в нетронутые попадают закрытые задачи').toContain("status not in ('done','verified')")
+    expect(line, 'в нетронутые попадают закрытые задачи').toContain("status not in ${settledSql}")
   })
 
   it('порог молчания считается ДОЛЕЙ, а не числом', () => {

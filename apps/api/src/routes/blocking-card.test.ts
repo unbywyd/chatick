@@ -38,15 +38,15 @@ describe('число на карточке сходится со списком 
     const at = companies.indexOf("companiesRoute.get('/:companyId/blocking'")
     expect(at, 'ручка /blocking исчезла').toBeGreaterThan(-1)
     const handler = companies.slice(at, at + 2600)
-    expect(handler, 'блокер может быть закрыт').toMatch(/bt\.status <> 'done'/)
-    expect(handler, 'ждущая может быть закрыта').toMatch(/dt\.status <> 'done'/)
+    expect(handler, 'блокер может быть закрыт').toContain('bt.status not in ${closedSql}')
+    expect(handler, 'ждущая может быть закрыта').toContain('dt.status not in ${closedSql}')
 
     // Тот же фильтр в запросе для тотала — иначе числа разойдутся.
     const totalAt = companies.indexOf('select distinct b.blocker_task_id')
     expect(totalAt, 'запрос тотала исчез').toBeGreaterThan(-1)
     const totalQ = companies.slice(totalAt, totalAt + 420)
-    expect(totalQ, 'тотал считает закрытые блокеры').toMatch(/bt\.status <> 'done'/)
-    expect(totalQ, 'тотал считает дождавшиеся задачи').toMatch(/t\.status <> 'done'/)
+    expect(totalQ, 'тотал считает закрытые блокеры').toContain('bt.status not in ${closedSql}')
+    expect(totalQ, 'тотал считает дождавшиеся задачи').toContain('t.status not in ${closedSql}')
   })
 
   it('модалка открывается только когда есть что показать', () => {

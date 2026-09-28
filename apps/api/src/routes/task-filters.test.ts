@@ -41,12 +41,12 @@ describe('фильтры считают одно и то же в обоих ме
     // Связь переживает закрытие задачи намеренно. Без фильтра по статусу
     // блокера сюда попала бы давно расшитая работа.
     //
-    // Саботаж: убрать bt.status <> 'done' — тест падает.
+    // Саботаж: убрать bt.status not in ${closedSql} — тест падает.
     for (const [name, text] of [['мост', bridgeTasks], ['ассистент', listTasks]] as const) {
       const at = text.indexOf('blocked_task_id')
       expect(at, `${name}: фильтра blocked нет`).toBeGreaterThan(-1)
       expect(text.slice(at - 200, at + 200), `${name}: считаются закрытые блокеры`).toMatch(
-        /bt\.status <> 'done' and bt\.deleted_at is null/,
+        /bt\.status not in \$\{closedSql\} and bt\.deleted_at is null/,
       )
     }
   })
@@ -67,10 +67,10 @@ describe('фильтры считают одно и то же в обоих ме
     //
     // Саботаж: убрать ограничение по статусу — тест падает.
     expect(bridgeTasks, 'мост: фильтры не отсекают закрытые').toMatch(
-      /notInArray\(tasks\.status, \['done', 'verified'\]\)/,
+      /notInArray\(tasks\.status, SETTLED_STATUSES\)/,
     )
     expect(listTasks, 'ассистент: фильтры не отсекают закрытые').toMatch(
-      /status\} not in \('done', 'verified'\)/,
+      /status\} not in \$\{settledSql\}/,
     )
   })
 

@@ -639,7 +639,7 @@ server.registerTool(
     inputSchema: {
       project: z.string(),
       assignee: z.string().optional().describe('"me" or a user id'),
-      status: z.enum(['todo', 'in_progress', 'review', 'verified', 'done']).optional(),
+      status: z.enum(['todo', 'in_progress', 'review', 'verified', 'done', 'cancelled']).optional(),
       q: z.string().optional().describe('Search in title'),
       blocked: z.enum(['1']).optional().describe('Only tasks waiting on another unfinished task'),
       stale: z.number().optional().describe('Untouched for at least this many days'),
@@ -723,7 +723,10 @@ server.registerTool(
       'To pull someone into the description write @[Name](userId) — a plain @name is text and notifies nobody. ' +
       'The assignee already learns of the assignment; mention others only when they specifically need to see it. ' +
       'The reply carries ready links — never assemble one yourself. Prefer "shortUrl" (chatick.com/t-AbC12) when sending ' +
-      'the task to a person: the long "url" is 90 characters, wraps badly in chat and breaks card layouts.',
+      'the task to a person: the long "url" is 90 characters, wraps badly in chat and breaks card layouts. ' +
+      'KEEP IT SHORT: a task is what to do and how to check it, readable without scrolling — the team asked for this ' +
+      'after getting walls of text they could not find the ask in. Details go in a comment, a checklist or a document; ' +
+      'people will ask if they need more. Past 1500 characters the reply carries a "warning" — the write still succeeds.',
     inputSchema: {
       project: z.string(),
       title: z.string().min(1),
@@ -765,11 +768,13 @@ server.registerTool(
       'not after. When the work is done move it to review, not to done: you are handing it over, and closing ' +
       'your own work skips the person who has to check it. verified belongs to whoever did the checking — never ' +
       'set it on your own work. Every status change deserves a comment: the board says that something moved, ' +
-      'only the comment says what.',
+      'only the comment says what. status=cancelled is the exit from any rung and it is the person\'s call, never ' +
+      'yours: set it only when they said to drop the task — a cancelled task leaves every list, count and blocker ' +
+      'chain at once. Keep an edited description short too: past 1500 characters the reply carries a "warning".',
     inputSchema: {
       project: z.string(),
       task: z.string(),
-      status: z.enum(['todo', 'in_progress', 'review', 'verified', 'done']).optional(),
+      status: z.enum(['todo', 'in_progress', 'review', 'verified', 'done', 'cancelled']).optional(),
       assignee: z.string().optional(),
       estimateMinutes: z.number().int().positive().optional(),
       dueDate: z

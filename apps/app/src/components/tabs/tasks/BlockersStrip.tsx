@@ -1,3 +1,4 @@
+import { isClosed } from './types'
 import { useRef } from 'react'
 import { useTranslation } from 'react-i18next'
 import { ChevronLeft, ChevronRight, TriangleAlert } from 'lucide-react'
@@ -51,7 +52,7 @@ export function BlockersStrip({
   // Держат других и сами не закрыты: завершённая задача никого уже не держит,
   // даже если связи на неё остались.
   const blockers = tasks
-    .filter((x) => (x.blocking ?? 0) > 0 && x.status !== 'done')
+    .filter((x) => (x.blocking ?? 0) > 0 && !isClosed(x.status))
     .sort((a, b) => (b.blocking ?? 0) - (a.blocking ?? 0))
 
   if (!blockers.length) return null
@@ -60,7 +61,7 @@ export function BlockersStrip({
   // задача, ждущая двух блокеров, попала бы в сумму дважды, и «держат 26» при
   // 20 задачах в проекте выглядело бы ошибкой — ею и было бы.
   const waitingCount = new Set(
-    tasks.filter((x) => (x.blockedBy ?? 0) > 0 && x.status !== 'done').map((x) => x.id),
+    tasks.filter((x) => (x.blockedBy ?? 0) > 0 && !isClosed(x.status)).map((x) => x.id),
   ).size
 
   // От кого ждут решения: исполнители блокирующих задач, без повторов.

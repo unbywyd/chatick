@@ -1,3 +1,4 @@
+import { isClosed } from './types'
 import { useState } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { useTranslation } from 'react-i18next'
@@ -149,7 +150,7 @@ function Group({
           >
             <span className="shrink-0 text-[11px] tabular-nums text-muted-foreground">{x.number}</span>
             <span
-              className={cn('min-w-0 flex-1 truncate text-sm', x.status === 'done' && 'text-muted-foreground line-through')}
+              className={cn('min-w-0 flex-1 truncate text-sm', isClosed(x.status) && 'text-muted-foreground line-through')}
             >
               {x.title}
             </span>

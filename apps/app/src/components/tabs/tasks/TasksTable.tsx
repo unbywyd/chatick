@@ -38,6 +38,7 @@ import {
   type Member,
   type Status,
   type Priority,
+  isClosed,
 } from './types'
 import { parseDuration } from '@/lib/time-parse'
 import { TaskRefs, REFS_SIGN } from './TaskRefs'
@@ -52,7 +53,8 @@ type SortKey = 'number' | 'title' | 'status' | 'priority' | 'estimate' | 'assign
 type SortDir = 'asc' | 'desc'
 
 // Порядок сортировки — порядок работы: verified между review и done.
-const STATUS_RANK: Record<Status, number> = { todo: 0, in_progress: 1, review: 2, verified: 3, done: 4 }
+// Отменённые — в самом конце: они закрыты, но это не ступень лестницы.
+const STATUS_RANK: Record<Status, number> = { todo: 0, in_progress: 1, review: 2, verified: 3, done: 4, cancelled: 5 }
 const PRIORITY_RANK: Record<Priority, number> = { low: 0, normal: 1, high: 2, urgent: 3 }
 
 /**
@@ -65,7 +67,7 @@ const PRIORITY_RANK: Record<Priority, number> = { low: 0, normal: 1, high: 2, ur
 const depsRank = (t: Task) =>
   // Завершённая — всегда «свободна»: поднимать её наверх как «делать первой»
   // значит советовать сделать сделанное.
-  t.status === 'done' ? 0 : (t.blocking ?? 0) > 0 ? 2 : (t.blockedBy ?? 0) > 0 ? 1 : 0
+  isClosed(t.status) ? 0 : (t.blocking ?? 0) > 0 ? 2 : (t.blockedBy ?? 0) > 0 ? 1 : 0
 
 export function TasksTable({
   tasks,
@@ -483,7 +485,7 @@ function GroupTable({
 
   // Прогресс спринта: закрытых из всех. Место в шапке свободно, а вопрос
   // «сколько там осталось» задают, не открывая список.
-  const doneCount = tasks.filter((x) => x.status === 'done').length
+  const doneCount = tasks.filter((x) => isClosed(x.status)).length
   const pct = tasks.length ? Math.round((doneCount / tasks.length) * 100) : 0
 
   // sortable-обёртка для строки-заголовка группы (перетаскивание групп)
@@ -759,7 +761,7 @@ function TableRow({
   // остаётся после завершения блокера, а замочек должен гаснуть сам.
   // Завершённую не приглушаем, даже если её блокер всё ещё открыт: работа
   // сделана, «брать рано» про неё уже неправда.
-  const blocked = (task.blockedBy ?? 0) > 0 && task.status !== 'done'
+  const blocked = (task.blockedBy ?? 0) > 0 && !isClosed(task.status)
   // Саму перетаскиваемую строку НЕ двигаем и прячем: соседние расступаются и
   // наезжали бы на неподвижную. Видно её под курсором, в DragOverlay. Сдвиг за нижний край растягивал область прокрутки,
   // автоскролл видел край и прокручивал дальше, от этого строка уезжала ещё
@@ -836,7 +838,7 @@ function TableRow({
         <TaskRefs value={task.refs} canEdit={canEdit} compact onChange={(refs) => onPatch(task.id, { refs })} />
       </td>
       <td className="px-2 py-1.5 align-middle">
-        <span className={cn('line-clamp-1', task.status === 'done' && 'text-muted-foreground line-through')}>{task.title}</span>
+        <span className={cn('line-clamp-1', isClosed(task.status) && 'text-muted-foreground line-through')}>{task.title}</span>
         {task.attachmentsCount > 0 && (
           <span className="ms-1 inline-flex items-center gap-0.5 text-xs text-muted-foreground">
             <Paperclip className="size-3" />
@@ -913,7 +915,7 @@ function TableRow({
           taskId={task.id}
           blockedBy={task.blockedBy}
           blocking={task.blocking}
-          done={task.status === 'done'}
+          done={isClosed(task.status)}
           onOpenTask={onOpenTask}
         />
       </td>
@@ -940,7 +942,7 @@ function TaskAge({ createdAt, status }: { createdAt: string; status: string }) {
   const { t, i18n } = useTranslation()
   // У закрытой задачи висеть уже нечего: «сколько ждёт» — вопрос про работу,
   // которая идёт. На живых данных 29 сделанных задач носили метку впустую.
-  if (status === 'done') return null
+  if (isClosed(status)) return null
   const days = Math.floor((Date.now() - new Date(createdAt).getTime()) / 86400000)
   if (days < 1) return null
   return (

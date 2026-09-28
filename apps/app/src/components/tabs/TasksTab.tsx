@@ -29,7 +29,7 @@ import { TaskRefs } from './tasks/TaskRefs'
 import { useTaskTimer } from '@/hooks/useTaskTimer'
 import { exportTasksToExcel, downloadImportTemplate, parseTasksFromExcel } from './tasks/taskExcel'
 import { useConfirm } from '@/components/ui/confirm'
-import { STATUSES, PRIORITIES, STATUS_ICON, STATUS_COLOR, PRIORITY_COLOR, fmtEstimate, isOverdue, isDueSoon, type Task, type TaskGroup, type Member, type Status, type Priority } from './tasks/types'
+import { STATUSES, PRIORITIES, STATUS_ICON, isClosed, STATUS_COLOR, PRIORITY_COLOR, fmtEstimate, isOverdue, isDueSoon, type Task, type TaskGroup, type Member, type Status, type Priority } from './tasks/types'
 import { StatusBadge } from './tasks/StatusBadge'
 import { DueDate } from './tasks/DueDate'
 import { DatePicker } from '@/components/ui/date-picker'
@@ -412,6 +412,9 @@ export function TasksTab({ projectId, meId }: { projectId: string; meId?: string
     if (priorityFilter) base = base.filter((task) => task.priority === priorityFilter)
     const needle = q.trim().toLowerCase()
     if (needle) base = base.filter((task) => task.title.toLowerCase().includes(needle) || task.number.toLowerCase().includes(needle))
+    // Отменённые — ни долг, ни достижение: вне знаменателя. Иначе отмена
+    // роняла бы процент готовности, и команда избегала бы отменять.
+    base = base.filter((task) => task.status !== 'cancelled')
     if (statusFilter && statusFilter !== 'done') base = base.filter((task) => task.status === statusFilter || task.status === 'done')
     const total = base.length
     const done = base.filter((task) => task.status === 'done').length
@@ -419,7 +422,7 @@ export function TasksTab({ projectId, meId }: { projectId: string; meId?: string
   }, [tasksQ.data, onlyMine, meId, assigneeFilter, statusFilter, priorityFilter, q])
 
   const groups = useMemo(() => {
-    const visible: Status[] = statusFilter ? [statusFilter] : showDone ? [...STATUSES] : STATUSES.filter((s) => s !== 'done')
+    const visible: Status[] = statusFilter ? [statusFilter] : showDone ? [...STATUSES] : STATUSES.filter((s) => !isClosed(s))
     return visible
       .map((s) => ({ status: s, tasks: filtered.filter((task) => task.status === s) }))
       .filter((g) => g.tasks.length > 0 || g.status === 'todo')
@@ -480,7 +483,7 @@ export function TasksTab({ projectId, meId }: { projectId: string; meId?: string
   const visibleIds = useMemo(() => new Set(visibleOrder()), [groups])
   const picked = useMemo(() => [...selected].filter((id) => visibleIds.has(id)), [selected, visibleIds])
 
-  const doneCount = (tasksQ.data ?? []).filter((task) => task.status === 'done').length
+  const doneCount = (tasksQ.data ?? []).filter((task) => isClosed(task.status)).length
   const openTask = tasksQ.data?.find((task) => task.id === openTaskId) ?? null
   // Какая задача была создана только что. Держим id, а не булев флаг: URL
   // чистится сразу после открытия, и флаг успел бы схлопнуться в false,
@@ -1316,7 +1319,7 @@ function TaskRow({
         dropBefore && 'border-t-2 border-t-brand',
         // Ждёт другие задачи — приглушаем: карточка рабочая, просто видно,
         // что брать её рано. При наведении яркость возвращается.
-        (task.blockedBy ?? 0) > 0 && task.status !== 'done' && 'opacity-55 hover:opacity-100',
+        (task.blockedBy ?? 0) > 0 && !isClosed(task.status) && 'opacity-55 hover:opacity-100',
       )}
       onClick={onOpen}
     >
@@ -1379,7 +1382,7 @@ function TaskRow({
       <span
         className={cn(
           'flex min-w-0 flex-1 items-center gap-1.5 text-sm',
-          task.status === 'done' && 'text-muted-foreground line-through',
+          isClosed(task.status) && 'text-muted-foreground line-through',
         )}
       >
         <span dir="ltr" className="shrink-0 text-xs text-muted-foreground">
@@ -1396,7 +1399,7 @@ function TaskRow({
         taskId={task.id}
         blockedBy={task.blockedBy}
         blocking={task.blocking}
-        done={task.status === 'done'}
+        done={isClosed(task.status)}
         onOpenTask={onOpenTask}
       />
 
@@ -1417,7 +1420,7 @@ function TaskRow({
         ) : null}
         {/* Срок — до аватара: он про работу, а аватар про человека, и группа
             «что за задача» не должна разрываться лицом посередине. */}
-        <DueDate due={task.dueDate} done={task.status === 'done'} compact />
+        <DueDate due={task.dueDate} done={isClosed(task.status)} compact />
         {task.assignee && <Avatar name={task.assignee.name} src={task.assignee.avatarUrl} size={22} title={task.assignee.name} />}
       </span>
     </li>

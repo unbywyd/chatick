@@ -1,8 +1,19 @@
-import { Circle, CircleCheck, CircleDot, Eye, ShieldCheck } from 'lucide-react'
+import { Circle, CircleCheck, CircleDot, CircleOff, Eye, ShieldCheck } from 'lucide-react'
 
-export const STATUSES = ['todo', 'in_progress', 'review', 'verified', 'done'] as const
+export const STATUSES = ['todo', 'in_progress', 'review', 'verified', 'done', 'cancelled'] as const
 export const PRIORITIES = ['low', 'normal', 'high', 'urgent'] as const
 export type Status = (typeof STATUSES)[number]
+
+/**
+ * Закрыта: работы больше нет. done — сделана, cancelled — отменена.
+ *
+ * Отменённая закрыта так же, как готовая: не просрочена, никого не держит,
+ * по умолчанию не показывается, зачёркнута. Но она НЕ достижение: в счётчик
+ * сделанного и в прогресс не идёт. Поэтому там, где спрашивают «закрыта ли»,
+ * зовут isClosed, а там, где «сделана ли», сравнивают с done напрямую.
+ */
+export const CLOSED_STATUSES: readonly Status[] = ['done', 'cancelled']
+export const isClosed = (status: string): boolean => (CLOSED_STATUSES as readonly string[]).includes(status)
 export type Priority = (typeof PRIORITIES)[number]
 
 export type Task = {
@@ -75,6 +86,7 @@ export const STATUS_ICON: Record<Status, typeof Circle> = {
   review: Eye,
   verified: ShieldCheck,
   done: CircleCheck,
+  cancelled: CircleOff,
 }
 
 // Цвета статусов: путь задачи серый → жёлтый → голубой → бирюзовый → зелёный.
@@ -85,6 +97,7 @@ export const STATUS_COLOR: Record<Status, string> = {
   review: 'text-sky-500',
   verified: 'text-teal-500',
   done: 'text-emerald-600',
+  cancelled: 'text-muted-foreground',
 }
 
 /**
@@ -101,7 +114,8 @@ export const STATUS_COLOR: Record<Status, string> = {
  *
  * Цвета взяты по смыслу, а не по «пути»: серый — ещё не трогали, жёлтый — в
  * работе, голубой — ждёт чужого действия, бирюзовый — проверку прошло, но не
- * закрыто, зелёный — закрыто.
+ * закрыто, зелёный — сделано. Отменено — приглушённый серый с зачёркиванием:
+ * закрыто, но не сделано, и цвета достижения ему не положено.
  */
 export const STATUS_BADGE: Record<Status, string> = {
   todo: 'bg-muted text-foreground/80 dark:bg-muted dark:text-foreground/80',
@@ -109,6 +123,7 @@ export const STATUS_BADGE: Record<Status, string> = {
   review: 'bg-sky-100 text-sky-950 dark:bg-sky-500/20 dark:text-sky-200',
   verified: 'bg-teal-100 text-teal-950 dark:bg-teal-500/20 dark:text-teal-200',
   done: 'bg-emerald-100 text-emerald-950 dark:bg-emerald-500/20 dark:text-emerald-200',
+  cancelled: 'bg-muted text-muted-foreground line-through dark:bg-muted dark:text-muted-foreground',
 }
 
 /** Заливка кружка статуса — для выпадающих меню, где тег был бы шумным. */
@@ -118,6 +133,7 @@ export const STATUS_DOT: Record<Status, string> = {
   review: 'bg-sky-500',
   verified: 'bg-teal-500',
   done: 'bg-emerald-600',
+  cancelled: 'bg-muted-foreground/40',
 }
 
 export const PRIORITY_COLOR: Record<Priority, string> = {
@@ -136,12 +152,12 @@ export const PRIORITY_DOT: Record<Priority, string> = {
 }
 
 export function isOverdue(t: Task) {
-  return Boolean(t.dueDate && t.status !== 'done' && new Date(t.dueDate).getTime() < Date.now())
+  return Boolean(t.dueDate && !isClosed(t.status) && new Date(t.dueDate).getTime() < Date.now())
 }
 
 /** Срок горит, но ещё не прошёл: сегодня или завтра. */
 export function isDueSoon(t: Task) {
-  if (!t.dueDate || t.status === 'done') return false
+  if (!t.dueDate || isClosed(t.status)) return false
   const left = dueDays(t.dueDate)
   return left !== null && left >= 0 && left <= 1
 }
@@ -162,7 +178,7 @@ export function isDueSoon(t: Task) {
 export type DueLevel = 'overdue' | 'urgent' | 'soon' | 'far'
 
 export function dueLevel(t: Task): DueLevel | null {
-  if (!t.dueDate || t.status === 'done') return null
+  if (!t.dueDate || isClosed(t.status)) return null
   const left = dueDays(t.dueDate)
   if (left === null) return null
   if (left < 0) return 'overdue'

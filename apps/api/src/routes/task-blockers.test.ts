@@ -84,7 +84,7 @@ describe('счётчики для списка', () => {
     // Связь переживает завершение блокера — это факт о работе. Но задача,
     // все блокеры которой сделаны, заблокированной уже не считается.
     const m = list.slice(list.indexOf('blockedBy: sql'), list.indexOf('blocking: sql'))
-    expect(m).toMatch(/bt\.status <> 'done'/)
+    expect(m).toContain('bt.status not in ${closedSql}')
   })
 
   it('удалённые задачи в счёт не идут', () => {
@@ -246,8 +246,8 @@ describe('GET /x/blockers — обзор по проекту', () => {
 
   it('завершённые не считаются держащими — с обеих сторон связи', () => {
     // Закрытая задача никого не держит, хотя связь остаётся историей.
-    expect(body).toMatch(/tasks\.status\} <> 'done'/)
-    expect(body).toMatch(/blocked\.status <> 'done'/)
+    expect(body).toContain('tasks.status} not in ${closedSql}')
+    expect(body).toContain('blocked.status not in ${closedSql}')
   })
 
   it('удалённые тоже не в счёт', () => {

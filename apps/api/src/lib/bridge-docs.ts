@@ -35,13 +35,18 @@ function endpointCatalog(q: string): string {
          pass ?project= or use a project tunnel.
 
   GET    /x/tasks${q}${amp}assignee=me&status=todo&q=text&sprint=<sprintId>&limit=50
-         status: todo | in_progress | review | verified | done
+         status: todo | in_progress | review | verified | done | cancelled
          The ladder is the order of work, and each rung belongs to someone
          else. Move to in_progress BEFORE you start. When the work is done,
          move it to review — not to done: you are handing it over, and
          closing your own work skips the person who has to check it.
          verified belongs to whoever did the checking; never set it on your
          own work. done comes after that.
+         cancelled is not a rung — it is the exit from any rung, and it is the
+         person's call, never yours: set it only when they said to drop the
+         task. A cancelled task leaves every list, count and blocker chain at
+         once. If you merely think a task is pointless, say so in a comment
+         and let them decide.
          Trouble filters — how you answer "what is stuck", "what did we
          forget", "why is this person idle", without pulling the whole board
          and reading it yourself:
@@ -640,6 +645,16 @@ ${denied.length ? `\n  NOT ALLOWED: ${denied.join(', ')}\n  Do not attempt these
 - Destructive actions (delete, bulk status changes) need explicit human
   confirmation first. Ask, then act.
 - Write content in the project's language, not the language of the request.
+- KEEP TASKS SHORT. A task is what to do and how to check it — readable
+  without scrolling. The team asked for this in so many words: assistant-
+  written descriptions run four times longer than human ones (median 581
+  characters against 152, a hundred of them past 2 000), and people stop
+  reading before they find the ask. Details go in a comment, a checklist or a
+  document linked from the task; if someone needs more, they will ask.
+- READ "warning" WHEN A WRITE RETURNS ONE. Some writes answer with a
+  "warning" next to the data — the description is in the wrong language for
+  the project, or it runs past 1 500 characters. The write succeeded; the
+  warning says what to fix, and a PATCH fixes it.
 - WRITE MARKDOWN. Task descriptions, comments, notes, work log and documents all
   take markdown and it is converted on our side — headings, lists, bold, code,
   links, tables, and a single newline stays a line break. Do not send a wall of

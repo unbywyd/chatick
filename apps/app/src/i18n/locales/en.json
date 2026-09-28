@@ -220,8 +220,8 @@
     "descriptionPlaceholder": "Description…",
     "deleteConfirm": "Delete task {{number}}?",
     "emptyGroup": "Nothing here",
-    "showDone": "Show done ({{count}})",
-    "hideDone": "Hide done",
+    "showDone": "Show closed ({{count}})",
+    "hideDone": "Hide closed",
     "viewList": "List view",
     "viewTable": "Table view",
     "sprint": "Sprint",
@@ -256,7 +256,8 @@
       "in_progress": "In progress",
       "review": "Awaiting review",
       "verified": "Verified",
-      "done": "Done"
+      "done": "Done",
+      "cancelled": "Cancelled"
     },
     "priority": {
       "low": "Low",
@@ -332,7 +333,8 @@
     "emptyManualHint": "Title, assignee, estimate. Takes half a minute — you can fill in the rest later.",
     "emptyAiTitle": "Let your AI assistant do it",
     "emptyAiHint": "Copy this line into Claude Code, ChatGPT or Cursor. The assistant reads the guide, asks you to approve access, and then creates and runs tasks itself.",
-    "emptyAiCopy": "Copy the line for the assistant"
+    "emptyAiCopy": "Copy the line for the assistant",
+    "markCancelled": "Cancel task"
   },
   "files": {
     "search": "Search files…",

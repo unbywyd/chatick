@@ -41,7 +41,7 @@ describe('счёт задач не выдумывает работу', () => {
   it('в очередь идут только незакрытые живые задачи', () => {
     // Саботаж: убрать любое условие — в «работе» окажутся закрытые.
     expect(handler, 'считаются удалённые задачи').toMatch(/t\.deleted_at is null/)
-    expect(handler, 'считаются закрытые задачи').toMatch(/t\.status <> 'done'/)
+    expect(handler, 'считаются закрытые задачи').toContain('t.status not in ${closedSql}')
   })
 })
 

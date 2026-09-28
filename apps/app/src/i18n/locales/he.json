@@ -220,8 +220,8 @@
     "descriptionPlaceholder": "תיאור…",
     "deleteConfirm": "למחוק את המשימה {{number}}?",
     "emptyGroup": "ריק כאן",
-    "showDone": "להציג בוצעו ({{count}})",
-    "hideDone": "להסתיר בוצעו",
+    "showDone": "להציג סגורות ({{count}})",
+    "hideDone": "להסתיר סגורות",
     "viewList": "תצוגת רשימה",
     "viewTable": "תצוגת טבלה",
     "sprint": "ספרינט",
@@ -256,7 +256,8 @@
       "in_progress": "בתהליך",
       "review": "ממתין לבדיקה",
       "verified": "עבר בדיקות",
-      "done": "בוצע"
+      "done": "בוצע",
+      "cancelled": "בוטל"
     },
     "priority": {
       "low": "נמוכה",
@@ -332,7 +333,8 @@
     "emptyManualHint": "כותרת, אחראי, הערכת זמן. חצי דקה — את השאר אפשר להשלים אחר כך.",
     "emptyAiTitle": "להטיל על עוזר ה-AI שלך",
     "emptyAiHint": "העתיקו את השורה ל-Claude Code, ל-ChatGPT או ל-Cursor. העוזר יקרא את ההוראות, יבקש אישור גישה, ומשם ייצור וינהל משימות בעצמו.",
-    "emptyAiCopy": "העתקת השורה לעוזר"
+    "emptyAiCopy": "העתקת השורה לעוזר",
+    "markCancelled": "ביטול המשימה"
   },
   "files": {
     "search": "חיפוש קבצים…",

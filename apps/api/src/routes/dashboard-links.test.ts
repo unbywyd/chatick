@@ -91,18 +91,18 @@ describe('список просроченных', () => {
     const counterAt = companies.indexOf("overdue: sql<number>")
     expect(counterAt, 'счётчик просрочки не найден').toBeGreaterThan(-1)
     const counter = companies.slice(counterAt, companies.indexOf('\n', counterAt))
-    // Из счётчика: count(*) filter (where <status> <> 'done' and <due> < now())
+    // Из счётчика: count(*) filter (where <status> not in ('done','cancelled') and <due> < now())
     const counterCond = norm(counter.slice(counter.indexOf('where') + 5, counter.lastIndexOf(')::int')))
 
     const listAt = companies.indexOf("'/:companyId/overdue'")
     const list = companies.slice(listAt, listAt + 2500)
     const listCond = norm(
-      list.slice(list.indexOf("sql`${tasks.status} <> 'done'`"), list.indexOf('.orderBy')),
+      list.slice(list.indexOf("sql`${tasks.status} not in ${closedSql}`"), list.indexOf('.orderBy')),
     )
 
     // Оба должны говорить одно: не done и срок в прошлом. Сверяем по частям,
     // потому что записаны они разным синтаксисом.
-    for (const piece of ["<> 'done'", '< now()']) {
+    for (const piece of ["not in ${closedSql}", '< now()']) {
       expect(counterCond, `счётчик потерял «${piece}»`).toContain(piece)
       expect(listCond, `список потерял «${piece}»`).toContain(piece)
     }

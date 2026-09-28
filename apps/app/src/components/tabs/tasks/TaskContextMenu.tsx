@@ -1,7 +1,7 @@
 import { useTranslation } from 'react-i18next'
 import { useParams } from 'react-router-dom'
 import { toast } from 'sonner'
-import { CheckCircle, Copy, Flag, Play, Trash2, UserCheck } from 'lucide-react'
+import { CheckCircle, Copy, Flag, Play, Trash2, UserCheck, CircleOff } from 'lucide-react'
 import {
   ContextMenu,
   ContextMenuTrigger,
@@ -12,7 +12,7 @@ import {
   ContextMenuLabel,
 } from '@/components/ui/context-menu'
 import { useConfirm } from '@/components/ui/confirm'
-import { STATUSES, PRIORITIES, PRIORITY_COLOR, type Task } from './types'
+import { STATUSES, PRIORITIES, PRIORITY_COLOR, type Task, isClosed } from './types'
 import { StatusBadge } from './StatusBadge'
 
 // Контекстное меню задачи (правый клик): быстрые статус/приоритет/назначить/ссылка/удалить.
@@ -58,7 +58,7 @@ export function TaskContextMenu({
       <ContextMenuContent>
         {/* Время тратится на задачи — начинать учёт логично отсюда, а не
             перенабирая описание в контроле таймера. */}
-        {onStartTimer && task.status !== 'done' && (
+        {onStartTimer && !isClosed(task.status) && (
           <>
             <ContextMenuItem onSelect={onStartTimer}>
               <Play className="size-4 text-brand-ink" />
@@ -69,10 +69,19 @@ export function TaskContextMenu({
         )}
 
         {/* Быстрое «Готово» / статусы */}
-        {canEdit && task.status !== 'done' && (
+        {canEdit && !isClosed(task.status) && (
           <ContextMenuItem onSelect={() => onPatch({ status: 'done' })}>
             <CheckCircle className="size-4 text-brand-ink" />
             {t('tasks.markDone')}
+          </ContextMenuItem>
+        )}
+
+        {/* Отмена — рядом с «Готово»: оба закрывают задачу. Но отмена не
+            достижение: не идёт в счётчики сделанного и не постит «сделал». */}
+        {canEdit && !isClosed(task.status) && (
+          <ContextMenuItem onSelect={() => onPatch({ status: 'cancelled' })}>
+            <CircleOff className="size-4 text-muted-foreground" />
+            {t('tasks.markCancelled')}
           </ContextMenuItem>
         )}
 

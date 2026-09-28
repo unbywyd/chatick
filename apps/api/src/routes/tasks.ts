@@ -1,3 +1,4 @@
+import { TASK_STATUSES, closedSql } from '../lib/task-status.js'
 import { Hono } from 'hono'
 import { zValidator } from '@hono/zod-validator'
 import { z } from 'zod'
@@ -22,7 +23,7 @@ import { normalizeRefs, MAX_REFS_LENGTH } from '../lib/task-refs.js'
 export const tasksRoute = new Hono<ProjectEnv>()
 tasksRoute.use('*', requireProject)
 
-const STATUSES = ['todo', 'in_progress', 'review', 'verified', 'done'] as const
+const STATUSES = TASK_STATUSES
 const PRIORITIES = ['low', 'normal', 'high', 'urgent'] as const
 
 const taskShape = {
@@ -260,7 +261,7 @@ tasksRoute.get('/', async (c) => {
         select count(*)::int from ${taskBlockers} b
         join ${tasks} bt on bt.id = b.blocker_task_id
         where b.blocked_task_id = "tasks"."id"
-          and bt.status <> 'done' and bt.deleted_at is null
+          and bt.status not in ${closedSql} and bt.deleted_at is null
       )`,
       blocking: sql<number>`(
         select count(*)::int from ${taskBlockers} b
@@ -282,7 +283,7 @@ tasksRoute.get('/', async (c) => {
         select min(b.created_at) from ${taskBlockers} b
         join ${tasks} dt on dt.id = b.blocked_task_id
         where b.blocker_task_id = "tasks"."id"
-          and dt.deleted_at is null and dt.status <> 'done'
+          and dt.deleted_at is null and dt.status not in ${closedSql}
       )`,
     })
     .from(tasks)
@@ -1858,7 +1859,7 @@ tasksMineRoute.get('/', async (c) => {
         eq(tasks.assigneeId, sub),
         isNull(tasks.deletedAt),
         // Всё, кроме сделанного: иначе панель утонет в закрытых задачах.
-        sql`${tasks.status} <> 'done'`,
+        sql`${tasks.status} not in ${closedSql}`,
       ),
     )
     /**

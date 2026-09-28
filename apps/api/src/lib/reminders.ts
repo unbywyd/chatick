@@ -1,3 +1,4 @@
+import type { TaskStatus } from './task-status.js'
 import { and, eq, inArray, isNotNull, isNull, lte } from 'drizzle-orm'
 import { db } from '../db/client.js'
 import { flush as flushWebhooks, sweepDeliveries } from './webhooks.js'
@@ -75,7 +76,7 @@ async function runReminder(r: typeof taskReminders.$inferSelect) {
   const project = await db.query.projects.findFirst({ where: eq(projects.id, r.projectId) })
   if (!project) return
 
-  const statuses = r.statuses.split(',').filter(Boolean) as ('todo' | 'in_progress' | 'review' | 'verified' | 'done')[]
+  const statuses = r.statuses.split(',').filter(Boolean) as TaskStatus[]
   if (!statuses.length) return
 
   const openTasks = await db.query.tasks.findMany({

@@ -1,3 +1,4 @@
+import { TASK_STATUSES, closedSql, settledSql, isClosed } from './task-status.js'
 import { and, asc, desc, eq, gt, gte, ilike, inArray, isNotNull, isNull, lte, or, sql } from 'drizzle-orm'
 import { companyOf, projectPath } from './links.js'
 import { shortUrlFor } from './short-links.js'
@@ -241,7 +242,7 @@ export function memoryTools(projectId: string, actorUserId: string): { tools: To
       parameters: {
         type: 'object',
         properties: {
-          status: { type: 'string', enum: ['todo', 'in_progress', 'review', 'verified', 'done'] },
+          status: { type: 'string', enum: [...TASK_STATUSES] },
           assignee: { type: 'string', description: '"me", a person name, or "none" for unassigned' },
           blocked: { type: 'boolean', description: 'Only tasks waiting on another unfinished task' },
           stale: { type: 'number', description: 'Untouched for at least this many days' },
@@ -336,6 +337,7 @@ export function memoryTools(projectId: string, actorUserId: string): { tools: To
         'To pull someone into the description, write @[Their Name](<userId>) — plain "@Name" is text and notifies nobody. ' +
         "The assignee is notified by being assigned; mention others only when they specifically need to see it. " +
         'When the task is about something the user just showed you — a screenshot, a log — pass its id in attachmentIds (get it from list_chat_images): the file lands in the task AND survives, otherwise chat attachments are deleted within a day. ' +
+        'KEEP IT SHORT: a task is what to do and how to check it, readable without scrolling — the team asked for this after getting walls of text they could not find the ask in. Details go in a comment, a checklist or a document; people will ask if they need more. ' +
         'The reply carries a short link to the new task — pass it on as is. Requires the author\'s tasks.create permission.',
       parameters: {
         type: 'object',
@@ -343,7 +345,7 @@ export function memoryTools(projectId: string, actorUserId: string): { tools: To
           title: { type: 'string' },
           description: { type: 'string' },
           priority: { type: 'string', enum: ['low', 'normal', 'high', 'urgent'] },
-          status: { type: 'string', enum: ['todo', 'in_progress', 'review', 'verified', 'done'] },
+          status: { type: 'string', enum: [...TASK_STATUSES] },
           assignee: { type: 'string', description: 'REQUIRED: member name or email. A task nobody owns sits on the board unclaimed — ask who should do it before creating' },
           dueDate: { type: 'string', description: 'due date, ISO or YYYY-MM-DD' },
           estimateMinutes: { type: 'number', description: 'REQUIRED: time estimate in minutes assuming the person works WITH an AI assistant (realistic, usually shorter)' },
@@ -361,7 +363,9 @@ export function memoryTools(projectId: string, actorUserId: string): { tools: To
     {
       name: 'update_task',
       description:
-        'Update a task by number: title/description/priority/status/assignee/due date/estimate/sprint. Only pass fields to change. Requires tasks.edit (status-only change needs tasks.changeStatus).',
+        'Update a task by number: title/description/priority/status/assignee/due date/estimate/sprint. Only pass fields to change. ' +
+        'status=cancelled is the exit from any rung and it is the person\'s call, never yours: set it only when they said to drop the task — a cancelled task leaves every list, count and blocker chain at once. ' +
+        'Keep an edited description short too: what to do and how to check it. Requires tasks.edit (status-only change needs tasks.changeStatus).',
       parameters: {
         type: 'object',
         properties: {
@@ -369,7 +373,7 @@ export function memoryTools(projectId: string, actorUserId: string): { tools: To
           title: { type: 'string' },
           description: { type: 'string' },
           priority: { type: 'string', enum: ['low', 'normal', 'high', 'urgent'] },
-          status: { type: 'string', enum: ['todo', 'in_progress', 'review', 'verified', 'done'] },
+          status: { type: 'string', enum: [...TASK_STATUSES] },
           assignee: { type: 'string', description: 'member name/email, or "none" to unassign' },
           dueDate: { type: 'string', description: 'ISO or YYYY-MM-DD, or "none" to clear' },
           estimateMinutes: { type: 'number' },
@@ -383,7 +387,7 @@ export function memoryTools(projectId: string, actorUserId: string): { tools: To
       description: 'Change task status by number. Requires tasks.changeStatus.',
       parameters: {
         type: 'object',
-        properties: { number: { type: 'string' }, status: { type: 'string', enum: ['todo', 'in_progress', 'review', 'verified', 'done'] } },
+        properties: { number: { type: 'string' }, status: { type: 'string', enum: [...TASK_STATUSES] } },
         required: ['number', 'status'],
       },
     },
@@ -409,7 +413,7 @@ export function memoryTools(projectId: string, actorUserId: string): { tools: To
                 title: { type: 'string' },
                 description: { type: 'string' },
                 priority: { type: 'string', enum: ['low', 'normal', 'high', 'urgent'] },
-                status: { type: 'string', enum: ['todo', 'in_progress', 'review', 'verified', 'done'] },
+                status: { type: 'string', enum: [...TASK_STATUSES] },
                 assignee: { type: 'string' },
                 dueDate: { type: 'string' },
                 estimateMinutes: { type: 'number' },
@@ -434,7 +438,7 @@ export function memoryTools(projectId: string, actorUserId: string): { tools: To
             type: 'object',
             description: 'Alternative to numbers: select tasks by criteria',
             properties: {
-              status: { type: 'string', enum: ['todo', 'in_progress', 'review', 'verified', 'done'] },
+              status: { type: 'string', enum: [...TASK_STATUSES] },
               assignee: { type: 'string', description: 'member name/email, or "me" for the author' },
               sprint: { type: 'string', description: 'sprint name' },
             },
@@ -443,7 +447,7 @@ export function memoryTools(projectId: string, actorUserId: string): { tools: To
             type: 'object',
             description: 'What to set on every selected task',
             properties: {
-              status: { type: 'string', enum: ['todo', 'in_progress', 'review', 'verified', 'done'] },
+              status: { type: 'string', enum: [...TASK_STATUSES] },
               priority: { type: 'string', enum: ['low', 'normal', 'high', 'urgent'] },
               assignee: { type: 'string', description: 'member name/email, or "none" to unassign' },
               dueDate: { type: 'string', description: 'ISO or YYYY-MM-DD, or "none" to clear' },
@@ -466,7 +470,7 @@ export function memoryTools(projectId: string, actorUserId: string): { tools: To
           filter: {
             type: 'object',
             properties: {
-              status: { type: 'string', enum: ['todo', 'in_progress', 'review', 'verified', 'done'] },
+              status: { type: 'string', enum: [...TASK_STATUSES] },
               assignee: { type: 'string' },
               sprint: { type: 'string' },
             },
@@ -975,7 +979,7 @@ export function memoryTools(projectId: string, actorUserId: string): { tools: To
 
     const conds = [eq(tasks.projectId, projectId), sql`${tasks.deletedAt} is null`]
     if (numbers.length) conds.push(inArray(tasks.number, numbers))
-    if (typeof filter.status === 'string' && ['todo', 'in_progress', 'review', 'verified', 'done'].includes(filter.status)) {
+    if (typeof filter.status === 'string' && (TASK_STATUSES as readonly string[]).includes(filter.status)) {
       conds.push(eq(tasks.status, filter.status as 'todo'))
     }
     if (filter.assignee !== undefined) {
@@ -1066,7 +1070,7 @@ export function memoryTools(projectId: string, actorUserId: string): { tools: To
         title: String(args.title ?? '').slice(0, 300),
         description: String(args.description ?? '').slice(0, 10_000),
         priority: (['low', 'normal', 'high', 'urgent'].includes(String(args.priority)) ? args.priority : 'normal') as 'normal',
-        status: (['todo', 'in_progress', 'review', 'verified', 'done'].includes(String(args.status)) ? args.status : 'todo') as 'todo',
+        status: ((TASK_STATUSES as readonly string[]).includes(String(args.status)) ? args.status : 'todo') as 'todo',
         assigneeId: assigneeId ?? null,
         groupId: groupId ?? null,
         dueDate: due ?? null,
@@ -1372,7 +1376,7 @@ export function memoryTools(projectId: string, actorUserId: string): { tools: To
       // явно: спросили status=done вместе с overdue — честнее пусто, чем
       // молча подменённый список.
       const openOnly = () => {
-        if (!status) conds.push(sql`${tasks.status} not in ('done', 'verified')`)
+        if (!status) conds.push(sql`${tasks.status} not in ${settledSql}`)
       }
 
       if (args.overdue === true) {
@@ -1393,7 +1397,7 @@ export function memoryTools(projectId: string, actorUserId: string): { tools: To
         conds.push(sql`exists (
           select 1 from ${taskBlockers} b
           join ${tasks} bt on bt.id = b.blocker_task_id
-          where b.blocked_task_id = ${tasks.id} and bt.status <> 'done' and bt.deleted_at is null
+          where b.blocked_task_id = ${tasks.id} and bt.status not in ${closedSql} and bt.deleted_at is null
         )`)
         openOnly()
       }
@@ -1504,7 +1508,7 @@ export function memoryTools(projectId: string, actorUserId: string): { tools: To
       if (typeof args.title === 'string') patch.title = args.title.slice(0, 300)
       if (typeof args.description === 'string') patch.description = args.description.slice(0, 10_000)
       if (['low', 'normal', 'high', 'urgent'].includes(String(args.priority))) patch.priority = args.priority
-      if (['todo', 'in_progress', 'review', 'verified', 'done'].includes(String(args.status))) patch.status = args.status
+      if ((TASK_STATUSES as readonly string[]).includes(String(args.status))) patch.status = args.status
       const assigneeId = await resolveAssignee(args.assignee)
       if (assigneeId !== undefined) patch.assigneeId = assigneeId
       const groupId = await resolveSprint(args.sprint)
@@ -1530,7 +1534,7 @@ export function memoryTools(projectId: string, actorUserId: string): { tools: To
       const t = await findTask(String(args.number ?? ''))
       if (!t) return 'Task not found.'
       const status = String(args.status ?? '')
-      if (!['todo', 'in_progress', 'review', 'verified', 'done'].includes(status)) return 'Invalid status.'
+      if (!(TASK_STATUSES as readonly string[]).includes(status)) return 'Invalid status.'
       await db.update(tasks).set({ status: status as 'todo' }).where(eq(tasks.id, t.id))
       broadcast(projectId, 'tasks_changed', {})
       return `${t.number} → ${status}.`
@@ -1614,7 +1618,7 @@ export function memoryTools(projectId: string, actorUserId: string): { tools: To
 
       const patch: Record<string, unknown> = {}
       if (['low', 'normal', 'high', 'urgent'].includes(String(changes.priority))) patch.priority = changes.priority
-      if (['todo', 'in_progress', 'review', 'verified', 'done'].includes(String(changes.status))) patch.status = changes.status
+      if ((TASK_STATUSES as readonly string[]).includes(String(changes.status))) patch.status = changes.status
       const assigneeId = await resolveAssignee(changes.assignee)
       if (assigneeId !== undefined) patch.assigneeId = assigneeId
       const groupId = await resolveSprint(changes.sprint)
@@ -2513,8 +2517,8 @@ export function memoryTools(projectId: string, actorUserId: string): { tools: To
             isNull(tasks.deletedAt),
             sql`blocked.deleted_at is null`,
             // Закрытая задача никого не держит: связь остаётся историей.
-            sql`${tasks.status} <> 'done'`,
-            sql`blocked.status <> 'done'`,
+            sql`${tasks.status} not in ${closedSql}`,
+            sql`blocked.status not in ${closedSql}`,
           ),
         )
       if (!rows.length) return 'Nothing is blocking anything right now.'
@@ -2550,7 +2554,7 @@ export function memoryTools(projectId: string, actorUserId: string): { tools: To
         .from(taskBlockers)
         .innerJoin(tasks, eq(tasks.id, taskBlockers.blockedTaskId))
         .where(and(eq(taskBlockers.blockerTaskId, task.id), isNull(tasks.deletedAt)))
-      const open = waits.filter((w) => w.st !== 'done').length
+      const open = waits.filter((w) => !isClosed(w.st)).length
       const fmt = (list: typeof waits) => list.map((x) => `${x.n} "${x.t}" [${x.st}]`).join(', ') || 'none'
       return [
         `${task.number} "${task.title}"`,
