@@ -12,7 +12,7 @@ import { Avatar } from '@/components/ui/avatar'
 import { ClipboardBanner } from '@/components/ui/clipboard-banner'
 import { useConfirm } from '@/components/ui/confirm'
 import type { Member } from './types'
-import { FileViewer, type ViewerFile } from '@/components/files/FileViewer'
+import { FileViewer, type ViewerFile, isImage } from '@/components/files/FileViewer'
 
 // Комментарии к задаче (SPEC §8.9): минимальный Tiptap + mentions + ответы + файлы.
 
@@ -105,9 +105,9 @@ export function TaskComments({
   // вложениях задачи: presigned на час, запрашиваем разом на все комментарии.
   const previewUrls = useQuery({
     queryKey: ['comment-previews', taskId, commentsQ.data?.map((c) => c.files.map((f) => f.id).join(',')).join('|')],
-    enabled: Boolean(commentsQ.data?.some((c) => c.files.some((f) => f.mime.startsWith('image/') && !f.deleted))),
+    enabled: Boolean(commentsQ.data?.some((c) => c.files.some((f) => isImage(f) && !f.deleted))),
     queryFn: async () => {
-      const images = (commentsQ.data ?? []).flatMap((c) => c.files.filter((f) => f.mime.startsWith('image/') && !f.deleted))
+      const images = (commentsQ.data ?? []).flatMap((c) => c.files.filter((f) => isImage(f) && !f.deleted))
       const entries = await Promise.all(
         images.map(async (f) => {
           try {
@@ -276,7 +276,7 @@ export function TaskComments({
                       >
                         {/* Превью вместо скрепки: по имени вроде
                             «354881888_6f937116-….webp» не понять, что внутри. */}
-                        {f.mime.startsWith('image/') && previewUrls.data?.[f.id] ? (
+                        {isImage(f) && previewUrls.data?.[f.id] ? (
                           <img src={previewUrls.data[f.id]} alt="" className="no-zoom size-5 rounded object-cover" />
                         ) : (
                           <Paperclip className="size-3" />

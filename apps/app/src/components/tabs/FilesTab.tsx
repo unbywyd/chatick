@@ -29,7 +29,7 @@ import { Button } from '@/components/ui/button'
 import { useConfirm } from '@/components/ui/confirm'
 import { Popover, PopoverTrigger, PopoverContent } from '@/components/ui/popover'
 import { Calendar } from '@/components/ui/calendar'
-import { FileViewer, type ViewerFile } from '@/components/files/FileViewer'
+import { FileViewer, type ViewerFile, isImage } from '@/components/files/FileViewer'
 import { ShareDialog } from '@/components/ShareDialog'
 import { ClipboardBanner } from '@/components/ui/clipboard-banner'
 import { DragHandle } from '@/components/ui/drag-handle'
@@ -472,7 +472,7 @@ function FileCard({
 }) {
   const { t } = useTranslation()
   const Icon = iconFor(file.mime)
-  const isImg = file.mime.startsWith('image/')
+  const isImg = isImage(file)
 
   const preview = useQuery({
     queryKey: ['file-preview', file.id],

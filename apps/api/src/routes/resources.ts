@@ -1,3 +1,4 @@
+import { resolveMime } from '../lib/mime.js'
 import { Hono } from 'hono'
 import { nanoid } from 'nanoid'
 import { PutObjectCommand, GetObjectCommand, DeleteObjectCommand } from '@aws-sdk/client-s3'
@@ -524,7 +525,7 @@ resourcesRoute.post('/:id/files', async (c) => {
       resourceId: resource.id,
       name: (file.name || 'file').slice(0, 200),
       key,
-      mime: file.type || 'application/octet-stream',
+      mime: resolveMime(file.type, file.name),
       // Размер ИСХОДНОГО файла: шифротекст на 28 байт длиннее, и показывать
       // человеку эту разницу незачем.
       size: String(plain.length),

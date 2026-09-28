@@ -1,3 +1,4 @@
+import { resolveMime } from '../lib/mime.js'
 import { Hono } from 'hono'
 import { Readable } from 'node:stream'
 import { and, desc, eq, gte, ilike, inArray, isNull, lte, sql } from 'drizzle-orm'
@@ -353,7 +354,9 @@ filesRoute.post('/', async (c) => {
   const niceBase = looksGenerated ? `image-${new Date().toISOString().slice(0, 16).replace('T', '_').replace(':', '-')}` : null
   const displayName = niceBase ? `${niceBase}${file.name.match(/\.[a-z0-9]+$/i)?.[0] ?? '.png'}` : file.name
   const safeName = displayName.replace(/[/\\]/g, '_')
-  const mime = file.type || 'application/octet-stream'
+  // Тип по имени, когда загрузчик его не назвал: мост шлёт байты без типа,
+  // и 36 картинок легли как octet-stream — без миниатюр и без просмотра.
+  const mime = resolveMime(file.type, file.name)
   let buffer = Buffer.from(await file.arrayBuffer())
   let outName = displayName
   let outMime = mime

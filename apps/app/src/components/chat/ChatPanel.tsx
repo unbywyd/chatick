@@ -24,7 +24,7 @@ import { ShareDialog } from '@/components/ShareDialog'
 import { AiFeed } from './AiFeed'
 import { MyTasksPanel } from './MyTasksPanel'
 import { ChatSkeleton } from '@/components/ui/skeleton'
-import { FileViewer, type ViewerFile } from '@/components/files/FileViewer'
+import { FileViewer, type ViewerFile, isImage } from '@/components/files/FileViewer'
 import { NOTE_META, NOTE_TYPES, type NoteType } from '@/components/tabs/NotesTab'
 import { DatePicker } from '@/components/ui/date-picker'
 
@@ -1523,8 +1523,8 @@ export function MessageAttachments({
   const { t } = useTranslation()
   const live = attachments.filter((a) => !a.deleted)
   const deleted = attachments.filter((a) => a.deleted)
-  const images = live.filter((a) => a.mime.startsWith('image/'))
-  const others = live.filter((a) => !a.mime.startsWith('image/'))
+  const images = live.filter((a) => isImage(a))
+  const others = live.filter((a) => !isImage(a))
   const [viewing, setViewing] = useState<ViewerFile | null>(null)
   /** файл, которым делятся прямо из просмотра */
   const [sharingFile, setSharingFile] = useState<ViewerFile | null>(null)

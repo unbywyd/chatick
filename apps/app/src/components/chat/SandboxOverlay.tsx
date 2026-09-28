@@ -1,3 +1,4 @@
+import { isImage } from '@/components/files/FileViewer'
 import { useEffect, useRef, useState } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { useTranslation } from 'react-i18next'
@@ -187,7 +188,7 @@ export function SandboxOverlay({
                   <div className="mt-2 flex flex-wrap gap-1.5">
                     {original.attachments.map((a) => (
                       <span key={a.id} className="inline-flex items-center gap-1 rounded-full border bg-secondary px-2 py-0.5 text-xs">
-                        {a.mime.startsWith('image/') ? <ImageIcon className="size-3" /> : <FileText className="size-3" />}
+                        {isImage(a) ? <ImageIcon className="size-3" /> : <FileText className="size-3" />}
                         <span className="max-w-32 truncate">{a.name}</span>
                       </span>
                     ))}

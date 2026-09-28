@@ -1,3 +1,4 @@
+import { resolveMime } from '../lib/mime.js'
 import { TASK_STATUSES, SETTLED_STATUSES, closedSql, isClosed, type TaskStatus } from '../lib/task-status.js'
 import { Hono } from 'hono'
 import { and, asc, desc, eq, gt, gte, ilike, inArray, isNull, lt, lte, notInArray, or, sql } from 'drizzle-orm'
@@ -3432,7 +3433,7 @@ bridgeRoute.post('/resources/:id/files', async (c) => {
       resourceId: resource.id,
       name: (file.name || 'file').slice(0, 200),
       key,
-      mime: file.type || 'application/octet-stream',
+      mime: resolveMime(file.type, file.name),
       size: String(plain.length),
       uploadedById: id.userId,
     })

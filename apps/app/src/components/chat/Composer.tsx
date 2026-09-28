@@ -1,3 +1,4 @@
+import { isImage } from '@/components/files/FileViewer'
 import { useEffect, useRef, useState } from 'react'
 import { useEditor, EditorContent, ReactRenderer } from '@tiptap/react'
 import { BubbleMenu } from '@tiptap/react/menus'
@@ -91,10 +92,10 @@ export function Composer({
   // превью-URL для картинок-вложений (в чипах)
   const previews = useQuery({
     queryKey: ['composer-previews', attachments.map((a) => a.id).join(',')],
-    enabled: attachments.some((a) => a.mime.startsWith('image/')),
+    enabled: attachments.some((a) => isImage(a)),
     staleTime: 50 * 60 * 1000,
     queryFn: async () => {
-      const imgs = attachments.filter((a) => a.mime.startsWith('image/'))
+      const imgs = attachments.filter((a) => isImage(a))
       const entries = await Promise.all(
         imgs.map(async (a) => [a.id, (await api<{ url: string }>(`/api/v1/files/${a.id}/view-url`, {}, 'project')).url] as const),
       )
@@ -458,9 +459,9 @@ export function Composer({
           ))}
           {attachments.map((a) => (
             <span key={a.id} className="inline-flex max-w-48 items-center gap-1.5 rounded-full border bg-secondary py-1 pe-2 ps-1 text-xs">
-              {a.mime.startsWith('image/') && previews.data?.[a.id] ? (
+              {isImage(a) && previews.data?.[a.id] ? (
                 <img src={previews.data[a.id]} alt="" className="size-5 shrink-0 rounded-full object-cover" />
-              ) : a.mime.startsWith('image/') ? (
+              ) : isImage(a) ? (
                 <ImageIcon className="size-4 shrink-0 ps-0.5" />
               ) : (
                 <FileText className="size-4 shrink-0 ps-0.5" />

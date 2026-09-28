@@ -35,7 +35,7 @@ import {
   DropdownMenuCheckItem,
 } from '@/components/ui/dropdown-menu'
 import { Popover, PopoverTrigger, PopoverContent } from '@/components/ui/popover'
-import { FileViewer, kindOf, type ViewerFile } from '@/components/files/FileViewer'
+import { FileViewer, kindOf, type ViewerFile, isImage } from '@/components/files/FileViewer'
 import { RichEditor } from '@/components/ui/rich-editor'
 import { Avatar } from '@/components/ui/avatar'
 import { TaskComments } from './TaskComments'
@@ -143,9 +143,9 @@ export function TaskDrawer({
   // превью-URL картинок (inline presigned, 1ч)
   const previews = useQuery({
     queryKey: ['task-file-previews', task.id, attachments.data?.map((a) => a.id).join(',')],
-    enabled: Boolean(attachments.data?.some((a) => a.mime.startsWith('image/') && !a.deleted)),
+    enabled: Boolean(attachments.data?.some((a) => isImage(a) && !a.deleted)),
     queryFn: async () => {
-      const images = attachments.data!.filter((a) => a.mime.startsWith('image/') && !a.deleted)
+      const images = attachments.data!.filter((a) => isImage(a) && !a.deleted)
       const entries = await Promise.all(
         images.map(async (a) => {
           const { url } = await api<{ url: string }>(`/api/v1/files/${a.id}/view-url`, {}, 'project')
@@ -576,12 +576,12 @@ export function TaskDrawer({
               )}
             >
               {/* Превью картинок сеткой (удалённые — не показываем как превью) */}
-              {(attachments.data ?? []).some((a) => a.mime.startsWith('image/') && !a.deleted) && (
+              {(attachments.data ?? []).some((a) => isImage(a) && !a.deleted) && (
                 // Мельче и больше в ряд: это опознавательные знаки, а не
                 // галерея — разглядывают их в просмотрщике по клику.
                 <div className="mb-2 grid grid-cols-[repeat(auto-fill,minmax(84px,1fr))] gap-2">
                   {attachments.data!
-                    .filter((a) => a.mime.startsWith('image/') && !a.deleted)
+                    .filter((a) => isImage(a) && !a.deleted)
                     .map((a) => (
                       <button
                         key={a.id}
@@ -604,7 +604,7 @@ export function TaskDrawer({
               {/* Остальные файлы списком (не картинки, не удалённые) */}
               <ul className="space-y-1">
                 {(attachments.data ?? [])
-                  .filter((a) => !a.mime.startsWith('image/') && !a.deleted)
+                  .filter((a) => !isImage(a) && !a.deleted)
                   .map((a) => (
                     <li key={a.id} className="flex items-center gap-2 rounded-md border bg-card px-2.5 py-2">
                       <File className="size-4 shrink-0 text-muted-foreground" />
@@ -666,12 +666,12 @@ export function TaskDrawer({
             </div>
 
             {/* Удаление картинок — по ховеру в лайтбоксе сложно; кнопка под сеткой */}
-            {(attachments.data ?? []).filter((a) => a.mime.startsWith('image/') && !a.deleted).length > 0 && (
+            {(attachments.data ?? []).filter((a) => isImage(a) && !a.deleted).length > 0 && (
               <details className="mt-1">
                 <summary className="cursor-pointer text-xs text-muted-foreground">{t('tasks.manageImages')}</summary>
                 <ul className="mt-1 space-y-1">
                   {attachments.data!
-                    .filter((a) => a.mime.startsWith('image/') && !a.deleted)
+                    .filter((a) => isImage(a) && !a.deleted)
                     .map((a) => (
                       <li key={a.id} className="flex items-center gap-2 text-xs">
                         <span className="min-w-0 flex-1 truncate">{a.name}</span>

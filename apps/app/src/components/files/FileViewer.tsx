@@ -17,10 +17,24 @@ export type ViewerFile = { id: string; name: string; mime: string; hasOriginal?:
  * тем, кто рисует список: иначе такой список заводит собственную проверку,
  * и она отстаёт от возможностей просмотрщика.
  */
+/**
+ * «Это картинка?» — единственный ответ на этот вопрос в клиенте.
+ *
+ * Раньше каждый список спрашивал `mime.startsWith('image/')` сам — семь мест,
+ * и все семь одинаково не узнавали картинку без типа. Спрашивать надо у
+ * kindOf: тот же ответ решает, чем файл показывать.
+ */
+export function isImage(file: { name: string; mime: string }): boolean {
+  return kindOf({ id: '', name: file.name, mime: file.mime }) === 'image'
+}
+
 export function kindOf(file: ViewerFile): 'image' | 'video' | 'audio' | 'pdf' | 'sheet' | 'text' | 'office' | 'other' {
   const m = file.mime
   const ext = file.name.toLowerCase().match(/\.([a-z0-9]+)$/)?.[1] ?? ''
-  if (m.startsWith('image/')) return 'image'
+  // Картинки — тоже по расширению, как видео и звук ниже: на проде лежали
+  // 36 «.png» с типом octet-stream (загружены без типа через мост), и по
+  // одному mime они считались «прочим» — без миниатюры и без просмотра.
+  if (m.startsWith('image/') || ['png', 'jpg', 'jpeg', 'gif', 'webp', 'svg', 'heic', 'avif', 'bmp'].includes(ext)) return 'image'
   if (m.startsWith('video/') || ['mp4', 'webm', 'mov', 'mkv', 'avi'].includes(ext)) return 'video'
   if (m.startsWith('audio/') || ['mp3', 'wav', 'ogg', 'm4a', 'flac', 'aac'].includes(ext)) return 'audio'
   if (m === 'application/pdf' || ext === 'pdf') return 'pdf'
