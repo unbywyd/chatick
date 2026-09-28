@@ -218,6 +218,24 @@ export async function summarizeAsk(
   if (row) sendToUserAnywhere(row.userId, 'notification', { projectId, id: row.id })
 }
 
+/**
+ * Название статуса на языке получателя — теми же словами, что на доске.
+ *
+ * Раньше в текст подставлялся сырой ключ, и ивритское уведомление читалось
+ * «סטטוס המשימה TASK-39 שונה ל-«in_progress»»: на доске человек видел
+ * «בתהליך», а в уведомлении — английское слово с подчёркиванием.
+ *
+ * Слова обязаны совпадать с tasks.status в локалях клиента — за это отвечает
+ * status-notification-label.test.ts. Неизвестный ключ отдаём как есть: сырое
+ * слово лучше пустоты.
+ */
+const STATUS_WORDS: Record<Lang, Record<string, string>> = {
+  en: { todo: 'To do', in_progress: 'In progress', review: 'Awaiting review', verified: 'Verified', done: 'Done', cancelled: 'Cancelled' },
+  ru: { todo: 'К выполнению', in_progress: 'В работе', review: 'Ждёт проверки', verified: 'Проверено', done: 'Готово', cancelled: 'Отменено' },
+  he: { todo: 'לביצוע', in_progress: 'בתהליך', review: 'ממתין לבדיקה', verified: 'עבר בדיקות', done: 'בוצע', cancelled: 'בוטל' },
+}
+const statusWords = (status: string, lang: Lang): string => STATUS_WORDS[lang]?.[status] ?? STATUS_WORDS.en[status] ?? status
+
 function tr(lang: Lang, key: string, vars: Record<string, string>): string {
   const s = STR[lang]?.[key] ?? STR.en[key] ?? key
   return s.replace(/\{(\w+)\}/g, (_, k) => vars[k] ?? '')
@@ -342,6 +360,9 @@ export async function notify(params: NotifyParams): Promise<void> {
         vars.when = dueWords(vars.dueAt, lang)
         delete vars.dueAt
       }
+      // Статус — словами получателя, а не ключом. Оба пути (правка из
+      // интерфейса и ассистент чата) проходят здесь, поэтому правка одна.
+      if (vars.status) vars.status = statusWords(vars.status, lang)
 
       // ГЛАВНОЕ: создаём ВНУТРЕННЕЕ уведомление (SPEC §8.22). Почта — суточным дайджестом.
       const [created] = await db
