@@ -2,7 +2,7 @@ import { SignJWT, jwtVerify } from 'jose'
 import { createMiddleware } from 'hono/factory'
 import { and, eq } from 'drizzle-orm'
 import { db } from './db/client.js'
-import { projectMembers, users } from './db/schema.js'
+import { projectMembers, projects, users } from './db/schema.js'
 import { env } from './env.js'
 
 const secret = new TextEncoder().encode(env.JWT_SECRET)
@@ -54,9 +54,34 @@ export async function verifyFileToken(token: string): Promise<{ fileId: string; 
   }
 }
 
+/**
+ * Токен для картинок в адресе (<img src="…?t=">): img не умеет слать
+ * Authorization.
+ *
+ * Раньше туда шёл проектный токен — полный доступ к проекту на месяц, и он
+ * уходил наружу всякий раз, когда человек копировал адрес картинки. Сессионный
+ * был бы ещё хуже: он открывает весь аккаунт. Этот годится только на чтение
+ * картинок; права на каждый файл проверяются в базе при отдаче.
+ */
+export const signMediaToken = (sub: string) =>
+  new SignJWT({ typ: 'media', sub }).setProtectedHeader({ alg: 'HS256' }).setIssuedAt().setExpirationTime('30d').sign(secret)
+
+export async function verifyMediaToken(token: string): Promise<{ sub: string } | null> {
+  try {
+    const { payload } = await jwtVerify(token, secret)
+    const p = payload as { typ?: string; sub?: string }
+    return p.typ === 'media' && p.sub ? { sub: p.sub } : null
+  } catch {
+    return null
+  }
+}
+
 export async function verifyToken(token: string): Promise<TokenPayload | null> {
   try {
     const { payload } = await jwtVerify(token, secret)
+    // Подписью одним секретом подписаны и узкие токены — файловый, медиа.
+    // Без этой проверки любой из них проходил бы как полноценная сессия.
+    if (payload.typ !== 'session' && payload.typ !== 'project') return null
     return payload as unknown as TokenPayload
   } catch {
     return null
@@ -90,21 +115,36 @@ export const requireSession = createMiddleware<SessionEnv>(async (c, next) => {
   await next()
 })
 
-/** Только project-токен — все ручки внутри проекта. */
+/**
+ * Ручки внутри проекта. Проект приходит одним из двух способов:
+ *
+ *  - сессионный токен + X-Project — проект из адреса окна. Основной путь:
+ *    проект в запросе ровно тот, что человек видит, подменить его нечем.
+ *  - проектный токен (/enter) — старый путь. Его шлют бандлы, выпущенные до
+ *    перехода на адрес и ещё живущие в кэшах браузеров. Убирать — только
+ *    когда их не останется.
+ *
+ * В обоих случаях членство и роль берутся из базы, а не из токена.
+ */
 export const requireProject = createMiddleware<ProjectEnv>(async (c, next) => {
   const token = bearer(c.req.header('Authorization'))
   const payload = token ? await verifyToken(token) : null
-  if (!payload || payload.typ !== 'project') {
-    return c.json({ error: 'Project token required' }, 401)
-  }
-
-  // Клиент называет проект из адреса окна (X-Project). Слот токена в клиенте
-  // один, и его подменяли под ногами: окно показывало один проект, токен был
-  // от другого — и таблица задач наполнялась чужими. Отдавать данные не того
-  // проекта нельзя ни при каком расхождении; по 409 клиент обменивает токен.
   const claimed = c.req.header('x-project')
-  if (claimed && claimed !== payload.projectId) {
-    return c.json({ error: 'Project token belongs to another project than the page; re-enter the project' }, 409)
+
+  let projectId: string
+  if (payload?.typ === 'project') {
+    // Клиент называет проект из адреса окна (X-Project). Слот токена в клиенте
+    // один, и его подменяли под ногами: окно показывало один проект, токен был
+    // от другого — и таблица задач наполнялась чужими. Отдавать данные не того
+    // проекта нельзя ни при каком расхождении; по 409 клиент обменивает токен.
+    if (claimed && claimed !== payload.projectId) {
+      return c.json({ error: 'Project token belongs to another project than the page; re-enter the project' }, 409)
+    }
+    projectId = payload.projectId
+  } else if (payload?.typ === 'session' && claimed) {
+    projectId = claimed
+  } else {
+    return c.json({ error: 'Project token required' }, 401)
   }
 
   // Токен живёт 30 дней, а членство кончается в тот момент, когда человека
@@ -115,11 +155,32 @@ export const requireProject = createMiddleware<ProjectEnv>(async (c, next) => {
   // Роль тоже берём из базы, а не из токена: понижённый из админов до
   // участника иначе сохранял бы админские права до перевыпуска.
   const membership = await db.query.projectMembers.findFirst({
-    where: and(eq(projectMembers.projectId, payload.projectId), eq(projectMembers.userId, payload.sub)),
-    columns: { role: true },
+    where: and(eq(projectMembers.projectId, projectId), eq(projectMembers.userId, payload.sub)),
+    columns: { role: true, rulesAcceptedAt: true },
   })
+
+  if (payload.typ === 'session') {
+    if (!membership) {
+      // 404 и 403 клиент объясняет по-разному: «проекта больше нет» против
+      // «вы не в команде». Лишний запрос — только на пути отказа.
+      const exists = await db.query.projects.findFirst({ where: eq(projects.id, projectId), columns: { id: true } })
+      return exists ? c.json({ error: 'Forbidden' }, 403) : c.json({ error: 'Not found' }, 404)
+    }
+    // Правила чата принимаются до первого входа (SPEC §4.2). Проектный токен
+    // выдавался только после согласия; без токена ту же дверь держим здесь.
+    if (!membership.rulesAcceptedAt) {
+      const project = await db.query.projects.findFirst({
+        where: eq(projects.id, projectId),
+        columns: { name: true, chatRules: true },
+      })
+      return c.json(
+        { error: 'Chat rules not accepted', needRulesAccept: true, chatRules: project?.chatRules ?? '', projectName: project?.name ?? '' },
+        428,
+      )
+    }
+  }
   if (!membership) return c.json({ error: 'Forbidden' }, 403)
 
-  c.set('auth', { ...payload, role: membership.role })
+  c.set('auth', { typ: 'project', sub: payload.sub, email: payload.email, projectId, role: membership.role })
   await next()
 })

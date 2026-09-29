@@ -68,6 +68,10 @@ function schedulePersist(documentId: string, room: Room) {
 /** Загрузить/создать комнату. Первый вход мигрирует существующий HTML в Yjs. */
 async function getRoom(documentId: string, projectId: string): Promise<Room | null> {
   const existing = rooms.get(documentId)
+  // Комната уже открыта кем-то — но проект у неё свой. Без этой проверки
+  // участник другого проекта с правом на документы входил в чужую комнату,
+  // стоило ему знать id документа.
+  if (existing && existing.projectId !== projectId) return null
   if (existing) {
     if (existing.destroyTimer) {
       clearTimeout(existing.destroyTimer)
@@ -180,19 +184,33 @@ export function attachYjs(server: Server) {
     const documentId = url.searchParams.get('doc')
     const payload = token ? await verifyToken(token) : null
 
-    if (!payload || payload.typ !== 'project' || !documentId) {
+    if (!payload || (payload.typ !== 'project' && payload.typ !== 'session') || !documentId) {
       pending.length = 0
       ws.close(4001, 'unauthorized')
       return
     }
+    // Проект — у самого документа (сессионный токен) или из проектного
+    // токена (старые бандлы). Право ниже проверяется в найденном проекте,
+    // так что сессия в чужой документ не пройдёт.
+    let projectId: string
+    if (payload.typ === 'project') projectId = payload.projectId
+    else {
+      const d = await db.query.documents.findFirst({ where: eq(documents.id, documentId), columns: { projectId: true } })
+      if (!d) {
+        pending.length = 0
+        ws.close(4004, 'not found')
+        return
+      }
+      projectId = d.projectId
+    }
     // право на запись в документы обязательно — иначе это не co-editing, а инъекция
-    if (!(await hasPermission(payload.projectId, payload.sub, 'documents.write'))) {
+    if (!(await hasPermission(projectId, payload.sub, 'documents.write'))) {
       pending.length = 0
       ws.close(4003, 'forbidden')
       return
     }
 
-    const room = await getRoom(documentId, payload.projectId)
+    const room = await getRoom(documentId, projectId)
     if (!room) {
       pending.length = 0
       ws.close(4004, 'not found')

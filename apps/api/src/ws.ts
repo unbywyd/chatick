@@ -1,9 +1,9 @@
 import { WebSocketServer, WebSocket } from 'ws'
 import type { Server } from 'node:http'
-import { eq } from 'drizzle-orm'
+import { and, eq } from 'drizzle-orm'
 import { verifyToken } from './auth.js'
 import { db } from './db/client.js'
-import { users } from './db/schema.js'
+import { projectMembers, users } from './db/schema.js'
 
 // Realtime-хаб: presence (кто онлайн в проекте) + бродкаст событий (новые сообщения и т.п.).
 // Подключение: /ws?token=<project-JWT> — комната = projectId из токена.
@@ -226,15 +226,34 @@ export function attachWs(server: Server) {
       return
     }
 
-    // Сессионное подключение — только ради уведомлений: человек открыл
-    // программу, но ещё не вошёл ни в один проект. Комнаты и presence ему не
-    // нужны, а уведомления адресованы ему и должны доходить сразу.
-    const notifyOnly = payload.typ === 'session'
+    // Проект — из адреса окна (?project=, с сессионным токеном) или из
+    // проектного токена (старые бандлы). Для адреса членство и правила
+    // проверяем в базе: сокет несёт чат и задачи проекта, пускать в комнату
+    // по одному лишь слову клиента нельзя.
+    const claimed = url.searchParams.get('project')
+    let projectId = ''
+    if (payload.typ === 'project') projectId = payload.projectId
+    else if (claimed) {
+      const m = await db.query.projectMembers.findFirst({
+        where: and(eq(projectMembers.projectId, claimed), eq(projectMembers.userId, payload.sub)),
+        columns: { rulesAcceptedAt: true },
+      })
+      if (!m || !m.rulesAcceptedAt) {
+        ws.close(4003, 'forbidden')
+        return
+      }
+      projectId = claimed
+    }
+
+    // Сессионное подключение без проекта — только ради уведомлений: человек
+    // открыл программу, но ещё не вошёл ни в один проект. Комнаты и presence
+    // ему не нужны, а уведомления адресованы ему и должны доходить сразу.
+    const notifyOnly = !projectId
 
     const client: Client = {
       ws,
       userId: payload.sub,
-      projectId: notifyOnly ? '' : payload.projectId,
+      projectId,
     }
     if (!notifyOnly) roomClients(client.projectId).add(client)
     userClients(client.userId).add(client)

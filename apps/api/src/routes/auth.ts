@@ -7,7 +7,7 @@ import sharp from 'sharp'
 import { PutObjectCommand } from '@aws-sdk/client-s3'
 import { db } from '../db/client.js'
 import { companyMembers, users, supportLogins } from '../db/schema.js'
-import { signSessionToken, requireSession, type SessionEnv } from '../auth.js'
+import { signMediaToken, signSessionToken, requireSession, type SessionEnv } from '../auth.js'
 import { env } from '../env.js'
 import { s3Client, s3Bucket, getObjectStream, S3_KEY_PREFIX } from '../lib/s3.js'
 import { notifySignup } from '../lib/admin-alert.js'
@@ -427,6 +427,15 @@ auth.post('/presence', requireSession, async (c) => {
   }
   presence.set(sub, { projectId, at: Date.now() })
   return c.json({ ok: true })
+})
+
+// POST /api/v1/auth/media-token — токен для картинок в адресе (см. signMediaToken).
+// Только из сессии: проектный токен сюда не годится, чтобы старый путь не
+// размножал новые пропуска.
+auth.post('/media-token', requireSession, async (c) => {
+  const session = c.get('session')
+  if (session.typ !== 'session') return c.json({ error: 'Session token required' }, 401)
+  return c.json({ token: await signMediaToken(session.sub) })
 })
 
 // GET /api/v1/auth/me — профиль по любому валидному токену

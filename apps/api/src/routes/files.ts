@@ -10,7 +10,7 @@ import { PutObjectCommand } from '@aws-sdk/client-s3'
 import { db } from '../db/client.js'
 import { authenticateBridge } from '../lib/bridge-auth.js'
 import { files, messages, companies, documents, projects, tasks, users } from '../db/schema.js'
-import { requireProject, signFileToken, verifyFileToken, verifyToken, type ProjectEnv } from '../auth.js'
+import { requireProject, signFileToken, verifyFileToken, verifyMediaToken, verifyToken, type ProjectEnv } from '../auth.js'
 import { hasPermission } from './projects.js'
 import { logActivity } from '../lib/audit.js'
 import { presignDownload, presignView, getObjectStream, resolveStorage, isCustomStorage, type ResolvedStorage } from '../lib/s3.js'
@@ -59,9 +59,12 @@ filesPublicRoute.get('/doc/:documentId/:fileId', async (c) => {
   // приватный документ — требуем project-токен на тот же проект
   if (!doc.publicSlug) {
     const bearer = c.req.header('Authorization')?.replace(/^Bearer\s+/i, '') ?? c.req.query('t')
-    const payload = bearer ? await verifyToken(bearer) : null
-    if (!payload || payload.typ !== 'project' || payload.projectId !== doc.projectId) return c.json({ error: 'Unauthorized' }, 401)
-    if (!(await hasPermission(doc.projectId, payload.sub, 'documents.read'))) return c.json({ error: 'Forbidden' }, 403)
+    // Медиа-токен (см. signMediaToken) или проектный — у старых бандлов.
+    const media = bearer ? await verifyMediaToken(bearer) : null
+    const payload = !media && bearer ? await verifyToken(bearer) : null
+    const sub = media?.sub ?? (payload?.typ === 'project' && payload.projectId === doc.projectId ? payload.sub : null)
+    if (!sub) return c.json({ error: 'Unauthorized' }, 401)
+    if (!(await hasPermission(doc.projectId, sub, 'documents.read'))) return c.json({ error: 'Forbidden' }, 403)
   }
 
   const file = await db.query.files.findFirst({ where: and(eq(files.id, fileId), eq(files.projectId, doc.projectId)) })
@@ -104,10 +107,17 @@ filesPublicRoute.get('/inline/:fileId', async (c) => {
     // а право на чтение всё равно проверяем ниже.
     projectId = bridge.projectId
   } else {
-    const payload = await verifyToken(bearer)
-    if (!payload || payload.typ !== 'project') return c.json({ error: 'Unauthorized' }, 401)
-    userId = payload.sub
-    projectId = payload.projectId
+    // Медиа-токен проекта не несёт: проект берём у файла, право — ниже.
+    const media = await verifyMediaToken(bearer)
+    const payload = media ? null : await verifyToken(bearer)
+    if (media) {
+      userId = media.sub
+      projectId = null
+    } else {
+      if (!payload || payload.typ !== 'project') return c.json({ error: 'Unauthorized' }, 401)
+      userId = payload.sub
+      projectId = payload.projectId
+    }
   }
 
   const file = await db.query.files.findFirst({
