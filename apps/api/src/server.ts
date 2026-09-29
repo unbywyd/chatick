@@ -23,7 +23,8 @@ attachYjs(server as Server)
   }
 })
 
-startReminderScheduler()
+if (env.BACKGROUND_JOBS === 'off') console.log('⏸  background jobs are off (BACKGROUND_JOBS=off)')
+else startReminderScheduler()
 
 /**
  * Одна оплошность в фоновой задаче не должна останавливать сервер.
