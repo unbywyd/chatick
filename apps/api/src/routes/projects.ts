@@ -1418,6 +1418,34 @@ async function canManageProject(projectId: string, userId: string): Promise<bool
 // другом, и найти файл становилось нечем. Компания одна на всех, и настройка
 // у неё одна.
 
+/**
+ * Принять правила чата — отдельно от входа.
+ *
+ * Раньше согласие было приклеено к /enter: правила подтверждались ровно в тот
+ * момент, когда выдавался проектный токен. Теперь проект берётся из адреса, а
+ * токена нет вовсе — согласие живёт само по себе. Пока правила не приняты,
+ * requireProject отвечает 428 (см. auth.ts), как и /enter.
+ */
+projectsRoute.post('/:projectId/rules/accept', async (c) => {
+  const { sub } = c.get('session')
+  const projectId = c.req.param('projectId')
+  const project = await db.query.projects.findFirst({ where: eq(projects.id, projectId), columns: { id: true } })
+  if (!project) return c.json({ error: 'Not found' }, 404)
+
+  const membership = await projectRoleOf(projectId, sub)
+  if (!membership) return c.json({ error: 'Not a project member' }, 403)
+
+  if (!membership.rulesAcceptedAt) {
+    await db.update(projectMembers).set({ rulesAcceptedAt: new Date() }).where(eq(projectMembers.id, membership.id))
+  }
+  return c.json({ ok: true })
+})
+
+/**
+ * Выдать проектный токен. Старый путь: так входят бандлы, выпущенные до
+ * перехода на адрес (X-Project + сессия). Убирать только после того, как
+ * старых бандлов в кэшах не останется.
+ */
 projectsRoute.post(
   '/:projectId/enter',
   zValidator('json', z.object({ acceptRules: z.boolean().default(false) })),
