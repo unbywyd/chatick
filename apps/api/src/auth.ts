@@ -98,6 +98,15 @@ export const requireProject = createMiddleware<ProjectEnv>(async (c, next) => {
     return c.json({ error: 'Project token required' }, 401)
   }
 
+  // Клиент называет проект из адреса окна (X-Project). Слот токена в клиенте
+  // один, и его подменяли под ногами: окно показывало один проект, токен был
+  // от другого — и таблица задач наполнялась чужими. Отдавать данные не того
+  // проекта нельзя ни при каком расхождении; по 409 клиент обменивает токен.
+  const claimed = c.req.header('x-project')
+  if (claimed && claimed !== payload.projectId) {
+    return c.json({ error: 'Project token belongs to another project than the page; re-enter the project' }, 409)
+  }
+
   // Токен живёт 30 дней, а членство кончается в тот момент, когда человека
   // исключили. Верить проекту и роли из токена — значит оставлять исключённому
   // доступ до конца срока: он продолжал читать и писать в чат и видеть ленту

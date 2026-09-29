@@ -9,8 +9,21 @@ export const setSessionToken = (t: string | null) =>
   t ? localStorage.setItem(SESSION_KEY, t) : localStorage.removeItem(SESSION_KEY)
 
 export const getProjectToken = () => localStorage.getItem(PROJECT_KEY)
-export const setProjectToken = (t: string | null) =>
-  t ? localStorage.setItem(PROJECT_KEY, t) : localStorage.removeItem(PROJECT_KEY)
+/**
+ * Слот проектного токена ОДИН, и он принадлежит проекту из адреса.
+ *
+ * Кто ставит сюда токен, тот и переходит в этот проект — иначе окно показывает
+ * один проект, а запросы уходят в другой. Ровно так и было: десктопный хук
+ * ставил токен проекта, где идёт таймер, не меняя адреса, и таблица задач
+ * Avents наполнялась задачами Just Us. Событие ниже — страховка: хук проекта
+ * слышит подмену и возвращает токен адресу.
+ */
+export const PROJECT_TOKEN_EVENT = 'chatick:project-token'
+export const setProjectToken = (t: string | null) => {
+  if (t) localStorage.setItem(PROJECT_KEY, t)
+  else localStorage.removeItem(PROJECT_KEY)
+  window.dispatchEvent(new Event(PROJECT_TOKEN_EVENT))
+}
 
 // Приглашение, открытое до входа: запоминаем токен и возвращаемся к нему после логина.
 const PENDING_INVITE_KEY = 'chatick_pending_invite'
@@ -122,19 +135,40 @@ export class ApiError extends Error {
 }
 
 type Scope = 'session' | 'project'
+/**
+ * Явный токен — для запроса в проект, который НЕ открыт в окне: таймер из трея
+ * идёт в проекте таймера, а окно смотрит другой. Слот при этом не трогаем —
+ * он принадлежит адресу.
+ */
+type Auth = Scope | { token: string }
 
-export async function api<T>(path: string, init: RequestInit = {}, scope: Scope = 'session'): Promise<T> {
-  const token = scope === 'project' ? getProjectToken() : getSessionToken()
+/** Проект из адреса окна: #/c/<company>/p/<project>/… — или null вне проекта. */
+export function projectIdFromLocation(): string | null {
+  return window.location.hash.match(/^#\/c\/[^/]+\/p\/([^/?]+)/)?.[1] ?? null
+}
+
+export async function api<T>(path: string, init: RequestInit = {}, scope: Auth = 'session'): Promise<T> {
+  const explicit = typeof scope === 'object'
+  const token = explicit ? scope.token : scope === 'project' ? getProjectToken() : getSessionToken()
+  // Слотовый проектный запрос называет серверу проект из адреса: если токен в
+  // слоте от другого проекта, сервер откажет (409), а не отдаст чужие данные.
+  // Явный токен адресу не обязан соответствовать — заголовок не шлём.
+  const claimed = !explicit && scope === 'project' ? projectIdFromLocation() : null
   const res = await fetch(`${API_URL}${path}`, {
     ...init,
     headers: {
       'Content-Type': 'application/json',
       ...(token ? { Authorization: `Bearer ${token}` } : {}),
+      ...(claimed ? { 'X-Project': claimed } : {}),
       ...init.headers,
     },
   })
   const body = (await res.json().catch(() => ({}))) as { error?: string }
-  if (!res.ok) throw new ApiError(res.status, body.error ?? res.statusText, body)
+  if (!res.ok) {
+    // Сервер поймал чужой токен: зовём хук проекта вернуть слот адресу.
+    if (res.status === 409 && claimed) window.dispatchEvent(new Event(PROJECT_TOKEN_EVENT))
+    throw new ApiError(res.status, body.error ?? res.statusText, body)
+  }
   return body as T
 }
 

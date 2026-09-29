@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react'
 import { useQueryClient, type QueryClient } from '@tanstack/react-query'
-import { api, getProjectToken, setProjectToken } from '@/lib/api'
+import { api, getProjectToken, getSessionToken, setProjectToken, PROJECT_TOKEN_EVENT } from '@/lib/api'
 
 // Источник истины о текущем проекте — projectId в URL (SPEC §8.29).
 // Токен подтягивается под него фоном, поэтому переключение между проектами
@@ -80,15 +80,30 @@ export function dropProjectCache(qc: QueryClient): void {
   })
 }
 
+/** Перезапросить проектное, ничего не снося: проект тот же, токен был чужой. */
+export function refetchProjectCache(qc: QueryClient): void {
+  void qc.invalidateQueries({
+    predicate: (q) => {
+      const head = q.queryKey[0]
+      return typeof head !== 'string' || !SESSION_KEYS.has(head)
+    },
+  })
+}
+
 export function useProjectToken(projectId: string | undefined): State & { accept: () => void } {
   const qc = useQueryClient()
   const [state, setState] = useState<State>({ status: 'loading' })
   // защита от гонки: пока меняем токен, пользователь мог кликнуть другой проект
   const wanted = useRef<string | undefined>(undefined)
 
-  const enter = async (id: string, acceptRules: boolean) => {
+  /**
+   * quiet — вернуть токен адресу без экрана загрузки: проект тот же, просто
+   * слот подменили (см. PROJECT_TOKEN_EVENT). Мигать спиннером незачем, а
+   * запросы, ушедшие с чужим токеном, перезапрашиваем.
+   */
+  const enter = async (id: string, acceptRules: boolean, quiet = false) => {
     wanted.current = id
-    setState({ status: 'loading' })
+    if (!quiet) setState({ status: 'loading' })
     try {
       const r = await api<{ token: string }>(`/api/v1/projects/${id}/enter`, {
         method: 'POST',
@@ -96,7 +111,8 @@ export function useProjectToken(projectId: string | undefined): State & { accept
       })
       if (wanted.current !== id) return // успели переключиться дальше — этот ответ уже неактуален
       setProjectToken(r.token)
-      dropProjectCache(qc)
+      if (quiet) refetchProjectCache(qc)
+      else dropProjectCache(qc)
       setState({ status: 'ready' })
     } catch (e) {
       const err = e as { status?: number; body?: { needRulesAccept?: boolean; chatRules?: string; projectName?: string } }
@@ -140,6 +156,23 @@ export function useProjectToken(projectId: string | undefined): State & { accept
       return
     }
     void enter(projectId, false)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [projectId])
+
+  // Слот подменили под ногами (см. PROJECT_TOKEN_EVENT): возвращаем токен
+  // адресу. Так отваливалась таблица задач: десктоп ставил токен проекта с
+  // таймером, а окно показывало другой проект. Сервер такое теперь отклоняет
+  // (409) — и тем же событием зовёт сюда.
+  useEffect(() => {
+    if (!projectId) return
+    const onToken = () => {
+      if (wanted.current !== projectId) return
+      if (!getSessionToken()) return // выход из аккаунта: слот чистят, входить некуда
+      if (projectOfToken(getProjectToken()) === projectId) return
+      void enter(projectId, false, true)
+    }
+    window.addEventListener(PROJECT_TOKEN_EVENT, onToken)
+    return () => window.removeEventListener(PROJECT_TOKEN_EVENT, onToken)
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [projectId])
 
