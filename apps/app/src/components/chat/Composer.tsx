@@ -13,7 +13,7 @@ import { Bold, Check, CheckSquare, ClipboardPaste, Code, SquareCode, FileText, I
 import { useTranslation } from 'react-i18next'
 import { toast } from 'sonner'
 import { useQuery } from '@tanstack/react-query'
-import { api, API_URL, getProjectToken } from '@/lib/api'
+import { api, API_URL, projectHeaders } from '@/lib/api'
 import { cn } from '@/lib/utils'
 import {
   DropdownMenu,
@@ -114,7 +114,7 @@ export function Composer({
         fd.append('pending', '1') // временный до отправки сообщения (SPEC §8.17)
         const res = await fetch(`${API_URL}/api/v1/files`, {
           method: 'POST',
-          headers: { Authorization: `Bearer ${getProjectToken()}` },
+          headers: projectHeaders(),
           body: fd,
         })
         if (!res.ok) throw new Error(((await res.json().catch(() => ({}))) as { error?: string }).error ?? res.statusText)

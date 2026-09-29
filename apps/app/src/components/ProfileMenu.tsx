@@ -4,7 +4,7 @@ import { useQueryClient } from '@tanstack/react-query'
 import { useTranslation } from 'react-i18next'
 import { toast } from 'sonner'
 import { Bell, Bot, Building2, Camera, Check, Compass, DoorOpen, Info, Keyboard, LogOut, Pencil, Plug, SlidersHorizontal, User, Users, X, Bug } from 'lucide-react'
-import { api, API_URL, getSessionToken, setSessionToken, setProjectToken, type Me } from '@/lib/api'
+import { api, API_URL, getSessionToken, logout as clearAuth, type Me } from '@/lib/api'
 import { Avatar } from '@/components/ui/avatar'
 import {
   DropdownMenu,
@@ -131,9 +131,7 @@ export function ProfileMenu({
       return
     try {
       await api(`/api/v1/projects/${projectId}/leave`, { method: 'POST' })
-      // Проектный токен больше не действует: доступа нет, и следующий запрос
-      // с ним вернул бы 403 на пустом экране.
-      setProjectToken(null)
+      // Кэш проекта больше не наш: доступа нет, показывать его нельзя.
       qc.clear()
       toast.success(t('profile.leftProject'))
       navigate('/start')
@@ -144,8 +142,7 @@ export function ProfileMenu({
 
   const logout = async () => {
     if (!(await confirm({ title: t('profile.logoutConfirm'), confirmLabel: t('profile.logout'), destructive: true }))) return
-    setProjectToken(null)
-    setSessionToken(null)
+    clearAuth()
     // Кэш чистим целиком: в нём лежат компании, проекты и профиль ушедшего
     // человека. Следующий увидел бы их до первого ответа сервера.
     qc.clear()

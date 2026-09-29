@@ -3,7 +3,7 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { useTranslation } from 'react-i18next'
 import { toast } from 'sonner'
 import { Download, FileLock2, Paperclip, X } from 'lucide-react'
-import { api, API_URL, getProjectToken } from '@/lib/api'
+import { api, API_URL, projectHeaders } from '@/lib/api'
 import { Button } from '@/components/ui/button'
 
 // Файлы под ресурсом: кейстор, сертификат, приватный ключ.
@@ -82,7 +82,7 @@ export function ResourceFiles({
       form.set('file', file)
       const res = await fetch(`${API_URL}/api/v1/resources/${resourceId}/files`, {
         method: 'POST',
-        headers: { authorization: `Bearer ${getProjectToken()}` },
+        headers: projectHeaders(),
         body: form,
       })
       if (!res.ok) {
@@ -105,7 +105,7 @@ export function ResourceFiles({
   const download = async (f: ResourceFile) => {
     try {
       const res = await fetch(`${API_URL}/api/v1/resources/${resourceId}/files/${f.id}`, {
-        headers: { authorization: `Bearer ${getProjectToken()}` },
+        headers: projectHeaders(),
       })
       if (!res.ok) throw new Error(`HTTP ${res.status}`)
       const blob = await res.blob()

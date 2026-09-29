@@ -13,15 +13,22 @@ import { join } from 'node:path'
  */
 
 const app = (f: string) => readFileSync(join(import.meta.dirname, '../../../app/src', f), 'utf8')
-const hook = app('hooks/useProjectToken.ts')
+const hook = app('hooks/useProjectAccess.ts')
 const menu = app('components/ProfileMenu.tsx')
 
 describe('кэш при смене проекта', () => {
   it('вход в проект больше не сносит кэш целиком', () => {
-    const enter = hook.match(/const enter = async[\s\S]*?\n  \}/)?.[0] ?? ''
-    expect(enter, 'функция входа не найдена').not.toBe('')
-    expect(enter, 'снова сносится весь кэш').not.toMatch(/qc\.clear\(\)/)
-    expect(enter).toMatch(/dropProjectCache\(qc\)/)
+    const check = hook.match(/const check = async[\s\S]*?\n  \}/)?.[0] ?? ''
+    expect(check, 'функция входа не найдена').not.toBe('')
+    expect(check, 'снова сносится весь кэш').not.toMatch(/qc\.clear\(\)/)
+    expect(check).toMatch(/dropProjectCache\(qc\)/)
+  })
+
+  it('кэш проекта сносится при смене проекта, а не при каждой перепроверке', () => {
+    // Ключи многих запросов проекта без projectId: сервер узнаёт проект из
+    // X-Project. Не снести кэш при смене — показать чужие задачи под своим
+    // заголовком. Сносить при каждой фоновой перепроверке — мигать.
+    expect(hook).toMatch(/if \(cachedProject !== id\) \{\s*dropProjectCache\(qc\)\s*cachedProject = id/)
   })
 
   it('общее переживает переключение', () => {

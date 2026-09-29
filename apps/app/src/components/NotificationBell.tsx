@@ -19,7 +19,7 @@ import {
 // сгруппированные по проекту, со счётчиками; клик ведёт к задаче/сообщению.
 type Inbox = { unreadTotal: number; unreadByProject: Record<string, number>; items: InboxNotification[] }
 
-export function NotificationBell({ currentProjectId }: { currentProjectId?: string }) {
+export function NotificationBell() {
   const { t, i18n } = useTranslation()
   const navigate = useNavigate()
   const qc = useQueryClient()
@@ -48,7 +48,7 @@ export function NotificationBell({ currentProjectId }: { currentProjectId?: stri
   })
 
   // Переходы и пометка прочитанным — общие со страницей уведомлений.
-  const { openNotification, openProject, markRead } = useOpenNotification(currentProjectId)
+  const { openNotification, openProject, markRead } = useOpenNotification()
 
   // группируем по проектам
   const groups = useMemo(() => {

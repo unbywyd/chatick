@@ -4,7 +4,7 @@ import { useTranslation } from 'react-i18next'
 import { toast } from 'sonner'
 import ReactMarkdown from 'react-markdown'
 import { CornerUpLeft, Paperclip, Pencil, Trash2, X } from 'lucide-react'
-import { api, API_URL, getProjectToken } from '@/lib/api'
+import { api, API_URL, projectHeaders } from '@/lib/api'
 import { cn } from '@/lib/utils'
 import { Button } from '@/components/ui/button'
 import { RichEditor } from '@/components/ui/rich-editor'
@@ -136,7 +136,7 @@ export function TaskComments({
       fd.append('file', file)
       fd.append('pending', '1') // временный до отправки комментария (SPEC §8.17)
       if (keepOriginal) fd.append('keepOriginal', '1')
-      const res = await fetch(`${API_URL}/api/v1/files`, { method: 'POST', headers: { Authorization: `Bearer ${getProjectToken()}` }, body: fd })
+      const res = await fetch(`${API_URL}/api/v1/files`, { method: 'POST', headers: projectHeaders(), body: fd })
       if (!res.ok) {
         const b = (await res.json().catch(() => ({}))) as { error?: string }
         throw new Error(b.error ?? res.statusText)

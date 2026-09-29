@@ -68,7 +68,7 @@ const Elapsed = memo(function Elapsed({
   return <span className={className}>{text}</span>
 })
 
-export function TimerControl({ collapsed }: { collapsed: boolean }) {
+export function TimerControl({ collapsed, ready = true }: { collapsed: boolean; ready?: boolean }) {
   const { t } = useTranslation()
   const { id: projectId, companyId } = useParams()
   const navigate = useNavigate()
@@ -76,7 +76,9 @@ export function TimerControl({ collapsed }: { collapsed: boolean }) {
 
   const running = useQuery({
     queryKey: ['time-running', projectId],
-    enabled: Boolean(projectId),
+    // До подтверждения доступа не спрашиваем: в проекте с непринятыми
+    // правилами сервер ответил бы 428.
+    enabled: Boolean(projectId) && ready,
     queryFn: () => api<{ items: RunningEntry[] }>('/api/v1/time/running', {}, 'project'),
     // опрос — только страховка: основное обновление приходит по сокету
     refetchInterval: 60_000,

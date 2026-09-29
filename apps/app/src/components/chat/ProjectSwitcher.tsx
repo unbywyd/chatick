@@ -1,10 +1,9 @@
 import { useState } from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
-import { useQuery, useMutation } from '@tanstack/react-query'
+import { useQuery } from '@tanstack/react-query'
 import { useTranslation } from 'react-i18next'
-import { toast } from 'sonner'
 import { Check, ChevronsUpDown } from 'lucide-react'
-import { api, setProjectToken } from '@/lib/api'
+import { api } from '@/lib/api'
 import { cn } from '@/lib/utils'
 import {
   DropdownMenu,
@@ -30,32 +29,9 @@ export function ProjectSwitcher({ projectName }: { projectName?: string }) {
     enabled: Boolean(companyId),
   })
 
-  const enter = useMutation({
-    mutationFn: (pid: string) =>
-      api<{ token: string; project: { id: string } }>(`/api/v1/projects/${pid}/enter`, {
-        method: 'POST',
-        body: JSON.stringify({ acceptRules: false }),
-      }),
-    onSuccess: (r) => {
-      setProjectToken(r.token)
-      // жёсткая навигация: смена project-токена → перезагрузить контекст проекта
-      // тот же список — значит та же компания, что и у открытого проекта
-      window.location.hash = `#/c/${companyId}/p/${r.project.id}`
-      window.location.reload()
-    },
-    onError: (e: unknown, pid) => {
-      const err = e as { status?: number; body?: { needRulesAccept?: boolean } }
-      if (err.status === 428 && err.body?.needRulesAccept) {
-        // проект требует принятия правил — уводим на экран входа в проект
-        setProjectToken(null)
-        navigate(`/start`)
-        toast.info(t('projSwitch.needRules'))
-        void pid
-      } else {
-        toast.error(e instanceof Error ? e.message : String(e))
-      }
-    },
-  })
+  // Просто переход: проект называется адресом, токен менять незачем. Правила
+  // чата, если они не приняты, покажет сам экран проекта.
+  const open = (pid: string) => navigate(`/c/${companyId}/p/${pid}`)
 
   const list = (projects.data ?? []).filter((p) => p.isMember)
   const showSearch = list.length > 5
@@ -85,7 +61,7 @@ export function ProjectSwitcher({ projectName }: { projectName?: string }) {
           </div>
         )}
         {filtered.map((p) => (
-          <DropdownMenuItem key={p.id} onSelect={() => p.id !== projectId && enter.mutate(p.id)}>
+          <DropdownMenuItem key={p.id} onSelect={() => p.id !== projectId && open(p.id)}>
             {/* активный проект — чёрная галка в лаймовом круге: тонкая лаймовая
                 иконка на светлом фоне была практически не видна */}
             {p.id === projectId ? (

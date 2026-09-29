@@ -37,7 +37,7 @@ import {
   Undo2,
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
-import { API_URL, docImageUrl, getProjectToken, stripDocImageAuth, withDocImageAuth } from '@/lib/api'
+import { API_URL, docImageUrl, projectHeaders, stripDocImageAuth, withDocImageAuth } from '@/lib/api'
 import { CollabProvider, userColor } from '@/lib/yjs-provider'
 import { mentionSuggestion, type RichMention } from '@/components/ui/rich-editor'
 import { ImagePicker } from './ImagePicker'
@@ -187,7 +187,7 @@ export function DocEditor({
       fd.append('manager', '1') // документ — постоянный файл, не временный (SPEC §8.17)
       const res = await fetch(`${API_URL}/api/v1/files`, {
         method: 'POST',
-        headers: { Authorization: `Bearer ${getProjectToken()}` },
+        headers: projectHeaders(),
         body: fd,
       })
       if (!res.ok) throw new Error('upload failed')

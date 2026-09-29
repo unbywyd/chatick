@@ -20,7 +20,7 @@ import {
 } from 'lucide-react'
 import { useNavigate, useParams, useSearchParams } from 'react-router-dom'
 import { ShareDialog } from '@/components/ShareDialog'
-import { api, API_URL, getProjectToken } from '@/lib/api'
+import { api, API_URL, projectHeaders } from '@/lib/api'
 import { cn } from '@/lib/utils'
 import { Input } from '@/components/ui/input'
 import { Button } from '@/components/ui/button'
@@ -502,7 +502,7 @@ function ResourceForm({ projectId, editing, onClose }: { projectId: string; edit
           form.set('file', file)
           const res = await fetch(`${API_URL}/api/v1/resources/${made.id}/files`, {
             method: 'POST',
-            headers: { authorization: `Bearer ${getProjectToken()}` },
+            headers: projectHeaders(),
             body: form,
           })
           if (!res.ok) {

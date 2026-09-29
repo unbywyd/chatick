@@ -3,7 +3,7 @@ import { Awareness, encodeAwarenessUpdate, applyAwarenessUpdate, removeAwareness
 import { writeSyncStep1, writeUpdate, readSyncMessage, messageYjsSyncStep2 } from 'y-protocols/sync'
 import * as encoding from 'lib0/encoding'
 import * as decoding from 'lib0/decoding'
-import { API_URL, getProjectToken } from './api'
+import { API_URL, getSessionToken } from './api'
 
 // Клиент совместного редактирования (SPEC §8.25, шаг 2).
 // Свой минимальный провайдер вместо y-websocket: протокол тот же, но нам нужен
@@ -83,7 +83,8 @@ export class CollabProvider {
 
   private connect() {
     if (this.closed) return
-    const token = getProjectToken()
+    // Проект сервер берёт у самого документа и проверяет право на запись.
+    const token = getSessionToken()
     if (!token) return
 
     const url =

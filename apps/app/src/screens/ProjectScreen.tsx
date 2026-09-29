@@ -5,7 +5,7 @@ import { useTranslation } from 'react-i18next'
 import { ArrowLeft, ExternalLink, Lock, MessagesSquare, X, FolderX } from 'lucide-react'
 import { api, getSessionToken, setReturnTo, type Me } from '@/lib/api'
 import { cn } from '@/lib/utils'
-import { useProjectToken } from '@/hooks/useProjectToken'
+import { useProjectAccess } from '@/hooks/useProjectAccess'
 import { useResizable } from '@/hooks/useResizable'
 import { useChatCollapsed } from '@/hooks/useChatCollapsed'
 import { Tour, type TourStep } from '@/components/Tour'
@@ -232,7 +232,7 @@ export function ProjectLayout() {
     navigate('/login', { replace: true })
   }, [navigate])
 
-  const token = useProjectToken(id)
+  const token = useProjectAccess(id)
   const project = useQuery({
     queryKey: ['project', id],
     queryFn: () => api<ProjectDetails>(`/api/v1/projects/${id}`),
@@ -291,7 +291,7 @@ export function ProjectLayout() {
       >
         {/* Компания из адреса, а не из загруженного проекта: пока запрос идёт,
             companyId уже известен, и шапка не мигает чужой компанией. */}
-        <ProjectSidebar me={me.data} companyId={companyId} onPick={() => setSidebarOpen(false)} />
+        <ProjectSidebar me={me.data} companyId={companyId} ready={token.status === 'ready'} onPick={() => setSidebarOpen(false)} />
       </aside>
       {sidebarOpen && (
         <div className="fixed inset-0 z-30 bg-black/50 md:hidden" onClick={() => setSidebarOpen(false)} />
@@ -336,10 +336,11 @@ export function ProjectLayout() {
           )}
         />
         )}
-        {/* Проекта нет — чат ни к чему: он продолжал бы опрашивать сервер и
-            держать сокет ради того, чего больше не существует. */}
+        {/* Чат — только когда доступ подтверждён. Проекта нет — чат ни к
+            чему: он опрашивал бы сервер и держал сокет ради того, чего не
+            существует. Правила не приняты — сервер ответит 428 на всё. */}
         <div className="min-h-0 flex-1">
-          {token.status === 'gone' || token.status === 'notMember' ? null : <ChatPanel
+          {token.status !== 'ready' ? null : <ChatPanel
             ref={chatRef}
             onOpenSidebar={() => setSidebarOpen(true)}
             onOpenWork={() => navigate(`${base}/tasks`)}

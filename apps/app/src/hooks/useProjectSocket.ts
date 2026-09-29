@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react'
 import { useQueryClient } from '@tanstack/react-query'
-import { API_URL, getProjectToken } from '@/lib/api'
+import { API_URL, getSessionToken } from '@/lib/api'
 
 export type PresenceUser = { id: string; name: string; avatarUrl: string | null }
 export type MessageAttachment = { id: string; name: string; mime: string; size: number; deleted?: boolean }
@@ -81,7 +81,9 @@ export function useProjectSocket(projectId: string | undefined, events: SocketEv
 
   useEffect(() => {
     if (!projectId) return
-    const token = getProjectToken()
+    // Сессия + проект из аргумента (он же — из адреса). Сервер пускает в
+    // комнату только участника, принявшего правила.
+    const token = getSessionToken()
     if (!token) return
 
     let ws: WebSocket | null = null
@@ -89,7 +91,7 @@ export function useProjectSocket(projectId: string | undefined, events: SocketEv
     let attempt = 0
 
     const connect = () => {
-      const wsUrl = API_URL.replace(/^http/, 'ws') + `/ws?token=${encodeURIComponent(token)}`
+      const wsUrl = API_URL.replace(/^http/, 'ws') + `/ws?token=${encodeURIComponent(token)}&project=${encodeURIComponent(projectId)}`
       ws = new WebSocket(wsUrl)
       wsRef.current = ws
       ws.onopen = () => {

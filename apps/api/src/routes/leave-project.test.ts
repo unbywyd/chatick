@@ -85,12 +85,12 @@ describe('интерфейс', () => {
     expect(fn, 'не сказано, что будет с работой').toMatch(/profile\.leaveProjectNote/)
   })
 
-  it('проектный токен сбрасывается', () => {
-    // Иначе следующий запрос уходит со старым токеном и возвращает 403 на
-    // пустом экране — выглядит как поломка, а не как результат.
+  it('кэш проекта сносится, человек уходит со страницы', () => {
+    // Доступа больше нет: показывать закэшированное нельзя, а оставаться на
+    // странице проекта — получать 403 на пустом экране.
     const at = menu.indexOf('const leaveProject')
     const fn = menu.slice(at, menu.indexOf('const logout', at))
-    expect(fn).toMatch(/setProjectToken\(null\)/)
+    expect(fn).toMatch(/qc\.clear\(\)/)
     expect(fn, 'человек остаётся на странице, куда уже нет доступа').toMatch(/navigate\('\/start'\)/)
   })
 })

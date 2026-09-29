@@ -2,11 +2,11 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { useNavigate } from 'react-router-dom'
 import { useTranslation } from 'react-i18next'
 import { toast } from 'sonner'
-import { api, setProjectToken, type Company, type ProjectListItem } from '@/lib/api'
+import { api, type Company, type ProjectListItem } from '@/lib/api'
 
 // Переход по уведомлению — общий для колокольчика и страницы уведомлений
-// (SPEC §8.22). Логика неочевидная: у каждого проекта свой токен, и уйти в
-// чужой проект по ссылке нельзя, не обменяв его.
+// (SPEC §8.22). Уведомления приходят из всех проектов сразу; ссылку чужого
+// проекта приводим к нынешнему адресу (с компанией) и просто переходим.
 
 export type InboxNotification = {
   id: string
@@ -42,7 +42,7 @@ export function normalizeLink(link: string, projectId: string, companyId?: strin
   return `/c/${companyId ?? ''}/p/${m[1]}${tail}${m[3] ?? ''}`
 }
 
-export function useOpenNotification(currentProjectId?: string) {
+export function useOpenNotification() {
   const { t } = useTranslation()
   const navigate = useNavigate()
   const qc = useQueryClient()
@@ -84,26 +84,10 @@ export function useOpenNotification(currentProjectId?: string) {
     onError: (e) => toast.error(e instanceof Error ? e.message : String(e)),
   })
 
-  /** Войти в проект: обменять токен и перезагрузиться на нужном адресе. */
-  const enterProject = async (projectId: string, path: string) => {
-    const r = await api<{ token: string; project: { id: string } }>(`/api/v1/projects/${projectId}/enter`, {
-      method: 'POST',
-      body: JSON.stringify({ acceptRules: false }),
-    })
-    setProjectToken(r.token)
-    window.location.hash = `#${path}`
-    window.location.reload()
-  }
-
   const openNotification = async (n: InboxNotification) => {
     try {
-      if (n.projectId !== currentProjectId) {
-        // Пометку ЖДЁМ: следом идёт reload, и незавершённый запрос просто
-        // не успел бы уйти — уведомление оставалось непрочитанным.
-        await markRead.mutateAsync({ ids: [n.id] })
-        await enterProject(n.projectId, normalizeLink(n.link, n.projectId, companyOf(n.projectId)))
-        return
-      }
+      // В другой проект — просто переход: проект называется адресом, токен
+      // менять незачем, и перезагрузка страницы больше не нужна.
       markRead.mutate({ ids: [n.id] })
       navigate(normalizeLink(n.link, n.projectId, companyOf(n.projectId)))
     } catch {
@@ -111,17 +95,8 @@ export function useOpenNotification(currentProjectId?: string) {
     }
   }
 
-  const openProject = async (projectId: string) => {
-    const path = `/c/${companyOf(projectId) ?? ''}/p/${projectId}/tasks`
-    if (projectId === currentProjectId) {
-      navigate(path)
-      return
-    }
-    try {
-      await enterProject(projectId, path)
-    } catch {
-      toast.error(t('inbox.openFailed'))
-    }
+  const openProject = (projectId: string) => {
+    navigate(`/c/${companyOf(projectId) ?? ''}/p/${projectId}/tasks`)
   }
 
   return { openNotification, openProject, markRead }

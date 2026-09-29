@@ -4,6 +4,7 @@ import { useTranslation } from 'react-i18next'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { toast } from 'sonner'
 import { api, API_URL, getSessionToken, type Me } from '@/lib/api'
+import { acceptProjectRules } from '@/hooks/useProjectAccess'
 
 // Связь веб-приложения с десктопной оболочкой (SPEC §8.33).
 //
@@ -515,20 +516,15 @@ export function useDesktopSync() {
         })
         .catch(() => {})
     })
-    // Токен того проекта, в котором собираемся работать. В localStorage лежит
-    // токен последнего открытого — с ним запрос в другой проект падает, а
-    // человек видит лишь неподвижную кнопку.
+    // Проект, в котором работаем, называем запросу явно ({ project }), а не
+    // берём из адреса: таймер идёт в своём проекте, а окно может смотреть
+    // другой. Раньше здесь брался проектный токен и однажды клался в общий
+    // слот — окно на Avents получало токен Just Us, и таблица задач
+    // наполнялась чужими.
     //
-    // Токен ВОЗВРАЩАЕМ, а не кладём в слот: слот принадлежит проекту из адреса
-    // окна. Раньше здесь стоял setProjectToken — и окно на Avents получало
-    // токен Just Us, где шёл таймер; таблица задач наполнялась чужими.
-    const enterProject = async (projectId: string): Promise<string> => {
-      const { token } = await api<{ token: string }>(
-        `/api/v1/projects/${projectId}/enter`,
-        { method: 'POST', body: JSON.stringify({ acceptRules: true }) },
-      )
-      return token
-    }
+    // Правила чата принимаем, как и прежде делал вход с acceptRules: true —
+    // иначе сервер ответит 428, а человек увидит лишь неподвижную кнопку.
+    const admit = (projectId: string) => acceptProjectRules(projectId)
 
     const offTimer = bridge.onToggleTimer(async (panelProjectId) => {
       // Из ref, а не из замыкания: на момент нажатия данные могли смениться.
@@ -546,16 +542,15 @@ export function useDesktopSync() {
       }
 
       try {
-        // Токен нужного проекта, а не тот, что лежит с прошлого раза. Без
-        // этого «плей» и «стоп» молча не срабатывали: запрос уходил с чужим
-        // токеном и падал, а человек видел лишь неподвижную кнопку.
-        const tok = await enterProject(target)
+        // Проект нужный, а не открытый в окне. Без этого «плей» и «стоп»
+        // молча не срабатывали: запрос уходил в чужой проект и падал.
+        await admit(target)
 
         if (current) {
-          await api(`/api/v1/time/${current.id}/stop`, { method: 'POST' }, { token: tok })
+          await api(`/api/v1/time/${current.id}/stop`, { method: 'POST' }, { project: target })
         } else {
           // projectId передаём явно — по той же причине, что и в веб-контроле
-          await api('/api/v1/time/start', { method: 'POST', body: JSON.stringify({ projectId: target }) }, { token: tok })
+          await api('/api/v1/time/start', { method: 'POST', body: JSON.stringify({ projectId: target }) }, { project: target })
         }
       } catch (e) {
         // Молчаливый отказ — худшее, что здесь может быть: кнопка выглядит
@@ -647,18 +642,19 @@ export function useDesktopSync() {
       const current = liveRef.current.timer
       try {
         // Остановить надо в том проекте, где часы идут, а запустить — в том,
-        // которому принадлежит задача. Это разные проекты, и токен нужен свой.
+        // которому принадлежит задача. Это разные проекты — каждый запрос
+        // называет свой.
         if (current) {
-          const tok = await enterProject(current.projectId)
-          await api(`/api/v1/time/${current.id}/stop`, { method: 'POST' }, { token: tok })
+          await admit(current.projectId)
+          await api(`/api/v1/time/${current.id}/stop`, { method: 'POST' }, { project: current.projectId })
         }
         // Уже шёл таймер именно по этой задаче — значит нажатие было «стоп».
         if (current?.task?.id !== taskId) {
-          const tok2 = await enterProject(task.project.id)
+          await admit(task.project.id)
           await api(
             '/api/v1/time/start',
             { method: 'POST', body: JSON.stringify({ projectId: task.project.id, taskId, description: task.title }) },
-            { token: tok2 },
+            { project: task.project.id },
           )
         }
       } catch (e) {

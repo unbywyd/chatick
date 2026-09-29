@@ -22,7 +22,7 @@ import {
 } from 'lucide-react'
 import { CalendarDays, MessagesSquare } from 'lucide-react'
 import { useNavigate, useParams } from 'react-router-dom'
-import { api, API_URL, getProjectToken } from '@/lib/api'
+import { api, API_URL, projectHeaders } from '@/lib/api'
 import { cn } from '@/lib/utils'
 import { Input } from '@/components/ui/input'
 import { Button } from '@/components/ui/button'
@@ -145,7 +145,7 @@ export function FilesTab({ projectId, isAdmin = false }: { projectId: string; is
         if (keepOriginal) fd.append('keepOriginal', '1')
         const res = await fetch(`${API_URL}/api/v1/files`, {
           method: 'POST',
-          headers: { Authorization: `Bearer ${getProjectToken()}` },
+          headers: projectHeaders(),
           body: fd,
         })
         if (!res.ok) {

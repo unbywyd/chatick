@@ -14,12 +14,13 @@ import { DangerZone, DangerAction } from '@/components/company/DangerZone'
 import { DeleteProjectDialog } from '@/components/DeleteProjectDialog'
 import { useConfirm } from '@/components/ui/confirm'
 import { useStickyHeight } from '@/hooks/useStickyHeight'
+import { acceptProjectRules, projectAccess } from '@/hooks/useProjectAccess'
 import { DropdownMenu, DropdownMenuTrigger, DropdownMenuContent, DropdownMenuItem } from '@/components/ui/dropdown-menu'
 import { ProjectSettingsDialog } from '@/components/ProjectSettingsDialog'
 import {
   api,
+  ApiError,
   logout,
-  setProjectToken,
   getSessionToken,
   setReturnTo,
   type Company,
@@ -932,15 +933,24 @@ function ProjectsTab({
   })
 
   const enter = useMutation({
-    mutationFn: ({ projectId, acceptRules }: { projectId: string; acceptRules?: boolean }) =>
-      api<{ token: string; project: { id: string } }>(`/api/v1/projects/${projectId}/enter`, {
-        method: 'POST',
-        body: JSON.stringify({ acceptRules: acceptRules ?? false }),
-      }),
-    onSuccess: (r) => {
-      setProjectToken(r.token)
-      onEntered(r.project.id)
+    // Токена больше нет — вход это проверка доступа. Правила спрашиваем здесь,
+    // в своём окне, а не на пустом экране проекта.
+    mutationFn: async ({ projectId, acceptRules }: { projectId: string; acceptRules?: boolean }) => {
+      if (acceptRules) await acceptProjectRules(projectId)
+      const access = await projectAccess(projectId)
+      if (access.status === 'needRules') {
+        throw new ApiError(428, 'Chat rules not accepted', {
+          needRulesAccept: true,
+          chatRules: access.chatRules,
+          projectName: access.projectName,
+        })
+      }
+      if (access.status === 'gone') throw new ApiError(404, 'Not found')
+      if (access.status === 'notMember') throw new ApiError(403, 'Not a project member')
+      if (access.status === 'error') throw new Error(access.message)
+      return { project: { id: projectId } }
     },
+    onSuccess: (r) => onEntered(r.project.id),
     onError: (e: unknown, vars) => {
       const err = e as { status?: number; body?: { needRulesAccept?: boolean; chatRules?: string; projectName?: string } }
       if (err.status === 428 && err.body?.needRulesAccept) {

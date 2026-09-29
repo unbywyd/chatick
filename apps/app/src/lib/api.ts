@@ -1,28 +1,59 @@
 export const API_URL = import.meta.env.VITE_API_URL ?? 'http://localhost:3200'
 
-// Двухступенчатая auth (SPEC §5): session-токен (личность) + project-токен (внутри проекта)
+/**
+ * Один токен — сессия (личность). Проект — из адреса окна, заголовком X-Project.
+ *
+ * Раньше был второй, проектный токен в localStorage. Слот у него был один на
+ * все окна и вкладки, а писателей — шесть: десктоп ставил токен проекта с
+ * таймером, не меняя адреса, и окно Avents показывало задачи Just Us. Три бага
+ * одной схемы. Членство и роль сервер всё равно проверяет в базе на каждом
+ * запросе, так что проект достаточно просто назвать — тем, что видно в адресе.
+ */
 const SESSION_KEY = 'chatick_session'
-const PROJECT_KEY = 'chatick_project_token'
+/** Ключ прежнего проектного токена: только чтобы убрать его при выходе. */
+const LEGACY_PROJECT_KEY = 'chatick_project_token'
+const MEDIA_KEY = 'chatick_media_token'
 
 export const getSessionToken = () => localStorage.getItem(SESSION_KEY)
-export const setSessionToken = (t: string | null) =>
-  t ? localStorage.setItem(SESSION_KEY, t) : localStorage.removeItem(SESSION_KEY)
+export const setSessionToken = (t: string | null) => {
+  if (t) localStorage.setItem(SESSION_KEY, t)
+  else localStorage.removeItem(SESSION_KEY)
+  // Медиа-токен выписан на человека: при смене сессии он чужой.
+  localStorage.removeItem(MEDIA_KEY)
+}
 
-export const getProjectToken = () => localStorage.getItem(PROJECT_KEY)
 /**
- * Слот проектного токена ОДИН, и он принадлежит проекту из адреса.
+ * Токен для картинок в адресе (<img> не шлёт Authorization).
  *
- * Кто ставит сюда токен, тот и переходит в этот проект — иначе окно показывает
- * один проект, а запросы уходят в другой. Ровно так и было: десктопный хук
- * ставил токен проекта, где идёт таймер, не меняя адреса, и таблица задач
- * Avents наполнялась задачами Just Us. Событие ниже — страховка: хук проекта
- * слышит подмену и возвращает токен адресу.
+ * Узкий: сервер принимает его только на отдачу картинок и проверяет права на
+ * каждый файл. Сессию в адрес класть нельзя — адрес картинки копируют и
+ * пересылают, а сессия открывает весь аккаунт.
  */
-export const PROJECT_TOKEN_EVENT = 'chatick:project-token'
-export const setProjectToken = (t: string | null) => {
-  if (t) localStorage.setItem(PROJECT_KEY, t)
-  else localStorage.removeItem(PROJECT_KEY)
-  window.dispatchEvent(new Event(PROJECT_TOKEN_EVENT))
+export const getMediaToken = () => localStorage.getItem(MEDIA_KEY)
+
+const DAY = 24 * 60 * 60 * 1000
+function expiresAt(token: string): number {
+  try {
+    const part = token.split('.')[1]!.replace(/-/g, '+').replace(/_/g, '/')
+    return ((JSON.parse(atob(part)) as { exp?: number }).exp ?? 0) * 1000
+  } catch {
+    return 0
+  }
+}
+
+let mediaInflight: Promise<void> | null = null
+/** Получить медиа-токен, если его нет или он скоро истечёт. Ошибки глотает: без картинок работать можно. */
+export function ensureMediaToken(): Promise<void> {
+  const current = getMediaToken()
+  if (current && expiresAt(current) - Date.now() > 7 * DAY) return Promise.resolve()
+  if (!getSessionToken()) return Promise.resolve()
+  mediaInflight ??= api<{ token: string }>('/api/v1/auth/media-token', { method: 'POST' })
+    .then((r) => localStorage.setItem(MEDIA_KEY, r.token))
+    .catch(() => {})
+    .finally(() => {
+      mediaInflight = null
+    })
+  return mediaInflight
 }
 
 // Приглашение, открытое до входа: запоминаем токен и возвращаемся к нему после логина.
@@ -85,7 +116,7 @@ export function previewUrl(appPath: string): string {
 
 export function logout() {
   setSessionToken(null)
-  setProjectToken(null)
+  localStorage.removeItem(LEGACY_PROJECT_KEY)
 }
 
 // Ссылка на изображение внутри документа (SPEC §8.25).
@@ -93,10 +124,10 @@ export function logout() {
 // Приватный документ в приложении: токен добавляется только на рендере (см. withDocImageAuth).
 export const docImageUrl = (documentId: string, fileId: string) => `${API_URL}/files/doc/${documentId}/${fileId}`
 
-// <img> не умеет слать Authorization → для приватного документа подставляем project-токен в URL.
+// <img> не умеет слать Authorization → для приватного документа подставляем медиа-токен в URL.
 // Делается на лету при показе, в сохранённый контент токен не попадает.
 export function withDocImageAuth(html: string): string {
-  const token = getProjectToken()
+  const token = getMediaToken()
   if (!token) return html
   return html.replace(
     new RegExp(`(src=")(${API_URL.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}/files/doc/[^"?]+)(")`, 'g'),
@@ -114,9 +145,9 @@ export const inlineImageUrl = (fileId: string) => `${API_URL}/files/inline/${fil
 
 const INLINE_RE = /(\/files\/inline\/[A-Za-z0-9_-]+)(\?t=[^\s")]*)?/g
 
-/** Подставить project-токен в ссылки картинок (markdown или HTML). */
+/** Подставить медиа-токен в ссылки картинок (markdown или HTML). */
 export function withInlineImageAuth(text: string): string {
-  const token = getProjectToken()
+  const token = getMediaToken()
   if (!token) return text
   return text.replace(INLINE_RE, (_m, path: string) => `${path}?t=${encodeURIComponent(token)}`)
 }
@@ -134,41 +165,46 @@ export class ApiError extends Error {
   }
 }
 
-type Scope = 'session' | 'project'
 /**
- * Явный токен — для запроса в проект, который НЕ открыт в окне: таймер из трея
- * идёт в проекте таймера, а окно смотрит другой. Слот при этом не трогаем —
- * он принадлежит адресу.
+ * 'project' — проект из адреса окна. { project } — явно названный проект: для
+ * запроса в проект, который НЕ открыт в окне (таймер из трея идёт в проекте
+ * таймера, а окно смотрит другой).
  */
-type Auth = Scope | { token: string }
+type Auth = 'session' | 'project' | { project: string }
 
 /** Проект из адреса окна: #/c/<company>/p/<project>/… — или null вне проекта. */
 export function projectIdFromLocation(): string | null {
   return window.location.hash.match(/^#\/c\/[^/]+\/p\/([^/?]+)/)?.[1] ?? null
 }
 
+/**
+ * Заголовки запроса в проект: сессия + X-Project.
+ *
+ * Для прямых fetch (загрузка файлов — FormData, api() с его JSON не годится).
+ * Проект по умолчанию — из адреса, в момент вызова.
+ */
+export function projectHeaders(projectId: string | null = projectIdFromLocation()): Record<string, string> {
+  const token = getSessionToken()
+  return {
+    ...(token ? { Authorization: `Bearer ${token}` } : {}),
+    ...(projectId ? { 'X-Project': projectId } : {}),
+  }
+}
+
 export async function api<T>(path: string, init: RequestInit = {}, scope: Auth = 'session'): Promise<T> {
-  const explicit = typeof scope === 'object'
-  const token = explicit ? scope.token : scope === 'project' ? getProjectToken() : getSessionToken()
-  // Слотовый проектный запрос называет серверу проект из адреса: если токен в
-  // слоте от другого проекта, сервер откажет (409), а не отдаст чужие данные.
-  // Явный токен адресу не обязан соответствовать — заголовок не шлём.
-  const claimed = !explicit && scope === 'project' ? projectIdFromLocation() : null
+  const project = typeof scope === 'object' ? scope.project : scope === 'project' ? projectIdFromLocation() : null
+  const token = getSessionToken()
   const res = await fetch(`${API_URL}${path}`, {
     ...init,
     headers: {
       'Content-Type': 'application/json',
       ...(token ? { Authorization: `Bearer ${token}` } : {}),
-      ...(claimed ? { 'X-Project': claimed } : {}),
+      ...(project ? { 'X-Project': project } : {}),
       ...init.headers,
     },
   })
   const body = (await res.json().catch(() => ({}))) as { error?: string }
-  if (!res.ok) {
-    // Сервер поймал чужой токен: зовём хук проекта вернуть слот адресу.
-    if (res.status === 409 && claimed) window.dispatchEvent(new Event(PROJECT_TOKEN_EVENT))
-    throw new ApiError(res.status, body.error ?? res.statusText, body)
-  }
+  if (!res.ok) throw new ApiError(res.status, body.error ?? res.statusText, body)
   return body as T
 }
 
@@ -181,7 +217,7 @@ export async function uploadInlineImage(file: File): Promise<{ id: string; url: 
   fd.append('manager', '1')
   const res = await fetch(`${API_URL}/api/v1/files`, {
     method: 'POST',
-    headers: { Authorization: `Bearer ${getProjectToken()}` },
+    headers: projectHeaders(),
     body: fd,
   })
   if (!res.ok) throw new ApiError(res.status, 'upload failed')

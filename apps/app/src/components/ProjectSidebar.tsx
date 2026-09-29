@@ -41,11 +41,14 @@ export function ProjectSidebar({
   me,
   companyId,
   onPick,
+  ready = true,
 }: {
   me?: Me
   /** компания ОТКРЫТОГО проекта — не обязательно своя */
   companyId?: string
   onPick?: () => void
+  /** доступ к проекту подтверждён — до этого проектные запросы не шлём */
+  ready?: boolean
 }) {
   const { t, i18n } = useTranslation()
   const navigate = useNavigate()
@@ -173,7 +176,7 @@ export function ProjectSidebar({
             ещё в сайдбаре */}
         {activeId && (
           <div className="flex justify-center border-b py-2">
-            <TimerControl collapsed />
+            <TimerControl collapsed ready={ready} />
           </div>
         )}
 
@@ -258,7 +261,7 @@ export function ProjectSidebar({
           )}
           {/* колокольчик и профиль живут только здесь: в навбаре проекта они
               дублировались, а сайдбар виден на любой вкладке */}
-          <NotificationBell currentProjectId={activeId} />
+          <NotificationBell />
           <ProfileMenu me={me} projectId={activeId} projectName={active?.name} companyId={company?.id} isAdmin={isAdmin} isOwner={active?.myRole === 'owner'} />
         </div>
       </div>
@@ -294,7 +297,7 @@ export function ProjectSidebar({
 
       {activeId && (
         <div className="border-b px-2 py-2">
-          <span data-tour="timer"><TimerControl collapsed={false} /></span>
+          <span data-tour="timer"><TimerControl collapsed={false} ready={ready} /></span>
         </div>
       )}
 
@@ -482,7 +485,7 @@ export function ProjectSidebar({
         {/* тот же аватар, что в шапке, ведёт себя одинаково: открывает меню
             профиля. Раньше отсюда уводило на /connect — разное поведение у
             одного и того же элемента. */}
-        <NotificationBell currentProjectId={activeId} />
+        <NotificationBell />
         <ProfileMenu me={me} projectId={activeId} projectName={active?.name} companyId={company?.id} isAdmin={isAdmin} isOwner={active?.myRole === 'owner'} />
       </div>
     </div>
