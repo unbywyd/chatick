@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { useQuery, useQueryClient, type QueryClient } from '@tanstack/react-query'
 import { useNavigate } from 'react-router-dom'
-import { api, API_URL, getSessionToken, type Company, type ProjectListItem } from '@/lib/api'
+import { api, API_URL, getSessionToken, MEMBERSHIP_EVENT, type Company, type ProjectListItem } from '@/lib/api'
 import { loadNotifySettings, type NotifySettings } from '@/lib/notify-settings'
 import type { InboxNotification } from '@/hooks/useOpenNotification'
 import { normalizeLink } from '@/hooks/useOpenNotification'
@@ -326,7 +326,17 @@ export function useSystemNotifications() {
       }
       ws.onmessage = (e) => {
         try {
-          const { event } = JSON.parse(e.data as string) as { event?: string }
+          const { event, payload } = JSON.parse(e.data as string) as { event?: string; payload?: unknown }
+          // Мне сменили роль, права или состав проектов. Роль лежит в кэше
+          // карточки проекта, и сама она не обновится: человек, которого
+          // сделали админом, не видел админских кнопок до повторного входа в
+          // проект. Списки перечитываем здесь, открытый проект — в его хуке.
+          if (event === 'membership_changed') {
+            for (const key of ['projects', 'sidebar-projects', 'company-projects', 'companies', 'tray-projects']) {
+              qc.invalidateQueries({ queryKey: [key] })
+            }
+            window.dispatchEvent(new CustomEvent(MEMBERSHIP_EVENT, { detail: payload }))
+          }
           if (event === 'notification') {
             qc.invalidateQueries({ queryKey: ['inbox-system'] })
             // ['inbox'] — то, из чего собирается панель в трее и бейдж. Без

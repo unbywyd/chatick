@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react'
 import { useQueryClient, type QueryClient } from '@tanstack/react-query'
-import { api, ensureMediaToken } from '@/lib/api'
+import { api, ensureMediaToken, MEMBERSHIP_EVENT } from '@/lib/api'
 
 // Источник истины о текущем проекте — projectId в URL (SPEC §8.29).
 // Запросы проекта называют его серверу сами (X-Project из адреса), токена
@@ -63,6 +63,16 @@ const SESSION_KEYS = new Set([
  */
 export function dropProjectCache(qc: QueryClient): void {
   qc.removeQueries({
+    predicate: (q) => {
+      const head = q.queryKey[0]
+      return typeof head !== 'string' || !SESSION_KEYS.has(head)
+    },
+  })
+}
+
+/** Перезапросить проектное, ничего не снося: проект тот же, изменились права. */
+function refetchProjectCache(qc: QueryClient): void {
+  void qc.invalidateQueries({
     predicate: (q) => {
       const head = q.queryKey[0]
       return typeof head !== 'string' || !SESSION_KEYS.has(head)
@@ -148,6 +158,25 @@ export function useProjectAccess(projectId: string | undefined): State & { accep
       return
     }
     void check(projectId, false)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [projectId])
+
+  // Мне сменили роль или права, добавили в проект или убрали из него (см.
+  // MEMBERSHIP_EVENT). Роль живёт в кэше карточки проекта; без перезапроса
+  // новый админ не видел админских кнопок, пока не выходил из проекта и не
+  // заходил снова. Доступ перепроверяем тоже: могли и исключить.
+  useEffect(() => {
+    if (!projectId) return
+    const onMembership = (e: Event) => {
+      const scope = (e as CustomEvent<{ projectId?: string } | undefined>).detail
+      // Событие про другой проект нас не касается; без проекта — про
+      // компанию, а роль в компании меняет права во всех её проектах.
+      if (scope?.projectId && scope.projectId !== projectId) return
+      refetchProjectCache(qc)
+      void check(projectId, true)
+    }
+    window.addEventListener(MEMBERSHIP_EVENT, onMembership)
+    return () => window.removeEventListener(MEMBERSHIP_EVENT, onMembership)
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [projectId])
 

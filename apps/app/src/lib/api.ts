@@ -114,6 +114,12 @@ export function previewUrl(appPath: string): string {
   return /^\/c\/[^/]+\/p\/[^/]+/.test(appPath) ? `${API_URL}/link${appPath}` : `${origin}/#${appPath}`
 }
 
+/**
+ * Событие окна: у человека сменились роль, права или состав проектов.
+ * Шлёт общий сокет приложения, слушает хук открытого проекта.
+ */
+export const MEMBERSHIP_EVENT = 'chatick:membership'
+
 export function logout() {
   setSessionToken(null)
   localStorage.removeItem(LEGACY_PROJECT_KEY)

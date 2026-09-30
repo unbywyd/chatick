@@ -24,6 +24,7 @@ import { readTimeConfig } from './time.js'
 import { NOTIFY_EVENTS, readNotifyConfig } from '../lib/notify-config.js'
 import { LLM_PROVIDERS, testLlm, type LlmProvider } from '../lib/llm.js'
 import { env } from '../env.js'
+import { membershipChanged } from '../ws.js'
 
 /**
  * Логотипы компаний — публично, ДО проверки сессии.
@@ -2280,6 +2281,7 @@ companiesRoute.patch(
       .update(companyMembers)
       .set(patch)
       .where(and(eq(companyMembers.companyId, companyId), eq(companyMembers.userId, userId)))
+    if (role !== undefined) membershipChanged(userId, { companyId })
     return c.json({ ok: true })
   },
 )
@@ -2303,6 +2305,7 @@ companiesRoute.delete('/:companyId/members/:userId', async (c) => {
   await db
     .delete(companyMembers)
     .where(and(eq(companyMembers.companyId, companyId), eq(companyMembers.userId, userId)))
+  membershipChanged(userId, { companyId })
   return c.json({ ok: true })
 })
 

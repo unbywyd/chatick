@@ -114,6 +114,34 @@ export function sendToUserAnywhere(userId: string, event: string, payload: unkno
   return sent
 }
 
+/**
+ * У человека изменились права или состав его проектов — сказать ему самому.
+ *
+ * Роль и права клиент держит в кэше карточки проекта. Без этого события
+ * человек, которого сделали админом, не видел админских кнопок, пока не
+ * выходил из проекта и не заходил снова: бегать по вкладкам не помогало,
+ * кэш никто не просил обновиться.
+ *
+ * Зовётся отовсюду, где меняются project_members и company_members: экран
+ * команды, мост ассистента, внешняя система.
+ *
+ * removed — человека убрали из проекта: закрываем и его сокеты в комнате.
+ * Иначе он продолжал получать чат проекта по открытому соединению до
+ * перезагрузки страницы.
+ */
+export function membershipChanged(
+  userId: string,
+  scope: { projectId?: string; companyId?: string; removed?: boolean } = {},
+): void {
+  sendToUserAnywhere(userId, 'membership_changed', { projectId: scope.projectId, companyId: scope.companyId })
+  if (!scope.removed) return
+  for (const c of byUser.get(userId) ?? []) {
+    if (!c.projectId) continue // сессионный сокет: уведомления ему по-прежнему положены
+    if (scope.projectId && c.projectId !== scope.projectId) continue
+    c.ws.close(4003, 'forbidden')
+  }
+}
+
 // --- Блокировка редактирования задачи (эфемерная, в памяти) ---
 // key = `${projectId}:${taskId}` → { userId, user, expiresAt }
 type Lock = { userId: string; user: PresenceUser; expiresAt: number }

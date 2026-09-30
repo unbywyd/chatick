@@ -14,11 +14,13 @@ import { join } from 'node:path'
  * поменять это было негде — отдельного места для языка профиля нет вовсе.
  */
 
-const auth = readFileSync(join(import.meta.dirname, 'auth.ts'), 'utf8')
+// Окончания строк приводим к \n: на Windows git отдаёт файлы с \r\n, и поиск
+// по "auth.patch(\n  '/me'" падал там, где на сервере проходил.
+const auth = readFileSync(join(import.meta.dirname, 'auth.ts'), 'utf8').replace(/\r\n/g, '\n')
 const select = readFileSync(
   join(import.meta.dirname, '../../../app/src/components/LanguageSelect.tsx'),
   'utf8',
-)
+).replace(/\r\n/g, '\n')
 
 describe('выбор языка доходит до профиля', () => {
   it('переключатель сохраняет выбор на сервере', () => {

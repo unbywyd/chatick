@@ -17,6 +17,7 @@ import { requireSession, requireProject, signProjectToken, type SessionEnv, type
 import { sendAddedToProjectMail, sendDeletedMail, sendRemovedFromProjectMail } from '../lib/mails.js'
 import { companyLlm } from '../lib/llm.js'
 import { stripMentions } from '../lib/notify.js'
+import { membershipChanged } from '../ws.js'
 import { profilesForProject } from '../lib/job-title.js'
 import { s3Client, s3Bucket, getObjectStream, deleteObject, isCustomStorage, resolveStorage, S3_KEY_PREFIX } from '../lib/s3.js'
 
@@ -1142,6 +1143,7 @@ projectsRoute.patch(
       entityLabel: role === 'admin' ? 'назначен админом проекта' : 'переведён в участники',
     })
 
+    membershipChanged(userId, { projectId })
     return c.json({ ok: true, role, domains: defaultDomainPermissions(role) })
   },
 )
@@ -1172,6 +1174,7 @@ projectsRoute.patch(
     // сохраняем ЧИСТЫЙ новый формат — уровни доменов
     await db.update(projectMembers).set({ permissions: JSON.stringify(next) }).where(eq(projectMembers.id, target.id))
 
+    membershipChanged(userId, { projectId })
     return c.json({ ok: true, domains: next, permissions: expandPermissions(next) })
   },
 )
@@ -1201,6 +1204,7 @@ projectsRoute.post(
     if (exists) return c.json({ error: 'Already a member' }, 409)
 
     await db.insert(projectMembers).values({ projectId, userId, role, permissions: JSON.stringify(defaultPermissions(role)) })
+    membershipChanged(userId, { projectId })
 
     const target = await db.query.users.findFirst({ where: eq(users.id, userId) })
     if (target)
@@ -1316,6 +1320,7 @@ projectsRoute.delete('/:projectId/members/:userId', async (c) => {
   if (victim?.role === 'owner') return c.json({ error: 'Project owner cannot be removed' }, 400)
 
   await db.delete(projectMembers).where(and(eq(projectMembers.projectId, projectId), eq(projectMembers.userId, userId)))
+  membershipChanged(userId, { projectId, removed: true })
 
   const target = await db.query.users.findFirst({ where: eq(users.id, userId) })
   if (target)

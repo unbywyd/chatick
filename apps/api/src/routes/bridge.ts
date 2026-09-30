@@ -73,7 +73,7 @@ import { normalizeRefs } from '../lib/task-refs.js'
 import { fetchSiteIcon, nameFromUrl } from '../lib/site-icon.js'
 import { encrypt } from '../lib/crypto.js'
 import { membersLockedForProject, MEMBERS_LOCKED } from '../lib/members-locked.js'
-import { broadcast, sendToUserAnywhere, tasksChanged } from '../ws.js'
+import { broadcast, membershipChanged, sendToUserAnywhere, tasksChanged } from '../ws.js'
 import { shortUrlFor, parseTaskRef, resolveShortCode } from '../lib/short-links.js'
 import { BUILD_TYPES, buildType, firstStage, isLiveStage, isValidStage } from '../lib/release-stages.js'
 import { isFeatureEnabled } from '../lib/features.js'
@@ -454,6 +454,7 @@ bridgeRoute.patch('/company/members/:userId', async (c) => {
   }
 
   await db.update(companyMembers).set(patch).where(eq(companyMembers.id, target.id))
+  if (patch.role !== undefined) membershipChanged(userId, { companyId })
   return c.json({
     ok: true,
     userId,
@@ -4378,6 +4379,7 @@ bridgeRoute.post('/members', async (c) => {
       role,
       permissions: JSON.stringify(defaultDomainPermissions(role)),
     })
+    membershipChanged(userId, { projectId: scope.projectId })
 
     const target = await db.query.users.findFirst({ where: eq(users.id, userId) })
     if (target) {
@@ -4515,6 +4517,7 @@ bridgeRoute.patch('/members/:userId', async (c) => {
   if (!Object.keys(patch).length) return c.json({ error: 'Nothing to change' }, 400)
 
   await db.update(projectMembers).set(patch).where(eq(projectMembers.id, target.id))
+  if (patch.role !== undefined || patch.permissions !== undefined) membershipChanged(userId, { projectId: scope.projectId })
   await logActivity({
     projectId: scope.projectId,
     actorId: id.userId,
@@ -4559,6 +4562,7 @@ bridgeRoute.delete('/members/:userId', async (c) => {
   await db
     .delete(projectMembers)
     .where(and(eq(projectMembers.projectId, scope.projectId), eq(projectMembers.userId, userId)))
+  membershipChanged(userId, { projectId: scope.projectId, removed: true })
 
   const user = await db.query.users.findFirst({ where: eq(users.id, userId) })
   if (user)
