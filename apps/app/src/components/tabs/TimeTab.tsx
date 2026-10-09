@@ -548,6 +548,38 @@ function EntryRow({
   const offset = end ? dayOffset(start, end) : 0
 
   /**
+   * Правка краёв — с проверкой ДО отправки.
+   *
+   * Сервер отвечал на «конец раньше начала» английской фразой, а человек не
+   * понимал, что сделал не так: он передвинул дату окончания, думая, что
+   * переносит запись. Здесь та же проверка, но со словами, что делать.
+   */
+  const sendEdges = (body: { startedAt?: Date; endedAt?: Date }) => {
+    const s = body.startedAt ?? start
+    const e = body.endedAt ?? end
+    if (e && e.getTime() <= s.getTime()) return toast.error(t('time.endBeforeStart'))
+    if (e && e.getTime() - s.getTime() > 24 * 3_600_000) return toast.error(t('time.tooLong'))
+    patch.mutate({
+      ...(body.startedAt ? { startedAt: body.startedAt.toISOString() } : {}),
+      ...(body.endedAt ? { endedAt: body.endedAt.toISOString() } : {}),
+    })
+  }
+
+  /**
+   * Дата начала переносит запись ЦЕЛИКОМ: конец едет следом, длительность та же.
+   *
+   * «Перенести на другой день» — то, зачем к календарю приходят. Когда дата
+   * начала двигала только начало, трёхминутная запись становилась суточной; а
+   * когда человек, чтобы перенести запись, правил дату окончания, конец
+   * оказывался раньше начала. Дата окончания по-прежнему правится отдельно —
+   * для смены, ушедшей за полночь.
+   */
+  const moveEntry = (day: Date) => {
+    const shift = day.getTime() - start.getTime()
+    sendEdges({ startedAt: day, ...(end ? { endedAt: new Date(end.getTime() + shift) } : {}) })
+  }
+
+  /**
    * На телефоне запись идёт в ДВЕ строки, на sm и выше — в одну, как было.
    *
    * В одну строку втиснуто семеро: аватар, описание с проектом, время
@@ -596,13 +628,9 @@ function EntryRow({
       <TimeCell
         value={start}
         saved={saved}
-        onCommit={(minutes) => patch.mutate({ startedAt: withTimeOfDay(start, minutes).toISOString() })}
+        onCommit={(minutes) => sendEdges({ startedAt: withTimeOfDay(start, minutes) })}
       />
-      <DateCell
-        value={start}
-        label={t('time.startDate')}
-        onChange={(d) => patch.mutate({ startedAt: d.toISOString() })}
-      />
+      <DateCell value={start} label={t('time.entryDate')} onChange={moveEntry} />
       <span className="text-xs text-muted-foreground">–</span>
       {end ? (
         <>
@@ -613,7 +641,7 @@ function EntryRow({
             <TimeCell
               value={end}
               saved={saved}
-              onCommit={(minutes) => patch.mutate({ endedAt: resolveEnd(start, minutes, offset).toISOString() })}
+              onCommit={(minutes) => sendEdges({ endedAt: resolveEnd(start, minutes, offset) })}
             />
             {offset > 0 && (
               <span className="absolute -end-3 -top-1 text-[9px] text-brand-ink" title={t('time.nextDay')}>
@@ -625,7 +653,7 @@ function EntryRow({
             value={end}
             label={t('time.endDate')}
             highlight={offset > 0}
-            onChange={(d) => patch.mutate({ endedAt: d.toISOString() })}
+            onChange={(d) => sendEdges({ endedAt: d })}
           />
         </>
       ) : (
@@ -636,15 +664,12 @@ function EntryRow({
           дата подставилась какая нужна, хоть на следующие сутки. Обычно
           человек знает именно «сколько отработал», а не «во сколько закончил»,
           и раньше это приходилось считать в уме и вводить временем конца. */}
-      <span className="relative w-16 shrink-0 text-end">
+      <span className="relative w-20 shrink-0 text-end">
         {end ? (
           <DurationCell
             minutes={entry.minutes ?? 0}
             saved={saved}
-            onCommit={(mins) => {
-              const next = new Date(start.getTime() + mins * 60_000)
-              patch.mutate({ endedAt: next.toISOString() })
-            }}
+            onCommit={(mins) => sendEdges({ endedAt: new Date(start.getTime() + mins * 60_000) })}
           />
         ) : (
           <span className="block font-mono text-base tabular-nums">—</span>
@@ -730,15 +755,36 @@ function DurationCell({
   onCommit: (minutes: number) => void
   saved?: boolean
 }) {
+  const { t } = useTranslation()
   const shown = formatDuration(minutes)
   const [draft, setDraft] = useState<string | null>(null)
+  const [focused, setFocused] = useState(false)
+
+  /**
+   * В покое — «22 ч», а не «22:00».
+   *
+   * В строке стояли три одинаковых числа в одном шрифте: 11:08, 09:08, 22:00.
+   * Длительность читалась как время окончания, и человек правил не то поле:
+   * «начал в 9, закончил в 10 вечера» — а это были конец следующего дня и
+   * двадцать два часа. При фокусе показываем «22:00»: так её привычно править.
+   */
+  const h = Math.floor(minutes / 60)
+  const m = Math.round(minutes % 60)
+  const human = h && m ? t('time.durHM', { h, m }) : h ? t('time.durH', { h }) : t('time.durM', { m })
 
   return (
     <input
-      value={draft ?? shown}
+      value={draft ?? (focused ? shown : human)}
+      title={t('time.durationHint')}
       onChange={(e) => setDraft(e.target.value)}
-      onFocus={(e) => e.target.select()}
+      onFocus={(e) => {
+        setFocused(true)
+        // значение меняется на «22:00» в этом же кадре — выделяем уже его
+        const el = e.target
+        requestAnimationFrame(() => el.select())
+      }}
       onBlur={() => {
+        setFocused(false)
         if (draft === null) return
         const mins = parseDuration(draft)
         setDraft(null)
@@ -756,7 +802,10 @@ function DurationCell({
       className={cn(
         // По центру и в покое, и в фокусе. Было text-end с focus:text-start —
         // значение перепрыгивало от одного края к другому по клику.
-        'w-full rounded-md bg-transparent py-1 text-center font-mono text-base tabular-nums outline-none transition-colors',
+        // Не моноширинный и не тем же кеглем, что время: длительность должна
+        // отличаться от времени с первого взгляда. В фокусе — как время.
+        'w-full rounded-md bg-transparent py-1 text-center tabular-nums outline-none transition-colors',
+        focused ? 'font-mono text-base' : 'text-sm font-semibold',
         'hover:bg-accent focus:bg-accent focus:ring-1 focus:ring-ring',
         saved && 'bg-brand/15 ring-1 ring-brand/40',
       )}

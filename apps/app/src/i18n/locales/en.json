@@ -1377,7 +1377,14 @@
     "peopleOnProject": "people: {{count}}",
     "entriesCount": "entries: {{count}}",
     "allProjects": "All projects",
-    "pickProject": "Pick a project"
+    "pickProject": "Pick a project",
+    "entryDate": "Entry date — the end moves with it",
+    "endBeforeStart": "The end came out before the start. To move the entry to another day, change the start date — the end follows.",
+    "tooLong": "That makes the entry longer than a day — check the dates, not just the times.",
+    "durH": "{{h}}h",
+    "durHM": "{{h}}h {{m}}m",
+    "durM": "{{m}}m",
+    "durationHint": "Duration. Type how long you worked — the end moves by itself."
   },
   "period": {
     "today": "Today",
