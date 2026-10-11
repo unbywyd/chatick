@@ -18,6 +18,7 @@ import { sendAddedToProjectMail, sendDeletedMail, sendRemovedFromProjectMail } f
 import { companyLlm } from '../lib/llm.js'
 import { stripMentions } from '../lib/notify.js'
 import { membershipChanged } from '../ws.js'
+import { releaseMember } from '../lib/member-leave.js'
 import { profilesForProject } from '../lib/job-title.js'
 import { s3Client, s3Bucket, getObjectStream, deleteObject, isCustomStorage, resolveStorage, S3_KEY_PREFIX } from '../lib/s3.js'
 
@@ -1283,6 +1284,8 @@ projectsRoute.post('/:projectId/leave', async (c) => {
   }
 
   await db.delete(projectMembers).where(and(eq(projectMembers.projectId, projectId), eq(projectMembers.userId, sub)))
+  // Его мячи — владельцам: задачи ушедшего не должны повиснуть ни на ком.
+  await releaseMember([projectId], sub, sub)
   void logActivity({
     projectId,
     actorId: sub,
@@ -1320,6 +1323,7 @@ projectsRoute.delete('/:projectId/members/:userId', async (c) => {
   if (victim?.role === 'owner') return c.json({ error: 'Project owner cannot be removed' }, 400)
 
   await db.delete(projectMembers).where(and(eq(projectMembers.projectId, projectId), eq(projectMembers.userId, userId)))
+  await releaseMember([projectId], userId, sub)
   membershipChanged(userId, { projectId, removed: true })
 
   const target = await db.query.users.findFirst({ where: eq(users.id, userId) })

@@ -562,3 +562,59 @@ export async function setOnTable(task: Task, on: boolean, actorId: string, isMan
   const [row] = await db.update(tasks).set({ onTable: on, updatedAt: new Date() }).where(eq(tasks.id, task.id)).returning()
   return { ok: true, task: row! }
 }
+
+/**
+ * Человек ушёл из проекта — его мячи не должны повиснуть.
+ *
+ * Без этого задачи ушедшего остаются «на нём»: в его списке их больше никто
+ * не видит, в чужих — тоже, и работа молча встаёт. Удаление при этом не
+ * блокируем: Atlas убирает людей сам, и отказ сломал бы ему синхронизацию.
+ *
+ *   держал мяч        → владельцу задачи, если тот в команде; иначе владельцу
+ *                       проекта; иначе в бэклог;
+ *   был владельцем    → владение переходит владельцу проекта: иначе «на
+ *                       проверку» уходить некому;
+ *   задал вопрос      → ответ вернётся владельцу задачи (askFromId снимаем).
+ *
+ * Каждая передача — строка журнала via='system'. Возвращает, кому сколько
+ * задач досталось, — для одного сводного уведомления на человека.
+ */
+export async function releaseBalls(
+  projectId: string,
+  userId: string,
+  actorId: string | null,
+): Promise<{ moved: Map<string, number>; tasks: number }> {
+  const team = await db
+    .select({ userId: projectMembers.userId, role: projectMembers.role })
+    .from(projectMembers)
+    .where(eq(projectMembers.projectId, projectId))
+  const inTeamNow = new Set(team.map((m) => m.userId).filter((id) => id !== userId))
+  const projectOwner = team.find((m) => m.role === 'owner' && m.userId !== userId)?.userId ?? null
+  const moved = new Map<string, number>()
+  let count = 0
+
+  const open = and(eq(tasks.projectId, projectId), sql`${tasks.deletedAt} is null`, sql`${tasks.status} not in ${closedSql}`)
+
+  // Владение — до передачи мячей: ниже «владелец» уже новый.
+  await db
+    .update(tasks)
+    .set({ ownerId: projectOwner, updatedAt: new Date() })
+    .where(and(open, sql`coalesce(${tasks.ownerId}, ${tasks.createdById}) = ${userId}`))
+  await db.update(tasks).set({ askFromId: null }).where(and(open, eq(tasks.askFromId, userId)))
+
+  const held = await db.select().from(tasks).where(and(open, eq(tasks.assigneeId, userId)))
+  for (const t of held) {
+    const owner = ownerOf(t)
+    const to = owner && inTeamNow.has(owner) ? owner : projectOwner
+    const r = planHandoff(t, 'pass', { actorId, to, via: 'system', lenient: true })
+    if (!r.ok) continue
+    // Ход «ответить» без спросившего превращается в «сделать»: ответ некому.
+    if (t.move === 'answer' && !t.askFromId) r.plan.patch.move = 'do'
+    if (r.plan.handoff) r.plan.handoff.moveAfter = r.plan.patch.move ?? t.move
+    const row = await apply(t, r.plan)
+    if (!row) continue
+    count++
+    if (to) moved.set(to, (moved.get(to) ?? 0) + 1)
+  }
+  return { moved, tasks: count }
+}

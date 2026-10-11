@@ -40,7 +40,7 @@ describe('заголовки передач', () => {
     return src.slice(i, src.indexOf('\n  },', i))
   })
   it('у каждого хода, о котором уведомляем, есть заголовок на всех языках', () => {
-    for (const a of ['review', 'accept', 'return', 'ask', 'answer', 'pass', 'take', 'cancel', 'reopen']) {
+    for (const a of ['review', 'accept', 'return', 'ask', 'answer', 'pass', 'take', 'cancel', 'reopen', 'released']) {
       for (const b of blocks) expect(b, `handoff_${a}`).toContain(`handoff_${a}:`)
     }
     for (const b of blocks) expect(b).toContain('task_handoff:')

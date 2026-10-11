@@ -16,6 +16,7 @@ import { issueEnterToken } from '../lib/enter-link.js'
 import { adoptAvatar } from '../lib/avatar.js'
 import { env } from '../env.js'
 import { membershipChanged } from '../ws.js'
+import { releaseMember } from '../lib/member-leave.js'
 
 // Внешний API для систем-заказчиков (SPEC-INTEGRATION).
 //
@@ -475,6 +476,7 @@ extRoute.delete('/projects/:externalId/members/:externalUserId', guard('users:wr
   await db
     .delete(projectMembers)
     .where(and(eq(projectMembers.projectId, project.id), eq(projectMembers.userId, user.id)))
+  await releaseMember([project.id], user.id, null)
   membershipChanged(user.id, { projectId: project.id, removed: true })
 
   return c.json({ ok: true })
@@ -766,6 +768,7 @@ extRoute.delete('/users/:externalId', guard('users:write'), async (c) => {
   await db
     .delete(companyMembers)
     .where(and(eq(companyMembers.companyId, companyId), eq(companyMembers.userId, user.id)))
+  await releaseMember(companyProjects.map((p) => p.id), user.id, null)
   for (const p of companyProjects) membershipChanged(user.id, { projectId: p.id, removed: true })
   membershipChanged(user.id, { companyId })
 

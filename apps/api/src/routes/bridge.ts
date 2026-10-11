@@ -86,6 +86,7 @@ import { notifyReleaseStage } from './releases.js'
 import { env } from '../env.js'
 import { handoff, insertTask, updateTask, type BallError } from '../lib/ball.js'
 import { notifyHandoff } from '../lib/handoff-notify.js'
+import { releaseMember } from '../lib/member-leave.js'
 import { fromMeList, listFilters, mineList, myProjects, quickTask, tableToggle } from './ball.js'
 
 // Мост для внешнего ИИ (SPEC §8.27). Всё выполняется ОТ ИМЕНИ пользователя,
@@ -4788,6 +4789,7 @@ bridgeRoute.delete('/members/:userId', async (c) => {
   await db
     .delete(projectMembers)
     .where(and(eq(projectMembers.projectId, scope.projectId), eq(projectMembers.userId, userId)))
+  await releaseMember([scope.projectId], userId, id.userId)
   membershipChanged(userId, { projectId: scope.projectId, removed: true })
 
   const user = await db.query.users.findFirst({ where: eq(users.id, userId) })

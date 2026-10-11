@@ -25,6 +25,7 @@ import { NOTIFY_EVENTS, readNotifyConfig } from '../lib/notify-config.js'
 import { LLM_PROVIDERS, testLlm, type LlmProvider } from '../lib/llm.js'
 import { env } from '../env.js'
 import { membershipChanged } from '../ws.js'
+import { releaseMember } from '../lib/member-leave.js'
 
 /**
  * Логотипы компаний — публично, ДО проверки сессии.
@@ -2315,6 +2316,13 @@ companiesRoute.delete('/:companyId/members/:userId', async (c) => {
   await db
     .delete(companyMembers)
     .where(and(eq(companyMembers.companyId, companyId), eq(companyMembers.userId, userId)))
+  // Вне компании — вне её работы: мячи в её проектах раздаём владельцам.
+  // Членство в проектах при этом остаётся как было (так устроено и раньше).
+  await releaseMember(
+    (await db.select({ id: projects.id }).from(projects).where(eq(projects.companyId, companyId))).map((p) => p.id),
+    userId,
+    sub,
+  )
   membershipChanged(userId, { companyId })
   return c.json({ ok: true })
 })
@@ -2433,6 +2441,7 @@ companiesRoute.post('/:companyId/leave', async (c) => {
   }
 
   await db.delete(companyMembers).where(and(eq(companyMembers.companyId, companyId), eq(companyMembers.userId, sub)))
+  await releaseMember(projectIds, sub, sub)
   return c.json({ ok: true })
 })
 
