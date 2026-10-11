@@ -19,6 +19,7 @@ import { postTaskDone, postTaskAssigned } from '../lib/task-events.js'
 import { richText } from '../lib/markdown.js'
 import { normalizeRefs, MAX_REFS_LENGTH } from '../lib/task-refs.js'
 import { handoff, insertTask, updateTask, type BallError } from '../lib/ball.js'
+import { notifyHandoff } from '../lib/handoff-notify.js'
 
 // Задачи проекта — project-токен; права per-user (SPEC §4.3) на каждое действие
 export const tasksRoute = new Hono<ProjectEnv>()
@@ -674,6 +675,7 @@ tasksRoute.post(
     if (!r.ok) return c.json({ error: r.error }, HANDOFF_ERRORS[r.error])
 
     const row = r.task
+    if (r.handoff) void notifyHandoff(row, r.handoff)
     tasksChanged(projectId, [row.assigneeId, task.assigneeId, row.ownerId ?? row.createdById])
     void logActivity({
       projectId,

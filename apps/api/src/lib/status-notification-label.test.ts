@@ -35,7 +35,7 @@ describe('статус в уведомлении — словами, не клю
     //
     // Саботаж: убрать строку — тест падает.
     expect(notify).toContain('if (vars.status) vars.status = statusWords(vars.status, lang)')
-    expect(notify.indexOf('vars.status = statusWords('), 'подстановка после сборки текста').toBeLessThan(notify.indexOf('title: tr(lang, event, vars)'))
+    expect(notify.indexOf('vars.status = statusWords('), 'подстановка после сборки текста').toBeLessThan(notify.indexOf('title: tr(lang, params.titleKey ?? event, vars)'))
   })
 
   it('слова совпадают с доской на каждом языке', () => {

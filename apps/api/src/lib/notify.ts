@@ -24,6 +24,7 @@ export type NotificationEvent =
   | 'release_status'
   | 'task_due'
   | 'announcement'
+  | 'task_handoff'
 
 /**
  * Кому уходит «новый комментарий к задаче».
@@ -145,6 +146,16 @@ const STR: Record<Lang, Record<string, string>> = {
     release_status: '{actor} moved {ref} to {status} in {project}',
     // Без {actor}: срок наступает сам, автора у этого события нет.
     task_due: '{ref} is due {when} in {project}',
+    task_handoff: '{actor} passed you {ref}',
+    handoff_review: '{actor} sent {ref} to you for review',
+    handoff_accept: '{actor} accepted your work on {ref}',
+    handoff_return: '{actor} returned {ref} for rework (round {round})',
+    handoff_ask: '{actor} has a question on {ref}',
+    handoff_answer: '{actor} answered your question on {ref}',
+    handoff_pass: '{actor} passed you {ref}',
+    handoff_take: '{actor} took {ref} back',
+    handoff_cancel: '{actor} cancelled {ref}',
+    handoff_reopen: '{actor} reopened {ref}',
     open: 'Open',
     footer: 'You can manage notifications in your project settings.',
   },
@@ -161,6 +172,16 @@ const STR: Record<Lang, Record<string, string>> = {
     timer_running: 'Таймер в проекте «{project}» идёт уже {hours} ч',
     release_status: '{actor} перевёл(а) {ref} на стадию «{status}» в проекте «{project}»',
     task_due: 'Срок задачи {ref} — {when} (проект «{project}»)',
+    task_handoff: '{actor} передал(а) вам {ref}',
+    handoff_review: '{actor} отправил(а) вам {ref} на проверку',
+    handoff_accept: '{actor} принял(а) вашу работу по {ref}',
+    handoff_return: '{actor} вернул(а) {ref} на доработку ({round}-й круг)',
+    handoff_ask: '{actor} спрашивает по {ref}',
+    handoff_answer: '{actor} ответил(а) на ваш вопрос по {ref}',
+    handoff_pass: '{actor} передал(а) вам {ref}',
+    handoff_take: '{actor} забрал(а) {ref} себе',
+    handoff_cancel: '{actor} отменил(а) {ref}',
+    handoff_reopen: '{actor} снова открыл(а) {ref}',
     open: 'Открыть',
     footer: 'Управлять уведомлениями можно в настройках проекта.',
   },
@@ -177,6 +198,16 @@ const STR: Record<Lang, Record<string, string>> = {
     timer_running: 'הטיימר בפרויקט «{project}» פועל כבר {hours} שעות',
     release_status: '{actor} העביר את {ref} לשלב {status} בפרויקט {project}',
     task_due: 'מועד היעד של {ref} — {when} (פרויקט «{project}»)',
+    task_handoff: '{actor} העביר/ה אליך את {ref}',
+    handoff_review: '{actor} שלח/ה אליך את {ref} לבדיקה',
+    handoff_accept: '{actor} אישר/ה את העבודה שלך על {ref}',
+    handoff_return: '{actor} החזיר/ה את {ref} לתיקון (סבב {round})',
+    handoff_ask: '{actor} שואל/ת לגבי {ref}',
+    handoff_answer: '{actor} ענה/תה על השאלה שלך לגבי {ref}',
+    handoff_pass: '{actor} העביר/ה אליך את {ref}',
+    handoff_take: '{actor} לקח/ה את {ref} בחזרה',
+    handoff_cancel: '{actor} ביטל/ה את {ref}',
+    handoff_reopen: '{actor} פתח/ה מחדש את {ref}',
     open: 'פתח',
     footer: 'ניתן לנהל התראות בהגדרות הפרויקט.',
   },
@@ -293,6 +324,12 @@ type NotifyParams = {
   preview?: string
   /** доп. переменные для шаблона: ref, status */
   vars?: Record<string, string>
+  /**
+   * Шаблон заголовка, когда он не совпадает с событием. У передачи мяча одно
+   * событие (по нему отписываются и группируют), а заголовков десяток: «вернул
+   * на доработку» и «спрашивает» — разные просьбы.
+   */
+  titleKey?: string
   /** на какую сущность ведёт уведомление (для иконки/навигации) */
   entityType?: 'task' | 'message' | 'comment' | 'note' | 'time' | 'release'
   entityId?: string
@@ -386,7 +423,7 @@ export async function notify(params: NotifyParams): Promise<void> {
           companyId: project.companyId,
           event,
           actorId: actorId ?? null,
-          title: tr(lang, event, vars),
+          title: tr(lang, params.titleKey ?? event, vars),
           body: previewText.slice(0, 500),
           link: params.link ?? '',
           entityType: params.entityType ?? null,

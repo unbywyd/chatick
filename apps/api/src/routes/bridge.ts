@@ -85,6 +85,7 @@ import { randomBytes } from 'node:crypto'
 import { notifyReleaseStage } from './releases.js'
 import { env } from '../env.js'
 import { handoff, insertTask, updateTask, type BallError } from '../lib/ball.js'
+import { notifyHandoff } from '../lib/handoff-notify.js'
 import { fromMeList, listFilters, mineList, myProjects, quickTask, tableToggle } from './ball.js'
 
 // Мост для внешнего ИИ (SPEC §8.27). Всё выполняется ОТ ИМЕНИ пользователя,
@@ -869,6 +870,8 @@ const INBOX_BRANCHES = [
   // Объявления первыми: «завтра отдыхаем» важнее любого комментария, и
   // отписаться от них нельзя — значит и в сводке они не должны тонуть.
   { kind: 'announcements', events: ['announcement'], next: 'уже здесь, в items — читать целиком' },
+  // Передача мяча: задача теперь на тебе, и записка говорит, чего ждут.
+  { kind: 'ball', events: ['task_handoff'], next: 'GET /x/ball/mine — the note in "last" says what is asked' },
   { kind: 'mentions', events: MENTION_EVENTS, next: 'GET /x/mentions' },
   { kind: 'answers', events: ['checklist_answer'], next: 'GET /x/tasks/<id> — ответы в чек-листе' },
   { kind: 'comments', events: ['task_comment'], next: 'GET /x/tasks/<id>/comments' },
@@ -2945,6 +2948,7 @@ bridgeRoute.post('/tasks/:id/handoff', async (c) => {
   if (!r.ok) return c.json({ error: r.error, hint: HANDOFF_HINTS[r.error] }, HANDOFF_STATUS[r.error])
 
   const row = r.task
+  if (r.handoff) void notifyHandoff(row, r.handoff)
   tasksChanged(scope.projectId, [row.assigneeId, existing.assigneeId, row.ownerId ?? row.createdById])
   void logActivity({
     projectId: scope.projectId,

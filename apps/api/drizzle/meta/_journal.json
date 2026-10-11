@@ -29,6 +29,13 @@
       "when": 1791733119272,
       "tag": "0003_ball_backfill",
       "breakpoints": true
+    },
+    {
+      "idx": 4,
+      "version": "7",
+      "when": 1791743099852,
+      "tag": "0004_handoff_notifications",
+      "breakpoints": true
     }
   ]
 }

@@ -133,7 +133,9 @@ function endpointCatalog(q: string): string {
          "table" (urgent, at most 3) and "items" — questions waiting for an
          answer first, then reviews, then work; overdue and longest-held first;
          "waiting for the client" last. Each item carries "last": the latest
-         hand-off with its note — why it is here. Filters: move=do|review|answer.
+         hand-off with its note — why it is here. "isNew" — there is an unread
+         notification about it: the person has not opened it since it moved.
+         Filters: move=do|review|answer.
          This is THE answer to "what is on me" and "what should I do next".
   GET    /x/ball/from-me${q}${amp}group=holder
          Tasks this person owns while someone else holds the ball — "what am I

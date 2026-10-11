@@ -1,0 +1,1 @@
+ALTER TYPE "public"."notification_event" ADD VALUE 'task_handoff';

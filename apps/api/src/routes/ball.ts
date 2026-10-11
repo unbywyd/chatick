@@ -4,7 +4,7 @@ import { z } from 'zod'
 import { and, eq, inArray, isNull, ne, sql, type SQL } from 'drizzle-orm'
 import { alias } from 'drizzle-orm/pg-core'
 import { db } from '../db/client.js'
-import { companies, companyMembers, projectMembers, projects, taskHandoffs, tasks, TASK_MOVES, users } from '../db/schema.js'
+import { companies, companyMembers, notifications, projectMembers, projects, taskHandoffs, tasks, TASK_MOVES, users } from '../db/schema.js'
 import { requireSession, type SessionEnv } from '../auth.js'
 import { hasPermission, ownsOrManages } from './projects.js'
 import { insertTask, setOnTable, TABLE_LIMIT, type Via } from '../lib/ball.js'
@@ -88,7 +88,7 @@ function orderFor(q: ListQuery, defaults: SQL[]): SQL[] {
 
 type Person = { id: string; name: string; avatarUrl: string | null }
 
-async function list(q: ListQuery, where: SQL, defaults: SQL[], projectList: ProjectList) {
+async function list(userId: string, q: ListQuery, where: SQL, defaults: SQL[], projectList: ProjectList) {
   const rows = await db
     .select({
       t: tasks,
@@ -122,6 +122,29 @@ async function list(q: ListQuery, where: SQL, defaults: SQL[], projectList: Proj
         .orderBy(taskHandoffs.taskId, sql`${taskHandoffs.createdAt} desc`)
     : []
   const lastBy = new Map(last.map((h) => [h.taskId, h]))
+  /**
+   * «Новое» — есть непрочитанное уведомление об этой задаче. Гаснет, когда
+   * задачу открыли: клиент помечает прочитанным всё по задаче разом
+   * (POST /inbox/read с entityId). Отдельного флага не заводим — правда уже
+   * лежит в уведомлениях, и второй копии не с чем было бы расходиться.
+   */
+  const unread = ids.length
+    ? new Set(
+        (
+          await db
+            .selectDistinct({ id: notifications.entityId })
+            .from(notifications)
+            .where(
+              and(
+                eq(notifications.userId, userId),
+                eq(notifications.entityType, 'task'),
+                inArray(notifications.entityId, ids),
+                isNull(notifications.readAt),
+              ),
+            )
+        ).map((r) => r.id),
+      )
+    : new Set<string | null>()
   const projectBy = new Map(projectList.map(({ companyId: _c, ...p }) => [p.id, p]))
   const person = (p: Person | { id: null }): Person | null => (p.id ? (p as Person) : null)
 
@@ -146,6 +169,7 @@ async function list(q: ListQuery, where: SQL, defaults: SQL[], projectList: Proj
         onTable: t.onTable,
         askFromId: t.askFromId,
       },
+      isNew: unread.has(t.id),
       last: l ? { action: l.action, note: l.note, via: l.via, at: l.createdAt, actor: l.actor?.id ? l.actor : null } : null,
     }
   })
@@ -185,6 +209,7 @@ function filters(q: ListQuery, projectIds: string[]): SQL[] {
 export async function mineList(userId: string, mine: ProjectList, q: ListQuery) {
   if (!mine.length) return { table: [], items: [], groups: undefined, tableLimit: TABLE_LIMIT }
   const items = await list(
+    userId,
     q,
     and(...filters(q, mine.map((p) => p.id)), eq(tasks.assigneeId, userId))!,
     [WAITING_LAST, MOVE_RANK, OVERDUE_FIRST, sql`${tasks.heldSince} asc nulls last`],
@@ -209,6 +234,7 @@ ballRoute.get('/mine', zValidator('query', listQuery), async (c) => {
 export async function fromMeList(userId: string, mine: ProjectList, q: ListQuery) {
   if (!mine.length) return { items: [], groups: undefined }
   const items = await list(
+    userId,
     q,
     and(
       ...filters(q, mine.map((p) => p.id)),
