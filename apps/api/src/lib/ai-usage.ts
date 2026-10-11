@@ -61,7 +61,7 @@ export const DEFAULT_PRICING: Record<string, { in: number; out: number }> = {
 export type TokenUsage = { tokensIn: number; tokensOut: number }
 
 /** Эффективная цена модели: per-project override → глобальный override → встроенный дефолт → null. */
-export async function pricingFor(projectId: string, model: string): Promise<{ in: number; out: number } | null> {
+export async function pricingFor(projectId: string | null, model: string): Promise<{ in: number; out: number } | null> {
   const rows = await db.query.modelPricing.findMany({ where: eq(modelPricing.model, model) })
   const projectRow = rows.find((r) => r.projectId === projectId)
   const globalRow = rows.find((r) => r.projectId === null)
@@ -71,7 +71,7 @@ export async function pricingFor(projectId: string, model: string): Promise<{ in
 }
 
 /** Стоимость вызова в USD (или null, если цена модели неизвестна). */
-export async function costFor(projectId: string, model: string, usage: TokenUsage): Promise<number | null> {
+export async function costFor(projectId: string | null, model: string, usage: TokenUsage): Promise<number | null> {
   const price = await pricingFor(projectId, model)
   if (!price) return null
   return (usage.tokensIn / 1_000_000) * price.in + (usage.tokensOut / 1_000_000) * price.out
@@ -79,7 +79,9 @@ export async function costFor(projectId: string, model: string, usage: TokenUsag
 
 /** Записать использование ИИ (fail-safe — не роняет основной флоу). */
 export async function logAiUsage(params: {
-  projectId: string
+  /** null — расход компании без проекта; тогда нужен companyId. */
+  projectId: string | null
+  companyId?: string
   source: 'company' | 'trial' | 'custom'
   model: string
   usage: TokenUsage
@@ -90,6 +92,8 @@ export async function logAiUsage(params: {
     const cost = await costFor(params.projectId, params.model, params.usage)
     await db.insert(aiUsageLog).values({
       projectId: params.projectId,
+      // С проектом компанию поставит триггер базы.
+      companyId: params.projectId ? null : (params.companyId ?? null),
       source: params.source,
       model: params.model,
       tokensIn: String(params.usage.tokensIn),
@@ -122,10 +126,11 @@ export async function companyTrialSpendUsd(companyId: string): Promise<number> {
   const [{ total }] = (await db
     .select({ total: sql<string>`coalesce(sum(cast(${aiUsageLog.costUsd} as numeric)), 0)` })
     .from(aiUsageLog)
-    .innerJoin(projects, eq(projects.id, aiUsageLog.projectId))
+    // По компании записи, а не по её проектам: ассистент компании тратит
+    // тот же пробный бюджет, а проекта у его расхода нет.
     .where(
       and(
-        eq(projects.companyId, companyId),
+        eq(aiUsageLog.companyId, companyId),
         eq(aiUsageLog.source, 'trial'),
         sql`${aiUsageLog.costUsd} is not null`,
       ),

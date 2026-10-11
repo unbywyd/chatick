@@ -1707,17 +1707,56 @@ export const aiUsageLog = pgTable(
   'ai_usage_log',
   {
     id: id(),
-    projectId: text('project_id').notNull().references(() => projects.id, { onDelete: 'cascade' }),
+    /** Проект — необязателен (v2): ассистент компании работает над всеми проектами сразу. */
+    projectId: text('project_id').references(() => projects.id, { onDelete: 'cascade' }),
+    /**
+     * Компания — есть всегда: по ней считается пробный бюджет. С проектом её
+     * ставит триггер базы (ai_usage_fill_company, миграция 0008), так что
+     * старые места записи о ней не знают.
+     */
+    companyId: text('company_id').references(() => companies.id, { onDelete: 'cascade' }),
     source: aiSource('source').notNull(),
     model: text('model').notNull(),
     tokensIn: text('tokens_in').notNull().default('0'),
     tokensOut: text('tokens_out').notNull().default('0'),
     // стоимость в USD (строкой, чтобы не терять точность); null = цена модели неизвестна
     costUsd: text('cost_usd'),
-    feature: text('feature'), // dispatcher | chat | summary | improve_task | validate_task
+    feature: text('feature'), // dispatcher | chat | summary | improve_task | validate_task | assistant
     createdAt: createdAt(),
   },
-  (t) => [index('ai_usage_project_idx').on(t.projectId, t.createdAt)],
+  (t) => [
+    index('ai_usage_project_idx').on(t.projectId, t.createdAt),
+    index('ai_usage_company_idx').on(t.companyId, t.createdAt),
+    check('ai_usage_scope', sql`${t.projectId} is not null or ${t.companyId} is not null`),
+  ],
+)
+
+/**
+ * Ассистент компании (v2): разговор человека с ИИ — один на человека и
+ * компанию, а не по вкладке в каждом проекте. Ассистент сам работает с любым
+ * проектом, где человек состоит; что открыто на экране — в context.
+ */
+export const assistantMessages = pgTable(
+  'assistant_messages',
+  {
+    id: id(),
+    companyId: text('company_id')
+      .notNull()
+      .references(() => companies.id, { onDelete: 'cascade' }),
+    userId: text('user_id')
+      .notNull()
+      .references(() => users.id, { onDelete: 'cascade' }),
+    role: text('role').notNull(), // user | assistant
+    text: text('text').notNull().default(''),
+    /** Что было открыто, когда человек спросил: {projectId?, taskId?, screen?} — JSON. */
+    context: text('context').notNull().default('{}'),
+    /** Какие инструменты ассистент вызвал для ответа — JSON-массив имён. */
+    tools: text('tools').notNull().default('[]'),
+    /** Ответ не получился (ИИ недоступен, бюджет) — показать честно, а не пустоту. */
+    failed: boolean('failed').notNull().default(false),
+    createdAt: createdAt(),
+  },
+  (t) => [index('assistant_messages_user_idx').on(t.userId, t.companyId, t.createdAt)],
 )
 
 /**

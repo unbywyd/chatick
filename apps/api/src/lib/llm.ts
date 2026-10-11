@@ -3,7 +3,7 @@ import { db } from '../db/client.js'
 import { companies, projectAi, projects } from '../db/schema.js'
 import { decrypt } from './crypto.js'
 import { env } from '../env.js'
-import { logAiUsage, trialBudgetExceeded, type TokenUsage } from './ai-usage.js'
+import { companyTrialSpendUsd, logAiUsage, trialBudgetExceeded, type TokenUsage } from './ai-usage.js'
 
 // BYO-LLM: каждая компания подключает своего провайдера (ключ шифрован в БД).
 /**
@@ -95,7 +95,8 @@ export type LlmConfig = {
   model: string
   apiKey: string
   // контекст учёта (SPEC §8.11): если задан — вызовы логируются в ai_usage_log
-  usage?: { projectId: string; source: 'company' | 'trial' | 'custom'; feature?: string }
+  // projectId null — расход компании без проекта (ассистент компании, v2)
+  usage?: { projectId: string | null; companyId?: string; source: 'company' | 'trial' | 'custom'; feature?: string }
 }
 
 /** Настройки LLM компании (расшифрованный ключ) — null, если не настроено. */
@@ -167,6 +168,26 @@ export async function projectLlm(projectId: string, feature?: string): Promise<L
   return null
 }
 
+/**
+ * Ключ ассистента компании (v2): ключ компании, а без него — пробный, пока
+ * не исчерпан бюджет компании. Своего ключа у проекта здесь не бывает:
+ * ассистент работает над всеми проектами сразу, и платит за него компания.
+ */
+export async function companyAssistantLlm(companyId: string, feature = 'assistant'): Promise<LlmConfig | null> {
+  const cfg = await companyLlm(companyId)
+  if (cfg) return { ...cfg, usage: { projectId: null, companyId, source: 'company', feature } }
+  if (env.AI_TRIAL_KEY && (await companyTrialSpendUsd(companyId)) < env.AI_TRIAL_BUDGET_USD) {
+    const provider = (env.AI_TRIAL_PROVIDER as LlmProvider) in LLM_PROVIDERS ? (env.AI_TRIAL_PROVIDER as LlmProvider) : 'deepseek'
+    return {
+      provider,
+      model: env.AI_TRIAL_MODEL || LLM_PROVIDERS[provider].defaultModel,
+      apiKey: env.AI_TRIAL_KEY,
+      usage: { projectId: null, companyId, source: 'trial', feature },
+    }
+  }
+  return null
+}
+
 // Извлекает токены из ответа (Anthropic / OpenAI-совместимые) и логирует, если задан usage-контекст.
 function accumulate(acc: TokenUsage, raw: unknown): void {
   const u = raw as { input_tokens?: number; output_tokens?: number; prompt_tokens?: number; completion_tokens?: number } | undefined
@@ -176,7 +197,14 @@ function accumulate(acc: TokenUsage, raw: unknown): void {
 }
 function flushUsage(cfg: LlmConfig, acc: TokenUsage): void {
   if (cfg.usage && (acc.tokensIn || acc.tokensOut)) {
-    void logAiUsage({ projectId: cfg.usage.projectId, source: cfg.usage.source, model: cfg.model, usage: acc, feature: cfg.usage.feature })
+    void logAiUsage({
+      projectId: cfg.usage.projectId,
+      companyId: cfg.usage.companyId,
+      source: cfg.usage.source,
+      model: cfg.model,
+      usage: acc,
+      feature: cfg.usage.feature,
+    })
   }
 }
 
