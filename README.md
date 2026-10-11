@@ -73,8 +73,10 @@ See [DEPLOY.md](./DEPLOY.md) for running it in production.
 
 - Packages live under `@chatick/*` and are wired together with `workspace:*`.
 - Secrets belong in `.env`, which is never committed.
-- Database changes are plain SQL migrations under `apps/api/drizzle`, listed in
-  `meta/_journal.json`.
+- Database changes go through `pnpm db:generate` (drizzle-kit) into
+  `apps/api/drizzle`, so every migration is in `meta/_journal.json` with a schema
+  snapshot. Hand-written SQL goes through `drizzle-kit generate --custom`, never
+  straight into the folder — a test fails otherwise.
 - Every release is described in [CHANGELOG.md](./CHANGELOG.md) before it ships —
   the landing build fails when the version has no entry, so a release can never
   go out undocumented.

@@ -43,7 +43,7 @@ describe('письмо приходит один раз за месяц', () => 
   })
 
   it('и в самой миграции — схема одна, а таблицу создаёт SQL', () => {
-    const sql = readFileSync(join(import.meta.dirname, '../../drizzle/0089_spend_alerts.sql'), 'utf8')
+    const sql = readFileSync(join(import.meta.dirname, '../../drizzle-legacy/0089_spend_alerts.sql'), 'utf8')
     expect(sql).toMatch(/CREATE UNIQUE INDEX IF NOT EXISTS "spend_alerts_period_idx"/)
   })
 })

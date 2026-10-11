@@ -49,7 +49,7 @@ describe('статус объявлен везде', () => {
   })
 
   it('миграция добавляет значение перед done', () => {
-    const sql = readFileSync(join(import.meta.dirname, '../../drizzle/0086_task_verified.sql'), 'utf8')
+    const sql = readFileSync(join(import.meta.dirname, '../../drizzle-legacy/0086_task_verified.sql'), 'utf8')
     expect(sql).toMatch(/ADD VALUE IF NOT EXISTS 'verified' BEFORE 'done'/)
   })
 

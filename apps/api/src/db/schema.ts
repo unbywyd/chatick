@@ -1,5 +1,19 @@
 import { TASK_STATUSES } from '../lib/task-status.js'
-import { pgTable, text, timestamp, boolean, uniqueIndex, index, integer, pgEnum, doublePrecision } from 'drizzle-orm/pg-core'
+import { sql } from 'drizzle-orm'
+import {
+  pgTable,
+  text,
+  timestamp,
+  boolean,
+  uniqueIndex,
+  index,
+  integer,
+  pgEnum,
+  doublePrecision,
+  vector,
+  check,
+  type AnyPgColumn,
+} from 'drizzle-orm/pg-core'
 import { nanoid } from 'nanoid'
 
 // ---------------------------------------------------------------------------
@@ -49,7 +63,11 @@ export const users = pgTable(
     createdAt: createdAt(),
     updatedAt: updatedAt(),
   },
-  (t) => [uniqueIndex('users_email_idx').on(t.email), uniqueIndex('users_google_idx').on(t.googleId)],
+  (t) => [
+    uniqueIndex('users_email_idx').on(t.email),
+    uniqueIndex('users_google_idx').on(t.googleId),
+    index('users_external_idx').on(t.externalId).where(sql`${t.externalId} is not null`),
+  ],
 )
 
 // Персональные API-токены — для MCP-сервера и внешних агентов (Claude Code).
@@ -133,7 +151,7 @@ export const webhookDeliveries = pgTable(
     lastError: text('last_error'),
     createdAt: createdAt(),
   },
-  (t) => [index('webhook_deliveries_pending_idx').on(t.nextTryAt)],
+  (t) => [index('webhook_deliveries_pending_idx').on(t.nextTryAt).where(sql`${t.deliveredAt} is null`)],
 )
 
 /** Журнал вызовов извне: ключ компании даёт много, поэтому видно, кто и что делал. */
@@ -149,7 +167,7 @@ export const companyApiLog = pgTable(
     ip: text('ip').notNull().default(''),
     createdAt: createdAt(),
   },
-  (t) => [index('company_api_log_company_idx').on(t.companyId, t.createdAt)],
+  (t) => [index('company_api_log_company_idx').on(t.companyId, t.createdAt.desc().nullsFirst())],
 )
 
 // ---------------------------------------------------------------------------
@@ -276,7 +294,7 @@ export const companies = pgTable('companies', {
    *
    * set null при удалении проекта: настройка не должна указывать в пустоту.
    */
-  mainProjectId: text('main_project_id'),
+  mainProjectId: text('main_project_id').references((): AnyPgColumn => projects.id, { onDelete: 'set null' }),
   // Проекты приходят только через API — кнопка создания в интерфейсе исчезает.
   projectsViaApiOnly: boolean('projects_via_api_only').notNull().default(false),
   // То же для людей: состав команды виден, но правится только снаружи. Иначе
@@ -284,7 +302,7 @@ export const companies = pgTable('companies', {
   membersViaApiOnly: boolean('members_via_api_only').notNull().default(false),
   createdAt: createdAt(),
   updatedAt: updatedAt(),
-})
+}, (t) => [index('companies_is_demo_idx').on(t.isDemo).where(sql`${t.isDemo}`)])
 
 export const companyMembers = pgTable(
   'company_members',
@@ -400,7 +418,13 @@ export const projects = pgTable(
     createdAt: createdAt(),
     updatedAt: updatedAt(),
   },
-  (t) => [index('projects_company_idx').on(t.companyId)],
+  (t) => [
+    index('projects_company_idx').on(t.companyId),
+    index('projects_active_idx').on(t.companyId).where(sql`${t.archivedAt} is null`),
+    // Имя проекта уникально в компании без учёта регистра.
+    uniqueIndex('projects_company_name_uniq').on(t.companyId, sql`lower(${t.name})`),
+    uniqueIndex('projects_external_idx').on(t.companyId, t.externalId).where(sql`${t.externalId} is not null`),
+  ],
 )
 
 // Настройка хранилища проекта (SPEC §8.10): platform (наш, лимит) | custom (свой S3/R2, без лимита).
@@ -500,6 +524,7 @@ export const projectMembers = pgTable(
   (t) => [
     uniqueIndex('project_members_uniq').on(t.projectId, t.userId),
     index('project_members_user_idx').on(t.userId),
+    index('project_members_hidden_idx').on(t.userId, t.hiddenAt),
   ],
 )
 
@@ -542,7 +567,10 @@ export const messages = pgTable(
     replyToId: text('reply_to_id'),
     createdAt: createdAt(),
   },
-  (t) => [index('messages_project_created_idx').on(t.projectId, t.createdAt)],
+  (t) => [
+    index('messages_project_created_idx').on(t.projectId, t.createdAt),
+    index('messages_project_mode_created_idx').on(t.projectId, t.mode, t.createdAt),
+  ],
 )
 
 // ---------------------------------------------------------------------------
@@ -656,7 +684,10 @@ export const taskComments = pgTable(
   // Частичный индекс task_comments_alive_idx (только живые) заведён миграцией
   // 0096: drizzle описывает частичные индексы через sql``, а больше их в этой
   // схеме нет — тянуть импорт ради одной строки дороже, чем помнить про него.
-  (t) => [index('task_comments_task_idx').on(t.taskId, t.createdAt)],
+  (t) => [
+    index('task_comments_task_idx').on(t.taskId, t.createdAt),
+    index('task_comments_alive_idx').on(t.taskId, t.createdAt).where(sql`${t.deletedAt} is null`),
+  ],
 )
 
 // Заметки ИИ к задаче (SPEC §8.14): факт / проблема / рекомендация / опровержение.
@@ -723,6 +754,7 @@ export const taskBlockers = pgTable(
   (t) => [
     // Одна и та же связь дважды — это не две связи.
     uniqueIndex('task_blockers_pair_idx').on(t.blockedTaskId, t.blockerTaskId),
+    check('task_blockers_no_self', sql`${t.blockedTaskId} <> ${t.blockerTaskId}`),
     index('task_blockers_blocked_idx').on(t.blockedTaskId),
     index('task_blockers_blocker_idx').on(t.blockerTaskId),
     index('task_blockers_project_idx').on(t.projectId),
@@ -858,7 +890,8 @@ export const notes = pgTable(
   },
   (t) => [
     index('notes_project_idx').on(t.projectId, t.createdAt),
-    index('notes_company_idx').on(t.companyId, t.scope),
+    index('notes_company_idx').on(t.companyId, t.createdAt.desc().nullsFirst()),
+    index('notes_project_idx2').on(t.projectId).where(sql`${t.projectId} is not null`),
     index('notes_remind_idx').on(t.remindAt),
   ],
 )
@@ -915,8 +948,12 @@ export const workLog = pgTable(
     updatedAt: updatedAt(),
   },
   (t) => [
-    index('work_log_project_idx').on(t.projectId, t.createdAt),
-    index('work_log_author_idx').on(t.projectId, t.authorId, t.createdAt),
+    index('work_log_project_idx').on(t.projectId, t.createdAt.desc().nullsFirst()),
+    index('work_log_author_idx').on(t.projectId, t.authorId, t.createdAt.desc().nullsFirst()),
+    // Один черновик на автора в проекте.
+    uniqueIndex('work_log_one_draft_idx')
+      .on(t.projectId, t.authorId)
+      .where(sql`${t.status} = 'draft' and ${t.deletedAt} is null`),
     // Черновик у человека в проекте один — правило держит база, а не код:
     // две вкладки заведут второй быстрее, чем проверка увидит первый.
     // Частичный индекс объявлен в миграции 0094: drizzle не умеет WHERE.
@@ -1280,7 +1317,7 @@ export const releases = pgTable(
   (t) => [
     index('releases_project_idx').on(t.projectId),
     // Сводка «что сейчас в проде» ходит именно так: проект + тип сборки.
-    index('releases_project_type_idx').on(t.projectId, t.buildType),
+    index('releases_project_app_type_idx').on(t.projectId, t.appName, t.buildType),
   ],
 )
 
@@ -1445,16 +1482,19 @@ export const notificationEvent = pgEnum('notification_event', [
   'task_assigned', // тебе назначили задачу
   'task_status', // изменился статус твоей/назначенной задачи
   'task_comment', // новый комментарий к задаче, где ты автор/ассайни
-  // Ответ под пунктом чек-листа. Отдельно от task_comment: инбокс группирует
-  // по событию, и «на мой вопрос ответили» нельзя было бы отделить от «кто-то
-  // что-то написал». Заголовок «прокомментировал» тоже был бы неправдой —
-  // человек открыл бы комментарии и ничего не нашёл.
-  'checklist_answer',
   'note_mention', // тебя упомянули в заметке проекта
   'note_reminder', // наступила дата напоминания в заметке
   'timer_running', // таймер идёт слишком долго — не забыли ли выключить
   'release_status', // версия сдвинулась по стадиям — автору и тем, кого это касается
   'task_due', // срок задачи на подходе — предупреждаем заранее
+  // Ответ под пунктом чек-листа. Отдельно от task_comment: инбокс группирует
+  // по событию, и «на мой вопрос ответили» нельзя было бы отделить от «кто-то
+  // что-то написал». Заголовок «прокомментировал» тоже был бы неправдой —
+  // человек открыл бы комментарии и ничего не нашёл.
+  //
+  // Стоит здесь, а не рядом с task_comment, потому что в базе добавлен позже
+  // (ALTER TYPE ... ADD VALUE ставит в конец): порядок в коде = порядок в базе.
+  'checklist_answer',
   // Объявление компании: «завтра отдыхаем», «изменили политику». Первое
   // событие без повода внутри проекта — оттого и project_id стал
   // необязательным.
@@ -1509,6 +1549,7 @@ export const notifications = pgTable(
   (t) => [
     index('notifications_user_read_idx').on(t.userId, t.readAt),
     index('notifications_user_created_idx').on(t.userId, t.createdAt),
+    index('notifications_company_idx').on(t.companyId, t.createdAt.desc().nullsFirst()),
   ],
 )
 
@@ -1595,8 +1636,8 @@ export const embeddings = pgTable(
     entityId: text('entity_id').notNull(),
     projectId: text('project_id').references(() => projects.id, { onDelete: 'cascade' }),
     companyId: text('company_id').references(() => companies.id, { onDelete: 'cascade' }),
-    /** vector(512) — drizzle его не типизирует, работаем через sql. */
-    embedding: text('embedding'),
+    /** Пишется и сравнивается через sql: `${toVector(vec)}::vector`, `<=>`. */
+    embedding: vector('embedding', { dimensions: 512 }),
     /** Отпечаток текста: правка, не менявшая его, не тратит денег на пересчёт. */
     contentHash: text('content_hash').notNull(),
     /** Векторы разных моделей несравнимы — поле говорит, какие устарели. */
@@ -1607,6 +1648,7 @@ export const embeddings = pgTable(
   (t) => [
     uniqueIndex('embeddings_entity_idx').on(t.entityType, t.entityId),
     index('embeddings_company_idx').on(t.companyId),
+    index('embeddings_vec_idx').using('hnsw', t.embedding.op('vector_cosine_ops')),
   ],
 )
 
@@ -1797,7 +1839,7 @@ export const shortLinks = pgTable(
   {
     id: id(),
     // Код без префикса: «AbC12». Префикс живёт в адресе и в entityType.
-    code: text('code').notNull().unique(),
+    code: text('code').notNull(),
     entityType: text('entity_type').notNull(),
     entityId: text('entity_id').notNull(),
     // Проект — для сборки длинного адреса и для зачистки: удалили проект,
@@ -1811,6 +1853,7 @@ export const shortLinks = pgTable(
   (t) => [
     // Одна ссылка на сущность: вторая означала бы, что у одной задачи два
     // «коротких адреса», и в переписке они выглядели бы как разные задачи.
+    uniqueIndex('short_links_code_idx').on(t.code),
     uniqueIndex('short_links_entity_idx').on(t.entityType, t.entityId),
     index('short_links_project_idx').on(t.projectId),
   ],
@@ -1948,7 +1991,7 @@ export const supportLogins = pgTable(
     usedAt: timestamp('used_at'),
     createdAt: timestamp('created_at').defaultNow().notNull(),
   },
-  (t) => [index('support_logins_target_idx').on(t.targetUserId, t.createdAt)],
+  (t) => [index('support_logins_target_idx').on(t.targetUserId, t.createdAt.desc().nullsFirst())],
 )
 
 // --- Подключения к внешним БД (шаг 1: только чтение) -------------------------

@@ -172,7 +172,7 @@ describe('задачи от ассистента — коротко', () => {
 
 describe('миграция', () => {
   it('файл есть, значение добавляется вне транзакции', () => {
-    const p = join(import.meta.dirname, '../../drizzle/0097_task_cancelled.sql')
+    const p = join(import.meta.dirname, '../../drizzle-legacy/0097_task_cancelled.sql')
     expect(existsSync(p)).toBe(true)
     const sql = readFileSync(p, 'utf8')
     expect(sql).toContain(`ALTER TYPE "public"."task_status" ADD VALUE 'cancelled';`)

@@ -29,7 +29,7 @@ describe('колонка и миграция', () => {
   it('миграция не трогает существующие проекты', () => {
     // Nullable без умолчания: NULL читается как «живой», и 22 проекта
     // StartPlan остаются там же, где были.
-    const sql = readFileSync(join(import.meta.dirname, '../../drizzle/0087_project_archive.sql'), 'utf8')
+    const sql = readFileSync(join(import.meta.dirname, '../../drizzle-legacy/0087_project_archive.sql'), 'utf8')
     expect(sql).toMatch(/ADD COLUMN IF NOT EXISTS "archived_at" timestamptz;/)
     expect(sql, 'умолчание сделало бы архивными всех').not.toMatch(/archived_at" timestamptz DEFAULT/)
   })

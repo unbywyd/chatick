@@ -48,15 +48,23 @@ without a description — see `apps/landing/src/changelog.ts`.
 
 ## Database
 
-Migrations are plain SQL under `apps/api/drizzle`, applied in the order listed
-in `apps/api/drizzle/meta/_journal.json`:
+Migrations live in `apps/api/drizzle` and are applied with the migrator:
 
 ```bash
-psql "$DATABASE_URL" -f apps/api/drizzle/0001_....sql
+cd apps/api && pnpm db:migrate
 ```
 
-Apply them in order on a fresh database. They are written to be re-runnable, so
-applying one twice is harmless.
+- **Fresh database:** `0000_baseline` creates the whole schema, including the
+  `vector` and `pg_trgm` extensions (creating `vector` needs a superuser or a
+  provider that allows it, such as Heroku Postgres).
+- **Existing installation:** the migrator marks `0000_baseline` as applied on its
+  own, but only if the database already has the last pre-baseline migration
+  (`0097_task_cancelled` in `apps/api/drizzle-legacy`). An older database stops
+  with an explanation: apply the remaining files from `drizzle-legacy` with `psql`
+  first.
+- Applied migrations are tracked in `drizzle.__drizzle_migrations_v2`. The old
+  `drizzle.__drizzle_migrations` table is history and is left untouched.
+- Take a dump before migrating production: `pg_dump -Fc "$DATABASE_URL" -f before.dump`.
 
 ## Running the API
 

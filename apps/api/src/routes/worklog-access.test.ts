@@ -158,7 +158,7 @@ describe('черновик один', () => {
   it('правило держит база, а не проверка в коде', () => {
     // Саботаж: убрать индекс из миграции — две вкладки заведут два черновика,
     // и «править последнюю до публикации» потеряет смысл.
-    const sql = readFileSync(join(import.meta.dirname, '../../drizzle/0094_work_log.sql'), 'utf8')
+    const sql = readFileSync(join(import.meta.dirname, '../../drizzle-legacy/0094_work_log.sql'), 'utf8')
     const norm = sql.replace(/\s+/g, ' ')
     expect(norm).toMatch(
       /CREATE UNIQUE INDEX IF NOT EXISTS "work_log_one_draft_idx" ON "work_log" \("project_id", "author_id"\) WHERE "status" = 'draft' AND "deleted_at" IS NULL/,
