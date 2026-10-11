@@ -12,7 +12,7 @@ import {
   users,
   type HandoffAction,
 } from '../db/schema.js'
-import { companyAssistantLlm, completeWithTools, type ToolDef, type ToolHandler } from './llm.js'
+import { companyAssistantLlm, completeWithTools, type StreamEvent, type ToolDef, type ToolHandler } from './llm.js'
 import { memoryTools } from './memory.js'
 import { handoff, setOnTable, TABLE_LIMIT } from './ball.js'
 import { notifyHandoff } from './handoff-notify.js'
@@ -437,6 +437,8 @@ export async function assistantReply(input: {
   userId: string
   text: string
   screen: ScreenContext
+  /** Поток: куски текста и «зову инструмент» — по мере ответа модели. */
+  onEvent?: (e: StreamEvent) => void
 }): Promise<{ text: string; tools: string[] } | null> {
   const cfg = await companyAssistantLlm(input.companyId)
   if (!cfg) return null
@@ -518,6 +520,7 @@ export async function assistantReply(input: {
     tools: [...c.tools, ...p.tools],
     handlers: { ...c.handlers, ...p.handlers },
     maxTokens: 1500,
+    onEvent: input.onEvent,
   })
   if (!reply) return null
   return { text: reply, tools: [...new Set(ctx.used)] }

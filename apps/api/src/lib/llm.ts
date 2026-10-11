@@ -283,8 +283,122 @@ export type ToolDef = {
 export type ToolHandler = (args: Record<string, unknown>) => Promise<ToolOutput>
 
 /**
+ * События потокового ответа: кусок текста по мере написания и «зову
+ * инструмент» — чтобы человек видел, что происходит, а не смотрел десятки
+ * секунд на спиннер, пока модель ходит по задачам.
+ */
+export type StreamEvent = { type: 'text'; delta: string } | { type: 'tool'; name: string }
+
+/** Построчное чтение SSE: data-строки как JSON, неполные и служебные пропускаем. */
+async function readSse(res: Response, onData: (json: Record<string, unknown>) => void): Promise<void> {
+  const reader = res.body!.getReader()
+  const decoder = new TextDecoder()
+  let buf = ''
+  for (;;) {
+    const { done, value } = await reader.read()
+    if (done) break
+    buf += decoder.decode(value, { stream: true })
+    const lines = buf.split('\n')
+    buf = lines.pop() ?? ''
+    for (const line of lines) {
+      if (!line.startsWith('data:')) continue
+      const data = line.slice(5).trim()
+      if (!data || data === '[DONE]') continue
+      try {
+        onData(JSON.parse(data) as Record<string, unknown>)
+      } catch {
+        /* неполный чанк */
+      }
+    }
+  }
+}
+
+type AnthropicBlock = { type: 'text'; text: string } | { type: 'tool_use'; id: string; name: string; input: Record<string, unknown> }
+
+/**
+ * Круг Anthropic потоком: собираем те же блоки, что вернул бы обычный ответ
+ * (текст и tool_use с JSON-аргументами из кусков), а текст отдаём по мере
+ * поступления.
+ */
+async function anthropicStreamRound(
+  res: Response,
+  onEvent: (e: StreamEvent) => void,
+  acc: TokenUsage,
+): Promise<{ stop_reason?: string; content: AnthropicBlock[] }> {
+  const blocks: (AnthropicBlock & { json?: string })[] = []
+  let stop: string | undefined
+  await readSse(res, (j) => {
+    const t = j.type as string | undefined
+    if (t === 'message_start') accumulate(acc, (j.message as { usage?: unknown } | undefined)?.usage)
+    else if (t === 'message_delta') {
+      accumulate(acc, j.usage)
+      stop = (j.delta as { stop_reason?: string } | undefined)?.stop_reason ?? stop
+    } else if (t === 'content_block_start') {
+      const b = j.content_block as { type: string; id?: string; name?: string }
+      const i = j.index as number
+      blocks[i] = b.type === 'tool_use' ? { type: 'tool_use', id: b.id!, name: b.name!, input: {}, json: '' } : { type: 'text', text: '' }
+      if (b.type === 'tool_use') onEvent({ type: 'tool', name: b.name! })
+    } else if (t === 'content_block_delta') {
+      const i = j.index as number
+      const d = j.delta as { type: string; text?: string; partial_json?: string }
+      const b = blocks[i]
+      if (!b) return
+      if (d.type === 'text_delta' && b.type === 'text' && d.text) {
+        b.text += d.text
+        onEvent({ type: 'text', delta: d.text })
+      } else if (d.type === 'input_json_delta' && b.type === 'tool_use') b.json = (b.json ?? '') + (d.partial_json ?? '')
+    }
+  })
+  // Пустой текстовый блок Anthropic в истории не примет — следующий круг упал бы.
+  const content = blocks.filter((b) => b && !(b.type === 'text' && !b.text)).map((b) => {
+    if (b.type !== 'tool_use') return b
+    let input: Record<string, unknown> = {}
+    try {
+      input = b.json ? (JSON.parse(b.json) as Record<string, unknown>) : {}
+    } catch {
+      /* битые аргументы — пустые */
+    }
+    return { type: 'tool_use' as const, id: b.id, name: b.name, input }
+  })
+  return { stop_reason: stop, content }
+}
+
+/** Круг OpenAI-совместимого потоком: текст и tool_calls из дельт по индексу. */
+async function openaiStreamRound(
+  res: Response,
+  onEvent: (e: StreamEvent) => void,
+  acc: TokenUsage,
+): Promise<{ content: string | null; tool_calls?: { id: string; type: 'function'; function: { name: string; arguments: string } }[] }> {
+  let text = ''
+  const calls: { id: string; type: 'function'; function: { name: string; arguments: string } }[] = []
+  await readSse(res, (j) => {
+    if (j.usage) accumulate(acc, j.usage)
+    const d = (j.choices as { delta?: { content?: string; tool_calls?: { index: number; id?: string; function?: { name?: string; arguments?: string } }[] } }[] | undefined)?.[0]?.delta
+    if (!d) return
+    if (d.content) {
+      text += d.content
+      onEvent({ type: 'text', delta: d.content })
+    }
+    for (const tc of d.tool_calls ?? []) {
+      const c = (calls[tc.index] ??= { id: '', type: 'function', function: { name: '', arguments: '' } })
+      if (tc.id) c.id = tc.id
+      // Имя может прийти кусками — событие отдаём после потока, целиком.
+      if (tc.function?.name) c.function.name += tc.function.name
+      if (tc.function?.arguments) c.function.arguments += tc.function.arguments
+    }
+  })
+  const tool_calls = calls.filter(Boolean)
+  for (const c of tool_calls) onEvent({ type: 'tool', name: c.function.name })
+  return { content: text || null, ...(tool_calls.length ? { tool_calls } : {}) }
+}
+
+/**
  * Диалог с инструментами: модель может вызывать tools, результаты возвращаются ей,
  * цикл до maxIterations; итог — финальный текст. Anthropic tool_use / OpenAI functions.
+ *
+ * С onEvent каждый круг идёт потоком (текст кусками, вызовы инструментов
+ * событиями), а итогом становится весь текст, который человек видел, — не
+ * только последнего круга. Без onEvent — как раньше, одним ответом.
  */
 export async function completeWithTools(
   cfg: LlmConfig,
@@ -312,9 +426,20 @@ export async function completeWithTools(
     handlers: Record<string, ToolHandler>
     maxTokens?: number
     maxIterations?: number
+    onEvent?: (e: StreamEvent) => void
   },
 ): Promise<string | null> {
   const p = LLM_PROVIDERS[cfg.provider]
+  const onEvent = opts.onEvent
+  // Всё, что человек увидел потоком, — итог ответа (между кругами — абзац).
+  let streamed = ''
+  const emit = (e: StreamEvent) => {
+    if (e.type === 'text') streamed += e.delta
+    onEvent?.(e)
+  }
+  const roundBreak = () => {
+    if (streamed && !streamed.endsWith('\n\n')) emit({ type: 'text', delta: '\n\n' })
+  }
   // 12, а не 5: с пакетными инструментами этого хватает почти всегда, а при
   // одиночных вызовах короткий лимит обрывал цепочку на середине — часть задач
   // уже изменена, а пользователь видел пустой ответ.
@@ -407,22 +532,26 @@ export async function completeWithTools(
             system: cachedSystem,
             messages: msgs,
             tools: cachedTools,
+            ...(onEvent ? { stream: true } : {}),
           }),
         })
         if (!res.ok) {
           console.error('[llm] tools failed:', res.status, await res.text().catch(() => ''))
           return null
         }
-        const data = (await res.json()) as {
-          stop_reason?: string
-          content: ({ type: 'text'; text: string } | { type: 'tool_use'; id: string; name: string; input: Record<string, unknown> })[]
-          usage?: unknown
-        }
-        accumulate(acc, data.usage)
+        if (onEvent) roundBreak()
+        const data = onEvent
+          ? await anthropicStreamRound(res, emit, acc)
+          : await (async () => {
+              const d = (await res.json()) as { stop_reason?: string; content: AnthropicBlock[]; usage?: unknown }
+              accumulate(acc, d.usage)
+              return d
+            })()
         if (data.stop_reason !== 'tool_use') {
           flushUsage(cfg, acc)
           // Круги и токены — чтобы «где лупится» отвечалось из лога, а не из базы.
           console.log(`[llm] tools done: rounds=${i + 1} in=${acc.tokensIn} out=${acc.tokensOut} model=${cfg.model}`)
+          if (onEvent) return streamed.trim() || null
           return data.content.find((b) => b.type === 'text')?.text ?? null
         }
         msgs.push({ role: 'assistant', content: data.content })
@@ -463,7 +592,13 @@ export async function completeWithTools(
       flushUsage(cfg, acc)
       if (!final.ok) return null
       const fdata = (await final.json()) as { content?: { type: string; text?: string }[] }
-      return fdata.content?.find((b) => b.type === 'text')?.text ?? null
+      const ftext = fdata.content?.find((b) => b.type === 'text')?.text ?? null
+      if (onEvent && ftext) {
+        roundBreak()
+        emit({ type: 'text', delta: ftext })
+        return streamed.trim()
+      }
+      return ftext
     }
 
     // OpenAI-compatible
@@ -487,24 +622,37 @@ export async function completeWithTools(
       const res = await fetch(`${p.baseUrl}/chat/completions`, {
         method: 'POST',
         headers: { Authorization: `Bearer ${cfg.apiKey}`, 'content-type': 'application/json' },
-        body: JSON.stringify({ model: cfg.model, ...tokenLimit(cfg.model, opts.maxTokens ?? 1500), ...toolsCompat(cfg.model), messages: msgs, tools }),
+        body: JSON.stringify({
+          model: cfg.model,
+          ...tokenLimit(cfg.model, opts.maxTokens ?? 1500),
+          ...toolsCompat(cfg.model),
+          messages: msgs,
+          tools,
+          ...(onEvent ? { stream: true, stream_options: { include_usage: true } } : {}),
+        }),
       })
       if (!res.ok) {
         console.error('[llm] tools failed:', res.status, await res.text().catch(() => ''))
         return null
       }
-      const data = (await res.json()) as {
-        choices?: { message?: { content?: string; tool_calls?: { id: string; function: { name: string; arguments: string } }[] } }[]
-        usage?: unknown
-      }
-      accumulate(acc, data.usage)
-      const msg = data.choices?.[0]?.message
+      if (onEvent) roundBreak()
+      const msg = onEvent
+        ? await openaiStreamRound(res, emit, acc)
+        : await (async () => {
+            const data = (await res.json()) as {
+              choices?: { message?: { content?: string; tool_calls?: { id: string; function: { name: string; arguments: string } }[] } }[]
+              usage?: unknown
+            }
+            accumulate(acc, data.usage)
+            return data.choices?.[0]?.message
+          })()
       if (!msg) {
         flushUsage(cfg, acc)
         return null
       }
       if (!msg.tool_calls?.length) {
         flushUsage(cfg, acc)
+        if (onEvent) return streamed.trim() || null
         return msg.content ?? null
       }
       msgs.push({ role: 'assistant', content: msg.content ?? null, tool_calls: msg.tool_calls })
@@ -540,7 +688,13 @@ export async function completeWithTools(
     flushUsage(cfg, acc)
     if (!final.ok) return null
     const fdata = (await final.json()) as { choices?: { message?: { content?: string } }[] }
-    return fdata.choices?.[0]?.message?.content ?? null
+    const ftext = fdata.choices?.[0]?.message?.content ?? null
+    if (onEvent && ftext) {
+      roundBreak()
+      emit({ type: 'text', delta: ftext })
+      return streamed.trim()
+    }
+    return ftext
   } catch (err) {
     console.error('[llm] tools error:', err)
     return null

@@ -7,6 +7,7 @@ import { assistantMessages, companyMembers, files } from '../db/schema.js'
 import { myProjects } from './ball.js'
 import { requireSession, type SessionEnv } from '../auth.js'
 import { assistantReply, type ScreenContext } from '../lib/assistant.js'
+import type { StreamEvent } from '../lib/llm.js'
 import { sendToUserAnywhere } from '../ws.js'
 
 /**
@@ -14,9 +15,16 @@ import { sendToUserAnywhere } from '../ws.js'
  *
  * Ответ не держит запрос: модель с инструментами думает десятки секунд, и
  * держать HTTP столько — значит ловить таймауты прокси. Сообщение человека
- * сохраняется сразу, ответ приходит по сокету событием 'assistant'
- * ({companyId, action: 'thinking' | 'message', id}) — так же, как ИИ-чат
- * проекта, только адресно человеку, где бы он ни был.
+ * сохраняется сразу, ответ идёт ПОТОКОМ по сокету событием 'assistant',
+ * адресно человеку, где бы он ни был:
+ *
+ *   {companyId, action: 'thinking', id}            — вопрос принят (id вопроса)
+ *   {companyId, action: 'tool', replyTo, name}     — ассистент зовёт инструмент
+ *   {companyId, action: 'delta', replyTo, text}    — кусок ответа (пачками)
+ *   {companyId, action: 'message', replyTo, id}    — ответ сохранён (id ответа)
+ *
+ * Клиент склеивает delta по replyTo, а по 'message' заменяет черновик
+ * сохранённым ответом — он и есть правда, если какой-то кусок потерялся.
  */
 export const assistantRoute = new Hono<SessionEnv>()
 assistantRoute.use('*', requireSession)
@@ -107,7 +115,26 @@ assistantRoute.post(
     sendToUserAnywhere(sub, 'assistant', { companyId, action: 'thinking', id: mine!.id })
     void (async () => {
       try {
-        const r = await assistantReply({ companyId, userId: sub, text: b.text, screen }).catch((e) => {
+        // Куски текста копим и отдаём пачкой раз в ~80 мс: событие на каждый
+        // токен — сотни сообщений в сокет ради одного абзаца.
+        let pending = ''
+        let timer: NodeJS.Timeout | null = null
+        const flush = () => {
+          timer = null
+          if (!pending) return
+          sendToUserAnywhere(sub, 'assistant', { companyId, action: 'delta', replyTo: mine!.id, text: pending })
+          pending = ''
+        }
+        const onEvent = (e: StreamEvent) => {
+          if (e.type === 'text') {
+            pending += e.delta
+            timer ??= setTimeout(flush, 80)
+          } else {
+            flush()
+            sendToUserAnywhere(sub, 'assistant', { companyId, action: 'tool', replyTo: mine!.id, name: e.name })
+          }
+        }
+        const r = await assistantReply({ companyId, userId: sub, text: b.text, screen, onEvent }).catch((e) => {
           console.error('[assistant] reply failed:', e)
           return null
         })
@@ -124,7 +151,9 @@ assistantRoute.post(
             failed: !r,
           })
           .returning()
-        sendToUserAnywhere(sub, 'assistant', { companyId, action: 'message', id: answer!.id })
+        if (timer) clearTimeout(timer)
+        flush()
+        sendToUserAnywhere(sub, 'assistant', { companyId, action: 'message', replyTo: mine!.id, id: answer!.id })
       } finally {
         busy.delete(key)
       }
