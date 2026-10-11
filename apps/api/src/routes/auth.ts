@@ -14,6 +14,7 @@ import { notifySignup } from '../lib/admin-alert.js'
 import { sendLoginCode, verifyLoginCode, parseSupportLogin, isDemoLogin, verifyDemoCode } from '../lib/otp.js'
 import { consumeEnterToken } from '../lib/enter-link.js'
 import { adoptAvatar } from '../lib/avatar.js'
+import { devLoginAllowed } from '../lib/dev-login.js'
 
 export const auth = new Hono<SessionEnv>()
 
@@ -343,6 +344,28 @@ auth.post('/otp/verify', async (c) => {
       .catch((err) => console.error('[support-login] mark failed:', err))
   }
 
+  const token = await signSessionToken({ sub: user.id, email: user.email })
+  return c.json({ token, user: { id: user.id, name: user.name, email: user.email } })
+})
+
+/**
+ * Вход разработчика без кода — только на копии базы, с этой машины, с флагом
+ * (lib/dev-login.ts). Иначе ручки нет: 404, как у любого несуществующего пути.
+ * Только в существующий аккаунт — никого не регистрирует.
+ */
+const devLoginOpen = (c: { req: { header: (k: string) => string | undefined } }) =>
+  devLoginAllowed({ flag: env.DEV_LOGIN, nodeEnv: env.NODE_ENV, databaseUrl: env.DATABASE_URL, host: c.req.header('host') })
+
+auth.get('/dev-login', (c) => (devLoginOpen(c) ? c.json({ enabled: true }) : c.json({ error: 'Not found' }, 404)))
+
+auth.post('/dev-login', async (c) => {
+  if (!devLoginOpen(c)) return c.json({ error: 'Not found' }, 404)
+  const body = (await c.req.json().catch(() => ({}))) as { email?: unknown }
+  const email = typeof body.email === 'string' ? body.email.trim().toLowerCase() : ''
+  if (!email) return c.json({ error: 'email required' }, 400)
+  const user = await db.query.users.findFirst({ where: eq(users.email, email) })
+  if (!user) return c.json({ error: 'No such user in this database' }, 404)
+  console.warn(`[dev-login] signed in as ${user.email}`)
   const token = await signSessionToken({ sub: user.id, email: user.email })
   return c.json({ token, user: { id: user.id, name: user.name, email: user.email } })
 })

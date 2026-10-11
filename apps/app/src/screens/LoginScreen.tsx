@@ -8,6 +8,7 @@ import { ThemeToggle } from '@/components/ThemeToggle'
 import { LanguageSelect } from '@/components/LanguageSelect'
 import { desktop } from '@/hooks/useDesktop'
 import { Button } from '@/components/ui/button'
+import { DevLogin } from '@/components/DevLogin'
 
 /**
  * Вход из десктопа (SPEC §8.33). Google запрещает свой экран согласия внутри
@@ -352,6 +353,8 @@ export function LoginScreen() {
             </button>
           </div>
         )}
+        {/* Вход разработчика: только dev-сборка и копия базы — см. DevLogin. */}
+        {import.meta.env.DEV && <DevLogin />}
       </main>
     </div>
   )

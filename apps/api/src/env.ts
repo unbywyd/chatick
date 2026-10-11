@@ -25,6 +25,13 @@ const envSchema = z.object({
   SUPPORT_LOGIN_EMAIL: z.string().optional(),
 
   /**
+   * Вход разработчика без кода (v2): «1» включает POST /auth/dev-login.
+   * Сам флаг ничего не открывает — нужны ещё не-production, база-копия и
+   * запрос с localhost (lib/dev-login.ts). На проде его не бывает.
+   */
+  DEV_LOGIN: z.string().optional(),
+
+  /**
    * Демо-аккаунт для проверяющих в магазинах приложений.
    *
    * Microsoft и Apple присылают рецензента, который видит форму входа и не
