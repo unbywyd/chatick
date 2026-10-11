@@ -27,6 +27,7 @@ import { visionEnabled, SUPPORTED, MAX_BYTES } from './vision.js'
 import { getObjectStream, resolveStorage } from './s3.js'
 import { env } from '../env.js'
 import { logActivity } from './audit.js'
+import { insertTask, updateTask } from './ball.js'
 import { CHATICK_HELP } from './chatick-help.js'
 import { sendToUser } from '../ws.js'
 
@@ -1061,9 +1062,8 @@ export function memoryTools(projectId: string, actorUserId: string): { tools: To
     const assigneeId = await resolveAssignee(args.assignee)
     const groupId = await resolveSprint(args.sprint)
     const due = parseDue(args.dueDate)
-    const [row] = await db
-      .insert(tasks)
-      .values({
+    const row = await insertTask(
+      {
         projectId,
         number: `TASK-${next}`,
         sortOrder: minSort - 1,
@@ -1076,8 +1076,9 @@ export function memoryTools(projectId: string, actorUserId: string): { tools: To
         dueDate: due ?? null,
         estimateMinutes: typeof args.estimateMinutes === 'number' ? String(Math.max(0, Math.round(args.estimateMinutes))) : null,
         createdById: actorUserId,
-      })
-      .returning()
+      },
+      { actorId: actorUserId, via: 'ai' },
+    )
     await notifyTaskChange(projectId, actorUserId, row!, { assigned: Boolean(assigneeId), mentions: true })
     return { number: row!.number, id: row!.id }
   }
@@ -1517,7 +1518,7 @@ export function memoryTools(projectId: string, actorUserId: string): { tools: To
       if (due !== undefined) setDue(patch, due)
       if (typeof args.estimateMinutes === 'number') patch.estimateMinutes = String(Math.max(0, Math.round(args.estimateMinutes)))
       if (!Object.keys(patch).length) return 'Nothing to update.'
-      const [row] = await db.update(tasks).set(patch).where(eq(tasks.id, t.id)).returning()
+      const { task: row } = await updateTask(t, patch, { actorId: actorUserId, via: 'ai' })
       await notifyTaskChange(projectId, actorUserId, row!, {
         assigned: assigneeId !== undefined && assigneeId !== t.assigneeId && Boolean(assigneeId),
         statusChanged: patch.status !== undefined && patch.status !== t.status,
@@ -1535,7 +1536,7 @@ export function memoryTools(projectId: string, actorUserId: string): { tools: To
       if (!t) return 'Task not found.'
       const status = String(args.status ?? '')
       if (!(TASK_STATUSES as readonly string[]).includes(status)) return 'Invalid status.'
-      await db.update(tasks).set({ status: status as 'todo' }).where(eq(tasks.id, t.id))
+      await updateTask(t, { status }, { actorId: actorUserId, via: 'ai' })
       broadcast(projectId, 'tasks_changed', {})
       return `${t.number} → ${status}.`
     },
@@ -1631,7 +1632,7 @@ export function memoryTools(projectId: string, actorUserId: string): { tools: To
 
       const updated: string[] = []
       for (const t of selected.rows) {
-        const [row] = await db.update(tasks).set(patch).where(eq(tasks.id, t.id)).returning()
+        const { task: row } = await updateTask(t, patch, { actorId: actorUserId, via: 'ai' })
         await notifyTaskChange(projectId, actorUserId, row!, {
           assigned: assigneeId !== undefined && assigneeId !== t.assigneeId && Boolean(assigneeId),
           statusChanged: patch.status !== undefined && patch.status !== t.status,

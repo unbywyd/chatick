@@ -7,6 +7,7 @@ import { db } from '../db/client.js'
 import { notifications, projectMembers, projects, tasks, users, userNotificationPrefs } from '../db/schema.js'
 import { requireSession, type SessionEnv } from '../auth.js'
 import { broadcast } from '../ws.js'
+import { updateTask } from '../lib/ball.js'
 
 // Глобальные in-app уведомления пользователя (SPEC §8.22) — session-токен,
 // уведомления из ВСЕХ проектов, сгруппированные по проекту на клиенте.
@@ -177,11 +178,8 @@ inboxRoute.patch(
     // до чужих задач нельзя.
     if (task.assigneeId !== sub) return c.json({ error: 'Not your task' }, 403)
 
-    const [updated] = await db
-      .update(tasks)
-      .set({ status, updatedAt: new Date() })
-      .where(eq(tasks.id, taskId))
-      .returning()
+    // Через мяч: «готово» из трея закрывает, «на проверку» отдаёт владельцу.
+    const { task: updated } = await updateTask(task, { status }, { actorId: sub, via: 'tray' })
 
     broadcast(task.projectId, 'tasks', { action: 'update', id: taskId })
     return c.json({ id: updated!.id, status: updated!.status })

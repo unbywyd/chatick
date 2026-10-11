@@ -81,6 +81,7 @@ import { REPORT_KINDS, submitAssistantReport, type ReportKind } from '../lib/ass
 import { randomBytes } from 'node:crypto'
 import { notifyReleaseStage } from './releases.js'
 import { env } from '../env.js'
+import { insertTask, updateTask } from '../lib/ball.js'
 
 // Мост для внешнего ИИ (SPEC §8.27). Всё выполняется ОТ ИМЕНИ пользователя,
 // одобрившего туннель, и проверяется теми же hasPermission, что и живой UI.
@@ -2183,7 +2184,7 @@ bridgeRoute.patch('/tasks/bulk', async (c) => {
       continue
     }
 
-    const [row] = await db.update(tasks).set(own).where(eq(tasks.id, existing.id)).returning()
+    const { task: row } = await updateTask(existing, own, { actorId: id.userId, via: 'mcp' })
     void logActivity({
       projectId: scope.projectId,
       actorId: id.userId,
@@ -2654,9 +2655,8 @@ bridgeRoute.post('/tasks', async (c) => {
     .from(tasks)
     .where(eq(tasks.projectId, scope.projectId))) as [{ next: number }]
 
-  const [row] = await db
-    .insert(tasks)
-    .values({
+  const row = await insertTask(
+    {
       projectId: scope.projectId,
       number: `TASK-${next}`,
       title: title.slice(0, 300),
@@ -2673,8 +2673,9 @@ bridgeRoute.post('/tasks', async (c) => {
       groupId: typeof b.sprintId === 'string' ? b.sprintId : null,
       dueDate: parseDue(b.dueDate),
       createdById: id.userId,
-    })
-    .returning()
+    },
+    { actorId: id.userId, via: 'mcp' },
+  )
 
   void logActivity({
     projectId: scope.projectId,
@@ -2790,9 +2791,7 @@ bridgeRoute.patch('/tasks/:id', async (c) => {
 
   // Пустой set() — ошибка драйвера, а не безобидный no-op: запрос, меняющий
   // только вложения или ресурсы, не трогает полей самой задачи.
-  const [row] = Object.keys(patch).length
-    ? await db.update(tasks).set(patch).where(eq(tasks.id, taskId)).returning()
-    : [existing]
+  const row = Object.keys(patch).length ? (await updateTask(existing, patch, { actorId: id.userId, via: 'mcp' })).task : existing
   void logActivity({
     projectId: scope.projectId,
     actorId: id.userId,
@@ -4797,9 +4796,8 @@ bridgeRoute.post('/releases/request', async (c) => {
     .from(tasks)
     .where(eq(tasks.projectId, ready.projectId))) as [{ next: number; minSort: number }]
 
-  const [task] = await db
-    .insert(tasks)
-    .values({
+  const task = await insertTask(
+    {
       projectId: ready.projectId,
       number: `TASK-${next}`,
       sortOrder: minSort - 1,
@@ -4810,8 +4808,9 @@ bridgeRoute.post('/releases/request', async (c) => {
       assigneeId: assigneeId ?? null,
       createdById: id.userId,
       estimateMinutes: typeof b.estimateMinutes === 'number' ? String(Math.max(0, Math.round(b.estimateMinutes))) : null,
-    })
-    .returning()
+    },
+    { actorId: id.userId, via: 'mcp' },
+  )
 
   const [release] = await db
     .insert(releases)

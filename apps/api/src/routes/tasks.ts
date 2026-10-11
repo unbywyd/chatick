@@ -6,7 +6,7 @@ import { and, asc, desc, eq, inArray, isNull, or, sql } from 'drizzle-orm'
 import { buildType, isLiveStage } from '../lib/release-stages.js'
 import { companyOf, projectPath } from '../lib/links.js'
 import { db } from '../db/client.js'
-import { activityLog, credentials, files, projectMembers, projects, taskBlockers, taskChecklist, taskComments, taskGroups, taskLinks, taskNotes, taskResources, tasks, users, taskReleases, releases } from '../db/schema.js'
+import { activityLog, credentials, files, projectMembers, projects, taskBlockers, taskChecklist, taskComments, taskGroups, taskLinks, taskNotes, taskResources, tasks, users, taskReleases, releases, taskHandoffs, HANDOFF_ACTIONS } from '../db/schema.js'
 import { requireProject, requireSession, type ProjectEnv, type SessionEnv } from '../auth.js'
 import { hasPermission, ownsOrManages } from './projects.js'
 import { improveTask, validateTask, generateTaskNotes } from '../lib/llm.js'
@@ -18,6 +18,7 @@ import { logActivity } from '../lib/audit.js'
 import { postTaskDone, postTaskAssigned } from '../lib/task-events.js'
 import { richText } from '../lib/markdown.js'
 import { normalizeRefs, MAX_REFS_LENGTH } from '../lib/task-refs.js'
+import { handoff, insertTask, updateTask, type BallError } from '../lib/ball.js'
 
 // Задачи проекта — project-токен; права per-user (SPEC §4.3) на каждое действие
 export const tasksRoute = new Hono<ProjectEnv>()
@@ -227,6 +228,17 @@ function serialize(row: typeof tasks.$inferSelect, assignee?: typeof users.$infe
     createdById: row.createdById,
     createdAt: row.createdAt,
     updatedAt: row.updatedAt,
+    // Мяч (v2): чего ждут от держателя, кто владелец, сколько у него, какой круг.
+    // Добавочные поля — старые клиенты их не читают.
+    ball: {
+      move: row.move,
+      ownerId: row.ownerId ?? row.createdById,
+      heldSince: row.heldSince,
+      round: row.round,
+      askFromId: row.askFromId,
+      waitingClientSince: row.waitingClientSince,
+      onTable: row.onTable,
+    },
   }
 }
 
@@ -391,9 +403,8 @@ tasksRoute.post('/', zValidator('json', z.object(taskShape)), async (c) => {
     .from(tasks)
     .where(eq(tasks.projectId, projectId))) as [{ next: number; minSort: number }]
 
-  const [row] = await db
-    .insert(tasks)
-    .values({
+  const row = await insertTask(
+    {
       projectId,
       number: `TASK-${next}`,
       sortOrder: minSort - 1,
@@ -407,8 +418,9 @@ tasksRoute.post('/', zValidator('json', z.object(taskShape)), async (c) => {
       estimateMinutes: body.estimateMinutes != null ? String(body.estimateMinutes) : null,
       refs: body.refs ? normalizeRefs(body.refs) : '',
       createdById: sub,
-    })
-    .returning()
+    },
+    { actorId: sub, via: 'ui' },
+  )
 
   const assignee = row!.assigneeId ? await db.query.users.findFirst({ where: eq(users.id, row!.assigneeId) }) : null
   void notifyTask(projectId, sub, row!, { assigneeChanged: Boolean(row!.assigneeId), mentions: true })
@@ -485,13 +497,13 @@ tasksRoute.patch(
       for (const item of b.tasks) {
         const row = byId.get(item.id)
         if (!row) continue
-        const patch: Record<string, unknown> = { sortOrder: i++ }
         // groupId трогаем, только если он ПРИСЛАН: иначе перестановка внутри
         // группы обнуляла бы принадлежность всем задачам списка.
-        if (item.groupId !== undefined && (row.groupId ?? null) !== (item.groupId ?? null)) {
-          patch.groupId = item.groupId ?? null
-        }
-        await db.update(tasks).set(patch).where(eq(tasks.id, row.id))
+        const moved = item.groupId !== undefined && (row.groupId ?? null) !== (item.groupId ?? null)
+        await db
+          .update(tasks)
+          .set(moved ? { sortOrder: i++, groupId: item.groupId ?? null } : { sortOrder: i++ })
+          .where(eq(tasks.id, row.id))
       }
     }
 
@@ -538,7 +550,9 @@ tasksRoute.patch(
     // разными строками, и поиск по номеру находил бы то одну, то другую.
     if (body.refs !== undefined) patch.refs = normalizeRefs(body.refs)
 
-    const [row] = await db.update(tasks).set(patch).where(eq(tasks.id, taskId)).returning()
+    // Статус и исполнитель — через мяч: старый клиент шлёт статусы, а в журнал
+    // ложится передача (lib/ball.ts).
+    const { task: row } = await updateTask(task, patch, { actorId: sub, via: 'ui' })
     const assignee = row!.assigneeId ? await db.query.users.findFirst({ where: eq(users.id, row!.assigneeId) }) : null
     void notifyTask(projectId, sub, row!, {
       assigneeChanged: body.assigneeId !== undefined && body.assigneeId !== task.assigneeId && Boolean(row!.assigneeId),
@@ -603,6 +617,112 @@ tasksRoute.patch(
     return c.json(serialize(row!, assignee))
   },
 )
+
+/**
+ * Ход мяча (v2): На проверку, Принять, Вернуть, Спросить, Ответить, Передать,
+ * Забрать, Ждём клиента, Отменить, Открыть заново.
+ *
+ * Базовое право — двигать задачи (changeStatus или edit). Кто в задаче что
+ * может — решает lib/ball.ts по роли: держатель, владелец, управляющий.
+ */
+const HANDOFF_ERRORS: Record<BallError, 400 | 403 | 409> = {
+  note_required: 400,
+  target_required: 400,
+  closed: 409,
+  not_closed: 409,
+  wrong_move: 409,
+  not_asking: 409,
+  already_asking: 409,
+  not_waiting: 409,
+  already_waiting: 409,
+  self: 400,
+  no_owner: 400,
+  not_member: 400,
+  forbidden: 403,
+  conflict: 409,
+}
+
+tasksRoute.post(
+  '/:taskId/handoff',
+  zValidator(
+    'json',
+    z.object({
+      action: z.enum(HANDOFF_ACTIONS).exclude(['create']),
+      to: z.string().nullable().optional(),
+      note: z.string().max(4000).optional(),
+    }),
+  ),
+  async (c) => {
+    const { projectId, sub } = c.get('auth')
+    const taskId = c.req.param('taskId')
+    const task = await db.query.tasks.findFirst({
+      where: and(eq(tasks.id, taskId), eq(tasks.projectId, projectId), isNull(tasks.deletedAt)),
+    })
+    if (!task) return c.json({ error: 'Not found' }, 404)
+    const allowed =
+      (await hasPermission(projectId, sub, 'tasks.changeStatus')) || (await hasPermission(projectId, sub, 'tasks.edit'))
+    if (!allowed) return c.json({ error: 'Forbidden' }, 403)
+
+    const body = c.req.valid('json')
+    const r = await handoff(task, body.action, {
+      actorId: sub,
+      to: body.to,
+      note: body.note,
+      via: 'ui',
+      isManager: await ownsOrManages(projectId, sub, []),
+    })
+    if (!r.ok) return c.json({ error: r.error }, HANDOFF_ERRORS[r.error])
+
+    const row = r.task
+    tasksChanged(projectId, [row.assigneeId, task.assigneeId, row.ownerId ?? row.createdById])
+    void logActivity({
+      projectId,
+      actorId: sub,
+      action: row.status !== task.status ? 'status' : row.assigneeId !== task.assigneeId ? 'assign' : 'update',
+      entityType: 'task',
+      entityId: row.id,
+      entityLabel: `${row.number}: ${row.title}`,
+      meta: {
+        handoff: body.action,
+        before: { status: task.status, assigneeId: task.assigneeId, move: task.move },
+        after: { status: row.status, assigneeId: row.assigneeId, move: row.move },
+      },
+    })
+    const assignee = row.assigneeId ? await db.query.users.findFirst({ where: eq(users.id, row.assigneeId) }) : null
+    return c.json(serialize(row, assignee))
+  },
+)
+
+// Журнал передач задачи — от старых к новым.
+tasksRoute.get('/:taskId/handoffs', async (c) => {
+  const { projectId, sub } = c.get('auth')
+  if (!(await hasPermission(projectId, sub, 'tasks.read'))) return c.json({ error: 'Forbidden' }, 403)
+  const taskId = c.req.param('taskId')
+  const rows = await db
+    .select()
+    .from(taskHandoffs)
+    .where(and(eq(taskHandoffs.taskId, taskId), eq(taskHandoffs.projectId, projectId)))
+    .orderBy(asc(taskHandoffs.createdAt))
+  const ids = [...new Set(rows.flatMap((r) => [r.actorId, r.fromId, r.toId]).filter((x): x is string => Boolean(x)))]
+  const people = ids.length ? await db.query.users.findMany({ where: inArray(users.id, ids) }) : []
+  const byId = new Map(people.map((u) => [u.id, { id: u.id, name: u.name, avatarUrl: u.avatarUrl }]))
+  const who = (id: string | null) => (id ? (byId.get(id) ?? null) : null)
+  return c.json(
+    rows.map((r) => ({
+      id: r.id,
+      action: r.action,
+      actor: who(r.actorId),
+      from: who(r.fromId),
+      to: who(r.toId),
+      moveBefore: r.moveBefore,
+      moveAfter: r.moveAfter,
+      note: r.note,
+      round: r.round,
+      via: r.via,
+      createdAt: r.createdAt,
+    })),
+  )
+})
 
 // Удалить — tasks.delete
 tasksRoute.delete('/:taskId', async (c) => {

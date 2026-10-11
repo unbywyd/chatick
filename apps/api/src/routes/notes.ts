@@ -12,6 +12,7 @@ import { logActivity } from '../lib/audit.js'
 import { htmlToText, sanitizeHtml } from '../lib/sanitize-html.js'
 import { notify } from '../lib/notify.js'
 import { broadcast } from '../ws.js'
+import { insertTask } from '../lib/ball.js'
 
 // Заметки проекта (SPEC §8.31): журнал решений, противоречий и напоминаний.
 // Отдельный домен прав notes: журнал стоит уметь открывать шире или уже, чем
@@ -452,9 +453,8 @@ export async function noteToTask(
         .join('')}`
     : ''
 
-  const [row] = await db
-    .insert(tasks)
-    .values({
+  const row = await insertTask(
+    {
       projectId,
       number: `TASK-${next}`,
       sortOrder: minSort - 1,
@@ -465,8 +465,9 @@ export async function noteToTask(
       dueDate: overrides.dueDate ? new Date(overrides.dueDate) : null,
       assigneeId: overrides.assigneeId ?? null,
       createdById: userId,
-    })
-    .returning()
+    },
+    { actorId: userId, via: 'ui' },
+  )
 
   await db.update(notes).set({ taskId: row!.id, updatedAt: new Date() }).where(eq(notes.id, note.id))
 
