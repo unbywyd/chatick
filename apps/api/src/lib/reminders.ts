@@ -9,8 +9,8 @@ import { sweepPendingFiles, sweepSoftDeleted } from './file-cleanup.js'
 import { sweepBridge } from './bridge-auth.js'
 import { sendDailyDigests } from './digest.js'
 import { notify } from './notify.js'
-import { timeConfigForProject } from '../routes/time.js'
-import { broadcast } from '../ws.js'
+import { timeConfigForCompany, timeConfigForProject } from '../routes/time.js'
+import { broadcast, sendToUserAnywhere } from '../ws.js'
 import { htmlToText } from './sanitize-html.js'
 import { companyOf, projectPath, projectUrl } from './links.js'
 import { runDueBackups } from './auto-backup.js'
@@ -282,9 +282,12 @@ async function sweepRunningTimers() {
     const now = Date.now()
 
     for (const e of running) {
-      const project = await db.query.projects.findFirst({ where: eq(projects.id, e.projectId) })
-      if (!project) continue
-      const cfg = await timeConfigForProject(project.id)
+      // Таймер на компанию (v2) — без проекта: настройки и ссылка компании.
+      const project = e.projectId ? await db.query.projects.findFirst({ where: eq(projects.id, e.projectId) }) : null
+      if (e.projectId && !project) continue
+      const companyId = project?.companyId ?? e.companyId
+      if (!companyId) continue
+      const cfg = project ? await timeConfigForProject(project.id) : await timeConfigForCompany(companyId)
       const hours = (now - e.startedAt.getTime()) / 3_600_000
       if (hours < cfg.idleHours) continue
 
@@ -293,7 +296,8 @@ async function sweepRunningTimers() {
         // не работал — иначе бы выключил
         const endedAt = new Date(e.startedAt.getTime() + cfg.idleHours * 3_600_000)
         await db.update(timeEntries).set({ endedAt, autoStopped: true, updatedAt: new Date() }).where(eq(timeEntries.id, e.id))
-        broadcast(e.projectId, 'time', { action: 'stop', id: e.id, userId: e.userId })
+        if (e.projectId) broadcast(e.projectId, 'time', { action: 'stop', id: e.id, userId: e.userId })
+        sendToUserAnywhere(e.userId, 'time', { action: 'stop', id: e.id })
       }
 
       // сколько напоминаний уже полагалось к этому моменту
@@ -302,13 +306,14 @@ async function sweepRunningTimers() {
         const user = await db.query.users.findFirst({ where: eq(users.id, e.userId) })
         await notify({
           projectId: e.projectId,
+          companyId,
           event: 'timer_running',
           recipientIds: [e.userId],
           actorId: null,
           actorName: user?.name || '',
           // ключ включает номер напоминания, иначе дедуп проглотит повторы
           dedupeKey: `timer_running:${e.id}:${cfg.idleAction === 'stop' ? 'auto' : due}`,
-          link: projectPath((await companyOf(e.projectId)) ?? '', e.projectId, '/time'),
+          link: e.projectId ? projectPath(companyId, e.projectId, '/time') : `/start/${companyId}/time`,
           preview: e.description || '',
           vars: { hours: String(Math.floor(hours)) },
           entityType: 'time',

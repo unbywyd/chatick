@@ -1061,7 +1061,18 @@ export const timeEntries = pgTable(
   'time_entries',
   {
     id: id(),
-    projectId: text('project_id').notNull().references(() => projects.id, { onDelete: 'cascade' }),
+    /**
+     * Проект — необязателен (v2): время можно записать на компанию — созвон,
+     * планёрка, разбор почты, работа на всех сразу. Раньше такое время либо
+     * терялось, либо ложилось в первый попавшийся проект и врало в его отчёте.
+     */
+    projectId: text('project_id').references(() => projects.id, { onDelete: 'cascade' }),
+    /**
+     * Компания — есть всегда. При записи с проектом её ставит триггер базы
+     * (time_entries_fill_company, миграция 0006) — так старые места записи и
+     * v1.0 при откате остаются правильными, ничего о ней не зная.
+     */
+    companyId: text('company_id').references(() => companies.id, { onDelete: 'cascade' }),
     userId: text('user_id').notNull().references(() => users.id, { onDelete: 'cascade' }),
     taskId: text('task_id').references(() => tasks.id, { onDelete: 'set null' }),
     description: text('description').notNull().default(''),
@@ -1078,7 +1089,10 @@ export const timeEntries = pgTable(
   },
   (t) => [
     index('time_entries_project_idx').on(t.projectId, t.startedAt),
+    index('time_entries_company_idx').on(t.companyId, t.startedAt),
     index('time_entries_user_idx').on(t.userId, t.startedAt),
+    // Время без проекта — только на компанию: запись ни о чём не бывает.
+    check('time_entries_scope', sql`${t.projectId} is not null or ${t.companyId} is not null`),
     // быстрый поиск идущих таймеров: их мало, но ищут их постоянно
     index('time_entries_running_idx').on(t.userId, t.endedAt),
   ],

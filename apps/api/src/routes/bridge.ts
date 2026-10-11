@@ -60,7 +60,7 @@ import { sendInviteMail } from '../lib/mail-invite.js'
 import { createNote, noteToTask, NOTE_TYPES, canUseKnowledge, canEditKnowledge, type NoteType } from './notes.js'
 import { enqueue as enqueueEmbedding, searchNoteIds, searchTaskIds } from '../lib/embeddings.js'
 import { announce, type AnnounceTarget } from '../lib/announce.js'
-import { readTimeConfig, maybeTranslate, timeConfigForProject } from './time.js'
+import { readTimeConfig, maybeTranslate, timeConfigForProject, timeConfigForCompany, DEFAULT_TIME_CONFIG } from './time.js'
 import { readPresence } from './auth.js'
 import { canPublish, createShare, locate, revokeShare, type ShareEntityType } from './shares.js'
 import { notifyChatMentions } from './messages.js'
@@ -5406,12 +5406,55 @@ function parseStamp(v: unknown): Date | null | undefined {
  * часы в соседнем проекте продолжали капать — и человек узнавал об этом на
  * следующий день. Так же устроен и живой интерфейс.
  */
+/**
+ * Куда пишется время: проект подключения или — с onCompany — компания (v2).
+ *
+ * Время «на компанию» — созвон, планёрка, почта: работа, у которой нет
+ * проекта. Компания берётся из подключения: компанейское — его компания,
+ * проектное — компания проекта, мастер — ?company=<id>.
+ */
+async function timeTarget(
+  c: Ctx,
+  b: Record<string, unknown>,
+): Promise<{ projectId: string | null; companyId: string } | { error: string; status: 400 | 403 | 404 }> {
+  const id = auth(c)
+  if (b.onCompany === true) {
+    let companyId: string | null = id.companyId ?? null
+    if (!companyId && id.projectId) companyId = await companyOf(id.projectId)
+    if (!companyId && id.scopeAll) {
+      const asked = c.req.query('company') ?? (typeof b.company === 'string' ? b.company : undefined)
+      if (!asked) return { error: 'This connection covers all your companies: pass ?company=<id> (GET /x/companies lists them).', status: 400 }
+      companyId = asked
+    }
+    if (!companyId) return { error: 'Company not found', status: 404 }
+    if (!(await companyRoleOf(companyId, id.userId))) return { error: 'You are not a member of that company', status: 403 }
+    return { projectId: null, companyId }
+  }
+  const scope = await resolveProject(c)
+  if ('error' in scope) return scope
+  return { projectId: scope.projectId, companyId: (await companyOf(scope.projectId)) ?? '' }
+}
+
+/** Проект запроса, если он есть; для ручек, которым проект не обязателен. */
+async function maybeProject(c: Ctx): Promise<string | null> {
+  const scope = await resolveProject(c)
+  return 'error' in scope ? null : scope.projectId
+}
+
+/** Имя места записи: проект, а без проекта — компания. */
+async function placeOf(e: { projectId: string | null; companyId: string | null }, p?: { name: string } | null) {
+  if (p) return p.name
+  if (e.companyId) return (await db.query.companies.findFirst({ where: eq(companies.id, e.companyId) }))?.name ?? null
+  return null
+}
+
 bridgeRoute.get('/time/running', async (c) => {
   const id = auth(c as never)
-  const scope = await resolveProject(c as never)
-  if ('error' in scope) return c.json({ error: scope.error }, scope.status)
+  // Проект не обязателен: таймер на компанию иначе было бы не увидеть.
+  const here = await maybeProject(c as never)
+  const scope = { projectId: here }
 
-  const cfg = await timeConfigForProject(scope.projectId)
+  const cfg = here ? await timeConfigForProject(here) : DEFAULT_TIME_CONFIG
   const rows = await db
     .select({ e: timeEntries, p: projects })
     .from(timeEntries)
@@ -5419,6 +5462,8 @@ bridgeRoute.get('/time/running', async (c) => {
     .where(and(eq(timeEntries.userId, id.userId), isNull(timeEntries.endedAt)))
 
   const now = Date.now()
+  const companyNames = new Map<string, string | null>()
+  for (const r of rows) if (!r.p && r.e.companyId) companyNames.set(r.e.companyId, await placeOf(r.e))
   return c.json({
     items: rows.map((r) => ({
       id: r.e.id,
@@ -5426,6 +5471,8 @@ bridgeRoute.get('/time/running', async (c) => {
       taskId: r.e.taskId,
       projectId: r.e.projectId,
       project: r.p?.name ?? null,
+      // Без проекта — на компанию: так и говорим, чтобы не искали проект.
+      ...(r.e.projectId ? {} : { onCompany: companyNames.get(r.e.companyId ?? '') ?? true }),
       // Чужой проект помечаем прямо: иначе ассистент решит, что это часы
       // здесь, и предложит остановить не то.
       here: r.e.projectId === scope.projectId,
@@ -5439,13 +5486,12 @@ bridgeRoute.get('/time/running', async (c) => {
 
 bridgeRoute.post('/time/start', async (c) => {
   const id = auth(c as never)
-  const scope = await resolveProject(c as never)
-  if ('error' in scope) return c.json({ error: scope.error }, scope.status)
-
   const parsed_b = await readJson(c as never)
   if ('error' in parsed_b) return c.json(parsed_b, 400)
   const b = parsed_b.body as Record<string, unknown>
-  const cfg = await timeConfigForProject(scope.projectId)
+  const scope = await timeTarget(c as never, b)
+  if ('error' in scope) return c.json({ error: scope.error }, scope.status)
+  const cfg = scope.projectId ? await timeConfigForProject(scope.projectId) : await timeConfigForCompany(scope.companyId)
 
   // Лимит считает ЧЕЛОВЕКА, а не проект. Пока условие включало projectId,
   // при лимите 1 можно было завести по таймеру в каждом проекте и «работать»
@@ -5476,6 +5522,7 @@ bridgeRoute.post('/time/start', async (c) => {
 
   let taskId: string | null = null
   if (typeof b.task === 'string' && b.task) {
+    if (!scope.projectId) return c.json({ error: 'A task lives in a project — drop onCompany to time a task' }, 400)
     const found = await db.query.tasks.findFirst({
       where: and(eq(tasks.projectId, scope.projectId), eq(tasks.number, b.task.toUpperCase())),
     })
@@ -5494,6 +5541,7 @@ bridgeRoute.post('/time/start', async (c) => {
     .insert(timeEntries)
     .values({
       projectId: scope.projectId,
+      companyId: scope.companyId,
       userId: id.userId,
       taskId,
       description: String(b.description ?? '').slice(0, 500),
@@ -5501,18 +5549,18 @@ bridgeRoute.post('/time/start', async (c) => {
       createdVia: 'bridge',
     })
     .returning()
-  broadcast(scope.projectId, 'time', { action: 'start', id: row!.id, userId: id.userId })
+  if (scope.projectId) broadcast(scope.projectId, 'time', { action: 'start', id: row!.id, userId: id.userId })
   // Трей живёт вне проекта, а часы — собственные: без этого панель у человека
   // до полуминуты показывала, что таймер не идёт.
   sendToUserAnywhere(id.userId, 'time', { action: 'start', id: row!.id })
-  void maybeTranslate(scope.projectId, row!.id, row!.description).catch(() => {})
-  return c.json({ id: row!.id, startedAt: row!.startedAt }, 201)
+  if (scope.projectId) void maybeTranslate(scope.projectId, row!.id, row!.description).catch(() => {})
+  return c.json({ id: row!.id, startedAt: row!.startedAt, ...(scope.projectId ? {} : { onCompany: true }) }, 201)
 })
 
 bridgeRoute.post('/time/stop', async (c) => {
   const id = auth(c as never)
-  const scope = await resolveProject(c as never)
-  if ('error' in scope) return c.json({ error: scope.error }, scope.status)
+  // Проект не обязателен: остановить таймер на компанию надо уметь всегда.
+  const scope = { projectId: await maybeProject(c as never) }
 
   const parsed_b = await readJson(c as never)
   if ('error' in parsed_b) return c.json(parsed_b, 400)
@@ -5547,13 +5595,13 @@ bridgeRoute.post('/time/stop', async (c) => {
   // меньше секунды — двойной клик, а не работа
   if (endedAt.getTime() - entry.startedAt.getTime() < 1_000) {
     await db.delete(timeEntries).where(eq(timeEntries.id, entry.id))
-    broadcast(entry.projectId, 'time', { action: 'delete', id: entry.id, userId: id.userId })
+    if (entry.projectId) broadcast(entry.projectId, 'time', { action: 'delete', id: entry.id, userId: id.userId })
     sendToUserAnywhere(id.userId, 'time', { action: 'delete', id: entry.id })
     return c.json({ discarded: true, reason: 'Stopped within a second — nothing recorded.' })
   }
   await db.update(timeEntries).set({ endedAt, updatedAt: endedAt }).where(eq(timeEntries.id, entry.id))
   // Оповещаем проект, где таймер шёл, а не тот, откуда пришёл запрос.
-  broadcast(entry.projectId, 'time', { action: 'stop', id: entry.id, userId: id.userId })
+  if (entry.projectId) broadcast(entry.projectId, 'time', { action: 'stop', id: entry.id, userId: id.userId })
   sendToUserAnywhere(id.userId, 'time', { action: 'stop', id: entry.id })
   return c.json({
     id: entry.id,
@@ -5564,12 +5612,11 @@ bridgeRoute.post('/time/stop', async (c) => {
 
 bridgeRoute.post('/time', async (c) => {
   const id = auth(c as never)
-  const scope = await resolveProject(c as never)
-  if ('error' in scope) return c.json({ error: scope.error }, scope.status)
-
   const parsed_b = await readJson(c as never)
   if ('error' in parsed_b) return c.json(parsed_b, 400)
   const b = parsed_b.body as Record<string, unknown>
+  const scope = await timeTarget(c as never, b)
+  if ('error' in scope) return c.json({ error: scope.error }, scope.status)
   const started = new Date(String(b.startedAt ?? ''))
   let ended = new Date(String(b.endedAt ?? ''))
   if (Number.isNaN(started.getTime()) || Number.isNaN(ended.getTime())) {
@@ -5580,6 +5627,7 @@ bridgeRoute.post('/time', async (c) => {
 
   let taskId: string | null = null
   if (typeof b.task === 'string' && b.task) {
+    if (!scope.projectId) return c.json({ error: 'A task lives in a project — drop onCompany to log time on a task' }, 400)
     const found = await db.query.tasks.findFirst({
       where: and(eq(tasks.projectId, scope.projectId), eq(tasks.number, b.task.toUpperCase())),
     })
@@ -5591,6 +5639,7 @@ bridgeRoute.post('/time', async (c) => {
     .insert(timeEntries)
     .values({
       projectId: scope.projectId,
+      companyId: scope.companyId,
       userId: id.userId,
       taskId,
       description: String(b.description ?? '').slice(0, 500),
@@ -5599,9 +5648,9 @@ bridgeRoute.post('/time', async (c) => {
       createdVia: 'bridge',
     })
     .returning()
-  broadcast(scope.projectId, 'time', { action: 'create', id: row!.id, userId: id.userId })
+  if (scope.projectId) broadcast(scope.projectId, 'time', { action: 'create', id: row!.id, userId: id.userId })
   sendToUserAnywhere(id.userId, 'time', { action: 'create', id: row!.id })
-  void maybeTranslate(scope.projectId, row!.id, row!.description).catch(() => {})
+  if (scope.projectId) void maybeTranslate(scope.projectId, row!.id, row!.description).catch(() => {})
   return c.json({ id: row!.id, minutes: Math.round((ended.getTime() - started.getTime()) / 60_000) }, 201)
 })
 
@@ -5614,13 +5663,20 @@ bridgeRoute.post('/time', async (c) => {
  */
 bridgeRoute.get('/time', async (c) => {
   const id = auth(c as never)
-  const scope = await resolveProject(c as never)
+  const q = c.req.query()
+  // onCompany=1 — свои записи на компанию, без проекта (v2). Чужие такие
+  // записи через мост не показываем: у них нет проекта, где решалось бы, кто
+  // вправе их видеть.
+  const scope = await timeTarget(c as never, { onCompany: q.onCompany === '1' })
   if ('error' in scope) return c.json({ error: scope.error }, scope.status)
 
   // Чужие часы — только руководству проекта, как и в отчёте.
-  const privileged = await hasPermission(scope.projectId, id.userId, 'tasks.edit')
-  const q = c.req.query()
-  const conds = [eq(timeEntries.projectId, scope.projectId)]
+  const privileged = scope.projectId ? await hasPermission(scope.projectId, id.userId, 'tasks.edit') : false
+  const conds = [
+    scope.projectId
+      ? eq(timeEntries.projectId, scope.projectId)
+      : and(isNull(timeEntries.projectId), eq(timeEntries.companyId, scope.companyId))!,
+  ]
   if (!privileged || q.mine === '1') conds.push(eq(timeEntries.userId, id.userId))
   const from = parseStamp(q.from)
   const to = parseStamp(q.to)
@@ -5631,7 +5687,7 @@ bridgeRoute.get('/time', async (c) => {
     if (!q.to!.includes('T')) end.setHours(23, 59, 59, 999)
     conds.push(lte(timeEntries.startedAt, end))
   }
-  if (q.task?.trim()) {
+  if (q.task?.trim() && scope.projectId) {
     const found = await db.query.tasks.findFirst({
       where: and(eq(tasks.projectId, scope.projectId), eq(tasks.number, q.task.trim().toUpperCase())),
     })
@@ -5681,14 +5737,16 @@ const TIME_PATCH_FIELDS = ['description', 'startedAt', 'endedAt', 'task', 'proje
  */
 bridgeRoute.patch('/time/:id', async (c) => {
   const id = auth(c as never)
-  const scope = await resolveProject(c as never)
+  const any = await db.query.timeEntries.findFirst({ where: eq(timeEntries.id, c.req.param('id')) })
+  // Своя запись на компанию (без проекта) правится без ?project=: проекта у
+  // неё нет. Чужие — только в проекте и только руководству, как раньше.
+  const ownCompanyEntry = any && !any.projectId && any.userId === id.userId
+  const scope = ownCompanyEntry ? { projectId: null as string | null } : await resolveProject(c as never)
   if ('error' in scope) return c.json({ error: scope.error }, scope.status)
 
-  const entry = await db.query.timeEntries.findFirst({
-    where: and(eq(timeEntries.id, c.req.param('id')), eq(timeEntries.projectId, scope.projectId)),
-  })
+  const entry = any && (ownCompanyEntry || any.projectId === scope.projectId) ? any : null
   if (!entry) return c.json({ error: 'Not found' }, 404)
-  if (entry.userId !== id.userId && !(await hasPermission(scope.projectId, id.userId, 'tasks.edit')))
+  if (entry.userId !== id.userId && !(scope.projectId && (await hasPermission(scope.projectId, id.userId, 'tasks.edit'))))
     return c.json({ error: 'That entry belongs to someone else' }, 403)
 
   const parsed_b = await readJson(c as never)
@@ -5708,8 +5766,16 @@ bridgeRoute.patch('/time/:id', async (c) => {
   // можно только туда, где человек действительно состоит, иначе через мост
   // получилось бы завести часы в чужом проекте.
   let targetProject = entry.projectId
-  if (b.project !== undefined) {
-    if (typeof b.project !== 'string' || !b.project) return c.json({ error: 'project must be a project id' }, 400)
+  if (b.project === null) {
+    // Снять с проекта — время на компанию (v2). Компания та же, что у проекта.
+    if (entry.projectId) {
+      patch.projectId = null
+      patch.companyId = entry.companyId
+      patch.taskId = null
+      targetProject = null
+    }
+  } else if (b.project !== undefined) {
+    if (typeof b.project !== 'string' || !b.project) return c.json({ error: 'project must be a project id, or null to keep it on the company' }, 400)
     if (b.project !== entry.projectId) {
       const membership = await projectRoleOf(b.project, id.userId)
       if (!membership) return c.json({ error: 'You are not a member of that project' }, 403)
@@ -5724,6 +5790,7 @@ bridgeRoute.patch('/time/:id', async (c) => {
   if (b.task !== undefined) {
     if (b.task === null || b.task === '') patch.taskId = null
     else if (typeof b.task !== 'string') return c.json({ error: 'task must be a task number or null' }, 400)
+    else if (!targetProject) return c.json({ error: 'A task lives in a project — move the entry to a project first' }, 400)
     else {
       const found = await db.query.tasks.findFirst({
         where: and(eq(tasks.projectId, targetProject), eq(tasks.number, b.task.toUpperCase())),
@@ -5751,14 +5818,15 @@ bridgeRoute.patch('/time/:id', async (c) => {
   const [row] = await db.update(timeEntries).set(patch).where(eq(timeEntries.id, entry.id)).returning()
   // Оба проекта: часы исчезли из одного и появились в другом, и обе страницы
   // должны это увидеть.
-  broadcast(scope.projectId, 'time', { action: 'update', id: row!.id, userId: entry.userId })
-  if (targetProject !== entry.projectId) broadcast(targetProject, 'time', { action: 'update', id: row!.id, userId: entry.userId })
+  if (entry.projectId) broadcast(entry.projectId, 'time', { action: 'update', id: row!.id, userId: entry.userId })
+  if (targetProject && targetProject !== entry.projectId) broadcast(targetProject, 'time', { action: 'update', id: row!.id, userId: entry.userId })
   sendToUserAnywhere(entry.userId, 'time', { action: 'update', id: row!.id })
-  if (b.description !== undefined) void maybeTranslate(targetProject, row!.id, row!.description).catch(() => {})
+  if (b.description !== undefined && targetProject) void maybeTranslate(targetProject, row!.id, row!.description).catch(() => {})
   return c.json({
     id: row!.id,
     description: row!.description,
     projectId: row!.projectId,
+    ...(row!.projectId ? {} : { onCompany: true }),
     startedAt: row!.startedAt,
     endedAt: row!.endedAt,
     running: !row!.endedAt,

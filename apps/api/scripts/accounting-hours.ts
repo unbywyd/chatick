@@ -79,19 +79,21 @@ async function main() {
   const to = sql`(${`${next}-01 00:00`}::timestamp at time zone ${tz})`
   // Запись через полночь на границе месяца режем по границе — как экран часов.
   const rows = await db
+    // Время на компанию без проекта (v2) — своей колонкой: это тоже рабочие
+    // часы, и бухгалтерии их терять нельзя.
     .select({
-      id: projects.id,
-      name: projects.name,
+      id: sql<string>`coalesce(${projects.id}, '')`,
+      name: sql<string>`coalesce(${projects.name}, 'Без проекта (общее)')`,
       seconds: sql<number>`coalesce(sum(greatest(extract(epoch from (
         least(${timeEntries.endedAt}, ${to}) - greatest(${timeEntries.startedAt}, ${from})
       )), 0)), 0)::float`,
     })
     .from(timeEntries)
-    .innerJoin(projects, eq(projects.id, timeEntries.projectId))
+    .leftJoin(projects, eq(projects.id, timeEntries.projectId))
     .where(
       and(
         eq(timeEntries.userId, user.id),
-        eq(projects.companyId, company.id),
+        eq(timeEntries.companyId, company.id),
         sql`${timeEntries.endedAt} is not null`,
         sql`${timeEntries.endedAt} > ${from}`,
         sql`${timeEntries.startedAt} < ${to}`,

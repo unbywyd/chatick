@@ -2,7 +2,7 @@ import { closedSql, settledSql } from '../lib/task-status.js'
 import { Hono } from 'hono'
 import { zValidator } from '@hono/zod-validator'
 import { z } from 'zod'
-import { and, eq, inArray, isNull, sql } from 'drizzle-orm'
+import { and, eq, inArray, isNull, or, sql } from 'drizzle-orm'
 import { nanoid } from 'nanoid'
 import sharp from 'sharp'
 import { DeleteObjectCommand, PutObjectCommand, S3Client } from '@aws-sdk/client-s3'
@@ -198,6 +198,16 @@ companiesRoute.get('/:companyId/overview', async (c) => {
     return c.json({ error: 'Invalid period' }, 400)
   }
   const period = { from: since.toISOString(), to: until.toISOString() }
+  /**
+   * Время на компанию (без проекта, v2) — в ритме недель и в «кто сколько
+   * отработал». Руководству компании — всё такое время, остальным — только
+   * своё: у записи без проекта нет команды проекта, и чужие часы без проекта
+   * видит лишь тот, кто видит всю компанию.
+   */
+  const seesCompany = membership.role === 'admin' || membership.role === 'manager'
+  const companyTimeSql = seesCompany
+    ? sql`(${timeEntries.projectId} is null and ${timeEntries.companyId} = ${companyId})`
+    : sql`(${timeEntries.projectId} is null and ${timeEntries.companyId} = ${companyId} and ${timeEntries.userId} = ${sub})`
   const inPeriod = sql`${timeEntries.startedAt} >= ${period.from}::timestamptz and ${timeEntries.startedAt} <= ${period.to}::timestamptz`
 
   const projectRows = await db.query.projects.findMany({ where: eq(projects.companyId, companyId) })
@@ -244,7 +254,7 @@ companiesRoute.get('/:companyId/overview', async (c) => {
       select to_char(date_trunc('week', ${timeEntries.startedAt}), 'YYYY-MM-DD') as week,
              coalesce(sum(extract(epoch from (${timeEntries.endedAt} - ${timeEntries.startedAt})) / 60), 0)::int as minutes
       from ${timeEntries}
-      where ${timeEntries.projectId} in ${ids}
+      where (${timeEntries.projectId} in ${ids} or ${companyTimeSql})
         and ${timeEntries.endedAt} is not null
         and ${timeEntries.startedAt} >= ${period.from}::timestamptz
         and ${timeEntries.startedAt} <= ${period.to}::timestamptz
@@ -311,7 +321,7 @@ companiesRoute.get('/:companyId/overview', async (c) => {
     .innerJoin(users, eq(users.id, timeEntries.userId))
     .where(
       and(
-        inArray(timeEntries.projectId, ids),
+        or(inArray(timeEntries.projectId, ids), companyTimeSql),
         sql`${timeEntries.endedAt} is not null`,
         inPeriod,
       ),

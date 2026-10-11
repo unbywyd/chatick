@@ -1939,16 +1939,27 @@ server.registerTool(
     title: 'Start a timer',
     description:
       'Starts tracking. Only after the human agreed — their hours are how the work gets counted, but starting one ' +
-      'behind their back puts wrong numbers in a report.',
+      'behind their back puts wrong numbers in a report. Work that belongs to no project (a call, planning, mail) ' +
+      'goes on the company: onCompany=true, no project, no task.',
     inputSchema: {
-      project: z.string(),
+      project: z.string().optional().describe('Required unless onCompany'),
       task: z.string().optional().describe('TASK-81, when the work belongs to one'),
       description: z.string().optional(),
+      onCompany: z
+        .boolean()
+        .optional()
+        .describe('Time on the company itself, no project — a call, planning, mail. No task then'),
     },
   },
-  async ({ project, ...body }) => {
+  async ({ project, onCompany, ...body }) => {
     try {
-      return json(await call({ ...(await need()), projectId: project }, 'POST', '/time/start', body))
+      const scope = await need()
+      return json(
+        await call({ ...scope, projectId: onCompany ? undefined : (project ?? scope.projectId) }, 'POST', '/time/start', {
+          ...body,
+          ...(onCompany ? { onCompany: true } : {}),
+        }),
+      )
     } catch (e) {
       return fail(e)
     }
@@ -2019,18 +2030,28 @@ server.registerTool(
     description:
       'Records work that already happened — the timer was never started, or was started an hour late. Both ends are ' +
       'ISO timestamps. Log ONLY what the person told you: invented hours are worse than missing ones, because ' +
-      'somebody bills by them.',
+      'somebody bills by them. Work that belongs to no project goes on the company: onCompany=true.',
     inputSchema: {
-      project: z.string(),
+      project: z.string().optional().describe('Required unless onCompany'),
       startedAt: z.string().describe('ISO timestamp, e.g. 2026-08-19T09:00:00Z'),
       endedAt: z.string().describe('ISO timestamp'),
       description: z.string().optional(),
       task: z.string().optional().describe('Task number, e.g. TASK-81'),
+      onCompany: z
+        .boolean()
+        .optional()
+        .describe('Time on the company itself, no project — a call, planning, mail. No task then'),
     },
   },
-  async ({ project, ...body }) => {
+  async ({ project, onCompany, ...body }) => {
     try {
-      return json(await call({ ...(await need()), projectId: project }, 'POST', '/time', body))
+      const scope = await need()
+      return json(
+        await call({ ...scope, projectId: onCompany ? undefined : (project ?? scope.projectId) }, 'POST', '/time', {
+          ...body,
+          ...(onCompany ? { onCompany: true } : {}),
+        }),
+      )
     } catch (e) {
       return fail(e)
     }
@@ -2043,21 +2064,24 @@ server.registerTool(
     title: 'Time entries',
     description:
       'Entries of this project for a period. Yours by default; project leads see everyone unless mine=true. Use it ' +
-      'to find the id of an entry that needs fixing.',
+      'to find the id of an entry that needs fixing. onCompany=true lists your entries on the company (no project).',
     inputSchema: {
-      project: z.string(),
+      project: z.string().optional().describe('Required unless onCompany'),
+      onCompany: z.boolean().optional().describe('Your entries on the company itself, without a project'),
       from: z.string().optional().describe('ISO date, e.g. 2026-08-01'),
       to: z.string().optional(),
       task: z.string().optional().describe('Only entries on this task number'),
       mine: z.boolean().optional().describe('Only your own entries'),
     },
   },
-  async ({ project, mine, ...q }) => {
+  async ({ project, mine, onCompany, ...q }) => {
     try {
+      const scope = await need()
       return json(
-        await call({ ...(await need()), projectId: project }, 'GET', '/time', undefined, {
+        await call({ ...scope, projectId: onCompany ? undefined : (project ?? scope.projectId) }, 'GET', '/time', undefined, {
           ...q,
           ...(mine ? { mine: '1' } : {}),
+          ...(onCompany ? { onCompany: '1' } : {}),
         }),
       )
     } catch (e) {
@@ -2074,26 +2098,28 @@ server.registerTool(
       'Corrects an entry: its description, when it started or ended, the task it belongs to, or THE PROJECT. ' +
       'Moving between projects is the case this exists for — "I worked on one thing but the timer was running on ' +
       'another" happens to everyone, and without this the tracker stops matching reality. Moving an entry drops ' +
-      'its task link, because that task lives in the project you are leaving. Only the fields you pass change. ' +
+      'its task link, because that task lives in the project you are leaving. moveToProject=null takes it off the ' +
+      'project and keeps it on the company. Only the fields you pass change. ' +
       'Someone else\'s entry needs tasks.edit.',
     inputSchema: {
-      project: z.string().describe('Project the entry is in NOW'),
+      project: z.string().optional().describe('Project the entry is in NOW; omit for your entry on the company'),
       entryId: z.string(),
       description: z.string().optional(),
       startedAt: z.string().optional().describe('ISO timestamp'),
       endedAt: z.string().optional().describe('ISO timestamp'),
       task: z.string().optional().describe('Task number in the target project'),
-      moveToProject: z.string().optional().describe('Project id to move this entry to'),
+      moveToProject: z.string().nullable().optional().describe('Project id to move this entry to; null — onto the company'),
     },
   },
   async ({ project, entryId, moveToProject, ...body }) => {
     try {
+      const scope = await need()
       return json(
         await call(
-          { ...(await need()), projectId: project },
+          { ...scope, projectId: project ?? scope.projectId },
           'PATCH',
           `/time/${encodeURIComponent(entryId)}`,
-          { ...body, ...(moveToProject ? { project: moveToProject } : {}) },
+          { ...body, ...(moveToProject !== undefined ? { project: moveToProject } : {}) },
         ),
       )
     } catch (e) {

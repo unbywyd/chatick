@@ -93,11 +93,13 @@ describe('правка записи', () => {
   const body = handler('patch', '/time/:id')
 
   it('чужую правит только руководство проекта', () => {
-    expect(body).toMatch(/entry\.userId !== id\.userId && !\(await hasPermission\(scope\.projectId, id\.userId, 'tasks\.edit'\)\)/)
+    expect(body).toMatch(/entry\.userId !== id\.userId && !\(scope\.projectId && \(await hasPermission\(scope\.projectId, id\.userId, 'tasks\.edit'\)\)\)/)
   })
 
   it('и только запись этого проекта', () => {
-    expect(body).toMatch(/eq\(timeEntries\.projectId, scope\.projectId\)/)
+    // Исключение одно — своя запись на компанию (v2): проекта у неё нет.
+    expect(body).toMatch(/ownCompanyEntry \|\| any\.projectId === scope\.projectId/)
+    expect(body).toMatch(/const ownCompanyEntry = any && !any\.projectId && any\.userId === id\.userId/)
   })
 
   it('переносит в другой проект только к тем, где человек состоит', () => {

@@ -24,19 +24,22 @@ describe('таймер запускается с главной', () => {
     //
     // Саботаж: скопировать тело во вторую ручку — тест падает.
     expect(time, 'общей функции запуска нет').toContain('async function startTimer(')
-    const starts = (time.match(/const cfg = await timeConfigForProject/g) ?? []).length
+    const starts = (time.match(/const cfg = await timeConfigFor\(/g) ?? []).length
     expect(starts, 'логика запуска продублирована').toBe(1)
   })
 
-  it('сессионная ручка требует проект явно', () => {
-    // Проектного токена на главной нет вовсе: без projectId в теле часы
-    // записывать некуда.
+  it('сессионная ручка требует проект или компанию явно', () => {
+    // Проектного токена на главной нет вовсе: без проекта или компании (время
+    // на компанию, v2) в теле часы записывать некуда.
     //
-    // Саботаж: сделать projectId необязательным — тест падает.
+    // Саботаж: убрать проверку — тест падает.
     const at = time.indexOf("timeMineRoute.post(")
     expect(at, 'сессионной ручки запуска нет').toBeGreaterThan(-1)
-    expect(time.slice(at, at + 420), 'проект не обязателен').toContain('projectId: z.string(),')
-    expect(time, 'пустой проект не отсекается').toContain("if (!projectId) return c.json({ error: 'projectId is required' }, 400)")
+    expect(time, 'пустое место записи не отсекается').toContain(
+      "if (!projectId && !companyId) return c.json({ error: 'projectId or companyId is required' }, 400)",
+    )
+    // Компания — только своя.
+    expect(time).toContain("if (!(await companyRoleOf(body.companyId, sub))) return c.json({ error: 'You are not a member of that company' }, 403)")
   })
 
   it('клиент предлагает последний проект одним нажатием', () => {

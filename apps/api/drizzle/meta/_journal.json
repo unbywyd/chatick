@@ -36,6 +36,20 @@
       "when": 1791743099852,
       "tag": "0004_handoff_notifications",
       "breakpoints": true
+    },
+    {
+      "idx": 5,
+      "version": "7",
+      "when": 1791744284163,
+      "tag": "0005_time_without_project",
+      "breakpoints": true
+    },
+    {
+      "idx": 6,
+      "version": "7",
+      "when": 1791744296013,
+      "tag": "0006_time_company_fill",
+      "breakpoints": true
     }
   ]
 }

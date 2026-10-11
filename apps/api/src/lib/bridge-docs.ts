@@ -941,6 +941,17 @@ poking at timers.
   Setting "endedAt": null makes the entry run again. Own entries always; other
   people's only with tasks.edit, and only inside this project.
 
+
+  Time on the company — no project (v2). A call, planning, reading mail:
+  work that belongs to no project goes on the company instead of being forced
+  into one. Pass "onCompany": true to /x/time/start or POST /x/time (no task
+  then — a task lives in a project). The company is the one of this
+  connection. GET /x/time?onCompany=1 lists your own such entries; PATCH with
+  "project": null takes an entry off its project and keeps it on the company,
+  and an entry of yours on the company is patched without ?project=.
+  /x/time/running and /x/time/stop need no project at all, so a company timer
+  can always be seen and stopped; such timers carry "onCompany".
+
   Deleting entries is not available through the bridge. Correct a wrong entry;
   erasing someone's recorded hours is not yours to do.
 
@@ -1429,6 +1440,9 @@ ${endpointCatalog('?project=<id>')}
   PATCH  /x/time/<entryId>?project=<id>  {"description?","task?","startedAt?","endedAt?","project?"}
          Timers and after-the-fact entries; GET /x/time lists them one by one,
          GET /x/time/report adds the hours up.
+         "onCompany": true on start / POST /x/time — time on the company with
+         no project (a call, planning); GET /x/time?onCompany=1 lists yours;
+         "project": null in PATCH moves an entry onto the company.
          "project" MOVES the entry elsewhere — for the day someone worked on
          one thing while the timer ran on another. The task link drops with
          the move, since that task stays behind.

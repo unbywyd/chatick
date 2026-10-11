@@ -1,7 +1,7 @@
 import { and, eq, inArray, isNull } from 'drizzle-orm'
 import { htmlToText } from './sanitize-html.js'
 import { db } from '../db/client.js'
-import { users, projects, projectMembers, notificationOptOuts, notificationLog, notifications } from '../db/schema.js'
+import { users, projects, projectMembers, notificationOptOuts, notificationLog, notifications, companies, companyMembers } from '../db/schema.js'
 import { sendToUserAnywhere } from '../ws.js'
 import { projectLlm, complete } from './llm.js'
 import { NOTIFY_EVENTS, notifyConfigForProject, type NotifyEvent } from './notify-config.js'
@@ -309,7 +309,13 @@ export function dueWords(iso: string, lang: Lang): string {
 }
 
 type NotifyParams = {
-  projectId: string
+  /**
+   * Проект. null — событие компании без проекта (таймер «на компанию», v2):
+   * тогда нужен companyId, получатели проверяются по компании, а настроек и
+   * отписок проекта нет — их не у чего спрашивать.
+   */
+  projectId: string | null
+  companyId?: string
   event: NotificationEvent
   /** id получателей (будут отфильтрованы: только участники, не отписаны, не дубль) */
   recipientIds: string[]
@@ -341,13 +347,22 @@ export async function notify(params: NotifyParams): Promise<void> {
     const recipientIds = [...new Set(params.recipientIds)].filter((id) => id && id !== actorId)
     if (recipientIds.length === 0) return
 
-    const project = await db.query.projects.findFirst({ where: eq(projects.id, projectId) })
-    if (!project) return
+    const project = projectId ? await db.query.projects.findFirst({ where: eq(projects.id, projectId) }) : null
+    if (projectId && !project) return
+    const companyId = project?.companyId ?? params.companyId
+    if (!companyId) return
+    const company = project ? null : await db.query.companies.findFirst({ where: eq(companies.id, companyId) })
+    if (!project && !company) return
+    const placeName = project?.name ?? company!.name
 
-    // только реальные участники проекта
-    const members = await db.query.projectMembers.findMany({
-      where: and(eq(projectMembers.projectId, projectId), inArray(projectMembers.userId, recipientIds)),
-    })
+    // только реальные участники проекта (или компании — у события без проекта)
+    const members = projectId
+      ? await db.query.projectMembers.findMany({
+          where: and(eq(projectMembers.projectId, projectId), inArray(projectMembers.userId, recipientIds)),
+        })
+      : await db.query.companyMembers.findMany({
+          where: and(eq(companyMembers.companyId, companyId), inArray(companyMembers.userId, recipientIds)),
+        })
     const memberIds = new Set(members.map((m) => m.userId))
     let targets = recipientIds.filter((id) => memberIds.has(id))
     if (targets.length === 0) return
@@ -357,22 +372,24 @@ export async function notify(params: NotifyParams): Promise<void> {
     // на уровне проекта, разбирать индивидуальные предпочтения незачем.
     // NOTIFY_EVENTS уже проекта, чем список событий: note_reminder и
     // timer_running настраивать нечем, и они проходят всегда.
-    if ((NOTIFY_EVENTS as readonly string[]).includes(event)) {
+    if (projectId && (NOTIFY_EVENTS as readonly string[]).includes(event)) {
       const cfg = await notifyConfigForProject(projectId)
       if (cfg.events[event as NotifyEvent] === false) return
     }
 
     // отписки от этого события
-    const optOuts = await db.query.notificationOptOuts.findMany({
-      where: and(
-        eq(notificationOptOuts.projectId, projectId),
-        eq(notificationOptOuts.event, event),
-        inArray(notificationOptOuts.userId, targets),
-      ),
-    })
-    const optedOut = new Set(optOuts.map((o) => o.userId))
-    targets = targets.filter((id) => !optedOut.has(id))
-    if (targets.length === 0) return
+    if (projectId) {
+      const optOuts = await db.query.notificationOptOuts.findMany({
+        where: and(
+          eq(notificationOptOuts.projectId, projectId),
+          eq(notificationOptOuts.event, event),
+          inArray(notificationOptOuts.userId, targets),
+        ),
+      })
+      const optedOut = new Set(optOuts.map((o) => o.userId))
+      targets = targets.filter((id) => !optedOut.has(id))
+      if (targets.length === 0) return
+    }
 
     const recipients = await db.query.users.findMany({ where: inArray(users.id, targets) })
     const actorName = params.actorName || 'Someone'
@@ -389,7 +406,7 @@ export async function notify(params: NotifyParams): Promise<void> {
       }
 
       const lang = langOf(user.locale)
-      const vars: Record<string, string> = { actor: actorName, project: project.name, ...(params.vars || {}) }
+      const vars: Record<string, string> = { actor: actorName, project: placeName, ...(params.vars || {}) }
       // Срок приходит в ISO — обращаем в слова на языке получателя. Пишем
       // «сегодня»/«завтра», а не дату: до срока меньше суток, и «17 августа»
       // заставляет сверяться с календарём ровно тогда, когда времени нет.
@@ -420,7 +437,7 @@ export async function notify(params: NotifyParams): Promise<void> {
            * здесь проставить забыли. Проект уже загружен строкой выше —
            * компанию берём из него.
            */
-          companyId: project.companyId,
+          companyId,
           event,
           actorId: actorId ?? null,
           title: tr(lang, params.titleKey ?? event, vars),
@@ -433,12 +450,14 @@ export async function notify(params: NotifyParams): Promise<void> {
 
       // «X упомянул вас» не говорит, что от вас нужно. Просим ИИ сформулировать
       // суть запроса — фоном, чтобы задержка модели не тормозила отправку.
-      if (created && previewText.trim().length > 15) {
+      if (created && projectId && previewText.trim().length > 15) {
         void summarizeAsk(created.id, projectId, previewText, actorName, lang).catch(() => {})
       }
 
       // фиксируем в логе дедупа
-      if (params.dedupeKey) {
+      // Журнал дедупа привязан к проекту; у события компании повторы
+      // сдерживает сам вызывающий (у таймера — счётчик напоминаний).
+      if (params.dedupeKey && projectId) {
         await db.insert(notificationLog).values({ userId: user.id, projectId, event, dedupeKey }).onConflictDoNothing()
       }
 

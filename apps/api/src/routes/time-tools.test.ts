@@ -35,7 +35,9 @@ describe('чужие часы не правятся', () => {
   })
 
   it('запись ищется в своём проекте', () => {
-    expect(body).toMatch(/eq\(timeEntries\.projectId, scope\.projectId\)/)
+    // Исключение одно — своя запись на компанию (v2): проекта у неё нет.
+    expect(body).toMatch(/ownCompanyEntry \|\| any\.projectId === scope\.projectId/)
+    expect(body).toMatch(/const ownCompanyEntry = any && !any\.projectId && any\.userId === id\.userId/)
   })
 
   it('чужие записи в списке — только руководству', () => {

@@ -965,7 +965,7 @@ extRoute.get('/users/:externalId/time', guard('read:all'), async (c) => {
 
   const byId = new Map(companyProjects.map((p) => [p.id, p]))
   const items = rows.map((r) => ({
-    project: { externalId: byId.get(r.projectId)?.externalId ?? null, name: byId.get(r.projectId)?.name ?? '' },
+    project: { externalId: byId.get(r.projectId ?? '')?.externalId ?? null, name: byId.get(r.projectId ?? '')?.name ?? '' },
     minutes: r.minutes,
   }))
 

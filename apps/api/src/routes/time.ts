@@ -1,7 +1,7 @@
 import { Hono } from 'hono'
 import { zValidator } from '@hono/zod-validator'
 import { z } from 'zod'
-import { and, asc, desc, eq, gte, inArray, isNull, lte, sql } from 'drizzle-orm'
+import { and, asc, desc, eq, gte, inArray, isNull, lte, or, sql } from 'drizzle-orm'
 import { db } from '../db/client.js'
 import { companies, projectMembers, projects, tasks, timeEntries, users } from '../db/schema.js'
 import { requireProject, requireSession, type ProjectEnv, type SessionEnv } from '../auth.js'
@@ -54,9 +54,13 @@ timeCompanyRoute.get(
     const periodTo = f.to ? new Date(f.to) : null
     if (periodTo && !f.to!.includes('T')) periodTo.setHours(23, 59, 59, 999)
 
-    const conds = [eq(projects.companyId, companyId), sql`${timeEntries.endedAt} is not null`]
+    // По компании записи, а не по её проектам: время «на компанию» (без
+    // проекта) — тоже её время, и в платёжном отчёте оно обязано быть.
+    // projectId=none — только такие записи.
+    const conds = [eq(timeEntries.companyId, companyId), sql`${timeEntries.endedAt} is not null`]
     if (f.userId) conds.push(eq(timeEntries.userId, f.userId))
-    if (f.projectId) conds.push(eq(timeEntries.projectId, f.projectId))
+    if (f.projectId === 'none') conds.push(isNull(timeEntries.projectId))
+    else if (f.projectId) conds.push(eq(timeEntries.projectId, f.projectId))
     // берём пересекающиеся записи, а лишнее отрежем — иначе смена через полночь
     // на границе месяца попадёт в отчёт целиком
     if (periodFrom) conds.push(sql`${timeEntries.endedAt} >= ${periodFrom.toISOString()}::timestamptz`)
@@ -83,7 +87,7 @@ timeCompanyRoute.get(
         entries: sql<number>`count(*)::int`,
       })
       .from(timeEntries)
-      .innerJoin(projects, eq(projects.id, timeEntries.projectId))
+      .leftJoin(projects, eq(projects.id, timeEntries.projectId))
       .innerJoin(users, eq(users.id, timeEntries.userId))
       .where(and(...conds))
       .groupBy(timeEntries.userId, users.name, users.avatarUrl, projects.id, projects.name)
@@ -97,7 +101,6 @@ timeCompanyRoute.get(
       with bounds as (
         select ${timeEntries.userId} as uid, ${timeEntries.startedAt} as s, ${timeEntries.endedAt} as e
         from ${timeEntries}
-        inner join ${projects} on ${projects.id} = ${timeEntries.projectId}
         where ${and(...conds)}
       ),
       spread as (
@@ -133,16 +136,19 @@ timeCompanyRoute.get(
     }
 
     // сворачиваем в людей с разбивкой по проектам: так читают отчёт
-    const byUser = new Map<string, { userId: string; name: string; avatarUrl: string | null; minutes: number; projects: { id: string; name: string; minutes: number; color: string | null; logoUrl: string | null }[] }>()
+    // Запись без проекта — строка с id null и noProject: true. Название клиент
+    // пишет сам на языке человека («Без проекта»), сервер языка не знает.
+    const byUser = new Map<string, { userId: string; name: string; avatarUrl: string | null; minutes: number; projects: { id: string | null; name: string; minutes: number; color: string | null; logoUrl: string | null; noProject?: true }[] }>()
     for (const r of rows) {
       const entry = byUser.get(r.userId) ?? { userId: r.userId, name: r.userName, avatarUrl: r.avatarUrl, minutes: 0, projects: [] }
       entry.minutes += r.minutes
       entry.projects.push({
         id: r.projectId,
-        name: r.projectName,
+        name: r.projectName ?? '',
         minutes: r.minutes,
         color: r.projectColor,
         logoUrl: r.projectLogoUrl,
+        ...(r.projectId ? {} : { noProject: true as const }),
       })
       byUser.set(r.userId, entry)
     }
@@ -170,11 +176,12 @@ timeCompanyRoute.get(
     // Зачем нужна: «сколько часов занял проект» — вопрос, который задают
     // снаружи (заказчику, в счёт), и по разбивке на людей на него отвечали
     // вручную, складывая строки из нескольких карточек.
-    const byProject = new Map<string, { id: string; name: string; color: string | null; logoUrl: string | null; minutes: number; entries: number; people: { userId: string; name: string; avatarUrl: string | null; minutes: number }[] }>()
+    const byProject = new Map<string, { id: string | null; name: string; color: string | null; logoUrl: string | null; minutes: number; entries: number; noProject?: true; people: { userId: string; name: string; avatarUrl: string | null; minutes: number }[] }>()
     for (const r of rows) {
-      const entry = byProject.get(r.projectId) ?? {
+      const entry = byProject.get(r.projectId ?? '') ?? {
         id: r.projectId,
-        name: r.projectName,
+        name: r.projectName ?? '',
+        ...(r.projectId ? {} : { noProject: true as const }),
         color: r.projectColor,
         logoUrl: r.projectLogoUrl,
         minutes: 0,
@@ -184,7 +191,7 @@ timeCompanyRoute.get(
       entry.minutes += r.minutes
       entry.entries += r.entries
       entry.people.push({ userId: r.userId, name: r.userName, avatarUrl: r.avatarUrl, minutes: r.minutes })
-      byProject.set(r.projectId, entry)
+      byProject.set(r.projectId ?? '', entry)
     }
 
     const projectList = [...byProject.values()]
@@ -290,6 +297,42 @@ export async function timeConfigForProject(projectId: string): Promise<TimeConfi
   return readTimeConfig(own && own !== '{}' ? own : r.company)
 }
 
+/** Настройки времени компании — для записей без проекта. */
+export async function timeConfigForCompany(companyId: string): Promise<TimeConfig> {
+  const row = await db.query.companies.findFirst({ where: eq(companies.id, companyId) })
+  return readTimeConfig(row?.timeConfig)
+}
+
+/** Настройки для записи: проекта, если он есть, иначе компании. */
+const timeConfigFor = (e: { projectId: string | null; companyId: string | null }) =>
+  e.projectId ? timeConfigForProject(e.projectId) : e.companyId ? timeConfigForCompany(e.companyId) : Promise.resolve(DEFAULT_TIME_CONFIG)
+
+/**
+ * Где показывать запись: имя проекта, а у записи без проекта — имя компании.
+ *
+ * Трей (его не обновить) рисует projectName как есть и ведёт по projectId,
+ * только если он есть, — поэтому запись на компанию он покажет как «StartPlan»,
+ * ничего о ней не зная.
+ */
+async function placeNames(rows: { projectId: string | null; companyId: string | null }[]) {
+  const pids = [...new Set(rows.map((r) => r.projectId).filter((x): x is string => Boolean(x)))]
+  const cids = [...new Set(rows.filter((r) => !r.projectId).map((r) => r.companyId).filter((x): x is string => Boolean(x)))]
+  const [ps, cs] = await Promise.all([
+    pids.length ? db.select({ id: projects.id, name: projects.name }).from(projects).where(inArray(projects.id, pids)) : [],
+    cids.length ? db.select({ id: companies.id, name: companies.name }).from(companies).where(inArray(companies.id, cids)) : [],
+  ])
+  const p = new Map(ps.map((x) => [x.id, x.name]))
+  const c = new Map(cs.map((x) => [x.id, x.name]))
+  return (r: { projectId: string | null; companyId: string | null }) =>
+    (r.projectId ? p.get(r.projectId) : r.companyId ? c.get(r.companyId) : undefined) ?? '—'
+}
+
+/** Сообщить об изменении записи: проекту (если есть) и лично владельцу. */
+function timeChanged(e: { projectId: string | null; userId: string }, action: string, id: string) {
+  if (e.projectId) broadcast(e.projectId, 'time', { action, id, userId: e.userId })
+  sendToUserAnywhere(e.userId, 'time', { action, id })
+}
+
 /** Чужие записи видит и правит только руководство проекта. */
 async function canSeeOthers(projectId: string, userId: string): Promise<boolean> {
   const m = await projectRoleOf(projectId, userId)
@@ -303,6 +346,9 @@ const serialize = (
 ) => ({
   id: e.id,
   userId: e.userId,
+  // null — запись на компанию, без проекта (v2).
+  projectId: e.projectId,
+  companyId: e.companyId,
   user: user ?? null,
   task: task ?? null,
   description: e.description,
@@ -359,19 +405,15 @@ timeRoute.get('/running', async (c) => {
     .where(and(eq(timeEntries.userId, sub), isNull(timeEntries.endedAt)))
     .orderBy(asc(timeEntries.startedAt))
 
-  const project = await db.query.projects.findFirst({ where: eq(projects.id, projectId) })
-  // названия проектов нужны, чтобы отличить чужой таймер от здешнего
-  const otherIds = [...new Set(rows.map((r) => r.projectId).filter((id) => id !== projectId))]
-  const others = otherIds.length
-    ? await db.select({ id: projects.id, name: projects.name }).from(projects).where(inArray(projects.id, otherIds))
-    : []
-  const nameById = new Map(others.map((p) => [p.id, p.name]))
+  // названия нужны, чтобы отличить чужой таймер от здешнего; у записи без
+  // проекта — имя компании
+  const nameOf = await placeNames(rows)
 
   const items = (await hydrate(rows)).map((item, i) => ({
     ...item,
     projectId: rows[i]!.projectId,
     // null для текущего проекта — клиенту достаточно понять «это не здесь»
-    projectName: rows[i]!.projectId === projectId ? null : nameById.get(rows[i]!.projectId) ?? '—',
+    projectName: rows[i]!.projectId === projectId ? null : nameOf(rows[i]!),
   }))
 
   return c.json({ items, config: await timeConfigForProject(projectId) })
@@ -396,16 +438,11 @@ timeMineRoute.get('/running', async (c) => {
     .where(and(eq(timeEntries.userId, sub), isNull(timeEntries.endedAt)))
     .orderBy(asc(timeEntries.startedAt))
 
-  const ids = [...new Set(rows.map((r) => r.projectId))]
-  const names = ids.length
-    ? await db.select({ id: projects.id, name: projects.name }).from(projects).where(inArray(projects.id, ids))
-    : []
-  const nameById = new Map(names.map((p) => [p.id, p.name]))
-
+  const nameOf = await placeNames(rows)
   const items = (await hydrate(rows)).map((item, i) => ({
     ...item,
     projectId: rows[i]!.projectId,
-    projectName: nameById.get(rows[i]!.projectId) ?? '—',
+    projectName: nameOf(rows[i]!),
   }))
   return c.json({ items })
 })
@@ -437,9 +474,10 @@ timeMineRoute.get('/recent', async (c) => {
   const limit = Math.min(50, Math.max(1, Number(c.req.query('limit')) || 10))
 
   const rows = await db
-    .select({ e: timeEntries, p: projects, t: tasks })
+    .select({ e: timeEntries, p: projects, t: tasks, co: { name: companies.name } })
     .from(timeEntries)
-    .innerJoin(projects, eq(projects.id, timeEntries.projectId))
+    .leftJoin(projects, eq(projects.id, timeEntries.projectId))
+    .leftJoin(companies, eq(companies.id, timeEntries.companyId))
     .leftJoin(tasks, eq(tasks.id, timeEntries.taskId))
     .where(eq(timeEntries.userId, sub))
     .orderBy(desc(timeEntries.startedAt))
@@ -464,14 +502,16 @@ timeMineRoute.get('/recent', async (c) => {
   return c.json({
     // Поля те же, что у списка записей проекта: список рисует один и тот же
     // компонент, и расхождение полей означает «то же самое, но не работает».
-    items: rows.map(({ e, p, t }) => ({
+    items: rows.map(({ e, p, t, co }) => ({
       id: e.id,
       userId: e.userId,
       user: null,
       projectId: e.projectId,
-      projectName: p.name,
-      projectColor: p.color,
-      projectLogoUrl: p.logoUrl,
+      companyId: e.companyId,
+      // Без проекта — имя компании: так запись подписана и в трее.
+      projectName: p?.name ?? co?.name ?? '—',
+      projectColor: p?.color ?? null,
+      projectLogoUrl: p?.logoUrl ?? null,
       task: t ? { id: t.id, number: t.number, title: t.title } : null,
       description: e.description,
       startedAt: e.startedAt,
@@ -485,7 +525,8 @@ timeMineRoute.get('/recent', async (c) => {
 })
 
 const minePatchSchema = z.object({
-  projectId: z.string().optional(),
+  /** null — снять с проекта, оставить на компании (v2). */
+  projectId: z.string().nullable().optional(),
   description: z.string().max(500).optional(),
   startedAt: z.string().optional(),
   endedAt: z.string().nullable().optional(),
@@ -510,6 +551,11 @@ timeMineRoute.patch('/:id', zValidator('json', minePatchSchema), async (c) => {
     patch.projectId = b.projectId
     // Задача осталась в прежнем проекте — связь рвём, иначе запись указывала
     // бы на задачу чужого проекта, и в отчёте появился бы висячий номер.
+    patch.taskId = null
+  } else if (b.projectId === null && entry.projectId) {
+    // На компанию: компания остаётся прежней — та, чей был проект.
+    patch.projectId = null
+    patch.companyId = entry.companyId
     patch.taskId = null
   }
   if (b.description !== undefined) patch.description = b.description
@@ -546,6 +592,7 @@ timeMineRoute.patch('/:id', zValidator('json', minePatchSchema), async (c) => {
   return c.json({
     id: row!.id,
     projectId: row!.projectId,
+    companyId: row!.companyId,
     description: row!.description,
     startedAt: row!.startedAt,
     endedAt: row!.endedAt,
@@ -610,8 +657,21 @@ timeMineRoute.get(
     // Дата без времени — это все сутки целиком: иначе «по сегодня» теряет день.
     if (periodTo && !f.to!.includes('T')) periodTo.setHours(23, 59, 59, 999)
 
+    /**
+     * Свои записи на компанию (без проекта) — тоже мои часы: в итог они
+     * входят, когда не выбран конкретный проект. Чужие такие записи здесь не
+     * показываем — у них нет проекта, где решалось бы, кто вправе их видеть.
+     */
+    const myCompanyIds =
+      target === sub && !f.projectId
+        ? (
+            await db.selectDistinct({ id: projects.companyId }).from(projects).where(inArray(projects.id, myProjectIds))
+          ).map((r) => r.id)
+        : []
     const conds = [
-      inArray(timeEntries.projectId, searchIds),
+      myCompanyIds.length
+        ? or(inArray(timeEntries.projectId, searchIds), and(isNull(timeEntries.projectId), inArray(timeEntries.companyId, myCompanyIds)))!
+        : inArray(timeEntries.projectId, searchIds),
       eq(timeEntries.userId, target),
       sql`${timeEntries.endedAt} is not null`,
     ]
@@ -648,8 +708,9 @@ timeMineRoute.get(
           entries: sql<number>`count(*)::int`,
         })
         .from(timeEntries)
-        .innerJoin(projects, eq(projects.id, timeEntries.projectId))
+        .leftJoin(projects, eq(projects.id, timeEntries.projectId))
         .where(and(...conds))
+        // Без проекта — своя строка с projectId null: клиент подпишет её «Без проекта».
         .groupBy(timeEntries.projectId, projects.name, projects.color, projects.logoUrl),
     ])
 
@@ -718,7 +779,7 @@ async function startTimer(
   c: { json: (body: unknown, status?: number) => Response },
   sub: string,
   tokenProject: string | null,
-  body: { taskId?: string | null; description: string; startedAt?: string; projectId?: string },
+  body: { taskId?: string | null; description: string; startedAt?: string; projectId?: string; companyId?: string },
 ) {
   {
     // членство обязательно: иначе можно завести часы в чужом проекте
@@ -728,10 +789,22 @@ async function startTimer(
       if (!membership) return c.json({ error: 'You are not a member of that project' }, 403)
       projectId = body.projectId
     }
-    // На сессионной ручке токенного проекта нет: проект обязан прийти в теле.
-    if (!projectId) return c.json({ error: 'projectId is required' }, 400)
+    /**
+     * Без проекта — на компанию (v2): созвон, планёрка, почта. Только на
+     * сессионной ручке и только в своей компании. Задачи у такой записи нет:
+     * задача всегда живёт в проекте.
+     */
+    let companyId: string | null = null
+    if (!body.projectId && !tokenProject && body.companyId) {
+      if (!(await companyRoleOf(body.companyId, sub))) return c.json({ error: 'You are not a member of that company' }, 403)
+      if (body.taskId) return c.json({ error: 'A task lives in a project — pass projectId to time a task' }, 400)
+      companyId = body.companyId
+      projectId = null
+    }
+    // На сессионной ручке токенного проекта нет: проект или компания — в теле.
+    if (!projectId && !companyId) return c.json({ error: 'projectId or companyId is required' }, 400)
 
-    const cfg = await timeConfigForProject(projectId)
+    const cfg = await timeConfigFor({ projectId, companyId })
 
     // Лимит про ЧЕЛОВЕКА, а не про проект: иначе при лимите 1 можно набрать
     // по таймеру в каждом проекте и «работать» в пяти местах разом.
@@ -741,9 +814,7 @@ async function startTimer(
       .where(and(eq(timeEntries.userId, sub), isNull(timeEntries.endedAt)))
     if (running.length >= cfg.maxTimers) {
       const elsewhere = running.find((r) => r.projectId !== projectId)
-      const otherName = elsewhere
-        ? (await db.query.projects.findFirst({ where: eq(projects.id, elsewhere.projectId) }))?.name
-        : null
+      const otherName = elsewhere ? (await placeNames([elsewhere]))(elsewhere) : null
       return c.json(
         {
           error: otherName
@@ -757,7 +828,7 @@ async function startTimer(
       )
     }
 
-    if (body.taskId) {
+    if (body.taskId && projectId) {
       const task = await db.query.tasks.findFirst({ where: and(eq(tasks.id, body.taskId), eq(tasks.projectId, projectId)) })
       if (!task) return c.json({ error: 'Task not found in this project' }, 404)
     }
@@ -766,6 +837,8 @@ async function startTimer(
       .insert(timeEntries)
       .values({
         projectId,
+        // С проектом компанию поставит триггер базы; без проекта — она и есть адрес.
+        companyId,
         userId: sub,
         taskId: body.taskId ?? null,
         description: body.description,
@@ -773,12 +846,12 @@ async function startTimer(
       })
       .returning()
 
-    broadcast(projectId, 'time', { action: 'start', id: row!.id, userId: sub })
-    // И лично человеку: трей живёт вне проекта, а часы — его собственные.
-    // Без этого панель до полуминуты показывала прежнее состояние.
-    sendToUserAnywhere(sub, 'time', { action: 'start', id: row!.id })
-    void maybeTranslate(projectId, row!.id, row!.description).catch(() => {})
-    return c.json((await hydrate([row!]))[0], 201)
+    // И проекту, и лично человеку: трей живёт вне проекта, а часы — его
+    // собственные. Без этого панель до полуминуты показывала прежнее состояние.
+    timeChanged(row!, 'start', row!.id)
+    if (projectId) void maybeTranslate(projectId, row!.id, row!.description).catch(() => {})
+    const nameOf = await placeNames([row!])
+    return c.json({ ...(await hydrate([row!]))[0], projectName: nameOf(row!) }, 201)
   }
 }
 
@@ -797,7 +870,9 @@ timeMineRoute.post(
       taskId: z.string().nullable().optional(),
       description: z.string().max(500).default(''),
       startedAt: z.string().optional(),
-      projectId: z.string(),
+      /** Проект, или companyId — время на компанию без проекта (v2). */
+      projectId: z.string().optional(),
+      companyId: z.string().optional(),
     }),
   ),
   async (c) => {
@@ -805,6 +880,39 @@ timeMineRoute.post(
     return startTimer(c, sub, null, c.req.valid('json'))
   },
 )
+
+/**
+ * Остановить свой таймер по сессии — с главной и из трея, где проектного
+ * токена нет, а у записи на компанию его не бывает вовсе.
+ */
+timeMineRoute.post('/:id/stop', async (c) => {
+  const { sub } = c.get('session')
+  const entry = await db.query.timeEntries.findFirst({ where: eq(timeEntries.id, c.req.param('id')) })
+  if (!entry) return c.json({ error: 'Not found' }, 404)
+  if (entry.userId !== sub) return c.json({ error: 'Forbidden' }, 403)
+  const r = await stopEntry(entry)
+  return c.json(r.body, r.status)
+})
+
+/** Остановка — одна на обе ручки. */
+async function stopEntry(entry: typeof timeEntries.$inferSelect) {
+  if (entry.endedAt) return { status: 400 as const, body: { error: 'Already stopped' } as Record<string, unknown> }
+  const endedAt = new Date()
+  // Меньше секунды — двойной клик, а не работа. Порог намеренно крошечный:
+  // всё, что человек делал хоть сколько-то, должно записаться.
+  if (endedAt.getTime() - entry.startedAt.getTime() < 1_000) {
+    await db.delete(timeEntries).where(eq(timeEntries.id, entry.id))
+    timeChanged(entry, 'delete', entry.id)
+    return { status: 200 as const, body: { discarded: true, reason: 'Stopped within a second — nothing recorded.' } as Record<string, unknown> }
+  }
+  const [row] = await db
+    .update(timeEntries)
+    .set({ endedAt, updatedAt: endedAt })
+    .where(eq(timeEntries.id, entry.id))
+    .returning()
+  timeChanged(entry, 'stop', row!.id)
+  return { status: 200 as const, body: (await hydrate([row!]))[0] as Record<string, unknown> }
+}
 
 timeRoute.post('/:id/stop', async (c) => {
   const { projectId, sub } = c.get('auth')
@@ -816,27 +924,8 @@ timeRoute.post('/:id/stop', async (c) => {
   if (entry.userId !== sub && !(entry.projectId === projectId && (await canSeeOthers(projectId, sub)))) {
     return c.json({ error: 'Forbidden' }, 403)
   }
-  if (entry.endedAt) return c.json({ error: 'Already stopped' }, 400)
-
-  const endedAt = new Date()
-  // Меньше секунды — двойной клик, а не работа. Порог намеренно крошечный:
-  // всё, что человек делал хоть сколько-то, должно записаться.
-  if (endedAt.getTime() - entry.startedAt.getTime() < 1_000) {
-    await db.delete(timeEntries).where(eq(timeEntries.id, entry.id))
-    broadcast(entry.projectId, 'time', { action: 'delete', id: entry.id, userId: entry.userId })
-    sendToUserAnywhere(entry.userId, 'time', { action: 'delete', id: entry.id })
-    return c.json({ discarded: true, reason: 'Stopped within a second — nothing recorded.' })
-  }
-
-  const [row] = await db
-    .update(timeEntries)
-    .set({ endedAt, updatedAt: endedAt })
-    .where(eq(timeEntries.id, entry.id))
-    .returning()
-
-  broadcast(entry.projectId, 'time', { action: 'stop', id: row!.id, userId: entry.userId })
-  sendToUserAnywhere(entry.userId, 'time', { action: 'stop', id: row!.id })
-  return c.json((await hydrate([row!]))[0])
+  const r = await stopEntry(entry)
+  return c.json(r.body, r.status)
 })
 
 // --- Список и правка --------------------------------------------------------
@@ -926,6 +1015,8 @@ timeRoute.patch('/:id', zValidator('json', patchSchema), async (c) => {
 
   if (b.taskId !== undefined) {
     if (b.taskId) {
+      // У записи на компанию задачи не бывает: задача живёт в проекте.
+      if (!targetProject) return c.json({ error: 'A task lives in a project — move the entry to a project first' }, 400)
       const task = await db.query.tasks.findFirst({ where: and(eq(tasks.id, b.taskId), eq(tasks.projectId, targetProject)) })
       if (!task) return c.json({ error: 'Task not found in this project' }, 404)
     }
@@ -954,8 +1045,8 @@ timeRoute.patch('/:id', zValidator('json', patchSchema), async (c) => {
   }
 
   const [row] = await db.update(timeEntries).set(patch).where(eq(timeEntries.id, entry.id)).returning()
-  broadcast(entry.projectId, 'time', { action: 'update', id: row!.id, userId: entry.userId })
-  if (targetProject !== entry.projectId) {
+  timeChanged(entry, 'update', row!.id)
+  if (targetProject && targetProject !== entry.projectId) {
     broadcast(targetProject, 'time', { action: 'update', id: row!.id, userId: entry.userId })
   }
   if (b.description !== undefined) void maybeTranslate(projectId, row!.id, row!.description).catch(() => {})

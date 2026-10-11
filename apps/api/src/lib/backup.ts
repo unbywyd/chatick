@@ -1,5 +1,5 @@
 import { createCipheriv, createDecipheriv, randomBytes, scryptSync } from 'node:crypto'
-import { and, eq, inArray } from 'drizzle-orm'
+import { and, eq, inArray, isNull } from 'drizzle-orm'
 import { db } from '../db/client.js'
 import {
   activityLog,
@@ -61,6 +61,11 @@ export type BackupFile = {
     files: Record<string, unknown>[]
     activity: Record<string, unknown>[]
   }[]
+  /**
+   * Время на компанию — записи без проекта (v2). Вне проектов, потому что
+   * проекта у них нет. В архивах до v2 поля нет — импорт его не требует.
+   */
+  companyTimeEntries?: Record<string, unknown>[]
   /** Пометка, что секреты в архиве зашифрованы паролем пользователя. */
   secretsEncrypted: boolean
 }
@@ -214,6 +219,11 @@ export async function exportCompany(companyId: string, password?: string): Promi
     })
   }
 
+  // Часы без проекта — тоже часы компании: экспорт обещан полным.
+  const companyTime = await db.query.timeEntries.findMany({
+    where: and(eq(timeEntries.companyId, companyId), isNull(timeEntries.projectId)),
+  })
+
   return {
     version: BACKUP_VERSION,
     exportedAt: new Date().toISOString(),
@@ -221,6 +231,7 @@ export async function exportCompany(companyId: string, password?: string): Promi
     company: { ...company, llmKeyEncrypted: undefined }, // чужой ключ модели не выгружаем
     members: cMembers.map((r) => ({ email: r.u.email, name: r.u.name, role: r.m.role })),
     projects: out,
+    companyTimeEntries: companyTime.map((e) => ({ ...e, user: refOf(people, e.userId) })),
     secretsEncrypted: Boolean(password),
   }
 }
@@ -621,6 +632,24 @@ export async function importCompany(
         `${restoredFiles} file record(s) restored in "${project!.name}". File CONTENTS require the same storage bucket to be connected.`,
       )
     }
+  }
+
+  // Время на компанию (без проекта): задачи у такой записи нет — переносить нечего.
+  for (const e of backup.companyTimeEntries ?? []) {
+    const userId = await userFor(e.user as PersonRef)
+    if (!userId) continue
+    await db.insert(timeEntries).values({
+      projectId: null,
+      companyId: company!.id,
+      userId,
+      description: String(e.description ?? ''),
+      startedAt: new Date(String(e.startedAt)),
+      endedAt: e.endedAt ? new Date(String(e.endedAt)) : null,
+      autoStopped: Boolean(e.autoStopped),
+      createdVia: String(e.createdVia ?? 'ui'),
+      createdAt: e.createdAt ? new Date(String(e.createdAt)) : undefined,
+    })
+    bump('timeEntries')
   }
 
   return { companyId: company!.id, created, warnings }

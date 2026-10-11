@@ -87,7 +87,8 @@ describe('уведомление знает свою компанию', () => {
     //
     // Саботаж: убрать строку — счётчик снова начнёт врать.
     const notify = readFileSync(join(import.meta.dirname, '../lib/notify.ts'), 'utf8')
-    expect(notify, 'уведомление создаётся без компании').toMatch(/companyId: project\.companyId/)
+    expect(notify, 'уведомление создаётся без компании').toMatch(/const companyId = project\?\.companyId \?\? params\.companyId\s+if \(!companyId\) return/)
+    expect(notify).toMatch(/\s+companyId,\s+event,/)
   })
 })
 
