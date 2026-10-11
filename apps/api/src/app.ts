@@ -12,6 +12,7 @@ import { dbConnectionsRoute } from './routes/db-connections.js'
 import { filesRoute, filesPublicRoute } from './routes/files.js'
 import { resourcesRoute } from './routes/resources.js'
 import { tasksRoute, tasksMineRoute } from './routes/tasks.js'
+import { ballRoute } from './routes/ball.js'
 import { messagesRoute } from './routes/messages.js'
 import { notificationsRoute } from './routes/notifications.js'
 import { extRoute } from './routes/ext.js'
@@ -53,6 +54,7 @@ app.route('/api/v1/resources', resourcesRoute)
 app.route('/api/v1/tasks', tasksRoute)
 // свои задачи по всем проектам компании — панель «Мои задачи», без привязки к проекту
 app.route('/api/v1/my/tasks', tasksMineRoute)
+app.route('/api/v1/ball', ballRoute) // v2: «На столе», «На мне», «От меня», быстрое создание
 // Подключения к внешним БД. Фича за выключателем: выключено — ручки 404.
 app.route('/api/v1/db-connections', dbConnectionsRoute)
 app.route('/api/v1/messages', messagesRoute)

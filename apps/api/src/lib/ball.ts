@@ -1,7 +1,7 @@
 import { and, desc, eq, sql } from 'drizzle-orm'
 import { db } from '../db/client.js'
 import { projectMembers, taskHandoffs, tasks, type HandoffAction, type TaskMove } from '../db/schema.js'
-import { isClosed, type TaskStatus } from './task-status.js'
+import { closedSql, isClosed, type TaskStatus } from './task-status.js'
 
 /**
  * Мяч (v2) — единственное место, где меняется, у кого задача и чего от него ждут.
@@ -52,6 +52,7 @@ export const BALL_FIELDS = [
   'askFromId',
   'askPrevMove',
   'waitingClientSince',
+  'onTable',
 ] as const
 
 export type BallPatch = Partial<Pick<Task, (typeof BALL_FIELDS)[number]>>
@@ -146,7 +147,7 @@ export function planHandoff(task: BallTask, action: HandoffAction, input: Handof
       break
     }
     case 'accept': {
-      patch = { status: 'done', waitingClientSince: null, ...clearAsk }
+      patch = { status: 'done', waitingClientSince: null, onTable: false, ...clearAsk }
       break
     }
     case 'return': {
@@ -205,7 +206,7 @@ export function planHandoff(task: BallTask, action: HandoffAction, input: Handof
       break
     }
     case 'cancel': {
-      patch = { status: 'cancelled', waitingClientSince: null, ...clearAsk }
+      patch = { status: 'cancelled', waitingClientSince: null, onTable: false, ...clearAsk }
       break
     }
     case 'reopen': {
@@ -521,4 +522,43 @@ export async function insertTask(
     if (h) await tx.insert(taskHandoffs).values({ ...h, taskId: row!.id, projectId: row!.projectId })
     return row!
   })
+}
+
+/**
+ * «На столе» — срочное держателя, отдельно на главном экране.
+ *
+ * Не больше трёх: стол, на котором лежит всё, ничего не выделяет. Четвёртое
+ * положить нельзя, пока не уберёшь одно, — это и есть смысл лимита, а не
+ * техническое ограничение. Считаем по держателю: стол — его, и пометка едет
+ * вместе с мячом. Если пришло сверх лимита (передали срочное), ничего не
+ * снимаем молча — держатель сам решит, что убрать.
+ *
+ * Класть может держатель, владелец и управляющий проектом.
+ */
+export const TABLE_LIMIT = 3
+
+export type TableResult = { ok: true; task: Task } | { ok: false; error: 'forbidden' | 'closed' | 'no_holder' | 'table_full' }
+
+export async function setOnTable(task: Task, on: boolean, actorId: string, isManager: boolean): Promise<TableResult> {
+  const holder = task.assigneeId === actorId
+  if (!holder && ownerOf(task) !== actorId && !isManager) return { ok: false, error: 'forbidden' }
+  if (task.onTable === on) return { ok: true, task }
+  if (on) {
+    if (isClosed(task.status)) return { ok: false, error: 'closed' }
+    if (!task.assigneeId) return { ok: false, error: 'no_holder' }
+    const [row] = await db
+      .select({ n: sql<number>`count(*)::int` })
+      .from(tasks)
+      .where(
+        and(
+          eq(tasks.assigneeId, task.assigneeId),
+          eq(tasks.onTable, true),
+          sql`${tasks.deletedAt} is null`,
+          sql`${tasks.status} not in ${closedSql}`,
+        ),
+      )
+    if ((row?.n ?? 0) >= TABLE_LIMIT) return { ok: false, error: 'table_full' }
+  }
+  const [row] = await db.update(tasks).set({ onTable: on, updatedAt: new Date() }).where(eq(tasks.id, task.id)).returning()
+  return { ok: true, task: row! }
 }
