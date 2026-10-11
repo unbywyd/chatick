@@ -764,7 +764,10 @@ server.registerTool(
   {
     title: 'Change a task',
     description:
-      'Status, assignee, estimate, linked resources, related tasks. Moving to in_progress belongs BEFORE the work, ' +
+      'Status, assignee, estimate, linked resources, related tasks. To hand work over — send for review, accept, ' +
+      'return, ask, pass to someone — prefer chatick_handoff: it records WHY the task moved, and that note is what ' +
+      'the next person reads. Status and assignee here still work and are turned into the same moves. ' +
+      'Moving to in_progress belongs BEFORE the work, ' +
       'not after. When the work is done move it to review, not to done: you are handing it over, and closing ' +
       'your own work skips the person who has to check it. verified belongs to whoever did the checking — never ' +
       'set it on your own work. Every status change deserves a comment: the board says that something moved, ' +
@@ -797,6 +800,130 @@ server.registerTool(
   async ({ project, task, ...body }) => {
     try {
       return json(await call({ ...(await need()), projectId: project }, 'PATCH', `/tasks/${encodeURIComponent(task)}`, body))
+    } catch (e) {
+      return fail(e)
+    }
+  },
+)
+
+server.registerTool(
+  'chatick_handoff',
+  {
+    title: 'Move the ball',
+    description:
+      'Hand a task over — the way work moves between people. The assignee holds the ball; ball.move says what is ' +
+      'owed: do, review or answer. Actions: review (done, please check — goes to the owner), accept (owner closes ' +
+      'it), return (not right yet — back to whoever sent it, round +1), ask (a question to "to"), answer (the ball ' +
+      'goes back to whoever asked), pass (same move, to someone else; to=null puts it in the backlog), take (owner ' +
+      'takes it back), wait_client / client_replied, cancel (the person\'s call, never yours), reopen. ' +
+      'A note is REQUIRED for review, return, ask, answer and cancel — say what to check, what is wrong, the ' +
+      'question, the answer, why. It is the first thing the next person reads, so write it in the project ' +
+      'language and make it stand on its own. A refusal carries "hint" with the next step.',
+    inputSchema: {
+      project: z.string(),
+      task: z.string().describe('TASK-81 or the id'),
+      action: z.enum(['review', 'accept', 'return', 'ask', 'answer', 'pass', 'take', 'wait_client', 'client_replied', 'cancel', 'reopen']),
+      to: z.string().nullable().optional().describe('"me", a name or a user id; null with pass = backlog'),
+      note: z.string().optional(),
+    },
+  },
+  async ({ project, task, ...body }) => {
+    try {
+      return json(
+        await call({ ...(await need()), projectId: project }, 'POST', `/tasks/${encodeURIComponent(task)}/handoff`, body),
+      )
+    } catch (e) {
+      return fail(e)
+    }
+  },
+)
+
+server.registerTool(
+  'chatick_handoffs',
+  {
+    title: 'Hand-off log of a task',
+    description:
+      'Who passed the task to whom, with which note, in which round. Read it before answering "why is this on me" ' +
+      'or "how many times was it returned" — the task itself does not say.',
+    inputSchema: { project: z.string(), task: z.string() },
+  },
+  async ({ project, task }) => {
+    try {
+      return json(await call({ ...(await need()), projectId: project }, 'GET', `/tasks/${encodeURIComponent(task)}/handoffs`))
+    } catch (e) {
+      return fail(e)
+    }
+  },
+)
+
+server.registerTool(
+  'chatick_ball',
+  {
+    title: 'What is on me / what am I waiting for',
+    description:
+      'view="mine": every task whose ball is with this person across their projects — "table" (urgent, at most 3) ' +
+      'and "items": questions waiting for an answer first, then reviews, then work; overdue and longest-held ' +
+      'first. Each item has "last" — the latest hand-off with its note, i.e. why it is here. This is THE answer to ' +
+      '"what is on me" and "what should I do next". ' +
+      'view="from-me": tasks this person owns while someone else holds them — "what am I waiting for, and from ' +
+      'whom", longest-held first. project narrows to one project.',
+    inputSchema: {
+      view: z.enum(['mine', 'from-me']),
+      project: z.string().optional(),
+      move: z.enum(['do', 'review', 'answer']).optional(),
+      sort: z.enum(['held', 'due', 'priority', 'created']).optional(),
+      group: z.enum(['move', 'project', 'holder', 'owner']).optional(),
+    },
+  },
+  async ({ view, project, ...q }) => {
+    try {
+      const scope = await need()
+      return json(
+        await call({ ...scope, projectId: project ?? scope.projectId }, 'GET', view === 'mine' ? '/ball/mine' : '/ball/from-me', undefined, q),
+      )
+    } catch (e) {
+      return fail(e)
+    }
+  },
+)
+
+server.registerTool(
+  'chatick_table',
+  {
+    title: 'Put on the table',
+    description:
+      'Put a task on the holder\'s table — the urgent few shown apart on the main screen — or take it off. At most ' +
+      '3: a fourth is refused with "table_full"; ask the person which one to take off, do not choose for them.',
+    inputSchema: { project: z.string(), task: z.string(), on: z.boolean() },
+  },
+  async ({ project, task, on }) => {
+    try {
+      return json(await call({ ...(await need()), projectId: project }, 'POST', '/ball/table', { task, on }))
+    } catch (e) {
+      return fail(e)
+    }
+  },
+)
+
+server.registerTool(
+  'chatick_quick_task',
+  {
+    title: 'Create a task from one line',
+    description:
+      'One line, the way people say it: "fix the header @Elisha #Atlas". No # — the company\'s main project (or the ' +
+      'only one); no @ — yourself; @"Two Words" for names with spaces. Call with preview=true first and tell the ' +
+      'person whom and where it goes; create only when that is right. Ambiguous names come back with ' +
+      '"candidates" — ask, never pick the first. For a description, estimate or due date use chatick_task_create.',
+    inputSchema: {
+      text: z.string().min(1),
+      preview: z.boolean().optional(),
+      project: z.string().optional().describe('Only to limit the search to one project'),
+    },
+  },
+  async ({ text, preview, project }) => {
+    try {
+      const scope = await need()
+      return json(await call({ ...scope, projectId: project ?? scope.projectId }, 'POST', '/ball/quick', { text, preview }))
     } catch (e) {
       return fail(e)
     }

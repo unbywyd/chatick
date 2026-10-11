@@ -102,6 +102,51 @@ function endpointCatalog(q: string): string {
   POST   /x/tasks/<id>/restore${q}
   GET    /x/trash${q}${amp}type=task|file
 
+  THE BALL — who the task is with, and what they owe it.
+  A task is always with exactly one person: the assignee holds the ball.
+  "ball.move" says what is expected of them: do (do the work), review (check
+  someone's work), answer (answer a question). "ball.ownerId" is who answers
+  for the result and accepts the work. Prefer these moves to raw status
+  changes: each one leaves a line in the task's hand-off log with a note, and
+  that note is how people learn WHY a task landed on them.
+  POST   /x/tasks/<id>/handoff${q}  {"action","to?","note?"}
+         review         done, please check — goes to the owner (or "to")
+         accept         the owner accepts: the task is closed
+         return         not right yet — back to whoever sent it, round +1
+         ask            a question to "to"; the ball comes back on "answer"
+         answer         answer the open question; the ball returns to the asker
+         pass           hand to "to" with the same move ("to": null = backlog)
+         take           the owner takes the ball back
+         wait_client / client_replied   pause while the client is silent
+         cancel         drop the task — the person's call, never yours
+         reopen         a closed task comes back
+         "note" is REQUIRED for review, return, ask, answer and cancel: what to
+         check, what is wrong, the question, the answer, why. Write it in the
+         project language. "to" is "me", a name or a user id.
+         A refusal carries "hint" — the next step. 409 "conflict" means
+         someone moved the ball a moment ago: read the task and decide again.
+  GET    /x/tasks/<id>/handoffs${q} the hand-off log: who passed it to whom,
+         with which note, in which round. Read it before answering "why is
+         this on me" or "how many times was this returned".
+  GET    /x/ball/mine${q}${amp}sort=held|due|priority|created&group=move|project
+         Everything whose ball is with this person, across their projects:
+         "table" (urgent, at most 3) and "items" — questions waiting for an
+         answer first, then reviews, then work; overdue and longest-held first;
+         "waiting for the client" last. Each item carries "last": the latest
+         hand-off with its note — why it is here. Filters: move=do|review|answer.
+         This is THE answer to "what is on me" and "what should I do next".
+  GET    /x/ball/from-me${q}${amp}group=holder
+         Tasks this person owns while someone else holds the ball — "what am I
+         waiting for, and from whom". Longest-held first: that is whom to ask.
+  POST   /x/ball/table${q}          {"task","on":true|false}
+         Put a task on the holder's table (urgent) or take it off. At most 3:
+         a 4th is refused with "table_full" — ask which one to take off.
+  POST   /x/ball/quick${q}          {"text","preview?"}
+         One line: "what to do @who #project". No # — the company's main
+         project (or the only one); no @ — yourself. preview=true only parses:
+         show the person whom and where before creating. Ambiguous names come
+         back with "candidates" — ask, never pick the first.
+
   "dueDate" — when the task is due: "2026-09-14", or a full timestamp if the
   hour matters. null clears it. A bare date is read as midday, so it does not
   slide to the previous day in western time zones.

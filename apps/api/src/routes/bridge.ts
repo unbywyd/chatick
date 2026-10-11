@@ -33,6 +33,9 @@ import {
   timeEntries,
   users,
   workLog,
+  taskHandoffs,
+  HANDOFF_ACTIONS,
+  type HandoffAction,
 } from '../db/schema.js'
 import {
   canCreateProjects,
@@ -81,7 +84,8 @@ import { REPORT_KINDS, submitAssistantReport, type ReportKind } from '../lib/ass
 import { randomBytes } from 'node:crypto'
 import { notifyReleaseStage } from './releases.js'
 import { env } from '../env.js'
-import { insertTask, updateTask } from '../lib/ball.js'
+import { handoff, insertTask, updateTask, type BallError } from '../lib/ball.js'
+import { fromMeList, listFilters, mineList, myProjects, quickTask, tableToggle } from './ball.js'
 
 // Мост для внешнего ИИ (SPEC §8.27). Всё выполняется ОТ ИМЕНИ пользователя,
 // одобрившего туннель, и проверяется теми же hasPermission, что и живой UI.
@@ -1839,6 +1843,20 @@ const taskView = (
   createdById: t.createdById,
   createdAt: t.createdAt,
   updatedAt: t.updatedAt,
+  /**
+   * Мяч (v2): чего ждут от держателя (assignee). move: do — сделать,
+   * review — проверить, answer — ответить на вопрос. ownerId — кто отвечает
+   * за результат и принимает работу; round — сколько раз возвращали.
+   */
+  ball: {
+    move: t.move,
+    ownerId: t.ownerId ?? t.createdById,
+    round: t.round,
+    heldSince: t.heldSince,
+    askFromId: t.askFromId,
+    waitingClientSince: t.waitingClientSince,
+    onTable: t.onTable,
+  },
 })
 
 /** Счётчики зависимостей одним запросом на весь список. */
@@ -2842,6 +2860,211 @@ bridgeRoute.patch('/tasks/:id', async (c) => {
     ...(linkedNow.length ? { links: linkedNow } : {}),
     ...(patchNotices.length ? { warning: patchNotices.join('\n') } : {}),
   })
+})
+
+// --- Мяч (v2): ходы, журнал, «На мне», «От меня», стол, быстрое создание ------
+
+/**
+ * Что сказать ассистенту на отказ хода. Не код ошибки, а следующий шаг:
+ * без него модель повторяет тот же вызов.
+ */
+const HANDOFF_HINTS: Record<BallError, string> = {
+  note_required:
+    'This move needs a note: for review — what to check; for return — what is wrong; for ask — the question; for answer — the answer; for cancel — why. Write it in the project language.',
+  target_required: 'Say who gets the ball: "to" is "me", a name or a user id from GET /x/members.',
+  closed: 'The task is closed. Use action "reopen" first if the work really continues.',
+  not_closed: 'The task is open — nothing to reopen.',
+  wrong_move:
+    'Not this move now: "review" is sent while doing the work (move=do); "return" is used on a task waiting for review (move=review). Check ball.move in GET /x/tasks/<id>.',
+  not_asking: 'Nobody asked a question on this task — "answer" is only for a task with move=answer.',
+  already_asking: 'A question is already open on this task. Wait for the answer (or answer it) before asking another.',
+  not_waiting: 'The task is not waiting for the client.',
+  already_waiting: 'The task is already waiting for the client.',
+  self: 'The ball is already with that person.',
+  no_owner: 'The task has no owner to review it. Pass "to" — who should check the work.',
+  not_member: 'That person is not in this project — the ball can only go to someone who can see the task.',
+  forbidden:
+    'Your role in this task does not allow that move. The holder sends to review, asks and passes; the owner accepts, returns, takes and cancels.',
+  conflict: 'Someone moved the ball a moment ago. Read the task again and decide on the fresh state.',
+}
+const HANDOFF_STATUS: Record<BallError, 400 | 403 | 409> = {
+  note_required: 400,
+  target_required: 400,
+  closed: 409,
+  not_closed: 409,
+  wrong_move: 409,
+  not_asking: 409,
+  already_asking: 409,
+  not_waiting: 409,
+  already_waiting: 409,
+  self: 400,
+  no_owner: 400,
+  not_member: 400,
+  forbidden: 403,
+  conflict: 409,
+}
+
+bridgeRoute.post('/tasks/:id/handoff', async (c) => {
+  const id = auth(c as never)
+  const scope = await resolveProject(c as never)
+  if ('error' in scope) return c.json({ error: scope.error }, scope.status)
+  const existing = await taskByKey(scope.projectId, c.req.param('id'))
+  if (!existing) return c.json({ error: 'Not found' }, 404)
+
+  const parsed_b = await readJson(c as never)
+  if ('error' in parsed_b) return c.json(parsed_b, 400)
+  const b = parsed_b.body as Record<string, unknown>
+  const bad = unknownFields(b, ['action', 'to', 'note', 'project'])
+  if (bad) return c.json({ error: bad }, 400)
+
+  const action = String(b.action ?? '') as HandoffAction
+  if (!(HANDOFF_ACTIONS as readonly string[]).includes(action) || action === 'create') {
+    return c.json(
+      { error: `Unknown action "${String(b.action)}". Use one of: ${HANDOFF_ACTIONS.filter((a) => a !== 'create').join(', ')}` },
+      400,
+    )
+  }
+  let to: string | null | undefined
+  if (b.to !== undefined) {
+    to = await resolveAssignee(id, scope.projectId, b.to)
+    if (to === undefined) return c.json({ error: `Unknown person: ${String(b.to)}`, hint: HANDOFF_HINTS.not_member }, 400)
+  }
+
+  const denied =
+    (await require(c as never, 'tasks.changeStatus', scope.projectId)) &&
+    (await require(c as never, 'tasks.edit', scope.projectId))
+  if (denied) return c.json(denied, 403)
+
+  const r = await handoff(existing, action, {
+    actorId: id.userId,
+    to,
+    note: typeof b.note === 'string' ? richText(b.note) : undefined,
+    via: 'mcp',
+    isManager: await ownsOrManages(scope.projectId, id.userId, []),
+  })
+  if (!r.ok) return c.json({ error: r.error, hint: HANDOFF_HINTS[r.error] }, HANDOFF_STATUS[r.error])
+
+  const row = r.task
+  tasksChanged(scope.projectId, [row.assigneeId, existing.assigneeId, row.ownerId ?? row.createdById])
+  void logActivity({
+    projectId: scope.projectId,
+    actorId: id.userId,
+    action: row.status !== existing.status ? 'status' : row.assigneeId !== existing.assigneeId ? 'assign' : 'update',
+    entityType: 'task',
+    entityId: row.id,
+    entityLabel: `${row.number} ${row.title}`,
+    meta: {
+      handoff: action,
+      before: { status: existing.status, assigneeId: existing.assigneeId, move: existing.move },
+      after: { status: row.status, assigneeId: row.assigneeId, move: row.move },
+    },
+  })
+  const who = row.assigneeId ? await db.query.users.findFirst({ where: eq(users.id, row.assigneeId) }) : null
+  return c.json({
+    ...taskView(row, who, undefined, undefined, await companyOf(scope.projectId), await shortUrlFor('task', row.id, scope.projectId, id.userId)),
+    handoff: r.handoff ? { action: r.handoff.action, to: who ? { id: who.id, name: who.name } : null, note: r.handoff.note, round: r.handoff.round } : null,
+  })
+})
+
+bridgeRoute.get('/tasks/:id/handoffs', async (c) => {
+  const scope = await resolveProject(c as never)
+  if ('error' in scope) return c.json({ error: scope.error }, scope.status)
+  const denied = await require(c as never, 'tasks.read', scope.projectId)
+  if (denied) return c.json(denied, 403)
+  const existing = await taskByKey(scope.projectId, c.req.param('id'))
+  if (!existing) return c.json({ error: 'Not found' }, 404)
+
+  const rows = await db
+    .select()
+    .from(taskHandoffs)
+    .where(eq(taskHandoffs.taskId, existing.id))
+    .orderBy(asc(taskHandoffs.createdAt))
+  const ids = [...new Set(rows.flatMap((r) => [r.actorId, r.fromId, r.toId]).filter((x): x is string => Boolean(x)))]
+  const people = ids.length ? await db.query.users.findMany({ where: inArray(users.id, ids) }) : []
+  const name = new Map(people.map((u) => [u.id, u.name]))
+  const who = (uid: string | null) => (uid ? { id: uid, name: name.get(uid) ?? null } : null)
+  return c.json({
+    task: existing.number,
+    items: rows.map((r) => ({
+      action: r.action,
+      by: who(r.actorId),
+      from: who(r.fromId),
+      to: who(r.toId),
+      moveAfter: r.moveAfter,
+      note: r.note,
+      round: r.round,
+      via: r.via,
+      at: r.createdAt,
+    })),
+  })
+})
+
+/**
+ * Проекты, которые видит подключение: проектное — свой, компанейское — свои в
+ * компании, мастер — все (или одной компании по ?company=).
+ */
+async function ballProjects(id: BridgeIdentity, company?: string) {
+  if (id.projectId) return (await myProjects(null, id.userId)).filter((p) => p.id === id.projectId)
+  if (id.scopeAll) return myProjects(company ?? null, id.userId)
+  return myProjects(id.companyId ?? '-', id.userId)
+}
+
+function ballQuery(c: { req: { query: (k: string) => string | undefined } }) {
+  return listFilters.safeParse({
+    project: c.req.query('project') || undefined,
+    move: c.req.query('move') || undefined,
+    sort: c.req.query('sort') || undefined,
+    group: c.req.query('group') || undefined,
+  })
+}
+
+bridgeRoute.get('/ball/mine', async (c) => {
+  const id = auth(c as never)
+  const q = ballQuery(c as never)
+  if (!q.success) return c.json({ error: q.error.issues.map((i) => `${i.path.join('.')}: ${i.message}`).join('; ') }, 400)
+  return c.json(await mineList(id.userId, await ballProjects(id, c.req.query('company')), q.data))
+})
+
+bridgeRoute.get('/ball/from-me', async (c) => {
+  const id = auth(c as never)
+  const q = ballQuery(c as never)
+  if (!q.success) return c.json({ error: q.error.issues.map((i) => `${i.path.join('.')}: ${i.message}`).join('; ') }, 400)
+  return c.json(await fromMeList(id.userId, await ballProjects(id, c.req.query('company')), q.data))
+})
+
+bridgeRoute.post('/ball/table', async (c) => {
+  const id = auth(c as never)
+  const scope = await resolveProject(c as never)
+  if ('error' in scope) return c.json({ error: scope.error }, scope.status)
+  const parsed_b = await readJson(c as never)
+  if ('error' in parsed_b) return c.json(parsed_b, 400)
+  const b = parsed_b.body as Record<string, unknown>
+  const bad = unknownFields(b, ['task', 'on', 'project'])
+  if (bad) return c.json({ error: bad }, 400)
+  if (typeof b.on !== 'boolean') return c.json({ error: 'on must be true (put on the table) or false (take off)' }, 400)
+  const existing = await taskByKey(scope.projectId, String(b.task ?? ''))
+  if (!existing) return c.json({ error: 'Not found' }, 404)
+  const r = await tableToggle(existing, b.on, id.userId)
+  if (r.status === 409 && r.body.error === 'table_full') {
+    return c.json({ ...r.body, hint: 'The table holds 3 tasks. Ask the person which one to take off first.' }, 409)
+  }
+  return c.json(r.body, r.status)
+})
+
+bridgeRoute.post('/ball/quick', async (c) => {
+  const id = auth(c as never)
+  const parsed_b = await readJson(c as never)
+  if ('error' in parsed_b) return c.json(parsed_b, 400)
+  const b = parsed_b.body as Record<string, unknown>
+  const bad = unknownFields(b, ['text', 'preview', 'company', 'project'])
+  if (bad) return c.json({ error: bad }, 400)
+  const text = typeof b.text === 'string' ? b.text.trim() : ''
+  if (!text) return c.json({ error: 'text is required: "what to do @who #project"' }, 400)
+
+  const list = await ballProjects(id, typeof b.company === 'string' ? b.company : c.req.query('company'))
+  const companyId = id.companyId ?? (list.length && list.every((p) => p.companyId === list[0]!.companyId) ? list[0]!.companyId : null)
+  const r = await quickTask({ userId: id.userId, companyId, projects: list, text, preview: b.preview === true, via: 'mcp' })
+  return c.json(r.body, r.status)
 })
 
 bridgeRoute.delete('/tasks/:id', async (c) => {
