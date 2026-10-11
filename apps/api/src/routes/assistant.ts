@@ -1,9 +1,10 @@
 import { Hono } from 'hono'
 import { zValidator } from '@hono/zod-validator'
 import { z } from 'zod'
-import { and, desc, eq, lt } from 'drizzle-orm'
+import { and, desc, eq, inArray, isNull, lt } from 'drizzle-orm'
 import { db } from '../db/client.js'
-import { assistantMessages, companyMembers } from '../db/schema.js'
+import { assistantMessages, companyMembers, files } from '../db/schema.js'
+import { myProjects } from './ball.js'
 import { requireSession, type SessionEnv } from '../auth.js'
 import { assistantReply, type ScreenContext } from '../lib/assistant.js'
 import { sendToUserAnywhere } from '../ws.js'
@@ -67,7 +68,13 @@ assistantRoute.post(
     z.object({
       text: z.string().trim().min(1).max(8000),
       context: z
-        .object({ projectId: z.string().optional(), taskId: z.string().optional(), screen: z.string().max(100).optional() })
+        .object({
+          projectId: z.string().optional(),
+          taskId: z.string().optional(),
+          screen: z.string().max(100).optional(),
+          /** Свои файлы, загруженные временно в проект (скриншот к вопросу). */
+          fileIds: z.array(z.string()).max(6).optional(),
+        })
         .optional(),
     }),
   ),
@@ -80,6 +87,17 @@ assistantRoute.post(
 
     const b = c.req.valid('json')
     const screen: ScreenContext = b.context ?? {}
+    // Вложения — только свои и только из проектов этой компании, где человек
+    // состоит: иначе через ассистента можно было бы показать модели чужой файл.
+    if (screen.fileIds?.length) {
+      const allowed = new Set((await myProjects(companyId, sub)).map((p) => p.id))
+      const rows = await db
+        .select({ id: files.id, projectId: files.projectId })
+        .from(files)
+        .where(and(inArray(files.id, screen.fileIds), eq(files.uploadedById, sub), isNull(files.deletedAt)))
+      screen.fileIds = rows.filter((r) => r.projectId && allowed.has(r.projectId)).map((r) => r.id)
+      if (!screen.fileIds.length) delete screen.fileIds
+    }
     const [mine] = await db
       .insert(assistantMessages)
       .values({ companyId, userId: sub, role: 'user', text: b.text, context: JSON.stringify(screen) })

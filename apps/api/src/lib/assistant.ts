@@ -1,8 +1,9 @@
-import { and, desc, eq, isNull, or } from 'drizzle-orm'
+import { and, desc, eq, inArray, isNull, or } from 'drizzle-orm'
 import { db } from '../db/client.js'
 import {
   assistantMessages,
   companies,
+  files,
   HANDOFF_ACTIONS,
   notifications,
   projectMembers,
@@ -16,6 +17,7 @@ import { memoryTools } from './memory.js'
 import { handoff, setOnTable, TABLE_LIMIT } from './ball.js'
 import { notifyHandoff } from './handoff-notify.js'
 import { matchPerson, matchProject } from './quick-task.js'
+import { imagesForFiles } from './vision.js'
 import { fromMeList, mineList, myProjects, quickTask, type ProjectList } from '../routes/ball.js'
 import { ownsOrManages } from '../routes/projects.js'
 import { signSessionToken } from '../auth.js'
@@ -36,8 +38,14 @@ import { tasksChanged } from '../ws.js'
  * ассистенту не даём (решение пользователя).
  */
 
-/** Что открыто на экране, когда человек спросил. */
-export type ScreenContext = { projectId?: string; taskId?: string; screen?: string }
+/**
+ * Что открыто на экране, когда человек спросил, и что он приложил.
+ *
+ * fileIds — его файлы, загруженные «временно» в проект (живут сутки, если их
+ * не прикрепить к задаче): скриншот, который он хочет показать или превратить
+ * в задачу. Маршрут проверяет, что они его и из проекта этой компании.
+ */
+export type ScreenContext = { projectId?: string; taskId?: string; screen?: string; fileIds?: string[] }
 
 /**
  * Инструменты ИИ проекта, которых у ассистента компании нет.
@@ -462,11 +470,38 @@ export async function assistantReply(input: {
   const c = companyTools(ctx)
   const screen = await describeScreen(ctx)
 
+  // Вложения: что приложено и где лежит — чтобы модель могла прикрепить их к
+  // задаче нужного проекта; картинки — если зрение включено и просят посмотреть.
+  const attached = input.screen.fileIds?.length
+    ? await db
+        .select({ id: files.id, name: files.name, mime: files.mime, size: files.size, key: files.key, projectId: files.projectId })
+        .from(files)
+        .where(and(inArray(files.id, input.screen.fileIds), eq(files.uploadedById, input.userId), isNull(files.deletedAt)))
+    : []
+  const images = await imagesForFiles(
+    attached.filter((f): f is typeof f & { projectId: string } => Boolean(f.projectId)),
+    Boolean(company.llmVision),
+    input.text,
+  )
+  const projectName = (id: string | null) => projectsList.find((x) => x.id === id)?.name ?? id
+  const attachedNote = attached.length
+    ? [
+        `ATTACHED BY THE PERSON: ${attached.map((f) => `«${f.name}» (fileId ${f.id}, project ${projectName(f.projectId)})`).join('; ')}.`,
+        'To turn it into a task: create the task in that project (create_task or quick_task), then attach_file_to_task with that project, fileId and the task number. Files not attached to a task disappear within a day.',
+        images.length
+          ? 'You can see the image(s). Describe only what is actually there.'
+          : company.llmVision
+            ? 'You were not given the image itself: the person did not ask you to look. If they want you to read it, they should say so ("look at it").'
+            : 'Image recognition is turned off for this company, so you cannot see the picture — say so plainly if asked about its contents.',
+      ].join('\n')
+    : ''
+
   const reply = await completeWithTools(cfg, {
     system: [
       `You are the assistant of the company "${company.name}" in Chatick, talking privately with ${user?.name ?? 'a member'}.`,
       `You work across all projects this person is in: ${projectsList.map((x) => `${x.name} (${x.id})`).join('; ') || 'none yet'}.`,
       screen,
+      attachedNote,
       'Project tools take "project" (id or name); omit it to use the project open on the screen. When nothing is open and the person has several projects, ask which one — or answer across all of them with company tools.',
       'ANSWER IN THE LANGUAGE THE PERSON WROTE IN. Do not switch to English because these instructions are in English.',
       'Everything you WRITE INTO a project — task titles and descriptions, notes, comments, hand-off notes — goes in that project\'s language.',
@@ -478,6 +513,7 @@ export async function assistantReply(input: {
       'FORMATTING: markdown renders. Lead with the answer; tables only to compare several items across the same fields; no "Sure!", no restating the question. Be concise.',
     ].join('\n'),
     user: input.text,
+    images,
     history,
     tools: [...c.tools, ...p.tools],
     handlers: { ...c.handlers, ...p.handlers },

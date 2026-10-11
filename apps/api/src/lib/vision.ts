@@ -187,3 +187,30 @@ export async function countAttachedImages(messageId: string, projectId: string):
 }
 
 export { MAX_IMAGES, MAX_BYTES, SUPPORTED }
+
+/**
+ * Картинки по списку файлов — для ассистента компании, где вложения приходят
+ * явно (fileIds в сообщении), а не из истории ИИ-чата проекта. Правила те же:
+ * зрение включено у компании, человек просит посмотреть (или прислал одну
+ * картинку без слов), не больше MAX_IMAGES, не тяжелее MAX_BYTES.
+ */
+export async function imagesForFiles(
+  rows: { projectId: string; mime: string; size: string; key: string; name: string }[],
+  companyVision: boolean,
+  text: string,
+): Promise<VisionImage[]> {
+  if (!companyVision || !asksToLook(text)) return []
+  const out: VisionImage[] = []
+  for (const f of rows.filter((x) => SUPPORTED.has(x.mime) && Number(x.size) <= MAX_BYTES).slice(0, MAX_IMAGES)) {
+    try {
+      const storage = await resolveStorage(f.projectId)
+      const { body } = await getObjectStream(storage, f.key)
+      const chunks: Buffer[] = []
+      for await (const chunk of body) chunks.push(Buffer.from(chunk as Buffer))
+      out.push({ mediaType: f.mime, base64: Buffer.concat(chunks).toString('base64'), name: f.name })
+    } catch {
+      // одну не достали — разбираем остальные
+    }
+  }
+  return out
+}
