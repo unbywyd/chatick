@@ -67,7 +67,7 @@ describe('инструкция просит markdown, а не HTML', () => {
   it('в описаниях инструментов не осталось «content is HTML»', () => {
     // Описание — это и есть команда модели. Пока оно требует HTML, модель
     // пишет теги руками, а рукописные теги она однажды экранирует.
-    const mcp = read('../../../mcp/src/index.ts')
+    const mcp = read('../../../mcp/src/tools.ts')
     expect(mcp, 'инструмент MCP снова просит HTML').not.toMatch(/is HTML|HTML, like|not markdown/)
 
     const memory = read('./memory.ts')

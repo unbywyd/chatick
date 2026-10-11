@@ -31,7 +31,7 @@ const bridgeRead = (() => {
   const from = bridge.indexOf("bridgeRoute.post('/inbox/read'")
   return bridge.slice(from, bridge.indexOf('\n})', from))
 })()
-const mcp = readFileSync(join(here, '../../../mcp/src/index.ts'), 'utf8')
+const mcp = readFileSync(join(here, '../../../mcp/src/tools.ts'), 'utf8')
 
 describe('ручка умеет гасить по сущности', () => {
   it('принимает entityType и entityId', () => {

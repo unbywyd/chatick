@@ -1,7 +1,7 @@
 import { createHash, randomBytes } from 'node:crypto'
 import { and, eq, isNull, lt, sql } from 'drizzle-orm'
 import { db } from '../db/client.js'
-import { bridgeAuthCodes, bridgeSessions, companies, companyMembers, projects, users } from '../db/schema.js'
+import { bridgeAuthCodes, bridgeSessions, companies, companyMembers, oauthClients, oauthGrants, projects, users } from '../db/schema.js'
 import { memberDomains, type DomainPermissions } from '../routes/projects.js'
 
 // Авторизация моста для внешнего ИИ (SPEC §8.27).
@@ -285,6 +285,27 @@ export async function authenticateBridge(token: string | undefined | null): Prom
 
 /** Закрыть туннель (человеком со страницы подключения или самим ИИ). */
 export async function closeSession(sessionId: string, userId: string) {
+  // Строка подключения коннектора без живой сессии — сам грант.
+  if (sessionId.startsWith('grant:')) {
+    const g = await db.query.oauthGrants.findFirst({
+      where: and(eq(oauthGrants.id, sessionId.slice('grant:'.length)), eq(oauthGrants.userId, userId)),
+    })
+    if (g) {
+      const { revokeGrant } = await import('./oauth.js')
+      await revokeGrant(g.id)
+    }
+    return
+  }
+  const row = await db.query.bridgeSessions.findFirst({
+    where: and(eq(bridgeSessions.id, sessionId), eq(bridgeSessions.userId, userId)),
+  })
+  // Сессия коннектора (MCP по адресу): закрыть — значит отозвать весь доступ,
+  // иначе он тут же взял бы новую сессию по refresh-токену.
+  if (row?.oauthGrantId) {
+    const { revokeGrant } = await import('./oauth.js')
+    await revokeGrant(row.oauthGrantId)
+    return
+  }
   await db
     .update(bridgeSessions)
     .set({ revokedAt: new Date() })
@@ -301,18 +322,52 @@ export async function listSessions(userId: string) {
     .leftJoin(companies, eq(companies.id, bridgeSessions.companyId))
     .where(and(eq(bridgeSessions.userId, userId), isNull(bridgeSessions.revokedAt)))
   const now = Date.now()
-  return rows
+  const live = rows
     .filter((r) => r.s.expiresAt.getTime() > now && now - r.s.lastUsedAt.getTime() <= IDLE_TTL_MS)
+    .sort((a, b) => b.s.lastUsedAt.getTime() - a.s.lastUsedAt.getTime())
+  const scopeOf = (x: { scopeAll: boolean; companyId: string | null }) =>
+    x.scopeAll ? ('all' as const) : x.companyId ? ('company' as const) : ('project' as const)
+
+  // Коннектор (MCP по адресу) берёт новую сессию на каждом обновлении токена —
+  // показываем одну строку на подключение, а не по строке на час работы.
+  const seenGrant = new Set<string>()
+  const items = live
+    .filter((r) => !r.s.oauthGrantId || (!seenGrant.has(r.s.oauthGrantId) && seenGrant.add(r.s.oauthGrantId)))
     .map((r) => ({
       id: r.s.id,
       clientName: r.s.clientName,
-      scope: r.s.scopeAll ? ('all' as const) : r.s.companyId ? ('company' as const) : ('project' as const),
+      scope: scopeOf(r.s),
       project: r.project ? { id: r.project.id, name: r.project.name } : null,
       company: r.company ? { id: r.company.id, name: r.company.name } : null,
       lastUsedAt: r.s.lastUsedAt,
       expiresAt: r.s.expiresAt,
       createdAt: r.s.createdAt,
     }))
+
+  // Подключённый коннектор без живой сессии (давно не обращался) всё равно
+  // держит доступ до 90 дней — его тоже надо видеть и уметь закрыть.
+  const grants = await db
+    .select({ g: oauthGrants, c: oauthClients, project: projects, company: companies })
+    .from(oauthGrants)
+    .innerJoin(oauthClients, eq(oauthClients.id, oauthGrants.clientId))
+    .leftJoin(projects, eq(projects.id, oauthGrants.projectId))
+    .leftJoin(companies, eq(companies.id, oauthGrants.companyId))
+    .where(and(eq(oauthGrants.userId, userId), isNull(oauthGrants.revokedAt)))
+  for (const r of grants) {
+    if (seenGrant.has(r.g.id)) continue
+    if (r.g.grantedAt.getTime() + 90 * 24 * 3600_000 < now) continue
+    items.push({
+      id: `grant:${r.g.id}`,
+      clientName: r.c.name || 'Claude (connector)',
+      scope: scopeOf(r.g),
+      project: r.project ? { id: r.project.id, name: r.project.name } : null,
+      company: r.company ? { id: r.company.id, name: r.company.name } : null,
+      lastUsedAt: r.g.rotatedAt ?? r.g.grantedAt,
+      expiresAt: new Date(r.g.grantedAt.getTime() + 90 * 24 * 3600_000),
+      createdAt: r.g.grantedAt,
+    })
+  }
+  return items
 }
 
 /** Уборка протухших кодов и сессий — вызывается по расписанию. */

@@ -108,7 +108,7 @@ describe('в хранилище лежит шифротекст', () => {
 
 describe('мост и ассистент', () => {
   const bridge = readFileSync(join(import.meta.dirname, 'bridge.ts'), 'utf8')
-  const mcp = readFileSync(join(import.meta.dirname, '..', '..', '..', 'mcp', 'src', 'index.ts'), 'utf8')
+  const mcp = readFileSync(join(import.meta.dirname, '..', '..', '..', 'mcp', 'src', 'tools.ts'), 'utf8')
 
   it('мост отдаёт список без содержимого', () => {
     const at = bridge.indexOf("bridgeRoute.get('/resources/:id/files'")

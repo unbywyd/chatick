@@ -41,7 +41,7 @@ for (const m of bridge.matchAll(/bridgeRoute\.(get|post|patch|delete|put)\('([^'
  * `/tasks/${task}/comments` и `/tasks/:id/comments` — один и тот же путь.
  */
 const called = new Map()
-for (const file of ['index.ts']) {
+for (const file of ['index.ts', 'tools.ts']) {
   const src = readFileSync(join(mcpDir, file), 'utf8')
   // Аргумент scope сам содержит запятые и скобки — `{ ...(await need()),
   // projectId: project }`. Поэтому пропускаем всё до метода лениво, а не

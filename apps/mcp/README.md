@@ -3,7 +3,27 @@
 MCP server for Chatick: tasks, comments, checklists, time, resources — as tools
 instead of hand-written `curl`.
 
-## Install
+## Connect by address — nothing to install
+
+The same tools are served by the API itself at `https://api.chatick.com/mcp`
+(Streamable HTTP, sign-in through OAuth in the browser). This is the way for
+almost everyone:
+
+- **claude.ai / Claude Desktop:** Settings → Connectors → Add custom connector →
+  `https://api.chatick.com/mcp`.
+- **Claude Code:** `claude mcp add --scope user --transport http chatick https://api.chatick.com/mcp`,
+  then in a new session `/mcp` → Authenticate.
+
+Claude opens a browser, you sign in to Chatick and choose what to share
+(a project, a whole company, or everything) — the same choice as below. The
+connector shows up on the Connect page next to other connections, and Close
+there revokes it.
+
+Six tools exist only in the local program, because they need your machine:
+connecting with a code, opening a link in your browser, downloading a file to
+your disk and uploading one from it (`LOCAL_ONLY_TOOLS` in `src/tools.ts`).
+
+## Install the local program
 
 ```bash
 claude mcp add --scope user --transport stdio chatick -- node /path/to/apps/mcp/dist/index.js

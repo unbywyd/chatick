@@ -14,7 +14,7 @@ const lib = readFileSync(join(here, 'assistant-report.ts'), 'utf8')
 const docs = readFileSync(join(here, 'bridge-docs.ts'), 'utf8')
 const route = readFileSync(join(here, '../routes/bridge.ts'), 'utf8')
 const about = readFileSync(join(here, '../routes/about.ts'), 'utf8')
-const mcp = readFileSync(join(here, '../../../mcp/src/index.ts'), 'utf8')
+const mcp = readFileSync(join(here, '../../../mcp/src/tools.ts'), 'utf8')
 const memory = readFileSync(join(here, 'memory.ts'), 'utf8')
 
 describe('репорт нельзя прислать пустым', () => {

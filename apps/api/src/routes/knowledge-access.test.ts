@@ -149,7 +149,7 @@ describe('поиск по умолчанию смотрит на всю комп
 
   it('ассистентам сказано про новое умолчание', () => {
     const memory = read('../lib/memory.ts')
-    const mcp = readFileSync(join(import.meta.dirname, '../../../mcp/src/index.ts'), 'utf8')
+    const mcp = readFileSync(join(import.meta.dirname, '../../../mcp/src/tools.ts'), 'utf8')
     for (const [src, who] of [[memory, 'ассистент'], [mcp, 'MCP']] as const) {
       expect(src, `${who} не объясняет умолчание`).toMatch(/WHOLE COMPANY by default/)
     }

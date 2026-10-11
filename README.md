@@ -24,7 +24,9 @@ Everything a small team actually uses, in one place:
 
 Anything an AI assistant can reach over HTTP, it can do here too: create tasks,
 change statuses, reply in chat, work through your notifications — without you
-leaving your editor.
+leaving your editor. Connect Claude by address — `https://api.chatick.com/mcp`
+in claude.ai, Claude Desktop or Claude Code — and sign in in the browser;
+nothing to install.
 
 ## Your data stays yours
 

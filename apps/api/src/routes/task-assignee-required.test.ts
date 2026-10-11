@@ -21,7 +21,7 @@ const read = (p: string) => readFileSync(join(import.meta.dirname, p), 'utf8')
 const memory = readFileSync(join(import.meta.dirname, '../lib/memory.ts'), 'utf8')
 const bridge = read('bridge.ts')
 const docs = readFileSync(join(import.meta.dirname, '../lib/bridge-docs.ts'), 'utf8')
-const mcp = readFileSync(join(import.meta.dirname, '../../../mcp/src/index.ts'), 'utf8')
+const mcp = readFileSync(join(import.meta.dirname, '../../../mcp/src/tools.ts'), 'utf8')
 
 describe('ассистент в чате', () => {
   it('одиночная задача без исполнителя отклоняется', () => {

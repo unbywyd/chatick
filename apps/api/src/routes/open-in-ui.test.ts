@@ -13,7 +13,7 @@ const ws = readFileSync(join(import.meta.dirname, '../ws.ts'), 'utf8')
 const guide = readFileSync(join(import.meta.dirname, '../lib/dispatcher.ts'), 'utf8')
 const socket = readFileSync(join(import.meta.dirname, '../../../app/src/hooks/useProjectSocket.ts'), 'utf8')
 const panel = readFileSync(join(import.meta.dirname, '../../../app/src/components/chat/ChatPanel.tsx'), 'utf8')
-const mcp = readFileSync(join(import.meta.dirname, '../../../mcp/src/index.ts'), 'utf8')
+const mcp = readFileSync(join(import.meta.dirname, '../../../mcp/src/tools.ts'), 'utf8')
 
 /** Тело обработчика open_in_ui. */
 function handler(): string {

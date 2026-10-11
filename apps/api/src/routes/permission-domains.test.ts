@@ -54,7 +54,7 @@ describe('домены прав', () => {
    * просто не сможет выставить по нему уровень. Молча, без единой ошибки.
    */
   it('MCP-инструмент знает ТЕ ЖЕ домены, что и сервер', () => {
-    const mcp = readFileSync(join(import.meta.dirname, '../../../mcp/src/index.ts'), 'utf8')
+    const mcp = readFileSync(join(import.meta.dirname, '../../../mcp/src/tools.ts'), 'utf8')
     const list = mcp.match(/const PERMISSION_DOMAINS = \[([^\]]+)\] as const/)
     expect(list, 'в MCP не нашёлся список доменов').toBeTruthy()
     const inMcp = [...(list as RegExpMatchArray)[1].matchAll(/'([a-z]+)'/g)].map((m) => m[1])
@@ -62,14 +62,14 @@ describe('домены прав', () => {
   })
 
   it('MCP-инструмент строит схему из списка, а не перечисляет домены руками', () => {
-    const mcp = readFileSync(join(import.meta.dirname, '../../../mcp/src/index.ts'), 'utf8')
+    const mcp = readFileSync(join(import.meta.dirname, '../../../mcp/src/tools.ts'), 'utf8')
     expect(mcp).toMatch(/z\s*\.object\(\s*Object\.fromEntries\(PERMISSION_DOMAINS/)
   })
 
   it('MCP умеет менять не только роль', () => {
     // Ручка принимает уровни, должность и зону ответственности, а инструмент
     // долго слал одну role: ассистент ЧИТАЛ права полностью и не мог поменять.
-    const mcp = readFileSync(join(import.meta.dirname, '../../../mcp/src/index.ts'), 'utf8')
+    const mcp = readFileSync(join(import.meta.dirname, '../../../mcp/src/tools.ts'), 'utf8')
     const tool = mcp.slice(
       mcp.indexOf("'chatick_member_role'"),
       mcp.indexOf("'chatick_member_remove'"),

@@ -1060,6 +1060,10 @@
     "goToApp": "Перейти в Chatick"
   },
   "connect": {
+    "mcpTitle": "Подключить Claude по адресу — ничего ставить не нужно",
+    "mcpHint": "Добавьте этот адрес в Claude. Он откроет браузер: вы входите в Chatick и выбираете, к чему дать доступ. Работает в claude.ai, Claude Desktop и Claude Code.",
+    "mcpClaudeAi": "claude.ai и Claude Desktop: Настройки → Коннекторы → Добавить свой коннектор → вставить адрес.",
+    "mcpClaudeCode": "Claude Code: выполнить один раз, потом /mcp → Authenticate:",
     "title": "Подключение ИИ",
     "back": "Назад",
     "step1Title": "Подключите своего ИИ-ассистента",

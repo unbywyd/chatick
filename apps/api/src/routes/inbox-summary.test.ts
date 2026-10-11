@@ -18,7 +18,7 @@ import { join } from 'node:path'
 const read = (p: string) => readFileSync(join(import.meta.dirname, p), 'utf8')
 const bridge = read('bridge.ts')
 const docs = read('../lib/bridge-docs.ts')
-const mcp = readFileSync(join(import.meta.dirname, '../../../mcp/src/index.ts'), 'utf8')
+const mcp = readFileSync(join(import.meta.dirname, '../../../mcp/src/tools.ts'), 'utf8')
 
 /** Тело ручки: от объявления до следующего маршрута. */
 function endpoint(src: string, head: string): string {

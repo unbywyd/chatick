@@ -29,7 +29,7 @@ const ext = api('routes/ext.ts')
 const tasks = api('routes/tasks.ts')
 const memory = api('lib/memory.ts')
 const guide = api('lib/bridge-docs.ts')
-const mcp = readFileSync(join(import.meta.dirname, '../../../mcp/src/index.ts'), 'utf8').replace(/\r\n/g, '\n')
+const mcp = readFileSync(join(import.meta.dirname, '../../../mcp/src/tools.ts'), 'utf8').replace(/\r\n/g, '\n')
 const types = app('components/tabs/tasks/types.ts')
 const tab = app('components/tabs/TasksTab.tsx')
 

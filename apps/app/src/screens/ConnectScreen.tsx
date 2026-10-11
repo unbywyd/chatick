@@ -41,8 +41,16 @@ export function ConnectPanel({ onClose }: { onClose?: () => void }) {
   const qc = useQueryClient()
   const [params] = useSearchParams()
   const [code, setCode] = useState(params.get('code') ?? '')
+  /**
+   * Вход коннектора по OAuth (MCP по адресу): Claude прислал человека сюда с
+   * ?oauth=<id>. Тот же выбор области, что и для кода, только кода нет, а после
+   * «Разрешить» человек возвращается в Claude по адресу, который даст сервер.
+   */
+  const oauthId = params.get('oauth') ?? ''
   const [projectId, setProjectId] = useState('')
   const [copied, setCopied] = useState(false)
+  const [copiedMcp, setCopiedMcp] = useState(false)
+  const mcpUrl = `${API_URL.replace(/\/$/, '')}/mcp`
 
   useEffect(() => {
     if (getSessionToken()) return
@@ -140,32 +148,42 @@ export function ConnectPanel({ onClose }: { onClose?: () => void }) {
   // Редирект в useEffect ниже от этого не спасает: он срабатывает ПОСЛЕ
   // первого рендера, а запрос уходит уже на нём.
   const pending = useQuery({
-    queryKey: ['bridge-code', code],
-    enabled: code.trim().length >= 8 && Boolean(getSessionToken()),
+    queryKey: ['bridge-code', code, oauthId],
+    enabled: (Boolean(oauthId) || code.trim().length >= 8) && Boolean(getSessionToken()),
     retry: false,
-    queryFn: () => api<{ clientName: string }>(`/api/v1/auth/bridge/code/${encodeURIComponent(code.trim())}`),
+    queryFn: () =>
+      oauthId
+        ? api<{ client: { name: string } }>(`/api/v1/auth/oauth/${encodeURIComponent(oauthId)}`).then((r) => ({ clientName: r.client.name }))
+        : api<{ clientName: string }>(`/api/v1/auth/bridge/code/${encodeURIComponent(code.trim())}`),
   })
   // 401 — это «войдите», а не «код плохой». Различаем: одинаковый текст на
   // две разные беды посылает человека чинить не то.
   const needsLogin = pending.error instanceof ApiError && pending.error.status === 401
 
+  // Ключ цели несёт её вид: «c:» — компания целиком, «p:» — проект.
+  // Префикс надо снять, иначе сервер ищет проект с таким id и отвечает
+  // «вы не участник этого проекта» — при том, что участник.
+  const scopeBody = () =>
+    masterMode
+      ? { all: true }
+      : projectId.startsWith('c:')
+        ? { companyId: projectId.slice(2) }
+        : { projectId: projectId.replace(/^p:/, '') }
   const approve = useMutation({
-    mutationFn: () =>
-      api('/api/v1/auth/bridge/approve', {
-        method: 'POST',
-        // Ключ цели несёт её вид: «c:» — компания целиком, «p:» — проект.
-        // Префикс надо снять, иначе сервер ищет проект с таким id и отвечает
-        // «вы не участник этого проекта» — при том, что участник.
-        body: JSON.stringify({
-          code: code.trim(),
-          ...(masterMode
-            ? { all: true }
-            : projectId.startsWith('c:')
-              ? { companyId: projectId.slice(2) }
-              : { projectId: projectId.replace(/^p:/, '') }),
-        }),
-      }),
+    mutationFn: async () => {
+      if (oauthId) {
+        const r = await api<{ redirect: string }>(`/api/v1/auth/oauth/${encodeURIComponent(oauthId)}/approve`, {
+          method: 'POST',
+          body: JSON.stringify(scopeBody()),
+        })
+        // Обратно в Claude: он ждёт код на своём адресе.
+        window.location.href = r.redirect
+        return
+      }
+      await api('/api/v1/auth/bridge/approve', { method: 'POST', body: JSON.stringify({ code: code.trim(), ...scopeBody() }) })
+    },
     onSuccess: () => {
+      if (oauthId) return
       toast.success(t('connect.approved'))
       setCode('')
       setAwaiting(true)
@@ -177,8 +195,16 @@ export function ConnectPanel({ onClose }: { onClose?: () => void }) {
   })
 
   const deny = useMutation({
-    mutationFn: () => api('/api/v1/auth/bridge/deny', { method: 'POST', body: JSON.stringify({ code: code.trim() }) }),
+    mutationFn: async () => {
+      if (oauthId) {
+        const r = await api<{ redirect: string }>(`/api/v1/auth/oauth/${encodeURIComponent(oauthId)}/deny`, { method: 'POST' })
+        window.location.href = r.redirect
+        return
+      }
+      await api('/api/v1/auth/bridge/deny', { method: 'POST', body: JSON.stringify({ code: code.trim() }) })
+    },
     onSuccess: () => {
+      if (oauthId) return
       setCode('')
       toast.success(t('connect.denied'))
     },
@@ -201,6 +227,11 @@ export function ConnectPanel({ onClose }: { onClose?: () => void }) {
     setCopied(true)
     setTimeout(() => setCopied(false), 2000)
   }
+  const copyMcp = () => {
+    navigator.clipboard.writeText(mcpUrl).catch(() => {})
+    setCopiedMcp(true)
+    setTimeout(() => setCopiedMcp(false), 2000)
+  }
 
   return (
     <div className="flex min-h-0 flex-col">
@@ -222,7 +253,34 @@ export function ConnectPanel({ onClose }: { onClose?: () => void }) {
       </header>
 
       <main className="min-h-0 flex-1 space-y-5 overflow-y-auto p-5">
+        {/* Коннектор по адресу (MCP + OAuth): ничего ставить не нужно — Claude
+            подключается сам, человек только входит и выбирает доступ. Первым:
+            это способ для всех, у кого нет программы. На шаге согласия
+            (?oauth=) лишнее — человек уже посреди подключения. */}
+        {!oauthId && (
+          <section className="rounded-xl border border-brand/40 bg-card p-5">
+            <h1 className="flex items-center gap-2 text-base font-bold">
+              <Plug className="size-4" />
+              {t('connect.mcpTitle')}
+            </h1>
+            <p className="mt-1 text-sm text-muted-foreground">{t('connect.mcpHint')}</p>
+            <div className="mt-3 flex items-center gap-2">
+              <code className="min-w-0 flex-1 truncate rounded-md border bg-secondary px-3 py-2 text-xs">{mcpUrl}</code>
+              <Button variant="brand" onClick={copyMcp}>
+                {copiedMcp ? <Check className="size-4" /> : <Copy className="size-4" />}
+                {copiedMcp ? t('connect.copied') : t('connect.copy')}
+              </Button>
+            </div>
+            <p className="mt-2 text-xs text-muted-foreground">{t('connect.mcpClaudeAi')}</p>
+            <p className="mt-1 text-xs text-muted-foreground">
+              {t('connect.mcpClaudeCode')}{' '}
+              <code className="rounded bg-secondary px-1 py-0.5">claude mcp add --transport http chatick {mcpUrl}</code>
+            </p>
+          </section>
+        )}
+
         {/* Шаг 1: одна кнопка — скопировать приглашение */}
+        {!oauthId && (
         <section className="rounded-xl border bg-card p-5">
           <h1 className="flex items-center gap-2 text-base font-bold">
             <Bot className="size-4" />
@@ -238,6 +296,7 @@ export function ConnectPanel({ onClose }: { onClose?: () => void }) {
             </Button>
           </div>
         </section>
+        )}
 
         {/* Шаг 2: подтвердить код, который показал ИИ */}
         <section className="rounded-xl border bg-card p-5">
@@ -247,13 +306,15 @@ export function ConnectPanel({ onClose }: { onClose?: () => void }) {
           </h2>
           <p className="mt-1 text-sm text-muted-foreground">{t('connect.step2Hint')}</p>
 
-          <Input
-            value={code}
-            onChange={(e) => setCode(e.target.value.toUpperCase())}
-            placeholder="ABCD-2345"
-            className="mt-3 font-mono tracking-widest"
-            maxLength={9}
-          />
+          {!oauthId && (
+            <Input
+              value={code}
+              onChange={(e) => setCode(e.target.value.toUpperCase())}
+              placeholder="ABCD-2345"
+              className="mt-3 font-mono tracking-widest"
+              maxLength={9}
+            />
+          )}
 
           {pending.data && (
             <div className="mt-3 space-y-3 rounded-lg border border-brand/40 bg-brand-soft/40 p-3">
@@ -373,7 +434,7 @@ export function ConnectPanel({ onClose }: { onClose?: () => void }) {
               </div>
             </div>
           )}
-          {code.trim().length >= 8 && pending.isError && (
+          {(oauthId || code.trim().length >= 8) && pending.isError && (
             <p className="mt-2 text-xs text-destructive">
               {needsLogin ? t('connect.signInFirst') : t('connect.badCode')}
             </p>

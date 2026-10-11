@@ -19,7 +19,7 @@ import { join } from 'node:path'
 
 const api = (f: string) => readFileSync(join(import.meta.dirname, '..', f), 'utf8')
 const app = (f: string) => readFileSync(join(import.meta.dirname, '../../../app/src', f), 'utf8')
-const mcp = readFileSync(join(import.meta.dirname, '../../../mcp/src/index.ts'), 'utf8')
+const mcp = readFileSync(join(import.meta.dirname, '../../../mcp/src/tools.ts'), 'utf8')
 
 /** Полный список статусов в том порядке, в каком идёт работа; cancelled — выход. */
 const FULL = "'todo', 'in_progress', 'review', 'verified', 'done', 'cancelled'"

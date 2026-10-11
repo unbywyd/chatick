@@ -11,7 +11,16 @@
  * машине, где никто не заметит.
  */
 
-const BASE = process.env.CHATICK_API ?? 'https://api.chatick.com'
+let BASE = process.env.CHATICK_API ?? 'https://api.chatick.com'
+
+/**
+ * Куда ходить за мостом. Программе хватает переменной окружения; сервер (MCP
+ * по адресу внутри API) ставит свой адрес — обращаться к себе через интернет
+ * незачем.
+ */
+export function setApiBase(url: string): void {
+  BASE = url.replace(/\/$/, '')
+}
 
 export class BridgeError extends Error {
   constructor(

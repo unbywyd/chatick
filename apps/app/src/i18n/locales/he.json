@@ -1055,6 +1055,10 @@
     "goToApp": "מעבר ל-Chatick"
   },
   "connect": {
+    "mcpTitle": "חיבור Claude לפי כתובת — בלי להתקין כלום",
+    "mcpHint": "הוסיפו את הכתובת הזו ל-Claude. ייפתח דפדפן: נכנסים ל-Chatick ובוחרים למה לתת גישה. עובד ב-claude.ai, ב-Claude Desktop וב-Claude Code.",
+    "mcpClaudeAi": "claude.ai ו-Claude Desktop: הגדרות ← מחברים ← הוספת מחבר מותאם ← הדבקת הכתובת.",
+    "mcpClaudeCode": "Claude Code: להריץ פעם אחת, ואז /mcp ← Authenticate:",
     "title": "חיבור AI",
     "back": "חזרה",
     "step1Title": "חברו את עוזר ה-AI שלכם",

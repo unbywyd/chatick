@@ -219,7 +219,7 @@ describe('правка задачи умеет связи', () => {
 })
 
 describe('инструменты ассистента знают про связи', () => {
-  const mcp = readFileSync(join(import.meta.dirname, '..', '..', '..', 'mcp', 'src', 'index.ts'), 'utf8')
+  const mcp = readFileSync(join(import.meta.dirname, '..', '..', '..', 'mcp', 'src', 'tools.ts'), 'utf8')
 
   it('создание задачи принимает links', () => {
     const at = mcp.indexOf("'chatick_task_create'")

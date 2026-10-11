@@ -48,6 +48,9 @@ importers:
       '@aws-sdk/s3-request-presigner':
         specifier: ^3.1093.0
         version: 3.1093.0
+      '@chatick/mcp':
+        specifier: workspace:*
+        version: link:../mcp
       '@hono/node-server':
         specifier: ^1.14.0
         version: 1.19.14(hono@4.12.31)

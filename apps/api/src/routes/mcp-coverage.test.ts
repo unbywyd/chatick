@@ -20,7 +20,7 @@ import { join } from 'node:path'
  * вовсе.
  */
 
-const mcp = readFileSync(join(import.meta.dirname, '../../../mcp/src/index.ts'), 'utf8')
+const mcp = readFileSync(join(import.meta.dirname, '../../../mcp/src/tools.ts'), 'utf8')
 
 /** Инструмент есть, если его имя объявлено в registerTool. */
 const has = (tool: string) => new RegExp(`'${tool}'`).test(mcp)

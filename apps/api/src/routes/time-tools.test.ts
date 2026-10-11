@@ -10,7 +10,7 @@ import { join } from 'node:path'
 // связи при переносе.
 
 const bridge = readFileSync(join(import.meta.dirname, 'bridge.ts'), 'utf8')
-const mcp = readFileSync(join(import.meta.dirname, '..', '..', '..', 'mcp', 'src', 'index.ts'), 'utf8')
+const mcp = readFileSync(join(import.meta.dirname, '..', '..', '..', 'mcp', 'src', 'tools.ts'), 'utf8')
 const docs = readFileSync(join(import.meta.dirname, '..', 'lib', 'bridge-docs.ts'), 'utf8')
 
 /** Тело обработчика моста от его начала до следующего маршрута. */

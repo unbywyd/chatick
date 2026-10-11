@@ -16,7 +16,7 @@ import { parseTaskRef } from '../lib/short-links.js'
  */
 
 const bridge = readFileSync(join(import.meta.dirname, 'bridge.ts'), 'utf8')
-const mcp = readFileSync(join(import.meta.dirname, '../../../mcp/src/index.ts'), 'utf8')
+const mcp = readFileSync(join(import.meta.dirname, '../../../mcp/src/tools.ts'), 'utf8')
 
 describe('разбор ссылки', () => {
   it('короткая — по коду', () => {

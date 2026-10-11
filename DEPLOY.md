@@ -37,6 +37,7 @@ app will look for the API on localhost.
 
 ```bash
 pnpm install
+pnpm --filter @chatick/mcp build      # the API serves the MCP tools from it
 pnpm --filter @chatick/api build
 pnpm --filter @chatick/app build      # → apps/app/dist
 pnpm --filter @chatick/landing build  # → apps/landing/dist
@@ -82,6 +83,20 @@ it must:
 - allow long-lived connections (`proxy_read_timeout` well above the default) —
   chat, presence and collaborative documents depend on them;
 - allow request bodies large enough for uploads (50 MB is a sensible ceiling).
+
+### MCP by address
+
+The API serves the MCP tools at `/mcp` (Streamable HTTP) with OAuth for sign-in:
+`/.well-known/oauth-protected-resource`, `/.well-known/oauth-authorization-server`
+and `/oauth/*`. Set `API_PUBLIC_URL` to the public address of the API — the
+discovery documents and the `WWW-Authenticate` header are built from it.
+For `/mcp` the proxy must not buffer (`proxy_buffering off`) and must allow long
+reads (`proxy_read_timeout 3600s`): replies stream as server-sent events.
+MCP sessions live in the API process; after a restart clients open a new one
+on their own.
+
+`DEV_LOGIN` (sign in without a code) is for a local copy of the database only
+and refuses to work in production — never set it on a server.
 
 ## Serving the static parts
 

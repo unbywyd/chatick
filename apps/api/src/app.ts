@@ -14,6 +14,8 @@ import { resourcesRoute } from './routes/resources.js'
 import { tasksRoute, tasksMineRoute } from './routes/tasks.js'
 import { ballRoute } from './routes/ball.js'
 import { assistantRoute } from './routes/assistant.js'
+import { oauthConsentRoute, oauthRoute } from './routes/oauth.js'
+import { mcpRoute } from './routes/mcp.js'
 import { messagesRoute } from './routes/messages.js'
 import { notificationsRoute } from './routes/notifications.js'
 import { extRoute } from './routes/ext.js'
@@ -57,6 +59,10 @@ app.route('/api/v1/tasks', tasksRoute)
 app.route('/api/v1/my/tasks', tasksMineRoute)
 app.route('/api/v1/ball', ballRoute) // v2: «На столе», «На мне», «От меня», быстрое создание
 app.route('/api/v1/assistant', assistantRoute) // v2: ассистент компании — один разговор на человека и компанию
+// MCP по адресу (v2): /mcp + OAuth (/.well-known/*, /oauth/*); согласие — из приложения
+app.route('/', oauthRoute)
+app.route('/', mcpRoute)
+app.route('/api/v1/auth/oauth', oauthConsentRoute)
 // Подключения к внешним БД. Фича за выключателем: выключено — ручки 404.
 app.route('/api/v1/db-connections', dbConnectionsRoute)
 app.route('/api/v1/messages', messagesRoute)

@@ -18,7 +18,7 @@ const read = (p: string) => readFileSync(join(import.meta.dirname, '..', p), 'ut
 const bridge = read('routes/bridge.ts')
 const docs = read('lib/bridge-docs.ts')
 const mcp = readFileSync(
-  join(import.meta.dirname, '../../../mcp/src/index.ts'),
+  join(import.meta.dirname, '../../../mcp/src/tools.ts'),
   'utf8',
 ).replace(/\r\n/g, '\n')
 

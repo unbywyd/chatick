@@ -64,6 +64,13 @@
       "when": 1791746003190,
       "tag": "0008_ai_usage_company_fill",
       "breakpoints": true
+    },
+    {
+      "idx": 9,
+      "version": "7",
+      "when": 1791747792056,
+      "tag": "0009_oauth_mcp",
+      "breakpoints": true
     }
   ]
 }

@@ -1939,6 +1939,12 @@ export const bridgeSessions = pgTable(
     // «не подтверждено».
     scopeAll: boolean('scope_all').notNull().default(false),
     clientName: text('client_name').notNull().default('AI assistant'),
+    /**
+     * Сессия, выданная коннектору по OAuth (MCP по адресу). Закрыть её на
+     * странице подключения — значит отозвать весь доступ: иначе коннектор тихо
+     * получил бы новую сессию по refresh-токену.
+     */
+    oauthGrantId: text('oauth_grant_id'),
     // туннель сам закрывается после простоя — забытая сессия не живёт вечно
     lastUsedAt: timestamp('last_used_at', { withTimezone: true }).notNull().defaultNow(),
     expiresAt: timestamp('expires_at', { withTimezone: true }).notNull(),
@@ -1946,6 +1952,73 @@ export const bridgeSessions = pgTable(
     createdAt: createdAt(),
   },
   (t) => [index('bridge_sessions_user_idx').on(t.userId, t.revokedAt)],
+)
+
+// --- OAuth для MCP по адресу (v2) -------------------------------------------
+//
+// Коннектор (claude.ai, Claude Code) сам регистрируется, ведёт человека на
+// согласие и получает токены. Доступ, который он получает, — обычная сессия
+// моста с выбранной человеком областью: права, гайд и все ручки /x те же.
+
+/** Зарегистрированный клиент (RFC 7591). Секрета нет — только публичные клиенты с PKCE. */
+export const oauthClients = pgTable('oauth_clients', {
+  id: id(),
+  name: text('name').notNull().default(''),
+  /** JSON-массив адресов возврата, которые клиент назвал при регистрации. */
+  redirectUris: text('redirect_uris').notNull().default('[]'),
+  createdAt: createdAt(),
+})
+
+/** Запрос на вход: ждёт согласия человека, потом — одноразовый код. */
+export const oauthRequests = pgTable(
+  'oauth_requests',
+  {
+    id: id(),
+    clientId: text('client_id')
+      .notNull()
+      .references(() => oauthClients.id, { onDelete: 'cascade' }),
+    redirectUri: text('redirect_uri').notNull(),
+    codeChallenge: text('code_challenge').notNull(),
+    state: text('state'),
+    /** pending → approved (выдан код) → used; или denied. */
+    status: text('status').notNull().default('pending'),
+    userId: text('user_id').references(() => users.id, { onDelete: 'cascade' }),
+    projectId: text('project_id').references(() => projects.id, { onDelete: 'cascade' }),
+    companyId: text('company_id').references(() => companies.id, { onDelete: 'cascade' }),
+    scopeAll: boolean('scope_all').notNull().default(false),
+    codeHash: text('code_hash'),
+    expiresAt: timestamp('expires_at', { withTimezone: true }).notNull(),
+    createdAt: createdAt(),
+  },
+  (t) => [uniqueIndex('oauth_requests_code_idx').on(t.codeHash)],
+)
+
+/** Выданный доступ: refresh-токен и область. Отзыв гранта закрывает все его сессии. */
+export const oauthGrants = pgTable(
+  'oauth_grants',
+  {
+    id: id(),
+    clientId: text('client_id')
+      .notNull()
+      .references(() => oauthClients.id, { onDelete: 'cascade' }),
+    userId: text('user_id')
+      .notNull()
+      .references(() => users.id, { onDelete: 'cascade' }),
+    projectId: text('project_id').references(() => projects.id, { onDelete: 'cascade' }),
+    companyId: text('company_id').references(() => companies.id, { onDelete: 'cascade' }),
+    scopeAll: boolean('scope_all').notNull().default(false),
+    refreshHash: text('refresh_hash').notNull(),
+    /** Прежний refresh — живёт минуту после ротации: Claude обновляет токены параллельно. */
+    prevRefreshHash: text('prev_refresh_hash'),
+    rotatedAt: timestamp('rotated_at', { withTimezone: true }),
+    grantedAt: timestamp('granted_at', { withTimezone: true }).notNull().defaultNow(),
+    revokedAt: timestamp('revoked_at', { withTimezone: true }),
+  },
+  (t) => [
+    uniqueIndex('oauth_grants_refresh_idx').on(t.refreshHash),
+    index('oauth_grants_prev_refresh_idx').on(t.prevRefreshHash),
+    index('oauth_grants_user_idx').on(t.userId),
+  ],
 )
 
 // --- Общий доступ по ссылке (SPEC §8.34) ------------------------------------

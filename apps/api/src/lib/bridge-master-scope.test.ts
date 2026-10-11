@@ -22,7 +22,7 @@ const bridgeRoute = read('../routes/bridge.ts')
 
 const app = (p: string) => readFileSync(join(here, '../../../app/src', p), 'utf8')
 const panel = readFileSync(join(here, '../../../desktop/panel.html'), 'utf8')
-const mcpIndex = readFileSync(join(here, '../../../mcp/src/index.ts'), 'utf8')
+const mcpIndex = readFileSync(join(here, '../../../mcp/src/tools.ts'), 'utf8')
 const mcpAuth = readFileSync(join(here, '../../../mcp/src/auth.ts'), 'utf8')
 
 describe('область выдаёт человек, а не клиент', () => {

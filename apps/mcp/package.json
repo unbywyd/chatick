@@ -6,6 +6,12 @@
   "bin": {
     "chatick-mcp": "./dist/index.js"
   },
+  "exports": {
+    "./hosted": {
+      "types": "./dist/hosted.d.ts",
+      "default": "./dist/hosted.js"
+    }
+  },
   "scripts": {
     "build": "tsc -p tsconfig.json",
     "dev": "tsx src/index.ts",

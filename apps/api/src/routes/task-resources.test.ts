@@ -158,7 +158,7 @@ describe('ассистент знает про привязку', () => {
   })
 
   it('MCP умеет привязывать и отвязывать', () => {
-    const mcp = readFileSync(join(import.meta.dirname, '..', '..', '..', 'mcp', 'src', 'index.ts'), 'utf8')
+    const mcp = readFileSync(join(import.meta.dirname, '..', '..', '..', 'mcp', 'src', 'tools.ts'), 'utf8')
     for (const tool of ['chatick_task_resources', 'chatick_task_resource_link', 'chatick_task_resource_unlink']) {
       expect(mcp, tool + ' не зарегистрирован').toMatch(new RegExp("'" + tool + "'"))
     }

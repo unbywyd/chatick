@@ -26,7 +26,8 @@ describe('код не спрашивают, пока не вошли', () => {
   it('запрос включён только при наличии сессии', () => {
     // Саботаж: убрать проверку токена — запрос снова уйдёт без входа и
     // вернётся 401, который выглядит как «код неверный».
-    expect(screen).toMatch(/enabled: code\.trim\(\)\.length >= 8 && Boolean\(getSessionToken\(\)\)/)
+    // Запрос OAuth-согласия (?oauth=) — по тому же правилу: только с сессией.
+    expect(screen).toMatch(/enabled: \(Boolean\(oauthId\) \|\| code\.trim\(\)\.length >= 8\) && Boolean\(getSessionToken\(\)\)/)
   })
 
   it('401 отличается от «плохого кода»', () => {

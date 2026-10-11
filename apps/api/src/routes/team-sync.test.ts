@@ -10,7 +10,7 @@ import { join } from 'node:path'
 
 const bridge = readFileSync(join(import.meta.dirname, 'bridge.ts'), 'utf8')
 const projects = readFileSync(join(import.meta.dirname, 'projects.ts'), 'utf8')
-const mcp = readFileSync(join(import.meta.dirname, '../../../mcp/src/index.ts'), 'utf8')
+const mcp = readFileSync(join(import.meta.dirname, '../../../mcp/src/tools.ts'), 'utf8')
 const guide = readFileSync(join(import.meta.dirname, '../lib/bridge-docs.ts'), 'utf8')
 
 describe('мост умеет всё, что умеет интерфейс', () => {

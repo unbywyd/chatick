@@ -101,7 +101,7 @@ describe('поиск доступен обоим ассистентам', () => 
   })
 
   it('обоим сказано, что комментарии ищутся вместе с задачей', () => {
-    const mcp = readFileSync(join(import.meta.dirname, '../../../mcp/src/index.ts'), 'utf8')
+    const mcp = readFileSync(join(import.meta.dirname, '../../../mcp/src/tools.ts'), 'utf8')
     for (const [src, who] of [[mcp, 'MCP'], [memory, 'ассистент']] as const) {
       expect(src, `${who} не объясняет про комментарии`).toMatch(/Comments are indexed together with their task/)
     }
