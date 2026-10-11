@@ -587,6 +587,35 @@ export const messages = pgTable(
 export const taskStatus = pgEnum('task_status', TASK_STATUSES)
 export const taskPriority = pgEnum('task_priority', ['low', 'normal', 'high', 'urgent'])
 
+/**
+ * Ход (v2): что ждут от того, у кого сейчас мяч.
+ *
+ * Мяч — это assignee_id: ровно один человек, от которого ждут хода. Статус
+ * больше не вводится руками, а выводится из хода (lib/ball.ts) — он остаётся
+ * в базе ради отчётов, внешних систем и старых клиентов.
+ */
+export const TASK_MOVES = ['do', 'review', 'answer'] as const
+export type TaskMove = (typeof TASK_MOVES)[number]
+export const taskMove = pgEnum('task_move', TASK_MOVES)
+
+/** Что случилось с мячом — строка журнала передач. */
+export const HANDOFF_ACTIONS = [
+  'create', // задачу поставили сразу на человека
+  'review', // «На проверку»
+  'accept', // «Принять» — задача закрыта
+  'return', // «Вернуть» — круг +1
+  'ask', // «Спросить»
+  'answer', // «Ответить» — мяч спросившему с его прежним ходом
+  'pass', // «Передать другому» — тот же ход
+  'take', // владелец забрал мяч себе
+  'wait_client', // «Ждём клиента» — мяч на месте, ожидание на паузе
+  'client_replied',
+  'cancel', // задача отменена
+  'reopen', // закрытую открыли снова
+] as const
+export type HandoffAction = (typeof HANDOFF_ACTIONS)[number]
+export const handoffAction = pgEnum('handoff_action', HANDOFF_ACTIONS)
+
 // Группы задач = спринты (SPEC §8.6): имя + цвет, ручной порядок групп.
 export const taskGroups = pgTable(
   'task_groups',
@@ -638,8 +667,25 @@ export const tasks = pgTable(
      * due_date: перенесли срок — значит, про новый ещё не предупреждали.
      */
     dueNotifiedAt: timestamp('due_notified_at', { withTimezone: true }),
+    /** Мяч (v2): у кого задача сейчас. null — в бэклоге, никому не поставлена. */
     assigneeId: text('assignee_id').references(() => users.id, { onDelete: 'set null' }),
     createdById: text('created_by_id').references(() => users.id, { onDelete: 'set null' }),
+    // --- мяч (v2), см. lib/ball.ts ---
+    /** Что ждут от держателя. У закрытой задачи значения не имеет. */
+    move: taskMove('move').notNull().default('do'),
+    /** Отвечает за результат; по умолчанию автор. Ему мяч уходит «на проверку». */
+    ownerId: text('owner_id').references(() => users.id, { onDelete: 'set null' }),
+    /** Когда мяч пришёл нынешнему держателю: «у Элиши 3 дня». */
+    heldSince: timestamp('held_since', { withTimezone: true }),
+    /** Круг: +1 на каждое «Вернуть». «2-й круг» показывается со второго. */
+    round: integer('round').notNull().default(1),
+    /** Открытый вопрос: кто спросил и какой ход вернуть ему после ответа. */
+    askFromId: text('ask_from_id').references(() => users.id, { onDelete: 'set null' }),
+    askPrevMove: taskMove('ask_prev_move'),
+    /** «Ждём клиента» с этого момента; ожидание держателя на паузе. */
+    waitingClientSince: timestamp('waiting_client_since', { withTimezone: true }),
+    /** Лежит «на столе» — срочное, на главном экране отдельно. */
+    onTable: boolean('on_table').notNull().default(false),
     // soft-delete (SPEC §8.21): восстановимо 7 дней, потом крон удаляет окончательно
     deletedAt: timestamp('deleted_at', { withTimezone: true }),
     deletedById: text('deleted_by_id').references(() => users.id, { onDelete: 'set null' }),
@@ -650,8 +696,48 @@ export const tasks = pgTable(
     uniqueIndex('tasks_project_number_idx').on(t.projectId, t.number),
     index('tasks_project_status_idx').on(t.projectId, t.status),
     index('tasks_assignee_idx').on(t.assigneeId),
+    // «На мне» и «От меня» по всей компании — самые частые запросы v2.
+    index('tasks_holder_move_idx').on(t.assigneeId, t.move),
+    index('tasks_owner_idx').on(t.ownerId),
     index('tasks_group_idx').on(t.groupId),
     index('tasks_deleted_idx').on(t.deletedAt),
+  ],
+)
+
+/**
+ * Журнал передач мяча (v2): строка на каждое действие хода.
+ *
+ * Из него строятся лента передач в задаче, уведомления, «новое» и «сколько
+ * кругов прошла задача». Записка — обязательная часть передачи: именно её
+ * отсутствие делало пинг-понг мутным («вернул» — а что не так?).
+ */
+export const taskHandoffs = pgTable(
+  'task_handoffs',
+  {
+    id: id(),
+    taskId: text('task_id')
+      .notNull()
+      .references(() => tasks.id, { onDelete: 'cascade' }),
+    projectId: text('project_id')
+      .notNull()
+      .references(() => projects.id, { onDelete: 'cascade' }),
+    action: handoffAction('action').notNull(),
+    /** Кто нажал. Может не совпадать с прежним держателем: админ отменил, владелец забрал. */
+    actorId: text('actor_id').references(() => users.id, { onDelete: 'set null' }),
+    fromId: text('from_id').references(() => users.id, { onDelete: 'set null' }),
+    toId: text('to_id').references(() => users.id, { onDelete: 'set null' }),
+    moveBefore: taskMove('move_before'),
+    moveAfter: taskMove('move_after'),
+    note: text('note').notNull().default(''),
+    round: integer('round').notNull().default(1),
+    /** Откуда пришло: ui, mcp, api, compat (старый клиент прислал статус), migration. */
+    via: text('via').notNull().default('ui'),
+    createdAt: createdAt(),
+  },
+  (t) => [
+    index('task_handoffs_task_idx').on(t.taskId, t.createdAt),
+    index('task_handoffs_to_idx').on(t.toId, t.createdAt),
+    index('task_handoffs_project_idx').on(t.projectId, t.createdAt),
   ],
 )
 
