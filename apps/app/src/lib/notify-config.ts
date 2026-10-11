@@ -9,6 +9,8 @@ export const NOTIFY_EVENTS = [
   'task_status',
   'task_comment',
   'task_due',
+  // Передача мяча (v2): «вернул на доработку», «спрашивает» — с запиской.
+  'task_handoff',
 ] as const
 
 export type NotifyEvent = (typeof NOTIFY_EVENTS)[number]

@@ -731,6 +731,10 @@
         "label": "A new comment on my task",
         "hint": "Someone comments on a task assigned to you"
       },
+      "task_handoff": {
+        "label": "A task is handed to me",
+        "hint": "Someone sends you a task to review, returns it, asks you or passes it on — with their note"
+      },
       "task_due": {
         "label": "A task of mine is due soon",
         "hint": "Warns you before the deadline, as set by the company"
@@ -1937,7 +1941,8 @@
       "task_assigned": "Task assigned",
       "task_status": "Task status changed",
       "task_comment": "New comment on a task",
-      "task_due": "Task due date approaching"
+      "task_due": "Task due date approaching",
+      "task_handoff": "Task handed over"
     },
     "inherited": "Inherited from the company. Change it here to override for this project only.",
     "own": "Set for this project — the company default no longer applies here.",
