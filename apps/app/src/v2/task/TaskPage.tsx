@@ -320,6 +320,7 @@ function Fields({
 }) {
   const { t } = useTranslation('v2')
   const [dueOpen, setDueOpen] = useState(false)
+  const [dueBtn, setDueBtn] = useState<HTMLButtonElement | null>(null)
   const [estEdit, setEstEdit] = useState(false)
   const [estText, setEstText] = useState('')
   const iso = due ? new Date(due).toLocaleDateString('sv-SE') : ''
@@ -345,12 +346,13 @@ function Fields({
         <div className="sf">
           <div className="k">{t('task.due')}</div>
           <div className="tp-due">
-            <button className="fieldbtn" disabled={readOnly} onClick={() => setDueOpen(!dueOpen)} aria-expanded={dueOpen} aria-label={`${t('task.due')}: ${dueText(t, due, lng)}`}>
+            <button ref={setDueBtn} className="fieldbtn" disabled={readOnly} onClick={() => setDueOpen(!dueOpen)} aria-expanded={dueOpen} aria-label={`${t('task.due')}: ${dueText(t, due, lng)}`}>
               <span>{dueText(t, due, lng)}</span>
               <I name="cal" />
             </button>
             <DatePop
               open={dueOpen}
+              anchor={dueBtn}
               onClose={() => setDueOpen(false)}
               value={iso || null}
               quick

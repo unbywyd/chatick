@@ -4,6 +4,7 @@ import { useQueryClient } from '@tanstack/react-query'
 import { errorCode, keys, useHandoff, useMe, useTask, type HandoffAction, type Person, type TaskFull } from '../data'
 import { useUi } from '../ui'
 import { Icon } from '../Icon'
+import { fuzzyMatch } from '../ui/Floating'
 import { letterOf, personColor } from '../util'
 
 type Act = HandoffAction | 'other'
@@ -69,7 +70,7 @@ export function HandoffDialog() {
   const fixed = act === 'return' || act === 'answer' || act === 'cancel'
   const to: Person | null = act === 'cancel' ? null : person ? (data.team.find((p) => p.id === person) ?? null) : guess
   const s = q.trim().toLowerCase()
-  const team = data.team.filter((p) => p.id !== task.holder?.id && p.id !== guess?.id && (!s || p.name.toLowerCase().includes(s)))
+  const team = data.team.filter((p) => p.id !== task.holder?.id && p.id !== guess?.id && fuzzyMatch(p.name, q))
   const nt = note.trim()
   const need = NEED.has(act)
   const missing = need && !nt

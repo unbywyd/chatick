@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { Icon } from '../Icon'
+import { Floating, fuzzyMatch } from './Floating'
 
 /**
  * Календарь и поле даты в стиле макета — вместо системного <input type="date">:
@@ -72,22 +73,27 @@ export function Calendar({ value, onPick, weekStart }: { value: string | null; o
   )
 }
 
-/** Всплывающий слой с подложкой-«закрывашкой»: общий для полей даты и выбора. */
-export function Pop({ open, onClose, children, wide, align = 'start' }: { open: boolean; onClose: () => void; children: React.ReactNode; wide?: boolean; align?: 'start' | 'end' }) {
-  useEffect(() => {
-    if (!open) return
-    const k = (e: KeyboardEvent) => e.key === 'Escape' && onClose()
-    window.addEventListener('keydown', k)
-    return () => window.removeEventListener('keydown', k)
-  }, [open, onClose])
+/** Всплывающий слой поверх страницы, привязанный к кнопке-якорю (см. Floating). */
+export function Pop({
+  open,
+  onClose,
+  anchor,
+  children,
+  wide,
+  align = 'start',
+}: {
+  open: boolean
+  onClose: () => void
+  anchor: HTMLElement | null
+  children: React.ReactNode
+  wide?: boolean
+  align?: 'start' | 'end'
+}) {
   if (!open) return null
   return (
-    <>
-      <div className="gt-scrim" onClick={onClose} />
-      <div className={'upop' + (wide ? ' wide' : '') + (align === 'end' ? ' end' : '')} role="dialog">
-        {children}
-      </div>
-    </>
+    <Floating anchor={anchor} onClose={onClose} align={align} className={'upop' + (wide ? ' wide' : '')}>
+      {children}
+    </Floating>
   )
 }
 
@@ -114,6 +120,7 @@ export function DateField({
 }) {
   const { t, i18n } = useTranslation('v2')
   const [open, setOpen] = useState(false)
+  const [btn, setBtn] = useState<HTMLButtonElement | null>(null)
   const pick = (v: string | null) => {
     setOpen(false)
     onChange(v)
@@ -125,11 +132,11 @@ export function DateField({
   }
   return (
     <span className="ufield">
-      <button className={'udate' + (className ? ' ' + className : '')} onClick={() => setOpen(!open)} aria-expanded={open} aria-label={ariaLabel}>
+      <button ref={setBtn} className={'udate' + (className ? ' ' + className : '')} onClick={() => setOpen(!open)} aria-expanded={open} aria-label={ariaLabel}>
         <Icon name="calendar" sm />
         <span>{value ? fromYmd(value).toLocaleDateString(i18n.language, { day: 'numeric', month: 'short', year: 'numeric' }) : (placeholder ?? t('ui.pickDate'))}</span>
       </button>
-      <DatePop open={open} onClose={() => setOpen(false)} value={value} onPick={pick} clearable={clearable} quick={quick} plus={plus} />
+      <DatePop open={open} anchor={btn} onClose={() => setOpen(false)} value={value} onPick={pick} clearable={clearable} quick={quick} plus={plus} />
     </span>
   )
 }
@@ -137,6 +144,7 @@ export function DateField({
 export function DatePop({
   open,
   onClose,
+  anchor,
   value,
   onPick,
   clearable,
@@ -149,6 +157,7 @@ export function DatePop({
 }: {
   open: boolean
   onClose: () => void
+  anchor: HTMLElement | null
   value: string | null
   onPick: (ymd: string | null) => void
   clearable?: boolean
@@ -157,7 +166,7 @@ export function DatePop({
 }) {
   const { t } = useTranslation('v2')
   return (
-    <Pop open={open} onClose={onClose}>
+    <Pop open={open} onClose={onClose} anchor={anchor}>
       {quick && (
         <div className="uquick">
           <button onClick={() => onPick(plus(0))}>{t('due.today')}</button>
@@ -197,8 +206,8 @@ export function Select<V extends string>({
   const [q, setQ] = useState('')
   const [i, setI] = useState(0)
   const list = useRef<HTMLDivElement>(null)
-  const s = q.trim().toLowerCase()
-  const shown = options.filter((o) => !s || o.label.toLowerCase().includes(s))
+  const [btn, setBtn] = useState<HTMLButtonElement | null>(null)
+  const shown = options.filter((o) => fuzzyMatch(o.label, q))
   const cur = options.find((o) => o.value === value)
   useEffect(() => {
     if (open) setI(Math.max(0, shown.findIndex((o) => o.value === value)))
@@ -223,11 +232,11 @@ export function Select<V extends string>({
   }
   return (
     <span className="ufield">
-      <button className="usel" onClick={() => setOpen(!open)} aria-haspopup="listbox" aria-expanded={open} aria-label={ariaLabel} onKeyDown={open ? onKey : undefined}>
+      <button ref={setBtn} className="usel" onClick={() => setOpen(!open)} aria-haspopup="listbox" aria-expanded={open} aria-label={ariaLabel} onKeyDown={open ? onKey : undefined}>
         <span className="bidi">{cur?.label ?? '—'}</span>
         <Icon name="chevron" sm />
       </button>
-      <Pop open={open} onClose={() => setOpen(false)} wide>
+      <Pop open={open} onClose={() => setOpen(false)} anchor={btn} wide>
         {(searchable ?? options.length > 8) && (
           <label className="cbx-s" style={{ margin: '0 4px 6px' }}>
             <Icon name="search" sm />

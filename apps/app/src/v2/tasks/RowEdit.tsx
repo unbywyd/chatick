@@ -6,6 +6,7 @@ import { errorCode, inProject, useHandoff, useRefreshBall, type BallItem, type T
 import { useUi } from '../ui'
 import { Icon } from '../Icon'
 import { DatePop, fromYmd } from '../ui/Calendar'
+import { Floating, fuzzyMatch } from '../ui/Floating'
 import { dueDiff, dueText, isImportant, letterOf, moveKey, personColor } from '../util'
 import type { useBallActions } from './actions'
 
@@ -65,6 +66,7 @@ export function DueCell({ item: i }: { item: BallItem }) {
   const { t, i18n } = useTranslation('v2')
   const patch = usePatch(i)
   const [open, setOpen] = useState(false)
+  const [btn, setBtn] = useState<HTMLButtonElement | null>(null)
   const n = dueDiff(i.dueDate)
   const set = (d: Date | null) => {
     setOpen(false)
@@ -78,6 +80,7 @@ export function DueCell({ item: i }: { item: BallItem }) {
   return (
     <span className="rcell">
       <button
+        ref={setBtn}
         className={'due rbtn' + (n !== null && n < 0 ? ' late' : '') + (n === 0 ? ' today' : '')}
         title={t('row.due')}
         aria-expanded={open}
@@ -89,6 +92,7 @@ export function DueCell({ item: i }: { item: BallItem }) {
       </button>
       <DatePop
         open={open}
+        anchor={btn}
         onClose={() => setOpen(false)}
         value={i.dueDate ? ymd(i.dueDate) : null}
         onPick={(v) => set(v ? fromYmd(v) : null)}
@@ -103,6 +107,7 @@ export function DueCell({ item: i }: { item: BallItem }) {
 export function MoveCell({ item: i, a }: { item: BallItem; a: Actions }) {
   const { t } = useTranslation('v2')
   const [open, setOpen] = useState(false)
+  const [btn, setBtn] = useState<HTMLButtonElement | null>(null)
   const mk = moveKey(i)
   // Цвет и значок — по смыслу хода: принять зелёный, вернуть оранжевый,
   // проверка синяя, вопрос фиолетовый, клиент — жёлтый. Не гадать по тексту.
@@ -118,15 +123,14 @@ export function MoveCell({ item: i, a }: { item: BallItem; a: Actions }) {
   if (a.canClient) items.push({ label: i.ball.waitingClientSince ? t('act.clientReplied') : t('act.waitClient'), run: a.toggleClient, k: 'work', icon: 'clock' })
   return (
     <div className="mvcell rcell">
-      <button className={`mv mv-${mk} rbtn`} title={t('row.move')} aria-expanded={open} disabled={!items.length} onClick={() => setOpen(!open)}>
+      <button ref={setBtn} className={`mv mv-${mk} rbtn`} title={t('row.move')} aria-expanded={open} disabled={!items.length} onClick={() => setOpen(!open)}>
         <i />
         {t(`mv.${mk}`)}
       </button>
       {i.ball.round > 1 && <span className="rnd">{t('round', { n: i.ball.round })}</span>}
       {open && (
-        <>
-          <div className="gt-scrim" onClick={() => setOpen(false)} />
-          <div className="rpop" role="menu">
+        <Floating anchor={btn} onClose={() => setOpen(false)} className="rpop">
+          <div role="menu">
             {items.map((it) => (
               <button
                 key={it.label}
@@ -144,7 +148,7 @@ export function MoveCell({ item: i, a }: { item: BallItem; a: Actions }) {
               </button>
             ))}
           </div>
-        </>
+        </Floating>
       )}
     </div>
   )
@@ -159,14 +163,14 @@ export function PersonCell({ item: i, label, person, wait }: { item: BallItem; l
   const { flash } = useUi()
   const [open, setOpen] = useState(false)
   const [q, setQ] = useState('')
+  const [btn, setBtn] = useState<HTMLButtonElement | null>(null)
   const handoff = useHandoff()
   const team = useQuery({
     queryKey: ['v2', 'task', i.id],
     queryFn: () => api<TaskFull>(`/api/v1/ball/task/${i.id}`),
     enabled: open,
   })
-  const s = q.trim().toLowerCase()
-  const list = (team.data?.team ?? []).filter((p) => p.id !== i.holder?.id && (!s || p.name.toLowerCase().includes(s)))
+  const list = (team.data?.team ?? []).filter((p) => p.id !== i.holder?.id && fuzzyMatch(p.name, q))
   const pass = (to: { id: string; name: string }) => {
     setOpen(false)
     if (!i.project) return
@@ -180,7 +184,7 @@ export function PersonCell({ item: i, label, person, wait }: { item: BallItem; l
   }
   return (
     <span className="from rcell">
-      <button className="rperson" title={t('row.who')} aria-expanded={open} disabled={!i.project || i.status === 'done' || i.status === 'cancelled'} onClick={() => setOpen(!open)}>
+      <button ref={setBtn} className="rperson" title={t('row.who')} aria-expanded={open} disabled={!i.project || i.status === 'done' || i.status === 'cancelled'} onClick={() => setOpen(!open)}>
         <span className="av" style={{ background: personColor(person?.id) }}>
           {letterOf(person?.name)}
         </span>
@@ -188,26 +192,30 @@ export function PersonCell({ item: i, label, person, wait }: { item: BallItem; l
       </button>
       {wait}
       {open && (
-        <>
-          <div className="gt-scrim" onClick={() => setOpen(false)} />
-          <div className="rpop wide" role="dialog" aria-label={t('row.who')}>
-            <div className="hd">{t('row.whoHead')}</div>
-            <label className="cbx-s" style={{ margin: '0 4px 6px' }}>
-              <Icon name="search" sm />
-              <input value={q} onChange={(e) => setQ(e.target.value)} placeholder={t('ho.teamSearch')} aria-label={t('ho.teamSearch')} autoFocus />
-            </label>
-            {!team.data && <div className="cbx-none">{t('common.loading')}</div>}
-            {list.map((p) => (
-              <button key={p.id} className="gp" onClick={() => pass(p)}>
-                <span className="av" style={{ background: personColor(p.id), width: 24, height: 24, fontSize: 11 }}>
-                  {letterOf(p.name)}
-                </span>
-                <span className="nm bidi">{p.name}</span>
-              </button>
-            ))}
-            {team.data && !list.length && <div className="cbx-none">{t('tasks.noPerson')}</div>}
-          </div>
-        </>
+        <Floating anchor={btn} onClose={() => setOpen(false)} className="rpop wide">
+          <div className="hd">{t('row.whoHead')}</div>
+          <label className="cbx-s" style={{ margin: '0 4px 6px' }}>
+            <Icon name="search" sm />
+            <input
+              value={q}
+              onChange={(e) => setQ(e.target.value)}
+              onKeyDown={(e) => e.key === 'Enter' && list[0] && pass(list[0])}
+              placeholder={t('ho.teamSearch')}
+              aria-label={t('ho.teamSearch')}
+              autoFocus
+            />
+          </label>
+          {!team.data && <div className="cbx-none">{t('common.loading')}</div>}
+          {list.map((p) => (
+            <button key={p.id} className="gp" onClick={() => pass(p)}>
+              <span className="av" style={{ background: personColor(p.id), width: 24, height: 24, fontSize: 11 }}>
+                {letterOf(p.name)}
+              </span>
+              <span className="nm bidi">{p.name}</span>
+            </button>
+          ))}
+          {team.data && !list.length && <div className="cbx-none">{t('tasks.noPerson')}</div>}
+        </Floating>
       )}
     </span>
   )

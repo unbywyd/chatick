@@ -29,7 +29,7 @@ import {
 
 type Tab = 'mine' | 'from'
 type Focus = 'fresh' | 'prio' | 'late' | 'rev' | 'ans' | 'long'
-type SortKey = 'title' | 'prio' | 'mv' | 'due' | 'who' | 'wait'
+type SortKey = 'id' | 'title' | 'prio' | 'mv' | 'due' | 'who' | 'wait'
 type GroupBy = 'due' | 'proj' | 'person' | 'none'
 
 const FOCUS: [Focus, string][] = [
@@ -92,7 +92,8 @@ export function TasksView() {
   const groups = useMemo(() => {
     const cmp = (a: BallItem, b: BallItem) => {
       let r = 0
-      if (sortK === 'title') r = a.title.localeCompare(b.title)
+      if (sortK === 'id') r = (Number(a.number.replace(/\D/g, '')) || 0) - (Number(b.number.replace(/\D/g, '')) || 0)
+      else if (sortK === 'title') r = a.title.localeCompare(b.title)
       else if (sortK === 'mv') r = (MOVE_ORDER[moveKey(a)] ?? 9) - (MOVE_ORDER[moveKey(b)] ?? 9)
       else if (sortK === 'due') r = (a.dueDate ?? '9999').localeCompare(b.dueDate ?? '9999')
       else if (sortK === 'who') r = (personOf(a)?.name ?? '').localeCompare(personOf(b)?.name ?? '')
@@ -155,7 +156,12 @@ export function TasksView() {
         }}
       >
         {label}
-        <i>{on ? (sortD === -1 ? '↑' : '↓') : ''}</i>
+        {k === 'prio' && on ? (
+          // Важность — не стрелкой, а словами: «сначала важные» понятнее, чем ↓.
+          <span className={'lh-tag ' + (sortD === 1 ? 'hi' : 'lo')}>{sortD === 1 ? t('tasks.prioFirst') : t('tasks.prioLast')}</span>
+        ) : (
+          <i>{on ? (sortD === -1 ? '↑' : '↓') : ''}</i>
+        )}
       </button>
     )
   }
@@ -200,6 +206,7 @@ export function TasksView() {
         <div className={'lh' + (sortK || grpBy !== 'due' ? ' pinned' : '')} role="toolbar">
           <span />
           <span style={{ display: 'flex', gap: 6 }}>
+            {sortBtn('id', t('tasks.lh.id'))}
             {sortBtn('title', t('tasks.lh.title'))}
             {sortBtn('prio', t('tasks.lh.prio'))}
           </span>
@@ -264,6 +271,40 @@ export function Carousel({
   const [q, setQ] = useState('')
   const [prefs, savePrefs] = useProjectPrefs(companyId)
   const [setup, setSetup] = useState(false)
+  const car = useRef<HTMLDivElement>(null)
+  const [edge, setEdge] = useState({ prev: false, next: false })
+  // Полосы прокрутки у ленты нет — листают стрелками и обычным колесом мыши.
+  useEffect(() => {
+    const el = car.current
+    if (!el) return
+    const rtl = getComputedStyle(el).direction === 'rtl'
+    const upd = () => {
+      const x = Math.abs(el.scrollLeft)
+      const max = el.scrollWidth - el.clientWidth
+      setEdge(rtl ? { prev: x > 4, next: x < max - 4 } : { prev: x > 4, next: x < max - 4 })
+    }
+    const wheel = (e: WheelEvent) => {
+      if (Math.abs(e.deltaY) <= Math.abs(e.deltaX) || el.scrollWidth <= el.clientWidth) return
+      e.preventDefault()
+      el.scrollLeft += rtl ? -e.deltaY : e.deltaY
+    }
+    upd()
+    el.addEventListener('scroll', upd, { passive: true })
+    el.addEventListener('wheel', wheel, { passive: false })
+    const ro = new ResizeObserver(upd)
+    ro.observe(el)
+    return () => {
+      el.removeEventListener('scroll', upd)
+      el.removeEventListener('wheel', wheel)
+      ro.disconnect()
+    }
+  }, [projects.length])
+  const page = (dir: 1 | -1) => {
+    const el = car.current
+    if (!el) return
+    const rtl = getComputedStyle(el).direction === 'rtl'
+    el.scrollBy({ left: dir * (rtl ? -1 : 1) * el.clientWidth * 0.8, behavior: 'smooth' })
+  }
   const by = new Map<string, number>()
   for (const c of counts) if (c.project) by.set(c.project.id, (by.get(c.project.id) ?? 0) + 1)
   const count = (id: string) => by.get(id) ?? 0
@@ -299,7 +340,12 @@ export function Carousel({
             aria-label={t('car.findAria')}
           />
         </label>
-        <div className="car" role="tablist" aria-label="Projects">
+        {edge.prev && (
+          <button className="car-arr prev" aria-label={t('car.prev')} onClick={() => page(-1)}>
+            <Icon name="chevronStart" />
+          </button>
+        )}
+        <div ref={car} className="car" role="tablist" aria-label="Projects">
           <button className={'chip' + (!selected ? ' sel' : '')} role="tab" aria-selected={!selected} onClick={() => onPick(null)} title={t('car.all')}>
             <span className="logo all">
               <Icon name="grid" sm />
@@ -319,6 +365,11 @@ export function Carousel({
             )
           })}
         </div>
+        {edge.next && (
+          <button className="car-arr next" aria-label={t('car.next')} onClick={() => page(1)}>
+            <Icon name="chevronEnd" />
+          </button>
+        )}
         {none && <span className="car-none">{t('car.none', { q })}</span>}
         <button className="car-set" aria-label={t('pprefs.open')} title={t('pprefs.open')} aria-expanded={setup} onClick={() => setSetup(!setup)}>
           <Icon name="sliders" />
