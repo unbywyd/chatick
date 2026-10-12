@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
+import { DatePop } from '../ui/Calendar'
 import { useLocation, useNavigate, useParams } from 'react-router-dom'
 import { useTranslation } from 'react-i18next'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
@@ -318,7 +319,7 @@ function Fields({
   onChange: (b: { priority?: string; dueDate?: string | null; estimateMinutes?: number | null }) => void
 }) {
   const { t } = useTranslation('v2')
-  const date = useRef<HTMLInputElement>(null)
+  const [dueOpen, setDueOpen] = useState(false)
   const [estEdit, setEstEdit] = useState(false)
   const [estText, setEstText] = useState('')
   const iso = due ? new Date(due).toLocaleDateString('sv-SE') : ''
@@ -344,18 +345,19 @@ function Fields({
         <div className="sf">
           <div className="k">{t('task.due')}</div>
           <div className="tp-due">
-            <button className="fieldbtn" disabled={readOnly} onClick={() => date.current?.showPicker?.()} aria-label={`${t('task.due')}: ${dueText(t, due, lng)}`}>
+            <button className="fieldbtn" disabled={readOnly} onClick={() => setDueOpen(!dueOpen)} aria-expanded={dueOpen} aria-label={`${t('task.due')}: ${dueText(t, due, lng)}`}>
               <span>{dueText(t, due, lng)}</span>
               <I name="cal" />
             </button>
-            <input
-              ref={date}
-              type="date"
-              className="tp-date"
-              tabIndex={-1}
-              aria-hidden="true"
-              value={iso}
-              onChange={(e) => onChange({ dueDate: e.target.value ? new Date(`${e.target.value}T12:00:00`).toISOString() : null })}
+            <DatePop
+              open={dueOpen}
+              onClose={() => setDueOpen(false)}
+              value={iso || null}
+              quick
+              onPick={(v) => {
+                setDueOpen(false)
+                onChange({ dueDate: v ? new Date(`${v}T12:00:00`).toISOString() : null })
+              }}
             />
             {due && !readOnly && (
               <button className="tp-x" aria-label={t('task.clearDue')} title={t('task.clearDue')} onClick={() => onChange({ dueDate: null })}>

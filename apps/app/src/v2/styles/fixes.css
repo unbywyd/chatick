@@ -128,3 +128,84 @@ html:has(.app .panel),html:has(.app .panel) body{overflow:hidden}
 .app .cbox-ed .ProseMirror{outline:none;min-height:22px}
 .app .cbox-ed .ProseMirror:focus-visible{outline:none}
 .app .cbox-ed .ProseMirror p{margin:0}
+
+/* Свои календарь и выбор из списка — вместо системных полей браузера. */
+.app .ufield{position:relative;display:inline-flex}
+.app .udate,.app .usel{display:inline-flex;align-items:center;gap:8px;height:40px;padding-inline:12px;border-radius:12px;background:var(--sheet);box-shadow:inset 0 0 0 1px var(--line);font-size:14px;color:var(--ink);white-space:nowrap}
+.app .udate:hover,.app .usel:hover{box-shadow:inset 0 0 0 1px var(--ink3)}
+.app .udate .ic{color:var(--ink3)}
+.app .usel{justify-content:space-between;min-width:160px}
+.app .usel .ic{color:var(--ink3)}
+.app .upop{position:absolute;top:calc(100% + 6px);inset-inline-start:0;background:var(--sheet);color:var(--ink);border-radius:16px;box-shadow:0 18px 44px -10px rgba(0,0,0,.28),0 0 0 1px var(--line);padding:8px;z-index:42}
+.app .upop.end{inset-inline-start:auto;inset-inline-end:0}
+.app .upop.wide{min-width:240px;max-width:360px}
+.app .ulist{max-height:320px;overflow-y:auto;outline:none}
+.app .ulist .gp{height:auto;min-height:38px;padding-block:8px}
+.app .ulist .gp.cur{font-weight:600}
+.app .uhint{color:var(--ink3);font-size:12px;margin-inline-start:auto}
+.app .cal{width:272px;padding:2px}
+.app .cal-h{display:flex;align-items:center;justify-content:space-between;padding:2px 2px 8px}
+.app .cal-h b{font-size:14px;font-weight:600;text-transform:capitalize}
+.app[dir='rtl'] .cal-h .ic{transform:scaleX(-1)}
+.app .cal-g{display:grid;grid-template-columns:repeat(7,1fr);gap:2px}
+.app .cal-w{font-size:11.5px;color:var(--ink3);text-align:center;padding:4px 0;text-transform:capitalize}
+.app .cal-d{height:34px;border-radius:10px;font-size:13.5px;color:var(--ink)}
+.app .cal-d:hover{background:var(--soft)}
+.app .cal-d.out{color:var(--ink3);opacity:.55}
+.app .cal-d.now{box-shadow:inset 0 0 0 1.5px var(--ink3);font-weight:600}
+.app .cal-d.on{background:var(--ink);color:var(--paper);font-weight:600;box-shadow:none}
+.app .uquick{display:flex;gap:6px;padding:2px 2px 8px}
+.app .uquick button{flex:1;height:32px;border-radius:9px;background:var(--soft);font-size:13px;font-weight:500}
+.app .uquick button:hover{background:var(--line)}
+.app .uclear{width:100%;margin-top:6px;height:34px;border-radius:9px;color:var(--signal);font-size:13px;font-weight:500}
+.app .uclear:hover{background:var(--signal-bg)}
+
+/* Меню хода: у каждого хода свой цвет и значок — не гадать. */
+.app .rpop .gp{height:auto;min-height:38px;padding-block:8px;gap:10px;align-items:center}
+.app .mvi .mvd{width:26px;height:26px;border-radius:8px;display:grid;place-items:center;flex:none}
+.app .mvi.k-ok{color:var(--ok)}.app .mvi.k-ok .mvd{background:var(--ok-bg)}
+.app .mvi.k-ret{color:var(--signal)}.app .mvi.k-ret .mvd{background:var(--signal-bg)}
+.app .mvi.k-rev{color:var(--rev)}.app .mvi.k-rev .mvd{background:var(--rev-bg)}
+.app .mvi.k-ask{color:var(--ask)}.app .mvi.k-ask .mvd{background:var(--ask-bg)}
+.app .mvi.k-work{color:var(--work)}.app .mvi.k-work .mvd{background:var(--work-bg)}
+.app .mvi.k-pass{color:var(--ink)}.app .mvi.k-pass .mvd{background:var(--soft)}
+.app .mvi .nm{color:var(--ink);font-weight:500}
+
+/* Настройка проектов карусели: кнопка и панель со списком, переключателями и перетаскиванием. */
+.app .car-wrap{position:relative}
+.app .car-set{flex:none;width:44px;height:44px;border-radius:14px;display:grid;place-items:center;background:var(--sheet);box-shadow:inset 0 0 0 1px var(--line);color:var(--ink2)}
+.app .car-set:hover,.app .car-set[aria-expanded='true']{color:var(--ink);box-shadow:inset 0 0 0 1px var(--ink3)}
+.app .ppanel{position:absolute;top:calc(100% + 8px);inset-inline-end:0;width:min(420px,100%);background:var(--sheet);color:var(--ink);border-radius:18px;box-shadow:0 24px 60px -12px rgba(0,0,0,.3),0 0 0 1px var(--line);padding:14px;z-index:41;display:flex;flex-direction:column}
+.app .pp-h{display:flex;align-items:center;gap:10px}
+.app .pp-h b{font-size:15px;font-weight:600}
+.app .pp-n{color:var(--ink3);font-size:13px;margin-inline-end:auto}
+.app .pp-hint{font-size:13px;color:var(--ink2);margin:6px 0 10px;line-height:1.45}
+.app .pp-list{max-height:min(460px,60vh);overflow-y:auto;margin:0 -4px;padding:0 4px}
+.app .pp-row{display:flex;align-items:center;gap:10px;height:46px;padding-inline:4px 6px;border-radius:12px;background:var(--sheet)}
+.app .pp-row:hover{background:var(--soft)}
+.app .pp-row.drag{box-shadow:0 10px 24px -8px rgba(0,0,0,.3),0 0 0 1px var(--line);position:relative;z-index:2}
+.app .pp-row.off .nm,.app .pp-row.off .logo{opacity:.45}
+.app .pp-row .nm{flex:1;min-width:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;font-weight:500}
+.app .pp-row .c{color:var(--ink3);font-size:12.5px}
+.app .pp-grip{width:26px;height:32px;display:grid;place-items:center;color:var(--ink3);cursor:grab;border-radius:8px;touch-action:none}
+.app .pp-grip:disabled{cursor:default;opacity:.35}
+.app .pp-grip:active{cursor:grabbing}
+.app .pp-more{height:24px}
+.app .pp-reset{margin-top:10px;align-self:flex-start;height:32px;padding:0 12px;border-radius:9px;font-size:13px;color:var(--ink2);box-shadow:inset 0 0 0 1px var(--line)}
+.app .pp-reset:hover{color:var(--ink)}
+.app .tp-due{position:relative}
+
+/* Описание в панели — на всю ширину: узкие 62ch макета у иврита прижимались влево
+   и оставляли пустоту в начале строк (справа). */
+.app .panel .desc{max-width:none}
+
+/* Лента проектов листается без видимой полосы — иначе она сдвигала ленту
+   относительно кнопки настройки. Кнопка — по центру ленты. */
+.app .car{scrollbar-width:none}
+.app .car::-webkit-scrollbar{display:none}
+.app .car-wrap{align-items:center}
+
+/* Число задач на проекте — заметнее: чёрным и жирным (на выбранном — как было). */
+.app .chip .c{color:var(--ink);font-weight:700}
+.app .chip.sel .c{color:var(--accent)}
+.app .uquick button{white-space:nowrap;padding-inline:8px;font-size:12.5px}

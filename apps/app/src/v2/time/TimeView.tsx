@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
+import { DateField } from '../ui/Calendar'
 import { useLocation, useNavigate, useParams } from 'react-router-dom'
 import { useTranslation } from 'react-i18next'
 import { useMe, useProjects } from '../data'
@@ -183,9 +184,9 @@ export function TimeView() {
         ) : (
           <div className="rng">
             {t('time.from')}
-            <input type="date" value={cFrom} onChange={(e) => e.target.value && setCFrom(e.target.value)} aria-label={t('time.fromAria')} />
+            <DateField value={cFrom || null} onChange={(v) => v && setCFrom(v)} ariaLabel={t('time.fromAria')} />
             {t('time.to')}
-            <input type="date" value={cTo} onChange={(e) => e.target.value && setCTo(e.target.value)} aria-label={t('time.toAria')} />
+            <DateField value={cTo || null} onChange={(v) => v && setCTo(v)} ariaLabel={t('time.toAria')} />
           </div>
         )}
         <ProjectCombo value={pf} projects={plist} onPick={setPf} withAll />

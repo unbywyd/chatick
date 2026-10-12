@@ -1,4 +1,5 @@
 import { useQueryClient } from '@tanstack/react-query'
+import { DateField } from '../ui/Calendar'
 import { useTranslation } from 'react-i18next'
 import { api } from '@/lib/api'
 import { errorCode, type CompanyProject } from '../data'
@@ -356,14 +357,14 @@ function EditForm({ form: F, setForm, onSave, lng, isNew }: { form: Form; setFor
       <label className="fl">
         <span>{t('time.fStart')}</span>
         <span className="dt">
-          <input className="d" type="date" value={F.sd} onChange={(e) => onSd(e.target.value)} aria-label={t('time.startDate')} />
+          <DateField className="d" value={F.sd || null} onChange={(v) => v && onSd(v)} ariaLabel={t('time.startDate')} />
           <input className="t" value={F.st} onChange={(e) => setF({ st: e.target.value })} aria-label={t('time.startTime')} placeholder="09:00" autoFocus={isNew} />
         </span>
       </label>
       <label className="fl">
         <span>{t('time.fEnd')}</span>
         <span className="dt">
-          <input className="d" type="date" value={F.ed} onChange={(e) => setF({ ed: e.target.value })} aria-label={t('time.endDate')} />
+          <DateField className="d" value={F.ed || null} onChange={(v) => v && setF({ ed: v })} ariaLabel={t('time.endDate')} />
           <input className="t" value={F.et} onChange={(e) => setF({ et: e.target.value })} aria-label={t('time.endTime')} placeholder="10:30" />
         </span>
       </label>

@@ -95,6 +95,24 @@ const PATHS: Record<string, React.ReactNode> = {
     </>
   ),
   reopen: <path d="M4 12a8 8 0 1 0 2.3-5.6M4 4v4h4" />,
+  calendar: (
+    <>
+      <rect x="4" y="5.5" width="16" height="14.5" rx="2.5" />
+      <path d="M8 3.5v4M16 3.5v4M4 10h16" />
+    </>
+  ),
+  back: <path d="M9 14l-4-4 4-4M5 10h9a5 5 0 010 10h-2" />,
+  sliders: <path d="M4 7h10M18 7h2M4 17h4M12 17h8M14 5v4M8 15v4" />,
+  grip: (
+    <>
+      <circle cx="9" cy="6" r="1.3" fill="currentColor" />
+      <circle cx="15" cy="6" r="1.3" fill="currentColor" />
+      <circle cx="9" cy="12" r="1.3" fill="currentColor" />
+      <circle cx="15" cy="12" r="1.3" fill="currentColor" />
+      <circle cx="9" cy="18" r="1.3" fill="currentColor" />
+      <circle cx="15" cy="18" r="1.3" fill="currentColor" />
+    </>
+  ),
   plane: (
     <>
       <path d="M21 3L10 14" />

@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from 'react'
+import { Select } from '../ui/Calendar'
 import { Navigate, useNavigate, useParams } from 'react-router-dom'
 import { useTranslation } from 'react-i18next'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
@@ -348,19 +349,12 @@ function Notify() {
               onChange={(v) => saveDigest.mutate({ dailyDigest: v, digestHourUtc: utcHour })}
             />
             {(digest.data?.dailyDigest ?? true) && (
-              <label className="f" style={{ width: 110 }}>
-                <select
-                  value={localHour}
-                  aria-label={t('settings.notify.digestAt')}
-                  onChange={(e) => saveDigest.mutate({ dailyDigest: true, digestHourUtc: (((Number(e.target.value) - off) % 24) + 24) % 24 })}
-                >
-                  {Array.from({ length: 24 }, (_, h) => (
-                    <option key={h} value={h}>
-                      {String(h).padStart(2, '0')}:00
-                    </option>
-                  ))}
-                </select>
-              </label>
+              <Select
+                value={String(localHour)}
+                ariaLabel={t('settings.notify.digestAt')}
+                options={Array.from({ length: 24 }, (_, h) => ({ value: String(h), label: `${String(h).padStart(2, '0')}:00` }))}
+                onChange={(v) => saveDigest.mutate({ dailyDigest: true, digestHourUtc: (((Number(v) - off) % 24) + 24) % 24 })}
+              />
             )}
           </div>
         </div>
@@ -422,22 +416,22 @@ function Notify() {
               {t('settings.notify.lead')}
               <small>{t('settings.notify.leadHint')}</small>
             </span>
-            <label className="f" style={{ width: 200 }}>
-              <select
-                value={coCfg.data.config.dueLeadHours}
-                disabled={coCfg.data.config.events.task_due === false}
-                aria-label={t('settings.notify.lead')}
-                onChange={(e) => saveCo.mutate({ dueLeadHours: Number(e.target.value) })}
-              >
-                {[...new Set([...LEAD_HOURS, coCfg.data.config.dueLeadHours])]
+            {coCfg.data.config.events.task_due === false ? (
+              <span className="usel" aria-disabled="true" style={{ opacity: 0.5 }}>
+                {coCfg.data.config.dueLeadHours % 24 === 0
+                  ? t('settings.notify.days', { count: coCfg.data.config.dueLeadHours / 24 })
+                  : t('settings.notify.hours', { count: coCfg.data.config.dueLeadHours })}
+              </span>
+            ) : (
+              <Select
+                value={String(coCfg.data.config.dueLeadHours)}
+                ariaLabel={t('settings.notify.lead')}
+                options={[...new Set([...LEAD_HOURS, coCfg.data.config.dueLeadHours])]
                   .sort((a, b) => a - b)
-                  .map((h) => (
-                    <option key={h} value={h}>
-                      {h % 24 === 0 ? t('settings.notify.days', { count: h / 24 }) : t('settings.notify.hours', { count: h })}
-                    </option>
-                  ))}
-              </select>
-            </label>
+                  .map((h) => ({ value: String(h), label: h % 24 === 0 ? t('settings.notify.days', { count: h / 24 }) : t('settings.notify.hours', { count: h }) }))}
+                onChange={(v) => saveCo.mutate({ dueLeadHours: Number(v) })}
+              />
+            )}
           </div>
         </section>
       )}

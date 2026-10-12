@@ -5,6 +5,7 @@ import { api } from '@/lib/api'
 import { errorCode, inProject, useHandoff, useRefreshBall, type BallItem, type TaskFull } from '../data'
 import { useUi } from '../ui'
 import { Icon } from '../Icon'
+import { DatePop, fromYmd } from '../ui/Calendar'
 import { dueDiff, dueText, isImportant, letterOf, moveKey, personColor } from '../util'
 import type { useBallActions } from './actions'
 
@@ -86,39 +87,14 @@ export function DueCell({ item: i }: { item: BallItem }) {
         {dueText(t, i.dueDate, i18n.language)}
         <small>{n !== null && n < 0 ? t('due.days', { count: -n }) : ''}</small>
       </button>
-      {open && (
-        <>
-          <div className="gt-scrim" onClick={() => setOpen(false)} />
-          <div className="rpop" role="dialog" aria-label={t('row.due')}>
-            <button className="gp" onClick={() => set(plus(0))}>
-              {t('due.today')}
-            </button>
-            <button className="gp" onClick={() => set(plus(1))}>
-              {t('due.tomorrow')}
-            </button>
-            <button className="gp" onClick={() => set(plus(7))}>
-              {t('row.week')}
-            </button>
-            <label className="rdate">
-              <input
-                type="date"
-                defaultValue={ymd(i.dueDate)}
-                onChange={(e) => {
-                  if (!e.target.value) return
-                  const [y, m, d] = e.target.value.split('-').map(Number) as [number, number, number]
-                  set(new Date(y, m - 1, d))
-                }}
-                aria-label={t('row.pickDate')}
-              />
-            </label>
-            {i.dueDate && (
-              <button className="gp rdanger" onClick={() => set(null)}>
-                {t('row.noDue')}
-              </button>
-            )}
-          </div>
-        </>
-      )}
+      <DatePop
+        open={open}
+        onClose={() => setOpen(false)}
+        value={i.dueDate ? ymd(i.dueDate) : null}
+        onPick={(v) => set(v ? fromYmd(v) : null)}
+        clearable
+        quick
+      />
     </span>
   )
 }
@@ -128,15 +104,18 @@ export function MoveCell({ item: i, a }: { item: BallItem; a: Actions }) {
   const { t } = useTranslation('v2')
   const [open, setOpen] = useState(false)
   const mk = moveKey(i)
-  const items: [string, () => void][] = []
-  if (a.isDo) items.push([t('act.review'), a.toReview])
-  if (a.isRev) items.push([t('act.accept'), a.accept], [t('act.return'), a.back])
-  if (a.isAns) items.push([t('act.answer'), a.answer])
-  if (a.canPassOn) items.push([i.ball.move === 'review' ? t('act.passReview') : t('act.forward'), a.pass])
-  else if (a.open) items.push([t('act.pass'), a.pass])
-  if (a.canAsk) items.push([t('act.ask'), a.ask])
-  if (a.canTake) items.push([t('act.take'), a.take])
-  if (a.canClient) items.push([i.ball.waitingClientSince ? t('act.clientReplied') : t('act.waitClient'), a.toggleClient])
+  // Цвет и значок — по смыслу хода: принять зелёный, вернуть оранжевый,
+  // проверка синяя, вопрос фиолетовый, клиент — жёлтый. Не гадать по тексту.
+  type It = { label: string; run: () => void; k: 'ok' | 'ret' | 'rev' | 'ask' | 'work' | 'pass'; icon: string }
+  const items: It[] = []
+  if (a.isDo) items.push({ label: t('act.review'), run: a.toReview, k: 'rev', icon: 'send' })
+  if (a.isRev) items.push({ label: t('act.accept'), run: a.accept, k: 'ok', icon: 'check' }, { label: t('act.return'), run: a.back, k: 'ret', icon: 'back' })
+  if (a.isAns) items.push({ label: t('act.answer'), run: a.answer, k: 'ask', icon: 'ask' })
+  if (a.canPassOn) items.push({ label: i.ball.move === 'review' ? t('act.passReview') : t('act.forward'), run: a.pass, k: 'pass', icon: 'arrow' })
+  else if (a.open) items.push({ label: t('act.pass'), run: a.pass, k: 'pass', icon: 'arrow' })
+  if (a.canAsk) items.push({ label: t('act.ask'), run: a.ask, k: 'ask', icon: 'ask' })
+  if (a.canTake) items.push({ label: t('act.take'), run: a.take, k: 'work', icon: 'hand' })
+  if (a.canClient) items.push({ label: i.ball.waitingClientSince ? t('act.clientReplied') : t('act.waitClient'), run: a.toggleClient, k: 'work', icon: 'clock' })
   return (
     <div className="mvcell rcell">
       <button className={`mv mv-${mk} rbtn`} title={t('row.move')} aria-expanded={open} disabled={!items.length} onClick={() => setOpen(!open)}>
@@ -148,17 +127,20 @@ export function MoveCell({ item: i, a }: { item: BallItem; a: Actions }) {
         <>
           <div className="gt-scrim" onClick={() => setOpen(false)} />
           <div className="rpop" role="menu">
-            {items.map(([label, run]) => (
+            {items.map((it) => (
               <button
-                key={label}
-                className="gp"
+                key={it.label}
+                className={`gp mvi k-${it.k}`}
                 role="menuitem"
                 onClick={() => {
                   setOpen(false)
-                  run()
+                  it.run()
                 }}
               >
-                {label}
+                <span className="mvd">
+                  <Icon name={it.icon} sm />
+                </span>
+                <span className="nm">{it.label}</span>
               </button>
             ))}
           </div>

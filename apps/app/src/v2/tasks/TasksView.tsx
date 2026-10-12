@@ -11,6 +11,7 @@ import { Icon } from '../Icon'
 import { useBallActions } from './actions'
 import { QuickInput, type QuickInputHandle } from './QuickInput'
 import { DueCell, MoveCell, PersonCell, PrioFlag } from './RowEdit'
+import { orderProjects, ProjectPrefsPanel, useProjectPrefs } from './ProjectPrefs'
 import {
   dueDiff,
   dueGroup,
@@ -259,10 +260,20 @@ export function Carousel({
   onPick: (id: string | null) => void
 }) {
   const { t } = useTranslation('v2')
+  const { companyId } = useUi()
   const [q, setQ] = useState('')
+  const [prefs, savePrefs] = useProjectPrefs(companyId)
+  const [setup, setSetup] = useState(false)
   const by = new Map<string, number>()
   for (const c of counts) if (c.project) by.set(c.project.id, (by.get(c.project.id) ?? 0) + 1)
-  const sorted = [...projects].sort((a, b) => (by.get(b.id) ?? 0) - (by.get(a.id) ?? 0))
+  const count = (id: string) => by.get(id) ?? 0
+  // Скрытые человеком не показываем — кроме выбранного сейчас: иначе непонятно, что отфильтровано.
+  const hidden = new Set(prefs.hidden)
+  const sorted = orderProjects(
+    projects.filter((p) => !hidden.has(p.id) || p.id === selected),
+    prefs,
+    count,
+  )
   const s = q.trim().toLowerCase()
   const shown = sorted.filter((p) => !s || p.id === selected || p.name.toLowerCase().includes(s))
   const none = s && !sorted.some((p) => p.name.toLowerCase().includes(s))
@@ -309,6 +320,10 @@ export function Carousel({
           })}
         </div>
         {none && <span className="car-none">{t('car.none', { q })}</span>}
+        <button className="car-set" aria-label={t('pprefs.open')} title={t('pprefs.open')} aria-expanded={setup} onClick={() => setSetup(!setup)}>
+          <Icon name="sliders" />
+        </button>
+        {setup && <ProjectPrefsPanel projects={projects} prefs={prefs} onSave={savePrefs} count={count} onClose={() => setSetup(false)} />}
       </div>
     </div>
   )

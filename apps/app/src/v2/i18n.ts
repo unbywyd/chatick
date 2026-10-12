@@ -268,6 +268,8 @@ const ru = {
     ctx: { tasks: 'Главный экран', task: 'Задача {{id}}', project: 'Проект {{name}}' },
     sug: ['Что важнее всего сегодня?', 'Что я отдал и до сих пор жду?', 'Что застряло дольше всех?'],
   },
+  pprefs: { open: 'Настроить проекты', title: 'Проекты сверху', shown: 'показано {{n}} из {{total}}', hint: 'Перетащи важные выше — они встанут первыми. Переключатель прячет проект из ленты сверху (задачи его остаются).', drag: 'Перетащить «{{name}}»', show: 'Показывать «{{name}}»', reset: 'Вернуть как было' },
+  ui: { pickDate: 'Выбрать дату', find: 'Найти', nothing: 'Ничего не нашлось' },
   common: { showAll: 'Показать целиком', collapse: 'Свернуть', loading: 'Загрузка…', error: 'Не загрузилось', retry: 'Повторить', soon: 'Этот раздел ещё в работе' },
 }
 
@@ -522,6 +524,8 @@ const en: Bundle = {
     ctx: { tasks: 'Home screen', task: 'Task {{id}}', project: 'Project {{name}}' },
     sug: ['What matters most today?', 'What did I pass on that I’m still waiting for?', 'What has been stuck the longest?'],
   },
+  pprefs: { open: 'Set up projects', title: 'Projects on top', shown: '{{n}} of {{total}} shown', hint: 'Drag important ones up — they come first. The switch hides a project from the top strip (its tasks stay).', drag: 'Drag “{{name}}”', show: 'Show “{{name}}”', reset: 'Reset' },
+  ui: { pickDate: 'Pick a date', find: 'Find', nothing: 'Nothing found' },
   common: { showAll: 'Show all', collapse: 'Collapse', loading: 'Loading…', error: 'Failed to load', retry: 'Retry', soon: 'This section is still in progress' },
 }
 
@@ -774,6 +778,8 @@ const he: Bundle = {
     ctx: { tasks: 'מסך הבית', task: 'משימה {{id}}', project: 'פרויקט {{name}}' },
     sug: ['מה הכי חשוב היום?', 'מה העברתי ועדיין מחכה לו?', 'מה תקוע הכי הרבה זמן?'],
   },
+  pprefs: { open: 'הגדרת פרויקטים', title: 'פרויקטים למעלה', shown: 'מוצגים {{n}} מתוך {{total}}', hint: 'גררו את החשובים למעלה — הם יופיעו ראשונים. המתג מסתיר פרויקט מהפס העליון (המשימות שלו נשארות).', drag: 'לגרור את „{{name}}”', show: 'להציג את „{{name}}”', reset: 'לאפס' },
+  ui: { pickDate: 'בחירת תאריך', find: 'חיפוש', nothing: 'לא נמצא' },
   common: { showAll: 'להציג הכול', collapse: 'לכווץ', loading: 'טוען…', error: 'לא נטען', retry: 'לנסות שוב', soon: 'החלק הזה עדיין בעבודה' },
 }
 
