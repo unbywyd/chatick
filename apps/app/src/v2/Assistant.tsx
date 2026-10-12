@@ -57,7 +57,9 @@ export function Assistant() {
   }, [companyId, qc])
 
   const items = history.data?.items ?? []
-  useEffect(() => end.current?.scrollIntoView({ block: 'end' }), [items.length, live?.text])
+  useEffect(() => {
+    end.current?.scrollIntoView({ block: 'end' })
+  }, [items.length, live?.text])
 
   const send = useMutation({
     mutationFn: (msg: string) =>
