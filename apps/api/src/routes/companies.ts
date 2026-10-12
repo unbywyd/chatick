@@ -550,6 +550,65 @@ companiesRoute.get('/:companyId/members', async (c) => {
   )
 })
 
+/**
+ * Команды и мячи всех живых проектов компании — для «Управления компанией» (веб v2).
+ *
+ * Экран показывает сразу всё: кто ведёт какой проект, сколько мячей у
+ * каждого, и перед удалением человека — какие именно задачи у него на руках,
+ * чтобы начальство само выбрало, кому их отдать. Списки проектов этого не
+ * дают (там нет ролей в команде и держателей), а обходить по проекту
+ * значило бы два десятка запросов на одну страницу.
+ *
+ * Только чтение и только менеджеру/админу компании: им и так видны все её
+ * проекты (одна лестница ролей).
+ */
+companiesRoute.get('/:companyId/teams', async (c) => {
+  const { sub } = c.get('session')
+  const companyId = c.req.param('companyId')
+  if (!canManageInvites(await memberRoleIn(companyId, sub))) return c.json({ error: 'Forbidden' }, 403)
+
+  const live = and(eq(projects.companyId, companyId), isNull(projects.archivedAt))
+  const members = await db
+    // Имя и почта — тут же: в команде проекта бывают и те, кого уже нет в
+    // компании (её удаление членство в проектах не трогает).
+    .select({
+      projectId: projectMembers.projectId,
+      userId: projectMembers.userId,
+      role: projectMembers.role,
+      name: users.name,
+      email: users.email,
+    })
+    .from(projectMembers)
+    .innerJoin(projects, eq(projects.id, projectMembers.projectId))
+    .innerJoin(users, eq(users.id, projectMembers.userId))
+    .where(live)
+  const open = await db
+    .select({
+      id: tasks.id,
+      number: tasks.number,
+      title: tasks.title,
+      projectId: tasks.projectId,
+      holderId: tasks.assigneeId,
+      move: tasks.move,
+      heldSince: tasks.heldSince,
+    })
+    .from(tasks)
+    .innerJoin(projects, eq(projects.id, tasks.projectId))
+    .where(and(live, isNull(tasks.deletedAt), sql`${tasks.status} not in ${closedSql}`))
+  // Состав или проекты ведутся во внешней системе — экран прячет кнопки,
+  // которые сервер всё равно отклонит (SPEC §8.42).
+  const company = await db.query.companies.findFirst({ where: eq(companies.id, companyId) })
+  return c.json({
+    members,
+    open,
+    external: {
+      name: company?.externalSystemName ?? null,
+      members: Boolean(company?.membersViaApiOnly),
+      projects: Boolean(company?.projectsViaApiOnly),
+    },
+  })
+})
+
 // --- BYO-LLM (только admin компании) -----------------------------------------
 // Ключ шифруется (AES-256-GCM) и НИКОГДА не отдаётся обратно — только статус + last4.
 

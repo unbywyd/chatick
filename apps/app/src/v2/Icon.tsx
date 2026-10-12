@@ -95,6 +95,40 @@ const PATHS: Record<string, React.ReactNode> = {
     </>
   ),
   reopen: <path d="M4 12a8 8 0 1 0 2.3-5.6M4 4v4h4" />,
+  plane: (
+    <>
+      <path d="M21 3L10 14" />
+      <path d="M21 3l-7 18-4-7-7-4z" />
+    </>
+  ),
+  external: (
+    <>
+      <path d="M14 4h6v6M20 4l-9 9" />
+      <path d="M18 14v4a2 2 0 01-2 2H6a2 2 0 01-2-2V8a2 2 0 012-2h4" />
+    </>
+  ),
+  download: <path d="M12 4v11M7.5 10.5L12 15l4.5-4.5M5 19h14" />,
+  mail: (
+    <>
+      <path d="M4 6h16v12H4z" />
+      <path d="M4 7l8 6 8-6" />
+    </>
+  ),
+  archive: <path d="M4 7h16v3H4zM5.5 10v9h13v-9M10 14h4" />,
+  sun: (
+    <>
+      <circle cx="12" cy="12" r="4" />
+      <path d="M12 2.5v2M12 19.5v2M2.5 12h2M19.5 12h2M5.3 5.3l1.4 1.4M17.3 17.3l1.4 1.4M5.3 18.7l1.4-1.4M17.3 6.7l1.4-1.4" />
+    </>
+  ),
+  moon: <path d="M20 14.5A8 8 0 019.5 4a8 8 0 1010.5 10.5z" />,
+  monitor: (
+    <>
+      <rect x="3" y="4" width="18" height="12" rx="2" />
+      <path d="M8 20h8M12 16v4" />
+    </>
+  ),
+  lang: <path d="M4 5h9M8.5 3v2M6 5c.5 3 3 6 6.5 7.5M11 5c-.8 3.5-3.6 6.6-7 8M13 21l4.5-10L22 21M14.5 17.5h6" />,
 }
 
 export type IconName = keyof typeof PATHS

@@ -18,10 +18,7 @@ import { ThemeProvider } from './providers/theme'
 import { ConfirmProvider } from './components/ui/confirm'
 import { ProjectLayout, useProjectCtx } from './screens/ProjectScreen'
 import { EnterScreen } from './screens/EnterScreen'
-import { LoginScreen, AuthCallback } from './screens/LoginScreen'
 import { PublicShareScreen } from './screens/PublicShareScreen'
-import { InviteScreen } from './screens/InviteScreen'
-import { ConnectScreen } from './screens/ConnectScreen'
 import { StartScreen } from './screens/StartScreen'
 import { InboxScreen } from './screens/InboxScreen'
 import { NotifySettingsScreen } from './screens/NotifySettingsScreen'
@@ -53,7 +50,7 @@ import { VersionsView } from './v2/versions/VersionsView'
 import { CompanyView } from './v2/company/CompanyView'
 import { SettingsView } from './v2/settings/SettingsView'
 import { NotificationsView } from './v2/settings/NotificationsView'
-import { LoginV2, CompaniesV2 } from './v2/auth/AuthScreens'
+import { LoginScreenV2, CodeScreenV2, AuthCallbackV2, InviteV2, ConsentV2, NewCompanyV2, CompaniesV2 } from './v2/auth/AuthScreens'
 
 // HashRouter — единый роутинг для веба и Electron (file://) без доп. настроек.
 const queryClient = new QueryClient({
@@ -350,17 +347,17 @@ createRoot(document.getElementById('root')!).render(
             {/* Без разрешения браузер молчит, а попросить его было негде */}
             <NotifyPermissionPrompt />
             <Routes>
-              <Route path="/" element={<LoginScreen />} />
+              <Route path="/" element={<LoginScreenV2 />} />
               <Route path="/enter" element={<EnterScreen />} />
-              <Route path="/login" element={<LoginScreen />} />
-              {/* v2: вход по макету — пока по временному адресу, до проверки */}
-              <Route path="/login2/*" element={<LoginV2 />} />
+              <Route path="/login" element={<LoginScreenV2 />} />
+              <Route path="/login/code" element={<CodeScreenV2 />} />
+              <Route path="/new-company" element={<NewCompanyV2 />} />
               <Route path="/companies" element={<CompaniesV2 />} />
-              <Route path="/auth" element={<AuthCallback />} />
+              <Route path="/auth" element={<AuthCallbackV2 />} />
               {/* приём приглашения по ссылке из письма */}
-              <Route path="/invite/:token" element={<InviteScreen />} />
+              <Route path="/invite/:token" element={<InviteV2 />} />
               {/* подключение внешнего ИИ (Claude Code) — SPEC §8.27 */}
-              <Route path="/connect" element={<ConnectScreen />} />
+              <Route path="/connect" element={<ConsentV2 />} />
               {/* публичная ссылка: открывается без входа — SPEC §8.34 */}
               <Route path="/s/:slug" element={<PublicShareScreen />} />
               {/* Компания и её табы адресуемы: /start/:companyId/(projects|team|settings) */}

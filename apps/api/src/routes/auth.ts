@@ -1,12 +1,12 @@
 import { Hono } from 'hono'
-import { and, eq, gt, isNull } from 'drizzle-orm'
+import { and, eq, gt, isNull, sql } from 'drizzle-orm'
 import { zValidator } from '@hono/zod-validator'
 import { z } from 'zod'
 import { nanoid } from 'nanoid'
 import sharp from 'sharp'
 import { PutObjectCommand } from '@aws-sdk/client-s3'
 import { db } from '../db/client.js'
-import { companyMembers, users, supportLogins } from '../db/schema.js'
+import { companies, companyInvites, companyMembers, projects, users, supportLogins } from '../db/schema.js'
 import { signMediaToken, signSessionToken, requireSession, type SessionEnv } from '../auth.js'
 import { env } from '../env.js'
 import { s3Client, s3Bucket, getObjectStream, S3_KEY_PREFIX } from '../lib/s3.js'
@@ -346,6 +346,35 @@ auth.post('/otp/verify', async (c) => {
 
   const token = await signSessionToken({ sub: user.id, email: user.email })
   return c.json({ token, user: { id: user.id, name: user.name, email: user.email } })
+})
+
+/**
+ * Что за приглашение — до входа (веб v2, экран «Вас пригласили»).
+ *
+ * Человек открывает ссылку из письма, ещё не войдя: экран должен сказать,
+ * куда его зовут и кто, иначе кнопка «Принять» — прыжок вслепую. Ручка без
+ * сессии, но только по секретному токену из письма (nanoid 32): кто его
+ * держит, тот и адресат. Ничего не меняет — принятие по-прежнему через
+ * POST /companies/invites/:token/accept под сессией.
+ */
+auth.get('/invite/:token', async (c) => {
+  const invite = await db.query.companyInvites.findFirst({
+    where: and(eq(companyInvites.token, c.req.param('token')), eq(companyInvites.status, 'pending')),
+  })
+  if (!invite) return c.json({ error: 'Invite not found or expired' }, 404)
+  const company = await db.query.companies.findFirst({ where: eq(companies.id, invite.companyId) })
+  if (!company) return c.json({ error: 'Invite not found or expired' }, 404)
+  const inviter = invite.invitedById ? await db.query.users.findFirst({ where: eq(users.id, invite.invitedById) }) : null
+  const project = invite.projectId ? await db.query.projects.findFirst({ where: eq(projects.id, invite.projectId) }) : null
+  const [people] = await db.select({ n: sql<number>`count(*)::int` }).from(companyMembers).where(eq(companyMembers.companyId, company.id))
+  const [projectCount] = await db.select({ n: sql<number>`count(*)::int` }).from(projects).where(eq(projects.companyId, company.id))
+  return c.json({
+    email: invite.email,
+    role: invite.role,
+    company: { id: company.id, name: company.name, logoUrl: company.logoUrl, people: people?.n ?? 0, projects: projectCount?.n ?? 0 },
+    inviter: inviter ? { id: inviter.id, name: inviter.name } : null,
+    project: project && project.companyId === company.id ? { id: project.id, name: project.name, color: project.color, logoUrl: project.logoUrl } : null,
+  })
 })
 
 /**

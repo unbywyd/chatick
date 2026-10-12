@@ -115,8 +115,8 @@ export function StartRedirect() {
   const last = localStorage.getItem('chatick_v2_company')
   // Иначе — та, где больше всего проектов: обычно это и есть рабочая компания.
   const pick = companies.data.find((c) => c.id === last) ?? [...companies.data].sort((a, b) => b.projectsCount - a.projectsCount)[0]
-  // Компаний нет — старый мастер первого входа пока остаётся (новый — по макету «Первый вход», позже).
-  if (!pick) return <Navigate to="/onboarding" replace />
+  // Компаний нет — завести свою (или принять приглашение со списка компаний).
+  if (!pick) return <Navigate to="/new-company" replace />
   return <Navigate to={`/c/${pick.id}`} replace />
 }
 

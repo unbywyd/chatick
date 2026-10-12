@@ -1,0 +1,12 @@
+/* Управление компанией: то, чего нет в main.css. */
+
+/* Роль в строке человека — кнопка-бейдж, по ней меню ролей (только админ). */
+.app .co-rolebtn{gap:4px;padding-inline:9px 6px;cursor:pointer}
+.app .co-rolebtn:hover{filter:brightness(.97);box-shadow:inset 0 0 0 1px var(--ink3)}
+.app .co-rolebtn .ic{width:14px;height:14px}
+.app .co-rmenu-role{top:calc(100% + 4px);inset-inline-start:0;inset-inline-end:auto;width:260px;z-index:41}
+.app .co-row .co-chev{color:var(--ink3)}
+.app .co-mem button:disabled,.app .co-cand button:disabled{opacity:.5;cursor:default}
+
+/* Имена в таблицах выровнены по началу строки и в иврите (в main.css — влево под английский макет). */
+.app[dir="rtl"] .co-pj b,.app[dir="rtl"] .co-pj small,.app[dir="rtl"] .co-mem b,.app[dir="rtl"] .co-mem small,.app[dir="rtl"] .co-cand b,.app[dir="rtl"] .co-bgt{text-align:right}
