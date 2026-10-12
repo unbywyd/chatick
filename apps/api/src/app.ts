@@ -23,10 +23,11 @@ import { aiRoute } from './routes/ai.js'
 import { activityRoute } from './routes/activity.js'
 import { inboxRoute } from './routes/inbox.js'
 import { reviewsRoute } from './routes/reviews.js'
-import { documentsRoute, documentsPublicRoute } from './routes/documents.js'
+import { documentsRoute, documentsPublicRoute, documentsCompanyRoute } from './routes/documents.js'
 import { notesRoute, companyNotesRoute } from './routes/notes.js'
 import { worklogRoute } from './routes/worklog.js'
 import { releasesRoute } from './routes/releases.js'
+import { releasesCompanyRoute } from './routes/releases-company.js'
 import { integrationsRoute, expoHookRoute } from './routes/integrations.js'
 import { timeRoute, timeMineRoute, timeCompanyRoute } from './routes/time.js'
 import { bridgeRoute } from './routes/bridge.js'
@@ -73,11 +74,15 @@ app.route('/api/v1/inbox', inboxRoute)
 // отзывы — публичные: их оставляют и читают без входа
 app.route('/api/v1/reviews', reviewsRoute)
 app.route('/api/v1/documents', documentsRoute)
+// v2: документы всех проектов компании одним запросом (экран «Документы и заметки»).
+app.route('/api/v1/company-documents', documentsCompanyRoute)
 app.route('/api/v1/notes', notesRoute)
 app.route('/api/v1/worklog', worklogRoute)
 // База знаний компании: сессия вместо проектного токена — на главной
 // компании проекта нет, а знание принадлежит именно ей.
 app.route('/api/v1/company', companyNotesRoute)
+// v2: версии всех проектов компании одним запросом (экран «Версии»).
+app.route('/api/v1/company-releases', releasesCompanyRoute)
 app.route('/api/v1/releases', releasesRoute)
 app.route('/api/v1/integrations', integrationsRoute)
 // Вебхуки внешних систем: без сессии, подлинность по подписи.
