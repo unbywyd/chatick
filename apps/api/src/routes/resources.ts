@@ -157,6 +157,20 @@ resourcesRoute.get('/permissions', async (c) => {
   return c.json({ canManage: await hasPermission(projectId, sub, 'credentials.manage') })
 })
 
+// Корзина — ДО '/:id': иначе GET /trash ловила ручка одного ресурса с id='trash'
+// и отвечала 404, и корзина ресурсов была пустой у всех.
+resourcesRoute.get('/trash', async (c) => {
+  const { projectId, sub } = c.get('auth')
+  if (!(await hasPermission(projectId, sub, 'credentials.manage'))) return c.json({ error: 'Forbidden' }, 403)
+  const rows = await db
+    .select({ r: credentials, deleter: users })
+    .from(credentials)
+    .leftJoin(users, eq(users.id, credentials.deletedById))
+    .where(and(eq(credentials.projectId, projectId), sql`${credentials.deletedAt} is not null`))
+    .orderBy(desc(credentials.deletedAt))
+  return c.json(rows.map((x) => ({ id: x.r.id, name: x.r.name, deletedAt: x.r.deletedAt, deletedBy: x.deleter ? { id: x.deleter.id, name: x.deleter.name, avatarUrl: x.deleter.avatarUrl } : null })))
+})
+
 // Детали одного ресурса + список секретов (метаданные, значения скрыты)
 resourcesRoute.get('/:id', async (c) => {
   const { projectId, sub } = c.get('auth')
@@ -340,19 +354,6 @@ resourcesRoute.delete('/:id', async (c) => {
   await audit(projectId, sub, 'delete', id, r.name)
   void logActivity({ projectId, actorId: sub, action: 'delete', entityType: 'resource', entityId: id, entityLabel: r.name })
   return c.json({ ok: true })
-})
-
-// Корзина ресурсов
-resourcesRoute.get('/trash', async (c) => {
-  const { projectId, sub } = c.get('auth')
-  if (!(await hasPermission(projectId, sub, 'credentials.manage'))) return c.json({ error: 'Forbidden' }, 403)
-  const rows = await db
-    .select({ r: credentials, deleter: users })
-    .from(credentials)
-    .leftJoin(users, eq(users.id, credentials.deletedById))
-    .where(and(eq(credentials.projectId, projectId), sql`${credentials.deletedAt} is not null`))
-    .orderBy(desc(credentials.deletedAt))
-  return c.json(rows.map((x) => ({ id: x.r.id, name: x.r.name, deletedAt: x.r.deletedAt, deletedBy: x.deleter ? { id: x.deleter.id, name: x.deleter.name, avatarUrl: x.deleter.avatarUrl } : null })))
 })
 
 // Восстановить ресурс

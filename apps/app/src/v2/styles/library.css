@@ -1,0 +1,55 @@
+/* Ресурсы, Файлы, История — то, чего нет в main.css: живые миниатюры,
+   строки секретов, журнал доступа, просмотр файла. Всё на токенах макета. */
+
+.app .mwrap.lib-modal{position:fixed;z-index:50;overflow-y:auto;padding-bottom:40px}
+
+/* Миниатюра настоящей картинки поверх тёмной подложки th-img */
+.app .lib-thumb{position:absolute;inset:0;width:100%;height:100%;object-fit:cover}
+.app .fthumb .fext,.app .fthumb .ftask{z-index:1}
+.app[dir="rtl"] .fext{left:auto;right:10px}
+.app[dir="rtl"] .ftask{right:auto;left:8px}
+.app .dz.lib-drag{border-color:var(--ink);color:var(--ink);background:var(--soft)}
+
+/* Секрет в окне ресурса: имя, точки или значение, глаз / копировать / удалить */
+.app .lib-sec{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1.4fr) 36px 36px 36px;gap:4px;align-items:center;min-height:40px;padding-inline-start:12px;border-radius:11px;background:var(--paper);box-shadow:inset 0 0 0 1px var(--line)}
+.app .lib-sec .ib{width:32px;height:32px;color:var(--ink3)}
+.app .lib-sec .ib:hover{color:var(--ink)}
+.app .lib-sec-l{font-size:14px;font-weight:500;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.app .lib-sec-v{font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:13px;color:var(--ink3);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;direction:ltr;text-align:start}
+.app .lib-sec-v.open{color:var(--ink);white-space:normal;word-break:break-all;user-select:all}
+.app .lk{cursor:pointer}
+.app .lk:hover{color:var(--ink)}
+
+/* Подтверждение удаления — второй щелчок по той же кнопке */
+.app .lib-danger,.app .lib-danger:hover{box-shadow:inset 0 0 0 1.5px var(--signal);color:var(--signal)}
+
+/* Журнал доступа к ресурсам */
+.app .lib-log{max-height:420px;overflow-y:auto;margin:0 -8px}
+.app .lib-log-r{display:grid;grid-template-columns:110px minmax(0,140px) auto minmax(0,1fr);gap:10px;align-items:center;padding:8px;border-radius:10px;font-size:13.5px}
+.app .lib-log-r:hover{background:var(--soft)}
+.app .lib-log-r time{color:var(--ink3);font-size:12.5px}
+.app .lib-log-r b{font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.app .lib-log-n{color:var(--ink2);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.app .tchip.lib-rev{background:var(--work-bg);color:var(--work)}
+
+/* Просмотр файла поверх экрана */
+.app .lib-view{position:fixed;inset:0;z-index:60;background:rgba(17,19,16,.95);display:flex;flex-direction:column}
+.app .lib-view-bar{display:flex;align-items:center;gap:8px;padding:14px 18px;color:#EEF3E6}
+.app .lib-view-bar .ib{color:#EEF3E6}
+.app .lib-view-bar .ib:hover{background:rgba(255,255,255,.1)}
+.app .lib-view-bar .mini{background:rgba(255,255,255,.1);color:#EEF3E6;box-shadow:none;height:34px;padding:0 12px}
+.app .lib-view-bar .mini:hover{background:rgba(255,255,255,.18)}
+.app .lib-view-bar .mini.lib-danger{box-shadow:inset 0 0 0 1.5px #FF8F57;color:#FF8F57}
+.app .lib-view-n{font-weight:600;font-size:15px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.app .lib-view-m{font-size:12.5px;color:#AEB9A5;margin-top:2px}
+.app .lib-view-body{flex:1;min-height:0;display:flex;align-items:center;justify-content:center;padding:0 24px 24px;overflow:hidden}
+.app .lib-view-body img,.app .lib-view-body video{display:block;max-width:100%;max-height:calc(100vh - 100px);border-radius:10px;object-fit:contain}
+.app .lib-view-body iframe{width:min(1100px,100%);height:calc(100vh - 100px);border:0;border-radius:10px;background:#fff}
+.app .lib-view-none{display:flex;flex-direction:column;align-items:center;gap:14px;color:#EEF3E6}
+
+@media (max-width:640px){
+  .app .lib-log-r{grid-template-columns:1fr auto;gap:2px 10px}
+  .app .lib-log-r time{grid-column:1/-1}
+  .app .lib-sec{grid-template-columns:minmax(0,1fr) 32px 32px 32px}
+  .app .lib-sec-v{display:none}
+}

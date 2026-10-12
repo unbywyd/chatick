@@ -441,6 +441,28 @@ filesRoute.post('/', async (c) => {
   )
 })
 
+// Корзина — ДО '/:fileId': иначе GET /trash ловила ручка одного файла с id='trash'
+// и отвечала 404, и корзина файлов была пустой у всех.
+filesRoute.get('/trash', async (c) => {
+  const { projectId, sub } = c.get('auth')
+  if (!(await hasPermission(projectId, sub, 'files.read'))) return c.json({ error: 'Forbidden' }, 403)
+  const rows = await db
+    .select({ file: files, deleter: users })
+    .from(files)
+    .leftJoin(users, eq(users.id, files.deletedById))
+    .where(and(eq(files.projectId, projectId), sql`${files.deletedAt} is not null`, isNull(files.pendingUntil)))
+    .orderBy(desc(files.deletedAt))
+    .limit(200)
+  return c.json(
+    rows.map((r) => ({
+      id: r.file.id,
+      name: r.file.name,
+      deletedAt: r.file.deletedAt,
+      deletedBy: r.deleter ? { id: r.deleter.id, name: r.deleter.name, avatarUrl: r.deleter.avatarUrl } : null,
+    })),
+  )
+})
+
 // Получить прокси-URL для просмотра (стабильный, на нашем домене, для iframe/img/Google)
 /**
  * Один файл по id (SPEC §8.34).
@@ -552,25 +574,4 @@ filesRoute.post('/:fileId/restore', async (c) => {
   await db.update(files).set({ deletedAt: null, deletedById: null }).where(eq(files.id, fileId))
   void logActivity({ projectId, actorId: sub, action: 'restore', entityType: 'file', entityId: file.id, entityLabel: file.name })
   return c.json({ ok: true })
-})
-
-// Корзина файлов
-filesRoute.get('/trash', async (c) => {
-  const { projectId, sub } = c.get('auth')
-  if (!(await hasPermission(projectId, sub, 'files.read'))) return c.json({ error: 'Forbidden' }, 403)
-  const rows = await db
-    .select({ file: files, deleter: users })
-    .from(files)
-    .leftJoin(users, eq(users.id, files.deletedById))
-    .where(and(eq(files.projectId, projectId), sql`${files.deletedAt} is not null`, isNull(files.pendingUntil)))
-    .orderBy(desc(files.deletedAt))
-    .limit(200)
-  return c.json(
-    rows.map((r) => ({
-      id: r.file.id,
-      name: r.file.name,
-      deletedAt: r.file.deletedAt,
-      deletedBy: r.deleter ? { id: r.deleter.id, name: r.deleter.name, avatarUrl: r.deleter.avatarUrl } : null,
-    })),
-  )
 })
