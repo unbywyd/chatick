@@ -93,6 +93,9 @@ export function useDocRoom(documentId: string, me: { id: string; name: string } 
   const [provider, setProvider] = useState<CollabProvider | null>(null)
   const [synced, setSynced] = useState(false)
   const [peers, setPeers] = useState<Peer[]>([])
+  // Себя (другие вкладки того же человека) в «кто здесь» не показываем.
+  const meId = useRef(me?.id)
+  meId.current = me?.id
   useEffect(() => {
     const p = new CollabProvider(documentId)
     setProvider(p)
@@ -104,7 +107,7 @@ export function useDocRoom(documentId: string, me: { id: string; name: string } 
       p.awareness.getStates().forEach((st, key) => {
         if (key === p.doc.clientID) return
         const u = (st as { user?: { id?: string; name?: string; color?: string; editing?: boolean } }).user
-        if (!u?.id || seen.has(u.id)) return
+        if (!u?.id || seen.has(u.id) || u.id === meId.current) return
         seen.add(u.id)
         list.push({ key, id: u.id, name: u.name ?? '…', color: u.color ?? '#71717A', editing: Boolean(u.editing) })
       })

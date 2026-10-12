@@ -166,6 +166,30 @@ export function DocsView() {
   const busy = createDoc.isPending || createNote.isPending
 
   const counts = items.filter((i) => i.projectId).map((i) => ({ project: { id: i.projectId! } }))
+
+  // Группы дерева свёрнуты: десятки документов в столбик растягивали боковую
+  // колонку на несколько экранов. Раскрыта та, где открытый документ, все —
+  // при поиске и при выбранном проекте. Раскрытые руками — запоминаем.
+  const openKey = `chatick_v2_docs_open_${companyId}`
+  const [openMap, setOpenMap] = useState<Record<string, boolean>>(() => {
+    try {
+      return (JSON.parse(localStorage.getItem(openKey) ?? '{}') as Record<string, boolean>) ?? {}
+    } catch {
+      return {}
+    }
+  })
+  const isOpen = (g: { key: string; rows: { id: string }[] }) =>
+    Boolean(s) || Boolean(project) || (openMap[g.key || 'co'] ?? g.rows.some((r) => r.id === sel?.id))
+  const toggleGroup = (k: string) => {
+    const g = groups.find((x) => (x.key || 'co') === k)
+    const next = { ...openMap, [k]: !(g ? isOpen(g) : false) }
+    setOpenMap(next)
+    try {
+      localStorage.setItem(openKey, JSON.stringify(next))
+    } catch {
+      /* не запомним — не страшно */
+    }
+  }
   const selNote = sel?.kind === 'note' ? (allNotes.find((n) => n.id === sel.id) ?? notesHit.data?.find((n) => n.id === sel.id) ?? null) : null
 
   return (
@@ -221,8 +245,12 @@ export function DocsView() {
           {groups.map((g) => (
             <div key={g.key || 'co'}>
               <div className="tg">
-                {g.project && <ProjectLogo project={g.project} size="xs" />}
-                <span className="nm bidi">{g.project ? shortProject(g.project.name) : t('docs.company')}</span>
+                <button className="tg-tog" aria-expanded={isOpen(g)} onClick={() => toggleGroup(g.key || 'co')}>
+                  <Icon name={isOpen(g) ? 'chevron' : 'chevronEnd'} sm />
+                  {g.project && <ProjectLogo project={g.project} size="xs" />}
+                  <span className="nm bidi">{g.project ? shortProject(g.project.name) : t('docs.company')}</span>
+                  <span className="tg-n">{g.rows.length}</span>
+                </button>
                 {(!g.project || pmap.has(g.project.id)) && (
                   <button
                     onClick={() => (g.project ? createDoc.mutate(g.project.id) : createNote.mutate(null))}
@@ -234,7 +262,7 @@ export function DocsView() {
                   </button>
                 )}
               </div>
-              {g.rows.map((i) => {
+              {isOpen(g) && g.rows.map((i) => {
                 const on = sel?.id === i.id
                 return (
                   <button
