@@ -8,6 +8,7 @@ import i18n from '@/i18n'
  * Склонения — через i18next plural (_one/_few/_many/_other).
  */
 const ru = {
+  navMenu: { aria: 'Разделы', more: 'Все разделы', head: 'Разделы', pin: 'Показывать «{{name}}» в шапке', pinHint: 'Показывать в шапке', hint: 'Переключатель — показывать раздел в шапке. Остальные всегда здесь.' },
   nav: { tasks: 'Задачи', docs: 'Документы', time: 'Часы', resources: 'Ресурсы', files: 'Файлы', versions: 'Версии', history: 'История' },
   mv: { do: 'Сделать', review: 'Проверить', answer: 'Ответить', client: 'Ждём клиента' },
   head: {
@@ -85,6 +86,11 @@ const ru = {
     newAria: 'Кинуть задачу',
     details: 'Подробно',
     me: 'мне',
+    toMe: 'Мне',
+    toWhom: 'Кому уйдёт мяч',
+    toProject: 'В какой проект',
+    noPerson: 'Нет такого человека',
+    noProject: 'Нет такого проекта',
     lh: { title: 'Задача', prio: 'Важность', mv: 'Ход', due: 'Срок', from: 'От кого', holder: 'У кого', wait: 'Ждёт' },
     groups: 'Группы: {{by}}',
     gb: { due: 'по сроку', proj: 'по проекту', personFrom: 'по автору', personTo: 'по исполнителю', none: 'без групп' },
@@ -267,6 +273,7 @@ const ru = {
 type Bundle = typeof ru
 
 const en: Bundle = {
+  navMenu: { aria: 'Sections', more: 'All sections', head: 'Sections', pin: 'Show “{{name}}” in the header', pinHint: 'Show in the header', hint: 'The switch shows a section in the header. The rest are always here.' },
   nav: { tasks: 'Tasks', docs: 'Docs', time: 'Hours', resources: 'Resources', files: 'Files', versions: 'Versions', history: 'History' },
   mv: { do: 'Do', review: 'Review', answer: 'Answer', client: 'Waiting on client' },
   head: {
@@ -332,6 +339,11 @@ const en: Bundle = {
     newAria: 'Throw a task',
     details: 'Details',
     me: 'me',
+    toMe: 'Me',
+    toWhom: 'Who gets the ball',
+    toProject: 'Which project',
+    noPerson: 'No such person',
+    noProject: 'No such project',
     lh: { title: 'Task', prio: 'Priority', mv: 'Move', due: 'Due', from: 'From', holder: 'Holder', wait: 'Waiting' },
     groups: 'Groups: {{by}}',
     gb: { due: 'by due date', proj: 'by project', personFrom: 'by author', personTo: 'by assignee', none: 'no groups' },
@@ -512,6 +524,7 @@ const en: Bundle = {
 }
 
 const he: Bundle = {
+  navMenu: { aria: 'אזורים', more: 'כל האזורים', head: 'אזורים', pin: 'להציג את „{{name}}” בכותרת', pinHint: 'להציג בכותרת', hint: 'המתג מציג אזור בכותרת. השאר תמיד כאן.' },
   nav: { tasks: 'משימות', docs: 'מסמכים', time: 'שעות', resources: 'משאבים', files: 'קבצים', versions: 'גרסאות', history: 'היסטוריה' },
   mv: { do: 'לבצע', review: 'לבדוק', answer: 'לענות', client: 'מחכים ללקוח' },
   head: {
@@ -577,6 +590,11 @@ const he: Bundle = {
     newAria: 'לזרוק משימה',
     details: 'פרטים',
     me: 'לי',
+    toMe: 'לי',
+    toWhom: 'למי עובר הכדור',
+    toProject: 'לאיזה פרויקט',
+    noPerson: 'אין אדם כזה',
+    noProject: 'אין פרויקט כזה',
     lh: { title: 'משימה', prio: 'חשיבות', mv: 'תור', due: 'מועד', from: 'ממי', holder: 'אצל מי', wait: 'מחכה' },
     groups: 'קבוצות: {{by}}',
     gb: { due: 'לפי מועד', proj: 'לפי פרויקט', personFrom: 'לפי יוצר', personTo: 'לפי מבצע', none: 'בלי קבוצות' },

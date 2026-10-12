@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react'
-import { Link, NavLink, useNavigate } from 'react-router-dom'
+import { Link, NavLink, useLocation, useNavigate } from 'react-router-dom'
 import { useTranslation } from 'react-i18next'
 import { useMutation, useQueryClient } from '@tanstack/react-query'
 import { api, logout } from '@/lib/api'
@@ -11,34 +11,103 @@ import { ProjectLogo } from './ProjectLogo'
 import { Icon } from './Icon'
 import { fmtClock, fmtHm, letterOf, personColor, projectColor, shortProject, timeAgo } from './util'
 
+const NAV = ['', 'docs', 'time', 'resources', 'files', 'versions', 'history'] as const
+const NAV_LABEL: Record<string, string> = { '': 'tasks', docs: 'docs', time: 'time', resources: 'resources', files: 'files', versions: 'versions', history: 'history' }
+const PINS_KEY = 'chatick_v2_nav'
+
+/** Какие разделы человек вынес в шапку. По умолчанию — только задачи. */
+function readPins(): string[] {
+  try {
+    const v = JSON.parse(localStorage.getItem(PINS_KEY) ?? 'null') as unknown
+    if (Array.isArray(v)) return v.filter((x): x is string => typeof x === 'string' && (NAV as readonly string[]).includes(x))
+  } catch {
+    /* хранилище закрыто — меню по умолчанию */
+  }
+  return ['']
+}
+
 export function Header() {
-  const { t } = useTranslation('v2')
-  const { companyId, base } = useUi()
-  const nav: [string, string][] = [
-    ['', t('nav.tasks')],
-    ['docs', t('nav.docs')],
-    ['time', t('nav.time')],
-    ['resources', t('nav.resources')],
-    ['files', t('nav.files')],
-    ['versions', t('nav.versions')],
-    ['history', t('nav.history')],
-  ]
+  const { companyId } = useUi()
   return (
     <header className="hdr">
       <CompanyMenu />
-      <nav className="nav" aria-label="Sections">
-        {nav.map(([path, label]) => (
-          <NavLink key={path} to={path ? `${base}/${path}` : base} end={!path} className={({ isActive }) => 'nv' + (isActive ? ' on' : '')}>
-            {label}
-          </NavLink>
-        ))}
-      </nav>
+      <SectionsNav />
       <div style={{ flex: 1 }} />
       <TimerPill companyId={companyId} />
-      <Hours />
       <Bell />
       <MeMenu />
     </header>
+  )
+}
+
+/**
+ * Разделы: в шапке — только то, что человек сам вынес (по умолчанию «Задачи»),
+ * остальное — в «⋯». Там же переход на любой раздел и галочки «в шапке».
+ * Открытый раздел виден в шапке, даже если не вынесен: иначе непонятно, где ты.
+ */
+function SectionsNav() {
+  const { t } = useTranslation('v2')
+  const { base } = useUi()
+  const navigate = useNavigate()
+  const { pathname } = useLocation()
+  const [pins, setPins] = useState<string[]>(readPins)
+  const [open, setOpen] = useState(false)
+  const pathOf = (k: string) => (k ? `${base}/${k}` : base)
+  const current = NAV.find((k) => (k ? pathname.startsWith(`${base}/${k}`) : pathname === base || pathname.startsWith(`${base}/task`))) ?? null
+  const shown = NAV.filter((k) => pins.includes(k) || k === current)
+  const toggle = (k: string) => {
+    const next = pins.includes(k) ? pins.filter((x) => x !== k) : NAV.filter((x) => x === k || pins.includes(x))
+    setPins(next)
+    try {
+      localStorage.setItem(PINS_KEY, JSON.stringify(next))
+    } catch {
+      /* не запомним — не страшно */
+    }
+  }
+  return (
+    <nav className="nav navw" aria-label={t('navMenu.aria')}>
+      {shown.map((k) => (
+        <NavLink key={k} to={pathOf(k)} end={!k} className={({ isActive }) => 'nv' + (isActive || k === current ? ' on' : '')}>
+          {t(`nav.${NAV_LABEL[k]}`)}
+        </NavLink>
+      ))}
+      <button className="nv nv-more" aria-label={t('navMenu.more')} aria-expanded={open} onClick={() => setOpen(!open)}>
+        <Icon name="more" />
+      </button>
+      {open && (
+        <>
+          <div className="gt-scrim" onClick={() => setOpen(false)} />
+          <div className="navpop" role="menu" aria-label={t('navMenu.aria')}>
+            <div className="hd">{t('navMenu.head')}</div>
+            {NAV.map((k) => (
+              <div key={k} className={'navi' + (k === current ? ' cur' : '')}>
+                <button
+                  className="navgo"
+                  role="menuitem"
+                  onClick={() => {
+                    setOpen(false)
+                    navigate(pathOf(k))
+                  }}
+                >
+                  {t(`nav.${NAV_LABEL[k]}`)}
+                </button>
+                <button
+                  className={'navpin' + (pins.includes(k) ? ' on' : '')}
+                  role="switch"
+                  aria-checked={pins.includes(k)}
+                  aria-label={t('navMenu.pin', { name: t(`nav.${NAV_LABEL[k]}`) })}
+                  title={t('navMenu.pinHint')}
+                  onClick={() => toggle(k)}
+                >
+                  <i />
+                </button>
+              </div>
+            ))}
+            <div className="navft">{t('navMenu.hint')}</div>
+          </div>
+        </>
+      )}
+    </nav>
   )
 }
 
@@ -193,6 +262,7 @@ function TimerPill({ companyId }: { companyId: string }) {
       >
         {run ? <Icon name="pause" /> : <Icon name="play" fill />}
       </button>
+      <Hours />
       {pick && (
         <>
           <div className="gt-scrim" onClick={() => setPick(false)} />
@@ -234,8 +304,8 @@ function Hours() {
   const run = running.data
   const extra = run ? (Date.now() - new Date(run.startedAt).getTime()) / 60000 : 0
   return (
-    <Link className="hours" to={`${base}/time`} aria-label={t('head.toHours')}>
-      <Icon name="clock" />
+    // Часть блока таймера: сколько набежало сегодня и переход к часам.
+    <Link className="gt-today" to={`${base}/time`} aria-label={t('head.toHours')} title={t('head.toHours')}>
       <span>{t('head.today')}</span>
       <b>{fmtHm((today.data ?? 0) + extra)}</b>
       <Icon name="chevronEnd" sm />

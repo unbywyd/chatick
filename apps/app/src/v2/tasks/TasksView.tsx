@@ -1,7 +1,7 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useTranslation } from 'react-i18next'
-import { useMutation } from '@tanstack/react-query'
+import { useMutation, useQuery } from '@tanstack/react-query'
 import type { TFunction } from 'i18next'
 import { api } from '@/lib/api'
 import { errorCode, useFromMe, useMe, useMine, useProjects, useRefreshBall, type BallItem, type CompanyProject } from '../data'
@@ -9,6 +9,7 @@ import { useUi } from '../ui'
 import { ProjectLogo } from '../ProjectLogo'
 import { Icon } from '../Icon'
 import { useBallActions } from './actions'
+import { QuickInput, type QuickInputHandle } from './QuickInput'
 import {
   dueDiff,
   dueGroup,
@@ -427,15 +428,25 @@ function QuickAdd({ projects, onCreated }: { projects: CompanyProject[]; onCreat
   const me = useMe()
   const navigate = useNavigate()
   const refresh = useRefreshBall()
+  const input = useRef<QuickInputHandle>(null)
   const [text, setText] = useState('')
   const [preview, setPreview] = useState<{ project: { id: string; name: string; color: string | null }; assignee: { id: string; name: string } | null } | null>(null)
   const [error, setError] = useState<string | null>(null)
+  // Ошибку разбора показываем после попытки создать, а не на каждую букву:
+  // «напиши, что сделать» под полем, где пишут, только мешает.
+  const [tried, setTried] = useState(false)
+  const people = useQuery({
+    queryKey: ['v2', 'members', companyId],
+    queryFn: () => api<{ user: { id: string; name: string } }[]>(`/api/v1/companies/${companyId}/members`).then((r) => r.map((m) => m.user)),
+    staleTime: 5 * 60_000,
+  })
 
   useEffect(() => {
     const s = text.trim()
     if (!s) {
       setPreview(null)
       setError(null)
+      setTried(false)
       return
     }
     const h = window.setTimeout(() => {
@@ -462,45 +473,66 @@ function QuickAdd({ projects, onCreated }: { projects: CompanyProject[]; onCreat
         body: JSON.stringify({ companyId, text: text.trim(), projectId: project ?? undefined }),
       }),
     onSuccess: (r) => {
+      input.current?.clear()
       setText('')
       setPreview(null)
+      setTried(false)
       const toMe = !r.task.assignee || r.task.assignee.id === me.data?.id
       flash(toMe ? t('tasks.created', { project: shortProject(r.task.project.name) }) : t('tasks.thrown', { name: r.task.assignee!.name, title: r.task.title }))
       onCreated(toMe)
       refresh()
     },
-    onError: (e) => setError(parseError(t, e)),
+    onError: (e) => {
+      setTried(true)
+      setError(parseError(t, e))
+    },
   })
 
+  const submit = () => {
+    if (!text.trim() || create.isPending) return
+    setTried(true)
+    create.mutate()
+  }
   const pin = preview?.project ?? projects.find((p) => p.id === project) ?? null
   const toMe = !preview?.assignee || preview.assignee.id === me.data?.id
+  const who = toMe ? (me.data ? { id: me.data.id, name: me.data.name } : null) : preview!.assignee
   return (
     <>
       <div className="newt">
         <Icon name="plus" style={{ color: 'var(--ink3)' }} />
-        <input
-          value={text}
-          onChange={(e) => setText(e.target.value)}
-          onKeyDown={(e) => {
-            if (e.key === 'Enter' && text.trim() && !create.isPending) create.mutate()
-            if (e.key === 'Escape') setText('')
-          }}
+        <QuickInput
+          ref={input}
           placeholder={t('tasks.newPh')}
-          aria-label={t('tasks.newAria')}
-          aria-invalid={Boolean(error)}
+          people={(people.data ?? []).map((u) => ({ id: u.id, label: u.name, kind: 'person' as const }))}
+          projects={projects.map((p) => ({ id: p.id, label: p.name, color: p.color, logoUrl: p.logoUrl, kind: 'project' as const }))}
+          emptyPeople={t('tasks.noPerson')}
+          emptyProjects={t('tasks.noProject')}
+          onChange={setText}
+          onSubmit={submit}
+          onEscape={() => {
+            input.current?.clear()
+            setText('')
+          }}
         />
-        {pin && (
-          <span className="pin">
+        {text.trim() && pin && (
+          <span className="pin" title={t('tasks.toProject')}>
             <ProjectLogo project={pin} size="xs" />
             <span className="bidi">{shortProject(pin.name)}</span>
           </span>
         )}
-        {text.trim() && <span className={'who' + (toMe ? ' me' : '')} style={{ paddingInlineStart: 10 }}>{toMe ? t('tasks.me') : `@${preview!.assignee!.name}`}</span>}
+        {text.trim() && who && (
+          <span className="qwho" title={t('tasks.toWhom')}>
+            <span className="av" style={{ background: personColor(who.id) }}>
+              {letterOf(who.name)}
+            </span>
+            <span className="bidi">{toMe ? t('tasks.toMe') : who.name}</span>
+          </span>
+        )}
         <button className="mini" onClick={() => navigate(`${base}/task/new`, { state: { title: text.trim(), projectId: pin?.id } })}>
           {t('tasks.details')}
         </button>
       </div>
-      {error && text.trim() && (
+      {error && tried && text.trim() && (
         <div className="need" role="alert" style={{ margin: '0 16px 8px' }}>
           <Icon name="info" />
           {error}

@@ -8,6 +8,7 @@ import { api } from '@/lib/api'
 import { errorCode, SOCKET_EVENT, type SocketMessage } from './data'
 import { useUi } from './ui'
 import { Icon } from './Icon'
+import { AssistantInput, type AssistantInputHandle } from './AssistantInput'
 
 type Msg = { id: string; role: 'user' | 'assistant'; text: string; tools: string[]; failed: boolean; createdAt: string }
 type Live = { replyTo: string; text: string; tool: string | null }
@@ -35,6 +36,7 @@ export function Assistant() {
   const [live, setLive] = useState<Live | null>(null)
   const [note, setNote] = useState<string | null>(null)
   const end = useRef<HTMLDivElement>(null)
+  const input = useRef<AssistantInputHandle>(null)
 
   useEffect(() => {
     const on = (e: Event) => {
@@ -73,6 +75,7 @@ export function Assistant() {
     onMutate: () => setNote(null),
     onSuccess: (m) => {
       setText('')
+      input.current?.clear()
       qc.setQueryData<{ items: Msg[]; busy: boolean }>(key, (old) => ({ items: [...(old?.items ?? []), m], busy: true }))
       setLive((l) => l ?? { replyTo: m.id, text: '', tool: null })
     },
@@ -147,19 +150,7 @@ export function Assistant() {
           <Icon name="target" sm />
           <span>{ctx}</span>
         </div>
-        <input
-          value={text}
-          onChange={(e) => setText(e.target.value)}
-          onKeyDown={(e) => {
-            if (e.key === 'Enter' && !e.shiftKey) {
-              e.preventDefault()
-              ask(text)
-            }
-          }}
-          placeholder={t('ai.ph')}
-          aria-label={t('ai.ph')}
-          disabled={Boolean(live)}
-        />
+        <AssistantInput ref={input} placeholder={t('ai.ph')} disabled={Boolean(live)} onChange={setText} onSubmit={ask} />
         <div className="r">
           <span style={{ fontSize: 12, color: 'var(--ink3)', flex: 1 }} />
           <button className="send" aria-label={t('ai.send')} onClick={() => ask(text)} disabled={!text.trim() || Boolean(live) || send.isPending}>
