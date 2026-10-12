@@ -1,3 +1,4 @@
+import { isImage } from '@/components/files/FileViewer'
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useTranslation } from 'react-i18next'
@@ -297,7 +298,8 @@ export type Tile = { key: string; name: string; mime: string; src?: string | nul
 
 const kindOf = (f: { name: string; mime: string }) => {
   const ext = f.name.toLowerCase().split('.').pop() ?? ''
-  if (f.mime.startsWith('image/') || ['png', 'jpg', 'jpeg', 'gif', 'webp', 'svg', 'avif'].includes(ext)) return 'img'
+  // Картинку узнаёт общий isImage: файлы без типа (из почты, со старых загрузок) — тоже картинки.
+  if (isImage(f)) return 'img'
   if (f.mime.startsWith('video/') || ['mp4', 'webm', 'mov'].includes(ext)) return 'vid'
   if (/pdf|word|excel|sheet|presentation|document|text|csv/.test(f.mime)) return 'doc'
   return 'oth'

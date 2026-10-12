@@ -276,7 +276,7 @@ function Bell() {
           <div className="bpop" role="dialog" aria-label={t('bell.title')}>
             <div className="hd">
               {t('bell.title')}
-              {unread.length > 0 && <button onClick={() => read.mutate({ all: true })}>{t('bell.readAll')}</button>}
+              {unread.length > 0 && <button onClick={() => read.mutate({ all: true, companyId, ids: unread.map((n) => n.id) })}>{t('bell.readAll')}</button>}
             </div>
             {unread.slice(0, 6).map((n) => (
               <button key={n.id} className="bi unread" onClick={() => openNotice(n)}>
