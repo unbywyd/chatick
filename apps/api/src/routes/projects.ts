@@ -591,6 +591,22 @@ export async function projectNameTaken(companyId: string, name: string, exceptId
 }
 
 /**
+ * Запись человека в команде проекта — как есть, без поднятия роли.
+ *
+ * projectRoleOf отвечает на вопрос «что ему можно» и для менеджера и админа
+ * компании отдаёт роль админа, даже если в команде его нет. Когда же речь о
+ * ДРУГОМ человеке — добавить, убрать, поменять роль или права, — нужен
+ * именно состав команды: иначе админа компании нельзя было добавить в
+ * проект («уже в команде»), а правка его роли молча ничего не меняла.
+ */
+export async function teamMemberOf(projectId: string, userId: string) {
+  const m = await db.query.projectMembers.findFirst({
+    where: and(eq(projectMembers.projectId, projectId), eq(projectMembers.userId, userId)),
+  })
+  return m ?? null
+}
+
+/**
  * Членство с ДЕЙСТВУЮЩЕЙ ролью: менеджер и админ компании — «админ» в любом её
  * проекте (одна лестница ролей, см. companyManagesProject). Не состоящему в
  * команде отдаём членство без записи в базе: права есть, в составе команды его
@@ -1135,7 +1151,7 @@ projectsRoute.patch(
     const companyRole = await companyRoleOf(project.companyId, sub)
     if (!(me?.role === 'owner' || me?.role === 'admin' || canCreateProjects(companyRole))) return c.json({ error: 'Forbidden' }, 403)
 
-    const target = await projectRoleOf(projectId, userId)
+    const target = await teamMemberOf(projectId, userId)
     if (!target) return c.json({ error: 'Not a project member' }, 404)
     const b = c.req.valid('json')
     const patch: Record<string, unknown> = {}
@@ -1166,7 +1182,7 @@ projectsRoute.patch(
     }
 
 
-    const target = await projectRoleOf(projectId, userId)
+    const target = await teamMemberOf(projectId, userId)
     if (!target) return c.json({ error: 'Not a project member' }, 404)
 
     // Владелец — это тот, кто завёл проект; роль не передаётся и не снимается,
@@ -1214,7 +1230,7 @@ projectsRoute.patch(
     if (!allowed) return c.json({ error: 'Forbidden' }, 403)
 
 
-    const target = await projectRoleOf(projectId, userId)
+    const target = await teamMemberOf(projectId, userId)
     if (!target) return c.json({ error: 'Not a project member' }, 404)
     if (target.role === 'owner') return c.json({ error: 'Owner permissions are fixed' }, 400)
 
@@ -1250,7 +1266,7 @@ projectsRoute.post(
     // добавляемый должен быть участником компании
     if (!(await companyRoleOf(project.companyId, userId))) return c.json({ error: 'User is not a company member' }, 400)
 
-    const exists = await projectRoleOf(projectId, userId)
+    const exists = await teamMemberOf(projectId, userId)
     if (exists) return c.json({ error: 'Already a member' }, 409)
 
     await db.insert(projectMembers).values({ projectId, userId, role, permissions: JSON.stringify(defaultPermissions(role)) })
@@ -1368,7 +1384,7 @@ projectsRoute.delete('/:projectId/members/:userId', async (c) => {
    * людей и раздать права. Мост это уже запрещал при смене роли, а здесь
    * дыра оставалась открытой.
    */
-  const victim = await projectRoleOf(projectId, userId)
+  const victim = await teamMemberOf(projectId, userId)
   if (victim?.role === 'owner') return c.json({ error: 'Project owner cannot be removed' }, 400)
 
   await db.delete(projectMembers).where(and(eq(projectMembers.projectId, projectId), eq(projectMembers.userId, userId)))

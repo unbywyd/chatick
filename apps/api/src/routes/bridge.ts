@@ -48,6 +48,7 @@ import {
   hasPermission,
   memberDomains,
   projectRoleOf,
+  teamMemberOf,
   PROJECT_COLORS,
   type ProjectPermission, ownsOrManages } from './projects.js'
 import { nanoid } from 'nanoid'
@@ -4598,7 +4599,7 @@ bridgeRoute.post('/members', async (c) => {
 
   // Человек уже в компании — просто включаем в проект.
   if (userId && (await companyRoleOf(project.companyId, userId))) {
-    if (await projectRoleOf(scope.projectId, userId)) return c.json({ error: 'Already a member' }, 409)
+    if (await teamMemberOf(scope.projectId, userId)) return c.json({ error: 'Already a member' }, 409)
 
     await db.insert(projectMembers).values({
       projectId: scope.projectId,
@@ -4695,7 +4696,7 @@ bridgeRoute.patch('/members/:userId', async (c) => {
   }
 
   const userId = c.req.param('userId')
-  const target = await projectRoleOf(scope.projectId, userId)
+  const target = await teamMemberOf(scope.projectId, userId)
   if (!target) return c.json({ error: 'Not a project member' }, 404)
   if (target.role === 'owner') return c.json({ error: 'Project owner cannot be changed' }, 400)
 
@@ -4780,7 +4781,7 @@ bridgeRoute.delete('/members/:userId', async (c) => {
   if (await membersLockedForProject(scope.projectId)) return c.json(MEMBERS_LOCKED, 403)
 
   const userId = c.req.param('userId')
-  const target = await projectRoleOf(scope.projectId, userId)
+  const target = await teamMemberOf(scope.projectId, userId)
   if (!target) return c.json({ error: 'Not a project member' }, 404)
   // Владелец один на проект и часто единственное начальство: убрав его,
   // проект остаётся без того, кто может вернуть людей и раздать права.
