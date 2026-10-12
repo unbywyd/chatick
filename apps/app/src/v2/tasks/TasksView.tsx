@@ -402,9 +402,11 @@ function Row({ item: i, tab, first, myId, person }: { item: BallItem; tab: Tab; 
         </button>
         {i.isNew && i.last && <div className="nw">{newLine(t, i)}</div>}
         <div className="meta">
-          <PrioFlag item={i} />
+          {/* Номер — первым, меткой одной ширины: столбцом, а не ступеньками после проекта.
+              Флажок важности — в конце: невидимый у обычных задач, он не сдвигает строку. */}
+          <span className="tnum">{i.number}</span>
           <span className="pn">{p ? shortProject(p.name) : ''}</span>
-          <span>{i.number}</span>
+          <PrioFlag item={i} />
         </div>
       </div>
       <MoveCell item={i} a={a} />

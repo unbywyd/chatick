@@ -228,3 +228,7 @@ html:has(.app .panel),html:has(.app .panel) body{overflow:hidden}
 .app .lh-tag{font-size:11.5px;font-weight:600;padding:1px 7px;border-radius:6px;margin-inline-start:4px}
 .app .lh-tag.hi{background:var(--signal-bg);color:var(--signal)}
 .app .lh-tag.lo{background:var(--soft);color:var(--ink2)}
+
+/* Номер задачи — в начале второй строки, одинаковой ширины: номера встают столбцом. */
+.app .row .meta .tnum{flex:none;min-width:76px;text-align:center;padding:1px 6px;border-radius:6px;background:var(--soft);font-variant-numeric:tabular-nums;font-family:'JetBrains Mono',ui-monospace,monospace;font-size:11.5px;font-weight:500;color:var(--ink2);opacity:1}
+.app.lay-stage .row .meta .tnum{opacity:1}
