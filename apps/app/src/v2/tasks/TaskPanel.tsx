@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useTranslation } from 'react-i18next'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { api } from '@/lib/api'
+import { api, setScreenProject } from '@/lib/api'
 import { RichEditor } from '@/components/ui/rich-editor'
 import { inProject, keys, useComments, useHandoffs, useMe, useRefreshBall, useTask, type Handoff, type TaskFull } from '../data'
 import { useUi } from '../ui'
@@ -71,6 +71,11 @@ export function TaskPanel({ taskId }: { taskId: string }) {
 export function PanelBody({ data, myId, lng }: { data: TaskFull; myId: string; lng: string }) {
   const { t } = useTranslation('v2')
   const task = data.task
+  const pid = task.project?.id ?? null
+  useEffect(() => {
+    setScreenProject(pid)
+    return () => setScreenProject(null)
+  }, [pid])
   const n = dueDiff(task.dueDate)
   return (
     <>
@@ -115,7 +120,7 @@ export function PanelBody({ data, myId, lng }: { data: TaskFull; myId: string; l
   )
 }
 
-function Ball({ data, myId, lng }: { data: TaskFull; myId: string; lng: string }) {
+export function Ball({ data, myId, lng }: { data: TaskFull; myId: string; lng: string }) {
   const { t } = useTranslation('v2')
   const task = data.task
   const a = useBallActions(task, myId)
@@ -319,7 +324,7 @@ function Feed({ task, lng }: { task: TaskFull['task']; lng: string }) {
   )
 }
 
-function PassEv({ h, lng }: { h: Handoff; lng: string }) {
+export function PassEv({ h, lng }: { h: Handoff; lng: string }) {
   const { t } = useTranslation('v2')
   const who = h.actor ?? h.from
   const to = h.to
@@ -357,7 +362,7 @@ function PassEv({ h, lng }: { h: Handoff; lng: string }) {
   )
 }
 
-const stripHtml = (s: string) =>
+export const stripHtml = (s: string) =>
   s.includes('<')
     ? new DOMParser().parseFromString(s.replace(/<br\s*\/?>/gi, '\n').replace(/<\/p>/gi, '\n'), 'text/html').body.textContent?.trim() ?? ''
     : s

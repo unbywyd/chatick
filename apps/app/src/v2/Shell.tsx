@@ -12,6 +12,7 @@ import { HandoffDialog } from './tasks/Handoff'
 import { Icon } from './Icon'
 import { inkOn } from './util'
 import './styles/main.css'
+import './styles/fixes.css'
 import './i18n'
 
 const ACCENT = '#D4F36B'

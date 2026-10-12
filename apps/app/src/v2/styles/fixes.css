@@ -1,0 +1,11 @@
+/* Поправки поверх стилей макета: то, чего на холсте не видно (RTL, живые данные). */
+
+/* Иврит: ассистент и его кнопка — с другой стороны, граница — к странице. */
+.app[dir='rtl'] .aside{border-left:0;border-right:1px solid var(--line)}
+.app[dir='rtl'] .ai-fab{right:auto;left:24px}
+
+/* Логотип проекта картинкой — без внутренних отступов буквы. */
+.app .logo img{display:block}
+
+/* Поле комментария в панели задачи — textarea вместо макетной заглушки. */
+.app .pf textarea.cin{resize:none;border:0;outline:none;font:inherit;color:var(--ink);padding:11px 14px;line-height:20px;display:block}

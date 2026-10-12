@@ -178,9 +178,19 @@ export class ApiError extends Error {
  */
 type Auth = 'session' | 'project' | { project: string }
 
-/** Проект из адреса окна: #/c/<company>/p/<project>/… — или null вне проекта. */
+/**
+ * Проект, открытый на экране веба v2. Там проекта в адресе нет (один экран на
+ * компанию), а старые виджеты — редактор с загрузкой картинок — берут его
+ * именно отсюда. Ставит экран задачи, пока открыт.
+ */
+let screenProject: string | null = null
+export const setScreenProject = (id: string | null) => {
+  screenProject = id
+}
+
+/** Проект из адреса окна: #/c/<company>/p/<project>/… — или открытый на экране v2, или null. */
 export function projectIdFromLocation(): string | null {
-  return window.location.hash.match(/^#\/c\/[^/]+\/p\/([^/?]+)/)?.[1] ?? null
+  return window.location.hash.match(/^#\/c\/[^/]+\/p\/([^/?]+)/)?.[1] ?? screenProject
 }
 
 /**

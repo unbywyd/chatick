@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from 'react'
+import { useLocation } from 'react-router-dom'
 import { useTranslation } from 'react-i18next'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import Markdown from 'react-markdown'
@@ -20,7 +21,10 @@ type Live = { replyTo: string; text: string; tool: string | null }
  */
 export function Assistant() {
   const { t } = useTranslation('v2')
-  const { companyId, company, setAiOpen, project, openTaskId } = useUi()
+  const { companyId, company, setAiOpen, project, openTaskId: panelTaskId } = useUi()
+  // Задача — из панели (?t=) или со страницы задачи (/task/:id).
+  const pageTask = useLocation().pathname.match(/\/task\/([^/]+)$/)?.[1]
+  const openTaskId = panelTaskId ?? (pageTask && pageTask !== 'new' ? pageTask : null)
   const qc = useQueryClient()
   const key = ['v2', 'assistant', companyId]
   const history = useQuery({

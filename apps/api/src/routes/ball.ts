@@ -322,6 +322,10 @@ ballRoute.get('/task/:taskId', async (c) => {
       priority: task.priority,
       dueDate: task.dueDate,
       estimateMinutes: task.estimateMinutes ? Number(task.estimateMinutes) : null,
+      // Страница задачи v2 показывает «Экраны в макете» и спринт — без этих
+      // двух полей ей пришлось бы тянуть весь список задач проекта.
+      refs: task.refs ?? '',
+      groupId: task.groupId ?? null,
       createdAt: task.createdAt,
       updatedAt: task.updatedAt,
       closed,
