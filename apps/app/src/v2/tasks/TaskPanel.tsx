@@ -1,0 +1,399 @@
+import { useEffect, useState } from 'react'
+import { useNavigate } from 'react-router-dom'
+import { useTranslation } from 'react-i18next'
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
+import { api } from '@/lib/api'
+import { RichEditor } from '@/components/ui/rich-editor'
+import { inProject, keys, useComments, useHandoffs, useMe, useRefreshBall, useTask, type Handoff, type TaskFull } from '../data'
+import { useUi } from '../ui'
+import { ProjectLogo } from '../ProjectLogo'
+import { Icon } from '../Icon'
+import { useBallActions } from './actions'
+import { dueDiff, dueText, fmtHm, heatOf, letterOf, personColor, projectColor, timeAgo, waitText } from '../util'
+
+type CheckItem = { id: string; text: string; done: boolean }
+
+/**
+ * Панель задачи справа поверх главного экрана. Главное в ней — мяч: у кого,
+ * какой ход, записка, и кнопки хода. Ниже — поля, описание, чек-лист и лента,
+ * где передачи и комментарии идут вперемешку по времени.
+ */
+export function TaskPanel({ taskId }: { taskId: string }) {
+  const { t, i18n } = useTranslation('v2')
+  const { closeTask, base } = useUi()
+  const navigate = useNavigate()
+  const me = useMe()
+  const full = useTask(taskId)
+  const refresh = useRefreshBall()
+
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => e.key === 'Escape' && !document.querySelector('.mwrap') && closeTask()
+    window.addEventListener('keydown', onKey)
+    return () => window.removeEventListener('keydown', onKey)
+  }, [closeTask])
+
+  // Открыл задачу — прочитал всё, что о ней было: «новое» гаснет.
+  const isNew = full.data?.task.isNew
+  useEffect(() => {
+    if (!isNew) return
+    void api('/api/v1/inbox/read', { method: 'POST', body: JSON.stringify({ entityType: 'task', entityId: taskId }) }).then(() => refresh())
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isNew, taskId])
+
+  const task = full.data?.task
+  return (
+    <>
+      <div className="scrim" onClick={closeTask} />
+      <section className="panel" aria-label={t('panel.aria')}>
+        <div className="ph">
+          {task?.project && (
+            <>
+              <ProjectLogo project={task.project} />
+              <span className="pn bidi">{task.project.name}</span>
+            </>
+          )}
+          <span className="tid">{task?.number}</span>
+          <span style={{ flex: 1 }} />
+          <button className="ib" aria-label={t('panel.full')} onClick={() => navigate(`${base}/task/${taskId}`)}>
+            <Icon name="expand" />
+          </button>
+          <button className="ib" aria-label={t('panel.close')} onClick={closeTask}>
+            <Icon name="close" />
+          </button>
+        </div>
+        {!full.data && <div className="pb">{full.isError ? t('common.error') : t('common.loading')}</div>}
+        {full.data && me.data && <PanelBody data={full.data} myId={me.data.id} lng={i18n.language} />}
+      </section>
+    </>
+  )
+}
+
+export function PanelBody({ data, myId, lng }: { data: TaskFull; myId: string; lng: string }) {
+  const { t } = useTranslation('v2')
+  const task = data.task
+  const n = dueDiff(task.dueDate)
+  return (
+    <>
+      <div className="pb">
+        <h2 className="pt bidi">{task.title}</h2>
+        <Ball data={data} myId={myId} lng={lng} />
+        <div className="fields">
+          <div className="fld">
+            <span className="k">{t('panel.owner')}</span>
+            <span className="v">
+              <span className="av" style={{ background: personColor(task.owner?.id), width: 20, height: 20, fontSize: 10 }}>
+                {letterOf(task.owner?.name)}
+              </span>
+              <span className="bidi">{task.owner?.name ?? '—'}</span>
+            </span>
+          </div>
+          <div className="fld">
+            <span className="k">{t('panel.due')}</span>
+            <span className="v">
+              <span className={'due' + (n !== null && n < 0 ? ' late' : '') + (n === 0 ? ' today' : '')}>{dueText(t, task.dueDate, lng)}</span>
+            </span>
+          </div>
+          <div className="fld">
+            <span className="k">{t('panel.estimate')}</span>
+            <span className="v">{task.estimateMinutes ? fmtHm(task.estimateMinutes) : '—'}</span>
+          </div>
+        </div>
+        {task.description?.trim() ? (
+          <div className="desc">
+            <RichEditor value={task.description} onChange={() => {}} mentions={[]} preset="full" readOnly />
+          </div>
+        ) : (
+          <p className="desc" style={{ color: 'var(--ink3)' }}>
+            {t('panel.noDesc')}
+          </p>
+        )}
+        <Checklist task={task} canEdit={Boolean(data.can.edit) || task.holder?.id === myId} />
+        <Feed task={task} lng={lng} />
+      </div>
+      <CommentBox task={task} />
+    </>
+  )
+}
+
+function Ball({ data, myId, lng }: { data: TaskFull; myId: string; lng: string }) {
+  const { t } = useTranslation('v2')
+  const task = data.task
+  const a = useBallActions(task, myId)
+  const [menu, setMenu] = useState(false)
+  const closed = task.closed
+  const mine = task.holder?.id === myId
+  const mk = task.ball.waitingClientSince ? 'client' : task.ball.move
+  const h = task.holder
+  const wait = waitText(t, task.ball.heldSince)
+  const ownerName = task.owner?.id === myId ? t('panel.you') : (task.owner?.name ?? '—')
+  let sub: string
+  if (closed) sub = task.status === 'done' ? t('panel.subClosedDone') : t('panel.subClosedCancel')
+  else if (task.ball.waitingClientSince)
+    sub = t('panel.subClient', { date: new Date(task.ball.waitingClientSince).toLocaleDateString(lng, { month: 'short', day: 'numeric' }) })
+  else if (mine) {
+    const from = task.owner?.id === myId ? t('panel.yourTask') : t('panel.fromName', { name: task.owner?.name ?? '—' })
+    sub = t('panel.subMine', { from, wait })
+  } else sub = t('panel.subAway', { wait, owner: ownerName })
+  const head =
+    task.status === 'done' ? t('panel.accepted') : task.status === 'cancelled' ? t('panel.cancelled') : mine ? t('panel.youHave') : h ? t('panel.hasBall', { name: h.name }) : t('panel.nobody')
+  const long = mine && !closed && !task.ball.waitingClientSince && heatOf(task.ball.move, task.ball.heldSince) === 'burn'
+
+  return (
+    <div className={'ball' + (mine && !closed ? ' is-me' : '')}>
+      <span className="av lg" style={{ background: personColor(h?.id) }}>
+        {letterOf(h?.name)}
+      </span>
+      <div className="who2">
+        <b className="bidi">{head}</b>
+        {!closed && (
+          <span className={`mv mv-${mk}`}>
+            <i />
+            {t(`mv.${mk}`)}
+          </span>
+        )}
+        {!closed && task.ball.round > 1 && <span className="rnd">{t('round', { n: task.ball.round })}</span>}
+        <small>
+          {sub}
+          {long && <span className="long"> {t('panel.long')}</span>}
+        </small>
+      </div>
+      <div className="bacts">
+        {a.isRev && (
+          <>
+            <button className="btn-acc" onClick={a.accept}>
+              <Icon name="check" />
+              {t('act.accept')}
+            </button>
+            <button className="btn" onClick={a.back}>
+              {t('act.return')}
+            </button>
+          </>
+        )}
+        {a.isDo && (
+          <>
+            <button className="btn-acc" onClick={a.toReview}>
+              {t('act.review')}
+            </button>
+            <button className="btn" onClick={a.pass}>
+              {t('act.pass')}
+            </button>
+          </>
+        )}
+        {a.isAns && (
+          <button className="btn-acc" onClick={a.answer}>
+            {t('act.answer')}
+          </button>
+        )}
+        {a.isClient && (
+          <button className="btn" onClick={a.clientReplied}>
+            {t('act.clientReplied')}
+          </button>
+        )}
+        {a.canTake && (
+          <button className="btn" onClick={a.take}>
+            {t('act.take')}
+          </button>
+        )}
+        {!a.open && data.can.reopen && (
+          <button className="btn" onClick={a.reopen}>
+            {t('act.reopen')}
+          </button>
+        )}
+        {a.open && (
+          <button className="ib" aria-label={t('act.more')} aria-expanded={menu} onClick={() => setMenu(!menu)}>
+            <Icon name="more" />
+          </button>
+        )}
+        {menu && (
+          <>
+            <div className="gt-scrim" onClick={() => setMenu(false)} />
+            <div className="mmenu" role="menu" onClick={() => setMenu(false)}>
+              {a.canPassOn && (
+                <button role="menuitem" onClick={a.pass}>
+                  <Icon name="arrow" sm />
+                  {task.ball.move === 'review' ? t('act.passReview') : t('act.forward')}
+                </button>
+              )}
+              {a.isAway && data.can.pass && (
+                <button role="menuitem" onClick={a.pass}>
+                  <Icon name="arrow" sm />
+                  {t('act.pass')}
+                </button>
+              )}
+              {a.canAsk && (
+                <button role="menuitem" onClick={a.ask}>
+                  <Icon name="ask" sm />
+                  {t('act.ask')}
+                </button>
+              )}
+              {a.canTake && (
+                <button role="menuitem" onClick={a.take}>
+                  <Icon name="hand" sm />
+                  {t('act.take')}
+                </button>
+              )}
+              {a.canClient && (
+                <button role="menuitem" onClick={a.toggleClient}>
+                  <Icon name="clock" sm />
+                  {task.ball.waitingClientSince ? t('act.clientReplied') : t('act.waitClient')}
+                </button>
+              )}
+              {data.can.cancel && (
+                <button role="menuitem" className="danger" onClick={a.cancel}>
+                  <Icon name="cancel" sm />
+                  {t('act.cancel')}
+                </button>
+              )}
+            </div>
+          </>
+        )}
+      </div>
+    </div>
+  )
+}
+
+function Checklist({ task, canEdit }: { task: TaskFull['task']; canEdit: boolean }) {
+  const qc = useQueryClient()
+  const key = ['v2', 'checklist', task.id]
+  const q = useQuery({
+    queryKey: key,
+    queryFn: () => api<{ items: CheckItem[] }>(`/api/v1/tasks/${task.id}/checklist`, inProject(task.project!.id)).then((r) => r.items),
+    enabled: Boolean(task.project),
+  })
+  const toggle = useMutation({
+    mutationFn: (i: CheckItem) =>
+      api(`/api/v1/tasks/${task.id}/checklist/${i.id}`, { method: 'PATCH', body: JSON.stringify({ done: !i.done }), ...inProject(task.project!.id) }),
+    onMutate: (i) => qc.setQueryData<CheckItem[]>(key, (old) => old?.map((x) => (x.id === i.id ? { ...x, done: !x.done } : x))),
+    onSettled: () => void qc.invalidateQueries({ queryKey: key }),
+  })
+  if (!q.data?.length) return null
+  return (
+    <div className="cl">
+      {q.data.map((c) => (
+        <button key={c.id} className={'cli' + (c.done ? ' on' : '')} disabled={!canEdit} onClick={() => toggle.mutate(c)} role="checkbox" aria-checked={c.done}>
+          <span className={'box' + (c.done ? ' on' : '')}>{c.done && <Icon name="check" style={{ width: 12, height: 12, strokeWidth: 2.6 }} />}</span>
+          <span className="bidi">{c.text}</span>
+        </button>
+      ))}
+    </div>
+  )
+}
+
+/** Передачи и комментарии — одной лентой по времени. */
+function Feed({ task, lng }: { task: TaskFull['task']; lng: string }) {
+  const { t } = useTranslation('v2')
+  const handoffs = useHandoffs(task)
+  const comments = useComments(task)
+  type Ev = { at: string; h?: Handoff; c?: { id: string; body: string; author: { id: string; name: string } | null; deleted?: boolean } }
+  const evs: Ev[] = [
+    ...(handoffs.data ?? []).map((h) => ({ at: h.createdAt, h })),
+    ...(comments.data ?? []).filter((c) => !(c as { deleted?: boolean }).deleted).map((c) => ({ at: c.createdAt, c })),
+  ].sort((a, b) => a.at.localeCompare(b.at))
+  if (!evs.length) return null
+  return (
+    <div>
+      <h3 className="sec">{t('panel.feed')}</h3>
+      <div className="feed">
+        {evs.map((e) =>
+          e.h ? (
+            <PassEv key={e.h.id} h={e.h} lng={lng} />
+          ) : (
+            <div key={e.c!.id} className="cm">
+              <span className="av lg" style={{ background: personColor(e.c!.author?.id) }}>
+                {letterOf(e.c!.author?.name)}
+              </span>
+              <div className="b">
+                <div className="n">
+                  <span className="bidi">{e.c!.author?.name ?? '—'}</span>
+                  <time>{timeAgo(lng, e.at)}</time>
+                </div>
+                <div className="x bidi" style={{ whiteSpace: 'pre-wrap' }}>
+                  {stripHtml(e.c!.body)}
+                </div>
+              </div>
+            </div>
+          ),
+        )}
+      </div>
+    </div>
+  )
+}
+
+function PassEv({ h, lng }: { h: Handoff; lng: string }) {
+  const { t } = useTranslation('v2')
+  const who = h.actor ?? h.from
+  const to = h.to
+  const verb = t(`panel.verb.${h.action}`, { defaultValue: '' })
+  const showMv = ['review', 'ask', 'answer', 'pass', 'return'].includes(h.action) && h.moveAfter
+  return (
+    <div className={'pass-ev' + (h.action === 'return' ? ' ret' : h.action === 'accept' ? ' ok' : '')}>
+      <div className="hd2">
+        <span className="av" style={{ background: personColor(who?.id) }}>
+          {letterOf(who?.name)}
+        </span>
+        <b className="bidi">{who?.name ?? 'Chatick'}</b>
+        {to && to.id !== who?.id && h.action !== 'accept' && h.action !== 'cancel' && (
+          <>
+            <span className="ar3">
+              <Icon name="arrow" sm />
+            </span>
+            <span className="av" style={{ background: personColor(to.id) }}>
+              {letterOf(to.name)}
+            </span>
+            <b className="bidi">{to.name}</b>
+          </>
+        )}
+        {showMv && (
+          <span className={`mv mv-${h.moveAfter}`}>
+            <i />
+            {t(`mv.${h.moveAfter}`)}
+          </span>
+        )}
+        {verb && !showMv && <span className="vt">{verb}</span>}
+        <time>{timeAgo(lng, h.createdAt)}</time>
+      </div>
+      {h.note && <div className="note2 bidi">{stripHtml(h.note)}</div>}
+    </div>
+  )
+}
+
+const stripHtml = (s: string) =>
+  s.includes('<')
+    ? new DOMParser().parseFromString(s.replace(/<br\s*\/?>/gi, '\n').replace(/<\/p>/gi, '\n'), 'text/html').body.textContent?.trim() ?? ''
+    : s
+
+function CommentBox({ task }: { task: TaskFull['task'] }) {
+  const { t } = useTranslation('v2')
+  const qc = useQueryClient()
+  const [text, setText] = useState('')
+  const send = useMutation({
+    mutationFn: () =>
+      api(`/api/v1/tasks/${task.id}/comments`, { method: 'POST', body: JSON.stringify({ body: text.trim() }), ...inProject(task.project!.id) }),
+    onSuccess: () => {
+      setText('')
+      void qc.invalidateQueries({ queryKey: keys.comments(task.id) })
+    },
+  })
+  if (!task.project) return null
+  return (
+    <div className="pf">
+      <textarea
+        className="cin"
+        value={text}
+        onChange={(e) => setText(e.target.value)}
+        onKeyDown={(e) => {
+          if (e.key === 'Enter' && !e.shiftKey && text.trim()) {
+            e.preventDefault()
+            send.mutate()
+          }
+        }}
+        placeholder={t('panel.comment')}
+        aria-label={t('panel.comment')}
+        rows={1}
+      />
+      <button className={'btn-acc' + (!text.trim() ? ' dis' : '')} style={{ height: 42 }} onClick={() => text.trim() && send.mutate()} disabled={send.isPending}>
+        {t('panel.send')}
+      </button>
+    </div>
+  )
+}

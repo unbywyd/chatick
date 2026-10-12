@@ -4,11 +4,11 @@ import { z } from 'zod'
 import { and, eq, inArray, isNull, ne, sql, type SQL } from 'drizzle-orm'
 import { alias } from 'drizzle-orm/pg-core'
 import { db } from '../db/client.js'
-import { companies, companyMembers, notifications, projectMembers, projects, taskHandoffs, tasks, TASK_MOVES, users } from '../db/schema.js'
+import { companies, companyMembers, HANDOFF_ACTIONS, notifications, projectMembers, projects, taskHandoffs, tasks, TASK_MOVES, users } from '../db/schema.js'
 import { requireSession, type SessionEnv } from '../auth.js'
-import { hasPermission, ownsOrManages } from './projects.js'
-import { insertTask, setOnTable, TABLE_LIMIT, type Via } from '../lib/ball.js'
-import { closedSql } from '../lib/task-status.js'
+import { hasPermission, ownsOrManages, projectRoleOf } from './projects.js'
+import { insertTask, lastReviewFrom, mayHandoff, ownerOf, planHandoff, setOnTable, TABLE_LIMIT, type Via } from '../lib/ball.js'
+import { closedSql, isClosed } from '../lib/task-status.js'
 import { matchPerson, matchProject, parseQuick, type Match } from '../lib/quick-task.js'
 import { notifyTask } from './tasks.js'
 import { postTaskAssigned } from '../lib/task-events.js'
@@ -146,7 +146,9 @@ async function list(userId: string, q: ListQuery, where: SQL, defaults: SQL[], p
       )
     : new Set<string | null>()
   const projectBy = new Map(projectList.map(({ companyId: _c, ...p }) => [p.id, p]))
-  const person = (p: Person | { id: null }): Person | null => (p.id ? (p as Person) : null)
+  // Левое соединение без пары отдаёт null целиком, а не объект с пустыми
+  // полями: задача без держателя (бэклог в «От меня») роняла весь список.
+  const person = (p: Person | { id: null } | null): Person | null => (p?.id ? (p as Person) : null)
 
   return rows.map(({ t, owner: o, holder: h }) => {
     const l = lastBy.get(t.id)
@@ -253,6 +255,95 @@ ballRoute.get('/from-me', zValidator('query', listQuery), async (c) => {
   return c.json(await fromMeList(sub, await myProjects(q.companyId, sub), q))
 })
 
+/**
+ * Одна задача для панели веба: сама задача, мяч, люди и какие ходы человеку
+ * сейчас доступны.
+ *
+ * Веб v2 живёт на всю компанию и открывает задачу из любого проекта — список
+ * проекта ради одной строки тянуть незачем. Доступные ходы считает сервер тем
+ * же планом, что и сам ход: кнопки на экране не расходятся с правилами.
+ */
+ballRoute.get('/task/:taskId', async (c) => {
+  const { sub } = c.get('session')
+  const task = await db.query.tasks.findFirst({ where: and(eq(tasks.id, c.req.param('taskId')), isNull(tasks.deletedAt)) })
+  if (!task) return c.json({ error: 'Not found' }, 404)
+  const role = await projectRoleOf(task.projectId, sub)
+  // Задача чужого проекта не существует для того, кто его не видит.
+  if (!role || !(await hasPermission(task.projectId, sub, 'tasks.read'))) return c.json({ error: 'Not found' }, 404)
+
+  const [project, team, isManager, canEdit, returnTo, unread] = await Promise.all([
+    db.query.projects.findFirst({
+      where: eq(projects.id, task.projectId),
+      columns: { id: true, name: true, color: true, logoUrl: true, companyId: true },
+    }),
+    db
+      .select({ id: users.id, name: users.name, avatarUrl: users.avatarUrl })
+      .from(projectMembers)
+      .innerJoin(users, eq(users.id, projectMembers.userId))
+      .where(eq(projectMembers.projectId, task.projectId)),
+    ownsOrManages(task.projectId, sub, []),
+    hasPermission(task.projectId, sub, 'tasks.edit'),
+    lastReviewFrom(task.id),
+    db
+      .select({ id: notifications.id })
+      .from(notifications)
+      .where(and(eq(notifications.userId, sub), eq(notifications.entityType, 'task'), eq(notifications.entityId, task.id), isNull(notifications.readAt)))
+      .limit(1),
+  ])
+  const ids = [ownerOf(task), task.assigneeId, task.askFromId, returnTo].filter((x): x is string => Boolean(x))
+  const people = ids.length
+    ? await db.select({ id: users.id, name: users.name, avatarUrl: users.avatarUrl }).from(users).where(inArray(users.id, ids))
+    : []
+  const who = (id: string | null) => (id ? (people.find((p) => p.id === id) ?? null) : null)
+
+  // Ход доступен, если роль в задаче позволяет и план на нынешнем состоянии
+  // сложился бы. Записку и адресата подставляем заглушками: их человек
+  // выберет сам, а «нужна записка» — не повод прятать кнопку.
+  const can: Record<string, boolean> = {}
+  for (const a of HANDOFF_ACTIONS) {
+    if (a === 'create') continue
+    if (a === 'take' && task.assigneeId === sub) {
+      can[a] = false
+      continue
+    }
+    can[a] = mayHandoff(a, task, sub, isManager) && planHandoff(task, a, { actorId: sub, to: '?', note: '-' }).ok
+  }
+  const closed = isClosed(task.status)
+  can.table = !closed && Boolean(task.assigneeId) && (task.assigneeId === sub || ownerOf(task) === sub || isManager)
+  can.edit = canEdit
+
+  return c.json({
+    task: {
+      id: task.id,
+      number: task.number,
+      title: task.title,
+      description: task.description,
+      status: task.status,
+      priority: task.priority,
+      dueDate: task.dueDate,
+      estimateMinutes: task.estimateMinutes ? Number(task.estimateMinutes) : null,
+      createdAt: task.createdAt,
+      updatedAt: task.updatedAt,
+      closed,
+      project: project ?? null,
+      owner: who(ownerOf(task)),
+      holder: who(task.assigneeId),
+      askFrom: who(task.askFromId),
+      returnTo: who(returnTo),
+      ball: {
+        move: task.move,
+        round: task.round,
+        heldSince: task.heldSince,
+        waitingClientSince: task.waitingClientSince,
+        onTable: task.onTable,
+      },
+      isNew: unread.length > 0,
+    },
+    team,
+    can,
+  })
+})
+
 /** Положить на стол / убрать. */
 ballRoute.post(
   '/table',
@@ -296,7 +387,13 @@ ballRoute.post(
   '/quick',
   zValidator(
     'json',
-    z.object({ companyId: z.string().min(1), text: z.string().min(1).max(1000), preview: z.boolean().optional() }),
+    z.object({
+      companyId: z.string().min(1),
+      text: z.string().min(1).max(1000),
+      preview: z.boolean().optional(),
+      /** Проект по умолчанию, когда # не указан: тот, что выбран на экране. */
+      projectId: z.string().optional(),
+    }),
   ),
   async (c) => {
     const { sub } = c.get('session')
@@ -307,6 +404,7 @@ ballRoute.post(
       projects: await myProjects(b.companyId, sub),
       text: b.text,
       preview: b.preview,
+      defaultProjectId: b.projectId,
       via: 'ui',
     })
     return c.json(r.body, r.status)
@@ -328,6 +426,8 @@ export async function quickTask(input: {
   projects: ProjectList
   text: string
   preview?: boolean
+  /** Проект, выбранный на экране: им заменяется основной проект компании, когда # нет. */
+  defaultProjectId?: string
   via: Via
 }): Promise<QuickResult> {
   const sub = input.userId
@@ -349,7 +449,10 @@ export async function quickTask(input: {
     const company = input.companyId
       ? await db.query.companies.findFirst({ where: eq(companies.id, input.companyId) })
       : null
-    project = mine.find((p) => p.id === company?.mainProjectId) ?? (mine.length === 1 ? mine[0] : undefined)
+    project =
+      mine.find((p) => p.id === input.defaultProjectId) ??
+      mine.find((p) => p.id === company?.mainProjectId) ??
+      (mine.length === 1 ? mine[0] : undefined)
   }
   if (!project) return bad({ error: 'project_required', candidates: mine.map((p) => ({ id: p.id, name: p.name })) })
   if (!(await hasPermission(project.id, sub, 'tasks.create'))) return { status: 403, body: { error: 'Forbidden' } }

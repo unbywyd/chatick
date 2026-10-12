@@ -41,6 +41,8 @@ import { NotesTab } from './components/tabs/NotesTab'
 import { TimeTab } from './components/tabs/TimeTab'
 import { ShortcutsTab } from './components/tabs/ShortcutsTab'
 import { ImageViewer } from './components/ImageViewer'
+import { Shell, StartRedirect, Soon } from './v2/Shell'
+import { TasksView } from './v2/tasks/TasksView'
 
 // HashRouter — единый роутинг для веба и Electron (file://) без доп. настроек.
 const queryClient = new QueryClient({
@@ -354,7 +356,22 @@ createRoot(document.getElementById('root')!).render(
               {/* системные уведомления — настройка программы, не проекта */}
               <Route path="/settings/notifications" element={<NotifySettingsScreen />} />
               <Route path="/settings/profile" element={<ProfileScreen />} />
-              <Route path="/start" element={<StartScreen />} />
+              {/* v2: один экран на компанию, проекты — фильтр сверху. */}
+              <Route path="/start" element={<StartRedirect />} />
+              <Route path="/onboarding" element={<StartScreen />} />
+              <Route path="/c/:companyId" element={<Shell />}>
+                <Route index element={<TasksView />} />
+                <Route path="task/:taskId" element={<Soon />} />
+                <Route path="docs/*" element={<Soon />} />
+                <Route path="time/*" element={<Soon />} />
+                <Route path="resources" element={<Soon />} />
+                <Route path="files" element={<Soon />} />
+                <Route path="versions" element={<Soon />} />
+                <Route path="history" element={<Soon />} />
+                <Route path="company/*" element={<Soon />} />
+                <Route path="settings/*" element={<Soon />} />
+                <Route path="notifications" element={<Soon />} />
+              </Route>
               <Route path="/start/:companyId" element={<StartScreen />} />
               <Route path="/start/:companyId/:companyTab" element={<StartScreen />} />
               {/* Компания в адресе: контекст известен до загрузки проекта.
