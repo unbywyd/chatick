@@ -185,8 +185,7 @@ export function companyTools(ctx: Ctx): { tools: ToolDef[]; handlers: Record<str
       name: 'my_ball',
       description:
         'THE answer to "what is on me", "what should I do next" (view=mine) and "what am I waiting for, from whom" (view=from_me), across all projects. ' +
-        'Each task says its move (do / review / answer), how long it has been held, the round and WHY it is here (the last hand-off and its note). ' +
-        'view=mine also returns the table: the urgent few, at most 3.',
+        'Each task says its move (do / review / answer), how long it has been held, the round and WHY it is here (the last hand-off and its note).',
       parameters: {
         type: 'object',
         properties: {
@@ -215,15 +214,6 @@ export function companyTools(ctx: Ctx): { tools: ToolDef[]; handlers: Record<str
           project: PROJECT_PARAM,
         },
         required: ['task', 'action'],
-      },
-    },
-    {
-      name: 'set_on_table',
-      description: `Put a task on the holder's table (urgent) or take it off. At most ${TABLE_LIMIT}: when full, ask the person which one to take off — never choose for them.`,
-      parameters: {
-        type: 'object',
-        properties: { task: { type: 'string' }, on: { type: 'boolean' }, project: PROJECT_PARAM },
-        required: ['task', 'on'],
       },
     },
     {
@@ -280,7 +270,10 @@ export function companyTools(ctx: Ctx): { tools: ToolDef[]; handlers: Record<str
         return json({ total: r.items.length, items: brief(r.items) })
       }
       const r = await mineList(ctx.userId, ctx.projects, q)
-      return json({ table: brief(r.table), total: r.items.length, items: brief(r.items) })
+      // Стола в вебе v2 пока нет — отдаём один список, чтобы ассистент не
+      // говорил человеку о «столе», которого тот не видит.
+      const all = [...r.table, ...r.items]
+      return json({ total: all.length, items: brief(all) })
     },
 
     move_ball: async (args) => {
