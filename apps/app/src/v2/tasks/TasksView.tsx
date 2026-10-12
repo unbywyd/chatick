@@ -10,6 +10,7 @@ import { ProjectLogo } from '../ProjectLogo'
 import { Icon } from '../Icon'
 import { useBallActions } from './actions'
 import { QuickInput, type QuickInputHandle } from './QuickInput'
+import { DueCell, MoveCell, PersonCell, PrioFlag } from './RowEdit'
 import {
   dueDiff,
   dueGroup,
@@ -335,36 +336,24 @@ function Row({ item: i, tab, first, myId, person }: { item: BallItem; tab: Tab; 
         </button>
         {i.isNew && i.last && <div className="nw">{newLine(t, i)}</div>}
         <div className="meta">
-          {isImportant(i.priority) && (
-            <span className="flag" title={t('tasks.important')}>
-              !
-            </span>
-          )}
+          <PrioFlag item={i} />
           <span className="pn">{p ? shortProject(p.name) : ''}</span>
           <span>{i.number}</span>
         </div>
       </div>
-      <div className="mvcell">
-        <span className={`mv mv-${mk}`}>
-          <i />
-          {t(`mv.${mk}`)}
-        </span>
-        {i.ball.round > 1 && <span className="rnd">{t('round', { n: i.ball.round })}</span>}
-      </div>
-      <span className={'due' + (n !== null && n < 0 ? ' late' : '') + (n === 0 ? ' today' : '')}>
-        {dueText(t, i.dueDate, i18n.language)}
-        <small>{n !== null && n < 0 ? t('due.days', { count: -n }) : ''}</small>
-      </span>
-      <span className="from">
-        <span className="av" style={{ background: personColor(person?.id) }}>
-          {letterOf(person?.name)}
-        </span>
-        <span className="bidi">{wlabel}</span>
-        <span className={'wt' + (long ? ' long' : '')} title={long ? t('tasks.longTitle') : t('tasks.waitTitle')}>
-          {long && <Icon name="hourglass" />}
-          {wait}
-        </span>
-      </span>
+      <MoveCell item={i} a={a} />
+      <DueCell item={i} />
+      <PersonCell
+        item={i}
+        person={tab === 'from' ? i.holder : person}
+        label={wlabel}
+        wait={
+          <span className={'wt' + (long ? ' long' : '')} title={long ? t('tasks.longTitle') : t('tasks.waitTitle')}>
+            {long && <Icon name="hourglass" />}
+            {wait}
+          </span>
+        }
+      />
       <div className={'acts' + (a.isRev ? ' always' : '')}>
         {a.isRev && (
           <>

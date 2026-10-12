@@ -65,3 +65,66 @@
 .qsug{min-height:0!important;background:var(--sheet);border-radius:14px;box-shadow:0 18px 44px -10px rgba(0,0,0,.28),0 0 0 1px var(--line);padding:6px;width:280px;max-height:320px;overflow:auto}
 .qsug .gp{height:40px}
 .qsug .av{width:24px;height:24px;font-size:11px}
+
+/* Правка прямо в строке: срок, ход, кому мяч, важность. */
+.app .rcell{position:relative}
+.app .rbtn{cursor:pointer;border-radius:8px}
+.app button.due.rbtn{display:flex;flex-direction:column;align-items:flex-start;text-align:start;padding:4px 6px;margin-inline-start:-6px}
+.app button.due.rbtn:hover,.app .rperson:hover{background:var(--soft)}
+.app button.mv.rbtn:hover{filter:brightness(.95);box-shadow:inset 0 0 0 1px currentColor}
+.app .rperson{display:inline-flex;align-items:center;gap:8px;min-width:0;padding:3px 6px 3px 3px;margin-inline-start:-3px;border-radius:999px}
+.app .rperson .bidi{white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.app .rflag{cursor:pointer}
+.app .rflag.off{opacity:0;background:var(--soft);color:var(--ink3)}
+.app .row:hover .rflag.off,.app .rflag.off:focus-visible{opacity:1}
+.app .rpop{position:absolute;top:calc(100% + 4px);inset-inline-start:0;min-width:200px;background:var(--sheet);color:var(--ink);border-radius:14px;box-shadow:0 18px 44px -10px rgba(0,0,0,.28),0 0 0 1px var(--line);padding:6px;z-index:41}
+.app .rpop.wide{width:280px;max-height:340px;overflow:auto}
+.app .rpop .hd{font-size:13px;color:var(--ink3);padding:6px 10px 6px}
+.app .rpop .gp{height:38px;font-size:14px}
+.app .rdate{display:block;padding:4px 8px}
+.app .rdate input{width:100%;height:36px;border:0;border-radius:10px;background:var(--soft);padding:0 10px;font:inherit;color:var(--ink)}
+.app .rdanger{color:var(--signal)}
+
+/* Панель задачи — поверх экрана со своей прокруткой. В макете она absolute и
+   растягивалась на всю высоту страницы: длинная задача тянула документ, и
+   скроллов становилось два. Шире — задачу читают, а не просматривают. */
+.app .scrim{position:fixed;top:64px}
+.app .panel{position:fixed;top:64px;width:min(780px,100%)}
+.app .panel .pb{overflow-x:hidden;overscroll-behavior:contain}
+html:has(.app .panel),html:has(.app .panel) body{overflow:hidden}
+
+/* Полосы прокрутки — тонкие, в цвет линий, во всём приложении. */
+.app,.app *{scrollbar-width:thin;scrollbar-color:color-mix(in srgb,var(--ink3) 45%,transparent) transparent}
+.app ::-webkit-scrollbar{width:10px;height:10px}
+.app ::-webkit-scrollbar-track{background:transparent}
+.app ::-webkit-scrollbar-thumb{background:color-mix(in srgb,var(--ink3) 40%,transparent);border-radius:10px;border:3px solid transparent;background-clip:padding-box}
+.app ::-webkit-scrollbar-thumb:hover{background-color:color-mix(in srgb,var(--ink3) 70%,transparent)}
+.app ::-webkit-scrollbar-button{display:none;width:0;height:0}
+
+/* Иврит и смешанный текст: каждый абзац берёт направление из своего текста. */
+.app .ProseMirror p,.app .ProseMirror li,.app .ProseMirror h1,.app .ProseMirror h2,.app .ProseMirror h3,.app .ProseMirror blockquote,.app .msgs p,.app .msgs li{unicode-bidi:plaintext;text-align:start}
+.app .ProseMirror{overflow-wrap:anywhere}
+.app .ProseMirror a{overflow-wrap:anywhere;word-break:break-word}
+.app .ProseMirror pre{white-space:pre-wrap;overflow-wrap:anywhere}
+
+/* Тело комментария и записки — редактор в режиме чтения, без лишних полей. */
+.app .cbody .ProseMirror{padding:0;min-height:0;outline:none}
+.app .cbody .ProseMirror p{margin:0 0 6px}
+.app .cbody .ProseMirror p:last-child{margin-bottom:0}
+.app .cbody .ProseMirror p:empty{display:none}
+.app .cm .b{min-width:0}
+
+/* Свёрнутый длинный текст: градиент внизу и «Показать целиком». */
+.app .clamp-in{overflow:hidden;position:relative}
+.app .clamp.shut .clamp-in::after{content:'';position:absolute;left:0;right:0;bottom:0;height:72px;background:linear-gradient(to bottom,transparent,var(--sheet));pointer-events:none}
+.app .pass-ev .clamp.shut .clamp-in::after{background:linear-gradient(to bottom,transparent,var(--soft))}
+.app .clamp-btn{margin-top:6px;height:30px;padding:0 12px;border-radius:9px;font-size:13px;font-weight:500;color:var(--ink2);box-shadow:inset 0 0 0 1px var(--line);background:var(--sheet)}
+.app .clamp-btn:hover{color:var(--ink);box-shadow:inset 0 0 0 1px var(--ink3)}
+
+/* Поле комментария — редактор в рамке макета. */
+.app .cbox{align-items:flex-end}
+.app .cbox-ed{flex:1;min-width:0;border-radius:12px;background:var(--soft);padding:10px 14px;max-height:220px;overflow-y:auto}
+.app .cbox-ed:focus-within{box-shadow:inset 0 0 0 1.5px var(--ink)}
+.app .cbox-ed .ProseMirror{outline:none;min-height:22px}
+.app .cbox-ed .ProseMirror:focus-visible{outline:none}
+.app .cbox-ed .ProseMirror p{margin:0}

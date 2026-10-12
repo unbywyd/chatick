@@ -126,6 +126,7 @@ const ru = {
   due: { none: 'Без срока', today: 'Сегодня', tomorrow: 'Завтра', days_one: '{{count}} день', days_few: '{{count}} дня', days_many: '{{count}} дней', days_other: '{{count}} дня' },
   wait: { now: 'только что', today: 'сегодня', d: '{{n}} дн', h: '{{n}} ч', min: '{{n}} мин', since: 'с {{date}}' },
   round: '{{n}}-й круг',
+  row: { mark: 'Сделать важной', unmark: 'Снять важность', due: 'Срок', week: 'Через неделю', pickDate: 'Выбрать дату', noDue: 'Убрать срок', move: 'Ход — что сделать с задачей', who: 'Кому мяч', whoHead: 'Отдать мяч' },
   act: {
     accept: 'Принять',
     return: 'Вернуть',
@@ -267,7 +268,7 @@ const ru = {
     ctx: { tasks: 'Главный экран', task: 'Задача {{id}}', project: 'Проект {{name}}' },
     sug: ['Что важнее всего сегодня?', 'Что я отдал и до сих пор жду?', 'Что застряло дольше всех?'],
   },
-  common: { loading: 'Загрузка…', error: 'Не загрузилось', retry: 'Повторить', soon: 'Этот раздел ещё в работе' },
+  common: { showAll: 'Показать целиком', collapse: 'Свернуть', loading: 'Загрузка…', error: 'Не загрузилось', retry: 'Повторить', soon: 'Этот раздел ещё в работе' },
 }
 
 type Bundle = typeof ru
@@ -379,6 +380,7 @@ const en: Bundle = {
   due: { none: 'No due date', today: 'Today', tomorrow: 'Tomorrow', days_one: '{{count}} day', days_few: '{{count}} days', days_many: '{{count}} days', days_other: '{{count}} days' },
   wait: { now: 'just now', today: 'today', d: '{{n}}d', h: '{{n}}h', min: '{{n}} min', since: 'since {{date}}' },
   round: 'round {{n}}',
+  row: { mark: 'Mark important', unmark: 'Unmark important', due: 'Due date', week: 'In a week', pickDate: 'Pick a date', noDue: 'Remove due date', move: 'Move — what to do with the task', who: 'Who has the ball', whoHead: 'Pass the ball' },
   act: {
     accept: 'Accept',
     return: 'Return',
@@ -520,7 +522,7 @@ const en: Bundle = {
     ctx: { tasks: 'Home screen', task: 'Task {{id}}', project: 'Project {{name}}' },
     sug: ['What matters most today?', 'What did I pass on that I’m still waiting for?', 'What has been stuck the longest?'],
   },
-  common: { loading: 'Loading…', error: 'Failed to load', retry: 'Retry', soon: 'This section is still in progress' },
+  common: { showAll: 'Show all', collapse: 'Collapse', loading: 'Loading…', error: 'Failed to load', retry: 'Retry', soon: 'This section is still in progress' },
 }
 
 const he: Bundle = {
@@ -630,6 +632,7 @@ const he: Bundle = {
   due: { none: 'בלי מועד', today: 'היום', tomorrow: 'מחר', days_one: 'יום', days_few: '{{count}} ימים', days_many: '{{count}} ימים', days_other: '{{count}} ימים' },
   wait: { now: 'עכשיו', today: 'היום', d: '{{n}} ימ׳', h: '{{n}} ש׳', min: '{{n}} דק׳', since: 'מאז {{date}}' },
   round: 'סבב {{n}}',
+  row: { mark: 'לסמן כחשובה', unmark: 'להסיר חשיבות', due: 'מועד', week: 'בעוד שבוע', pickDate: 'בחירת תאריך', noDue: 'להסיר מועד', move: 'תור — מה לעשות עם המשימה', who: 'אצל מי הכדור', whoHead: 'להעביר את הכדור' },
   act: {
     accept: 'לאשר',
     return: 'להחזיר',
@@ -771,7 +774,7 @@ const he: Bundle = {
     ctx: { tasks: 'מסך הבית', task: 'משימה {{id}}', project: 'פרויקט {{name}}' },
     sug: ['מה הכי חשוב היום?', 'מה העברתי ועדיין מחכה לו?', 'מה תקוע הכי הרבה זמן?'],
   },
-  common: { loading: 'טוען…', error: 'לא נטען', retry: 'לנסות שוב', soon: 'החלק הזה עדיין בעבודה' },
+  common: { showAll: 'להציג הכול', collapse: 'לכווץ', loading: 'טוען…', error: 'לא נטען', retry: 'לנסות שוב', soon: 'החלק הזה עדיין בעבודה' },
 }
 
 i18n.addResourceBundle('ru', 'v2', ru, true, true)

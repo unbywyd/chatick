@@ -1,0 +1,232 @@
+import { useState } from 'react'
+import { useTranslation } from 'react-i18next'
+import { useMutation, useQuery } from '@tanstack/react-query'
+import { api } from '@/lib/api'
+import { errorCode, inProject, useHandoff, useRefreshBall, type BallItem, type TaskFull } from '../data'
+import { useUi } from '../ui'
+import { Icon } from '../Icon'
+import { dueDiff, dueText, isImportant, letterOf, moveKey, personColor } from '../util'
+import type { useBallActions } from './actions'
+
+/**
+ * Правка прямо в строке списка: важность, срок, ход и кому мяч.
+ *
+ * Срок и важность — обычная правка задачи. Ход и «кому» — через мяч: это не
+ * поле, а передача с журналом и уведомлением, поэтому идут теми же ходами,
+ * что и кнопки. Право решает сервер; отказ показываем тостом.
+ */
+
+type Actions = ReturnType<typeof useBallActions>
+
+function usePatch(i: BallItem) {
+  const { t } = useTranslation('v2')
+  const { flash } = useUi()
+  const refresh = useRefreshBall()
+  return useMutation({
+    mutationFn: (body: Record<string, unknown>) =>
+      api(`/api/v1/tasks/${i.id}`, { method: 'PATCH', body: JSON.stringify(body), ...inProject(i.project!.id) }),
+    onError: (e) => flash(t(`err.${errorCode(e)}`, { defaultValue: t('err.generic') })),
+    onSettled: () => refresh(i.id),
+  })
+}
+
+/** Флажок важности: «!» горит у важной, у обычной проступает при наведении. */
+export function PrioFlag({ item: i }: { item: BallItem }) {
+  const { t } = useTranslation('v2')
+  const patch = usePatch(i)
+  const on = isImportant(i.priority)
+  return (
+    <button
+      className={'flag rflag' + (on ? '' : ' off')}
+      title={on ? t('row.unmark') : t('row.mark')}
+      aria-label={on ? t('row.unmark') : t('row.mark')}
+      aria-pressed={on}
+      disabled={!i.project || patch.isPending}
+      onClick={() => patch.mutate({ priority: on ? 'normal' : 'high' })}
+    >
+      !
+    </button>
+  )
+}
+
+const iso = (d: Date) => {
+  // Срок — конец выбранного дня по местному времени, как в форме задачи.
+  const x = new Date(d.getFullYear(), d.getMonth(), d.getDate(), 23, 59, 0)
+  return x.toISOString()
+}
+const ymd = (s: string | null) => {
+  if (!s) return ''
+  const d = new Date(s)
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
+}
+
+export function DueCell({ item: i }: { item: BallItem }) {
+  const { t, i18n } = useTranslation('v2')
+  const patch = usePatch(i)
+  const [open, setOpen] = useState(false)
+  const n = dueDiff(i.dueDate)
+  const set = (d: Date | null) => {
+    setOpen(false)
+    patch.mutate({ dueDate: d ? iso(d) : null })
+  }
+  const plus = (days: number) => {
+    const d = new Date()
+    d.setDate(d.getDate() + days)
+    return d
+  }
+  return (
+    <span className="rcell">
+      <button
+        className={'due rbtn' + (n !== null && n < 0 ? ' late' : '') + (n === 0 ? ' today' : '')}
+        title={t('row.due')}
+        aria-expanded={open}
+        disabled={!i.project}
+        onClick={() => setOpen(!open)}
+      >
+        {dueText(t, i.dueDate, i18n.language)}
+        <small>{n !== null && n < 0 ? t('due.days', { count: -n }) : ''}</small>
+      </button>
+      {open && (
+        <>
+          <div className="gt-scrim" onClick={() => setOpen(false)} />
+          <div className="rpop" role="dialog" aria-label={t('row.due')}>
+            <button className="gp" onClick={() => set(plus(0))}>
+              {t('due.today')}
+            </button>
+            <button className="gp" onClick={() => set(plus(1))}>
+              {t('due.tomorrow')}
+            </button>
+            <button className="gp" onClick={() => set(plus(7))}>
+              {t('row.week')}
+            </button>
+            <label className="rdate">
+              <input
+                type="date"
+                defaultValue={ymd(i.dueDate)}
+                onChange={(e) => {
+                  if (!e.target.value) return
+                  const [y, m, d] = e.target.value.split('-').map(Number) as [number, number, number]
+                  set(new Date(y, m - 1, d))
+                }}
+                aria-label={t('row.pickDate')}
+              />
+            </label>
+            {i.dueDate && (
+              <button className="gp rdanger" onClick={() => set(null)}>
+                {t('row.noDue')}
+              </button>
+            )}
+          </div>
+        </>
+      )}
+    </span>
+  )
+}
+
+/** Метка хода — она же меню: какие ходы сейчас можно сделать с задачей. */
+export function MoveCell({ item: i, a }: { item: BallItem; a: Actions }) {
+  const { t } = useTranslation('v2')
+  const [open, setOpen] = useState(false)
+  const mk = moveKey(i)
+  const items: [string, () => void][] = []
+  if (a.isDo) items.push([t('act.review'), a.toReview])
+  if (a.isRev) items.push([t('act.accept'), a.accept], [t('act.return'), a.back])
+  if (a.isAns) items.push([t('act.answer'), a.answer])
+  if (a.canPassOn) items.push([i.ball.move === 'review' ? t('act.passReview') : t('act.forward'), a.pass])
+  else if (a.open) items.push([t('act.pass'), a.pass])
+  if (a.canAsk) items.push([t('act.ask'), a.ask])
+  if (a.canTake) items.push([t('act.take'), a.take])
+  if (a.canClient) items.push([i.ball.waitingClientSince ? t('act.clientReplied') : t('act.waitClient'), a.toggleClient])
+  return (
+    <div className="mvcell rcell">
+      <button className={`mv mv-${mk} rbtn`} title={t('row.move')} aria-expanded={open} disabled={!items.length} onClick={() => setOpen(!open)}>
+        <i />
+        {t(`mv.${mk}`)}
+      </button>
+      {i.ball.round > 1 && <span className="rnd">{t('round', { n: i.ball.round })}</span>}
+      {open && (
+        <>
+          <div className="gt-scrim" onClick={() => setOpen(false)} />
+          <div className="rpop" role="menu">
+            {items.map(([label, run]) => (
+              <button
+                key={label}
+                className="gp"
+                role="menuitem"
+                onClick={() => {
+                  setOpen(false)
+                  run()
+                }}
+              >
+                {label}
+              </button>
+            ))}
+          </div>
+        </>
+      )}
+    </div>
+  )
+}
+
+/**
+ * Человек в строке — кому мяч. Клик открывает команду проекта: выбранному
+ * мяч уходит ходом «передать» (без записки — для записки есть окно передачи).
+ */
+export function PersonCell({ item: i, label, person, wait }: { item: BallItem; label: string; person: BallItem['owner']; wait: React.ReactNode }) {
+  const { t } = useTranslation('v2')
+  const { flash } = useUi()
+  const [open, setOpen] = useState(false)
+  const [q, setQ] = useState('')
+  const handoff = useHandoff()
+  const team = useQuery({
+    queryKey: ['v2', 'task', i.id],
+    queryFn: () => api<TaskFull>(`/api/v1/ball/task/${i.id}`),
+    enabled: open,
+  })
+  const s = q.trim().toLowerCase()
+  const list = (team.data?.team ?? []).filter((p) => p.id !== i.holder?.id && (!s || p.name.toLowerCase().includes(s)))
+  const pass = (to: { id: string; name: string }) => {
+    setOpen(false)
+    if (!i.project) return
+    handoff.mutate(
+      { taskId: i.id, projectId: i.project.id, action: 'pass', to: to.id },
+      {
+        onSuccess: () => flash(t('ho.done.pass', { name: to.name })),
+        onError: (e) => flash(t(`err.${errorCode(e)}`, { defaultValue: t('err.generic') })),
+      },
+    )
+  }
+  return (
+    <span className="from rcell">
+      <button className="rperson" title={t('row.who')} aria-expanded={open} disabled={!i.project || i.status === 'done' || i.status === 'cancelled'} onClick={() => setOpen(!open)}>
+        <span className="av" style={{ background: personColor(person?.id) }}>
+          {letterOf(person?.name)}
+        </span>
+        <span className="bidi">{label}</span>
+      </button>
+      {wait}
+      {open && (
+        <>
+          <div className="gt-scrim" onClick={() => setOpen(false)} />
+          <div className="rpop wide" role="dialog" aria-label={t('row.who')}>
+            <div className="hd">{t('row.whoHead')}</div>
+            <label className="cbx-s" style={{ margin: '0 4px 6px' }}>
+              <Icon name="search" sm />
+              <input value={q} onChange={(e) => setQ(e.target.value)} placeholder={t('ho.teamSearch')} aria-label={t('ho.teamSearch')} autoFocus />
+            </label>
+            {!team.data && <div className="cbx-none">{t('common.loading')}</div>}
+            {list.map((p) => (
+              <button key={p.id} className="gp" onClick={() => pass(p)}>
+                <span className="av" style={{ background: personColor(p.id), width: 24, height: 24, fontSize: 11 }}>
+                  {letterOf(p.name)}
+                </span>
+                <span className="nm bidi">{p.name}</span>
+              </button>
+            ))}
+            {team.data && !list.length && <div className="cbx-none">{t('tasks.noPerson')}</div>}
+          </div>
+        </>
+      )}
+    </span>
+  )
+}

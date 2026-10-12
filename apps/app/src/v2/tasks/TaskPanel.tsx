@@ -8,6 +8,7 @@ import { inProject, keys, useComments, useHandoffs, useMe, useRefreshBall, useTa
 import { useUi } from '../ui'
 import { ProjectLogo } from '../ProjectLogo'
 import { Icon } from '../Icon'
+import { Clamp } from '../Clamp'
 import { useBallActions } from './actions'
 import { dueDiff, dueText, fmtHm, heatOf, letterOf, personColor, projectColor, timeAgo, waitText } from '../util'
 
@@ -115,7 +116,7 @@ export function PanelBody({ data, myId, lng }: { data: TaskFull; myId: string; l
         <Checklist task={task} canEdit={Boolean(data.can.edit) || task.holder?.id === myId} />
         <Feed task={task} lng={lng} />
       </div>
-      <CommentBox task={task} />
+      <CommentBox task={task} team={data.team} />
     </>
   )
 }
@@ -312,9 +313,11 @@ function Feed({ task, lng }: { task: TaskFull['task']; lng: string }) {
                   <span className="bidi">{e.c!.author?.name ?? '—'}</span>
                   <time>{timeAgo(lng, e.at)}</time>
                 </div>
-                <div className="x bidi" style={{ whiteSpace: 'pre-wrap' }}>
-                  {stripHtml(e.c!.body)}
-                </div>
+                <Clamp>
+                  <div className="x cbody">
+                    <RichEditor value={e.c!.body} onChange={() => {}} mentions={[]} preset="minimal" readOnly />
+                  </div>
+                </Clamp>
               </div>
             </div>
           ),
@@ -357,7 +360,13 @@ export function PassEv({ h, lng }: { h: Handoff; lng: string }) {
         {verb && !showMv && <span className="vt">{verb}</span>}
         <time>{timeAgo(lng, h.createdAt)}</time>
       </div>
-      {h.note && <div className="note2 bidi">{stripHtml(h.note)}</div>}
+      {h.note && (
+        <Clamp max={160}>
+          <div className="note2 cbody">
+            <RichEditor value={h.note} onChange={() => {}} mentions={[]} preset="minimal" readOnly />
+          </div>
+        </Clamp>
+      )}
     </div>
   )
 }
@@ -367,36 +376,38 @@ export const stripHtml = (s: string) =>
     ? new DOMParser().parseFromString(s.replace(/<br\s*\/?>/gi, '\n').replace(/<\/p>/gi, '\n'), 'text/html').body.textContent?.trim() ?? ''
     : s
 
-function CommentBox({ task }: { task: TaskFull['task'] }) {
+/** Поле комментария — тот же редактор, что в старом чате задач: разметка, @упоминания команды. Ctrl+Enter — отправить. */
+function CommentBox({ task, team }: { task: TaskFull['task']; team: TaskFull['team'] }) {
   const { t } = useTranslation('v2')
   const qc = useQueryClient()
   const [text, setText] = useState('')
+  const [key, setKey] = useState(0)
+  const empty = !text.replace(/<[^>]*>/g, '').trim()
   const send = useMutation({
     mutationFn: () =>
-      api(`/api/v1/tasks/${task.id}/comments`, { method: 'POST', body: JSON.stringify({ body: text.trim() }), ...inProject(task.project!.id) }),
+      api(`/api/v1/tasks/${task.id}/comments`, { method: 'POST', body: JSON.stringify({ body: text }), ...inProject(task.project!.id) }),
     onSuccess: () => {
       setText('')
+      setKey((k) => k + 1)
       void qc.invalidateQueries({ queryKey: keys.comments(task.id) })
     },
   })
   if (!task.project) return null
+  const submit = () => !empty && !send.isPending && send.mutate()
   return (
-    <div className="pf">
-      <textarea
-        className="cin"
-        value={text}
-        onChange={(e) => setText(e.target.value)}
-        onKeyDown={(e) => {
-          if (e.key === 'Enter' && !e.shiftKey && text.trim()) {
-            e.preventDefault()
-            send.mutate()
-          }
-        }}
-        placeholder={t('panel.comment')}
-        aria-label={t('panel.comment')}
-        rows={1}
-      />
-      <button className={'btn-acc' + (!text.trim() ? ' dis' : '')} style={{ height: 42 }} onClick={() => text.trim() && send.mutate()} disabled={send.isPending}>
+    <div className="pf cbox">
+      <div className="cbox-ed">
+        <RichEditor
+          key={key}
+          value={text}
+          onChange={(html) => setText(html)}
+          onSubmit={submit}
+          placeholder={t('panel.comment')}
+          mentions={team.map((m) => ({ id: m.id, label: m.name }))}
+          preset="minimal"
+        />
+      </div>
+      <button className={'btn-acc' + (empty ? ' dis' : '')} style={{ height: 42 }} onClick={submit} disabled={send.isPending} title="Ctrl+Enter">
         {t('panel.send')}
       </button>
     </div>
