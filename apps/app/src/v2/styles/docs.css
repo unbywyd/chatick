@@ -1,0 +1,140 @@
+/*
+ * Раздел «Документы и заметки» — правила из макета Docs, которых нет в main.css.
+ * Классы те же, что в макете. Часть имён (.ph .card .tg .lk .doc .btn) в main.css
+ * уже занята другими экранами, поэтому всё — под .kb, со специфичностью выше.
+ */
+.app .kb{max-width:1340px;margin:0 auto;container-type:inline-size}
+.app .kb .ph{display:flex;align-items:flex-end;gap:10px;margin-bottom:6px;padding:0}
+.app .kb .ph h1{margin:0;font-size:30px;letter-spacing:-.03em;font-weight:600;line-height:1.1}
+.app .kb .ph p{margin:6px 0 0;color:var(--ink2);font-size:15px}
+.app .kb .ph > .sp{flex:1}
+.app .kb .btn{height:40px;padding:0 15px;border-radius:12px;font-weight:600;display:inline-flex;align-items:center;gap:8px;white-space:nowrap;background:var(--sheet);box-shadow:inset 0 0 0 1px var(--line)}
+.app .kb .btn:hover{box-shadow:inset 0 0 0 1px var(--ink3)}
+.app .kb .btn.pr{background:var(--ink);color:var(--paper);box-shadow:none}
+.app .kb .btn.moss{background:var(--moss);color:var(--moss-ink);box-shadow:none}
+.app .kb .btn.sm{height:32px;padding:0 11px;border-radius:9px;font-size:13px}
+.app .kb .btn:disabled{opacity:.5;cursor:default}
+.app .kb .sv-proj{margin:18px 0 18px}
+
+.app .kb .card{display:block;padding:0;grid-template-columns:none;background:var(--sheet);border-radius:20px;box-shadow:inset 0 0 0 1px var(--line)}
+.app .kb .dl{display:grid;grid-template-columns:270px minmax(0,1fr) 280px;gap:18px;align-items:start}
+.app .kb .tree{padding:12px 10px}
+.app .kb .srch{display:flex;align-items:center;gap:8px;height:38px;border-radius:11px;background:var(--paper);padding:0 10px;margin-bottom:8px;color:var(--ink3)}
+.app .kb .srch > input{flex:1;height:100%;min-width:0;color:var(--ink);background:none;border:0;outline:0;font:inherit}
+.app .kb .tg{padding:12px 8px 4px;display:flex;align-items:center;gap:8px;font-size:12px;font-weight:600;color:var(--ink3);text-transform:uppercase;letter-spacing:.05em;background:none;border-radius:0}
+.app .kb .tg > .nm{min-width:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.app .kb .tg > button{margin-inline-start:auto;width:24px;height:24px;border-radius:7px;display:grid;place-items:center;flex:none}
+.app .kb .tg > button:hover{background:var(--soft);color:var(--ink)}
+.app .kb .di{display:flex;align-items:center;gap:9px;width:100%;padding:7px 8px;border-radius:9px;font-size:14px;color:var(--ink2);text-align:start}
+.app .kb .di:hover{background:var(--soft);color:var(--ink)}
+.app .kb .di.on{background:var(--ink);color:var(--paper)}
+.app .kb .di > .ic{width:15px;height:15px;opacity:.7}
+.app .kb .di > span{flex:1;min-width:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.app .kb .kb-none{color:var(--ink3);font-size:13.5px;padding:14px 8px}
+.app .kb .doc > .kb-none{padding:40px 0;text-align:center}
+
+.app .kb .doc{padding:30px 40px 40px;min-height:640px;max-width:none;font-size:14px;line-height:1.45}
+.app .kb .dm{display:flex;align-items:center;gap:10px;font-size:13px;color:var(--ink3);margin-bottom:10px;min-height:32px}
+.app .kb .dm > .sp{flex:1}
+.app .kb .kb-place{min-width:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.app .kb .kb-st{font-size:12.5px;color:var(--ink3);white-space:nowrap}
+.app .kb .doc h1{font-size:32px;letter-spacing:-.03em;margin:0 0 6px;font-weight:600;line-height:1.15;overflow-wrap:anywhere}
+.app .kb .kb-title{display:block;width:100%;font-family:inherit;font-size:32px;font-weight:600;line-height:1.15;letter-spacing:-.03em;margin:0 0 6px;padding:0;color:var(--ink);background:none;border:0;outline:0;border-bottom:1.5px dashed var(--line)}
+.app .kb .kb-title:focus{border-bottom-color:var(--ink3)}
+.app .kb .aiw{display:flex;align-items:center;gap:10px;margin:14px 0 24px;padding:10px 12px;border-radius:13px;background:var(--paper)}
+.app .kb .aiw > span{flex:1;font-size:13.5px;color:var(--ink2)}
+.app .kb .kb-empty{color:var(--ink3);font-size:15px;margin:0}
+
+/* Текст документа — типографика макета поверх общих правил редактора */
+.app .kb .body{font-size:15.5px;line-height:1.65;color:var(--ink);max-width:680px;outline:none}
+.app .kb .body h1{font-size:23px;margin:28px 0 8px;font-weight:600}
+.app .kb .body h2{font-size:19px;margin:26px 0 8px;font-weight:600;color:var(--ink)}
+.app .kb .body h3{font-size:16.5px;margin:20px 0 6px;font-weight:600}
+.app .kb .body > :first-child{margin-top:0}
+.app .kb .body p{margin:0 0 12px}
+.app .kb .body ul,.app .kb .body ol{margin:0 0 12px;padding-inline-start:22px}
+.app .kb .body li{margin:4px 0}
+.app .kb .body li > p{margin:0}
+.app .kb .body code{font-family:'JetBrains Mono',ui-monospace,monospace;font-size:13px;background:var(--soft);border-radius:6px;padding:1px 6px}
+.app .kb .body pre{background:var(--soft);border-radius:12px;padding:12px 14px;overflow-x:auto;margin:0 0 12px}
+.app .kb .body pre code{background:none;padding:0}
+.app .kb .body blockquote{margin:0 0 12px;padding-inline-start:14px;border-inline-start:3px solid var(--line);color:var(--ink2)}
+.app .kb .body a{color:var(--rev);text-decoration:underline}
+.app .kb .body hr{border:0;border-top:1px solid var(--line);margin:20px 0}
+.app .kb .body img{max-width:100%;height:auto;border-radius:10px}
+.app .kb .body table{border-collapse:collapse;width:100%;margin:0 0 12px}
+.app .kb .body th,.app .kb .body td{border:1px solid var(--line);padding:6px 9px;vertical-align:top}
+.app .kb .body th{background:var(--paper);font-weight:600}
+/* Чек-лист — как .ck в макете: квадратик, выполненное зачёркнуто */
+.app .kb .body ul[data-type=taskList]{list-style:none;padding-inline-start:0}
+.app .kb .body ul[data-type=taskList] li{display:flex;gap:10px;align-items:flex-start;margin:6px 0}
+.app .kb .body ul[data-type=taskList] li > label{margin-top:4px;flex:none;display:grid}
+.app .kb .body ul[data-type=taskList] li > label input{appearance:none;width:18px;height:18px;margin:0;border-radius:5px;box-shadow:inset 0 0 0 1.5px #B9BDB3;cursor:pointer;display:grid;place-items:center}
+.app .kb .body ul[data-type=taskList] li > label input:checked{background:var(--moss);box-shadow:none}
+.app .kb .body ul[data-type=taskList] li > label input:checked::after{content:'';width:9px;height:5px;border:2px solid var(--accent);border-top:0;border-inline-end:0;transform:translateY(-1px) rotate(-45deg)}
+.app .kb .body ul[data-type=taskList] li[data-checked=true] > div{color:var(--ink3);text-decoration:line-through}
+.app .kb .body ul[data-type=taskList] li > div{flex:1;min-width:0}
+.app .kb .body p.is-editor-empty:first-child::before{content:attr(data-placeholder);color:var(--ink3);float:inline-start;height:0;pointer-events:none}
+
+/* Правка: рамка как у .ed в макете, сверху панель */
+.app .kb .kb-edw{border-radius:14px;box-shadow:inset 0 0 0 1.5px var(--line);background:var(--paper)}
+.app .kb .kb-edw:focus-within{box-shadow:inset 0 0 0 1.5px var(--ink)}
+.app .kb .kb-ed{min-height:480px;padding:16px;max-width:none}
+.app .kb .kb-tb{position:sticky;top:64px;z-index:3;display:flex;flex-wrap:wrap;align-items:center;gap:2px;padding:6px;border-bottom:1px solid var(--line);background:var(--paper);border-radius:14px 14px 0 0}
+.app .kb .kb-tb > button{width:30px;height:30px;border-radius:8px;display:grid;place-items:center;color:var(--ink2)}
+.app .kb .kb-tb > button:hover{background:var(--soft);color:var(--ink)}
+.app .kb .kb-tb > button.on{background:var(--ink);color:var(--paper)}
+.app .kb .kb-tb > i{width:1px;height:18px;background:var(--line);margin:0 4px}
+.app .kb .kb-tb > .sp{flex:1}
+
+/* Правая колонка */
+.app .kb .rp > section{margin-bottom:14px;padding:14px 16px}
+.app .kb .rp h3{margin:0 0 10px;font-size:14px;font-weight:600}
+.app .kb .lk{display:flex;align-items:center;gap:9px;width:100%;padding:7px 0;font-size:13.5px;font-weight:400;color:var(--ink);background:none;border-radius:0;border-top:1px solid var(--line);text-align:start}
+.app .kb .lk:first-of-type{border-top:0}
+.app .kb .lk:hover > span:last-child{text-decoration:underline}
+.app .kb .lk > .id{font-family:'JetBrains Mono',ui-monospace,monospace;font-size:12px;color:var(--rev);flex:none}
+.app .kb .lk > span{flex:1;min-width:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.app .kb .lk > .id{flex:none}
+.app .kb .hv{display:flex;gap:9px;font-size:13px;color:var(--ink2);padding:6px 0;align-items:flex-start}
+.app .kb .hv > .av{width:22px;height:22px;font-size:10px}
+.app .kb .hv > .tx{flex:1;min-width:0}
+.app .kb .hv b{font-weight:600;color:var(--ink)}
+.app .kb .hv time{color:var(--ink3);font-size:12px}
+.app .kb .kb-mute{color:var(--ink3);font-size:13px}
+.app .kb .ask{display:flex;gap:6px;flex-wrap:wrap}
+.app .kb .ask > button{height:30px;padding:0 10px;border-radius:999px;box-shadow:inset 0 0 0 1px var(--line);font-size:12.5px;font-weight:500}
+.app .kb .ask > button:hover{background:var(--accent);color:var(--accent-ink);box-shadow:none}
+.app .kb .ask > button:disabled{opacity:.5}
+
+/* Меню и выбор проекта */
+.app .kb .kb-pk{position:relative}
+.app .kb .kb-pop{inset-inline-start:auto;inset-inline-end:0}
+.app .kb .kb-ib{width:32px;height:32px;border-radius:9px;display:grid;place-items:center;color:var(--ink3)}
+.app .kb .kb-ib:hover{background:var(--soft);color:var(--ink)}
+.app .kb .kb-menu{position:absolute;top:calc(100% + 6px);inset-inline-end:0;width:260px;background:var(--sheet);color:var(--ink);border-radius:16px;box-shadow:0 24px 60px -12px rgba(0,0,0,.3),0 0 0 1px var(--line);padding:6px;z-index:41;display:flex;flex-direction:column}
+.app .kb .kb-menu > button{height:38px;padding:0 10px;border-radius:10px;text-align:start;font-size:14px}
+.app .kb .kb-menu > button:hover{background:var(--soft)}
+.app .kb .kb-danger{color:var(--signal)}
+.app .kb .kb-ask{padding:8px 8px 6px}
+.app .kb .kb-ask p{margin:0 0 10px;font-size:14px;overflow-wrap:anywhere}
+.app .kb .kb-ask > div{display:flex;gap:8px}
+.app .kb .kb-ask .btn.kb-danger{background:var(--signal);color:#fff;box-shadow:none}
+
+/* Узко (ассистент открыт или маленький экран): правая колонка уходит вниз */
+@container (max-width:1080px){
+  .app .kb .dl{grid-template-columns:240px minmax(0,1fr)}
+  .app .kb .rp{grid-column:2;display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:14px}
+  .app .kb .rp > section{margin:0}
+  .app .kb .doc{padding:24px 26px 32px}
+}
+@container (max-width:720px){
+  .app .kb .dl{grid-template-columns:minmax(0,1fr)}
+  .app .kb .rp{grid-column:auto}
+  .app .kb .tree{max-height:320px;overflow:auto}
+  .app .kb .ph{flex-wrap:wrap;align-items:center}
+  .app .kb .ph > div:first-child{flex-basis:100%}
+  .app .kb .ph > .sp{display:none}
+  .app .kb .doc{padding:20px 16px 28px;min-height:0}
+  .app .kb .doc h1,.app .kb .kb-title{font-size:26px}
+}

@@ -1,12 +1,12 @@
 import { Hono } from 'hono'
 import { zValidator } from '@hono/zod-validator'
 import { z } from 'zod'
-import { and, desc, eq, ilike, sql } from 'drizzle-orm'
+import { and, desc, eq, ilike, inArray, sql } from 'drizzle-orm'
 import { nanoid } from 'nanoid'
 import { db } from '../db/client.js'
-import { documents, documentVersions, users } from '../db/schema.js'
-import { requireProject, type ProjectEnv } from '../auth.js'
-import { hasPermission, ownsOrManages } from './projects.js'
+import { documents, documentVersions, projects, users } from '../db/schema.js'
+import { requireProject, requireSession, type ProjectEnv, type SessionEnv } from '../auth.js'
+import { companyRoleOf, hasPermission, ownsOrManages } from './projects.js'
 import { logActivity } from '../lib/audit.js'
 import { htmlToText, sanitizeHtml } from '../lib/sanitize-html.js'
 import { broadcast } from '../ws.js'
@@ -217,6 +217,44 @@ documentsRoute.delete('/:id', async (c) => {
   void logActivity({ projectId, actorId: sub, action: 'delete', entityType: 'document', entityId: id, entityLabel: d.title || '—' })
   broadcast(projectId, 'documents_changed', {})
   return c.json({ ok: true })
+})
+
+/**
+ * v2: документы всех проектов компании одним запросом (экран «Документы и
+ * заметки» — один на компанию, проект в нём только фильтр). Иначе клиент
+ * спрашивал бы каждый проект отдельно: в рабочей компании их три десятка.
+ * Права те же, что у списка проекта: documents.read в каждом проекте.
+ * Только список с превью — сам документ по-прежнему читается через проект.
+ */
+export const documentsCompanyRoute = new Hono<SessionEnv>()
+documentsCompanyRoute.use('*', requireSession)
+
+documentsCompanyRoute.get('/:companyId', async (c) => {
+  const { sub } = c.get('session')
+  const companyId = c.req.param('companyId')
+  if (!(await companyRoleOf(companyId, sub))) return c.json({ error: 'Forbidden' }, 403)
+  const all = await db.select({ id: projects.id }).from(projects).where(eq(projects.companyId, companyId))
+  const ok = await Promise.all(all.map((p) => hasPermission(p.id, sub, 'documents.read')))
+  const allowed = all.filter((_, i) => ok[i]).map((p) => p.id)
+  if (!allowed.length) return c.json({ items: [] })
+  const rows = await db
+    .select({ d: documents, author: users })
+    .from(documents)
+    .leftJoin(users, eq(users.id, documents.updatedById))
+    .where(and(inArray(documents.projectId, allowed), sql`${documents.deletedAt} is null`))
+    .orderBy(desc(documents.updatedAt))
+    .limit(1000)
+  return c.json({
+    items: rows.map((r) => ({
+      id: r.d.id,
+      projectId: r.d.projectId,
+      title: r.d.title || '—',
+      preview: htmlToText(r.d.content).slice(0, 160),
+      publicSlug: r.d.publicSlug,
+      updatedAt: r.d.updatedAt,
+      author: r.author ? { id: r.author.id, name: r.author.name, avatarUrl: r.author.avatarUrl } : null,
+    })),
+  })
 })
 
 // --- Публичная страница документа по слагу (БЕЗ авторизации) ---
