@@ -11,7 +11,7 @@ import { ProjectLogo } from '../ProjectLogo'
 import { Carousel } from '../tasks/TasksView'
 import { personColor, letterOf, shortProject, timeAgo } from '../util'
 import { htmlText, kbKeys, useAllDocs, useDoc, useKbSocket, useNotes, useVersions, type DocFull, type DocItem, type NoteRow } from './kb'
-import { CollabEditor, KbView, PlainEditor } from './KbEditor'
+import { CollabEditor, KbView, PlainEditor, useDocRoom } from './KbEditor'
 import '../i18n/docs'
 import '../styles/docs.css'
 
@@ -474,6 +474,9 @@ function DocArticle({
   const me = useMe()
   const doc = useDoc(projectId, docId)
   const [editing, setEditing] = useState(editInit)
+  const meRef = useMemo(() => (me.data ? { id: me.data.id, name: me.data.name } : null), [me.data])
+  // Подключение к документу — пока он открыт: совместная правка и «кто здесь».
+  const room = useDocRoom(docId, meRef, editing)
   const [title, setTitle] = useState<string | null>(null)
   const [html, setHtml] = useState<string | null>(null)
   const [dirty, setDirty] = useState(false)
@@ -592,6 +595,16 @@ function DocArticle({
             </MoreMenu>
           }
         />
+        {room.peers.length > 0 && (
+          <div className="kb-peers" aria-label={t('docs.here')}>
+            <span className="kb-peers-l">{t('docs.here')}</span>
+            {room.peers.map((p) => (
+              <span key={p.key} className={'kb-peer' + (p.editing ? ' ed' : '')} title={`${p.name} — ${p.editing ? t('docs.peerEditing') : t('docs.peerViewing')}`} style={{ background: p.color }}>
+                {(p.name.trim()[0] ?? '?').toUpperCase()}
+              </span>
+            ))}
+          </div>
+        )}
         {editing ? (
           <input
             className="kb-title bidi"
@@ -621,8 +634,10 @@ function DocArticle({
             }}
             onSynced={onSynced}
             mentions={members}
-            me={me.data ? { id: me.data.id, name: me.data.name } : null}
+            me={meRef}
             placeholder={t('docs.bodyPh')}
+            provider={room.provider}
+            synced={room.synced}
           />
         ) : htmlText(d.content) || /<img|<table/.test(d.content) ? (
           <KbView html={d.content} />

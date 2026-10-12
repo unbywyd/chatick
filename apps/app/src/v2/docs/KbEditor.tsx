@@ -81,6 +81,51 @@ export function PlainEditor({ value, onChange, placeholder }: { value: string; o
  * Y.Doc ровно один раз (флаг в самом Y.Doc), иначе контент задвоится у
  * каждого, кто откроет документ одновременно.
  */
+/**
+ * Подключение к документу на всё время, пока он открыт (и в просмотре, и в
+ * правке): по нему идут совместная правка и «кто сейчас здесь». Раньше
+ * присутствие давал сокет проекта; в v2 сокет личный, а сведения о людях в
+ * документе и так ходят по комнате Yjs — берём их оттуда.
+ */
+export type Peer = { key: number; id: string; name: string; color: string; editing: boolean }
+
+export function useDocRoom(documentId: string, me: { id: string; name: string } | null, editing: boolean) {
+  const [provider, setProvider] = useState<CollabProvider | null>(null)
+  const [synced, setSynced] = useState(false)
+  const [peers, setPeers] = useState<Peer[]>([])
+  useEffect(() => {
+    const p = new CollabProvider(documentId)
+    setProvider(p)
+    setSynced(false)
+    const off = p.onStatus((_c, s) => setSynced(s))
+    const read = () => {
+      const seen = new Set<string>()
+      const list: Peer[] = []
+      p.awareness.getStates().forEach((st, key) => {
+        if (key === p.doc.clientID) return
+        const u = (st as { user?: { id?: string; name?: string; color?: string; editing?: boolean } }).user
+        if (!u?.id || seen.has(u.id)) return
+        seen.add(u.id)
+        list.push({ key, id: u.id, name: u.name ?? '…', color: u.color ?? '#71717A', editing: Boolean(u.editing) })
+      })
+      setPeers(list)
+    }
+    p.awareness.on('change', read)
+    return () => {
+      p.awareness.off('change', read)
+      off()
+      p.destroy()
+      setProvider(null)
+      setPeers([])
+    }
+  }, [documentId])
+  // Себя — в общее состояние: имя, цвет курсора и «правит или смотрит».
+  useEffect(() => {
+    if (provider && me) provider.awareness.setLocalStateField('user', { id: me.id, name: me.name || '…', color: userColor(me.id), editing })
+  }, [provider, me, editing])
+  return { provider, synced, peers }
+}
+
 export function CollabEditor({
   documentId,
   projectId,
@@ -90,6 +135,8 @@ export function CollabEditor({
   mentions,
   me,
   placeholder,
+  provider,
+  synced,
 }: {
   documentId: string
   projectId: string
@@ -99,20 +146,9 @@ export function CollabEditor({
   mentions: RichMention[]
   me: { id: string; name: string } | null
   placeholder: string
+  provider: CollabProvider | null
+  synced: boolean
 }) {
-  const [provider, setProvider] = useState<CollabProvider | null>(null)
-  const [synced, setSynced] = useState(false)
-  useEffect(() => {
-    const p = new CollabProvider(documentId)
-    setProvider(p)
-    setSynced(false)
-    const off = p.onStatus((_c, s) => setSynced(s))
-    return () => {
-      off()
-      p.destroy()
-      setProvider(null)
-    }
-  }, [documentId])
   useEffect(() => onSynced(synced), [synced, onSynced])
 
   const fileRef = useRef<HTMLInputElement>(null)
@@ -158,7 +194,7 @@ export function CollabEditor({
   }, [editor, synced])
 
   useEffect(() => {
-    if (provider && me) provider.awareness.setLocalStateField('user', { name: me.name || '…', color: userColor(me.id) })
+    if (provider && me) provider.awareness.setLocalStateField('user', { id: me.id, name: me.name || '…', color: userColor(me.id), editing: true })
   }, [provider, me])
 
   useEffect(() => {
