@@ -41,8 +41,19 @@ import { NotesTab } from './components/tabs/NotesTab'
 import { TimeTab } from './components/tabs/TimeTab'
 import { ShortcutsTab } from './components/tabs/ShortcutsTab'
 import { ImageViewer } from './components/ImageViewer'
-import { Shell, StartRedirect, Soon } from './v2/Shell'
+import { Shell, StartRedirect } from './v2/Shell'
 import { TasksView } from './v2/tasks/TasksView'
+import { TaskPage, TaskNew } from './v2/task/TaskPage'
+import { DocsView } from './v2/docs/DocsView'
+import { TimeView } from './v2/time/TimeView'
+import { ResourcesView } from './v2/library/ResourcesView'
+import { FilesView } from './v2/library/FilesView'
+import { HistoryView } from './v2/library/HistoryView'
+import { VersionsView } from './v2/versions/VersionsView'
+import { CompanyView } from './v2/company/CompanyView'
+import { SettingsView } from './v2/settings/SettingsView'
+import { NotificationsView } from './v2/settings/NotificationsView'
+import { LoginV2, CompaniesV2 } from './v2/auth/AuthScreens'
 
 // HashRouter — единый роутинг для веба и Electron (file://) без доп. настроек.
 const queryClient = new QueryClient({
@@ -342,6 +353,9 @@ createRoot(document.getElementById('root')!).render(
               <Route path="/" element={<LoginScreen />} />
               <Route path="/enter" element={<EnterScreen />} />
               <Route path="/login" element={<LoginScreen />} />
+              {/* v2: вход по макету — пока по временному адресу, до проверки */}
+              <Route path="/login2/*" element={<LoginV2 />} />
+              <Route path="/companies" element={<CompaniesV2 />} />
               <Route path="/auth" element={<AuthCallback />} />
               {/* приём приглашения по ссылке из письма */}
               <Route path="/invite/:token" element={<InviteScreen />} />
@@ -361,16 +375,17 @@ createRoot(document.getElementById('root')!).render(
               <Route path="/onboarding" element={<StartScreen />} />
               <Route path="/c/:companyId" element={<Shell />}>
                 <Route index element={<TasksView />} />
-                <Route path="task/:taskId" element={<Soon />} />
-                <Route path="docs/*" element={<Soon />} />
-                <Route path="time/*" element={<Soon />} />
-                <Route path="resources" element={<Soon />} />
-                <Route path="files" element={<Soon />} />
-                <Route path="versions" element={<Soon />} />
-                <Route path="history" element={<Soon />} />
-                <Route path="company/*" element={<Soon />} />
-                <Route path="settings/*" element={<Soon />} />
-                <Route path="notifications" element={<Soon />} />
+                <Route path="task/new" element={<TaskNew />} />
+                <Route path="task/:taskId" element={<TaskPage />} />
+                <Route path="docs/*" element={<DocsView />} />
+                <Route path="time/*" element={<TimeView />} />
+                <Route path="resources" element={<ResourcesView />} />
+                <Route path="files" element={<FilesView />} />
+                <Route path="versions" element={<VersionsView />} />
+                <Route path="history" element={<HistoryView />} />
+                <Route path="company/*" element={<CompanyView />} />
+                <Route path="settings/:tab?" element={<SettingsView />} />
+                <Route path="notifications" element={<NotificationsView />} />
               </Route>
               <Route path="/start/:companyId" element={<StartScreen />} />
               <Route path="/start/:companyId/:companyTab" element={<StartScreen />} />
