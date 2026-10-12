@@ -152,9 +152,24 @@ function CompanyMenu() {
                 {c.id === company.id && <Icon name="check" />}
               </button>
             ))}
+            <div className="cdiv" />
+            <button
+              className="citem plain"
+              role="menuitem"
+              onClick={() => {
+                setOpen(false)
+                navigate('/companies')
+              }}
+            >
+              <span className="clg" style={{ background: 'var(--soft)', color: 'var(--ink)' }}>
+                <Icon name="grid" sm />
+              </span>
+              <span className="cb">
+                <b>{t('head.allCompanies')}</b>
+              </span>
+            </button>
             {boss && (
               <>
-                <div className="cdiv" />
                 <button
                   className="citem plain"
                   role="menuitem"
