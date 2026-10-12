@@ -441,7 +441,10 @@ export async function assistantReply(input: {
   onEvent?: (e: StreamEvent) => void
 }): Promise<{ text: string; tools: string[] } | null> {
   const cfg = await companyAssistantLlm(input.companyId)
-  if (!cfg) return null
+  if (!cfg) {
+    console.warn(`[assistant] no AI for company ${input.companyId}: no company key and no trial (or trial budget spent)`)
+    return null
+  }
   const [company, user, projectsList] = await Promise.all([
     db.query.companies.findFirst({ where: eq(companies.id, input.companyId) }),
     db.query.users.findFirst({ where: eq(users.id, input.userId) }),

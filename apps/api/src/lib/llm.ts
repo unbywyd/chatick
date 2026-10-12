@@ -647,13 +647,17 @@ export async function completeWithTools(
             return data.choices?.[0]?.message
           })()
       if (!msg) {
+        // Без записи в лог такой отказ выглядел для человека как «ИИ недоступен»
+        // без единой зацепки, почему.
+        console.error(`[llm] tools: empty round ${i + 1} from ${cfg.provider}/${cfg.model}`)
         flushUsage(cfg, acc)
         return null
       }
       if (!msg.tool_calls?.length) {
         flushUsage(cfg, acc)
-        if (onEvent) return streamed.trim() || null
-        return msg.content ?? null
+        const text = onEvent ? streamed.trim() || null : (msg.content ?? null)
+        if (!text) console.error(`[llm] tools: no text and no tool calls in round ${i + 1} from ${cfg.provider}/${cfg.model}`)
+        return text
       }
       msgs.push({ role: 'assistant', content: msg.content ?? null, tool_calls: msg.tool_calls })
       for (const call of msg.tool_calls) {
@@ -686,7 +690,10 @@ export async function completeWithTools(
       body: JSON.stringify({ model: cfg.model, ...tokenLimit(cfg.model, opts.maxTokens ?? 1500), messages: msgs }),
     })
     flushUsage(cfg, acc)
-    if (!final.ok) return null
+    if (!final.ok) {
+      console.error('[llm] tools: final round failed:', final.status, await final.text().catch(() => ''))
+      return null
+    }
     const fdata = (await final.json()) as { choices?: { message?: { content?: string } }[] }
     const ftext = fdata.choices?.[0]?.message?.content ?? null
     if (onEvent && ftext) {

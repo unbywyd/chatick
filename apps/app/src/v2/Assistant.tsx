@@ -59,6 +59,7 @@ export function Assistant() {
   }, [companyId, qc])
 
   const items = history.data?.items ?? []
+  const lastAsked = [...items].reverse().find((x) => x.role === 'user')?.text ?? ''
   useEffect(() => {
     end.current?.scrollIntoView({ block: 'end' })
   }, [items.length, live?.text])
@@ -119,7 +120,19 @@ export function Assistant() {
             </div>
           ) : (
             <div key={m.id} className="ma">
-              {m.failed ? <p>{t('ai.failed')}</p> : <Markdown remarkPlugins={[remarkGfm]}>{m.text}</Markdown>}
+              {m.failed ? (
+                <>
+                  <p>{t('ai.failed')}</p>
+                  {/* Сбой у модели бывает разовым — повторить тот же вопрос одной кнопкой. */}
+                  {m.id === items[items.length - 1]?.id && lastAsked && !live && (
+                    <button className="sug" onClick={() => ask(lastAsked)}>
+                      {t('ai.retry')}
+                    </button>
+                  )}
+                </>
+              ) : (
+                <Markdown remarkPlugins={[remarkGfm]}>{m.text}</Markdown>
+              )}
             </div>
           ),
         )}
