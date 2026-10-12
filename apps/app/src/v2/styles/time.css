@@ -1,0 +1,179 @@
+/* «Часы» — из макета Time.dc.html (и досок TimeEdit / TimeSheet / TimePerson / TimeExport).
+   Имена классов как в макете. Часть из них (.card .ph .btn .seg .st .dt .rd .scrim .av .cbx-f .cbx-pop)
+   в main.css значит другое, поэтому всё живёт под .tmv и явно сбрасывает чужое.
+   Единственное переименование: панель фильтров .tb → .tbar — в main.css «.tb button» красит
+   любую кнопку внутри (жирный 13px, min-width), и сбросить это поверх .btn/.seg без войны
+   специфичностей нельзя. */
+
+.app .tmv{max-width:1280px;margin:0 auto;--heat-lo:#F1F4EA;--heat-hi:#9CB27A;--hover:#FAFBF8;--edit:#F6F7F3;--live:#EFF7D8;--zero:#C8CCC2}
+.app.dark .tmv{--heat-lo:#1E241B;--heat-hi:#4E6B34;--hover:#1D201B;--edit:#1D201B;--live:#232C1A;--zero:#4A5046}
+.app .tmv input{border:0;outline:0;background:none;min-width:0;font:inherit;color:inherit}
+.app .tmv .k{font-size:12px;font-weight:600;color:var(--ink3);text-transform:uppercase;letter-spacing:.06em}
+
+.app .tmv .ph{display:flex;align-items:flex-end;gap:16px;margin-bottom:22px;padding:0;flex-wrap:wrap}
+.app .tmv .ph h1{margin:0;font-size:30px;letter-spacing:-.03em;font-weight:600;line-height:1.1}
+.app .tmv .ph p{margin:6px 0 0;color:var(--ink2);font-size:15px}
+.app .tmv .ph > .sp{flex:1}
+.app .tmv .seg{display:flex;gap:2px;background:var(--soft);padding:3px;border-radius:12px}
+.app .tmv .seg > button{height:34px;padding:0 13px;border-radius:9px;font-weight:500;color:var(--ink2);display:flex;align-items:center;gap:6px;white-space:nowrap}
+.app .tmv .seg > button.on{background:var(--sheet);color:var(--ink);box-shadow:0 1px 2px rgba(0,0,0,.08)}
+.app .tmv .seg .rl{font-size:11px;color:var(--ink3);font-weight:600;margin-inline-start:4px}
+.app .tmv .btn{height:40px;padding:0 15px;border-radius:12px;font-weight:600;display:inline-flex;align-items:center;gap:8px;white-space:nowrap;background:var(--sheet);box-shadow:inset 0 0 0 1px var(--line);color:var(--ink)}
+.app .tmv .btn:hover{box-shadow:inset 0 0 0 1px var(--ink3)}
+.app .tmv .btn.pr{background:var(--ink);color:var(--paper);box-shadow:none}
+.app .tmv .btn.sm{height:32px;padding:0 11px;border-radius:9px;font-size:13px}
+.app .tmv .btn.dis,.app .tmv .btn:disabled{opacity:.4;cursor:default}
+.app .tmv .card{display:block;padding:0;gap:0;background:var(--sheet);border-radius:20px;box-shadow:inset 0 0 0 1px var(--line)}
+.app .tmv .av{width:28px;height:28px;border-radius:50%;display:grid;place-items:center;color:#fff;font-weight:600;font-size:12px;flex:none}
+.app .tmv .logo.np{background:#9A9E95}
+
+/* панель фильтров */
+.app .tmv .tbar{display:flex;align-items:center;gap:10px;margin-bottom:16px;flex-wrap:wrap}
+.app .tmv .tbar > .sp{flex:1}
+.app .tmv .nav2{display:flex;align-items:center;gap:2px;background:var(--sheet);border-radius:12px;box-shadow:inset 0 0 0 1px var(--line);height:40px;padding:0 3px}
+.app .tmv .nav2 > button{width:32px;height:32px;border-radius:9px;display:grid;place-items:center;color:var(--ink2)}
+.app .tmv .nav2 > button:hover{background:var(--soft);color:var(--ink)}
+.app .tmv .nav2 > span{min-width:150px;text-align:center;font-weight:600;font-size:14px}
+.app[dir="rtl"] .tmv .nav2 .ic{transform:scaleX(-1)}
+.app .tmv .rng{display:flex;align-items:center;gap:6px;height:40px;padding:0 6px 0 10px;border-radius:12px;background:var(--sheet);box-shadow:inset 0 0 0 1px var(--line);font-size:13.5px}
+.app .tmv .rng input{height:30px;font-size:13.5px;border-radius:8px;padding:0 6px;background:var(--paper)}
+
+/* выпадающий выбор проекта */
+.app .tmv .cbx-f{width:auto;height:40px;padding:0 10px 0 6px;border-radius:12px;box-shadow:inset 0 0 0 1px var(--line);min-width:190px;max-width:280px}
+.app .tmv .cbx-f:hover{box-shadow:inset 0 0 0 1px var(--ink3)}
+.app .tmv .cbx-f.sm{height:28px;min-width:0;max-width:100%;padding:0 8px 0 3px;border-radius:8px;background:var(--soft);box-shadow:none;font-size:13px;gap:6px}
+.app .tmv .cbx-f.sm.np{background:var(--work-bg);color:var(--work)}
+.app .tmv .cbx-f.sm .logo{width:20px;height:20px;border-radius:6px;font-size:9.5px}
+.app .tmv .cbx-pop{inset-inline:auto;inset-inline-start:0;width:280px;min-width:0}
+.app .tmv .cbx-o .logo{width:22px;height:22px;border-radius:6px;font-size:10px}
+
+/* сводка за период */
+.app .tmv .sum{display:flex;align-items:stretch;gap:12px;margin-bottom:16px}
+.app .tmv .sum .tot{padding:14px 18px;min-width:190px}
+.app .tmv .sum .tot .v{font:600 30px/1.1 'JetBrains Mono',monospace;margin-top:6px}
+.app .tmv .sum .tot .d{font-size:13px;color:var(--ink3);margin-top:4px}
+.app .tmv .sum .bp{flex:1;padding:14px 18px;display:flex;flex-direction:column;gap:10px;justify-content:center;align-items:stretch;min-width:0}
+.app .tmv .stack{display:flex;height:12px;border-radius:6px;overflow:hidden;gap:2px;background:var(--soft)}
+.app .tmv .stack > i{display:block;height:100%}
+.app .tmv .leg{display:flex;flex-wrap:wrap;gap:6px 16px;font-size:13px;color:var(--ink2)}
+.app .tmv .leg > span{display:flex;align-items:center;gap:6px}
+.app .tmv .leg > span > i{width:10px;height:10px;border-radius:3px}
+.app .tmv .leg b{font-family:'JetBrains Mono',monospace;color:var(--ink);font-weight:600}
+
+/* записи по дням */
+.app .tmv .dg{margin-bottom:12px}
+.app .tmv .dh{display:flex;align-items:center;gap:10px;padding:12px 18px;border-bottom:1px solid var(--line)}
+.app .tmv .dh > b{font-size:15px;font-weight:600}
+.app .tmv .dh > .td{font-size:11.5px;font-weight:600;color:var(--moss);background:var(--accent);border-radius:6px;padding:1px 6px}
+.app .tmv .dh > .sp{flex:1}
+.app .tmv .dh > .t{font:600 14px/1 'JetBrains Mono',monospace}
+.app .tmv .dh > .add{width:30px;height:30px;border-radius:9px;display:grid;place-items:center;color:var(--ink3)}
+.app .tmv .dh > .add:hover{background:var(--soft);color:var(--ink)}
+.app .tmv .en{display:grid;grid-template-columns:150px 58px 210px minmax(0,1fr) 76px;gap:12px;align-items:center;padding:9px 18px;border-top:1px solid var(--line);position:relative;cursor:pointer}
+.app .tmv .dh + .en{border-top:0}
+.app .tmv .en:hover{background:var(--hover)}
+.app .tmv .en.live{background:linear-gradient(90deg,var(--live),transparent 60%)}
+.app[dir="rtl"] .tmv .en.live{background:linear-gradient(270deg,var(--live),transparent 60%)}
+.app .tmv .en.ed{background:var(--edit);cursor:default}
+.app .tmv .tr{font:500 13px/1.3 'JetBrains Mono',monospace;color:var(--ink2);display:flex;align-items:center;gap:6px;white-space:nowrap;direction:ltr;justify-content:flex-end}
+.app[dir="ltr"] .tmv .tr{justify-content:flex-start}
+.app .tmv .nx{font:600 10.5px/1 'Onest',sans-serif;color:var(--rev);background:var(--rev-bg);border-radius:5px;padding:3px 5px}
+.app .tmv .du{font:600 14px/1 'JetBrains Mono',monospace;text-align:end}
+.app .tmv .bd{min-width:0}
+.app .tmv .bd > .t1{font-size:13.5px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.app .tmv .bd > .t1 > b{font-family:'JetBrains Mono',monospace;font-weight:500;font-size:12px;color:var(--ink3);margin-inline-end:6px}
+.app .tmv .bd > .t1.e{color:var(--ink3)}
+.app .tmv .bd > .t2{font-size:12.5px;color:var(--ink3);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;margin-top:1px}
+.app .tmv .ea{display:flex;gap:2px;justify-content:flex-end;opacity:0}
+.app .tmv .en:hover .ea,.app .tmv .en:focus-within .ea,.app .tmv .en.ed .ea,.app .tmv .en.live .ea{opacity:1}
+.app .tmv .ea > button{width:30px;height:30px;border-radius:9px;display:grid;place-items:center;color:var(--ink3)}
+.app .tmv .ea > button:hover{background:var(--soft);color:var(--ink)}
+.app .tmv .ea > button.stop{width:auto;height:28px;padding:0 10px;border-radius:8px;background:var(--ink);color:var(--paper);font-size:12.5px;font-weight:600}
+.app .tmv .edf{grid-column:1/-1;display:grid;grid-template-columns:auto auto auto minmax(0,1fr);gap:12px 16px;align-items:end;padding:6px 0 4px}
+.app .tmv .fl{display:flex;flex-direction:column;gap:5px}
+.app .tmv .fl > span:first-child{font-size:12px;font-weight:600;color:var(--ink3)}
+.app .tmv .dt{display:flex;gap:6px;width:auto;height:auto;border-radius:0;background:none;transition:none}
+.app .tmv .dt input{height:38px;border-radius:10px;box-shadow:inset 0 0 0 1.5px var(--line);background:var(--sheet);padding:0 9px;font-family:'JetBrains Mono',monospace;font-size:13px;direction:ltr}
+.app .tmv .dt input:focus{box-shadow:inset 0 0 0 1.5px var(--ink)}
+.app .tmv .dt input.t{width:76px}
+.app .tmv .dt input.d{width:140px}
+.app .tmv .fl input.nt{height:38px;border-radius:10px;box-shadow:inset 0 0 0 1.5px var(--line);background:var(--sheet);padding:0 10px;width:100%}
+.app .tmv .fl input.nt:focus{box-shadow:inset 0 0 0 1.5px var(--ink)}
+.app .tmv .edb{grid-column:1/-1;display:flex;align-items:center;gap:8px}
+.app .tmv .edb > .msg{font-size:13px;color:var(--ink3)}
+.app .tmv .edb > .msg.err{color:var(--signal);font-weight:500}
+.app .tmv .edb > .msg.warn{color:var(--work);font-weight:500}
+.app .tmv .edb > .sp{flex:1}
+.app .tmv .empty{padding:40px 20px;text-align:center;color:var(--ink3)}
+.app .tmv .note{font-size:13px;color:var(--ink3);margin-top:10px;line-height:1.5}
+
+/* часы по людям */
+.app .tmv .psq{display:flex;align-items:center;gap:8px;height:40px;width:240px;padding:0 12px;border-radius:12px;background:var(--sheet);box-shadow:inset 0 0 0 1px var(--line);color:var(--ink3)}
+.app .tmv .psq:focus-within{box-shadow:inset 0 0 0 1.5px var(--ink)}
+.app .tmv .psq > input{flex:1;height:100%;color:var(--ink)}
+.app .tmv .sheetw{overflow:auto}
+.app .tmv table.st{display:table;height:auto;padding:0;border-radius:0;white-space:normal;width:100%;border-collapse:separate;border-spacing:0;font-size:13px;font-weight:400}
+.app .tmv .st th{background:var(--sheet);font-weight:500;color:var(--ink3);font-size:12px;padding:12px 8px;text-align:end;white-space:nowrap;border-bottom:1px solid var(--line)}
+.app .tmv .st th:first-child{text-align:start;padding-inline-start:18px}
+.app .tmv .st th .hh{display:inline-flex;align-items:center;gap:6px;max-width:150px}
+.app .tmv .st th .hh > span:last-child{overflow:hidden;text-overflow:ellipsis}
+.app .tmv .st th .logo{width:18px;height:18px;border-radius:5px;font-size:9px}
+.app .tmv .st td{padding:4px;text-align:end;border-bottom:1px solid var(--line)}
+.app .tmv .st td:first-child{text-align:start;padding:9px 8px;padding-inline-start:18px}
+.app .tmv .st tbody tr{cursor:pointer}
+.app .tmv .st tbody tr:hover td{background:var(--hover)}
+.app .tmv .st tbody tr.sel td{background:var(--heat-lo)}
+.app .tmv .cell{display:block;height:32px;border-radius:8px;padding:0 8px;font:500 12.5px/32px 'JetBrains Mono',monospace;color:var(--ink);white-space:nowrap}
+.app .tmv .cell.z{color:var(--zero)}
+.app .tmv .who{display:flex;align-items:center;gap:10px;font-weight:500;font-size:14px}
+.app .tmv .who small{display:block;font-size:12px;color:var(--ink3);font-weight:400}
+.app .tmv .st td.tt .cell{font-weight:600}
+.app .tmv .st tfoot td{font-weight:600;border-bottom:0}
+.app .tmv .cbm{width:18px;height:18px;border-radius:5px;box-shadow:inset 0 0 0 1.5px #B9BDB3;display:inline-grid;place-items:center;color:transparent;flex:none}
+.app .tmv .cbm.on{background:var(--moss);box-shadow:none;color:var(--accent)}
+.app .tmv .cbm .ic{width:11px;height:11px;stroke-width:3}
+.app .tmv .lgd{display:flex;align-items:center;gap:8px;font-size:12px;color:var(--ink3)}
+.app .tmv .lgd > i{width:70px;height:8px;border-radius:4px;background:linear-gradient(90deg,var(--heat-lo),var(--heat-hi))}
+
+/* панель человека и окно выгрузки */
+.app .tmv .scrim{position:fixed;inset:0;top:0;background:rgba(20,22,18,.32);z-index:30}
+.app .tmv .drw{position:fixed;top:0;inset-inline-end:0;bottom:0;width:min(640px,100vw);background:var(--sheet);z-index:31;display:flex;flex-direction:column;box-shadow:-20px 0 60px -20px rgba(0,0,0,.25)}
+.app .tmv .drw-h{display:flex;align-items:center;gap:12px;padding:20px 22px 12px}
+.app .tmv .drw-h .av{width:42px;height:42px;font-size:16px}
+.app .tmv .drw-h > div{flex:1;min-width:0}
+.app .tmv .drw-h b{display:block;font-size:19px;font-weight:600}
+.app .tmv .drw-h small{color:var(--ink3);font-size:13px}
+.app .tmv .drw-b{flex:1;overflow:auto;padding:0 0 20px}
+.app .tmv .drw .en{grid-template-columns:140px 54px 180px minmax(0,1fr);cursor:default}
+.app .tmv .drw .en:hover{background:none}
+.app .tmv .drw .dh{background:var(--paper)}
+.app .tmv .drw .pjn{display:flex;align-items:center;gap:7px;font-size:13px;font-weight:500;min-width:0}
+.app .tmv .drw .pjn > span:last-child{white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.app .tmv .drw .pjn .logo{width:20px;height:20px;border-radius:6px;font-size:9.5px}
+.app .tmv .x{width:36px;height:36px;border-radius:50%;background:var(--soft);display:grid;place-items:center;flex:none}
+.app .tmv .mdl{position:fixed;left:50%;top:90px;transform:translateX(-50%);width:min(520px,calc(100vw - 32px));max-height:calc(100vh - 120px);overflow:auto;background:var(--sheet);border-radius:24px;z-index:31;padding:22px 24px;box-shadow:0 40px 100px -20px rgba(0,0,0,.4);display:flex;flex-direction:column;gap:16px}
+.app .tmv .mdl h3{margin:0;font-size:20px;font-weight:600}
+.app .tmv .mdl .k{display:block;margin-bottom:8px}
+.app .tmv .opt{display:flex;flex-direction:column;gap:6px}
+.app .tmv .opt > button{display:flex;align-items:flex-start;gap:11px;padding:10px 12px;border-radius:12px;box-shadow:inset 0 0 0 1.5px var(--line);text-align:start}
+.app .tmv .opt > button.on{box-shadow:inset 0 0 0 2px var(--ink)}
+.app .tmv .opt .rd{width:18px;height:18px;border-radius:50%;box-shadow:inset 0 0 0 1.5px #B9BDB3;flex:none;margin:1px 0 0;display:block;-webkit-line-clamp:unset;overflow:visible}
+.app .tmv .opt > button.on .rd{box-shadow:inset 0 0 0 5px var(--ink)}
+.app .tmv .opt b{display:block;font-weight:600}
+.app .tmv .opt small{color:var(--ink3);font-size:12.5px}
+.app .tmv .tok .av{width:24px;height:24px;font-size:10.5px}
+.app .tmv .tmore{font-size:13px;color:var(--ink3);font-weight:500;padding:0 4px}
+.app .tmv .mdl .cbx-pop{width:100%}
+.app .tmv .cbx-o small{color:var(--ink3);font-size:12px;margin-inline-start:auto}
+.app .tmv .prev{font:500 12px/1.6 'JetBrains Mono',monospace;background:var(--paper);border-radius:12px;padding:10px 12px;color:var(--ink2);white-space:pre;overflow:hidden;direction:ltr;text-align:left}
+.app .tmv .toast > button{color:var(--accent);font-weight:600;margin-inline-start:4px}
+
+@media (max-width:900px){
+  .app .tmv .sum{flex-direction:column}
+  .app .tmv .en{grid-template-columns:110px 52px minmax(0,1fr) 70px}
+  .app .tmv .en > .pjc{grid-column:1/-1;order:5}
+  .app .tmv .edf{grid-template-columns:1fr}
+  .app .tmv .drw .en{grid-template-columns:110px 52px minmax(0,1fr)}
+  .app .tmv .drw .en .pjn{display:none}
+  .app .tmv .psq{width:100%}
+}

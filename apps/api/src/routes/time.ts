@@ -3,7 +3,7 @@ import { zValidator } from '@hono/zod-validator'
 import { z } from 'zod'
 import { and, asc, desc, eq, gte, inArray, isNull, lte, or, sql } from 'drizzle-orm'
 import { db } from '../db/client.js'
-import { companies, projectMembers, projects, tasks, timeEntries, users } from '../db/schema.js'
+import { companies, companyMembers, projectMembers, projects, tasks, timeEntries, users } from '../db/schema.js'
 import { requireProject, requireSession, type ProjectEnv, type SessionEnv } from '../auth.js'
 import { projectRoleOf, companyRoleOf } from './projects.js'
 import { logActivity } from '../lib/audit.js'
@@ -202,6 +202,88 @@ timeCompanyRoute.get(
       people,
       projects: projectList,
       totalMinutes: people.reduce((sum, u) => sum + u.minutes, 0),
+    })
+  },
+)
+
+/**
+ * Записи компании за период — экран «Часы» веба v2.
+ *
+ * Нужна потому, что всё остальное либо проектное (X-Project), либо по всем
+ * компаниям сразу и только по проектам, где человек состоит: записи без
+ * проекта и записи админа в проекте, где его нет в команде, туда не попадали.
+ * Здесь адрес — компания, как и у экрана.
+ *
+ * Права — одна лестница: участник видит только свои записи (userId из
+ * запроса молча игнорируется), менеджер и админ компании — чьи угодно.
+ * Идущий таймер тоже отдаём: в списке он строка «сейчас» с кнопкой «Стоп».
+ */
+const COMPANY_ENTRIES_LIMIT = 5000
+timeCompanyRoute.get(
+  '/company/:companyId/entries',
+  zValidator(
+    'query',
+    z.object({
+      from: z.string().optional(),
+      to: z.string().optional(),
+      userId: z.string().optional(),
+      projectId: z.string().optional(),
+    }),
+  ),
+  async (c) => {
+    const { sub } = c.get('session')
+    const companyId = c.req.param('companyId')
+    const role = await companyRoleOf(companyId, sub)
+    if (!role) return c.json({ error: 'Forbidden' }, 403)
+    const lead = role === 'admin' || role === 'manager'
+
+    const f = c.req.valid('query')
+    const conds = [eq(timeEntries.companyId, companyId)]
+    if (!lead) conds.push(eq(timeEntries.userId, sub))
+    else if (f.userId) conds.push(eq(timeEntries.userId, f.userId))
+    if (f.projectId === 'none') conds.push(isNull(timeEntries.projectId))
+    else if (f.projectId) conds.push(eq(timeEntries.projectId, f.projectId))
+    // Пересечение с периодом, как и в остальных ручках: ночная смена на
+    // границе обязана найтись.
+    if (f.from) conds.push(sql`coalesce(${timeEntries.endedAt}, now()) >= ${new Date(f.from).toISOString()}::timestamptz`)
+    if (f.to) {
+      const to = new Date(f.to)
+      if (!f.to.includes('T')) to.setHours(23, 59, 59, 999)
+      conds.push(lte(timeEntries.startedAt, to))
+    }
+
+    const rows = await db
+      .select({
+        e: timeEntries,
+        p: { id: projects.id, name: projects.name, color: projects.color, logoUrl: projects.logoUrl },
+        t: { id: tasks.id, number: tasks.number, title: tasks.title },
+        u: { id: users.id, name: users.name, avatarUrl: users.avatarUrl },
+      })
+      .from(timeEntries)
+      .leftJoin(projects, eq(projects.id, timeEntries.projectId))
+      .leftJoin(tasks, eq(tasks.id, timeEntries.taskId))
+      .innerJoin(users, eq(users.id, timeEntries.userId))
+      .where(and(...conds))
+      .orderBy(desc(timeEntries.startedAt))
+      .limit(COMPANY_ENTRIES_LIMIT)
+
+    return c.json({
+      items: rows.map(({ e, p, t, u }) => ({
+        id: e.id,
+        userId: e.userId,
+        user: u,
+        projectId: e.projectId,
+        project: p?.id ? p : null,
+        task: t?.id ? t : null,
+        description: e.description,
+        startedAt: e.startedAt,
+        endedAt: e.endedAt,
+        running: e.endedAt === null,
+        minutes: e.endedAt ? Math.round((e.endedAt.getTime() - e.startedAt.getTime()) / 60_000) : null,
+        autoStopped: e.autoStopped,
+      })),
+      // Упёрлись в потолок — клиент скажет «сузьте период», а не покажет неполное молча.
+      truncated: rows.length === COMPANY_ENTRIES_LIMIT,
     })
   },
 )
@@ -599,6 +681,66 @@ timeMineRoute.patch('/:id', zValidator('json', minePatchSchema), async (c) => {
   })
 })
 
+/**
+ * Ручная запись задним числом — по сессии (веб v2, «Запись вручную»).
+ *
+ * Проектная ручка POST /time/ требует X-Project и не умеет запись без проекта,
+ * а таймером «задним числом» её не завести: при идущем таймере старт упрётся
+ * в лимит. Правила те же, что у старта: членство в проекте (или в компании
+ * для времени без проекта), задача — только внутри проекта, не дольше суток.
+ * Этим же путём веб возвращает только что удалённую запись («Вернуть»).
+ */
+timeMineRoute.post(
+  '/',
+  zValidator(
+    'json',
+    z.object({
+      projectId: z.string().optional(),
+      companyId: z.string().optional(),
+      taskId: z.string().nullable().optional(),
+      description: z.string().max(500).default(''),
+      startedAt: z.string(),
+      endedAt: z.string(),
+    }),
+  ),
+  async (c) => {
+    const { sub } = c.get('session')
+    const b = c.req.valid('json')
+    const started = new Date(b.startedAt)
+    const ended = new Date(b.endedAt)
+    if (Number.isNaN(started.getTime()) || Number.isNaN(ended.getTime())) return c.json({ error: 'Bad date' }, 400)
+    if (ended.getTime() <= started.getTime()) return c.json({ error: 'End must be after start' }, 400)
+    if (ended.getTime() - started.getTime() > MAX_ENTRY_MS) {
+      return c.json({ error: 'That would make the entry longer than a day — check the dates, not just the times.' }, 400)
+    }
+
+    let projectId: string | null = null
+    let companyId: string | null = null
+    if (b.projectId) {
+      if (!(await projectRoleOf(b.projectId, sub))) return c.json({ error: 'You are not a member of that project' }, 403)
+      projectId = b.projectId
+    } else if (b.companyId) {
+      if (!(await companyRoleOf(b.companyId, sub))) return c.json({ error: 'You are not a member of that company' }, 403)
+      if (b.taskId) return c.json({ error: 'A task lives in a project — pass projectId to time a task' }, 400)
+      companyId = b.companyId
+    } else {
+      return c.json({ error: 'projectId or companyId is required' }, 400)
+    }
+    if (b.taskId && projectId) {
+      const task = await db.query.tasks.findFirst({ where: and(eq(tasks.id, b.taskId), eq(tasks.projectId, projectId)) })
+      if (!task) return c.json({ error: 'Task not found in this project' }, 404)
+    }
+
+    const [row] = await db
+      .insert(timeEntries)
+      .values({ projectId, companyId, userId: sub, taskId: b.taskId ?? null, description: b.description, startedAt: started, endedAt: ended })
+      .returning()
+    timeChanged(row!, 'create', row!.id)
+    if (projectId) void maybeTranslate(projectId, row!.id, row!.description).catch(() => {})
+    return c.json((await hydrate([row!]))[0], 201)
+  },
+)
+
 timeMineRoute.delete('/:id', async (c) => {
   const { sub } = c.get('session')
   const entry = await db.query.timeEntries.findFirst({ where: eq(timeEntries.id, c.req.param('id')) })
@@ -624,10 +766,19 @@ timeMineRoute.get(
     const f = c.req.valid('query')
 
     // Проекты, где я состою, и те из них, где я вправе видеть чужие часы.
-    const myMemberships = await db
+    const memberRows = await db
       .select({ projectId: projectMembers.projectId, role: projectMembers.role })
       .from(projectMembers)
       .where(eq(projectMembers.userId, sub))
+    // Одна лестница ролей (v2): менеджер и админ компании ведут все её
+    // проекты — как и в projectRoleOf, даже без строки в project_members.
+    // Иначе админ не видел ни чужих часов, ни своих в проектах вне команды.
+    const managedRows = await db
+      .select({ projectId: projects.id })
+      .from(projects)
+      .innerJoin(companyMembers, and(eq(companyMembers.companyId, projects.companyId), eq(companyMembers.userId, sub)))
+      .where(inArray(companyMembers.role, ['admin', 'manager']))
+    const myMemberships = [...memberRows, ...managedRows.map((r) => ({ projectId: r.projectId, role: 'admin' as const }))]
 
     const myProjectIds = myMemberships.map((m) => m.projectId)
     if (!myProjectIds.length) {

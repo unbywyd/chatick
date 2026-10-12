@@ -9,3 +9,6 @@
 
 /* Поле комментария в панели задачи — textarea вместо макетной заглушки. */
 .app .pf textarea.cin{resize:none;border:0;outline:none;font:inherit;color:var(--ink);padding:11px 14px;line-height:20px;display:block}
+
+/* Открыта панель или окно — плавающая кнопка ассистента не висит поверх затемнения. */
+.app:has(.scrim, .mwrap) .ai-fab{display:none}

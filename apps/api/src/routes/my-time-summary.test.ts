@@ -42,12 +42,20 @@ describe('мои часы по всем проектам: доступ', () => {
     expect(body).toMatch(/const target = canSeeOthers && f\.userId \? f\.userId : sub/)
   })
 
-  it('право видеть чужое считается по роли в проекте, а не в компании', () => {
+  it('право видеть чужое — у руководства проекта', () => {
     // owner/admin проекта — те же роли, что и в проектной ручке canSeeOthers.
-    // Роль в компании сюда не годится: админ компании не обязательно участник
-    // проекта, и часы чужого проекта его не касаются.
     expect(body).toMatch(/m\.role === 'owner' \|\| m\.role === 'admin'/)
     expect(body).toMatch(/const canSeeOthers = leadProjectIds\.length > 0/)
+  })
+
+  it('менеджер и админ компании руководят всеми её проектами (одна лестница ролей)', () => {
+    // v2: роль в компании одна на всё. Менеджер и админ ведут все проекты
+    // компании — так же решает projectRoleOf. Без этого админ не видел чужих
+    // часов, а свои в проекте вне команды — тоже.
+    expect(body).toMatch(/inArray\(companyMembers\.role, \['admin', 'manager'\]\)/)
+    expect(body).toMatch(/role: 'admin' as const/)
+    // Только роли этого человека: связка по userId обязательна.
+    expect(body).toMatch(/eq\(companyMembers\.userId, sub\)/)
   })
 
   it('чужие часы ищет только там, где человек руководит', () => {
