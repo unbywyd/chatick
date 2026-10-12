@@ -234,6 +234,7 @@ export async function ownsOrManages(
   owners: (string | null | undefined)[],
 ): Promise<boolean> {
   if (owners.some((o) => o && o === userId)) return true
+  // projectRoleOf уже учитывает менеджера и админа компании.
   const m = await projectRoleOf(projectId, userId)
   return m?.role === 'owner' || m?.role === 'admin'
 }
@@ -280,11 +281,35 @@ export function resolveDomains(role: 'owner' | 'admin' | 'member', raw: string |
 
 /** Эффективные доменные уровни участника. */
 export async function memberDomains(projectId: string, userId: string): Promise<DomainPermissions | null> {
-  const m = await db.query.projectMembers.findFirst({
-    where: and(eq(projectMembers.projectId, projectId), eq(projectMembers.userId, userId)),
-  })
+  const m = await projectRoleOf(projectId, userId)
   if (!m) return null
   return resolveDomains(m.role, m.permissions)
+}
+
+/**
+ * Одна лестница ролей (v2): участник / менеджер / админ — в КОМПАНИИ.
+ *
+ * Раньше у проекта были свои роли (владелец, админ проекта, участник), отдельно
+ * от ролей компании, и менеджер компании, видя все проекты, не мог поправить
+ * чужую задачу, пока его не сделали админом конкретного проекта. Две лестницы
+ * со словом «админ» в обеих путали всех.
+ *
+ * Теперь менеджер и админ компании управляют ЛЮБЫМ её проектом — как админ
+ * проекта, даже не состоя в команде. Участник видит только проекты, куда его
+ * позвали, и распоряжается своим. «Ведёт проект» (админ проекта) остаётся
+ * галочкой для участника, которому доверили один проект.
+ *
+ * Состав команды при этом не меняется: упоминания, уведомления и мяч — только
+ * тем, кто в ней на самом деле.
+ */
+export async function companyManagesProject(projectId: string, userId: string): Promise<boolean> {
+  const [row] = await db
+    .select({ role: companyMembers.role })
+    .from(projects)
+    .innerJoin(companyMembers, and(eq(companyMembers.companyId, projects.companyId), eq(companyMembers.userId, userId)))
+    .where(eq(projects.id, projectId))
+    .limit(1)
+  return canCreateProjects(row?.role ?? null)
 }
 
 /** Эффективный плоский пермишен участника (для существующих проверок в коде). */
@@ -565,11 +590,35 @@ export async function projectNameTaken(companyId: string, name: string, exceptId
   return rows.some((p) => p.name.trim().toLowerCase() === needle && p.id !== exceptId)
 }
 
-export async function projectRoleOf(projectId: string, userId: string) {
+/**
+ * Членство с ДЕЙСТВУЮЩЕЙ ролью: менеджер и админ компании — «админ» в любом её
+ * проекте (одна лестница ролей, см. companyManagesProject). Не состоящему в
+ * команде отдаём членство без записи в базе: права есть, в составе команды его
+ * нет — списки людей берутся из project_members напрямую.
+ */
+export async function projectRoleOf(projectId: string, userId: string): Promise<typeof projectMembers.$inferSelect | null> {
   const m = await db.query.projectMembers.findFirst({
     where: and(eq(projectMembers.projectId, projectId), eq(projectMembers.userId, userId)),
   })
-  return m ?? null
+  if (m && (m.role === 'owner' || m.role === 'admin')) return m
+  if (!(await companyManagesProject(projectId, userId))) return m ?? null
+  if (m) return { ...m, role: 'admin' }
+  const now = new Date()
+  return {
+    id: '',
+    projectId,
+    userId,
+    role: 'admin',
+    permissions: '{}',
+    hiddenAt: null,
+    jobTitle: '',
+    responsibility: '',
+    lastSeenGroupAt: null,
+    lastSeenAiAt: null,
+    // Правила чата принимают те, кто в команде; начальство заходит посмотреть.
+    rulesAcceptedAt: now,
+    createdAt: now,
+  } as typeof projectMembers.$inferSelect
 }
 
 // Детали проекта (участник или company admin/manager)
@@ -751,7 +800,7 @@ projectsRoute.patch(
 
     const membership = await projectRoleOf(projectId, sub)
     const companyRole = await companyRoleOf(project.companyId, sub)
-    const allowed = membership?.role === 'owner' || membership?.role === 'admin' || companyRole === 'admin'
+    const allowed = membership?.role === 'owner' || membership?.role === 'admin' || canCreateProjects(companyRole)
     if (!allowed) return c.json({ error: 'Forbidden' }, 403)
 
     const { name, about, aiConfig, chatRules, color, timeConfig, storageLimit, locale, deadline } = c.req.valid('json')
@@ -801,7 +850,7 @@ projectsRoute.post('/:projectId/logo', async (c) => {
 
   const membership = await projectRoleOf(projectId, sub)
   const companyRole = await companyRoleOf(project.companyId, sub)
-  if (!(membership?.role === 'owner' || membership?.role === 'admin' || companyRole === 'admin')) {
+  if (!(membership?.role === 'owner' || membership?.role === 'admin' || canCreateProjects(companyRole))) {
     return c.json({ error: 'Forbidden' }, 403)
   }
 
@@ -838,7 +887,7 @@ projectsRoute.delete('/:projectId/logo', async (c) => {
   if (!project) return c.json({ error: 'Not found' }, 404)
   const membership = await projectRoleOf(projectId, sub)
   const companyRole = await companyRoleOf(project.companyId, sub)
-  if (!(membership?.role === 'owner' || membership?.role === 'admin' || companyRole === 'admin')) {
+  if (!(membership?.role === 'owner' || membership?.role === 'admin' || canCreateProjects(companyRole))) {
     return c.json({ error: 'Forbidden' }, 403)
   }
   await db.update(projects).set({ logoUrl: null, logoKey: null }).where(eq(projects.id, projectId))
@@ -1084,7 +1133,7 @@ projectsRoute.patch(
     if (!project) return c.json({ error: 'Not found' }, 404)
     const me = await projectRoleOf(projectId, sub)
     const companyRole = await companyRoleOf(project.companyId, sub)
-    if (!(me?.role === 'owner' || me?.role === 'admin' || companyRole === 'admin')) return c.json({ error: 'Forbidden' }, 403)
+    if (!(me?.role === 'owner' || me?.role === 'admin' || canCreateProjects(companyRole))) return c.json({ error: 'Forbidden' }, 403)
 
     const target = await projectRoleOf(projectId, userId)
     if (!target) return c.json({ error: 'Not a project member' }, 404)
@@ -1112,7 +1161,7 @@ projectsRoute.patch(
 
     const me = await projectRoleOf(projectId, sub)
     const companyRole = await companyRoleOf(project.companyId, sub)
-    if (!(me?.role === 'owner' || me?.role === 'admin' || companyRole === 'admin')) {
+    if (!(me?.role === 'owner' || me?.role === 'admin' || canCreateProjects(companyRole))) {
       return c.json({ error: 'Forbidden' }, 403)
     }
 
@@ -1161,7 +1210,7 @@ projectsRoute.patch(
 
     const me = await projectRoleOf(projectId, sub)
     const companyRole = await companyRoleOf(project.companyId, sub)
-    const allowed = me?.role === 'owner' || me?.role === 'admin' || companyRole === 'admin'
+    const allowed = me?.role === 'owner' || me?.role === 'admin' || canCreateProjects(companyRole)
     if (!allowed) return c.json({ error: 'Forbidden' }, 403)
 
 
@@ -1416,7 +1465,7 @@ async function canManageProject(projectId: string, userId: string): Promise<bool
   if (!project) return false
   const me = await projectRoleOf(projectId, userId)
   const companyRole = await companyRoleOf(project.companyId, userId)
-  return me?.role === 'owner' || me?.role === 'admin' || companyRole === 'admin'
+  return me?.role === 'owner' || me?.role === 'admin' || canCreateProjects(companyRole)
 }
 
 // Конфиг хранилища — БЕЗ ключей (метаданные + флаг «ключи заданы»)

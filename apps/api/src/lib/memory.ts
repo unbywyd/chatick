@@ -7,7 +7,7 @@ import { db } from '../db/client.js'
 import { chatSummaries, credentials, documents, files, messages, notes, projectMembers, projects, resourceSecrets, taskComments, taskGroups, taskBlockers, taskResources, dbConnections, dbTablePolicies, tasks, timeEntries, users, companies, workLog } from '../db/schema.js'
 import { dependentsOf } from '../routes/tasks.js'
 import { readFromConnection } from '../routes/db-connections.js'
-import { hasPermission, companyRoleOf } from '../routes/projects.js'
+import { hasPermission, companyRoleOf, projectRoleOf } from '../routes/projects.js'
 import { snapshot } from '../routes/documents.js'
 import { htmlToText } from './sanitize-html.js'
 import { searchInDocument, searchInText } from './doc-search.js'
@@ -2340,9 +2340,7 @@ export function memoryTools(projectId: string, actorUserId: string): { tools: To
      * отборе после.
      */
     read_work_log: async (args) => {
-      const member = await db.query.projectMembers.findFirst({
-        where: and(eq(projectMembers.projectId, projectId), eq(projectMembers.userId, actorUserId)),
-      })
+      const member = await projectRoleOf(projectId, actorUserId)
       if (!member) return 'PERMISSION DENIED: you are not a member of this project.'
       const seesEveryone = member.role === 'owner' || member.role === 'admin'
 

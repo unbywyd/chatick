@@ -154,10 +154,10 @@ export const requireProject = createMiddleware<ProjectEnv>(async (c, next) => {
   //
   // Роль тоже берём из базы, а не из токена: понижённый из админов до
   // участника иначе сохранял бы админские права до перевыпуска.
-  const membership = await db.query.projectMembers.findFirst({
-    where: and(eq(projectMembers.projectId, projectId), eq(projectMembers.userId, payload.sub)),
-    columns: { role: true, rulesAcceptedAt: true },
-  })
+  // Действующая роль: менеджер и админ компании — «админ» в любом её проекте,
+  // даже не состоя в команде (одна лестница ролей, routes/projects.ts).
+  const { projectRoleOf } = await import('./routes/projects.js')
+  const membership = await projectRoleOf(projectId, payload.sub)
 
   if (payload.typ === 'session') {
     if (!membership) {

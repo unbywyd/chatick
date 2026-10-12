@@ -36,7 +36,9 @@ describe('requireProject принимает оба пути', () => {
   })
 
   it('членство и роль — из базы по проекту запроса, не из токена', () => {
-    expect(auth).toContain('where: and(eq(projectMembers.projectId, projectId), eq(projectMembers.userId, payload.sub))')
+    // Через projectRoleOf: членство из базы по проекту запроса, с действующей
+    // ролью (менеджер и админ компании — «админ» в любом её проекте).
+    expect(auth).toContain('const membership = await projectRoleOf(projectId, payload.sub)')
     expect(auth).toContain("c.set('auth', { typ: 'project', sub: payload.sub, email: payload.email, projectId, role: membership.role })")
   })
 

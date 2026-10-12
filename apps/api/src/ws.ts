@@ -262,10 +262,9 @@ export function attachWs(server: Server) {
     let projectId = ''
     if (payload.typ === 'project') projectId = payload.projectId
     else if (claimed) {
-      const m = await db.query.projectMembers.findFirst({
-        where: and(eq(projectMembers.projectId, claimed), eq(projectMembers.userId, payload.sub)),
-        columns: { rulesAcceptedAt: true },
-      })
+      // Менеджер и админ компании входят в любой её проект (одна лестница ролей).
+      const { projectRoleOf } = await import('./routes/projects.js')
+      const m = await projectRoleOf(claimed, payload.sub)
       if (!m || !m.rulesAcceptedAt) {
         ws.close(4003, 'forbidden')
         return
