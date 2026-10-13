@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react'
-import { useLocation } from 'react-router-dom'
+import { useLocation, useNavigate } from 'react-router-dom'
 import { useTranslation } from 'react-i18next'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import Markdown from 'react-markdown'
@@ -33,7 +33,8 @@ const SECTION = /\/c\/[^/]+\/(docs|notes|time|resources|files|versions|history|c
  */
 export function Assistant() {
   const { t } = useTranslation('v2')
-  const { companyId, company, setAiOpen, project, openTaskId: panelTaskId, pendingAsk, clearAsk } = useUi()
+  const { companyId, company, base, setAiOpen, project, openTaskId: panelTaskId, pendingAsk, clearAsk, openTask } = useUi()
+  const navigate = useNavigate()
   const { pathname } = useLocation()
   // Задача — из панели (?t=) или со страницы задачи (/task/:id).
   const pageTask = pathname.match(/\/task\/([^/]+)$/)?.[1]
@@ -57,13 +58,19 @@ export function Assistant() {
     const on = (e: Event) => {
       const { event, payload } = (e as CustomEvent<SocketMessage>).detail
       if (event !== 'assistant') return
-      const p = payload as { companyId: string; action: string; id?: string; replyTo?: string; text?: string; name?: string }
+      const p = payload as { companyId: string; action: string; id?: string; replyTo?: string; text?: string; name?: string; path?: string; taskId?: string }
       if (p.companyId !== companyId) return
       if (p.action === 'thinking' && p.id) setLive((l) => (l && l.text ? l : { replyTo: p.id!, text: '', tool: l?.tool ?? null }))
       // До ответа сервера на отправку id вопроса ещё нет — принимаем события и для «pending».
       const mine = (l: Live) => l.replyTo === p.replyTo || l.replyTo === PENDING || l.replyTo === BUSY
       if (p.action === 'tool') setLive((l) => (l && mine(l) ? { ...l, replyTo: p.replyTo ?? l.replyTo, tool: p.name ?? null } : l))
       if (p.action === 'delta') setLive((l) => (l && mine(l) ? { ...l, replyTo: p.replyTo ?? l.replyTo, text: l.text + (p.text ?? ''), tool: null } : l))
+      // «Открой…» — ассистент переключает экран. Адрес собрал сервер из
+      // проверенных записей; панель ассистента остаётся открытой.
+      if (p.action === 'open') {
+        if (p.taskId) openTask(p.taskId)
+        else if (typeof p.path === 'string' && (p.path === '' || p.path.startsWith('/') || p.path.startsWith('?'))) navigate(`${base}${p.path}`)
+      }
       if (p.action === 'message') {
         void qc.invalidateQueries({ queryKey: key }).then(() => setLive(null))
         // Ассистент мог создать или передать задачу — списки устарели.

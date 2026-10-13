@@ -3,8 +3,10 @@ import { db } from '../db/client.js'
 import {
   assistantMessages,
   companies,
+  documents,
   files,
   HANDOFF_ACTIONS,
+  notes,
   notifications,
   projectMembers,
   projects,
@@ -23,7 +25,7 @@ import { fromMeList, mineList, myProjects, quickTask, type ProjectList } from '.
 import { canCreateProjects, companyRoleOf, ownsOrManages } from '../routes/projects.js'
 import { signSessionToken } from '../auth.js'
 import { timeMineRoute } from '../routes/time.js'
-import { tasksChanged } from '../ws.js'
+import { sendToUserAnywhere, tasksChanged } from '../ws.js'
 
 /**
  * Ассистент компании (v2): один разговор на человека и компанию.
@@ -56,8 +58,8 @@ export type ScreenContext = { projectId?: string; taskId?: string; screen?: stri
  *   *_attached_file,      у ассистента компании своя история
  *   list_chat_images,
  *   view_image,
- *   open_in_ui          — шлёт событие в комнату проекта; ассистенту экран
- *                         открывает клиент v2.
+ *   open_in_ui          — шлёт событие в комнату проекта и строит адреса
+ *                         старого клиента; у ассистента свой open_on_screen.
  */
 export const EXCLUDED_TOOLS = new Set([
   'delete_task',
@@ -241,6 +243,28 @@ export function companyTools(ctx: Ctx): { tools: ToolDef[]; handlers: Record<str
       },
     },
     {
+      name: 'open_on_screen',
+      description:
+        'Open something on the person\'s screen: a task (in the side panel), a document, a note, or a whole section. ' +
+        'Use it whenever they ask to open / show / go to something ("открой доку X", "покажи задачу 115", "перейди в часы") — ' +
+        'open it instead of pasting its contents into the chat, then say in one line what you opened. ' +
+        'Also when they are about to look at the thing anyway. One place at a time — a screen that keeps jumping is worse than no help.',
+      parameters: {
+        type: 'object',
+        properties: {
+          what: { type: 'string', enum: ['task', 'document', 'note', 'section'], description: 'What to open' },
+          id: { type: 'string', description: 'Task number (TASK-5) or id, document id, note id. Omit for a section.' },
+          section: {
+            type: 'string',
+            enum: ['tasks', 'docs', 'notes', 'time', 'resources', 'files', 'versions', 'history', 'company', 'settings', 'notifications'],
+            description: 'For what=section',
+          },
+          project: { type: 'string', description: 'Project id or name: where the task lives, or the project to filter a section by.' },
+        },
+        required: ['what'],
+      },
+    },
+    {
       name: 'my_inbox',
       description:
         'Unread notifications of this person in this company — what reached them and what is asked. Use for "anything new", "did anyone answer me".',
@@ -371,6 +395,69 @@ export function companyTools(ctx: Ctx): { tools: ToolDef[]; handlers: Record<str
         createdVia: 'ai',
       })
       return `Logged ${Math.round((ended.getTime() - started.getTime()) / 60000)} min on the company.`
+    },
+
+    open_on_screen: async (args) => {
+      used('open_on_screen')
+      // Адрес собираем ЗДЕСЬ из проверенных записей, а не берём у модели:
+      // иначе экран перешёл бы куда угодно внутри приложения.
+      const what = String(args.what ?? '')
+      const raw = typeof args.id === 'string' ? args.id.trim() : ''
+      const visible = ctx.projects.map((p) => p.id)
+      const send = (payload: { path?: string; taskId?: string }) =>
+        sendToUserAnywhere(ctx.userId, 'assistant', { companyId: ctx.companyId, action: 'open', ...payload }) > 0
+      const done = (ok: boolean, label: string) =>
+        ok ? `Opened ${label} on their screen. Say so in one line — do not paste its contents.` : 'Their app is not open — nothing was opened. Tell them where to find it instead.'
+
+      if (what === 'section') {
+        const section = String(args.section ?? '')
+        const allowed = ['tasks', 'docs', 'notes', 'time', 'resources', 'files', 'versions', 'history', 'company', 'settings', 'notifications']
+        if (!allowed.includes(section)) return `Unknown section: ${section || '(none)'}. One of: ${allowed.join(', ')}`
+        let q = ''
+        if (typeof args.project === 'string' && args.project.trim()) {
+          const p = pickProject(ctx, args.project)
+          if (typeof p === 'string') return p
+          q = `?p=${p.id}`
+        }
+        return done(send({ path: `${section === 'tasks' ? '' : `/${section}`}${q}` }), `the ${section} section`)
+      }
+      if (!raw) return `Pass the ${what} id`
+      if (what === 'task') {
+        // Номер (TASK-5) повторяется в разных проектах: без проекта ищем по всем видимым.
+        let rows: (typeof tasks.$inferSelect)[]
+        if (typeof args.project === 'string' && args.project.trim()) {
+          const p = pickProject(ctx, args.project)
+          if (typeof p === 'string') return p
+          const t = await taskIn(p.id, raw)
+          rows = t ? [t] : []
+        } else {
+          rows = visible.length
+            ? await db.query.tasks.findMany({
+                where: and(inArray(tasks.projectId, visible), isNull(tasks.deletedAt), or(eq(tasks.id, raw), eq(tasks.number, raw.toUpperCase()))!),
+                limit: 10,
+              })
+            : []
+          if (rows.length > 1 && ctx.screen.projectId) {
+            const here = rows.filter((r) => r.projectId === ctx.screen.projectId)
+            if (here.length === 1) rows = here
+          }
+        }
+        if (!rows.length) return `No task ${raw} in the person's projects.`
+        if (rows.length > 1)
+          return `${raw} exists in several projects: ${rows.map((r) => ctx.projects.find((p) => p.id === r.projectId)?.name).join(', ')}. Ask which one, then pass project.`
+        return done(send({ taskId: rows[0]!.id }), `${rows[0]!.number}`)
+      }
+      if (what === 'document') {
+        const d = await db.query.documents.findFirst({ where: and(eq(documents.id, raw), isNull(documents.deletedAt)) })
+        if (!d || !visible.includes(d.projectId)) return `No document ${raw} in the person's projects. Find its id with list_documents.`
+        return done(send({ path: `/docs/d/${d.projectId}/${d.id}` }), `the document «${d.title}»`)
+      }
+      if (what === 'note') {
+        const n = await db.query.notes.findFirst({ where: and(eq(notes.id, raw), eq(notes.companyId, ctx.companyId), isNull(notes.deletedAt)) })
+        if (!n) return `No note ${raw} in this company. Find its id with list_notes.`
+        return done(send({ path: `/notes/n/${n.id}` }), `the note «${n.title}»`)
+      }
+      return `Unknown target: ${what}`
     },
 
     my_inbox: async (args) => {
@@ -524,6 +611,7 @@ export async function assistantReply(input: {
       'CONFIRMATION RULE: never change or move anything that is not plainly what the person asked for. For updates to other people\'s work, state exactly what you will change and wait for a yes. A clear explicit request counts as the yes.',
       'All actions are permission-checked per person and project — on PERMISSION DENIED or REFUSED, explain plainly.',
       'about_chatick answers questions about the product itself — call it instead of guessing.',
+      'OPENING THINGS: when the person asks to open, show or go to a task, document, note or section, call open_on_screen — the app switches to it. Do not paste a document\'s text into the chat instead of opening it.',
       'FORMATTING: markdown renders. Lead with the answer; tables only to compare several items across the same fields; no "Sure!", no restating the question. Be concise.',
     ].join('\n'),
     user: input.text,

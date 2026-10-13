@@ -64,3 +64,19 @@ describe('pickProject', () => {
     expect(pickProject(ctx(), 'Nope') as string).toMatch(/No project "Nope"/)
   })
 })
+
+describe('open_on_screen — ассистент открывает экраны', () => {
+  it('есть у ассистента компании', () => {
+    expect(companyTools(ctx()).tools.map((t) => t.name)).toContain('open_on_screen')
+  })
+  it('раздел — только из списка: адрес не собирается из слов модели', async () => {
+    const h = companyTools(ctx()).handlers.open_on_screen!
+    expect(await h({ what: 'section', section: '../../logout' })).toMatch(/^Unknown section/)
+    expect(await h({ what: 'whatever', id: 'x' })).toMatch(/^Unknown target/)
+    expect(await h({ what: 'task' })).toMatch(/Pass the task id/)
+  })
+  it('незнакомый проект для раздела — переспросить, а не открыть', async () => {
+    const h = companyTools(ctx()).handlers.open_on_screen!
+    expect(await h({ what: 'section', section: 'docs', project: 'Нет такого' })).toMatch(/No project/)
+  })
+})
