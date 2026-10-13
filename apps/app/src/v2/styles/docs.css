@@ -138,3 +138,23 @@
   .app .kb .doc{padding:20px 16px 28px;min-height:0}
   .app .kb .doc h1,.app .kb .kb-title{font-size:26px}
 }
+
+/* Список документов: автор, когда правили, «публичный». */
+.app .kb .di .di-b{flex:1;min-width:0;display:grid;gap:1px}
+.app .kb .di .di-b > .bidi{white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.app .kb .di .di-m{font-size:11.5px;color:var(--ink3);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;display:flex;align-items:center;gap:6px}
+.app .kb .di.on .di-m{color:color-mix(in srgb,var(--paper) 70%,transparent)}
+.app .kb .di .di-pub{padding:0 6px;border-radius:6px;background:var(--soft);color:var(--ink2);font-weight:600;font-size:10.5px;line-height:16px}
+.app .kb .di.on .di-pub{background:color-mix(in srgb,var(--paper) 18%,transparent);color:var(--paper)}
+/* История документа: строка — кнопка, версия открывается целиком. */
+.app .hv-b{display:block;width:100%;text-align:start;border-radius:10px}
+.app .hv-b:hover{background:var(--paper)}
+.app .kb-ver{width:min(820px,calc(100vw - 32px));max-height:calc(100vh - 140px);display:flex;flex-direction:column}
+.app .kb-ver-b{overflow:auto;min-height:0;flex:1;padding:4px 2px 8px;border-top:1px solid var(--line);margin-top:8px}
+.app .kb-ver-b h2{font-size:22px;margin:14px 0 8px}
+/* Картинки проекта для документа */
+.app .kb-gal{width:min(720px,calc(100vw - 32px))}
+.app .kb-gal-g{display:grid;grid-template-columns:repeat(auto-fill,minmax(120px,1fr));gap:10px;max-height:420px;overflow:auto;padding:2px}
+.app .kb-gal-i{aspect-ratio:1;border-radius:12px;overflow:hidden;background:var(--soft);box-shadow:inset 0 0 0 1px var(--line)}
+.app .kb-gal-i:hover{box-shadow:inset 0 0 0 2px var(--ink)}
+.app .kb-gal-i img{width:100%;height:100%;object-fit:cover;display:block}

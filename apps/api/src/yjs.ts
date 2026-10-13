@@ -22,6 +22,8 @@ type Room = {
   doc: Y.Doc
   awareness: awarenessProtocol.Awareness
   conns: Map<WebSocket, Set<number>> // соединение -> его awareness clientIDs
+  /** Кто сидит в комнате: правку от них сервер считает сохранением самого редактора. */
+  users: Map<WebSocket, string>
   projectId: string
   dirty: boolean
   saveTimer: NodeJS.Timeout | null
@@ -98,6 +100,7 @@ async function getRoom(documentId: string, projectId: string): Promise<Room | nu
     doc,
     awareness: new awarenessProtocol.Awareness(doc),
     conns: new Map(),
+    users: new Map(),
     projectId,
     dirty: false,
     saveTimer: null,
@@ -139,6 +142,7 @@ async function getRoom(documentId: string, projectId: string): Promise<Room | nu
 function closeConn(documentId: string, room: Room, ws: WebSocket) {
   const ids = room.conns.get(ws)
   room.conns.delete(ws)
+  room.users.delete(ws)
   if (ids && ids.size) {
     awarenessProtocol.removeAwarenessStates(room.awareness, [...ids], null)
   }
@@ -151,7 +155,8 @@ function closeConn(documentId: string, room: Room, ws: WebSocket) {
         if (room.conns.size === 0) {
           room.awareness.destroy()
           room.doc.destroy()
-          rooms.delete(documentId)
+          // Только свою: после сброса под этим id уже может жить новая комната.
+          if (rooms.get(documentId) === room) rooms.delete(documentId)
         }
       })
     }, EMPTY_ROOM_TTL)
@@ -219,6 +224,7 @@ export function attachYjs(server: Server) {
 
     ws.binaryType = 'arraybuffer'
     room.conns.set(ws, new Set())
+    room.users.set(ws, payload.sub)
 
     // шаг 1 синхронизации: отдать наш стейт-вектор
     const enc = encoding.createEncoder()
@@ -279,6 +285,34 @@ export function attachYjs(server: Server) {
   })
 
   console.log('🔗 yjs collab hub attached at /yjs')
+}
+
+/** Человек сейчас в совместной правке этого документа. */
+export function isInDocRoom(documentId: string, userId: string): boolean {
+  const room = rooms.get(documentId)
+  return room ? [...room.users.values()].includes(userId) : false
+}
+
+/**
+ * Текст документа поменяли не из совместного редактора: откатом к версии,
+ * через MCP, ассистентом, внешним API.
+ *
+ * Совместное состояние (ycontent) хранится отдельно от HTML и при открытии
+ * правки побеждает его. Без сброса открытый редактор показал бы старый текст,
+ * а автосохранение записало бы его поверх новой правки. Поэтому состояние
+ * стираем и закрываем комнату кодом 4009: клиент перечитает документ и
+ * заведёт её заново из свежего HTML.
+ */
+export async function resetDocCollab(documentId: string): Promise<void> {
+  const room = rooms.get(documentId)
+  if (room) {
+    rooms.delete(documentId)
+    room.dirty = false
+    if (room.saveTimer) clearTimeout(room.saveTimer)
+    if (room.destroyTimer) clearTimeout(room.destroyTimer)
+    for (const ws of [...room.conns.keys()]) ws.close(4009, 'reset')
+  }
+  await db.update(documents).set({ ycontent: null }).where(eq(documents.id, documentId))
 }
 
 /** Сохранить все комнаты — вызывается при остановке процесса, чтобы не потерять правки. */

@@ -22,6 +22,7 @@ export class CollabProvider {
   private attempt = 0
   private reconnectTimer: ReturnType<typeof setTimeout> | null = null
   private listeners = new Set<(connected: boolean, synced: boolean) => void>()
+  private resetListeners = new Set<() => void>()
 
   connected = false
   /** true после первого полного обмена — до этого редактор держим read-only. */
@@ -39,6 +40,16 @@ export class CollabProvider {
     if (typeof window !== 'undefined') window.addEventListener('beforeunload', this.onUnload)
 
     this.connect()
+  }
+
+  /**
+   * Сервер сбросил совместное состояние (текст поменяли откатом, ИИ или API).
+   * Этот провайдер со своим Y.Doc больше не годится: переподключившись, он
+   * залил бы старый текст обратно. Хозяин заводит новый.
+   */
+  onReset(cb: () => void) {
+    this.resetListeners.add(cb)
+    return () => this.resetListeners.delete(cb)
   }
 
   onStatus(cb: (connected: boolean, synced: boolean) => void) {
@@ -141,9 +152,14 @@ export class CollabProvider {
       }
     }
 
-    ws.onclose = () => {
+    ws.onclose = (e) => {
       this.connected = false
       this.emit()
+      if (e.code === 4009) {
+        this.closed = true
+        for (const cb of this.resetListeners) cb()
+        return
+      }
       // чужие курсоры больше не актуальны
       removeAwarenessStates(
         this.awareness,

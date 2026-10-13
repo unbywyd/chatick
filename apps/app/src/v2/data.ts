@@ -396,3 +396,18 @@ export function useUserSocket(enabled: boolean) {
     }
   }, [enabled, qc])
 }
+
+/**
+ * Что мне можно в проекте — «действие → да/нет», как судит сервер
+ * (documents.delete, files.delete, credentials.manage…). Чтобы не показывать
+ * кнопку, на которую придёт отказ. Пока не пришло — считаем, что нельзя.
+ */
+export function useMyAccess(projectId: string | null | undefined) {
+  const q = useQuery({
+    queryKey: ['v2', 'my-access', projectId],
+    queryFn: () => api<{ permissions: Record<string, boolean> }>(`/api/v1/projects/${projectId}/my-access`).then((r) => r.permissions),
+    enabled: Boolean(projectId),
+    staleTime: 5 * 60_000,
+  })
+  return (perm: string) => Boolean(q.data?.[perm])
+}

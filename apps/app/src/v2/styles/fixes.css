@@ -430,3 +430,4 @@ html:has(.app .panel),html:has(.app .panel) body{overflow:hidden}
 .app .cmt-files{display:flex;gap:6px;flex-wrap:wrap;margin-top:8px}
 .app .cmt-files .tchip{display:inline-flex;align-items:center;gap:6px;max-width:260px}
 .app .cmt-files .tchip .bidi{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.app .rel-ed{display:grid;gap:10px}.app .rel-ed label{display:grid;gap:4px}.app .rel-ed .lbl{margin:0}

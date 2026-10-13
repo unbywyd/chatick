@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { useMutation, useQueries, useQuery, useQueryClient } from '@tanstack/react-query'
+import '../i18n/list'
 import { useLocation, useNavigate, useParams } from 'react-router-dom'
 import { api, ensureMediaToken, getMediaToken, inlineImageUrl } from '@/lib/api'
 import { inProject, type CompanyProject } from '../data'
@@ -13,7 +14,7 @@ import { firstName, shortProject } from '../util'
 import { byDay, dayLabel, errText, fmtSize, Modal, ProjectCombo, uploadTo, useDebounced, useLibProjects, usePerProject } from './shared'
 import { kindOf, srcOf, Viewer, type FileItem, type Kind, type Row, type Src } from './FileViewer'
 
-type Page = { items: FileItem[]; hasMore: boolean }
+type Page = { items: FileItem[]; hasMore: boolean; storage?: { used: number; limit: number; custom?: boolean } }
 const SRCS: ('all' | Src)[] = ['all', 'chat', 'task', 'up']
 const KINDS: Kind[] = ['img', 'vid', 'doc', 'oth']
 
@@ -57,21 +58,31 @@ export function FilesView() {
   const qs = `/api/v1/files?withTaskFiles=1${dq ? `&q=${encodeURIComponent(dq)}` : ''}`
   const per = usePerProject<Page>('files', projects, qs)
   const selected = projects.find((p) => p.id === project) ?? null
-  // Следующие страницы — только в выбранном проекте.
+  // Следующие страницы — в выбранном проекте, а на «Все проекты» — в каждом,
+  // где они есть: раньше «ещё» было только внутри одного проекта, и дальше
+  // 24 свежих файлов с проекта на общем экране не заглянуть.
+  const targets = selected ? [selected] : projects
+  const firstOf = (pid: string): Page | undefined => per.parts.find((x) => x.project.id === pid)?.data ?? undefined
+  const moreSpecs = targets.flatMap((p) => Array.from({ length: pages - 1 }, (_, i) => ({ p, page: i + 2 })))
   const more = useQueries({
-    queries: Array.from({ length: selected ? pages - 1 : 0 }, (_, i) => ({
-      queryKey: ['v2', 'lib', 'files', selected!.id, qs, 'page', i + 2],
-      queryFn: () => api<Page>(`${qs}&page=${i + 2}`, inProject(selected!.id)),
+    queries: moreSpecs.map(({ p, page }) => ({
+      queryKey: ['v2', 'lib', 'files', p.id, qs, 'page', page],
+      queryFn: () => api<Page>(`${qs}&page=${page}`, inProject(p.id)),
       staleTime: 30_000,
+      // Страницу просим, только если на предыдущей сервер сказал «есть ещё».
+      enabled: page === 2 ? Boolean(firstOf(p.id)?.hasMore) : Boolean(qc.getQueryData<Page>(['v2', 'lib', 'files', p.id, qs, 'page', page - 1])?.hasMore),
     })),
   })
+  const pageOf = (pid: string, page: number): Page | undefined =>
+    page === 1 ? firstOf(pid) : more[moreSpecs.findIndex((x) => x.p.id === pid && x.page === page)]?.data
 
   const all: Row[] = useMemo(() => {
     const mk = (p: CompanyProject, items: FileItem[]) => items.map((f) => ({ ...f, project: p, kind: kindOf(f), src: srcOf(f) }))
     const base = per.parts.flatMap(({ project: p, data }) => mk(p, data?.items ?? []))
-    const extra = selected ? more.flatMap((r) => mk(selected, r.data?.items ?? [])) : []
+    const extra = moreSpecs.flatMap((x, i) => mk(x.p, more[i]?.data?.items ?? []))
     return [...base, ...extra].sort((a, b) => b.createdAt.localeCompare(a.createdAt))
-  }, [per.parts, more, selected])
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [per.parts, more, selected, pages])
   // Открыт по адресу: берём из списка, а если файла нет в первой порции —
   // спрашиваем сервер о нём одном.
   const deepId = deep?.[2] ?? null
@@ -99,8 +110,43 @@ export function FilesView() {
     setOpen(null)
     if (deepId) navigate(`${base}/files${search}`)
   }
-  const lastPage = selected ? (pages === 1 ? per.parts.find((x) => x.project.id === selected.id)?.data : more[more.length - 1]?.data) : null
-  const hasMore = Boolean(lastPage?.hasMore)
+  // «Ещё» есть, если хоть у одного проекта последняя загруженная страница не последняя.
+  const hasMore = targets.some((p) => Boolean(pageOf(p.id, pages)?.hasMore))
+  // Место: у выбранного проекта сервер отдаёт занятое и лимит с первой страницей.
+  const storage = selected ? firstOf(selected.id)?.storage : undefined
+  // Выбор нескольких файлов — удалить разом.
+  const [picked, setPicked] = useState<Set<string>>(() => new Set())
+  const togglePick = (id: string) =>
+    setPicked((prev) => {
+      const n = new Set(prev)
+      if (n.has(id)) n.delete(id)
+      else n.add(id)
+      return n
+    })
+  const [delAsk, setDelAsk] = useState(false)
+  const bulkDelete = useMutation({
+    mutationFn: async () => {
+      const byProject = new Map<string, string[]>()
+      for (const f of all) if (picked.has(f.id)) byProject.set(f.project.id, [...(byProject.get(f.project.id) ?? []), f.id])
+      let deleted = 0
+      let skipped = 0
+      for (const [pid, ids] of byProject) {
+        const r = await api<{ deleted: number; skipped: number }>('/api/v1/files/bulk-delete', { method: 'POST', body: JSON.stringify({ ids }), ...inProject(pid) })
+        deleted += r.deleted
+        skipped += r.skipped
+        void qc.invalidateQueries({ queryKey: ['v2', 'lib', 'files', pid] })
+      }
+      return { deleted, skipped }
+    },
+    onSuccess: (r) => {
+      setPicked(new Set())
+      setDelAsk(false)
+      flash(r.skipped ? `${t('library.files.bulkDeleted', { count: r.deleted })} ${t('library.files.bulkSkipped', { count: r.skipped })}` : t('library.files.bulkDeleted', { count: r.deleted }))
+    },
+    onError: (e) => flash(errText(t, e)),
+  })
+  // «Без сжатия»: картинки загрузятся как есть — для макетов и скриншотов.
+  const [keepOrig, setKeepOrig] = useState(false)
 
   const inProj = all.filter((f) => !project || f.project.id === project)
   const bySrc = inProj.filter((f) => src === 'all' || f.src === src)
@@ -116,6 +162,7 @@ export function FilesView() {
       const form = new FormData()
       form.set('file', f)
       form.set('manager', '1') // прямая загрузка — файл постоянный, не черновик вложения
+      if (keepOrig) form.set('keepOriginal', '1')
       try {
         const res = await uploadTo(projectId, '/api/v1/files', form)
         if (res.ok) ok++
@@ -178,6 +225,10 @@ export function FilesView() {
           <p className="sub">{t('library.files.sub')}</p>
         </div>
         <div className="rh-a">
+          <label className="keep-orig" title={t('task.keepOrigHint')}>
+            <input type="checkbox" checked={keepOrig} onChange={(e) => setKeepOrig(e.target.checked)} />
+            {t('task.keepOrig')}
+          </label>
           <button className="btn-acc" onClick={() => start(null)}>
             <svg className="ic" viewBox="0 0 24 24" aria-hidden="true">
               <path d="M12 15V4M7.5 8.5L12 4l4.5 4.5" />
@@ -227,6 +278,15 @@ export function FilesView() {
         })}
       </div>
 
+      {storage && !storage.custom && storage.limit > 0 && (
+        <div className="lib-store" title={t('library.files.storageTitle')}>
+          <span>{t('library.files.storage', { used: fmtSize(storage.used, t), limit: fmtSize(storage.limit, t) })}</span>
+          <span className="lib-store-bar">
+            <i className={storage.used / storage.limit > 0.9 ? 'hot' : ''} style={{ width: `${Math.min(100, Math.round((storage.used / storage.limit) * 100))}%` }} />
+          </span>
+        </div>
+      )}
+
       <div className="sheet" style={{ padding: '12px 8px 14px' }}>
         <div
           className={'dz' + (drag ? ' lib-drag' : '')}
@@ -256,7 +316,7 @@ export function FilesView() {
             </div>
             <div className="fgrid">
               {d.items.map((f) => (
-                <Tile key={f.id} f={f} onOpen={() => openFile(f)} />
+                <Tile key={f.id} f={f} onOpen={() => openFile(f)} picked={picked.has(f.id)} picking={picked.size > 0} onPick={() => togglePick(f.id)} />
               ))}
             </div>
           </div>
@@ -288,17 +348,38 @@ export function FilesView() {
         />
       )}
       {open && <Viewer f={open} onClose={closeFile} />}
+      {picked.size > 0 && (
+        <div className="lt-bulk" role="toolbar">
+          <b>{t('library.files.picked', { count: picked.size })}</b>
+          {!delAsk ? (
+            <button className="mini" onClick={() => setDelAsk(true)}>
+              {t('library.files.delete')}
+            </button>
+          ) : (
+            <button className="mini danger on" disabled={bulkDelete.isPending} onClick={() => bulkDelete.mutate()}>
+              {t('library.files.deleteN', { count: picked.size })}
+            </button>
+          )}
+          <span style={{ flex: 1 }} />
+          <button className="ib" aria-label={t('lt.clear')} title={t('lt.clear')} onClick={() => (setPicked(new Set()), setDelAsk(false))}>
+            <Icon name="close" />
+          </button>
+        </div>
+      )}
     </div>
   )
 }
 
-function Tile({ f, onOpen }: { f: Row; onOpen: () => void }) {
+function Tile({ f, onOpen, picked, picking, onPick }: { f: Row; onOpen: () => void; picked: boolean; picking: boolean; onPick: () => void }) {
   const { t } = useTranslation('v2')
   const token = getMediaToken()
   const [broken, setBroken] = useState(false)
   const img = f.kind === 'img' && token && !broken
   return (
-    <div className="ftile">
+    <div className={'ftile' + (picked ? ' picked' : '') + (picking ? ' picking' : '')}>
+      <button className={'fsel' + (picked ? ' on' : '')} role="checkbox" aria-checked={picked} aria-label={t('library.files.pick', { name: f.name })} onClick={onPick}>
+        {picked && <Icon name="check" sm />}
+      </button>
       <button className={`fthumb th-${f.kind}`} aria-label={t('library.files.openAria', { name: f.name })} onClick={onOpen}>
         {img && <img className="lib-thumb" src={`${inlineImageUrl(f.id)}?t=${encodeURIComponent(token)}`} alt="" loading="lazy" onError={() => setBroken(true)} />}
         {f.kind === 'img' && !img && (

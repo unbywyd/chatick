@@ -1,4 +1,5 @@
 import { TASK_STATUSES, closedSql, settledSql, isClosed } from './task-status.js'
+import { resetDocCollab } from '../yjs.js'
 import { and, asc, desc, eq, gt, gte, ilike, inArray, isNotNull, isNull, lte, or, sql } from 'drizzle-orm'
 import { companyOf, projectPath } from './links.js'
 import { shortUrlFor } from './short-links.js'
@@ -2512,6 +2513,8 @@ export function memoryTools(projectId: string, actorUserId: string): { tools: To
       // правку ИИ обязательно версионируем: перезапись всего документа должна быть обратима
       await snapshot(d.id, d.title, d.content, actorUserId, 'before AI edit').catch(() => {})
       await db.update(documents).set(patch).where(eq(documents.id, d.id))
+      // Открытые редакторы должны увидеть правку ИИ, а не перезаписать её своей копией.
+      if (patch.content !== undefined) await resetDocCollab(d.id)
       void logActivity({ projectId, actorId: actorUserId, action: 'update', entityType: 'document', entityId: d.id, entityLabel: d.title || '—' })
       broadcast(projectId, 'documents_changed', { id: d.id })
       return `Updated document "${d.title || '—'}".`
@@ -2528,6 +2531,7 @@ export function memoryTools(projectId: string, actorUserId: string): { tools: To
       const next = `${d.content}${add}`.slice(0, 500_000)
       await snapshot(d.id, d.title, d.content, actorUserId, 'before AI append').catch(() => {})
       await db.update(documents).set({ content: next, updatedById: actorUserId }).where(eq(documents.id, d.id))
+      await resetDocCollab(d.id)
       void logActivity({ projectId, actorId: actorUserId, action: 'update', entityType: 'document', entityId: d.id, entityLabel: d.title || '—' })
       broadcast(projectId, 'documents_changed', { id: d.id })
       return `Appended ${add.length} chars to "${d.title || '—'}".`

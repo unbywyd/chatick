@@ -7,10 +7,12 @@ import Mention from '@tiptap/extension-mention'
 import TaskList from '@tiptap/extension-task-list'
 import TaskItem from '@tiptap/extension-task-item'
 import Highlight from '@tiptap/extension-highlight'
+import TextAlign from '@tiptap/extension-text-align'
 import { Table, TableRow, TableCell, TableHeader } from '@tiptap/extension-table'
 import Collaboration from '@tiptap/extension-collaboration'
 import CollaborationCaret from '@tiptap/extension-collaboration-caret'
-import { API_URL, docImageUrl, projectHeaders, stripDocImageAuth, stripInlineImageAuth, withInlineImageAuth } from '@/lib/api'
+import { API_URL, api, docImageUrl, ensureMediaToken, getMediaToken, inlineImageUrl, projectHeaders, stripDocImageAuth, stripInlineImageAuth, withInlineImageAuth } from '@/lib/api'
+import { createPortal } from 'react-dom'
 import { CollabProvider, userColor } from '@/lib/yjs-provider'
 import { mentionSuggestion, type RichMention } from '@/components/ui/rich-editor'
 import { TextDirection } from '@/components/ui/text-direction'
@@ -32,6 +34,9 @@ function extensions(placeholder: string, mentions: RichMention[] | null, collab:
     StarterKit.configure({ link: { openOnClick: false }, ...(collab ? { undoRedo: false as const } : {}) }),
     Placeholder.configure({ placeholder }),
     Highlight.configure({ multicolor: false }),
+    // Как в редакторе первой версии: обе пишут в один Y.Doc, и без этого
+    // правка здесь срезала бы выравнивание, поставленное там.
+    TextAlign.configure({ types: ['heading', 'paragraph'] }),
     ResizableImage.configure({ inline: false, allowBase64: false, HTMLAttributes: { class: 'doc-image' } }),
     Table.configure({ resizable: true }),
     TableRow,
@@ -89,8 +94,13 @@ export function PlainEditor({ value, onChange, placeholder }: { value: string; o
  */
 export type Peer = { key: number; id: string; name: string; color: string; editing: boolean }
 
-export function useDocRoom(documentId: string, me: { id: string; name: string } | null, editing: boolean) {
+export function useDocRoom(documentId: string, me: { id: string; name: string } | null, editing: boolean, onReset?: () => Promise<unknown>) {
   const [provider, setProvider] = useState<CollabProvider | null>(null)
+  // Сервер сбросил комнату (текст поменяли снаружи): дочитать свежий текст и
+  // завести провайдер заново — с пустым Y.Doc, который засеется из него.
+  const [epoch, setEpoch] = useState(0)
+  const resetRef = useRef(onReset)
+  resetRef.current = onReset
   const [synced, setSynced] = useState(false)
   const [peers, setPeers] = useState<Peer[]>([])
   // Себя (другие вкладки того же человека) в «кто здесь» не показываем.
@@ -101,6 +111,9 @@ export function useDocRoom(documentId: string, me: { id: string; name: string } 
     setProvider(p)
     setSynced(false)
     const off = p.onStatus((_c, s) => setSynced(s))
+    const offReset = p.onReset(() => {
+      void Promise.resolve(resetRef.current?.()).finally(() => setEpoch((x) => x + 1))
+    })
     const read = () => {
       const seen = new Set<string>()
       const list: Peer[] = []
@@ -117,11 +130,12 @@ export function useDocRoom(documentId: string, me: { id: string; name: string } 
     return () => {
       p.awareness.off('change', read)
       off()
+      offReset()
       p.destroy()
       setProvider(null)
       setPeers([])
     }
-  }, [documentId])
+  }, [documentId, epoch])
   // Себя — в общее состояние: имя, цвет курсора и «правит или смотрит».
   useEffect(() => {
     if (provider && me) provider.awareness.setLocalStateField('user', { id: me.id, name: me.name || '…', color: userColor(me.id), editing })
@@ -155,6 +169,7 @@ export function CollabEditor({
   useEffect(() => onSynced(synced), [synced, onSynced])
 
   const fileRef = useRef<HTMLInputElement>(null)
+  const [gallery, setGallery] = useState(false)
   const editor = useEditor(
     {
       extensions: [
@@ -231,7 +246,21 @@ export function CollabEditor({
   if (!editor) return null
   return (
     <div className="kb-edw">
-      <Toolbar editor={editor} onImage={() => fileRef.current?.click()} />
+      <Toolbar editor={editor} onImage={() => fileRef.current?.click()} onGallery={() => setGallery(true)} />
+      {gallery && (
+        <GalleryPick
+          projectId={projectId}
+          onClose={() => setGallery(false)}
+          onPick={(id) => {
+            setGallery(false)
+            editor.chain().focus().setImage({ src: docImageUrl(documentId, id) }).run()
+          }}
+          onUpload={() => {
+            setGallery(false)
+            fileRef.current?.click()
+          }}
+        />
+      )}
       <EditorContent editor={editor} />
       <input
         ref={fileRef}
@@ -248,6 +277,14 @@ export function CollabEditor({
 }
 
 const P: Record<string, React.ReactNode> = {
+  h1: <path d="M5 5v14M13 5v14M5 12h8M17 8l3-2v13" />,
+  underline: <path d="M7 4v7a5 5 0 0010 0V4M5 20h14" />,
+  highlight: <path d="M4 20h16M7 16l9-9 3 3-9 9H7zM13 10l3 3" />,
+  alignLeft: <path d="M4 6h16M4 10h10M4 14h16M4 18h10" />,
+  alignCenter: <path d="M4 6h16M7 10h10M4 14h16M7 18h10" />,
+  alignRight: <path d="M4 6h16M10 10h10M4 14h16M10 18h10" />,
+  hr: <path d="M4 12h16M8 7h8M8 17h8" />,
+  gallery: <path d="M4 7h12v12H4zM8 4h12v12M4 16l4-4 3 3 2-2 3 3" />,
   h2: <path d="M5 5v14M13 5v14M5 12h8M17 19h4c0-2-4-2.5-4-5a2 2 0 014 0" />,
   h3: <path d="M5 5v14M13 5v14M5 12h8M17 10.5a2 2 0 114 .5c0 1-1 1.5-2 1.5 1 0 2 .5 2 1.8a2 2 0 01-4 .2" />,
   bold: <path d="M7 5h6a3.5 3.5 0 010 7H7zM7 12h7a3.5 3.5 0 010 7H7z" />,
@@ -265,7 +302,7 @@ const P: Record<string, React.ReactNode> = {
   redo: <path d="M15 14l5-5-5-5M20 9H10a6 6 0 000 12h3" />,
 }
 
-function Toolbar({ editor, onImage }: { editor: Editor; onImage?: () => void }) {
+function Toolbar({ editor, onImage, onGallery }: { editor: Editor; onImage?: () => void; onGallery?: () => void }) {
   const { t } = useTranslation('v2')
   // Подсветка активных кнопок зависит от каретки — перерисовываемся на её движение.
   const [, bump] = useState(0)
@@ -292,11 +329,14 @@ function Toolbar({ editor, onImage }: { editor: Editor; onImage?: () => void }) 
   }
   return (
     <div className="kb-tb" role="toolbar" aria-label={t('docs.tb.toolbar')}>
+      {b('h1', () => c().toggleHeading({ level: 1 }).run(), editor.isActive('heading', { level: 1 }))}
       {b('h2', () => c().toggleHeading({ level: 2 }).run(), editor.isActive('heading', { level: 2 }))}
       {b('h3', () => c().toggleHeading({ level: 3 }).run(), editor.isActive('heading', { level: 3 }))}
       <i />
       {b('bold', () => c().toggleBold().run(), editor.isActive('bold'))}
       {b('italic', () => c().toggleItalic().run(), editor.isActive('italic'))}
+      {b('underline', () => c().toggleUnderline().run(), editor.isActive('underline'))}
+      {b('highlight', () => c().toggleHighlight().run(), editor.isActive('highlight'))}
       {b('strike', () => c().toggleStrike().run(), editor.isActive('strike'))}
       {b('code', () => c().toggleCode().run(), editor.isActive('code'))}
       <i />
@@ -305,12 +345,65 @@ function Toolbar({ editor, onImage }: { editor: Editor; onImage?: () => void }) 
       {b('check', () => c().toggleTaskList().run(), editor.isActive('taskList'))}
       {b('quote', () => c().toggleBlockquote().run(), editor.isActive('blockquote'))}
       <i />
+      {b('alignLeft', () => c().setTextAlign('left').run(), editor.isActive({ textAlign: 'left' }))}
+      {b('alignCenter', () => c().setTextAlign('center').run(), editor.isActive({ textAlign: 'center' }))}
+      {b('alignRight', () => c().setTextAlign('right').run(), editor.isActive({ textAlign: 'right' }))}
+      {b('hr', () => c().setHorizontalRule().run())}
+      <i />
       {b('link', link, editor.isActive('link'))}
       {onImage && b('image', onImage)}
+      {onGallery && b('gallery', onGallery)}
       {b('table', () => c().insertTable({ rows: 3, cols: 3, withHeaderRow: true }).run())}
       <span className="sp" />
       {b('undo', () => c().undo().run())}
       {b('redo', () => c().redo().run())}
     </div>
+  )
+}
+
+/**
+ * Картинка из файлов проекта: то, что уже загружено в задачи и библиотеку.
+ * В документ идёт ссылка документа (без токена) — как и у загруженной сюда.
+ */
+function GalleryPick({ projectId, onClose, onPick, onUpload }: { projectId: string; onClose: () => void; onPick: (id: string) => void; onUpload: () => void }) {
+  const { t } = useTranslation('v2')
+  const [items, setItems] = useState<{ id: string; name: string }[] | null>(null)
+  const [, setMedia] = useState(getMediaToken())
+  useEffect(() => {
+    void ensureMediaToken().then(() => setMedia(getMediaToken()))
+    api<{ items: { id: string; name: string }[] }>('/api/v1/files?type=image', { headers: projectHeaders(projectId) })
+      .then((r) => setItems(r.items))
+      .catch(() => setItems([]))
+  }, [projectId])
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => e.key === 'Escape' && onClose()
+    window.addEventListener('keydown', onKey)
+    return () => window.removeEventListener('keydown', onKey)
+  }, [onClose])
+  return createPortal(
+    <div className="mwrap mwrap-top" onMouseDown={(e) => e.target === e.currentTarget && onClose()}>
+      <div className="modal kb-gal" role="dialog" aria-modal="true" aria-label={t('docs.gallery.title')}>
+        <div className="mh">
+          <div style={{ minWidth: 0, flex: 1 }}>
+            <h3 style={{ marginTop: 4 }}>{t('docs.gallery.title')}</h3>
+          </div>
+          <button className="btn sm" onClick={onUpload}>
+            {t('docs.gallery.upload')}
+          </button>
+        </div>
+        {items === null && <p className="co-hint">…</p>}
+        {items && !items.length && <p className="co-hint">{t('docs.gallery.empty')}</p>}
+        {items && items.length > 0 && (
+          <div className="kb-gal-g">
+            {items.map((f) => (
+              <button key={f.id} className="kb-gal-i" title={f.name} onClick={() => onPick(f.id)}>
+                <img src={withInlineImageAuth(inlineImageUrl(f.id))} alt={f.name} loading="lazy" />
+              </button>
+            ))}
+          </div>
+        )}
+      </div>
+    </div>,
+    document.querySelector('.app') ?? document.body,
   )
 }

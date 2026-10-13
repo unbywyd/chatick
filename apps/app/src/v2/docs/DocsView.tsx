@@ -1,19 +1,21 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useLocation, useNavigate, useParams } from 'react-router-dom'
 import { useTranslation } from 'react-i18next'
-import { useMutation, useQueryClient } from '@tanstack/react-query'
-import { api, API_URL } from '@/lib/api'
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
+import { createPortal } from 'react-dom'
+import { api, API_URL, withDocImageAuth } from '@/lib/api'
 import type { RichMention } from '@/components/ui/rich-editor'
-import { errorCode, inProject, useMe, useProjects, useTask, type CompanyProject } from '../data'
+import { errorCode, inProject, useMe, useProjects, useTask, type CompanyProject, useMyAccess } from '../data'
 import { useUi } from '../ui'
 import { Icon } from '../Icon'
 import { ShareItem } from '../ShareTask'
 import { ProjectLogo } from '../ProjectLogo'
 import { Carousel } from '../tasks/TasksView'
-import { personColor, letterOf, shortProject, timeAgo } from '../util'
-import { htmlText, kbKeys, useAllDocs, useDoc, useKbSocket, useNotes, useVersions, type DocFull, type DocItem, type NoteRow } from './kb'
+import { firstName, personColor, letterOf, shortProject, timeAgo } from '../util'
+import { htmlText, kbKeys, useAllDocs, useDoc, useKbSocket, useNotes, useVersions, type DocFull, type DocItem, type DocVersion, type NoteRow } from './kb'
 import { CollabEditor, KbView, PlainEditor, useDocRoom } from './KbEditor'
 import '../i18n/docs'
+import '../i18n/list'
 import '../styles/docs.css'
 
 /**
@@ -34,7 +36,7 @@ import '../styles/docs.css'
  */
 
 type Sel = { kind: 'doc'; projectId: string; id: string } | { kind: 'note'; id: string } | null
-type Item = { kind: 'doc' | 'note'; id: string; projectId: string | null; title: string; text: string; updatedAt: string }
+type Item = { kind: 'doc' | 'note'; id: string; projectId: string | null; title: string; text: string; updatedAt: string; author?: string | null; isPublic?: boolean; preview?: string }
 type ProjectLike = { id: string; name: string; color: string | null; logoUrl?: string | null }
 
 function parseSel(rest: string): Sel {
@@ -60,7 +62,7 @@ export function NotesView() {
 }
 
 export function DocsView({ mode = 'doc' }: { mode?: 'doc' | 'note' }) {
-  const { t } = useTranslation('v2')
+  const { t, i18n } = useTranslation('v2')
   const { companyId, base, project, setProject, flash } = useUi()
   const navigate = useNavigate()
   const loc = useLocation()
@@ -87,7 +89,17 @@ export function DocsView({ mode = 'doc' }: { mode?: 'doc' | 'note' }) {
   const semantic = Boolean(applied) && applied === q.trim()
 
   const items = useMemo<Item[]>(() => {
-    const d: Item[] = docs.items.map((x) => ({ kind: 'doc', id: x.id, projectId: x.projectId, title: x.title || t('docs.noTitle'), text: `${x.title} ${x.preview}`, updatedAt: x.updatedAt }))
+    const d: Item[] = docs.items.map((x) => ({
+      kind: 'doc',
+      id: x.id,
+      projectId: x.projectId,
+      title: x.title || t('docs.noTitle'),
+      text: `${x.title} ${x.preview}`,
+      updatedAt: x.updatedAt,
+      author: x.author?.name ?? null,
+      isPublic: Boolean(x.publicSlug),
+      preview: x.preview,
+    }))
     const n: Item[] = (semantic ? (notesHit.data ?? []) : allNotes).map((x) => ({
       kind: 'note',
       id: x.id,
@@ -294,10 +306,19 @@ export function DocsView({ mode = 'doc' }: { mode?: 'doc' | 'note' }) {
                     className={'di' + (on ? ' on' : '')}
                     aria-current={on ? 'page' : undefined}
                     onClick={() => go(i.kind === 'doc' ? { kind: 'doc', projectId: i.projectId!, id: i.id } : { kind: 'note', id: i.id })}
-                    title={i.kind === 'doc' ? t('docs.kindDoc') : t('docs.kindNote')}
+                    title={i.preview?.trim() ? i.preview.trim().slice(0, 200) : i.kind === 'doc' ? t('docs.kindDoc') : t('docs.kindNote')}
                   >
                     <Svg d={i.kind === 'doc' ? DOC_PATH : NOTE_PATH} />
-                    <span className="bidi">{i.title}</span>
+                    <span className="di-b">
+                      <span className="bidi">{i.title}</span>
+                      {i.kind === 'doc' && (
+                        <small className="di-m">
+                          {i.author ? `${firstName(i.author)} · ` : ''}
+                          {timeAgo(i18n.language, i.updatedAt)}
+                          {i.isPublic && <span className="di-pub">{t('docs.publicBadge')}</span>}
+                        </small>
+                      )}
+                    </span>
                   </button>
                 )
               })}
@@ -530,7 +551,17 @@ function DocArticle({
   const [editing, setEditing] = useState(editInit)
   const meRef = useMemo(() => (me.data ? { id: me.data.id, name: me.data.name } : null), [me.data])
   // Подключение к документу — пока он открыт: совместная правка и «кто здесь».
-  const room = useDocRoom(docId, meRef, editing)
+  const room = useDocRoom(docId, meRef, editing, () => qc.refetchQueries({ queryKey: kbKeys.doc(docId) }))
+  const can = useMyAccess(projectId)
+  // Упоминать можно всю команду проекта: в списке проектов приходят первые
+  // восемь участников (для аватарок), а не весь состав.
+  const team = useQuery({
+    queryKey: ['v2', 'project-members', projectId],
+    queryFn: () => api<{ user: { id: string; name: string; avatarUrl: string | null } }[]>(`/api/v1/projects/${projectId}/members`),
+    enabled: editing,
+    staleTime: 5 * 60_000,
+  })
+  const people: RichMention[] = team.data ? team.data.map((m) => ({ id: m.user.id, label: m.user.name, avatarUrl: m.user.avatarUrl })) : members
   const [title, setTitle] = useState<string | null>(null)
   const [html, setHtml] = useState<string | null>(null)
   const [dirty, setDirty] = useState(false)
@@ -620,7 +651,11 @@ function DocArticle({
           canEdit
           onToggle={toggle}
           menu={
-            <MoreMenu title={shownTitle} path={`/c/${companyId}/docs/d/${projectId}/${docId}`} onDelete={() => remove.mutate()}>
+            <MoreMenu
+              title={shownTitle}
+              path={`/c/${companyId}/docs/d/${projectId}/${docId}`}
+              onDelete={can('documents.delete') || (can('documents.write') && d.author?.id === me.data?.id) ? () => remove.mutate() : null}
+            >
               {(close) => (
                 <>
                   {d.publicSlug && (
@@ -635,6 +670,12 @@ function DocArticle({
                       {t('docs.copyPublic')}
                     </button>
                   )}
+                  <button role="menuitem" onClick={() => (close(), exportDoc(shownTitle, d.content, 'doc'))}>
+                    {t('docs.exportDoc')}
+                  </button>
+                  <button role="menuitem" onClick={() => (close(), exportDoc(shownTitle, d.content, 'html'))}>
+                    {t('docs.exportHtml')}
+                  </button>
                   <button
                     role="menuitem"
                     onClick={() => {
@@ -687,7 +728,7 @@ function DocArticle({
               setDirty(true)
             }}
             onSynced={onSynced}
-            mentions={members}
+            mentions={people}
             me={meRef}
             placeholder={t('docs.bodyPh')}
             provider={room.provider}
@@ -862,22 +903,129 @@ function Hist({ name, id, text, at }: { name: string | null; id: string | null; 
 
 function DocHistory({ projectId, docId }: { projectId: string; docId: string }) {
   const { t, i18n } = useTranslation('v2')
+  const { flash } = useUi()
+  const qc = useQueryClient()
+  const can = useMyAccess(projectId)
   const v = useVersions(projectId, docId)
-  const rows = (v.data ?? []).slice(0, 6)
+  const [all, setAll] = useState(false)
+  const [open, setOpen] = useState<DocVersion | null>(null)
+  const list = v.data ?? []
+  const rows = all ? list : list.slice(0, 6)
+  const restore = useMutation({
+    mutationFn: (ver: DocVersion) => api(`/api/v1/documents/${docId}/versions/${ver.id}/restore`, { method: 'POST', ...inProject(projectId) }),
+    onSuccess: (_d, ver) => {
+      setOpen(null)
+      flash(t('docs.restored', { n: ver.version }))
+      void qc.invalidateQueries({ queryKey: kbKeys.doc(docId) })
+      void qc.invalidateQueries({ queryKey: kbKeys.versions(docId) })
+    },
+    onError: () => flash(t('docs.restoreFailed')),
+  })
   return (
     <section className="card">
       <h3>{t('docs.histHead')}</h3>
       {rows.map((r) => (
-        <Hist
-          key={r.id}
-          name={r.author?.name ?? null}
-          id={r.author?.id ?? null}
-          text={r.version === 1 && v.data?.length === 1 ? t('docs.created') : t('docs.version', { n: r.version })}
-          at={timeAgo(i18n.language, r.createdAt)}
-        />
+        <button key={r.id} className="hv-b" onClick={() => setOpen(r)} title={t('docs.openVersion')}>
+          <Hist
+            name={r.author?.name ?? null}
+            id={r.author?.id ?? null}
+            text={r.version === 1 && list.length === 1 ? t('docs.created') : t('docs.version', { n: r.version })}
+            at={timeAgo(i18n.language, r.createdAt)}
+          />
+        </button>
       ))}
+      {list.length > 6 && (
+        <button className="more2" onClick={() => setAll(!all)}>
+          {all ? t('docs.histLess') : t('docs.histAll', { count: list.length })}
+        </button>
+      )}
       {v.data && !rows.length && <div className="kb-mute">{t('docs.histNone')}</div>}
+      {open && (
+        <VersionView
+          projectId={projectId}
+          docId={docId}
+          ver={open}
+          canRestore={can('documents.write')}
+          busy={restore.isPending}
+          onRestore={() => restore.mutate(open)}
+          onClose={() => setOpen(null)}
+        />
+      )}
     </section>
+  )
+}
+
+/** Старая версия документа целиком — посмотреть и, если надо, вернуть. Текущая сама уйдёт в историю. */
+function VersionView({
+  projectId,
+  docId,
+  ver,
+  canRestore,
+  busy,
+  onRestore,
+  onClose,
+}: {
+  projectId: string
+  docId: string
+  ver: DocVersion
+  canRestore: boolean
+  busy: boolean
+  onRestore: () => void
+  onClose: () => void
+}) {
+  const { t, i18n } = useTranslation('v2')
+  const full = useQuery({
+    queryKey: ['v2', 'doc-version', ver.id],
+    queryFn: () => api<{ title: string; content: string }>(`/api/v1/documents/${docId}/versions/${ver.id}`, inProject(projectId)),
+  })
+  const [sure, setSure] = useState(false)
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => e.key === 'Escape' && onClose()
+    window.addEventListener('keydown', onKey)
+    return () => window.removeEventListener('keydown', onKey)
+  }, [onClose])
+  return createPortal(
+    <div className="mwrap mwrap-top" onMouseDown={(e) => e.target === e.currentTarget && onClose()}>
+      <div className="modal kb-ver" role="dialog" aria-modal="true" aria-label={t('docs.version', { n: ver.version })}>
+        <div className="mh">
+          <div style={{ minWidth: 0, flex: 1 }}>
+            <h3 style={{ marginTop: 4 }}>{t('docs.versionTitle', { n: ver.version })}</h3>
+            <p className="co-hint" style={{ margin: 0 }}>
+              {ver.author?.name ? `${ver.author.name} · ` : ''}
+              {new Date(ver.createdAt).toLocaleString(i18n.language, { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' })}
+            </p>
+          </div>
+          <button className="ib" aria-label={t('docs.close')} onClick={onClose}>
+            <Icon name="close" />
+          </button>
+        </div>
+        <div className="kb-ver-b">
+          {full.data ? (
+            <>
+              <h2 className="bidi">{full.data.title || t('docs.noTitle')}</h2>
+              <KbView html={full.data.content} />
+            </>
+          ) : (
+            <p className="co-hint">…</p>
+          )}
+        </div>
+        {canRestore && (
+          <div className="mf">
+            <div className="res">{sure ? t('docs.restoreHint') : ''}</div>
+            {sure ? (
+              <button className={'btn-acc' + (busy ? ' dis' : '')} onClick={onRestore}>
+                {t('docs.restoreYes', { n: ver.version })}
+              </button>
+            ) : (
+              <button className="btn" onClick={() => setSure(true)}>
+                {t('docs.restore')}
+              </button>
+            )}
+          </div>
+        )}
+      </div>
+    </div>,
+    document.querySelector('.app') ?? document.body,
   )
 }
 
@@ -904,4 +1052,26 @@ function AskCard({ kind, id, projectId, title }: { kind: 'document' | 'note'; id
       </div>
     </section>
   )
+}
+
+/**
+ * Документ файлом. .doc — тот же HTML с заголовком Word: Word открывает его
+ * как документ, с таблицами и списками. Картинки — с токеном: файл открывают
+ * вне приложения.
+ */
+function exportDoc(title: string, content: string, kind: 'html' | 'doc') {
+  const safe = (title || 'document').replace(/[^\p{L}\p{N}\-]+/gu, '_').slice(0, 60)
+  const esc = (x: string) => x.replace(/[<>&]/g, (ch) => ({ '<': '&lt;', '>': '&gt;', '&': '&amp;' })[ch]!)
+  const page = `<!doctype html><html><head><meta charset="utf-8"><title>${esc(title)}</title>
+<style>body{font:16px/1.7 system-ui,sans-serif;max-width:48rem;margin:0 auto;padding:2rem}
+img{max-width:100%;height:auto;display:block}table{border-collapse:collapse;width:100%}
+th,td{border:1px solid #ddd;padding:.45rem .6rem;text-align:start}th{background:#f4f4f5}
+blockquote{border-inline-start:3px solid #ccc;margin-inline-start:0;padding-inline-start:1rem;color:#666}
+pre{background:#f4f4f5;padding:.85rem;border-radius:6px;overflow-x:auto}</style>
+</head><body><h1>${esc(title)}</h1>${withDocImageAuth(content)}</body></html>`
+  const a = document.createElement('a')
+  a.href = URL.createObjectURL(new Blob([page], { type: kind === 'doc' ? 'application/msword' : 'text/html' }))
+  a.download = `${safe}.${kind}`
+  a.click()
+  URL.revokeObjectURL(a.href)
 }

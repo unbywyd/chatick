@@ -644,6 +644,18 @@ export async function projectRoleOf(projectId: string, userId: string): Promise<
  * Что включено в проекте. Читают все участники: интерфейс по этому списку
  * решает, показывать ли вкладку.
  */
+/**
+ * Что мне можно в этом проекте — плоской таблицей «действие → да/нет», той
+ * же, по которой судит hasPermission. Интерфейсу — чтобы не показывать
+ * кнопку, на которую сервер всё равно ответит отказом.
+ */
+projectsRoute.get('/:projectId/my-access', async (c) => {
+  const { sub } = c.get('session')
+  const domains = await memberDomains(c.req.param('projectId'), sub)
+  if (!domains) return c.json({ error: 'Forbidden' }, 403)
+  return c.json({ permissions: expandPermissions(domains) })
+})
+
 projectsRoute.get('/:projectId/features', async (c) => {
   const { sub } = c.get('session')
   const projectId = c.req.param('projectId')

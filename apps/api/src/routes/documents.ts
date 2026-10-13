@@ -8,6 +8,7 @@ import { documents, documentVersions, projects, users } from '../db/schema.js'
 import { requireProject, requireSession, type ProjectEnv, type SessionEnv } from '../auth.js'
 import { companyRoleOf, hasPermission, ownsOrManages } from './projects.js'
 import { logActivity } from '../lib/audit.js'
+import { isInDocRoom, resetDocCollab } from '../yjs.js'
 import { htmlToText, sanitizeHtml } from '../lib/sanitize-html.js'
 import { broadcast } from '../ws.js'
 
@@ -92,6 +93,9 @@ documentsRoute.patch(
     if (b.title !== undefined) patch.title = b.title
     if (b.content !== undefined) patch.content = b.content
     const [row] = await db.update(documents).set(patch).where(eq(documents.id, id)).returning()
+    // Текст сохранил не тот, кто сидит в совместной правке (API, скрипт, старый
+    // клиент) — открытые редакторы должны увидеть именно его, а не своё старое.
+    if (b.content !== undefined && b.content !== d.content && !isInDocRoom(id, sub)) await resetDocCollab(id)
     // снапшот версии (сам решает, создавать новую или дописать текущую)
     void snapshot(id, row!.title, row!.content, sub).catch((e) => console.error('[documents] snapshot failed:', e))
     void logActivity({ projectId, actorId: sub, action: 'update', entityType: 'document', entityId: id, entityLabel: row!.title || '—' })
@@ -177,6 +181,8 @@ documentsRoute.post('/:id/versions/:versionId/restore', async (c) => {
 
   await snapshot(id, d.title, d.content, sub, `before restore to v${v.version}`)
   const [row] = await db.update(documents).set({ title: v.title, content: v.content, updatedById: sub }).where(eq(documents.id, id)).returning()
+  // Откат — правка «снаружи» для всех открытых редакторов, даже для своего.
+  await resetDocCollab(id)
   void logActivity({ projectId, actorId: sub, action: 'update', entityType: 'document', entityId: id, entityLabel: `${row!.title || '—'} → v${v.version}` })
   broadcast(projectId, 'documents_changed', { id })
   return c.json(serialize(row!))

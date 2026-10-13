@@ -1,4 +1,5 @@
 import { resolveMime } from '../lib/mime.js'
+import { resetDocCollab } from '../yjs.js'
 import { TASK_STATUSES, SETTLED_STATUSES, closedSql, isClosed, type TaskStatus } from '../lib/task-status.js'
 import { Hono } from 'hono'
 import { and, asc, desc, eq, gt, gte, ilike, inArray, isNull, lt, lte, notInArray, or, sql } from 'drizzle-orm'
@@ -6688,6 +6689,8 @@ bridgeRoute.patch('/documents/:id', async (c) => {
   await snapshot(docId, d.title, d.content, id.userId, 'before AI bridge edit').catch(() => {})
 
   const [row] = await db.update(documents).set(patch).where(eq(documents.id, docId)).returning()
+  // Открытые редакторы должны увидеть правку ИИ, а не перезаписать её своей копией.
+  if (patch.content !== undefined) await resetDocCollab(docId)
   void logActivity({
     projectId: scope.projectId,
     actorId: id.userId,
@@ -6725,6 +6728,7 @@ bridgeRoute.post('/documents/:id/append', async (c) => {
   await snapshot(docId, d.title, d.content, id.userId, 'before AI bridge append').catch(() => {})
   const next = `${d.content}${add}`.slice(0, 500_000)
   await db.update(documents).set({ content: next, updatedById: id.userId }).where(eq(documents.id, docId))
+  await resetDocCollab(docId)
   broadcast(scope.projectId, 'documents_changed', { id: docId })
   return c.json({ ok: true, totalChars: next.length })
 })
@@ -6793,6 +6797,7 @@ bridgeRoute.post('/documents/:id/versions/:versionId/restore', async (c) => {
     .set({ title: v.title, content: v.content, updatedById: id.userId })
     .where(eq(documents.id, doc.id))
     .returning()
+  await resetDocCollab(doc.id)
   void logActivity({
     projectId: scope.projectId,
     actorId: id.userId,

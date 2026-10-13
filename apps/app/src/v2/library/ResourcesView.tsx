@@ -248,9 +248,7 @@ export function ResourcesView() {
             </div>
             {g.rows.map((r, i) => (
               <div key={r.id} className={'res-row' + (i === 0 ? ' first' : '')}>
-                <span className="rk">
-                  <Svg>{KIND_ICON[r.kind]}</Svg>
-                </span>
+                <ResIcon icon={r.icon ?? null} kind={r.kind} />
                 <div style={{ minWidth: 0 }}>
                   <div className="rt">
                     <b>{r.name || r.url}</b>
@@ -279,11 +277,9 @@ export function ResourcesView() {
                       <Svg>{COPY}</Svg>
                     </button>
                   )}
-                  {r.url && (
-                    <button className="ib" aria-label={t('library.res.share')} title={t('library.res.share')} onClick={() => setShare(r)}>
-                      <Icon name="share" />
-                    </button>
-                  )}
+                  <button className="ib" aria-label={t('library.res.share')} title={t('library.res.share')} onClick={() => setShare(r)}>
+                    <Icon name="share" />
+                  </button>
                   <button className="ib" aria-label={t('library.res.edit')} title={t('library.res.edit')} onClick={() => openEdit(r)}>
                     <Svg>{EDIT}</Svg>
                   </button>
@@ -542,7 +538,14 @@ function ResourceModal({
         {canSee &&
           detail.data!.secrets.map((x) => (
             <div key={x.id} className="lib-sec">
-              <span className="lib-sec-l bidi">{x.label || t('library.res.secretNoName')}</span>
+              {x.label ? (
+                // Логин нужен так же часто, как пароль: название копируется щелчком.
+                <button className="lib-sec-l bidi lib-sec-copy" title={t('library.res.copyLogin')} onClick={() => copy(x.label, t('library.res.loginCopied'))}>
+                  {x.label}
+                </button>
+              ) : (
+                <span className="lib-sec-l bidi">{t('library.res.secretNoName')}</span>
+              )}
               <span className={'lib-sec-v' + (shown[x.id] !== undefined ? ' open' : '')}>{shown[x.id] ?? '••••••••'}</span>
               <button className="ib" aria-label={shown[x.id] !== undefined ? t('library.res.hide') : t('library.res.reveal')} title={shown[x.id] !== undefined ? t('library.res.hide') : t('library.res.reveal')} onClick={() => void toggle(x.id)}>
                 <Svg sm>{EYE}</Svg>
@@ -715,6 +718,23 @@ function ResourceModal({
  * поэтому в окне только ссылка: её копируют или отдают в мессенджер.
  */
 function ShareModal({ row, onClose }: { row: Row; onClose: () => void }) {
+  const { company } = useUi()
+  // Ресурс без ссылки (только секреты, описание): делиться можно им самим — в Chatick.
+  if (!row.url)
+    return (
+      <ShareItem
+        type="resource"
+        id={row.id}
+        title={row.name || ''}
+        path={`/resources/r/${row.project.id}/${row.id}`}
+        canPublish={company.myRole === 'admin' || company.myRole === 'manager'}
+        onClose={onClose}
+      />
+    )
+  return <ShareLinkModal row={row} onClose={onClose} />
+}
+
+function ShareLinkModal({ row, onClose }: { row: Row; onClose: () => void }) {
   const { t } = useTranslation('v2')
   const { company } = useUi()
   const copy = useCopy()
@@ -819,5 +839,21 @@ function LogModal({ projects, defaultProject, onClose }: { projects: CompanyProj
         {log.data && !log.data.length && <div className="none">{t('library.res.logEmpty')}</div>}
       </div>
     </Modal>
+  )
+}
+
+/** Значок ресурса: картинка сайта, а не загрузилась или нет — по виду ссылки. */
+function ResIcon({ icon, kind }: { icon: string | null; kind: Kind }) {
+  const [broken, setBroken] = useState(false)
+  if (icon && !broken)
+    return (
+      <span className="rk rk-img">
+        <img src={icon} alt="" loading="lazy" referrerPolicy="no-referrer" onError={() => setBroken(true)} />
+      </span>
+    )
+  return (
+    <span className="rk">
+      <Svg>{KIND_ICON[kind]}</Svg>
+    </span>
   )
 }
