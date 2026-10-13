@@ -143,7 +143,8 @@ server.registerTool(
     title: 'Where I was asked personally',
     description:
       'The "mentions" branch of chatick_inbox, on its own: things addressed to this person directly — mentions in ' +
-      'comments, chat and notes, plus tasks assigned to them. These are the ones with someone waiting on the other ' +
+      'comments, chat and notes, tasks assigned to them, and questions waiting for their answer (kind="question" — ' +
+      'answer those with chatick_handoff action=answer, a comment does not return the ball). These are the ones with someone waiting on the other ' +
       'end, so they are worth reading in full. Start at chatick_inbox anyway — its branch counts tell you whether ' +
       'there is anything here before you ask. Every item carries a ready url. Once you have handled one, clear it ' +
       'with chatick_inbox_read — anything you leave here stays on the person as an unread counter for work you ' +
@@ -769,7 +770,7 @@ server.registerTool(
   {
     title: 'Change a task',
     description:
-      'Status, assignee, estimate, linked resources, related tasks. To hand work over — send for review, accept, ' +
+      'Title, description, status, assignee, estimate, linked resources, related tasks. To hand work over — send for review, accept, ' +
       'return, ask, pass to someone — prefer chatick_handoff: it records WHY the task moved, and that note is what ' +
       'the next person reads. Status and assignee here still work and are turned into the same moves. ' +
       'Moving to in_progress belongs BEFORE the work, ' +
@@ -782,6 +783,8 @@ server.registerTool(
     inputSchema: {
       project: z.string(),
       task: z.string(),
+      title: z.string().min(1).optional(),
+      description: z.string().optional().describe('Markdown. REPLACES the old description — read the task first and keep what still holds'),
       status: z.enum(['todo', 'in_progress', 'review', 'verified', 'done', 'cancelled']).optional(),
       assignee: z.string().optional(),
       estimateMinutes: z.number().int().positive().optional(),
@@ -871,7 +874,8 @@ server.registerTool(
       'first. Each item has "last" — the latest hand-off with its note, i.e. why it is here. This is THE answer to ' +
       '"what is on me" and "what should I do next". ' +
       'view="from-me": tasks this person owns while someone else holds them — "what am I waiting for, and from ' +
-      'whom", longest-held first. project narrows to one project.',
+      'whom", longest-held first. project narrows to one project. Every item carries "url" (give people that) and ' +
+      '"moves" — the chatick_handoff actions this person can take on it right now; offer only those.',
     inputSchema: {
       view: z.enum(['mine', 'from-me']),
       project: z.string().optional(),
@@ -922,13 +926,14 @@ server.registerTool(
     inputSchema: {
       text: z.string().min(1),
       preview: z.boolean().optional(),
-      project: z.string().optional().describe('Only to limit the search to one project'),
+      project: z.string().optional().describe('Where the task goes when the line has no #project'),
+      company: z.string().optional().describe('On an all-companies connection: which company to look for people and projects in'),
     },
   },
-  async ({ text, preview, project }) => {
+  async ({ text, preview, project, company }) => {
     try {
       const scope = await need()
-      return json(await call({ ...scope, projectId: project ?? scope.projectId }, 'POST', '/ball/quick', { text, preview }))
+      return json(await call({ ...scope, projectId: project ?? scope.projectId }, 'POST', '/ball/quick', { text, preview, ...(company ? { company } : {}) }))
     } catch (e) {
       return fail(e)
     }
@@ -942,7 +947,9 @@ server.registerTool(
     description:
       'Adds a comment. This is where results go — what you did, what you verified it with, what is still open. ' +
       'A task finished without a closing comment reads to everyone else as one silently marked done. ' +
-      'Mention someone with @[Name](userId); a plain @name is just text.',
+      'Mention someone with @[Name](userId); a plain @name is just text. ' +
+      'If the task is waiting for YOUR answer (ball.move="answer"), answer with chatick_handoff action="answer" ' +
+      'and the answer as its note — a comment does not return the ball, and the asker keeps waiting.',
     inputSchema: {
       project: z.string(),
       task: z.string(),
@@ -1633,7 +1640,9 @@ server.registerTool(
       'Tags matter: they narrow a search that meaning alone cannot ("cardcom", "sms", "ios"). ' +
       'Write in MARKDOWN — headings, lists, bold, code fences, links, tables. It is converted on our side. Do not send HTML tags and never escape them.',
     inputSchema: {
-      project: z.string().describe('Project id'),
+      project: z.string().optional().describe('Project id. Omit with onCompany'),
+      onCompany: z.boolean().optional().describe('An entry of the company itself, outside any project — a rule for everyone, a deal with the accountant'),
+      company: z.string().optional().describe('With onCompany on an all-companies connection: which company'),
       title: z.string().describe('Short — what this is about'),
       body: z.string().describe('markdown'),
       type: z
@@ -1644,9 +1653,74 @@ server.registerTool(
       scope: z.enum(['project', 'company']).optional().describe('company = findable from every project'),
     },
   },
-  async ({ project, ...body }) => {
+  async ({ project, onCompany, company, ...body }) => {
     try {
+      if (onCompany) return json(await call({ ...(await need()), projectId: undefined }, 'POST', '/notes', body, { onCompany: '1', company }))
+      if (!project) return fail(new Error('project is required — or pass onCompany=true for an entry of the company itself'))
       return json(await call({ ...(await need()), projectId: project }, 'POST', '/notes', body))
+    } catch (e) {
+      return fail(e)
+    }
+  },
+)
+
+server.registerTool(
+  'chatick_company_time',
+  {
+    title: 'Hours of the whole company',
+    description:
+      'Hours across every project of the company plus time logged on the company itself — totals by person and ' +
+      'by project for a period. Company admins and managers see everyone; anyone else sees only their own. ' +
+      'Answers "how many hours did we put in this month", "who worked on what". Never estimate hours yourself.',
+    inputSchema: {
+      from: z.string().optional().describe('ISO date, e.g. 2026-10-01'),
+      to: z.string().optional().describe('ISO date, inclusive'),
+      person: z.string().optional().describe('"me" or a user id — one person only'),
+      company: z.string().optional().describe('On an all-companies connection: which company'),
+    },
+  },
+  async (q) => {
+    try {
+      return json(await call({ ...(await need()), projectId: undefined }, 'GET', '/company/time', undefined, q))
+    } catch (e) {
+      return fail(e)
+    }
+  },
+)
+
+server.registerTool(
+  'chatick_company_documents',
+  {
+    title: 'Documents of the whole company',
+    description:
+      'Documents of every project in the company you can read, newest first; q searches titles and text. ' +
+      'Use it when you do not know which project a document lives in. Read one with chatick_document and its project.',
+    inputSchema: {
+      q: z.string().optional(),
+      company: z.string().optional().describe('On an all-companies connection: which company'),
+    },
+  },
+  async (q) => {
+    try {
+      return json(await call({ ...(await need()), projectId: undefined }, 'GET', '/company/documents', undefined, q))
+    } catch (e) {
+      return fail(e)
+    }
+  },
+)
+
+server.registerTool(
+  'chatick_company_releases',
+  {
+    title: 'App versions of the whole company',
+    description:
+      'Versions of every project with releases on, newest first, and "live" — what is in production per project. ' +
+      'Answers "what is live where" in one call.',
+    inputSchema: { company: z.string().optional().describe('On an all-companies connection: which company') },
+  },
+  async (q) => {
+    try {
+      return json(await call({ ...(await need()), projectId: undefined }, 'GET', '/company/releases', undefined, q))
     } catch (e) {
       return fail(e)
     }
@@ -1954,7 +2028,7 @@ server.registerTool(
     description:
       'What is running right now, across every project of this person. Nothing running — offer to start one. ' +
       'Something running — leave it alone: stopping is the human decision and theirs alone.',
-    inputSchema: { project: z.string() },
+    inputSchema: { project: z.string().optional().describe('Not needed: timers are per person, across every project') },
   },
   async ({ project }) => {
     try {
@@ -1981,16 +2055,20 @@ server.registerTool(
         .boolean()
         .optional()
         .describe('Time on the company itself, no project — a call, planning, mail. No task then'),
+      company: z.string().optional().describe('With onCompany on an all-companies connection: which company. Omitted — the company of the project the person has open'),
     },
   },
-  async ({ project, onCompany, ...body }) => {
+  async ({ project, onCompany, company, ...body }) => {
     try {
       const scope = await need()
       return json(
-        await call({ ...scope, projectId: onCompany ? undefined : (project ?? scope.projectId) }, 'POST', '/time/start', {
-          ...body,
-          ...(onCompany ? { onCompany: true } : {}),
-        }),
+        await call(
+          { ...scope, projectId: onCompany ? undefined : (project ?? scope.projectId) },
+          'POST',
+          '/time/start',
+          { ...body, ...(onCompany ? { onCompany: true } : {}) },
+          onCompany && company ? { company } : undefined,
+        ),
       )
     } catch (e) {
       return fail(e)
@@ -2073,16 +2151,20 @@ server.registerTool(
         .boolean()
         .optional()
         .describe('Time on the company itself, no project — a call, planning, mail. No task then'),
+      company: z.string().optional().describe('With onCompany on an all-companies connection: which company. Omitted — the company of the project the person has open'),
     },
   },
-  async ({ project, onCompany, ...body }) => {
+  async ({ project, onCompany, company, ...body }) => {
     try {
       const scope = await need()
       return json(
-        await call({ ...scope, projectId: onCompany ? undefined : (project ?? scope.projectId) }, 'POST', '/time', {
-          ...body,
-          ...(onCompany ? { onCompany: true } : {}),
-        }),
+        await call(
+          { ...scope, projectId: onCompany ? undefined : (project ?? scope.projectId) },
+          'POST',
+          '/time',
+          { ...body, ...(onCompany ? { onCompany: true } : {}) },
+          onCompany && company ? { company } : undefined,
+        ),
       )
     } catch (e) {
       return fail(e)
@@ -2100,20 +2182,21 @@ server.registerTool(
     inputSchema: {
       project: z.string().optional().describe('Required unless onCompany'),
       onCompany: z.boolean().optional().describe('Your entries on the company itself, without a project'),
+      company: z.string().optional().describe('With onCompany on an all-companies connection: which company. Omitted — the company of the project the person has open'),
       from: z.string().optional().describe('ISO date, e.g. 2026-08-01'),
       to: z.string().optional(),
       task: z.string().optional().describe('Only entries on this task number'),
       mine: z.boolean().optional().describe('Only your own entries'),
     },
   },
-  async ({ project, mine, onCompany, ...q }) => {
+  async ({ project, mine, onCompany, company, ...q }) => {
     try {
       const scope = await need()
       return json(
         await call({ ...scope, projectId: onCompany ? undefined : (project ?? scope.projectId) }, 'GET', '/time', undefined, {
           ...q,
           ...(mine ? { mine: '1' } : {}),
-          ...(onCompany ? { onCompany: '1' } : {}),
+          ...(onCompany ? { onCompany: '1', company } : {}),
         }),
       )
     } catch (e) {

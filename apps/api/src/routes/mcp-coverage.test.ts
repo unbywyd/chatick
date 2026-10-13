@@ -142,3 +142,73 @@ describe('чего в MCP быть не должно', () => {
     expect(mcp, 'появился прямой доступ к базе').not.toMatch(/'\/db\//)
   })
 })
+
+/**
+ * v2: мяч, быстрый ввод, уровень компании.
+ *
+ * Проверка покрытия писалась под первую версию и не знала, что работа теперь
+ * движется передачами мяча, а у компании есть свои часы, документы и версии.
+ * Без этого раздела инструмент можно было потерять, и тесты молчали бы.
+ */
+describe('v2: мяч', () => {
+  const bridge = readFileSync(join(import.meta.dirname, './bridge.ts'), 'utf8')
+
+  it('ходы, списки мяча, стол и быстрый ввод — в MCP', () => {
+    for (const tool of ['chatick_ball', 'chatick_handoff', 'chatick_handoffs', 'chatick_table', 'chatick_quick_task']) {
+      expect(has(tool), `нет инструмента ${tool}`).toBe(true)
+    }
+  })
+
+  it('в списках мяча есть ссылка и доступные ходы', () => {
+    // Без «moves» ассистент пробовал ход наугад и получал отказ; без «url»
+    // собирал ссылку сам — и она вела в никуда.
+    const at = bridge.indexOf("bridgeRoute.get('/ball/mine'")
+    expect(bridge.slice(at, at + 700)).toMatch(/forAgent\(/)
+    expect(bridge).toMatch(/async function movesFor/)
+    const tool = mcp.indexOf("'chatick_ball'")
+    expect(mcp.slice(tool, tool + 1500)).toMatch(/"moves"/)
+  })
+
+  it('на вопрос отвечают ходом answer, а не комментарием', () => {
+    // Комментарий не возвращает мяч: спросивший ждёт дальше.
+    const at = mcp.indexOf("'chatick_comment'")
+    expect(mcp.slice(at, at + 1500)).toMatch(/action="answer"/)
+    // И вопросы видны в «лично мне».
+    expect(bridge).toMatch(/kind: r\.n\.event === 'task_handoff' \? 'question' : 'mention'/)
+  })
+
+  it('быстрый ввод: project — куда без #, company — у мастер-доступа, в ответе ссылка', () => {
+    const at = mcp.indexOf("'chatick_quick_task'")
+    const tool = mcp.slice(at, at + 1800)
+    expect(tool).toMatch(/project: z\.string\(\)\.optional\(\)\.describe\('Where the task goes/)
+    expect(tool).toMatch(/company: z\.string\(\)/)
+    const q = bridge.indexOf("bridgeRoute.post('/ball/quick'")
+    expect(bridge.slice(q, q + 2200)).toMatch(/defaultProjectId: def\?\.id/)
+    expect(bridge.slice(q, q + 2200)).toMatch(/\.url = projectUrl/)
+  })
+
+  it('правка задачи меняет заголовок и описание', () => {
+    // Схема их отбрасывала: ассистент «исправлял» описание, а оно оставалось прежним.
+    const at = mcp.indexOf("'chatick_task_update'")
+    const tool = mcp.slice(at, at + 3000)
+    expect(tool).toMatch(/title: z\.string\(\)\.min\(1\)\.optional\(\)/)
+    expect(tool).toMatch(/description: z\.string\(\)\.optional\(\)/)
+  })
+})
+
+describe('v2: уровень компании', () => {
+  it('часы, документы и версии всей компании', () => {
+    for (const tool of ['chatick_company_time', 'chatick_company_documents', 'chatick_company_releases']) {
+      expect(has(tool), `нет инструмента ${tool}`).toBe(true)
+    }
+  })
+
+  it('время и заметки — и на компанию, без проекта', () => {
+    for (const tool of ['chatick_timer_start', 'chatick_time_log', 'chatick_time_list', 'chatick_note_save']) {
+      const at = mcp.indexOf(`'${tool}'`)
+      expect(mcp.slice(at, at + 2500), `${tool}: нет onCompany`).toMatch(/onCompany/)
+      // У мастер-доступа без company был 400 — параметра не было вовсе.
+      expect(mcp.slice(at, at + 2500), `${tool}: нет company`).toMatch(/company: z\.string\(\)/)
+    }
+  })
+})

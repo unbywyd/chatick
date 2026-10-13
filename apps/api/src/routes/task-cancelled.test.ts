@@ -125,8 +125,11 @@ describe('отменённая — закрыта, но не достигнут�
 
 describe('мост и ассистенты знают про cancelled', () => {
   it('гайд: не ступень, а выход — по слову человека', () => {
-    expect(guide).toContain('status: todo | in_progress | review | verified | done | cancelled')
-    expect(guide).toContain('cancelled is not a rung')
+    // v2: ступени статусов больше нет (работа движется передачами мяча, а
+    // «verified» убран) — но отмена по-прежнему выход, и решает её человек.
+    expect(guide).toContain('status filter: todo | in_progress | review | done | cancelled')
+    expect(guide).toContain('cancel is the exit from any point, and it is the person\'s call')
+    expect(guide).toContain('leaves every list, count and blocker chain at once')
     expect(mcp).toContain("status=cancelled is the exit from any rung and it is the person\\'s call")
     expect(memory).toContain("status=cancelled is the exit from any rung and it is the person\\'s call")
   })

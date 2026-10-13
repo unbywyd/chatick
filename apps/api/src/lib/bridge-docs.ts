@@ -34,19 +34,21 @@ function endpointCatalog(q: string): string {
          The reply names the project it landed in. A bare number needs one:
          pass ?project= or use a project tunnel.
 
-  GET    /x/tasks${q}${amp}assignee=me&status=todo&q=text&sprint=<sprintId>&limit=50
-         status: todo | in_progress | review | verified | done | cancelled
-         The ladder is the order of work, and each rung belongs to someone
-         else. Move to in_progress BEFORE you start. When the work is done,
-         move it to review — not to done: you are handing it over, and
-         closing your own work skips the person who has to check it.
-         verified belongs to whoever did the checking; never set it on your
-         own work. done comes after that.
-         cancelled is not a rung — it is the exit from any rung, and it is the
-         person's call, never yours: set it only when they said to drop the
-         task. A cancelled task leaves every list, count and blocker chain at
-         once. If you merely think a task is pointless, say so in a comment
-         and let them decide.
+  GET    /x/tasks${q}${amp}assignee=me&q=text&limit=50
+         For "what is on me" use GET /x/ball/mine instead — it is ordered by
+         what is owed (answers, then reviews, then work), and this list is not.
+         status filter: todo | in_progress | review | done | cancelled.
+         Work moves by HAND-OFFS, not by statuses: POST /x/tasks/<id>/handoff
+         (below). When the work is done hand it over with "review" — never
+         close your own work: that skips the person who has to check it. The
+         owner closes it with "accept". There is no separate "verified" rung
+         any more. A raw status in PATCH still works and is turned into the
+         same moves, but it leaves no note — and the note is what the next
+         person reads.
+         cancel is the exit from any point, and it is the person's call,
+         never yours: only when they said to drop the task. A cancelled task
+         leaves every list, count and blocker chain at once. If you merely
+         think a task is pointless, say so in a comment and let them decide.
          Trouble filters — how you answer "what is stuck", "what did we
          forget", "why is this person idle", without pulling the whole board
          and reading it yourself:
@@ -136,6 +138,9 @@ function endpointCatalog(q: string): string {
          hand-off with its note — why it is here. "isNew" — there is an unread
          notification about it: the person has not opened it since it moved.
          Filters: move=do|review|answer.
+         Each item carries "url" (give people that, never a link you built)
+         and "moves" — the hand-off actions this person can take on it right
+         now. Offer those; anything else is refused.
          This is THE answer to "what is on me" and "what should I do next".
   GET    /x/ball/from-me${q}${amp}group=holder
          Tasks this person owns while someone else holds the ball — "what am I
@@ -143,11 +148,12 @@ function endpointCatalog(q: string): string {
   POST   /x/ball/table${q}          {"task","on":true|false}
          Put a task on the holder's table (urgent) or take it off. At most 3:
          a 4th is refused with "table_full" — ask which one to take off.
-  POST   /x/ball/quick${q}          {"text","preview?"}
-         One line: "what to do @who #project". No # — the company's main
-         project (or the only one); no @ — yourself. preview=true only parses:
-         show the person whom and where before creating. Ambiguous names come
-         back with "candidates" — ask, never pick the first.
+  POST   /x/ball/quick${q}          {"text","preview?","project?","company?"}
+         One line: "what to do @who #project". No # — "project" if given,
+         else the company's main project (or the only one); no @ — yourself.
+         preview=true only parses: show the person whom and where before
+         creating. Ambiguous names come back with "candidates" — ask, never
+         pick the first. The created task comes back with "url".
 
   "dueDate" — when the task is due: "2026-09-14", or a full timestamp if the
   hour matters. null clears it. A bare date is read as midday, so it does not
@@ -790,7 +796,7 @@ Example — handle everything waiting for me:
 ${endpointCatalog('')}
 
   Example — what is on my plate:
-    curl -s '${b}/x/tasks?assignee=me&status=todo' -H 'authorization: Bearer <token>'
+    curl -s '${b}/x/ball/mine' -H 'authorization: Bearer <token>'
 
   Example — create a task and assign it:
     curl -s -X POST ${b}/x/tasks -H 'authorization: Bearer <token>' \\
@@ -1183,9 +1189,12 @@ and can filter by person and date; members read only their own.
     curl -X POST '${b}/x/resources/<id>/files?project=<projectId>' \
       -H 'authorization: Bearer <token>' -F 'file=@./main.jks'
 
-  Through MCP use the chatick_upload tool with resourceId instead: it
-  reads the file, builds the multipart body and supplies the token itself.
-  Do not ask the human to attach the file by hand — you can do it.
+  Through the installed (local) MCP use the chatick_upload tool with
+  resourceId instead: it reads the file, builds the multipart body and
+  supplies the token itself. Do not ask the human to attach the file by hand
+  — you can do it. The MCP connected by address (claude.ai, OAuth) has no
+  access to anyone's disk and no chatick_upload: there, ask the person to
+  attach the file in the app (the resource → Files).
   Because PATCH only adds, this is how you undo your own mistake — a wrong
   label, a value pasted twice. It takes exactly one named secret; the resource
   itself stays, deleting that is still a human's call.
@@ -1387,8 +1396,16 @@ Without ?project= a call returns 400 telling you the same thing.
 ## Rules
 
 - "me" means ${id.user.name || id.user.email}.
-- Permissions are checked PER PROJECT. Company access does not grant access to
-  a project this person was never added to — such calls return 403.
+- Permissions are checked PER PROJECT, on one ladder of company roles: a company
+  admin or manager acts as an admin in EVERY project of the company, even one
+  they are not in the team of. A member sees only the projects they were added
+  to — anywhere else calls return 403. GET /x/projects lists exactly the
+  projects this person can work in.
+- Company-level views need no project: GET /x/company/time (hours: everyone's
+  for admins and managers, your own otherwise), /x/company/documents?q=,
+  /x/company/releases. Time and notes can go on the company itself — no
+  project: onCompany. On an all-companies connection add ?company=<id>; without
+  it the company of the project the person has open is used.
 - Destructive actions (delete, bulk status changes) need explicit human
   confirmation first. Ask, then act.
 - Write content in each project's own language (GET /x/context tells you).
@@ -1531,18 +1548,17 @@ ${endpointCatalog('?project=<id>')}
   GET    /x/resources/<id>/files/<fileId>?project=<id>
          Download one. Binary, and audited like revealing a password.
   POST   /x/resources/<id>/files?project=<id>
-         Attach one: multipart, file=@path. Through MCP call chatick_upload
-         with resourceId — it reads the file and supplies the token itself, so
-         there is no curl to assemble. Do not ask the human to do it by hand.
+         Attach one: multipart, file=@path. Through the installed MCP call
+         chatick_upload with resourceId — it reads the file and supplies the
+         token itself. The MCP connected by address has no upload (no disk to
+         read from): ask the person to attach it in the app instead.
   DELETE /x/resources/<id>/files/<fileId>?project=<id>
          Remove one you attached by mistake. The object leaves storage too.
 
   POST   /x/disconnect                  close this tunnel when you are done
 
-Example — what is on my plate across the company:
+Example — what is on my plate across the company (one call, every project):
 
-    for p in $(curl -s ${b}/x/projects -H 'authorization: Bearer <token>' | jq -r '.items[].id'); do
-      curl -s "${b}/x/tasks?project=$p&assignee=me&status=todo" -H 'authorization: Bearer <token>'
-    done
+    curl -s '${b}/x/ball/mine' -H 'authorization: Bearer <token>'
 `
 }

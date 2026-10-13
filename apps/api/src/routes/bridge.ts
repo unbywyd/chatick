@@ -59,7 +59,7 @@ import { connectDoc, guideDoc } from '../lib/bridge-docs.js'
 import { logActivity } from '../lib/audit.js'
 import { sendAddedToProjectMail, sendRemovedFromProjectMail } from '../lib/mails.js'
 import { sendInviteMail } from '../lib/mail-invite.js'
-import { createNote, noteToTask, NOTE_TYPES, canUseKnowledge, canEditKnowledge, type NoteType } from './notes.js'
+import { createCompanyNote, createNote, noteToTask, NOTE_TYPES, canUseKnowledge, canEditKnowledge, type NoteType } from './notes.js'
 import { enqueue as enqueueEmbedding, searchNoteIds, searchTaskIds } from '../lib/embeddings.js'
 import { announce, type AnnounceTarget } from '../lib/announce.js'
 import { readTimeConfig, maybeTranslate, timeConfigForProject, timeConfigForCompany, DEFAULT_TIME_CONFIG } from './time.js'
@@ -86,11 +86,11 @@ import { REPORT_KINDS, submitAssistantReport, type ReportKind } from '../lib/ass
 import { randomBytes } from 'node:crypto'
 import { notifyReleaseStage } from './releases.js'
 import { env } from '../env.js'
-import { handoff, HandoffRefused, insertTask, refusalText, updateTask, type BallError } from '../lib/ball.js'
+import { handoff, HandoffRefused, insertTask, mayHandoff, planHandoff, refusalText, updateTask, type BallError } from '../lib/ball.js'
 import { canSeeSecrets } from './resources.js'
 import { notifyHandoff } from '../lib/handoff-notify.js'
 import { releaseMember } from '../lib/member-leave.js'
-import { fromMeList, listFilters, mineList, myProjects, quickTask, tableToggle } from './ball.js'
+import { fromMeList, listFilters, mineList, myProjects, quickTask, tableToggle, visibleProjects } from './ball.js'
 
 // Мост для внешнего ИИ (SPEC §8.27). Всё выполняется ОТ ИМЕНИ пользователя,
 // одобрившего туннель, и проверяется теми же hasPermission, что и живой UI.
@@ -244,13 +244,28 @@ bridgeRoute.get('/projects', async (c) => {
   // projectId отдаём как есть — по прямой ссылке архивный проект открывается,
   // иначе «убрали с глаз» превратилось бы в «отобрали доступ».
   const rows = id.scopeAll
-    ? (
-        await db
-          .select({ p: projects })
-          .from(projectMembers)
-          .innerJoin(projects, eq(projects.id, projectMembers.projectId))
-          .where(and(eq(projectMembers.userId, id.userId), isNull(projects.archivedAt)))
-      ).map((r) => r.p)
+    ? await (async () => {
+        // По членству — плюс все живые проекты компаний, где человек менеджер
+        // или админ: одна лестница ролей (v2) делает его админом любого их
+        // проекта. Без этого вызовы с ?project= проходили, а в списке этих
+        // проектов не было — ассистент не знал, что туда можно.
+        const member = (
+          await db
+            .select({ p: projects })
+            .from(projectMembers)
+            .innerJoin(projects, eq(projects.id, projectMembers.projectId))
+            .where(and(eq(projectMembers.userId, id.userId), isNull(projects.archivedAt)))
+        ).map((r) => r.p)
+        const boss = (
+          await db
+            .select({ p: projects })
+            .from(companyMembers)
+            .innerJoin(projects, eq(projects.companyId, companyMembers.companyId))
+            .where(and(eq(companyMembers.userId, id.userId), inArray(companyMembers.role, ['admin', 'manager']), isNull(projects.archivedAt)))
+        ).map((r) => r.p)
+        const seen = new Set<string>()
+        return [...member, ...boss].filter((p) => !seen.has(p.id) && Boolean(seen.add(p.id)))
+      })()
     : id.companyId
       ? await db.query.projects.findMany({
           where: and(eq(projects.companyId, id.companyId), isNull(projects.archivedAt)),
@@ -884,7 +899,7 @@ const INBOX_BRANCHES = [
   { kind: 'tasks', events: ['task_status', 'task_due'], next: 'GET /x/tasks/<id>' },
   { kind: 'releases', events: ['release_status'], next: 'GET /x/releases' },
   { kind: 'notes', events: ['note_reminder'], next: 'GET /x/notes' },
-  { kind: 'timers', events: ['timer_running'], next: 'GET /x/timer' },
+  { kind: 'timers', events: ['timer_running'], next: 'GET /x/time/running' },
 ] as const satisfies readonly { kind: string; events: readonly string[]; next: string }[]
 
 bridgeRoute.get('/mentions', async (c) => {
@@ -892,7 +907,11 @@ bridgeRoute.get('/mentions', async (c) => {
   const onlyUnread = c.req.query('unread') !== '0'
   const limit = Math.min(100, Math.max(1, Number(c.req.query('limit')) || 30))
 
-  const conds = [eq(notifications.userId, id.userId), inArray(notifications.event, MENTION_EVENTS as never)]
+  // Вопрос по задаче (ход «спросить») — тоже обращение лично к человеку, хоть
+  // и приходит передачей мяча, а не упоминанием. Берём те передачи, где
+  // задача и сейчас ждёт ЕГО ответа: отвеченный вопрос здесь уже не нужен.
+  const asked = sql`(${notifications.event} = 'task_handoff' and exists (select 1 from ${tasks} where ${tasks.id} = ${notifications.entityId} and ${tasks.move} = 'answer' and ${tasks.assigneeId} = ${id.userId} and ${tasks.deletedAt} is null))`
+  const conds = [eq(notifications.userId, id.userId), or(inArray(notifications.event, MENTION_EVENTS as never), asked)!]
   if (id.projectId) conds.push(eq(notifications.projectId, id.projectId))
   if (onlyUnread) conds.push(isNull(notifications.readAt))
   const since = parseSince(c.req.query('since'))
@@ -911,6 +930,8 @@ bridgeRoute.get('/mentions', async (c) => {
     items: rows.map((r) => ({
       id: r.n.id,
       event: r.n.event,
+      // question — задача ждёт ответа этого человека: отвечают ходом answer, а не комментарием.
+      kind: r.n.event === 'task_handoff' ? 'question' : 'mention',
       title: r.n.title,
       whatIsAsked: r.n.summary,
       body: r.n.body,
@@ -923,6 +944,7 @@ bridgeRoute.get('/mentions', async (c) => {
       createdAt: r.n.createdAt,
     })),
     hint:
+      'kind="question" means the task waits for THIS person\'s answer: reply with POST /x/tasks/<id>/handoff {"action":"answer","note":"…"} — a comment does not return the ball. ' +
       'These are the things addressed to YOU personally — answer them first. For entityType="task" the entityId is the task id: read it with GET /x/tasks/<id> and reply with POST /x/tasks/<id>/comments. Mark handled ones read with POST /x/inbox/read — {"entityType":"task","entityId":"<id>"} clears every notification about that task at once, which is what you want after handling one: assigned, mentioned and commented are separate items. Leave them and the person keeps a counter for work you already did.',
   })
 })
@@ -939,20 +961,25 @@ bridgeRoute.get('/inbox', async (c) => {
   const onlyUnread = c.req.query('unread') !== '0'
   const limit = Math.min(100, Math.max(1, Number(c.req.query('limit')) || 30))
 
-  // company-туннель видит все проекты человека, проектный — только свой
+  // company-туннель видит все проекты человека в этой компании, проектный —
+  // только свой. Мастер — всё.
   const conds = [eq(notifications.userId, id.userId)]
   if (id.projectId) conds.push(eq(notifications.projectId, id.projectId))
+  else if (id.companyId && !id.scopeAll) conds.push(eq(notifications.companyId, id.companyId))
   if (onlyUnread) conds.push(isNull(notifications.readAt))
   // «что нового с момента X» — чтобы не тянуть последние тридцать и не искать
   // в них глазами незнакомое.
   const since = parseSince(c.req.query('since'))
   if (since) conds.push(gt(notifications.createdAt, since))
 
+  // leftJoin проекта: у объявления компании и таймера на компанию проекта нет.
+  // С inner они считались в unreadTotal, но в items не попадали — ассистент
+  // видел «ждёт 5» и показывал три.
   const rows = await db
     .select({ n: notifications, actor: users, project: projects })
     .from(notifications)
     .leftJoin(users, eq(users.id, notifications.actorId))
-    .innerJoin(projects, eq(projects.id, notifications.projectId))
+    .leftJoin(projects, eq(projects.id, notifications.projectId))
     .where(and(...conds))
     .orderBy(desc(notifications.createdAt))
     .limit(limit)
@@ -1000,11 +1027,12 @@ bridgeRoute.get('/inbox', async (c) => {
         .select({ n: notifications, actor: users, project: projects })
         .from(notifications)
         .leftJoin(users, eq(users.id, notifications.actorId))
-        .innerJoin(projects, eq(projects.id, notifications.projectId))
+        .leftJoin(projects, eq(projects.id, notifications.projectId))
         .where(
           and(
             eq(notifications.userId, id.userId),
             ...(id.projectId ? [eq(notifications.projectId, id.projectId)] : []),
+            ...(!id.projectId && id.companyId && !id.scopeAll ? [eq(notifications.companyId, id.companyId)] : []),
             sql`${notifications.readAt} is not null`,
             sql`${notifications.readAt} > now() - make_interval(mins => ${RECENTLY_READ_MINUTES})`,
           ),
@@ -1030,7 +1058,8 @@ bridgeRoute.get('/inbox', async (c) => {
       whatIsAsked: r.n.summary,
       body: r.n.body,
       from: r.actor ? { id: r.actor.id, name: r.actor.name } : { id: 'ai', name: 'AI' },
-      project: { id: r.project.id, name: r.project.name },
+      // null — уведомление компании (объявление, таймер на компанию): проекта у него нет.
+      project: r.project ? { id: r.project.id, name: r.project.name } : null,
       // по этим полям агент дотягивается до сути: сообщение, задача, комментарий
       entityType: r.n.entityType,
       entityId: r.n.entityId,
@@ -1068,7 +1097,7 @@ bridgeRoute.get('/inbox', async (c) => {
         title: r.n.title,
         whatIsAsked: r.n.summary,
         from: r.actor ? { id: r.actor.id, name: r.actor.name } : { id: 'ai', name: 'AI' },
-        project: { id: r.project.id, name: r.project.name },
+        project: r.project ? { id: r.project.id, name: r.project.name } : null,
         entityType: r.n.entityType,
         entityId: r.n.entityId,
         url: `${APP()}/#${r.n.link}`,
@@ -1212,13 +1241,16 @@ async function resolveAssignee(id: BridgeIdentity, projectId: string, value: unk
   if (value === null) return null // явный сброс
   if (typeof value !== 'string' || !value.trim()) return undefined
   const v = value.trim()
-  if (v.toLowerCase() === 'me') return id.userId
 
   const rows = await db
     .select({ u: users })
     .from(projectMembers)
     .innerJoin(users, eq(users.id, projectMembers.userId))
     .where(eq(projectMembers.projectId, projectId))
+  // «me» — тоже только из команды: менеджер компании видит любой её проект, но
+  // мяч держат те, кто в команде. Иначе задача уезжала на человека, которого
+  // нет ни в списке команды, ни в упоминаниях.
+  if (v.toLowerCase() === 'me') return rows.some((r) => r.u.id === id.userId) ? id.userId : undefined
   const lower = v.toLowerCase()
   const hit =
     rows.find((r) => r.u.id === v) ??
@@ -3056,18 +3088,64 @@ function ballQuery(c: { req: { query: (k: string) => string | undefined } }) {
   })
 }
 
+/**
+ * Какие ходы человеку доступны по каждой задаче — то же правило, что у кнопок
+ * в вебе (роль в задаче + сложится ли ход на нынешнем состоянии). Без этого
+ * ассистент пробовал ход наугад и получал отказ.
+ */
+async function movesFor(userId: string, ids: string[]): Promise<Map<string, string[]>> {
+  const out = new Map<string, string[]>()
+  if (!ids.length) return out
+  const rows = await db.select().from(tasks).where(inArray(tasks.id, ids))
+  const mgr = new Map<string, boolean>()
+  for (const t of rows) {
+    if (!mgr.has(t.projectId)) mgr.set(t.projectId, await ownsOrManages(t.projectId, userId, []))
+    const isManager = mgr.get(t.projectId)!
+    out.set(
+      t.id,
+      HANDOFF_ACTIONS.filter(
+        (a) =>
+          a !== 'create' &&
+          !(a === 'take' && t.assigneeId === userId) &&
+          mayHandoff(a, t, userId, isManager) &&
+          planHandoff(t, a, { actorId: userId, to: '?', note: '-' }).ok,
+      ),
+    )
+  }
+  return out
+}
+
+/** Строки списка мяча для ассистента: готовая ссылка и доступные ходы. */
+async function forAgent<T extends { id: string; project: { id: string } | null }>(userId: string, list: ProjectListLite, items: T[]) {
+  const moves = await movesFor(userId, items.map((i) => i.id))
+  const companyBy = new Map(list.map((p) => [p.id, p.companyId]))
+  return items.map((i) => ({
+    ...i,
+    url: i.project ? projectUrl(APP(), companyBy.get(i.project.id) ?? '', i.project.id, `/tasks/${i.id}`) : null,
+    moves: moves.get(i.id) ?? [],
+  }))
+}
+type ProjectListLite = { id: string; companyId: string }[]
+const BALL_HINT =
+  '"moves" — what this person can do with each task right now: POST /x/tasks/<id>/handoff {"action":<one of them>}. ' +
+  'Give people "url", never a link you assembled yourself.'
+
 bridgeRoute.get('/ball/mine', async (c) => {
   const id = auth(c as never)
   const q = ballQuery(c as never)
   if (!q.success) return c.json({ error: q.error.issues.map((i) => `${i.path.join('.')}: ${i.message}`).join('; ') }, 400)
-  return c.json(await mineList(id.userId, await ballProjects(id, c.req.query('company')), q.data))
+  const list = await ballProjects(id, c.req.query('company'))
+  const r = await mineList(id.userId, list, q.data)
+  return c.json({ ...r, table: await forAgent(id.userId, list, r.table), items: await forAgent(id.userId, list, r.items), hint: BALL_HINT })
 })
 
 bridgeRoute.get('/ball/from-me', async (c) => {
   const id = auth(c as never)
   const q = ballQuery(c as never)
   if (!q.success) return c.json({ error: q.error.issues.map((i) => `${i.path.join('.')}: ${i.message}`).join('; ') }, 400)
-  return c.json(await fromMeList(id.userId, await ballProjects(id, c.req.query('company')), q.data))
+  const list = await ballProjects(id, c.req.query('company'))
+  const r = await fromMeList(id.userId, list, q.data)
+  return c.json({ ...r, items: await forAgent(id.userId, list, r.items), hint: BALL_HINT })
 })
 
 bridgeRoute.post('/ball/table', async (c) => {
@@ -3101,7 +3179,20 @@ bridgeRoute.post('/ball/quick', async (c) => {
 
   const list = await ballProjects(id, typeof b.company === 'string' ? b.company : c.req.query('company'))
   const companyId = id.companyId ?? (list.length && list.every((p) => p.companyId === list[0]!.companyId) ? list[0]!.companyId : null)
-  const r = await quickTask({ userId: id.userId, companyId, projects: list, text, preview: b.preview === true, via: 'mcp' })
+  // project — куда, если в строке нет #. Раньше параметр принимался и молча
+  // терялся: задача уезжала в основной проект компании.
+  const want = (typeof b.project === 'string' && b.project) || c.req.query('project') || ''
+  const def = want ? list.find((p) => p.id === want) : undefined
+  if (want && !def) return c.json({ error: `Project ${want} is not among the projects of this connection — chatick_projects lists them` }, 404)
+  const r = await quickTask({ userId: id.userId, companyId: def?.companyId ?? companyId, projects: list, text, preview: b.preview === true, via: 'mcp', defaultProjectId: def?.id })
+  // Готовая ссылка на созданную задачу: собирать её самому ассистент не должен.
+  if (r.status === 201) {
+    const t = (r.body as { task?: { id: string; project?: { id: string } } }).task
+    if (t?.project) {
+      const co = list.find((p) => p.id === t.project!.id)?.companyId ?? (await companyOf(t.project.id)) ?? ''
+      ;(t as Record<string, unknown>).url = projectUrl(APP(), co, t.project.id, `/tasks/${t.id}`)
+    }
+  }
   return c.json(r.body, r.status)
 })
 
@@ -5460,6 +5551,23 @@ function parseStamp(v: unknown): Date | null | undefined {
  * проекта. Компания берётся из подключения: компанейское — его компания,
  * проектное — компания проекта, мастер — ?company=<id>.
  */
+/**
+ * Компания запроса для ручек уровня компании (v2): компания подключения;
+ * у проектного — компания проекта; у мастер-доступа — названная (?company=),
+ * иначе компания проекта из запроса, иначе та, где человек сейчас, иначе
+ * единственная.
+ */
+async function bridgeCompany(
+  c: Ctx,
+  b: Record<string, unknown> = {},
+): Promise<{ companyId: string; role: string } | { error: string; status: 400 | 403 | 404 }> {
+  const r = await timeTarget(c, { ...b, onCompany: true })
+  if ('error' in r) return r
+  const role = await companyRoleOf(r.companyId, auth(c).userId)
+  if (!role) return { error: 'You are not a member of that company', status: 403 }
+  return { companyId: r.companyId, role }
+}
+
 async function timeTarget(
   c: Ctx,
   b: Record<string, unknown>,
@@ -5469,9 +5577,23 @@ async function timeTarget(
     let companyId: string | null = id.companyId ?? null
     if (!companyId && id.projectId) companyId = await companyOf(id.projectId)
     if (!companyId && id.scopeAll) {
-      const asked = c.req.query('company') ?? (typeof b.company === 'string' ? b.company : undefined)
-      if (!asked) return { error: 'This connection covers all your companies: pass ?company=<id> (GET /x/companies lists them).', status: 400 }
-      companyId = asked
+      // Мастер-подключение: компания — названная явно, иначе компания проекта
+      // из запроса, иначе та, где человек сейчас (presence), иначе
+      // единственная. Раньше без ?company= был 400, а MCP этот параметр не
+      // передавал вовсе — время «на компанию» с мастер-доступом не писалось.
+      const asked = c.req.query('company') ?? (typeof b.company === 'string' && b.company ? b.company : undefined)
+      const viaProject = c.req.query('project') ?? (typeof b.project === 'string' && b.project ? b.project : undefined)
+      const here = readPresence(id.userId)
+      companyId =
+        asked ??
+        (viaProject ? await companyOf(viaProject) : null) ??
+        (here ? await companyOf(here.projectId) : null) ??
+        null
+      if (!companyId) {
+        const mine = await db.select({ id: companyMembers.companyId }).from(companyMembers).where(eq(companyMembers.userId, id.userId))
+        if (mine.length === 1) companyId = mine[0]!.id
+        else return { error: 'This connection covers all your companies: pass company=<id> (GET /x/companies lists them; chatick_projects shows the companyId of each project).', status: 400 }
+      }
     }
     if (!companyId) return { error: 'Company not found', status: 404 }
     if (!(await companyRoleOf(companyId, id.userId))) return { error: 'You are not a member of that company', status: 403 }
@@ -5494,6 +5616,135 @@ async function placeOf(e: { projectId: string | null; companyId: string | null }
   if (e.companyId) return (await db.query.companies.findFirst({ where: eq(companies.id, e.companyId) }))?.name ?? null
   return null
 }
+
+// --- Уровень компании (v2) ----------------------------------------------------
+//
+// Веб показывает часы, документы и версии всей компании одним экраном, а
+// ассистенту приходилось обходить проекты по одному — или он не мог вовсе:
+// время «на компанию» не принадлежит ни одному проекту.
+
+bridgeRoute.get('/company/time', async (c) => {
+  const id = auth(c as never)
+  const co = await bridgeCompany(c as never)
+  if ('error' in co) return c.json({ error: co.error }, co.status)
+  // Чужие часы — руководству компании; участнику — свои.
+  const boss = canCreateProjects(co.role as Parameters<typeof canCreateProjects>[0])
+  const conds = [eq(timeEntries.companyId, co.companyId), sql`${timeEntries.endedAt} is not null`]
+  if (!boss) conds.push(eq(timeEntries.userId, id.userId))
+  const person = c.req.query('person')
+  if (boss && person) conds.push(eq(timeEntries.userId, person === 'me' ? id.userId : person))
+  const from = c.req.query('from')
+  const to = c.req.query('to')
+  if (from) conds.push(sql`${timeEntries.startedAt} >= ${new Date(from).toISOString()}::timestamptz`)
+  if (to) {
+    const end = new Date(to)
+    if (!to.includes('T')) end.setHours(23, 59, 59, 999)
+    conds.push(sql`${timeEntries.startedAt} <= ${end.toISOString()}::timestamptz`)
+  }
+  const minutes = sql<number>`coalesce(sum(extract(epoch from (${timeEntries.endedAt} - ${timeEntries.startedAt})) / 60), 0)::int`
+  const [byPerson, byProject] = await Promise.all([
+    db
+      .select({ id: users.id, name: users.name, minutes })
+      .from(timeEntries)
+      .innerJoin(users, eq(users.id, timeEntries.userId))
+      .where(and(...conds))
+      .groupBy(users.id, users.name)
+      .orderBy(desc(minutes)),
+    db
+      .select({ id: timeEntries.projectId, name: projects.name, minutes })
+      .from(timeEntries)
+      .leftJoin(projects, eq(projects.id, timeEntries.projectId))
+      .where(and(...conds))
+      .groupBy(timeEntries.projectId, projects.name)
+      .orderBy(desc(minutes)),
+  ])
+  return c.json({
+    companyId: co.companyId,
+    scope: boss ? 'everyone' : 'yours',
+    totalMinutes: byPerson.reduce((s, r) => s + r.minutes, 0),
+    byPerson,
+    // id null — время «на компанию», без проекта.
+    byProject: byProject.map((r) => ({ id: r.id, name: r.id ? r.name : null, onCompany: !r.id, minutes: r.minutes })),
+    hint: boss ? undefined : 'Only your own hours: other people\'s hours are visible to company admins and managers.',
+  })
+})
+
+/** Проекты компании, где человеку можно действие (менеджер/админ — все). */
+async function companyProjectsWith(companyId: string, userId: string, role: string, perm: ProjectPermission) {
+  const visible = await visibleProjects(companyId, userId)
+  if (canCreateProjects(role as Parameters<typeof canCreateProjects>[0])) return visible
+  const ok = await Promise.all(visible.map((p) => hasPermission(p.id, userId, perm)))
+  return visible.filter((_, i) => ok[i])
+}
+
+bridgeRoute.get('/company/documents', async (c) => {
+  const id = auth(c as never)
+  const co = await bridgeCompany(c as never)
+  if ('error' in co) return c.json({ error: co.error }, co.status)
+  const list = await companyProjectsWith(co.companyId, id.userId, co.role, 'documents.read')
+  if (!list.length) return c.json({ items: [] })
+  const names = new Map(list.map((p) => [p.id, p.name]))
+  const q = c.req.query('q')?.trim()
+  const base = and(inArray(documents.projectId, list.map((p) => p.id)), isNull(documents.deletedAt))
+  const rows = await db.query.documents.findMany({
+    where: q ? and(base, or(ilike(documents.title, `%${q}%`), ilike(documents.content, `%${q}%`))) : base,
+    orderBy: desc(documents.updatedAt),
+    limit: 100,
+  })
+  return c.json({
+    items: rows.map((d) => {
+      const text = htmlToText(d.content)
+      const hit = q ? searchInText(text, q, 120).matches[0] : null
+      return {
+        id: d.id,
+        title: d.title || '—',
+        project: { id: d.projectId, name: names.get(d.projectId) ?? '' },
+        preview: hit ? hit.text : text.slice(0, 160),
+        updatedAt: d.updatedAt,
+        url: projectUrl(APP(), co.companyId, d.projectId, `/documents/${d.id}`),
+      }
+    }),
+    hint: 'Read one with GET /x/documents/<id>?project=<its project id>.',
+  })
+})
+
+bridgeRoute.get('/company/releases', async (c) => {
+  const id = auth(c as never)
+  const co = await bridgeCompany(c as never)
+  if ('error' in co) return c.json({ error: co.error }, co.status)
+  const allowed = await companyProjectsWith(co.companyId, id.userId, co.role, 'releases.read')
+  const on = await Promise.all(allowed.map((p) => isFeatureEnabled(p.id, 'releases')))
+  const list = allowed.filter((_, i) => on[i])
+  if (!list.length) return c.json({ items: [], live: {} })
+  const names = new Map(list.map((p) => [p.id, p.name]))
+  const rows = await db
+    .select()
+    .from(releases)
+    .where(inArray(releases.projectId, list.map((p) => p.id)))
+    .orderBy(desc(releases.createdAt))
+    .limit(200)
+  // «Что сейчас в проде» — по каждому проекту и типу сборки.
+  const live: Record<string, Record<string, string>> = {}
+  for (const r of rows) {
+    if (!isLiveStage(r.buildType, r.status)) continue
+    const p = (live[names.get(r.projectId) ?? r.projectId] ??= {})
+    if (!p[r.buildType]) p[r.buildType] = r.version
+  }
+  return c.json({
+    items: rows.map((r) => ({
+      id: r.id,
+      version: r.version,
+      appName: r.appName,
+      project: { id: r.projectId, name: names.get(r.projectId) ?? '' },
+      buildType: r.buildType,
+      status: r.status,
+      isLive: isLiveStage(r.buildType, r.status),
+      createdAt: r.createdAt,
+      url: projectUrl(APP(), co.companyId, r.projectId, `/releases/${r.id}`),
+    })),
+    live,
+  })
+})
 
 bridgeRoute.get('/time/running', async (c) => {
   const id = auth(c as never)
@@ -6093,27 +6344,20 @@ bridgeRoute.get('/notes', async (c) => {
 })
 
 bridgeRoute.get('/notes/:id', async (c) => {
-  const scope = await resolveProject(c as never)
-  if ('error' in scope) return c.json({ error: scope.error }, scope.status)
-  // База знаний принадлежит КОМПАНИИ: доступ даёт членство в ней, а не права
-  // в проекте. Знание про Cardcom нужно всем, кто с ним столкнётся.
-  const kbCompany = await companyOf(scope.projectId)
-  if (!kbCompany || !(await canUseKnowledge(kbCompany, auth(c as never).userId))) {
-    return c.json({ error: 'You are not a member of this company' }, 403)
-  }
-
+  const id = auth(c as never)
   const row = await db.query.notes.findFirst({
     where: and(eq(notes.id, c.req.param('id')), isNull(notes.deletedAt)),
   })
   if (!row) return c.json({ error: 'Note not found' }, 404)
-
-  // чужой проект — только если заметка помечена как company-видимая
-  if (row.projectId !== scope.projectId) {
-    const project = await db.query.projects.findFirst({ where: eq(projects.id, scope.projectId) })
-    if (!(row.scope === 'company' && row.companyId && row.companyId === project?.companyId)) {
-      return c.json({ error: 'Note not found' }, 404)
-    }
-  }
+  // База знаний принадлежит КОМПАНИИ: доступ даёт членство в ней, а не права
+  // в проекте. Список отдаёт заметки всех проектов компании — и открыть
+  // любую из них можно так же. Раньше заметка соседнего проекта (без
+  // пометки scope=company) была в списке, а здесь — 404.
+  // Граница — компания подключения; у мастер-доступа — любая своя.
+  const tunnelCompany = id.companyId ?? (id.projectId ? await companyOf(id.projectId) : null)
+  if (tunnelCompany && row.companyId !== tunnelCompany) return c.json({ error: 'Note not found' }, 404)
+  if (!(await canUseKnowledge(row.companyId, id.userId))) return c.json({ error: 'Note not found' }, 404)
+  const scope = { projectId: row.projectId ?? (await maybeProject(c as never)) ?? '' }
 
   const author = row.authorId ? await db.query.users.findFirst({ where: eq(users.id, row.authorId) }) : null
   return c.json({
@@ -6139,6 +6383,36 @@ bridgeRoute.get('/notes/:id', async (c) => {
 
 bridgeRoute.post('/notes', async (c) => {
   const id = auth(c as never)
+  // Заметка на компанию — без проекта (v2): знание, которое не принадлежит
+  // ни одному проекту, — договорённость с бухгалтерией, правило для всех.
+  if (c.req.query('onCompany') === '1') {
+    const co = await bridgeCompany(c as never)
+    if ('error' in co) return c.json({ error: co.error }, co.status)
+    const parsed = await readJson(c as never)
+    if ('error' in parsed) return c.json(parsed, 400)
+    const b = parsed.body as Record<string, unknown>
+    const type = String(b.type ?? 'note')
+    if (!(NOTE_TYPES as readonly string[]).includes(type)) return c.json({ error: `type must be one of: ${NOTE_TYPES.join(', ')}` }, 400)
+    if (!String(b.title ?? '').trim() && !String(b.body ?? '').trim()) return c.json({ error: 'Provide at least title or body' }, 400)
+    const row = await createCompanyNote(
+      co.companyId,
+      null,
+      id.userId,
+      {
+        type: type as NoteType,
+        title: String(b.title ?? '').slice(0, 300),
+        body: richText(String(b.body ?? '')),
+        tags: Array.isArray(b.tags) ? (b.tags as unknown[]).map(String).slice(0, 20) : [],
+        scope: 'company',
+        sources: [],
+        mentionedIds: Array.isArray(b.mentionedIds) ? (b.mentionedIds as unknown[]).map(String) : [],
+        remindAt: typeof b.remindAt === 'string' ? b.remindAt : null,
+        sourceMessageIds: [],
+      },
+      'bridge',
+    )
+    return c.json({ id: row.id, type: row.type, title: row.title, scope: 'company', projectId: null, url: `${APP()}/#/c/${co.companyId}/notes/n/${row.id}` }, 201)
+  }
   const scope = await resolveProject(c as never)
   if ('error' in scope) return c.json({ error: scope.error }, scope.status)
   // База знаний принадлежит КОМПАНИИ: доступ даёт членство в ней, а не права

@@ -56,8 +56,11 @@ describe('серверные ручки — по сессии, а не по пр
   })
 
   it('новая запись сразу идёт в индекс поиска', () => {
+    // Запись идёт через общую createCompanyNote (её зовёт и мост) — индекс там.
     const at = notes.indexOf("companyNotesRoute.post('/:companyId/notes'")
-    expect(notes.slice(at, at + 2000)).toMatch(/void enqueue\('note'/)
+    expect(notes.slice(at, at + 2000)).toMatch(/createCompanyNote\(/)
+    const fn = notes.indexOf('export async function createCompanyNote')
+    expect(notes.slice(fn, fn + 1600)).toMatch(/void enqueue\('note'/)
   })
 })
 

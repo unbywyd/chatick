@@ -633,6 +633,42 @@ export async function noteChanged(row: typeof notes.$inferSelect, action: 'creat
   for (const m of members) if (m.id !== actorId) sendToUserAnywhere(m.id, 'notes', { companyId: row.companyId, action, id: row.id })
 }
 
+/**
+ * Запись базы знаний компании — с проектом или без (v2). Один путь для веба и
+ * моста: отдельная вставка где-то ещё забыла бы поиск по смыслу или рассылку,
+ * и запись молча выпала бы из поиска.
+ */
+export async function createCompanyNote(
+  companyId: string,
+  projectId: string | null,
+  authorId: string,
+  input: z.infer<typeof bodySchema>,
+  via: 'ui' | 'bridge' | 'ai' = 'ui',
+) {
+  const [row] = await db
+    .insert(notes)
+    .values({
+      companyId,
+      projectId,
+      type: input.type,
+      title: input.title.slice(0, 300),
+      body: sanitizeHtml(input.body),
+      tags: JSON.stringify([...new Set(input.tags.map((t) => t.trim().toLowerCase()).filter(Boolean))]),
+      scope: 'company',
+      sources: JSON.stringify(input.sources),
+      mentionedIds: JSON.stringify(input.mentionedIds),
+      remindAt: input.remindAt ? new Date(input.remindAt) : null,
+      authorId,
+      createdVia: via,
+    })
+    .returning()
+
+  // Поиск по смыслу: вектор считается фоном, как и на остальных путях.
+  void enqueue('note', row!.id, projectId)
+  void noteChanged(row!, 'create', authorId)
+  return row!
+}
+
 companyNotesRoute.post('/:companyId/notes', zValidator('json', bodySchema), async (c) => {
   const { sub } = c.get('session')
   const access = await kbAccess(c.req.param('companyId'), sub)
@@ -647,28 +683,8 @@ companyNotesRoute.post('/:companyId/notes', zValidator('json', bodySchema), asyn
     if (!p || p.companyId !== access.companyId) return c.json({ error: 'Project is not in this company' }, 400)
   }
 
-  const [row] = await db
-    .insert(notes)
-    .values({
-      companyId: access.companyId,
-      projectId,
-      type: input.type,
-      title: input.title.slice(0, 300),
-      body: sanitizeHtml(input.body),
-      tags: JSON.stringify([...new Set(input.tags.map((t) => t.trim().toLowerCase()).filter(Boolean))]),
-      scope: 'company',
-      sources: JSON.stringify(input.sources),
-      mentionedIds: JSON.stringify(input.mentionedIds),
-      remindAt: input.remindAt ? new Date(input.remindAt) : null,
-      authorId: sub,
-      createdVia: 'ui',
-    })
-    .returning()
-
-  // Поиск по смыслу: вектор считается фоном, как и на остальных путях.
-  void enqueue('note', row!.id, projectId)
-  void noteChanged(row!, 'create', sub)
-  return c.json(serialize(row!), 201)
+  const row = await createCompanyNote(access.companyId, projectId, sub, input, 'ui')
+  return c.json(serialize(row), 201)
 })
 
 companyNotesRoute.patch('/:companyId/notes/:id', zValidator('json', bodySchema.partial()), async (c) => {
