@@ -26,6 +26,7 @@ const ru = {
   },
   hero: {
     title: 'Герой за столом',
+    menu: 'Мой герой',
     sub: 'Так тебя видят на столе с задачами. Выдали случайно — можно сменить.',
     taken: 'Уже у {{name}}',
     saved: 'Герой сменён',
@@ -306,6 +307,7 @@ const en: typeof ru = {
   },
   hero: {
     title: 'Your hero at the table',
+    menu: 'My hero',
     sub: 'This is how people see you at the task table. It was given at random — pick another if you like.',
     taken: 'Already {{name}}’s',
     saved: 'Hero changed',
@@ -586,6 +588,7 @@ const he: typeof ru = {
   },
   hero: {
     title: 'הדמות שלך ליד השולחן',
+    menu: 'הדמות שלי',
     sub: 'כך רואים אותך ליד שולחן המשימות. ניתנה באקראי — אפשר להחליף.',
     taken: 'כבר של {{name}}',
     saved: 'הדמות הוחלפה',

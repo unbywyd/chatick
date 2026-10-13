@@ -96,7 +96,7 @@ export function RowMenu({ item, x, y, myId, onClose }: { item: BallItem; x: numb
           {important ? t('lt.unimportant') : t('lt.important')}
         </button>
       )}
-      {a.open && item.holder && (a.mine || item.owner?.id === myId) && (
+      {a.open && item.holder && (a.mine || item.owner?.id === myId) && (item.ball.onTable || !(a.mine && item.owner?.id === myId)) && (
         <button className="lt-i" role="menuitem" onClick={() => (onClose(), void toggleTable(item.id, !item.ball.onTable))}>
           <Icon name="fire" sm />
           {item.ball.onTable ? t('tbl.off') : t('tbl.on')}

@@ -13,7 +13,7 @@ import '../i18n/list'
 
 /*
  * «На столе» — сцена из макета: круглый стол сверху, вокруг в креслах герои
- * людей задачи, картошка-мяч лежит перед тем, у кого ход. Держатель мяча —
+ * людей задачи, фишка-мяч лежит перед тем, у кого ход. Держатель мяча —
  * всегда наверху: герои нарисованы лицом к столу, и сверху лицо видно прямо.
  * Клик по герою — передать ему мяч (ход подбирается по смыслу, как в макете).
  *
@@ -26,6 +26,7 @@ const BOX = 136 // герой вписан в квадрат
 const BOX_LEAD = 188 // тот, чей ход, — крупнее остальных
 const SHIFT = 22 // стол чуть ниже центра: крупному держателю наверху нужно место
 const BALL_R = Math.round((TABLE / 2) * 0.46)
+const CHIP = 56 // фишка со знаком Chatick — «мяч» на сукне
 const HIT_R = HANDS + 72
 const LABEL_R = HANDS - 26 // имя — на сукне перед руками
 const TOP = 270 // угол места держателя: сверху
@@ -159,10 +160,10 @@ function SceneView({ s }: { s: Scene }) {
               )
             })}
             <img
-              className={'tg-pot' + (mine && (heat === 'hot' || heat === 'burn') ? ' hot' : '')}
-              src={`${import.meta.env.BASE_URL}table/ball.webp`}
+              className={'tg-chip' + (mine ? ` ${heat}` : '')}
+              src={`${import.meta.env.BASE_URL}table/chip.webp`}
               alt=""
-              style={{ left: Math.round(300 + BALL_R * Math.cos(q) - 23), top: Math.round(300 + BALL_R * Math.sin(q) - 22) }}
+              style={{ left: Math.round(300 + BALL_R * Math.cos(q) - CHIP / 2), top: Math.round(300 + BALL_R * Math.sin(q) - CHIP / 2) }}
             />
             {s.seats.map((p, j) => {
               const r = (seatA(j) * Math.PI) / 180

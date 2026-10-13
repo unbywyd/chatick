@@ -13,6 +13,8 @@ import { Icon } from './Icon'
 import { fmtClock, fmtHm, letterOf, personColor, projectColor, shortProject, timeAgo } from './util'
 import { AboutModal, ReportModal } from './MeModals'
 import { openSearch } from './Palette'
+import { heroOf, heroSrc } from './heroes'
+import './i18n/list'
 import { showCombo, useBindings } from './keys'
 
 const NAV = ['', 'team', 'docs', 'notes', 'time', 'resources', 'files', 'versions', 'history'] as const
@@ -554,6 +556,10 @@ function MeMenu() {
             <button className="me-i" role="menuitem" onClick={() => go(`${base}/settings/profile`)}>
               <Icon name="user" sm />
               {t('me.profile')}
+            </button>
+            <button className="me-i" role="menuitem" onClick={() => go(`${base}/settings/profile?hero=1`)}>
+              {me.data ? <img className="me-hero" src={heroSrc(heroOf(me.data).slug)} alt="" /> : <Icon name="user" sm />}
+              {t('hero.menu')}
             </button>
             <button className="me-i" role="menuitem" onClick={() => go(`${base}/settings/ai`)}>
               <Icon name="spark" sm />

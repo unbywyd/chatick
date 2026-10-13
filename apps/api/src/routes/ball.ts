@@ -460,7 +460,10 @@ export async function tableScenes(userId: string, projectList: ProjectList) {
       can,
     })
   }
-  return { mine: scenes.filter((x) => x.holder?.id === userId), away: scenes.filter((x) => x.holder?.id !== userId) }
+  // Задача «сам себе» — за столом никого, кроме меня: столу нечего показать,
+  // она остаётся в списке.
+  const shared = scenes.filter((x) => x.seats.length > 1)
+  return { mine: shared.filter((x) => x.holder?.id === userId), away: shared.filter((x) => x.holder?.id !== userId) }
 }
 
 ballRoute.get('/table', zValidator('query', z.object({ companyId: z.string().min(1) })), async (c) => {
@@ -701,7 +704,10 @@ ballRoute.get('/task/:taskId', async (c) => {
     can[a] = mayHandoff(a, task, sub, isManager) && planHandoff(task, a, { actorId: sub, to: '?', note: '-' }).ok
   }
   const closed = isClosed(task.status)
-  can.table = !closed && Boolean(task.assigneeId) && (task.assigneeId === sub || ownerOf(task) === sub || isManager)
+  // На стол — не «сам себе» (владелец и держатель — я сам). Убрать со стола можно всегда:
+  // иначе такая задача молча занимала бы одно из трёх мест.
+  const selfOnly = task.assigneeId === sub && ownerOf(task) === sub
+  can.table = !closed && Boolean(task.assigneeId) && (task.assigneeId === sub || ownerOf(task) === sub || isManager) && (task.onTable || !selfOnly)
   can.edit = canEdit
 
   return c.json({

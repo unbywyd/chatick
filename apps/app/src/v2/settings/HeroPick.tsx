@@ -1,3 +1,5 @@
+import { useEffect, useRef } from 'react'
+import { useSearchParams } from 'react-router-dom'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { useTranslation } from 'react-i18next'
 import { api } from '@/lib/api'
@@ -33,8 +35,14 @@ export function HeroPick() {
     onError: fail,
   })
   const mine = set.isPending ? set.variables : q.data?.mine
+  // Пришли из меню «Мой герой» — сразу к выбору.
+  const [params] = useSearchParams()
+  const ref = useRef<HTMLElement>(null)
+  useEffect(() => {
+    if (params.get('hero')) ref.current?.scrollIntoView({ block: 'start', behavior: 'smooth' })
+  }, [params])
   return (
-    <section className="card sec">
+    <section className="card sec" ref={ref} id="hero">
       <h2>{t('hero.title')}</h2>
       <p className="d">{t('hero.sub')}</p>
       <div className="hero-pick" role="radiogroup" aria-label={t('hero.title')}>
