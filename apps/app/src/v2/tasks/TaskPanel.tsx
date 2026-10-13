@@ -75,13 +75,13 @@ export function TaskPanel({ taskId }: { taskId: string }) {
           </button>
         </div>
         {!full.data && <div className="pb">{full.isError ? t('common.error') : t('common.loading')}</div>}
-        {full.data && me.data && <PanelBody data={full.data} myId={me.data.id} lng={i18n.language} />}
+        {full.data && me.data && <PanelBody data={full.data} myId={me.data.id} lng={i18n.language} onFull={() => navigate(`${base}/task/${taskId}`)} />}
       </section>
     </>
   )
 }
 
-export function PanelBody({ data, myId, lng }: { data: TaskFull; myId: string; lng: string }) {
+export function PanelBody({ data, myId, lng, onFull }: { data: TaskFull; myId: string; lng: string; onFull?: () => void }) {
   const { t } = useTranslation('v2')
   const task = data.task
   const pid = task.project?.id ?? null
@@ -132,6 +132,16 @@ export function PanelBody({ data, myId, lng }: { data: TaskFull; myId: string; l
         <div className="cl-classic">
           <div className="v2chk"><ClassicChecklist taskId={task.id} canEdit={Boolean(data.can.edit)} /></div>
         </div>
+        {/* Блокеры, связи, файлы, ресурсы и заметки живут на полной странице. В
+            панели их нет, и без этой полоски казалось, что их нет вовсе. */}
+        {onFull && (
+          <button className="pn-more" onClick={onFull}>
+            <Icon name="expand" sm />
+            <b>{t('panel.more')}</b>
+            <span>{t('panel.moreHint')}</span>
+            <Icon name="chevronEnd" sm />
+          </button>
+        )}
         {task.project && (
           <>
             <TaskDiscussion task={task} lng={lng} mentions={data.team.map((p) => ({ id: p.id, label: p.name, avatarUrl: p.avatarUrl }))} />

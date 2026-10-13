@@ -251,6 +251,8 @@ const ru = {
   panel: {
     aria: 'Задача',
     full: 'Открыть целиком',
+    more: 'Развернуть задачу',
+    moreHint: 'блокеры, связи, файлы, ресурсы, заметки',
     close: 'Закрыть',
     youHave: 'Мяч у тебя',
     hasBall: 'Мяч у {{name}}',
@@ -547,6 +549,8 @@ const en: Bundle = {
   panel: {
     aria: 'Task',
     full: 'Open full page',
+    more: 'Expand task',
+    moreHint: 'blockers, links, files, resources, notes',
     close: 'Close',
     youHave: 'You have the ball',
     hasBall: '{{name}} has the ball',
@@ -841,6 +845,8 @@ const he: Bundle = {
   panel: {
     aria: 'משימה',
     full: 'פתיחה במסך מלא',
+    more: 'להרחיב את המשימה',
+    moreHint: 'חוסמים, קישורים, קבצים, משאבים, הערות',
     close: 'סגירה',
     youHave: 'הכדור אצלך',
     hasBall: 'הכדור אצל {{name}}',

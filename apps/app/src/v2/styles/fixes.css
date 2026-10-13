@@ -114,9 +114,9 @@ html:has(.app .mwrap){overflow:hidden}
    него. Раньше основная колонка забирала весь простор (flex-grow 999), и на
    экране в 2000px ассистент оставался в 340px: строки по пять слов, а между
    ним и контентом — пустота. Ширина контента своя у каждой страницы; от 340px
-   до 960px, чтобы на сверхшироком мониторе строки не уезжали в бесконечность.
+   до 560px: шире строки слишком длинные, читать снова тяжело (960px — перебор).
    Панель задачи считает его ширину по той же формуле. */
-.app{--content-w:1040px;--aside-min:340px;--aside-max:960px}
+.app{--content-w:1040px;--aside-min:340px;--aside-max:560px}
 .app:has(.main .tpw){--content-w:1120px}
 .app:has(.main .stg),.app:has(.main .ntf){--content-w:1240px}
 .app:has(.main .tmv){--content-w:1280px}
@@ -483,3 +483,13 @@ html:has(.app .mwrap){overflow:hidden}
 /* Моноширинные подписи стола (жар, «ты», имена у мест) — разрядка и заглавные
    под латиницу. Иврит берёт Heebo из запасного шрифта, разрядка ему вредит. */
 .app[dir='rtl'] .ob-tag,.app[dir='rtl'] .tg-lab,.app[dir='rtl'] .ob-seat small{letter-spacing:0}
+
+/* «Развернуть задачу» в панели — тихая серая полоса после чек-листа: остальное
+   (блокеры, связи, файлы, ресурсы, заметки) — на полной странице. */
+.app .pn-more{display:flex;align-items:center;gap:8px;width:100%;margin:14px 0 4px;padding:9px 12px;border-radius:10px;background:var(--soft);color:var(--ink3);font-size:13px;text-align:start}
+.app .pn-more b{color:var(--ink2);font-weight:600;white-space:nowrap}
+.app .pn-more span{flex:1;min-width:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.app .pn-more:hover{color:var(--ink2)}
+.app .pn-more:hover b{color:var(--ink)}
+/* Шапка ассистента — знак Чатика, как в шапке приложения. */
+.app .ah .ah-mk{width:34px;height:34px;flex:none;display:block}
