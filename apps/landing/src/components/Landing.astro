@@ -18,6 +18,16 @@ const GITHUB = 'https://github.com/unbywyd/chatick'
 const SUPPORT = 'support@chatick.com'
 const SITE_STARTPLAN = 'https://startplan.co.uk/'
 const SITE_ANYAPP = 'https://any-app.com/'
+// Our other products: the same section, in each site's own design, is on ungic.com, vexelkit.com and skey.tscodex.com.
+const loc = locale === 'en' ? '' : `${locale}/`
+const PRODUCTS = [
+  { name: 'ungic', host: 'ungic.com', url: `https://ungic.com/${loc}`, text: c.products.ungic, tile: '#09090c',
+    mark: '<svg viewBox="0 0 56 56" width="26" height="26" fill="none"><path d="M14 18 V34 a14 14 0 0 0 28 0 V26" stroke="#FFFFFF" stroke-width="8" stroke-linecap="round"/><circle cx="42" cy="12" r="5" fill="#6D5DFC"/></svg>' },
+  { name: 'Vexelkit', host: 'vexelkit.com', url: `https://vexelkit.com/${locale}`, text: c.products.vexel, tile: '#f5f2eb',
+    mark: '<svg viewBox="0 0 64 64" width="30" height="30"><rect x="5.5" y="5.5" width="53" height="53" rx="17" fill="#2BC874" transform="rotate(-8 32 32)"/></svg>' },
+  { name: 'skey', host: 'skey.tscodex.com', url: 'https://skey.tscodex.com/', text: c.products.skey, tile: '#f4f2ec',
+    mark: '<svg viewBox="0 0 24 24" width="28" height="28" fill="none"><circle cx="6.5" cy="12" r="3.75" stroke="#111110" stroke-width="2.2"/><path d="M10.25 12H22" stroke="#111110" stroke-width="2.2" stroke-linecap="round"/><rect x="14" y="14" width="8" height="4.5" rx="1" fill="#C93E12"/></svg>' },
+]
 
 // Версия — из десктопного package.json, того же, что electron-builder пишет в
 // latest.yml: числом здесь она уже расходилась с релизом. Мак — двумя файлами
@@ -286,6 +296,21 @@ const ICON_GH =
         </a>
       </div>
       <p class="dn">{c.download.macNote} <a href={WIN_EXE} download>{c.download.winDirect}</a></p>
+    </section>
+
+    <section class="sec" id="products">
+      <h2 class="h2">{c.products.title}</h2>
+      <p class="sub">{c.products.sub}</p>
+      <div class="prods">
+        {PRODUCTS.map((p) => (
+          <a class="pr" href={p.url} target="_blank" rel="noopener">
+            <i class="pr-mark" style={`background:${p.tile}`} aria-hidden="true" set:html={p.mark} />
+            <b>{p.name}</b>
+            <span>{p.text}</span>
+            <em dir="ltr">{p.host} ↗</em>
+          </a>
+        ))}
+      </div>
     </section>
 
     <section class="final">
@@ -1223,6 +1248,58 @@ const ICON_GH =
     color: var(--ink2);
   }
 
+  /* Наши продукты */
+  .prods {
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 12px;
+    margin-top: 40px;
+  }
+  .pr {
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+    padding: 24px;
+    border-radius: 20px;
+    background: #fff;
+    box-shadow: inset 0 0 0 1px var(--line);
+    text-decoration: none;
+    transition: box-shadow 0.15s;
+  }
+  .pr:hover {
+    box-shadow: inset 0 0 0 1.5px var(--ink);
+  }
+  .pr-mark {
+    width: 48px;
+    height: 48px;
+    border-radius: 14px;
+    display: grid;
+    place-items: center;
+    box-shadow: inset 0 0 0 1px rgba(22, 24, 15, 0.08);
+    margin-bottom: 6px;
+  }
+  .pr b {
+    font-size: 22px;
+    letter-spacing: -0.02em;
+  }
+  .pr span {
+    color: var(--ink2);
+    font-size: 16px;
+    line-height: 1.5;
+  }
+  .pr em {
+    font-style: normal;
+    font: 600 13px/1 var(--font-mono);
+    color: var(--ink3);
+    margin-top: auto;
+    padding-top: 8px;
+    align-self: flex-start;
+    unicode-bidi: isolate;
+  }
+  .pr:hover em {
+    color: var(--ink);
+  }
+
   .final {
     margin: 120px 0 0;
     padding: 72px 0 64px;
@@ -1280,6 +1357,7 @@ const ICON_GH =
     .heatbar,
     .own,
     .dl,
+    .prods,
     .ask {
       grid-template-columns: minmax(0, 1fr);
     }

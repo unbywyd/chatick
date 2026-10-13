@@ -54,6 +54,7 @@ export type LandCopy = {
     macNote: string
     winDirect: string
   }
+  products: { title: string; sub: string; ungic: string; vexel: string; skey: string }
   final: { title: string; start: string }
   foot: { backed: string; built: string; changelog: string; forAi: string; integration: string; privacy: string; terms: string; contact: string }
 }
@@ -148,6 +149,13 @@ const en: LandCopy = {
     webSub: 'app.chatick.com — nothing to install',
     macNote: 'The Mac build isn’t signed by Apple yet: a certificate costs money, and Chatick has no sponsors. First launch: right-click the app → Open → Open.',
     winDirect: 'Store blocked on your machine? Direct download (.exe)',
+  },
+  products: {
+    title: 'Our products',
+    sub: 'From the same team.',
+    ungic: 'A wild machine built to replace Figma for developers: your AI designs and prototypes the app.',
+    vexel: 'Any illustrations, generated in sets — every picture in one style.',
+    skey: 'API keys and passwords for your AI: it uses them, but never sees them.',
   },
   final: { title: 'Pick up the ball.', start: 'Start free' },
   foot: {
@@ -253,6 +261,13 @@ const ru: LandCopy = {
     macNote: 'Сборка для Mac пока не подписана Apple: сертификат стоит денег, а у Chatick нет спонсоров. Первый запуск: правый клик по приложению → Открыть → Открыть.',
     winDirect: 'Магазин закрыт на вашей машине? Прямая загрузка (.exe)',
   },
+  products: {
+    title: 'Наши продукты',
+    sub: 'От той же команды.',
+    ungic: 'Безумная машина, которая заменит программистам Figma: ваш ИИ рисует и собирает прототип приложения.',
+    vexel: 'Любые иллюстрации пакетами — все картинки в одном стиле.',
+    skey: 'API-ключи и пароли для вашего ИИ: он ими пользуется, но никогда их не видит.',
+  },
   final: { title: 'Возьмите мяч.', start: 'Начать бесплатно' },
   foot: {
     backed: 'При поддержке',
@@ -356,6 +371,13 @@ const he: LandCopy = {
     webSub: 'app.chatick.com — בלי להתקין כלום',
     macNote: 'הגרסה ל־Mac עדיין לא חתומה על ידי Apple: תעודה עולה כסף, ול־Chatick אין ספונסרים. בהפעלה הראשונה: קליק ימני על האפליקציה ← פתח ← פתח.',
     winDirect: 'החנות חסומה אצלכם? הורדה ישירה (‎.exe)',
+  },
+  products: {
+    title: 'המוצרים שלנו',
+    sub: 'מאותו צוות.',
+    ungic: 'מכונה מטורפת שנועדה להחליף את Figma למפתחים: ה-AI שלכם מעצב ובונה אבטיפוס לאפליקציה.',
+    vexel: 'כל איור שתרצו, בחבילות — כל התמונות באותו סגנון.',
+    skey: 'מפתחות API וסיסמאות ל-AI שלכם: הוא משתמש בהם, אבל אף פעם לא רואה אותם.',
   },
   final: { title: 'לתפוס את הכדור.', start: 'להתחיל בחינם' },
   foot: {
