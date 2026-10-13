@@ -264,6 +264,10 @@ export function mayHandoff(action: HandoffAction, task: BallTask, actorId: strin
     case 'return':
       return owner || (holder && task.move === 'review')
     case 'take':
+      // Свободную задачу (ни на ком — бэклог) берёт любой из команды, как
+      // «назначить на себя» в первой версии. Уже взятую — только владелец:
+      // перехватывать чужую работу нельзя. Что берущий в команде, проверяет handoff.
+      return owner || !task.assigneeId
     case 'cancel':
     case 'reopen':
       return owner

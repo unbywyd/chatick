@@ -121,6 +121,11 @@ describe('mayHandoff', () => {
       expect(mayHandoff(a, t, 'stranger', true)).toBe(true)
     }
   })
+  it('свободную задачу забирает любой, взятую — только владелец', () => {
+    expect(mayHandoff('take', task({ assigneeId: null }), 'stranger', false)).toBe(true)
+    expect(mayHandoff('take', task({ assigneeId: 'doer' }), 'stranger', false)).toBe(false)
+    expect(mayHandoff('take', task({ assigneeId: 'doer' }), 'boss', false)).toBe(true)
+  })
   it('отвечает только тот, кого спросили', () => {
     const asked = task({ move: 'answer', assigneeId: 'designer', askFromId: 'boss' })
     expect(mayHandoff('answer', asked, 'designer', false)).toBe(true)

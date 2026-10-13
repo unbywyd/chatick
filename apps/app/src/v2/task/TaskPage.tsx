@@ -469,6 +469,9 @@ function Screens({ refs, readOnly, onChange }: { refs: string; readOnly: boolean
 
 type Member = { user: { id: string; name: string; email?: string; avatarUrl: string | null } }
 
+/** Пункт «Никому — в бэклог» в выборе, кому уходит мяч. */
+const NOBODY = '__nobody__'
+
 /**
  * Новая задача целиком: проект, кому мяч, важность, срок, описание, чек-лист
  * и файлы. Пока задачи нет, чек-лист и файлы копятся здесь и уходят на сервер
@@ -527,7 +530,11 @@ function TaskNewForm() {
   const team = (members.data ?? []).map((m) => m.user)
   const myId = me.data?.id ?? null
   // Кому мяч: выбранный, если он есть в проекте; иначе — я.
-  const who = (to && team.find((p) => p.id === to)) || team.find((p) => p.id === myId) || (me.data ? { id: me.data.id, name: me.data.name, avatarUrl: null } : null)
+  // «Никому» — в бэклог: задача ни на ком, её заберёт тот, у кого дойдут руки.
+  const backlog = to === NOBODY
+  const who = backlog
+    ? null
+    : (to && team.find((p) => p.id === to)) || team.find((p) => p.id === myId) || (me.data ? { id: me.data.id, name: me.data.name, avatarUrl: null } : null)
   const previews = useMemo(() => files.map((f) => (f.type.startsWith('image/') ? URL.createObjectURL(f) : null)), [files])
   useEffect(() => () => previews.forEach((u) => u && URL.revokeObjectURL(u)), [previews])
 
@@ -553,7 +560,13 @@ function TaskNewForm() {
     },
     onSuccess: (row) => {
       refresh(row.id)
-      flash(who && who.id !== myId ? t('task.createdTo', { id: row.number, name: who.name }) : t('task.created', { id: row.number }))
+      flash(
+        backlog
+          ? t('task.createdBacklog', { id: row.number })
+          : who && who.id !== myId
+            ? t('task.createdTo', { id: row.number, name: who.name })
+            : t('task.created', { id: row.number }),
+      )
       navigate(`${base}/task/${row.id}`, { replace: true })
     },
     onError: (e) => flash(t(`err.${errorCode(e)}`, { defaultValue: errorCode(e) === '403' ? t('err.forbidden') : t('err.generic') })),
@@ -650,14 +663,17 @@ function TaskNewForm() {
               <Combo
                 cur={
                   <>
-                    {personAv(who)}
-                    <span className="cbx-n bidi">{who ? (who.id === myId ? t('task.me') : who.name) : '—'}</span>
+                    {backlog ? <Icon name="list" sm /> : personAv(who)}
+                    <span className="cbx-n bidi">{backlog ? t('task.nobody') : who ? (who.id === myId ? t('task.me') : who.name) : '—'}</span>
                   </>
                 }
-                items={[...team]
-                  .sort((a, b) => (a.id === myId ? -1 : b.id === myId ? 1 : a.name.localeCompare(b.name)))
-                  .map((p) => ({ id: p.id, label: p.id === myId ? t('task.me') : p.name, lead: personAv(p) }))}
-                selected={who?.id ?? null}
+                items={[
+                  ...[...team]
+                    .sort((a, b) => (a.id === myId ? -1 : b.id === myId ? 1 : a.name.localeCompare(b.name)))
+                    .map((p) => ({ id: p.id, label: p.id === myId ? t('task.me') : p.name, lead: personAv(p) })),
+                  { id: NOBODY, label: t('task.nobody'), lead: <Icon name="list" sm /> },
+                ]}
+                selected={backlog ? NOBODY : (who?.id ?? null)}
                 onPick={setTo}
                 ph={t('task.findPerson', { n: team.length })}
                 aria={`${t('task.ballTo')}: ${who?.name ?? ''}`}

@@ -49,7 +49,8 @@ export function useBallActions(task: Ballish, myId: string | undefined) {
     isAns: plain && task.ball.move === 'answer',
     isClient: open && mine && client,
     isAway: open && !mine,
-    canTake: open && !mine && owner,
+    // Свободную (ни на ком) берёт любой из команды; взятую — только владелец.
+    canTake: open && !mine && (owner || !task.holder),
     canAsk: open && mine,
     canClient: open && mine,
     canPassOn: plain && task.ball.move !== 'do',
