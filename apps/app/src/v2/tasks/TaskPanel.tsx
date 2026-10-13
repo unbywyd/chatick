@@ -127,7 +127,7 @@ export function PanelBody({ data, myId, lng }: { data: TaskFull; myId: string; l
           </p>
         )}
         <div className="cl-classic">
-          <ClassicChecklist taskId={task.id} canEdit={Boolean(data.can.edit)} />
+          <div className="v2chk"><ClassicChecklist taskId={task.id} canEdit={Boolean(data.can.edit)} /></div>
         </div>
         <Feed task={task} lng={lng} />
       </div>

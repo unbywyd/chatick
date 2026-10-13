@@ -7,6 +7,7 @@ import { useUi } from '../ui'
 import { Carousel } from '../tasks/TasksView'
 import { ProjectLogo } from '../ProjectLogo'
 import { Icon } from '../Icon'
+import { ShareItem } from '../ShareTask'
 import { shortProject } from '../util'
 import { errText, Modal, ProjectCombo, uploadTo, useCopy, useLibProjects, usePerProject } from './shared'
 
@@ -597,7 +598,10 @@ function ResourceModal({
  */
 function ShareModal({ row, onClose }: { row: Row; onClose: () => void }) {
   const { t } = useTranslation('v2')
+  const { company } = useUi()
   const copy = useCopy()
+  // Ссылка на сам ресурс в Chatick и публичный доступ — общий диалог, как в старом клиенте.
+  const [inApp, setInApp] = useState(false)
   const [msg, setMsg] = useState('')
   const link = withScheme(row.url ?? '')
   const text = msg.trim() ? `${msg.trim()}\n${link}` : link
@@ -629,6 +633,19 @@ function ShareModal({ row, onClose }: { row: Row; onClose: () => void }) {
           <button onClick={() => (window.location.href = `mailto:?subject=${encodeURIComponent(row.name || link)}&body=${encodeURIComponent(text)}`)}>Email</button>
         </div>
       </div>
+      <button className="mini" onClick={() => setInApp(true)}>
+        {t('library.res.shareInApp')}
+      </button>
+      {inApp && (
+        <ShareItem
+          type="resource"
+          id={row.id}
+          title={row.name || row.url || ''}
+          path={`/p/${row.project.id}/resources/${row.id}`}
+          canPublish={company.myRole === 'admin' || company.myRole === 'manager'}
+          onClose={() => setInApp(false)}
+        />
+      )}
       {row.secretCount > 0 && (
         <div className="note-s">
           <Svg sm>{LOCK}</Svg>

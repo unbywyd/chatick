@@ -81,6 +81,7 @@ const ru = {
     created: 'Ресурс сохранён: {{project}}',
     deleted: 'Ресурс удалён — он в корзине 7 дней',
     shareTitle: 'Поделиться ресурсом',
+    shareInApp: 'Ссылка в Chatick и публичный доступ',
     msgPh: 'Сообщение (необязательно)',
     msgAria: 'Сообщение к ссылке',
     viaMessenger: 'Через мессенджер',
@@ -93,6 +94,7 @@ const ru = {
   },
   files: {
     title: 'Файлы',
+    share: 'Поделиться',
     sub: 'Всё, что приложено к задачам, прислано в чат или загружено руками, по всем проектам.',
     upload: 'Загрузить',
     uploading_one: 'Загружаю {{count}}…',
@@ -278,6 +280,7 @@ const en: typeof ru = {
     created: 'Resource saved: {{project}}',
     deleted: 'Resource deleted — it stays in the trash for 7 days',
     shareTitle: 'Share resource',
+    shareInApp: 'Chatick link and public access',
     msgPh: 'Message (optional)',
     msgAria: 'Message with the link',
     viaMessenger: 'Via messenger',
@@ -290,6 +293,7 @@ const en: typeof ru = {
   },
   files: {
     title: 'Files',
+    share: 'Share',
     sub: 'Everything attached to tasks, sent in chat or uploaded by hand, across all projects.',
     upload: 'Upload',
     uploading_one: 'Uploading {{count}}…',
@@ -475,6 +479,7 @@ const he: typeof ru = {
     created: 'המשאב נשמר: {{project}}',
     deleted: 'המשאב נמחק — הוא בסל 7 ימים',
     shareTitle: 'שיתוף משאב',
+    shareInApp: 'קישור ב-Chatick וגישה ציבורית',
     msgPh: 'הודעה (לא חובה)',
     msgAria: 'הודעה עם הקישור',
     viaMessenger: 'דרך מסנג׳ר',
@@ -487,6 +492,7 @@ const he: typeof ru = {
   },
   files: {
     title: 'קבצים',
+    share: 'שיתוף',
     sub: 'כל מה שצורף למשימות, נשלח בצ׳אט או הועלה ידנית, בכל הפרויקטים.',
     upload: 'העלאה',
     uploading_one: 'מעלה {{count}}…',

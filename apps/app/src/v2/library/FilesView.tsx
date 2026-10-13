@@ -7,6 +7,7 @@ import { useUi } from '../ui'
 import { Carousel } from '../tasks/TasksView'
 import { ProjectLogo } from '../ProjectLogo'
 import { Icon } from '../Icon'
+import { ShareItem } from '../ShareTask'
 import { firstName, shortProject } from '../util'
 import { byDay, dayLabel, errText, fmtSize, Modal, ProjectCombo, uploadTo, useDebounced, useLibProjects, usePerProject } from './shared'
 
@@ -374,8 +375,10 @@ function UploadModal({ projects, files, onClose, onGo }: { projects: CompanyProj
  * по короткой ссылке сервера (view-url), остальное — скачать.
  */
 function Viewer({ f, onClose }: { f: Row; onClose: () => void }) {
+  const [sharing, setSharing] = useState(false)
   const { t, i18n } = useTranslation('v2')
-  const { openTask, flash } = useUi()
+  const { openTask, flash, company } = useUi()
+  const boss = company.myRole === 'admin' || company.myRole === 'manager'
   const qc = useQueryClient()
   const [url, setUrl] = useState<string | null>(null)
   const [confirm, setConfirm] = useState(false)
@@ -383,10 +386,10 @@ function Viewer({ f, onClose }: { f: Row; onClose: () => void }) {
   const token = getMediaToken()
 
   useEffect(() => {
-    const onKey = (e: KeyboardEvent) => e.key === 'Escape' && onClose()
+    const onKey = (e: KeyboardEvent) => e.key === 'Escape' && !sharing && onClose()
     window.addEventListener('keydown', onKey)
     return () => window.removeEventListener('keydown', onKey)
-  }, [onClose])
+  }, [onClose, sharing])
   useEffect(() => {
     if (f.kind === 'vid' || pdf)
       void api<{ url: string }>(`/api/v1/files/${f.id}/view-url`, inProject(f.project.id))
@@ -414,6 +417,10 @@ function Viewer({ f, onClose }: { f: Row; onClose: () => void }) {
   })
 
   return (
+    <>
+    {sharing && (
+      <ShareItem type="file" id={f.id} title={f.name} path={`/p/${f.project.id}/files/${f.id}`} canPublish={boss} onClose={() => setSharing(false)} />
+    )}
     <div className="lib-view" role="dialog" aria-modal="true" aria-label={f.name} onMouseDown={(e) => e.target === e.currentTarget && onClose()}>
       <div className="lib-view-bar">
         <div style={{ minWidth: 0, flex: 1 }}>
@@ -434,6 +441,9 @@ function Viewer({ f, onClose }: { f: Row; onClose: () => void }) {
             {f.taskNumber ?? t('library.files.task')}
           </button>
         )}
+        <button className="mini" onClick={() => setSharing(true)}>
+          {t('library.files.share')}
+        </button>
         <button className="mini" onClick={() => void download()}>
           {t('library.files.download')}
         </button>
@@ -458,5 +468,6 @@ function Viewer({ f, onClose }: { f: Row; onClose: () => void }) {
         )}
       </div>
     </div>
+    </>
   )
 }

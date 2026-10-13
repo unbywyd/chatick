@@ -279,3 +279,11 @@ html:has(.app .panel),html:has(.app .panel) body{overflow:hidden}
 
 .app .lh-tag{white-space:nowrap}
 .app .lh-b{white-space:nowrap}
+
+/* Чек-лист (старый компонент): строка «добавить пункт» — одно поле, кнопка внутри. */
+.app .v2chk section > div:last-child:has(> input){min-height:40px;padding-block:4px;padding-inline:12px 4px;border-radius:12px;background:var(--soft);box-shadow:inset 0 0 0 1px transparent;transition:box-shadow .15s}
+.app .v2chk section > div:last-child:has(> input):focus-within{background:var(--sheet);box-shadow:inset 0 0 0 1.5px var(--ink)}
+.app .v2chk section > div:last-child > input{padding:6px 0}
+.app .v2chk section > div:last-child > input:focus-visible{outline:none}
+.app .v2chk section > div:last-child > button{height:32px;padding:0 14px;border-radius:9px;background:var(--ink);color:var(--sheet);font-weight:600;font-size:13px}
+.app .v2chk section > div:last-child > button:hover{background:var(--ink);opacity:.88}

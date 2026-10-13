@@ -7,6 +7,7 @@ import type { RichMention } from '@/components/ui/rich-editor'
 import { errorCode, inProject, useMe, useProjects, useTask, type CompanyProject } from '../data'
 import { useUi } from '../ui'
 import { Icon } from '../Icon'
+import { ShareItem } from '../ShareTask'
 import { ProjectLogo } from '../ProjectLogo'
 import { Carousel } from '../tasks/TasksView'
 import { personColor, letterOf, shortProject, timeAgo } from '../util'
@@ -716,6 +717,7 @@ function NoteArticle({ note, project, editInit, onDeleted }: { note: NoteRow; pr
   const [body, setBody] = useState(note.body)
   const [dirty, setDirty] = useState(false)
   const task = useTask(note.taskId)
+  const [sharing, setSharing] = useState(false)
 
   const save = useMutation({
     mutationFn: (b: { title: string; body: string }) => api<NoteRow>(`/api/v1/company/${companyId}/notes/${note.id}`, { method: 'PATCH', body: JSON.stringify(b) }),
@@ -743,6 +745,16 @@ function NoteArticle({ note, project, editInit, onDeleted }: { note: NoteRow; pr
 
   return (
     <>
+      {sharing && note.projectId && (
+        <ShareItem
+          type="note"
+          id={note.id}
+          title={shownTitle}
+          path={`/notes/n/${note.id}`}
+          canPublish={company.myRole === 'admin' || company.myRole === 'manager'}
+          onClose={() => setSharing(false)}
+        />
+      )}
       <article className="card doc">
         <Meta
           project={project}
@@ -755,7 +767,24 @@ function NoteArticle({ note, project, editInit, onDeleted }: { note: NoteRow; pr
             if (editing && dirty) doSave()
             setEditing(!editing)
           }}
-          menu={<MoreMenu title={shownTitle} onDelete={canEdit ? () => remove.mutate() : null} />}
+          menu={
+            <MoreMenu title={shownTitle} onDelete={canEdit ? () => remove.mutate() : null}>
+              {(close) =>
+                // Наружу делятся заметкой проекта; заметка компании — только ссылкой для своих.
+                note.projectId && (
+                  <button
+                    role="menuitem"
+                    onClick={() => {
+                      setSharing(true)
+                      close()
+                    }}
+                  >
+                    {t('docs.share')}
+                  </button>
+                )
+              }
+            </MoreMenu>
+          }
         />
         {editing ? (
           <input

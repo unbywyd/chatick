@@ -189,7 +189,7 @@ function Page({ data, myId, lng }: { data: TaskFull; myId: string; lng: string }
           )}
           {/* Чек-лист — тот же, что в старом клиенте: ответы на пункты, копирование,
               перетаскивание. Проект он берёт «с экрана» (setScreenProject выше). */}
-          <ClassicChecklist taskId={task.id} canEdit={canEdit} />
+          <div className="v2chk"><ClassicChecklist taskId={task.id} canEdit={canEdit} /></div>
           <TaskRelations task={task} canEdit={canEdit} />
           <TaskFiles task={task} canAttach={!task.closed} />
           <TaskResources task={task} canEdit={canEdit} />
