@@ -1,4 +1,7 @@
 ---
+import { createHash } from 'node:crypto'
+import { readFileSync } from 'node:fs'
+import { join } from 'node:path'
 import { LOCALES, type LocaleCode } from '../i18n'
 
 interface Props {
@@ -12,7 +15,10 @@ const current = LOCALES.find((l) => l.code === locale)!
 const canonical = new URL(current.path, Astro.site)
 
 // Мессенджеры и поисковики не умеют относительные адреса — только полный URL.
-const ogImage = new URL('/og.png', Astro.site).toString()
+// Версия — из содержимого файла: Telegram запоминает картинку по адресу и
+// новую по тому же адресу не скачивает. Сменился og.png — сменился и адрес.
+const ogVer = createHash('sha1').update(readFileSync(join(process.cwd(), 'public/og.png'))).digest('hex').slice(0, 10)
+const ogImage = new URL(`/og.png?v=${ogVer}`, Astro.site).toString()
 
 // Формат, который ждёт Open Graph: язык_СТРАНА.
 const OG_LOCALE: Record<string, string> = { en: 'en_US', ru: 'ru_RU', he: 'he_IL' }
