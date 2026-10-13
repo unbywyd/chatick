@@ -94,7 +94,12 @@
 .app .scrim{position:fixed;top:64px}
 .app .panel{position:fixed;top:64px;width:min(780px,100%)}
 .app .panel .pb{overflow-x:hidden;overscroll-behavior:contain}
-html:has(.app .panel),html:has(.app .panel) body{overflow:hidden}
+/* Прокрутку страницы под панелью глушим только на html. С body заодно он сам
+   становился контейнером прокрутки, «липкий» ассистент цеплялся к нему и
+   уезжал вверх на всю прокрутку. Место под полосу — всегда: иначе в Windows
+   она пропадает при открытии панели, и страница прыгает вбок. */
+html:has(.app){scrollbar-gutter:stable}
+html:has(.app .panel){overflow:hidden}
 /* Панель — с края напротив ассистента, а он остаётся над затемнением: задачу
    читают и тут же спрашивают про неё ассистента. Раньше оба жались к одному
    краю, и панель с затемнением закрывали ассистента целиком. */
