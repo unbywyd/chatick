@@ -29,9 +29,9 @@ describe('каталог героев', () => {
     }
   })
 
-  it('стол и фишка-мяч на месте', () => {
+  it('стол и мяч на месте', () => {
     expect(existsSync(join(app, 'public/table/table.webp'))).toBe(true)
-    expect(existsSync(join(app, 'public/table/chip.webp'))).toBe(true)
+    expect(existsSync(join(app, 'public/table/ball.webp'))).toBe(true)
   })
 })
 

@@ -13,7 +13,7 @@ import '../i18n/list'
 
 /*
  * «На столе» — сцена из макета: круглый стол сверху, вокруг в креслах герои
- * людей задачи, фишка-мяч лежит перед тем, у кого ход. Держатель мяча —
+ * людей задачи, мяч лежит перед тем, у кого ход. Держатель мяча —
  * всегда наверху: герои нарисованы лицом к столу, и сверху лицо видно прямо.
  * Клик по герою — передать ему мяч (ход подбирается по смыслу, как в макете).
  *
@@ -26,7 +26,7 @@ const BOX = 136 // герой вписан в квадрат
 const BOX_LEAD = 188 // тот, чей ход, — крупнее остальных
 const SHIFT = 22 // стол чуть ниже центра: крупному держателю наверху нужно место
 const BALL_R = Math.round((TABLE / 2) * 0.46)
-const CHIP = 56 // фишка со знаком Chatick — «мяч» на сукне
+const CHIP = 54 // мяч — «мяч на твоей стороне»
 const HIT_R = HANDS + 72
 const LABEL_R = HANDS - 26 // имя — на сукне перед руками
 const TOP = 270 // угол места держателя: сверху
@@ -159,11 +159,12 @@ function SceneView({ s }: { s: Scene }) {
                 </div>
               )
             })}
+            {/* Мяч лежит на столе, но стоит ровно: стол поворачивается, мяч — обратно, как имена. */}
             <img
-              className={'tg-chip' + (mine ? ` ${heat}` : '')}
-              src={`${import.meta.env.BASE_URL}table/chip.webp`}
+              className={'tg-ball' + (mine ? ` ${heat}` : '')}
+              src={`${import.meta.env.BASE_URL}table/ball.webp`}
               alt=""
-              style={{ left: Math.round(300 + BALL_R * Math.cos(q) - CHIP / 2), top: Math.round(300 + BALL_R * Math.sin(q) - CHIP / 2) }}
+              style={{ left: Math.round(300 + BALL_R * Math.cos(q) - CHIP / 2), top: Math.round(300 + BALL_R * Math.sin(q) - CHIP / 2), rotate: `${-G}deg` }}
             />
             {s.seats.map((p, j) => {
               const r = (seatA(j) * Math.PI) / 180
