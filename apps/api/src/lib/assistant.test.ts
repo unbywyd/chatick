@@ -9,16 +9,20 @@ const projects = [
 const ctx = (over: Partial<Ctx> = {}): Ctx => ({ companyId: 'c', userId: 'u', screen: {}, projects, used: [], ...over })
 
 describe('ассистент компании ничего не удаляет', () => {
-  it('каждый delete_* инструмент ИИ проекта исключён', () => {
+  // Единственное исключение — заметки: базу знаний ведёт в основном сам ИИ, и
+  // владелец решил (13.10.2026), что удалять их он может. Удаление мягкое.
+  const ALLOWED = new Set(['delete_note'])
+  it('каждый delete_* инструмент ИИ проекта исключён, кроме заметок', () => {
     // Сторож: новый удаляющий инструмент в memory.ts не должен молча стать
     // доступен ассистенту компании.
     const deleting = memoryTools('', 'u').tools.map((t) => t.name).filter((n) => /^delete_|_delete$|remove/.test(n))
     expect(deleting.length).toBeGreaterThan(0)
-    for (const n of deleting) expect(EXCLUDED_TOOLS.has(n), n).toBe(true)
+    for (const n of deleting) if (!ALLOWED.has(n)) expect(EXCLUDED_TOOLS.has(n), n).toBe(true)
   })
-  it('в наборе ассистента их нет', () => {
+  it('в наборе ассистента их нет, кроме удаления заметки', () => {
     const names = [...projectTools(ctx()).tools, ...companyTools(ctx()).tools].map((t) => t.name)
-    expect(names.filter((n) => n.startsWith('delete_'))).toEqual([])
+    expect(names.filter((n) => n.startsWith('delete_') && !ALLOWED.has(n))).toEqual([])
+    expect(names).toContain('delete_note')
   })
 })
 

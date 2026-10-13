@@ -617,7 +617,7 @@ companyNotesRoute.get('/:companyId/notes', async (c) => {
  * для них нет). Событие — в комнату проекта для старых окон и каждому в
  * компании в личный канал: веб v2 комнат проектов не слушает.
  */
-async function noteChanged(row: typeof notes.$inferSelect, action: 'create' | 'update' | 'delete', actorId: string) {
+export async function noteChanged(row: typeof notes.$inferSelect, action: 'create' | 'update' | 'delete', actorId: string) {
   if (row.projectId) {
     void logActivity({
       projectId: row.projectId,

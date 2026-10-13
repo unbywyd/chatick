@@ -15,7 +15,7 @@ import { submitAssistantReport, REPORT_KINDS, type ReportKind } from './assistan
 import { createNote, noteToTask, NOTE_TYPES } from '../routes/notes.js'
 import { enqueue as enqueueEmbedding, searchNoteIds, searchTaskIds } from './embeddings.js'
 import { announce } from './announce.js'
-import { canUseKnowledge } from '../routes/notes.js'
+import { canEditKnowledge, canUseKnowledge, noteChanged } from '../routes/notes.js'
 import { richText } from './markdown.js'
 import { timeConfigForProject } from '../routes/time.js'
 import { encrypt } from './crypto.js'
@@ -855,6 +855,14 @@ export function memoryTools(projectId: string, actorUserId: string): { tools: To
         },
         required: ['id'],
       },
+    },
+    {
+      name: 'delete_note',
+      description:
+        'Delete a note by id when the person asks to remove it, or when it is plainly wrong and already replaced by a better entry. ' +
+        'Soft delete: it disappears from lists and search, an admin can restore it. The author deletes their own entries, a company admin — anyone\'s. ' +
+        'If the entry only needs correcting, use update_note instead.',
+      parameters: { type: 'object', properties: { id: { type: 'string' } }, required: ['id'] },
     },
     {
       name: 'note_to_task',
@@ -2335,6 +2343,24 @@ export function memoryTools(projectId: string, actorUserId: string): { tools: To
       void enqueueEmbedding('note', n.id, projectId)
       broadcast(projectId, 'notes', { action: 'update', id: n.id })
       return `Updated note "${n.title}".`
+    },
+    // Заметки — единственное, что ИИ удаляет (решение владельца 13.10.2026): база
+    // знаний ведётся в основном им самим. Удаление мягкое — запись можно вернуть.
+    delete_note: async (args) => {
+      const kbProject = await db.query.projects.findFirst({ where: eq(projects.id, projectId) })
+      if (!kbProject?.companyId || !(await canUseKnowledge(kbProject.companyId, actorUserId))) {
+        return 'PERMISSION DENIED: you are not a member of this company.'
+      }
+      const n = await db.query.notes.findFirst({
+        where: and(eq(notes.id, String(args.id ?? '')), eq(notes.companyId, kbProject.companyId), sql`${notes.deletedAt} is null`),
+      })
+      if (!n) return 'Note not found.'
+      if (!(await canEditKnowledge(kbProject.companyId, actorUserId, n.authorId))) {
+        return 'PERMISSION DENIED: only the author or a company admin can delete this entry.'
+      }
+      await db.update(notes).set({ deletedAt: new Date(), deletedById: actorUserId }).where(eq(notes.id, n.id))
+      void noteChanged(n, 'delete', actorUserId)
+      return `Deleted note "${n.title || n.id}". It can be restored by an admin if needed.`
     },
     note_to_task: async (args) => {
       if (!(await hasPermission(projectId, actorUserId, 'tasks.create'))) return 'PERMISSION DENIED: the author cannot create tasks.'

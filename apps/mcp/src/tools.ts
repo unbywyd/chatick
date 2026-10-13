@@ -1683,6 +1683,33 @@ server.registerTool(
   },
 )
 
+/**
+ * Удалить запись базы знаний. Заметки — единственное, что ассистент удаляет:
+ * базу знаний ведёт в основном он сам, и владелец так решил (13.10.2026).
+ * Удаление мягкое, своё убирает автор, чужое — админ компании (решает мост).
+ */
+server.registerTool(
+  'chatick_note_delete',
+  {
+    title: 'Delete a journal entry',
+    description:
+      'Delete an entry when the person asks, or when it is plainly wrong and already replaced by a better one. ' +
+      'Soft delete: it disappears from lists and search, an admin can restore it. Only the author or a company admin can delete. ' +
+      'If the entry only needs correcting, use chatick_note_update instead.',
+    inputSchema: {
+      project: z.string().describe('Project id'),
+      id: z.string().describe('Note id'),
+    },
+  },
+  async ({ project, id }) => {
+    try {
+      return json(await call({ ...(await need()), projectId: project }, 'DELETE', `/notes/${encodeURIComponent(id)}`))
+    } catch (e) {
+      return fail(e)
+    }
+  },
+)
+
 // --- Журнал работы -----------------------------------------------------------
 
 /**
