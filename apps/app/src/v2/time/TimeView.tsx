@@ -10,11 +10,12 @@ import { ProjectCombo } from './Combo'
 import { Mine, newForm, type Form } from './Mine'
 import { PersonDrawer, Sheet } from './Sheet'
 import { ExportDialog, type ExPerson } from './Export'
+import { ProjectSummary } from './ProjectSummary'
 import { addDays, hm, parseDay, rangeOf, todayKey, useEntries, useMembers, useNow, useReport, useTimeSocket, useWeekStart, type PF, type Per } from './timeData'
 import '../i18n/time'
 import '../styles/time.css'
 
-const PERS: Per[] = ['day', 'week', 'month', 'custom']
+const PERS: Per[] = ['day', 'week', 'month', 'custom', 'all']
 
 /**
  * «Часы» (v2): мои часы и — для менеджера и админа компании — часы по людям.
@@ -61,6 +62,22 @@ export function TimeView() {
   // null — закрыто; 'mine' — свои часы; 'many' — выбранные люди; иначе — id человека.
   const [ex, setEx] = useState<string | null>(null)
   const [toast, setToast] = useState<{ msg: string; undo?: () => Promise<unknown> } | null>(null)
+  // По людям или по проектам — свод часов компании; запоминаем выбор.
+  const [by, setBy] = useState<'people' | 'projects'>(() => {
+    try {
+      return localStorage.getItem('chatick_v2_time_by') === 'projects' ? 'projects' : 'people'
+    } catch {
+      return 'people'
+    }
+  })
+  const chooseBy = (v: 'people' | 'projects') => {
+    setBy(v)
+    try {
+      localStorage.setItem('chatick_v2_time_by', v)
+    } catch {
+      /* без хранилища просто не запомним */
+    }
+  }
   const toastTimer = useRef<number | undefined>(undefined)
 
   const plist = projects.data ?? []
@@ -102,7 +119,9 @@ export function TimeView() {
   }
   const short = (k: string) => parseDay(k).toLocaleDateString(lng, { month: 'short', day: 'numeric' })
   const perLabel =
-    per === 'day'
+    per === 'all'
+      ? t('time.per.all')
+      : per === 'day'
       ? parseDay(range[0]).toLocaleDateString(lng, { weekday: 'short', month: 'short', day: 'numeric' })
       : per === 'month'
         ? parseDay(range[0]).toLocaleDateString(lng, { month: 'long', year: 'numeric' })
@@ -171,7 +190,7 @@ export function TimeView() {
             </button>
           ))}
         </div>
-        {per !== 'custom' ? (
+        {per === 'all' ? null : per !== 'custom' ? (
           <div className="nav2">
             <button onClick={() => shift(-1)} aria-label={t('time.prev')}>
               <Icon name="chevronStart" />
@@ -191,6 +210,15 @@ export function TimeView() {
         )}
         <ProjectCombo value={pf} projects={plist} onPick={setPf} withAll />
         {isSheet && (
+          <div className="seg">
+            {(['people', 'projects'] as const).map((v) => (
+              <button key={v} className={by === v ? 'on' : ''} aria-pressed={by === v} onClick={() => chooseBy(v)}>
+                {t(`time.by.${v}`)}
+              </button>
+            ))}
+          </div>
+        )}
+        {isSheet && by === 'people' && (
           <label className="psq">
             <Icon name="search" sm />
             <input value={pq} onChange={(e) => setPq(e.target.value)} placeholder={t('time.findPerson', { count: people.length })} aria-label={t('time.findPersonAria')} />
@@ -213,7 +241,11 @@ export function TimeView() {
 
       {isSheet ? (
         <>
-          <Sheet report={report.data} loading={report.isLoading} roleOf={roleOf} q={pq} openId={openId} onOpen={(id) => go(`/people/${id}`)} isSel={isSel} setSel={setSel} setAll={setAll} />
+          {by === 'projects' ? (
+            <ProjectSummary report={report.data} loading={report.isLoading} />
+          ) : (
+            <Sheet report={report.data} loading={report.isLoading} roleOf={roleOf} q={pq} openId={openId} onOpen={(id) => go(`/people/${id}`)} isSel={isSel} setSel={setSel} setAll={setAll} />
+          )}
           <p className="note">{t('time.notePeople')}</p>
         </>
       ) : (

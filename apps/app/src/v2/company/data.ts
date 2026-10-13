@@ -12,6 +12,8 @@ export type CoMember = {
   id: string
   role: CompanyRole
   jobTitle: string
+  /** Зона ответственности: ассистент по ней понимает, кому что поручать. */
+  responsibility?: string | null
   user: { id: string; name: string; email: string; avatarUrl: string | null }
 }
 export type TeamRole = 'owner' | 'admin' | 'member'

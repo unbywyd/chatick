@@ -71,8 +71,10 @@ describe('разбор натикавшего', () => {
   it('понимает то же, что и приложение', () => {
     // Копия обязана совпадать с оригиналом хотя бы в правилах, которые
     // человек проверяет глазами.
+    // Панель v2 сознательно строже приложения: только формат счётчика.
+    // «200» в приложении — 2 часа, а на счётчике так время не выглядит.
     expect(parse).toMatch(/до двух цифр — минуты/)
-    expect(panel).toMatch(/КОПИЯ логики parseDuration/)
+    expect(panel).toMatch(/Голые цифры НЕ принимаем/)
   })
 })
 
@@ -103,30 +105,33 @@ describe('поле ведёт себя предсказуемо', () => {
   it('Escape отменяет, Enter применяет', () => {
     // Панель маленькая, промахнуться легко: без отмены случайный клик по
     // времени превращается в ловушку.
-    expect(panel).toMatch(/e\.key === 'Enter'.*commitElapsed/s)
-    expect(panel).toMatch(/e\.key === 'Escape'.*closeElapsedEdit/s)
+    expect(panel).toMatch(/e\.key === 'Enter'\) \{ e\.preventDefault\(\); commitEdit\(\) \}/)
+    expect(panel).toMatch(/e\.key === 'Escape'\) \{ e\.preventDefault\(\); e\.stopPropagation\(\); closeEdit\(\) \}/)
   })
 
   it('поле не мешает таскать окно', () => {
     // Полоса таймера — ручка перетаскивания.
-    const css = panel.slice(panel.indexOf('.elapsed-input {'))
-    expect(css.slice(0, css.indexOf('}'))).toMatch(/-webkit-app-region:\s*no-drag/)
+    // Тащат панель за шапку; таймер с полем — ниже неё, вне области перетаскивания.
+    const head = panel.slice(panel.indexOf('.tr-head {'))
+    expect(head.slice(0, head.indexOf('}'))).toMatch(/-webkit-app-region:\s*drag/)
+    expect(panel.indexOf('id="tInput"')).toBeGreaterThan(panel.indexOf('</header>'))
   })
 
   it('тиканье не затирает набранное', () => {
-    expect(panel).toMatch(/if \(\$\('elapsedEdit'\)\.hidden\)/)
+    expect(panel).toMatch(/const editing = !\$\('tEdit'\)\.hidden/)
+    expect(panel).toMatch(/if \(running && !editing\) \{\s*\$\('tClock'\)\.textContent = clockText\(t\)/)
   })
 
   it('без таймера править нечего', () => {
-    expect(panel).toMatch(/if \(state\.timer && canEditElapsed\) openElapsedEdit\(\)/)
+    expect(panel).toMatch(/const t = state\.timer\s*\n\s*if \(!t \|\| !canEditElapsed\) return/)
   })
 
   it('со старой оболочкой правку не предлагаем', () => {
     // preload живёт ВНУТРИ установленного приложения, а панель грузится с
     // сайта. Приложение лежит в магазине и обновляется не по нашей воле:
     // вызов метода, которого там нет, ронял панель насмерть.
-    expect(panel).toMatch(/typeof window\.panel\.setTimerElapsed === 'function'/)
-    expect(panel).toMatch(/window\.panel\.setTimerElapsed\?\./)
+    expect(panel).toMatch(/const canEditElapsed = typeof P\.setTimerElapsed === 'function'/)
+    expect(panel).toMatch(/P\.setTimerElapsed\?\./)
   })
 
   it('признак объявлен ДО первой отрисовки', () => {
@@ -152,20 +157,21 @@ describe('поле и счётчик — одно состояние', () => {
   it('в поле подставляется РОВНО показанное', () => {
     // Любой пересчёт давал два числа для одного времени: на экране 2:02, в
     // поле 0:02 — и человек правил не то, что видел.
-    expect(panel).toMatch(/inp\.value = elapsedText\(t\)/)
+    expect(panel).toMatch(/inp\.value = clockText\(t\)/)
   })
 
   it('есть чем подтвердить и чем отменить', () => {
     // Без кнопок непонятно, чем закончить правку, а клик мимо терял
     // набранное — на маленькой панели это происходит постоянно.
-    expect(panel).toMatch(/id="elapsedOk"/)
-    expect(panel).toMatch(/id="elapsedCancel"/)
+    expect(panel).toMatch(/id="tOk"/)
+    expect(panel).toMatch(/id="tCancel"/)
+    expect(panel).toMatch(/\$\('tCancel'\)\.onclick = \(\) => closeEdit\(\)/)
   })
 
   it('нажатие галочки не считается уходом', () => {
     // blur срабатывает раньше клика: без проверки правка терялась ровно в
     // тот момент, когда её подтверждали.
-    expect(panel).toMatch(/relatedTarget\.closest\('#elapsedEdit'\)/)
+    expect(panel).toMatch(/relatedTarget\.closest\('#tEdit'\)/)
   })
 })
 
@@ -196,6 +202,8 @@ describe('ввод не даёт напортачить', () => {
     // Панель читает свой ключ. Обновляя только ключ вкладки «Время», я
     // оставлял её ждать опроса — до 30 секунд со старым числом.
     const at = desktop.indexOf('Date.now() - seconds * 1000')
-    expect(desktop.slice(at, at + 900)).toMatch(/'desktop-running'/)
+    expect(desktop.slice(at, at + 900)).toMatch(/refreshTime\(\)/)
+    const fn = desktop.slice(desktop.indexOf('const refreshTime = () => {'))
+    expect(fn.slice(0, fn.indexOf('\n    }'))).toMatch(/queryKey: keys\.running/)
   })
 })

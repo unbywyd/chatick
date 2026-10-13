@@ -42,27 +42,17 @@ describe('страница профиля', () => {
   })
 })
 
-describe('аватар в трее ведёт в профиль', () => {
-  it('это кнопка, а не надпись', () => {
-    // span не нажимается: аватар было видно, но не кликнуть.
-    expect(panel).toMatch(/<button class="avatar me-avatar" id="meAvatar"/)
+describe('профиль из трея', () => {
+  // В v2 аватар открывает меню аккаунта, профиль — его пункт.
+  it('аватар — кнопка, а не надпись', () => {
+    expect(panel).toMatch(/<button class="tr-ib" id="meBtn" type="button"/)
   })
 
-  it('клик открывает страницу профиля', () => {
-    expect(panel).toMatch(/closest\('#meAvatar'\)/)
-    expect(panel).toMatch(/openProject\('\/settings\/profile', null\)/)
+  it('пункт меню открывает страницу профиля', () => {
+    expect(panel).toMatch(/else if \(go === 'profile'\) P\.open\(`\$\{base\}\/settings\/profile`\)/)
   })
 
   it('не мешает таскать окно', () => {
-    // Полоса таймера — ручка перетаскивания.
-    const css = panel.slice(panel.indexOf('.me-avatar {'))
-    expect(css.slice(0, css.indexOf('}'))).toMatch(/-webkit-app-region:\s*no-drag/)
-  })
-
-  it('адрес личный — без компании', () => {
-    // В отличие от часов проекта: профиль не привязан ни к какой компании,
-    // и подставлять её значило бы вести человека не туда.
-    const at = panel.indexOf("closest('#meAvatar')")
-    expect(panel.slice(at, at + 200)).not.toMatch(/companyId/)
+    expect(panel).toMatch(/\.tr-head button \{ -webkit-app-region: no-drag; \}/)
   })
 })

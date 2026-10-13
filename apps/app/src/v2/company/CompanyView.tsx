@@ -424,18 +424,28 @@ function PersonRow({
 }) {
   const { t } = useTranslation('v2')
   const role = t(`company.roles.${m.role}`)
+  const [job, setJob] = useState(false)
   return (
     <div className="co-prow">
+      {job && <JobEdit m={m} onDone={() => setJob(false)} />}
       <span className="co-pj">
         <span className="av lg" style={{ background: personColor(m.user.id) }}>
           {letterOf(m.user.name)}
         </span>
-        <span>
+        <span style={{ minWidth: 0 }}>
           <b>
             {m.user.name}
             {me ? t('company.you') : ''}
           </b>
-          <small>{m.user.email}</small>
+          {/* Должность — видно всем; админ правит по щелчку. */}
+          {admin ? (
+            <button className="co-job" onClick={() => setJob(!job)} title={t('job.edit')}>
+              {m.jobTitle ? <span className="bidi">{m.jobTitle}</span> : <span className="ph">{t('job.add')}</span>}
+              <span> · {m.user.email}</span>
+            </button>
+          ) : (
+            <small className="bidi">{m.jobTitle ? `${m.jobTitle} · ${m.user.email}` : m.user.email}</small>
+          )}
         </span>
       </span>
       <span style={{ position: 'relative' }}>
@@ -590,3 +600,33 @@ function group<T>(list: T[], key: (x: T) => string): Map<string, T[]> {
   return m
 }
 
+/** Должность и зона ответственности человека в компании. Проекты наследуют их. */
+function JobEdit({ m, onDone }: { m: CoMember; onDone: () => void }) {
+  const { t } = useTranslation('v2')
+  const { companyId, flash } = useUi()
+  const refresh = useCoRefresh()
+  const [title, setTitle] = useState(m.jobTitle ?? '')
+  const [resp, setResp] = useState(m.responsibility ?? '')
+  const save = useMutation({
+    mutationFn: () =>
+      api(`/api/v1/companies/${companyId}/members/${m.user.id}`, { method: 'PATCH', body: JSON.stringify({ jobTitle: title.trim(), responsibility: resp.trim() }) }),
+    onSuccess: () => {
+      refresh()
+      flash(t('job.saved', { name: m.user.name }))
+      onDone()
+    },
+    onError: (e) => flash(coError(t, e)),
+  })
+  return (
+    <div className="co-jobx">
+      <input className="nin bidi" autoFocus value={title} maxLength={120} onChange={(e) => setTitle(e.target.value)} placeholder={t('job.title')} aria-label={t('job.title')} />
+      <input className="nin bidi" value={resp} maxLength={300} onChange={(e) => setResp(e.target.value)} placeholder={t('job.resp')} aria-label={t('job.resp')} onKeyDown={(e) => e.key === 'Enter' && save.mutate()} />
+      <button className={'btn-acc' + (save.isPending ? ' dis' : '')} onClick={() => save.mutate()}>
+        {t('proj.save')}
+      </button>
+      <button className="btn" onClick={onDone}>
+        {t('company.cancel')}
+      </button>
+    </div>
+  )
+}

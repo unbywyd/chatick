@@ -981,7 +981,7 @@
           const cnt = unread ? `<span class="n hot">${unread}</span>` : ''
           if (pid) {
             const p = projectById(pid) || { id: pid, name: list[0].projectName || '—' }
-            html += `<button class="tr-gh" type="button" data-project="${esc(pid)}" data-co="${esc(list[0].companyId || coSel || '')}" title="${esc(T('openInApp', 'Opens in Chatick'))}">
+            html += `<button class="tr-gh" type="button" data-project="${esc(pid)}" data-read="1" data-co="${esc(list[0].companyId || coSel || '')}" title="${esc(T('openInApp', 'Opens in Chatick'))}">
                 ${projectLogo(p, 'sm')}<span class="nm">${esc(list[0].projectName || shortName(p))}</span>${cnt}</button>`
           } else {
             const c = company()
@@ -1389,7 +1389,11 @@
         const head = e.target.closest('[data-project]')
         if (head) {
           const co = head.dataset.co || coSel
-          if (co) P.open(`/c/${co}?p=${encodeURIComponent(head.dataset.project)}`)
+          const link = `/c/${co}?p=${encodeURIComponent(head.dataset.project)}`
+          // Из группы уведомлений — с проектом: веб гасит все его уведомления,
+          // человек уходит смотреть их разом (так было и в первой версии).
+          if (co && head.dataset.read && P.openProject) window.panel.openProject(link, head.dataset.project)
+          else if (co) P.open(link)
           return
         }
         const open = e.target.closest('[data-open]')

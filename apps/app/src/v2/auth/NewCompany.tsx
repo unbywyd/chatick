@@ -37,8 +37,8 @@ function Form() {
       void qc.invalidateQueries({ queryKey: keys.companies })
       void qc.invalidateQueries({ queryKey: ['companies'] })
       localStorage.setItem('chatick_v2_company', c.id)
-      // Пустая компания — сразу в управление: там заводят проекты и зовут людей.
-      navigate(`/c/${c.id}/company`, { replace: true })
+      // Пустая компания — первые шаги: проект с языком и приглашения списком.
+      navigate(`/c/${c.id}/welcome`, { replace: true })
     },
   })
   // Своя уже есть — говорим сразу, а не после нажатия: сервер всё равно ответит 409.

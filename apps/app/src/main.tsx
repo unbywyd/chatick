@@ -28,6 +28,8 @@ import { TimeView } from './v2/time/TimeView'
 import { ResourcesView } from './v2/library/ResourcesView'
 import { FilesView } from './v2/library/FilesView'
 import { HistoryView } from './v2/library/HistoryView'
+import { TeamView } from './v2/team/TeamView'
+import { Welcome } from './v2/company/Welcome'
 import { VersionsView } from './v2/versions/VersionsView'
 import { CompanyView } from './v2/company/CompanyView'
 import { SettingsView } from './v2/settings/SettingsView'
@@ -250,6 +252,8 @@ createRoot(document.getElementById('root')!).render(
                 <Route path="files/*" element={<FilesView />} />
                 <Route path="versions/*" element={<VersionsView />} />
                 <Route path="history" element={<HistoryView />} />
+                <Route path="team" element={<TeamView />} />
+                <Route path="welcome" element={<Welcome />} />
                 <Route path="company/*" element={<CompanyView />} />
                 <Route path="settings/:tab?" element={<SettingsView />} />
                 <Route path="notifications" element={<NotificationsView />} />

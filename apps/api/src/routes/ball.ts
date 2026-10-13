@@ -1,10 +1,10 @@
 import { Hono } from 'hono'
 import { zValidator } from '@hono/zod-validator'
 import { z } from 'zod'
-import { and, eq, inArray, isNull, ne, sql, type SQL } from 'drizzle-orm'
+import { and, eq, inArray, isNotNull, isNull, ne, or, sql, type SQL } from 'drizzle-orm'
 import { alias } from 'drizzle-orm/pg-core'
 import { db } from '../db/client.js'
-import { companies, companyMembers, HANDOFF_ACTIONS, notifications, projectMembers, projects, taskHandoffs, tasks, TASK_MOVES, users } from '../db/schema.js'
+import { companies, companyMembers, HANDOFF_ACTIONS, notifications, projectMembers, projects, taskHandoffs, tasks, TASK_MOVES, timeEntries, users } from '../db/schema.js'
 import { requireSession, type SessionEnv } from '../auth.js'
 import { canCreateProjects, companyRoleOf, hasPermission, ownsOrManages, projectRoleOf } from './projects.js'
 import { insertTask, lastReviewFrom, mayHandoff, ownerOf, planHandoff, setOnTable, TABLE_LIMIT, type Via } from '../lib/ball.js'
@@ -87,6 +87,8 @@ export const listFilters = z.object({
   /** held — дольше всех у держателя сверху; due — по сроку; priority; created — новые сверху. */
   sort: z.enum(['held', 'due', 'priority', 'created']).optional(),
   group: z.enum(['move', 'project', 'holder', 'owner']).optional(),
+  /** Задачи одного человека — страница «Команда» показывает их по щелчку. */
+  holder: z.string().optional(),
 })
 export type ListQuery = z.infer<typeof listFilters>
 const listQuery = listFilters.extend({ companyId: z.string().min(1) })
@@ -231,6 +233,7 @@ function filters(q: ListQuery, projectIds: string[]): SQL[] {
     isNull(tasks.deletedAt),
     sql`${tasks.status} not in ${closedSql}`,
     ...(q.move ? [eq(tasks.move, q.move)] : []),
+    ...(q.holder ? [eq(tasks.assigneeId, q.holder)] : []),
   ]
 }
 
@@ -308,6 +311,97 @@ ballRoute.get('/all', zValidator('query', listQuery), async (c) => {
   const { sub } = c.get('session')
   const q = c.req.valid('query')
   return c.json(await allList(sub, await readableProjects(q.companyId, sub), q))
+})
+
+/**
+ * «Команда»: кто что делает и сколько на ком. Простая картина вместо
+ * статистики первой версии: открытые задачи на человеке, сколько из них ждут
+ * его проверки или ответа, сколько просрочено, и идущий таймер.
+ *
+ * Видно всем участникам компании, но считается по тем же проектам, что
+ * «Все»: задачи проекта, куда человека не пускают, в его цифры не попадают,
+ * и над чем коллега работает в закрытом проекте — тоже не видно.
+ */
+ballRoute.get('/team', zValidator('query', z.object({ companyId: z.string().min(1) })), async (c) => {
+  const { sub } = c.get('session')
+  const { companyId } = c.req.valid('query')
+  if (!(await companyRoleOf(companyId, sub))) return c.json({ error: 'Forbidden' }, 403)
+  const readable = await readableProjects(companyId, sub)
+  const ids = readable.map((p) => p.id)
+  const projectBy = new Map(readable.map(({ companyId: _c, ...p }) => [p.id, p]))
+
+  const people = await db
+    .select({ id: users.id, name: users.name, avatarUrl: users.avatarUrl, jobTitle: companyMembers.jobTitle, role: companyMembers.role })
+    .from(companyMembers)
+    .innerJoin(users, eq(users.id, companyMembers.userId))
+    .where(eq(companyMembers.companyId, companyId))
+
+  const counts = ids.length
+    ? await db
+        .select({
+          userId: tasks.assigneeId,
+          total: sql<number>`count(*)::int`,
+          review: sql<number>`(count(*) filter (where ${tasks.move} = 'review'))::int`,
+          answer: sql<number>`(count(*) filter (where ${tasks.move} = 'answer'))::int`,
+          late: sql<number>`(count(*) filter (where ${tasks.dueDate} is not null and ${tasks.dueDate} < now()))::int`,
+        })
+        .from(tasks)
+        .where(and(...filters({}, ids), isNotNull(tasks.assigneeId)))
+        .groupBy(tasks.assigneeId)
+    : []
+  const countBy = new Map(counts.map((r) => [r.userId!, r]))
+
+  const companyProjectIds = (await db.select({ id: projects.id }).from(projects).where(eq(projects.companyId, companyId))).map((p) => p.id)
+  const running = people.length
+    ? await db
+        .select({
+          userId: timeEntries.userId,
+          projectId: timeEntries.projectId,
+          startedAt: timeEntries.startedAt,
+          task: { id: tasks.id, number: tasks.number, title: tasks.title, projectId: tasks.projectId },
+        })
+        .from(timeEntries)
+        .leftJoin(tasks, eq(tasks.id, timeEntries.taskId))
+        .where(
+          and(
+            isNull(timeEntries.endedAt),
+            inArray(
+              timeEntries.userId,
+              people.map((p) => p.id),
+            ),
+            or(eq(timeEntries.companyId, companyId), companyProjectIds.length ? inArray(timeEntries.projectId, companyProjectIds) : sql`false`),
+          ),
+        )
+    : []
+  const runBy = new Map(running.map((r) => [r.userId, r]))
+
+  return c.json({
+    people: people
+      .map((p) => {
+        const n = countBy.get(p.id)
+        const r = runBy.get(p.id)
+        return {
+          id: p.id,
+          name: p.name,
+          avatarUrl: p.avatarUrl,
+          jobTitle: p.jobTitle,
+          role: p.role,
+          open: n?.total ?? 0,
+          review: n?.review ?? 0,
+          answer: n?.answer ?? 0,
+          late: n?.late ?? 0,
+          // Проект и задачу таймера — только если их видно смотрящему.
+          now: r
+            ? {
+                startedAt: r.startedAt,
+                project: r.projectId ? (projectBy.get(r.projectId) ?? null) : null,
+                task: r.task?.id && projectBy.has(r.task.projectId) ? { id: r.task.id, number: r.task.number, title: r.task.title } : null,
+              }
+            : null,
+        }
+      })
+      .sort((a, b) => Number(Boolean(b.now)) - Number(Boolean(a.now)) || b.open - a.open || a.name.localeCompare(b.name)),
+  })
 })
 
 const closedQuery = z.object({

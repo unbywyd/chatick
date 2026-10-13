@@ -645,6 +645,19 @@ export async function assistantReply(input: {
   ])
   if (!company) return null
   const ctx: Ctx = { companyId: input.companyId, userId: input.userId, screen: input.screen, projects: projectsList, used: [] }
+  // Язык каждого проекта — словами, а не «угадай по тексту»: задачи и
+  // записки пишутся на нём, а по последним сообщениям его не всегда видно.
+  const langBy = new Map(
+    projectsList.length
+      ? (await db.select({ id: projects.id, aiConfig: projects.aiConfig }).from(projects).where(inArray(projects.id, projectsList.map((x) => x.id)))).map((r) => {
+          try {
+            return [r.id, (JSON.parse(r.aiConfig || '{}') as { language?: string }).language ?? null] as const
+          } catch {
+            return [r.id, null] as const
+          }
+        })
+      : [],
+  )
 
   // История: последние реплики этого человека в этой компании, по объёму, а не
   // по штукам — одна простыня не должна вытеснять остальное.
@@ -697,7 +710,7 @@ export async function assistantReply(input: {
   const reply = await completeWithTools(cfg, {
     system: [
       `You are the assistant of the company "${company.name}" in Chatick, talking privately with ${user?.name ?? 'a member'}.`,
-      `You work across all projects this person is in: ${projectsList.map((x) => `${x.name} (${x.id})`).join('; ') || 'none yet'}.`,
+      `You work across all projects this person is in: ${projectsList.map((x) => `${x.name} (${x.id}${langBy.get(x.id) ? `, language: ${langBy.get(x.id)}` : ''})`).join('; ') || 'none yet'}.`,
       screen,
       attachedNote,
       'Project tools take "project" (id or name); omit it to use the project open on the screen. When nothing is open and the person has several projects, ask which one — or answer across all of them with company tools.',

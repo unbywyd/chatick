@@ -43,9 +43,10 @@ describe('панель оживает сама', () => {
   it('ни один запрос панели не остаётся без опроса', () => {
     // Общее правило вместо перечисления: следующий добавленный запрос попадёт
     // под ту же проверку, а не повторит эту историю.
-    for (const key of ['companies', 'me', 'inbox', 'desktop-running', 'desktop-tasks', 'bridge-sessions']) {
-      expect(query(key), `${key} без refetchInterval`).toMatch(/refetchInterval:/)
-    }
+    // Каждый useQuery и каждая пачка useQueries в мосте десктопа опрашиваются.
+    const blocks = desktop.split(/use(?:Query|Queries)\(\{/).slice(1).map((b) => b.slice(0, b.indexOf('\n  })')))
+    expect(blocks.length).toBeGreaterThanOrEqual(6)
+    for (const b of blocks) expect(b, b.slice(0, 120)).toMatch(/refetchInterval:/)
   })
 })
 

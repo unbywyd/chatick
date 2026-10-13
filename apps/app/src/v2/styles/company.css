@@ -39,3 +39,38 @@
 .app .psx-accr{display:flex;align-items:center;gap:12px;justify-content:space-between}
 .app .psx-accr > span{font-size:13.5px;color:var(--ink2)}
 .app .co-prow.co-arch{grid-template-columns:minmax(0,1fr) auto}
+.app .co-job{display:block;max-width:100%;text-align:start;font-size:12.5px;color:var(--ink3);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;border-radius:6px}
+.app .co-job:hover{color:var(--ink)}
+.app .co-job .ph{text-decoration:underline dotted;text-underline-offset:3px}
+.app .co-jobx{grid-column:1/-1;order:2;display:flex;gap:8px;align-items:center;padding:4px 0 6px}
+.app .co-jobx .nin{height:40px}
+
+/* «Команда»: кто что делает и сколько на ком. */
+.app .tm-row{display:grid;grid-template-columns:minmax(0,1.3fr) minmax(0,1.5fr) 80px 90px 90px 100px;gap:14px;align-items:center;padding:10px 14px;border-radius:16px;width:100%;text-align:start}
+.app button.tm-row:hover,.app .tm-row.sel{background:var(--paper)}
+.app .tm-h{font-size:12.5px;color:var(--ink3);font-weight:500;padding-block:6px}
+.app .tm-h > span:nth-child(n+3),.app .tm-n{text-align:center}
+.app .tm-n{font-weight:600;font-variant-numeric:tabular-nums}
+.app .tm-n.zero{color:var(--ink3);font-weight:400}
+.app .tm-n.rev{color:var(--rev)}
+.app .tm-n.ask{color:var(--ask)}
+.app .tm-n.late{color:var(--signal)}
+.app .tm-now{display:flex;align-items:center;gap:8px;min-width:0;font-size:13.5px}
+.app .tm-now i{width:8px;height:8px;border-radius:50%;background:var(--ok,#2E9E5B);flex:none;box-shadow:0 0 0 3px color-mix(in oklab,var(--ok,#2E9E5B) 20%,transparent)}
+.app .tm-now .bidi{min-width:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.app .tm-now time{color:var(--ink3);font-variant-numeric:tabular-nums;flex:none}
+.app .tm-now.idle{color:var(--ink3)}
+.app .tm-list{display:grid;gap:4px}
+.app .tm-task{display:grid;gap:6px;padding:10px 12px;border-radius:12px;text-align:start;width:100%}
+.app .tm-task:hover{background:var(--paper)}
+.app .tm-t{font-weight:500;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.app .tm-m{display:flex;align-items:center;gap:8px;font-size:12.5px;color:var(--ink3);flex-wrap:wrap}
+.app .tm-row .av img{width:100%;height:100%;border-radius:inherit;object-fit:cover}
+
+/* Первые шаги новой компании */
+.app .wl{display:grid;place-items:start center;padding-top:56px}
+.app .wl-card{width:min(560px,100%);background:var(--sheet);border-radius:22px;padding:28px 30px 26px;box-shadow:0 1px 2px rgba(0,0,0,.04)}
+.app .wl-step{margin:0 0 8px;font-size:12.5px;font-weight:600;color:var(--ink3);text-transform:uppercase;letter-spacing:.04em}
+.app .wl .head{margin:0 0 6px}
+.app .wl .sub{margin:0 0 8px}
+.app .wl .psx-ta{margin-top:10px}

@@ -38,7 +38,7 @@ export type Report = { people: ReportPerson[]; projects: ReportProject[]; totalM
 
 export type Member = { role: CompanyRole; user: { id: string; name: string; email: string; avatarUrl: string | null } }
 
-export type Per = 'day' | 'week' | 'month' | 'custom'
+export type Per = 'day' | 'week' | 'month' | 'custom' | 'all'
 /** Фильтр проекта: всё, конкретный проект или «без проекта». */
 export type PF = 'all' | 'none' | string
 
@@ -90,6 +90,8 @@ export function parseDur(t: string): number | null {
 /** Границы периода [с, по] — ключи дней. Неделя начинается с дня из настроек компании. */
 export function rangeOf(per: Per, anchor: string, cFrom: string, cTo: string, weekStart: number): [string, string] {
   if (per === 'day') return [anchor, anchor]
+  // «Всё время»: с запасом в прошлое — раньше 2020-го учёта в Chatick не было.
+  if (per === 'all') return ['2020-01-01', dayKey(new Date())]
   if (per === 'week') {
     const wd = (parseDay(anchor).getDay() - weekStart + 7) % 7
     const s = addDays(anchor, -wd)

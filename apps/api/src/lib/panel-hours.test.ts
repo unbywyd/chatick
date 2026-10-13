@@ -12,48 +12,33 @@ const here = import.meta.dirname
 const panel = readFileSync(join(here, '../../../desktop/panel.html'), 'utf8')
 const strings = readFileSync(join(here, '../../../app/src/hooks/useDesktop.ts'), 'utf8')
 
-describe('кнопка часов в панели', () => {
-  it('ведёт в часы ПРОЕКТА, а не компании', () => {
-    // Компанейская вкладка «Часы» показывает больше, но открывается только
-    // руководству (canManage в StartScreen). Рядовой участник попал бы в
-    // настройки — то есть в никуда.
-    expect(panel).toMatch(/\/c\/\$\{companyId\}\/p\/\$\{id\}\/time/)
+describe('«Мои часы» в панели', () => {
+  // В v2 часы — на компанию (/c/<компания>/time, проект — фильтром ?p=):
+  // отдельной страницы часов проекта больше нет.
+  it('ведёт в часы компании, выбранной в панели', () => {
+    expect(panel).toMatch(/const base = coSel \? `\/c\/\$\{coSel\}` : null/)
+    expect(panel).toMatch(/if \(go === 'hours'\) P\.open\(`\$\{base\}\/time`\)/)
   })
 
-  it('без компании ссылки нет, и кнопка прячется', () => {
-    // Маршрут в приложении — /c/<companyId>/p/<id>/…; без компании он не
-    // совпадает ни с чем и открывает пустой роутер.
-    const fn = panel.slice(panel.indexOf('const openHoursLink'))
-    expect(fn.slice(0, fn.indexOf('\n      }'))).toMatch(/companyId \?.*: null/s)
-    expect(panel).toMatch(/openHoursLink\(id\) \|\| '\/start'/)
+  it('без компании пункт ничего не открывает', () => {
+    expect(panel).toMatch(/if \(!base\) return\n\s*if \(go === 'hours'\)/)
   })
 
-  it('кнопка не мешает таскать окно', () => {
-    // Полоса таймера — ручка перетаскивания (-webkit-app-region: drag).
-    // Кнопка внутри неё обязана быть no-drag, иначе по ней не нажать.
-    const css = panel.slice(panel.indexOf('.hours-btn {'))
-    expect(css.slice(0, css.indexOf('}'))).toMatch(/-webkit-app-region:\s*no-drag/)
-  })
-
-  it('переход к часам не гасит уведомления проекта', () => {
-    // projectId в panel:open означает «ушёл разбирать проект». Часы — не
-    // разбор дел, и гасить бейдж за это нельзя.
-    expect(panel).toMatch(/openProject\(id \? openHoursLink/)
+  it('пункт меню не мешает таскать окно', () => {
+    // Тащат за шапку; меню аккаунта — поверх списка, вне области перетаскивания.
+    expect(panel).toMatch(/\.tr-head button \{ -webkit-app-region: no-drag; \}/)
   })
 
   it('подпись приходит переводом, а не зашита', () => {
-    expect(strings).toMatch(/openHours: t\('desktop\.openHours'\)/)
-    expect(panel).toMatch(/T\('openHours'/)
+    expect(strings).toMatch(/hours: tv\('tray\.hours'\)/)
+    expect(panel).toMatch(/T\('hours'/)
   })
 })
 
-describe('кнопка часов срабатывает, а не притворяется', () => {
+describe('пункт часов срабатывает, а не притворяется', () => {
   it('ссылка считается в момент клика, а не при отрисовке', () => {
-    // Замкнув ссылку при отрисовке, кнопку получали живой, а ссылку пустой:
-    // панель показывается сразу, список проектов приезжает следом. Клик тогда
-    // молча не делал ничего — и отладить это нечем, консоли в панели нет.
-    expect(panel).toMatch(/closest\('#hoursBtn'\)/)
-    expect(panel).toMatch(/currentTimerProject\(\)/)
-    expect(panel).toMatch(/hours\.hidden = !selId/)
+    const at = panel.indexOf("const go = e.target.closest('[data-go]')?.dataset.go")
+    expect(at).toBeGreaterThan(-1)
+    expect(panel.slice(at, at + 400)).toMatch(/const base = coSel/)
   })
 })
