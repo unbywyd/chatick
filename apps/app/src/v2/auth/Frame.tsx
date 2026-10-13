@@ -39,9 +39,8 @@ export function AuthLayout({ children }: { children: React.ReactNode }) {
     <AuthFrame kind="au">
       <aside className="lft">
         <div className="lgo">
-          <i>
-            <b />
-          </i>
+          {/* Знак — тот же, что у установленного приложения: новый появится вместе с его обновлением. */}
+          <img src={`${import.meta.env.BASE_URL}favicon.svg`} alt="" />
           Chatick
         </div>
         {/* Языки — там, где в макете были кнопки прототипа: на входе шапки нет. */}

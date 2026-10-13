@@ -223,6 +223,11 @@ export async function api<T>(path: string, init: RequestInit = {}, scope: Auth =
     },
   })
   const body = (await res.json().catch(() => ({}))) as { error?: string }
+  // Сервер не принимает сохранённый вход: сессию отозвали, она истекла или
+  // токен от другой базы. Снимаем его — экраны увидят «не вошёл» и уведут на
+  // вход; иначе окно ждало данных, которых не будет, и оставалось пустым.
+  // Только тот же токен: за время запроса человек мог уже войти заново.
+  if (res.status === 401 && token && body.error === 'Unauthorized' && getSessionToken() === token) logout()
   if (!res.ok) throw new ApiError(res.status, body.error ?? res.statusText, body)
   return body as T
 }

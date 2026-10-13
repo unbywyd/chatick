@@ -7,8 +7,7 @@
 .app.au{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);min-height:100vh;font-size:15px}
 .au .lft{background:#1F2B1B;color:#EEF3E6;position:relative;overflow:hidden;display:flex;flex-direction:column;padding:40px 48px}
 .au .lgo{display:flex;align-items:center;gap:10px;font-weight:700;font-size:18px;color:#EEF3E6;text-decoration:none}
-.au .lgo > i{width:32px;height:32px;border-radius:10px;background:var(--accent);display:grid;place-items:center}
-.au .lgo > i > b{width:13px;height:10px;border-radius:52% 48% 46% 54% / 60% 55% 45% 40%;background:#B5763A}
+.au .lgo > img{width:32px;height:32px;display:block}
 .au .lft h2{font-size:34px;letter-spacing:-.03em;line-height:1.08;margin:0;font-weight:700;max-width:520px}
 .au .lft h2 > em{font-style:normal;color:var(--accent)}
 .au .lft p{color:#B9C4AE;margin:10px 0 0;font-size:15px}
