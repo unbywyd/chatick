@@ -25,10 +25,13 @@ import { useBallActions } from './actions'
 import { QuickInput, type QuickInputHandle } from './QuickInput'
 import { DueCell, MoveCell, PersonCell, PrioFlag } from './RowEdit'
 import { orderProjects, ProjectPrefsPanel, useProjectPrefs } from './ProjectPrefs'
+import { BulkBar, EmptyStart, RowMenu, SortMore, TasksMenu, type ExtraSort } from './ListTools'
+import { I } from '../task/parts'
 import {
   dueDiff,
   dueGroup,
   dueText,
+  fmtHm,
   heatOf,
   heldDays,
   isImportant,
@@ -42,7 +45,7 @@ import {
 
 type Tab = 'mine' | 'from' | 'all'
 type Focus = 'fresh' | 'prio' | 'late' | 'rev' | 'ans' | 'long'
-type SortKey = 'id' | 'title' | 'prio' | 'mv' | 'due' | 'who' | 'wait'
+type SortKey = 'id' | 'title' | 'prio' | 'mv' | 'due' | 'who' | 'wait' | ExtraSort
 type GroupBy = 'due' | 'proj' | 'person' | 'none'
 
 const FOCUS: [Focus, string][] = [
@@ -118,6 +121,22 @@ export function TasksView() {
     localStorage.setItem('chatick_v2_tab', v)
   }
 
+  // Поиск задачи по номеру или названию — в пределах вкладки и проекта.
+  const [q, setQ] = useState('')
+  const qs = q.trim().toLowerCase()
+  const hit = (i: BallItem) => !qs || i.title.toLowerCase().includes(qs) || i.number.toLowerCase().includes(qs) || i.number.replace(/\D/g, '') === qs
+  // Выбранные строки (массовые действия) и меню по правому клику.
+  const [sel, setSel] = useState<Set<string>>(() => new Set())
+  const [menu, setMenu] = useState<{ item: BallItem; x: number; y: number } | null>(null)
+  const toggleSel = (id: string) =>
+    setSel((prev) => {
+      const n = new Set(prev)
+      if (n.has(id)) n.delete(id)
+      else n.add(id)
+      return n
+    })
+  useEffect(() => setSel(new Set()), [tab, project])
+
   const myId = me.data?.id
   const inProj = (i: BallItem) => !project || i.project?.id === project
   const mineAll = mine.data ?? []
@@ -133,7 +152,7 @@ export function TasksView() {
     ans: (i) => i.ball.move === 'answer' && !i.ball.waitingClientSince,
     long: (i) => heatOf(i.ball.move, i.ball.heldSince) === 'burn' && !i.ball.waitingClientSince,
   }
-  const list = focus ? src.filter(F[focus]) : src
+  const list = (focus ? src.filter(F[focus]) : src).filter(hit)
 
   // «От кого» в «На мне» — кто отдал мяч (последний ход), иначе владелец.
   // В «От меня» и «Все» — у кого он сейчас.
@@ -149,6 +168,9 @@ export function TasksView() {
       else if (sortK === 'who') r = (personOf(a)?.name ?? '').localeCompare(personOf(b)?.name ?? '')
       else if (sortK === 'wait') r = heldDays(b.ball.heldSince) - heldDays(a.ball.heldSince)
       else if (sortK === 'prio') r = Number(isImportant(b.priority)) - Number(isImportant(a.priority))
+      else if (sortK === 'est') r = (b.estimateMinutes ?? -1) - (a.estimateMinutes ?? -1)
+      else if (sortK === 'created') r = b.createdAt.localeCompare(a.createdAt)
+      else if (sortK === 'blk') r = (b.blockedBy ?? 0) - (a.blockedBy ?? 0)
       if (sortK) return r * sortD || (a.dueDate ?? '9999').localeCompare(b.dueDate ?? '9999')
       return Number(isImportant(b.priority)) - Number(isImportant(a.priority)) || (a.dueDate ?? '').localeCompare(b.dueDate ?? '')
     }
@@ -264,6 +286,10 @@ export function TasksView() {
             </button>
           </div>
         )}
+        <label className="rsearch tq">
+          <Icon name="search" sm />
+          <input type="search" value={q} onChange={(e) => setQ(e.target.value)} placeholder={t('lt.find')} aria-label={t('lt.find')} />
+        </label>
         <div style={{ flex: 1 }} />
         {FOCUS.map(([f, dot]) => {
           const c = src.filter(F[f]).length
@@ -288,6 +314,17 @@ export function TasksView() {
             {sortBtn('id', t('tasks.lh.id'))}
             {sortBtn('title', t('tasks.lh.title'))}
             {sortBtn('prio', t('tasks.lh.prio'))}
+            <SortMore
+              value={sortK === 'est' || sortK === 'created' || sortK === 'blk' ? sortK : null}
+              dir={sortD}
+              onPick={(k) => {
+                if (k && k === sortK) setSortD(sortD === 1 ? -1 : 1)
+                else {
+                  setSortK(k)
+                  setSortD(1)
+                }
+              }}
+            />
           </span>
           <span>{sortBtn('mv', t('tasks.lh.mv'))}</span>
           <span>{sortBtn('due', t('tasks.lh.due'))}</span>
@@ -295,7 +332,13 @@ export function TasksView() {
             {sortBtn('who', tab === 'mine' ? t('tasks.lh.from') : t('tasks.lh.holder'))}
             {sortBtn('wait', t('tasks.lh.wait'))}
           </span>
-          <span style={{ textAlign: 'end' }}>
+          <span className="lh-end">
+            <TasksMenu
+              items={list}
+              projects={projects.data ?? []}
+              project={project}
+              label={project ? shortProject(projects.data?.find((p) => p.id === project)?.name ?? '') : t(`tasks.tab${tab === 'mine' ? 'Mine' : tab === 'from' ? 'From' : 'All'}`)}
+            />
             {!grouped && (
             <button
               className={'lh-g' + (grpBy !== 'due' ? ' on' : '')}
@@ -321,7 +364,18 @@ export function TasksView() {
                   <span className="n">{g.rows.length}</span>
                 </div>
                 {g.rows.map((i, n) => (
-                  <Row key={i.id} item={i} tab={tab} first={n === 0} myId={myId} person={personOf(i)} />
+                  <Row
+                    key={i.id}
+                    item={i}
+                    tab={tab}
+                    first={n === 0}
+                    myId={myId}
+                    person={personOf(i)}
+                    picked={sel.has(i.id)}
+                    picking={sel.size > 0}
+                    onPick={() => toggleSel(i.id)}
+                    onMenu={(x, y) => setMenu({ item: i, x, y })}
+                  />
                 ))}
               </div>
             )
@@ -335,19 +389,40 @@ export function TasksView() {
                 <span className="nm bidi">{g.label}</span>
                 <span className="pgc">{g.rows.length}</span>
               </button>
-              {open && g.rows.map((i, n) => <Row key={i.id} item={i} tab={tab} first={n === 0} myId={myId} person={personOf(i)} />)}
+              {open &&
+                g.rows.map((i, n) => (
+                  <Row
+                    key={i.id}
+                    item={i}
+                    tab={tab}
+                    first={n === 0}
+                    myId={myId}
+                    person={personOf(i)}
+                    picked={sel.has(i.id)}
+                    picking={sel.size > 0}
+                    onPick={() => toggleSel(i.id)}
+                    onMenu={(x, y) => setMenu({ item: i, x, y })}
+                  />
+                ))}
             </div>
           )
         })}
-        {!loading && !groups.length && (
-          <div className="none">
-            {focus ? t('tasks.noneFilter') : tab === 'mine' ? t('tasks.noneMine') : tab === 'from' ? t('tasks.noneFrom') : t('tasks.noneAll')}
-          </div>
+        {!loading && !groups.length && tab === 'mine' && !focus && !qs && !mineAll.length && !fromAll.length ? (
+          <EmptyStart onQuick={() => document.querySelector<HTMLElement>('.newt [contenteditable], .newt input')?.focus()} />
+        ) : (
+          !loading &&
+          !groups.length && (
+            <div className="none">
+              {qs ? t('lt.noHits', { q }) : focus ? t('tasks.noneFilter') : tab === 'mine' ? t('tasks.noneMine') : tab === 'from' ? t('tasks.noneFrom') : t('tasks.noneAll')}
+            </div>
+          )
         )}
         {loading && <div className="none">{t('common.loading')}</div>}
         {/* Фокус-фильтры — про текущую работу; закрытым под ними не место. */}
-        {!focus && <ClosedBlock key={`${tab}:${project ?? ''}`} tab={tab} project={project} />}
+        {!focus && !qs && <ClosedBlock key={`${tab}:${project ?? ''}`} tab={tab} project={project} />}
       </div>
+      {sel.size > 0 && <BulkBar items={src.filter((i) => sel.has(i.id))} onClear={() => setSel(new Set())} />}
+      {menu && <RowMenu item={menu.item} x={menu.x} y={menu.y} myId={myId} onClose={() => setMenu(null)} />}
     </div>
   )
 }
@@ -481,7 +556,27 @@ export function Carousel({
   )
 }
 
-function Row({ item: i, tab, first, myId, person }: { item: BallItem; tab: Tab; first: boolean; myId?: string; person: BallItem['owner'] }) {
+function Row({
+  item: i,
+  tab,
+  first,
+  myId,
+  person,
+  picked,
+  picking,
+  onPick,
+  onMenu,
+}: {
+  item: BallItem
+  tab: Tab
+  first: boolean
+  myId?: string
+  person: BallItem['owner']
+  picked: boolean
+  picking: boolean
+  onPick: () => void
+  onMenu: (x: number, y: number) => void
+}) {
   const { t, i18n } = useTranslation('v2')
   const { openTask } = useUi()
   const a = useBallActions(i, myId)
@@ -503,9 +598,22 @@ function Row({ item: i, tab, first, myId, person }: { item: BallItem; tab: Tab; 
     ? t('wait.since', { date: new Date(i.ball.waitingClientSince).toLocaleDateString(i18n.language, { month: 'short', day: 'numeric' }) })
     : waitText(t, i.ball.heldSince)
   const p = i.project
+  // Возраст задачи: с какого дня она вообще существует (не путать с «ждёт»).
+  const age = Math.floor((Date.now() - new Date(i.createdAt).getTime()) / 86_400_000)
   return (
-    <div className={'row' + (first ? ' first' : '') + (i.isNew ? ' fresh' : '')}>
-      <ProjectLogo project={p} title={p?.name} />
+    <div
+      className={'row' + (first ? ' first' : '') + (i.isNew ? ' fresh' : '') + (picked ? ' picked' : '') + (picking ? ' picking' : '')}
+      onContextMenu={(e) => {
+        e.preventDefault()
+        onMenu(e.clientX, e.clientY)
+      }}
+    >
+      <span className="rsel">
+        <ProjectLogo project={p} title={p?.name} />
+        <button className={'rsel-cb' + (picked ? ' on' : '')} role="checkbox" aria-checked={picked} aria-label={t('lt.pick', { id: i.number })} onClick={onPick}>
+          {picked && <Icon name="check" sm />}
+        </button>
+      </span>
       <div style={{ minWidth: 0 }}>
         <button className="ttl bidi" onClick={() => openTask(i.id)}>
           {i.title}
@@ -516,6 +624,28 @@ function Row({ item: i, tab, first, myId, person }: { item: BallItem; tab: Tab; 
               Флажок важности — в конце: невидимый у обычных задач, он не сдвигает строку. */}
           <span className="tnum">{i.number}</span>
           <span className="pn">{p ? shortProject(p.name) : ''}</span>
+          {(i.blockedBy ?? 0) > 0 && (
+            <span className="rx lock" title={t('lt.blocked', { count: i.blockedBy })}>
+              <I name="lock" sm />
+            </span>
+          )}
+          {i.estimateMinutes ? (
+            <span className="rx" title={t('lt.estimate')}>
+              <Icon name="clock" sm />
+              {fmtHm(i.estimateMinutes)}
+            </span>
+          ) : null}
+          {(i.files ?? 0) > 0 && (
+            <span className="rx" title={t('lt.files', { count: i.files })}>
+              <Icon name="attach" sm />
+              {i.files}
+            </span>
+          )}
+          {age >= 1 && (
+            <span className="rx age" title={t('lt.created', { date: new Date(i.createdAt).toLocaleDateString(i18n.language, { day: 'numeric', month: 'short', year: 'numeric' }) })}>
+              {t('lt.age', { count: age })}
+            </span>
+          )}
           <PrioFlag item={i} />
         </div>
       </div>
@@ -676,15 +806,21 @@ function newLine(t: TFunction, i: BallItem) {
  * Пока человек пишет, сервер разбирает строку (preview) — справа видно, куда
  * и кому уйдёт задача. Без # — проект, выбранный в карусели, иначе основной.
  */
+/** «Сегодня» и пояс человека: от них сервер считает «завтра» и «до пятницы». */
+const here = () => {
+  const d = new Date()
+  return { today: `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`, tzOffset: d.getTimezoneOffset() }
+}
+
 function QuickAdd({ projects, onCreated }: { projects: CompanyProject[]; onCreated: (toMe: boolean) => void }) {
-  const { t } = useTranslation('v2')
+  const { t, i18n } = useTranslation('v2')
   const { companyId, project, flash, base } = useUi()
   const me = useMe()
   const navigate = useNavigate()
   const refresh = useRefreshBall()
   const input = useRef<QuickInputHandle>(null)
   const [text, setText] = useState('')
-  const [preview, setPreview] = useState<{ project: { id: string; name: string; color: string | null }; assignee: { id: string; name: string } | null } | null>(null)
+  const [preview, setPreview] = useState<{ project: { id: string; name: string; color: string | null }; assignee: { id: string; name: string } | null; due?: string | null } | null>(null)
   const [error, setError] = useState<string | null>(null)
   // Ошибку разбора показываем после попытки создать, а не на каждую букву:
   // «напиши, что сделать» под полем, где пишут, только мешает.
@@ -706,7 +842,7 @@ function QuickAdd({ projects, onCreated }: { projects: CompanyProject[]; onCreat
     const h = window.setTimeout(() => {
       api<{ preview: NonNullable<typeof preview> }>('/api/v1/ball/quick', {
         method: 'POST',
-        body: JSON.stringify({ companyId, text: s, preview: true, projectId: project ?? undefined }),
+        body: JSON.stringify({ companyId, text: s, preview: true, projectId: project ?? undefined, ...here() }),
       })
         .then((r) => {
           setPreview(r.preview)
@@ -724,7 +860,7 @@ function QuickAdd({ projects, onCreated }: { projects: CompanyProject[]; onCreat
     mutationFn: () =>
       api<{ task: { id: string; title: string; project: { name: string }; assignee: { id: string; name: string } | null } }>('/api/v1/ball/quick', {
         method: 'POST',
-        body: JSON.stringify({ companyId, text: text.trim(), projectId: project ?? undefined }),
+        body: JSON.stringify({ companyId, text: text.trim(), projectId: project ?? undefined, ...here() }),
       }),
     onSuccess: (r) => {
       input.current?.clear()
@@ -772,6 +908,12 @@ function QuickAdd({ projects, onCreated }: { projects: CompanyProject[]; onCreat
           <span className="pin" title={t('tasks.toProject')}>
             <ProjectLogo project={pin} size="xs" />
             <span className="bidi">{shortProject(pin.name)}</span>
+          </span>
+        )}
+        {text.trim() && preview?.due && (
+          <span className="pin" title={t('tasks.dueWord')}>
+            <Icon name="calendar" sm />
+            <span>{dueText(t, `${preview.due}T12:00:00`, i18n.language)}</span>
           </span>
         )}
         {text.trim() && who && (

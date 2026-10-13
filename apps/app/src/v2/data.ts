@@ -23,6 +23,11 @@ export type BallItem = {
   priority: string
   dueDate: string | null
   createdAt: string
+  estimateMinutes?: number | null
+  /** Сколько вложений у задачи. */
+  files?: number
+  /** Сколько незакрытых задач её держат: больше нуля — замок в строке. */
+  blockedBy?: number
   /** Только у закрытой задачи — когда закрыли. */
   closedAt?: string | null
   project: ProjectRef | null

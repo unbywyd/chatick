@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { matchPerson, matchProject, parseQuick } from './quick-task.js'
+import { matchPerson, matchProject, parseQuick, resolveDue } from './quick-task.js'
 
 describe('parseQuick', () => {
   it('название, @кто и #проект в любом месте строки', () => {
@@ -84,5 +84,53 @@ describe('matchProject', () => {
     expect(pick('Mobile')).toBe('3')
     expect(pick('Start')).toBe('ambiguous')
     expect(pick('nope')).toBe('none')
+  })
+})
+
+describe('срок в быстрой строке', () => {
+  it('!срок — в любом месте', () => {
+    expect(parseQuick('сверстать шапку !завтра @Элиша')).toEqual({ title: 'сверстать шапку', people: ['Элиша'], projects: [], due: { days: 1 } })
+    expect(parseQuick('!пт отчёт').due).toEqual({ weekday: 5 })
+    expect(parseQuick('отчёт !20.10').due).toEqual({ day: 20, month: 10 })
+    expect(parseQuick('отчёт !3д').due).toEqual({ days: 3 })
+  })
+  it('не срок после ! — остаётся в названии', () => {
+    const p = parseQuick('срочно !важно поправить')
+    expect(p.due).toBeUndefined()
+    expect(p.title).toContain('!важно поправить')
+  })
+  it('в конце строки: сегодня/завтра — без предлога', () => {
+    expect(parseQuick('позвонить клиенту завтра')).toMatchObject({ title: 'позвонить клиенту', due: { days: 1 } })
+    expect(parseQuick('call the client tomorrow').due).toEqual({ days: 1 })
+  })
+  it('день недели и дата в конце — только с предлогом', () => {
+    expect(parseQuick('сдать макет до пятницы')).toMatchObject({ title: 'сдать макет', due: { weekday: 5 } })
+    expect(parseQuick('отчёт к 20.10')).toMatchObject({ title: 'отчёт', due: { day: 20, month: 10 } })
+    expect(parseQuick('ship it by friday').due).toEqual({ weekday: 5 })
+    expect(parseQuick('отчёт за пятницу')).toEqual({ title: 'отчёт за пятницу', people: [], projects: [] })
+    expect(parseQuick('сводка 20.10')).toEqual({ title: 'сводка 20.10', people: [], projects: [] })
+  })
+  it('«завтра» в середине — часть названия', () => {
+    expect(parseQuick('позвонить завтра клиенту')).toEqual({ title: 'позвонить завтра клиенту', people: [], projects: [] })
+  })
+})
+
+describe('срок → дата', () => {
+  // 13.10.2026 — вторник
+  const today = '2026-10-13'
+  it('через дни', () => {
+    expect(resolveDue({ days: 0 }, today)).toBe('2026-10-13')
+    expect(resolveDue({ days: 1 }, today)).toBe('2026-10-14')
+    expect(resolveDue({ days: 30 }, today)).toBe('2026-11-12')
+  })
+  it('день недели — ближайший, сегодня включительно', () => {
+    expect(resolveDue({ weekday: 5 }, today)).toBe('2026-10-16')
+    expect(resolveDue({ weekday: 2 }, today)).toBe('2026-10-13')
+    expect(resolveDue({ weekday: 1 }, today)).toBe('2026-10-19')
+  })
+  it('дата без года, уже прошедшая, — в следующем году', () => {
+    expect(resolveDue({ day: 20, month: 10 }, today)).toBe('2026-10-20')
+    expect(resolveDue({ day: 1, month: 3 }, today)).toBe('2027-03-01')
+    expect(resolveDue({ day: 1, month: 3, year: 2026 }, today)).toBe('2026-03-01')
   })
 })

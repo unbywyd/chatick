@@ -4,12 +4,12 @@ import { z } from 'zod'
 import { and, eq, inArray, isNotNull, isNull, ne, or, sql, type SQL } from 'drizzle-orm'
 import { alias } from 'drizzle-orm/pg-core'
 import { db } from '../db/client.js'
-import { companies, companyMembers, HANDOFF_ACTIONS, notifications, projectMembers, projects, taskHandoffs, tasks, TASK_MOVES, timeEntries, users } from '../db/schema.js'
+import { companies, companyMembers, files, HANDOFF_ACTIONS, notifications, projectMembers, projects, taskBlockers, taskHandoffs, tasks, TASK_MOVES, timeEntries, users } from '../db/schema.js'
 import { requireSession, type SessionEnv } from '../auth.js'
 import { canCreateProjects, companyRoleOf, hasPermission, ownsOrManages, projectRoleOf } from './projects.js'
 import { insertTask, lastReviewFrom, mayHandoff, ownerOf, planHandoff, setOnTable, TABLE_LIMIT, type Via } from '../lib/ball.js'
 import { closedSql, isClosed } from '../lib/task-status.js'
-import { matchPerson, matchProject, parseQuick, type Match } from '../lib/quick-task.js'
+import { matchPerson, matchProject, parseQuick, resolveDue, type Match } from '../lib/quick-task.js'
 import { notifyTask } from './tasks.js'
 import { postTaskAssigned } from '../lib/task-events.js'
 import { logActivity } from '../lib/audit.js'
@@ -176,6 +176,34 @@ async function list(userId: string, q: ListQuery, where: SQL, defaults: SQL[], p
         ).map((r) => r.id),
       )
     : new Set<string | null>()
+  /**
+   * Строке списка нужны ещё две цифры: сколько вложений и сколько открытых
+   * блокеров (замок у заблокированной задачи). Тоже одним запросом на список.
+   */
+  const fileCount = ids.length
+    ? new Map(
+        (
+          await db
+            .select({ id: files.taskId, n: sql<number>`count(*)::int` })
+            .from(files)
+            .where(and(inArray(files.taskId, ids), isNull(files.deletedAt), isNull(files.pendingUntil)))
+            .groupBy(files.taskId)
+        ).map((r) => [r.id, r.n]),
+      )
+    : new Map<string | null, number>()
+  const blocker = alias(tasks, 'blocker')
+  const blockedBy = ids.length
+    ? new Map(
+        (
+          await db
+            .select({ id: taskBlockers.blockedTaskId, n: sql<number>`count(*)::int` })
+            .from(taskBlockers)
+            .innerJoin(blocker, eq(blocker.id, taskBlockers.blockerTaskId))
+            .where(and(inArray(taskBlockers.blockedTaskId, ids), isNull(blocker.deletedAt), sql`${blocker.status} not in ${closedSql}`))
+            .groupBy(taskBlockers.blockedTaskId)
+        ).map((r) => [r.id, r.n]),
+      )
+    : new Map<string, number>()
   const projectBy = new Map(projectList.map(({ companyId: _c, ...p }) => [p.id, p]))
   // Левое соединение без пары отдаёт null целиком, а не объект с пустыми
   // полями: задача без держателя (бэклог в «От меня») роняла весь список.
@@ -191,6 +219,10 @@ async function list(userId: string, q: ListQuery, where: SQL, defaults: SQL[], p
       priority: t.priority,
       dueDate: t.dueDate,
       createdAt: t.createdAt,
+      estimateMinutes: t.estimateMinutes,
+      files: fileCount.get(t.id) ?? 0,
+      /** Сколько незакрытых задач её держат: больше нуля — замок в строке. */
+      blockedBy: blockedBy.get(t.id) ?? 0,
       // Отдельного поля «закрыта» нет: после закрытия задачу почти не правят,
       // и время последней правки — это время закрытия.
       closedAt: isClosed(t.status) ? t.updatedAt : null,
@@ -584,6 +616,9 @@ ballRoute.post(
       preview: z.boolean().optional(),
       /** Проект по умолчанию, когда # не указан: тот, что выбран на экране. */
       projectId: z.string().optional(),
+      /** «Сегодня» человека и его пояс: от них считается «завтра» и «до пятницы». */
+      today: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional(),
+      tzOffset: z.number().int().min(-14 * 60).max(14 * 60).optional(),
     }),
   ),
   async (c) => {
@@ -596,6 +631,8 @@ ballRoute.post(
       text: b.text,
       preview: b.preview,
       defaultProjectId: b.projectId,
+      today: b.today,
+      tzOffset: b.tzOffset,
       via: 'ui',
     })
     return c.json(r.body, r.status)
@@ -619,6 +656,9 @@ export async function quickTask(input: {
   preview?: boolean
   /** Проект, выбранный на экране: им заменяется основной проект компании, когда # нет. */
   defaultProjectId?: string
+  /** Местное «сегодня» человека ('YYYY-MM-DD') и getTimezoneOffset() — для срока. */
+  today?: string
+  tzOffset?: number
   via: Via
 }): Promise<QuickResult> {
   const sub = input.userId
@@ -680,10 +720,18 @@ export async function quickTask(input: {
     to = team.find((u) => u.id === m.value.id)
   }
 
+  // Срок — полдень того дня по местному времени человека, как ставит его веб.
+  const dueDay = parsed.due ? resolveDue(parsed.due, input.today ?? new Date().toISOString().slice(0, 10)) : null
+  let dueDate: Date | null = null
+  if (dueDay) {
+    const [y, m, d] = dueDay.split('-').map(Number) as [number, number, number]
+    dueDate = new Date(Date.UTC(y, m - 1, d, 12) + (input.tzOffset ?? 0) * 60_000)
+  }
   const result = {
     title: parsed.title,
     project: { id: project.id, name: project.name, color: project.color },
     assignee: to ? { id: to.id, name: to.name, avatarUrl: to.avatarUrl } : null,
+    due: dueDay,
   }
   if (input.preview) return { status: 200, body: { preview: result } }
 
@@ -703,6 +751,7 @@ export async function quickTask(input: {
       title: parsed.title.slice(0, 300),
       assigneeId: to?.id ?? null,
       createdById: sub,
+      dueDate,
     },
     { actorId: sub, via: input.via },
   )
