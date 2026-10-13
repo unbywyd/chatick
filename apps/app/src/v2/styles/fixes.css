@@ -505,3 +505,106 @@ html:has(.app .mwrap){overflow:hidden}
 .app .moved-x{position:absolute;top:10px;inset-inline-end:10px;width:30px;height:30px;color:var(--ink2)}
 .app .moved-x:hover{color:var(--ink)}
 .app .moved-in{padding-inline-end:48px}
+
+/* ==========================================================================
+   Телефоны и планшеты. Аудит 14.10 (375/390/768, ru и he): шапка не влезала,
+   и поиск, таймер, уведомления и профиль были недоступны; всплывашки шапки
+   уезжали за край; ассистент оказывался под всей страницей; таблицы команды и
+   версий резали колонки. .app{overflow-x:clip} прятал всё это — прокрутить к
+   уехавшему было нельзя.
+   ========================================================================== */
+
+/* Шапка: на узком — только значки; разделы — в меню «⋯», оно отмечает текущий. */
+@media (max-width:900px){
+  .app .hdr{gap:8px;padding-inline:12px}
+  .app .hd-logo,.app .gt-today{display:none}
+  .app .hd-search{width:40px;padding:0;justify-content:center;margin-inline-end:0;flex:none}
+  .app .hd-search > :not(.ic){display:none}
+  .app .gt-proj .nm,.app .gt-proj > .ic{display:none}
+  /* Таймер и уведомления на планшете в иврите уезжали за левый край. */
+  .app .gt-pop,.app .bpop{position:fixed;top:68px;inset-inline:auto 8px;width:min(400px,calc(100vw - 16px));max-height:calc(100dvh - 84px);overflow:auto}
+}
+@media (max-width:760px){
+  .app .hdr{gap:4px}
+  .app[dir] .brand{padding:0 4px;gap:6px}
+  .app .brand > .bidi,.app .brand > .ic{display:none}
+  .app .nav .nv:not(.nv-more){display:none}
+  .app .gt-time{min-width:0;padding-inline:6px 4px;font-size:15px}
+  .app .cpop,.app .navpop,.app .mepop,.app .bpop,.app .gt-pop{position:fixed;top:68px;inset-inline:8px;width:auto;max-height:calc(100dvh - 84px);overflow:auto}
+}
+@media (max-width:420px){.app .gt-proj{display:none}}
+
+/* Ассистент на узком экране — листом поверх страницы, а не в самом низу под ней. */
+@media (max-width:900px){
+  .app .aside:not(.col){position:fixed;inset:64px 0 0;z-index:35;max-width:none;width:auto;height:auto;min-height:0;border:0}
+  html:has(.app .aside:not(.col)){overflow:hidden}
+}
+
+/* Тосты: длинный текст переносится, а не уезжает за края. */
+.app .toast{max-width:calc(100vw - 32px);white-space:normal}
+
+/* Кнопка ассистента на телефоне — только значок, тост — над ней. Подсказки
+   клавиш на сенсорном экране не нужны. */
+@media (max-width:600px){
+  /* Подпись — текстовый узел, селектором его не спрятать: font-size:0. */
+  .app .ai-fab{padding:8px;height:52px;width:52px;justify-content:center;gap:0;font-size:0}
+  .app .ai-fab > :not(.ico){display:none}
+  .app .toast{bottom:88px}
+}
+@media (hover:none){.app .ai-fab kbd,.app .hd-search kbd{display:none}}
+
+/* Лента проектов: поиск — своей строкой, лента — на всю ширину; листают пальцем. */
+@media (max-width:600px){
+  .app .car-wrap{flex-wrap:wrap}
+  .app .car-q,.app .car-q:focus-within{flex:1 1 100%;width:auto}
+  .app .car-wrap > .car{flex:1 1 0}
+}
+@media (hover:none){.app .car-arr{display:none}}
+
+/* Сегменты-вкладки, которые не влезают, — листаются вбок. */
+@media (max-width:600px){
+  .app .rbar .seg,.app .tmv .tbar .seg{max-width:100%;overflow-x:auto;scrollbar-width:none}
+  .app .rbar .seg button,.app .tmv .seg > button{white-space:nowrap;flex:none}
+  .app .rh-a{flex-wrap:wrap}
+}
+
+/* Команда: имя и три числа. */
+@media (max-width:700px){
+  .app .tm-row{grid-template-columns:minmax(0,1fr) repeat(3,60px);gap:8px;padding-inline:8px}
+  .app .tm-row > :nth-child(2),.app .tm-row > :nth-child(5){display:none}
+}
+
+/* Версии: прогресс — второй строкой, действия остаются в строке. */
+@media (max-width:600px){
+  .app .vrow{grid-template-columns:auto minmax(0,1fr) auto;row-gap:6px}
+  .app .vrow .pipe{grid-column:2/-1;grid-row:2}
+}
+
+/* Страница задачи: связи — значение под подписью; поля поуже. */
+@media (max-width:600px){
+  .app .rel{grid-template-columns:minmax(0,1fr) auto;row-gap:4px}
+  .app .rel .v{grid-column:1/-1;grid-row:2}
+  .app .tp-main{padding:20px 16px}
+}
+
+/* Время: заголовок записи — своей строкой, иначе от него оставалось «без …». */
+@media (max-width:600px){
+  .app .tmv .en{grid-template-columns:auto auto minmax(0,1fr);padding-inline:12px}
+  .app .tmv .en > .bd{grid-column:1/-1}
+}
+
+/* Строки задач на телефоне: «Без срока» в каждой строке съедало место у названия. */
+@media (max-width:600px){
+  .app .row{grid-template-columns:24px minmax(0,1fr) auto}
+  .app .row .due.none{display:none}
+}
+
+/* Окна на телефоне — у верха экрана, а не в 160px от него. */
+@media (max-width:600px){.app .mwrap,.app .mwrap.mwrap-top{padding-top:16px}}
+
+/* Сенсорный экран: то, что появлялось по наведению, видно всегда; цели — под палец. */
+@media (hover:none){.app .rflag.off,.app .tmv .ea{opacity:1}}
+@media (pointer:coarse){
+  .app .panel .ph .ib,.app .tmv .ea > button,.app .tmv .dh .add,.app .rel-x,.app .moved-x,.app .kb .tg > button{min-width:36px;min-height:36px}
+  .app .newt button.mini,.app .rcell .rbtn,.app .cmt-act,.app .ntf .qx,.app .tgt,.app .tg-tog{min-height:36px}
+}

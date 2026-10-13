@@ -38,6 +38,11 @@ function mirrorDecl(d, rule) {
     if (has(other)) {
       if (get(other) !== v) out.push([p, get(other)], [other, v])
     } else out.push([p, kind === 'margin' && v === 'auto' ? '0' : '0'], [other, v])
+  } else if ((p === 'left' || p === 'right') && v === '50%' && /translate(X)?\(\s*-50%/.test(get('transform') ?? '')) {
+    // Центровка left:50% + translateX(-50%) симметрична — зеркалить нечего.
+    // right:50% с тем же сдвигом уводил элемент вбок: тосты в иврите — за экран.
+  } else if ((p === 'left' || p === 'right') && v === '50%' && /^-50%/.test((get('translate') ?? '').trim())) {
+    // То же через translate: -50%.
   } else if (p === 'left' || p === 'right') {
     const other = SWAP[p]
     if (has(other)) {

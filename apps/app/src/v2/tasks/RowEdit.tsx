@@ -81,7 +81,7 @@ export function DueCell({ item: i }: { item: BallItem }) {
     <span className="rcell">
       <button
         ref={setBtn}
-        className={'due rbtn' + (n !== null && n < 0 ? ' late' : '') + (n === 0 ? ' today' : '')}
+        className={'due rbtn' + (n !== null && n < 0 ? ' late' : '') + (n === 0 ? ' today' : '') + (i.dueDate ? '' : ' none')}
         title={t('row.due')}
         aria-expanded={open}
         disabled={!i.project}

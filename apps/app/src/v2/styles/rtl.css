@@ -262,8 +262,6 @@
     padding: 0 6px 0 13px
 }
 .app[dir='rtl'] .toast {
-    left: auto;
-    right: 50%;
     padding: 12px 14px 12px 18px
 }
 .app[dir='rtl'] .co-pj b {
@@ -333,18 +331,10 @@
     left: auto;
     right: 34px
 }
-.app[dir='rtl'] .lp-p .nm {
-    left: auto;
-    right: 50%
-}
 .app[dir='rtl'] .ob-seat {
     left: auto;
     right: 0;
     margin: -22px -22px 0 0
-}
-.app[dir='rtl'] .ob-seat small {
-    left: auto;
-    right: 50%
 }
 .app[dir='rtl'] .ob-por {
     left: auto;
@@ -384,10 +374,6 @@
 .app[dir='rtl'] .hd-search {
     padding: 0 12px 0 10px
 }
-.app[dir='rtl'] .tg-seat img.tg-hero2 {
-    left: auto;
-    right: 50%
-}
 .app[dir='rtl'] .stg .url {
     padding: 12px 16px 12px 12px
 }
@@ -405,10 +391,6 @@
 }
 .app[dir='rtl'] .tmv .cbx-f.sm {
     padding: 0 3px 0 8px
-}
-.app[dir='rtl'] .tmv .mdl {
-    left: auto;
-    right: 50%
 }
 .app[dir='rtl'] .tmv .prev {
     text-align: right
