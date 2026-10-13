@@ -71,7 +71,7 @@ function CodeEntry() {
           onChange={(e) => setV(e.target.value)}
           onKeyDown={(e) => e.key === 'Enter' && go()}
           placeholder="ABCD-2345"
-          style={{ fontFamily: "'JetBrains Mono', monospace", letterSpacing: '.12em', textTransform: 'uppercase' }}
+          style={{ fontFamily: "'JetBrains Mono', 'Heebo', monospace", letterSpacing: '.12em', textTransform: 'uppercase' }}
         />
       </label>
       <div style={{ height: 12 }} />

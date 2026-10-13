@@ -10,15 +10,18 @@
 /* Поле комментария в панели задачи — textarea вместо макетной заглушки. */
 .app .pf textarea.cin{resize:none;border:0;outline:none;font:inherit;color:var(--ink);padding:11px 14px;line-height:20px;display:block}
 
-/* Открыта панель или окно — плавающая кнопка ассистента не висит поверх затемнения. */
-.app:has(.scrim, .mwrap) .ai-fab{display:none}
+/* Открыто окно — плавающая кнопка ассистента не висит поверх затемнения. Боковая
+   панель — исключение: она с другого края, и ассистента зовут как раз про неё.
+   На узком экране панель доходит до кнопки — там прячем. */
+.app:has(.mwrap) .ai-fab,.app:has(.scrim):not(:has(.panel)) .ai-fab{display:none}
+@media (max-width:1100px){.app:has(.scrim) .ai-fab{display:none}}
 
 /* Поле ассистента — tiptap: без своей рамки и синей обводки фокуса (рамку держит .ain). */
 .app .ain .ai-ed{outline:none;min-height:22px;max-height:160px;overflow-y:auto;font-size:14.5px;line-height:1.5;color:var(--ink)}
 .app .ain .ai-ed:focus-visible{outline:none}
 .app .ain .ai-ed p{margin:0}
 .app .ain .ai-ed ul,.app .ain .ai-ed ol{margin:2px 0;padding-inline-start:20px}
-.app .ain .ai-ed code{font-family:'JetBrains Mono',ui-monospace,monospace;font-size:13px;background:var(--soft);border-radius:5px;padding:1px 4px}
+.app .ain .ai-ed code{font-family:'JetBrains Mono','Heebo',ui-monospace,monospace;font-size:13px;background:var(--soft);border-radius:5px;padding:1px 4px}
 .app .ain .ai-ed pre{background:var(--soft);border-radius:8px;padding:8px 10px;margin:4px 0;white-space:pre-wrap}
 .app .ain .ai-ed p.is-editor-empty:first-child::before{content:attr(data-placeholder);color:var(--ink3);float:inline-start;height:0;pointer-events:none}
 .app .ain:focus-within{box-shadow:inset 0 0 0 1.5px var(--ink)}
@@ -92,6 +95,12 @@
 .app .panel{position:fixed;top:64px;width:min(780px,100%)}
 .app .panel .pb{overflow-x:hidden;overscroll-behavior:contain}
 html:has(.app .panel),html:has(.app .panel) body{overflow:hidden}
+/* Панель — с края напротив ассистента, а он остаётся над затемнением: задачу
+   читают и тут же спрашивают про неё ассистента. Раньше оба жались к одному
+   краю, и панель с затемнением закрывали ассистента целиком. */
+.app[dir='rtl'] .panel{box-shadow:-30px 0 60px -20px rgba(0,0,0,.25)}
+.app:has(.panel) .aside{z-index:11}
+@media (min-width:901px){.app:has(.aside) .panel{width:min(780px,calc(100% - 400px))}}
 
 /* Полосы прокрутки — тонкие, в цвет линий, во всём приложении. */
 .app,.app *{scrollbar-width:thin;scrollbar-color:color-mix(in srgb,var(--ink3) 45%,transparent) transparent}
@@ -228,7 +237,7 @@ html:has(.app .panel),html:has(.app .panel) body{overflow:hidden}
 .app .lh-tag.lo{background:var(--soft);color:var(--ink2)}
 
 /* Номер задачи — в начале второй строки, одинаковой ширины: номера встают столбцом. */
-.app .row .meta .tnum{flex:none;min-width:76px;text-align:center;padding:1px 6px;border-radius:6px;background:var(--soft);font-variant-numeric:tabular-nums;font-family:'JetBrains Mono',ui-monospace,monospace;font-size:11.5px;font-weight:500;color:var(--ink2);opacity:1}
+.app .row .meta .tnum{flex:none;min-width:76px;text-align:center;padding:1px 6px;border-radius:6px;background:var(--soft);font-variant-numeric:tabular-nums;font-family:'JetBrains Mono','Heebo',ui-monospace,monospace;font-size:11.5px;font-weight:500;color:var(--ink2);opacity:1}
 .app.lay-stage .row .meta .tnum{opacity:1}
 
 /* Документ: кто сейчас здесь (из комнаты совместной правки). Правящий — с кольцом. */
@@ -433,3 +442,7 @@ html:has(.app .panel),html:has(.app .panel) body{overflow:hidden}
 .app .ai-files .tchip button{display:grid;place-items:center;color:var(--ink3)}
 .app .ai-older{align-self:center;margin:4px auto 10px;display:block}
 .app .ai-off span{line-height:1.45}
+
+/* Моноширинные подписи стола (жар, «ты», имена у мест) — разрядка и заглавные
+   под латиницу. Иврит берёт Heebo из запасного шрифта, разрядка ему вредит. */
+.app[dir='rtl'] .ob-tag,.app[dir='rtl'] .tg-lab,.app[dir='rtl'] .ob-seat small{letter-spacing:0}

@@ -44,7 +44,7 @@
 .app .stg .f > input,.app .stg .f > select{flex:1;height:100%;border:0;outline:0;background:none;min-width:0;font:inherit;color:inherit}
 .app .stg .f > input:focus-visible{outline:none}
 .app .stg .f.ro{background:var(--paper);color:var(--ink2);overflow:hidden;white-space:nowrap;text-overflow:ellipsis;display:block;line-height:40px}
-.app .stg .f.mono,.app .stg .f.mono > input{font-family:'JetBrains Mono',monospace;font-size:13px}
+.app .stg .f.mono,.app .stg .f.mono > input{font-family:'JetBrains Mono','Heebo',monospace;font-size:13px}
 .app .stg .inl{display:flex;align-items:center;gap:8px;flex-wrap:wrap;min-width:0}
 .app .stg .hint{color:var(--ink3);font-size:13px}
 .app .stg .err{color:var(--signal);font-size:13px}
@@ -91,12 +91,12 @@
 .app .stg .bk.bad > .dot{background:var(--signal);animation:none}
 .app .stg .bk.bad > div > b,.app .stg .bk.bad > div > small{color:var(--signal)}
 
-.app .stg .url{display:flex;align-items:center;gap:10px;padding:12px 12px 12px 16px;border-radius:14px;background:var(--moss);color:var(--moss-ink);font-family:'JetBrains Mono',monospace;font-size:14px;direction:ltr}
+.app .stg .url{display:flex;align-items:center;gap:10px;padding:12px 12px 12px 16px;border-radius:14px;background:var(--moss);color:var(--moss-ink);font-family:'JetBrains Mono','Heebo',monospace;font-size:14px;direction:ltr}
 .app .stg .url > span{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .app .stg .url > .btn{background:var(--accent);color:#1B1D1A;box-shadow:none;font-family:'Onest','Heebo',system-ui,sans-serif}
 .app .stg .how{margin:14px 0 0;padding:0;list-style:none;display:flex;flex-direction:column;gap:8px;font-size:13.5px;color:var(--ink2)}
 .app .stg .how b{color:var(--ink);font-weight:600}
-.app .stg .how code{font-family:'JetBrains Mono',monospace;font-size:12.5px;background:var(--soft);border-radius:6px;padding:2px 6px;direction:ltr;unicode-bidi:isolate;word-break:break-all}
+.app .stg .how code{font-family:'JetBrains Mono','Heebo',monospace;font-size:12.5px;background:var(--soft);border-radius:6px;padding:2px 6px;direction:ltr;unicode-bidi:isolate;word-break:break-all}
 
 .app .stg .cn{display:grid;grid-template-columns:44px minmax(0,1fr) auto;gap:14px;align-items:center;padding:14px 0;border-top:1px solid var(--line)}
 .app .stg .sec > p.d + .cn{border-top:0}
@@ -111,10 +111,10 @@
 .app .stg .keys{width:100%;border-collapse:collapse;font-size:13.5px}
 .app .stg .keys th{font-size:12px;font-weight:500;color:var(--ink3);text-align:start;padding:6px 10px 6px 0}
 .app .stg .keys td{padding:10px 10px 10px 0;border-top:1px solid var(--line);vertical-align:middle}
-.app .stg .keys td.m{font-family:'JetBrains Mono',monospace;font-size:12.5px;direction:ltr;unicode-bidi:isolate}
+.app .stg .keys td.m{font-family:'JetBrains Mono','Heebo',monospace;font-size:12.5px;direction:ltr;unicode-bidi:isolate}
 .app .stg .keys td.e{text-align:end}
 .app .stg .newkey{display:flex;align-items:center;gap:10px;padding:12px 14px;border-radius:13px;background:var(--accent);color:#1B1D1A;margin-top:10px;flex-wrap:wrap}
-.app .stg .newkey > span{flex:1;min-width:0;font-family:'JetBrains Mono',monospace;font-size:13px;word-break:break-all;direction:ltr}
+.app .stg .newkey > span{flex:1;min-width:0;font-family:'JetBrains Mono','Heebo',monospace;font-size:13px;word-break:break-all;direction:ltr}
 .app .stg .newkey > small{flex-basis:100%;font-size:12.5px}
 .app .stg .radio{display:flex;gap:6px;flex-wrap:wrap}
 .app .stg .radio > button{height:36px;padding:0 13px;border-radius:10px;box-shadow:inset 0 0 0 1px var(--line);background:var(--sheet);font-weight:500}
@@ -166,7 +166,7 @@
 .app .ntf .it .m{display:flex;align-items:center;gap:7px;margin-top:6px;font-size:12.5px;color:var(--ink3);min-width:0}
 .app .ntf .it .m > .logo{width:16px;height:16px;border-radius:5px;font-size:8.5px}
 .app .ntf .it .m > .pn{white-space:nowrap;overflow:hidden;text-overflow:ellipsis;min-width:0}
-.app .ntf .it .m > .id{font-family:'JetBrains Mono',monospace;white-space:nowrap}
+.app .ntf .it .m > .id{font-family:'JetBrains Mono','Heebo',monospace;white-space:nowrap}
 .app .ntf .it .tm{font-size:12.5px;color:var(--ink3);white-space:nowrap;margin-top:2px}
 .app .ntf .acts{position:absolute;inset-inline-end:14px;bottom:12px;display:flex;gap:6px;opacity:0;transition:opacity .12s;justify-content:flex-end}
 .app .ntf .it:hover .acts,.app .ntf .it:focus-within .acts{opacity:1}

@@ -68,7 +68,7 @@
 .app .lib-view-body img.lib-zoom{max-width:none;max-height:none;cursor:zoom-out}
 .app .lib-view-body:has(img.lib-zoom){overflow:auto;place-items:start}
 .app .lib-audio{display:grid;gap:14px;justify-items:center;color:#fff}
-.app .lib-text{margin:0;max-width:min(980px,92vw);max-height:100%;overflow:auto;padding:18px 20px;border-radius:12px;background:var(--sheet);color:var(--ink);font:13px/1.55 'JetBrains Mono',ui-monospace,monospace;white-space:pre-wrap;word-break:break-word}
+.app .lib-text{margin:0;max-width:min(980px,92vw);max-height:100%;overflow:auto;padding:18px 20px;border-radius:12px;background:var(--sheet);color:var(--ink);font:13px/1.55 'JetBrains Mono','Heebo',ui-monospace,monospace;white-space:pre-wrap;word-break:break-word}
 .app .lib-sheet{max-width:min(1100px,94vw);max-height:100%;overflow:auto;border-radius:12px;background:var(--sheet);color:var(--ink)}
 .app .lib-sheet table{border-collapse:collapse;font-size:13px}
 .app .lib-sheet td{border:1px solid var(--line);padding:5px 9px;white-space:nowrap}

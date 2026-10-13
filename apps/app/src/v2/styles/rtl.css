@@ -229,9 +229,9 @@
     margin-right: auto
 }
 .app[dir='rtl'] .panel {
-    right: auto;
-    left: 0;
-    border-radius: 0 24px 0 0
+    left: auto;
+    right: 0;
+    border-radius: 24px 0 0 0
 }
 .app[dir='rtl'] .ph {
     padding: 16px 28px 0 16px
