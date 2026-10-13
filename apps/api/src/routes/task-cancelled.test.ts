@@ -130,13 +130,16 @@ describe('мост и ассистенты знают про cancelled', () => {
     expect(guide).toContain('status filter: todo | in_progress | review | done | cancelled')
     expect(guide).toContain('cancel is the exit from any point, and it is the person\'s call')
     expect(guide).toContain('leaves every list, count and blocker chain at once')
-    expect(mcp).toContain("status=cancelled is the exit from any rung and it is the person\\'s call")
+    // MCP v2: статус — наследие для старых клиентов, отмена — передача cancel, и решает человек.
+    expect(mcp).toContain('cancelled = cancel (only the')
+    expect(mcp).toContain('person decides, never you — a cancelled task leaves every list, count and blocker chain at once')
     expect(memory).toContain("status=cancelled is the exit from any rung and it is the person\\'s call")
   })
 
   it('enum\'ы моста, MCP и ассистента чата содержат cancelled', () => {
     expect(bridge).toContain('(TASK_STATUSES as readonly string[]).includes(')
-    expect((mcp.match(/z\.enum\(\['todo', 'in_progress', 'review', 'verified', 'done', 'cancelled'\]\)/g) ?? []).length).toBe(2)
+    // v2: verified убран из MCP (присланный verified сервер читает как done) — в фильтре и в правке его нет.
+    expect((mcp.match(/\.enum\(\['todo', 'in_progress', 'review', 'done', 'cancelled'\]\)/g) ?? []).length).toBe(2)
     expect((memory.match(/enum: \[\.\.\.TASK_STATUSES\]/g) ?? []).length).toBe(8)
   })
 

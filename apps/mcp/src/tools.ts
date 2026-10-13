@@ -31,7 +31,7 @@ import { currentScope, connectViaDesktop, startDeviceFlow, waitForApproval, acce
  * токен OAuth из текущего запроса.
  */
 export function createChatickServer(opts: { need: () => Promise<Scope>; local: boolean }): McpServer {
-  const real = new McpServer({ name: 'chatick', version: '0.2.0' })
+  const real = new McpServer({ name: 'chatick', version: '0.3.0' })
   const need = opts.need
   // Локальные инструменты на сервере не регистрируем — фильтр в одном месте.
   const server = {
@@ -128,10 +128,16 @@ server.registerTool(
 
 server.registerTool(
   'chatick_disconnect',
-  { title: 'Forget the stored access', description: 'Drops the token from memory. Use when handing the machine over.', inputSchema: {} },
+  {
+    title: 'Forget the stored access',
+    description:
+      'Closes this access on the Chatick server, deletes the stored token (~/.chatick/mcp-token.json) and forgets it ' +
+      'in memory. Use when handing the machine over or when the person asks to disconnect.',
+    inputSchema: {},
+  },
   async () => {
-    forget()
-    return text('Forgotten. The next call will ask for access again.')
+    await forget()
+    return text('Forgotten: the access is closed on the server and the stored token is deleted. The next call will ask for access again.')
   },
 )
 
@@ -641,11 +647,13 @@ server.registerTool(
       'The trouble filters are how you answer "what is stuck", "what did we forget", "why is this person idle": ' +
       'blocked=1 is work waiting on someone else, stale=14 is what nobody has touched in that many days, ' +
       'noEstimate=1 is what cannot be planned, overdue=1 is a missed date. They combine with assignee — ' +
-      'assignee=me&blocked=1 says what is holding YOU up. Each one implies "not finished".',
+      'assignee=me&blocked=1 says what is holding YOU up. Each one implies "not finished". ' +
+      'assignee is whoever holds the ball now. For "what is on me" and "what am I waiting for" across all projects ' +
+      'use chatick_ball (mine / from-me) — it already sorts by what is owed and how long it has waited.',
     inputSchema: {
       project: z.string(),
-      assignee: z.string().optional().describe('"me" or a user id'),
-      status: z.enum(['todo', 'in_progress', 'review', 'verified', 'done', 'cancelled']).optional(),
+      assignee: z.string().optional().describe('"me" or a user id — the current holder of the ball'),
+      status: z.enum(['todo', 'in_progress', 'review', 'done', 'cancelled']).optional(),
       q: z.string().optional().describe('Search in title'),
       blocked: z.enum(['1']).optional().describe('Only tasks waiting on another unfinished task'),
       stale: z.number().optional().describe('Untouched for at least this many days'),
@@ -724,8 +732,10 @@ server.registerTool(
   {
     title: 'Create a task',
     description:
-      'Creates a task. estimateMinutes is required here even though the API allows omitting it: without an estimate ' +
-      'nobody can plan a sprint, and the number never gets added later. Write in the language the project speaks. ' +
+      'Creates a task. The assignee gets the ball with the move "do"; you (or the person you work for) become the ' +
+      'owner who accepts the result. The assignee must be in the project team. ' +
+      'estimateMinutes is required here even though the API allows omitting it: without an estimate ' +
+      'nobody can plan the week, and the number never gets added later. Write in the language the project speaks. ' +
       'To pull someone into the description write @[Name](userId) — a plain @name is text and notifies nobody. ' +
       'The assignee already learns of the assignment; mention others only when they specifically need to see it. ' +
       'The reply carries ready links — never assemble one yourself. Prefer "shortUrl" (chatick.com/t-AbC12) when sending ' +
@@ -770,23 +780,25 @@ server.registerTool(
   {
     title: 'Change a task',
     description:
-      'Title, description, status, assignee, estimate, linked resources, related tasks. To hand work over — send for review, accept, ' +
-      'return, ask, pass to someone — prefer chatick_handoff: it records WHY the task moved, and that note is what ' +
-      'the next person reads. Status and assignee here still work and are turned into the same moves. ' +
-      'Moving to in_progress belongs BEFORE the work, ' +
-      'not after. When the work is done move it to review, not to done: you are handing it over, and closing ' +
-      'your own work skips the person who has to check it. verified belongs to whoever did the checking — never ' +
-      'set it on your own work. Every status change deserves a comment: the board says that something moved, ' +
-      'only the comment says what. status=cancelled is the exit from any rung and it is the person\'s call, never ' +
-      'yours: set it only when they said to drop the task — a cancelled task leaves every list, count and blocker ' +
-      'chain at once. Keep an edited description short too: past 1500 characters the reply carries a "warning".',
+      'Title, description, estimate, due date, priority, linked resources and versions, related tasks. ' +
+      'To move work between people — send for review, accept, return, ask, answer, pass, take — use ' +
+      'chatick_handoff: the ball moves with a note, and that note is the first thing the next person reads. ' +
+      'status and assignee here are kept for old clients and are turned into the same moves without a note: ' +
+      'review = send to the owner for checking, done = accept (only the owner decides), cancelled = cancel (only the ' +
+      'person decides, never you — a cancelled task leaves every list, count and blocker chain at once), a new ' +
+      'assignee = pass. todo ↔ in_progress is optional and moves nothing. When the work is done, hand it over for ' +
+      'review — never close your own work. Keep an edited description short too: past 1500 characters the reply ' +
+      'carries a "warning".',
     inputSchema: {
       project: z.string(),
       task: z.string(),
       title: z.string().min(1).optional(),
       description: z.string().optional().describe('Markdown. REPLACES the old description — read the task first and keep what still holds'),
-      status: z.enum(['todo', 'in_progress', 'review', 'verified', 'done', 'cancelled']).optional(),
-      assignee: z.string().optional(),
+      status: z
+        .enum(['todo', 'in_progress', 'review', 'done', 'cancelled'])
+        .optional()
+        .describe('Legacy — prefer chatick_handoff, which carries the note'),
+      assignee: z.string().optional().describe('Legacy — prefer chatick_handoff action "pass"'),
       estimateMinutes: z.number().int().positive().optional(),
       dueDate: z
         .string()
@@ -1099,7 +1111,8 @@ server.registerTool(
   {
     title: 'Who did what to this task',
     description:
-      'The path of a task: who created it, who assigned it, who moved it through statuses, when. ' +
+      'The path of a task: who created it, who held the ball and what changed, when. For the passes themselves ' +
+      'with their notes — who sent it for review, who returned it and why — read chatick_handoffs first. ' +
       'ASK THIS BEFORE ANSWERING "why was this returned to me" or "who closed it" — the task object alone does ' +
       'not say, and a guess passed off as an answer is worse than "I do not know". That is not hypothetical: it ' +
       'already happened, and the guess was wrong. ' +
@@ -1324,10 +1337,10 @@ server.registerTool(
 server.registerTool(
   'chatick_sprints',
   {
-    title: 'Sprints of a project',
+    title: 'Sprints of a project (legacy)',
     description:
-      'Sprints (task groups) with their ids. Needed before putting a task into one: chatick_task_create takes a ' +
-      'sprint NAME, and an unknown name is not created silently — the task simply lands outside any sprint.',
+      'Sprints (task groups) with their ids. Legacy: since Chatick 2.0 sprints are gone from the app — people no ' +
+      'longer see or plan by them. Use only when the person explicitly asks about an old sprint.',
     inputSchema: { project: z.string() },
   },
   async ({ project }) => {
@@ -1342,10 +1355,10 @@ server.registerTool(
 server.registerTool(
   'chatick_sprint_create',
   {
-    title: 'Create a sprint',
+    title: 'Create a sprint (legacy)',
     description:
-      'Create a sprint (task group). Ask before doing it: sprints shape how the team plans, and an extra one ' +
-      'made on a guess has to be cleaned up by hand.',
+      'Create a sprint (task group). Legacy: since Chatick 2.0 sprints are not shown in the app, so a new one is ' +
+      'invisible to the team. Do it only when the person explicitly asks for it.',
     inputSchema: {
       project: z.string(),
       name: z.string().min(1),
@@ -2492,16 +2505,16 @@ server.registerTool(
   {
     title: 'Any other bridge endpoint',
     description:
-      'Raw call to the Chatick bridge, for the endpoints without a dedicated tool here: sprints, documents, blockers, ' +
+      'Raw call to the Chatick bridge, for the endpoints without a dedicated tool here: documents, blockers, ' +
       'task links (GET/POST /tasks/<id>/links, DELETE /tasks/<id>/links/<linkId> — links say where a task came from, ' +
       'they never block anything), ' +
       'files, chat, notes. Read GET /x/guide first — it lists every path and the exact permissions of this person. ' +
-      'Paths start with a slash and omit the /x prefix: "/sprints", "/documents/<id>/append". ' +
+      'Paths start with a slash and omit the /x prefix: "/documents/<id>/append", "/tasks/<id>/links". ' +
       'DELETE only unlinks: a task link or blocker, or a public share. Deleting work itself (tasks, documents, notes, ' +
       'messages, files, resources, secrets) is not available to an assistant — tell the person where to do it in Chatick.',
     inputSchema: {
       method: z.enum(['GET', 'POST', 'PATCH', 'DELETE']),
-      path: z.string().describe('e.g. /sprints or /documents/abc/append'),
+      path: z.string().describe('e.g. /documents/abc/append'),
       project: z.string().optional().describe('Required on a company-wide connection'),
       body: z.record(z.unknown()).optional(),
     },

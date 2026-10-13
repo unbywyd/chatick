@@ -108,8 +108,12 @@ describe('внешние контракты', () => {
   it('MCP тоже', () => {
     // MCP — отдельный пакет и в API не смотрит: у него своя копия, и за её
     // полноту отвечает этот тест.
-    expect(count(mcp, FULL), 'MCP не знает полный список').toBeGreaterThanOrEqual(2)
-    expect(count(mcp, OLD), 'остался старый список').toBe(0)
+    // С v2 verified в MCP не предлагается: работу принимает передача accept,
+    // а присланный verified сервер читает как done.
+    const V2 = "'todo', 'in_progress', 'review', 'done', 'cancelled'"
+    expect(count(mcp, V2), 'MCP не знает список v2').toBeGreaterThanOrEqual(2)
+    expect(count(mcp, FULL), 'verified вернулся в MCP').toBe(0)
+    expect(count(mcp, OLD), 'остался список без cancelled').toBe(count(mcp, V2))
   })
 })
 
