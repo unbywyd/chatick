@@ -29,9 +29,10 @@ describe('каталог героев', () => {
     }
   })
 
-  it('стол и мяч на месте', () => {
+  it('стол и мяч каждого цвета на месте', () => {
     expect(existsSync(join(app, 'public/table/table.webp'))).toBe(true)
-    expect(existsSync(join(app, 'public/table/ball.webp'))).toBe(true)
+    // сцена берёт мяч по состоянию: heatOf (warm/hot/burn), чужой ход (away), ждём клиента (client)
+    for (const k of ['warm', 'hot', 'burn', 'away', 'client']) expect(existsSync(join(app, `public/table/ball-${k}.webp`)), k).toBe(true)
   })
 })
 

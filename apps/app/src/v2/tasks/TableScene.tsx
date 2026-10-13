@@ -67,8 +67,9 @@ function heroBox(p: Seat, lead: boolean) {
 }
 
 
-const SPOT = { warm: 'rgba(212,243,107,.7)', hot: 'rgba(255,181,71,.55)', burn: 'rgba(255,110,50,.55)', away: 'rgba(255,255,255,.95)' }
-const INK = { warm: '#4D7A12', hot: '#855600', burn: '#C2410C', away: '#4E524C' }
+// Состояние сцены — одним цветом: метка, часы, подсветка за держателем и мяч (table/ball-<состояние>.webp).
+const SPOT = { warm: 'rgba(212,243,107,.7)', hot: 'rgba(255,181,71,.55)', burn: 'rgba(255,110,50,.55)', away: 'rgba(255,255,255,.95)', client: 'rgba(255,214,51,.55)' }
+const INK = { warm: '#4D7A12', hot: '#855600', burn: '#C2410C', away: '#4E524C', client: '#7A5C00' }
 
 function useTick(on: boolean) {
   const [, set] = useState(0)
@@ -174,6 +175,8 @@ function SceneView({ s }: { s: Scene }) {
   const mine = s.holder?.id === myId
   const client = Boolean(s.ball.waitingClientSince)
   const heat = mine ? heatOf(s.ball.move, s.ball.heldSince) : 'away'
+  // Ждём клиента — пауза поверх хода: не «тепло» и не «горит», а своё состояние.
+  const tone = client ? 'client' : heat
   useTick(true)
 
   const n = s.seats.length
@@ -209,7 +212,7 @@ function SceneView({ s }: { s: Scene }) {
   const from = s.last?.actor && s.last.actor.id !== myId ? t('tbl.from', { name: s.last.actor.name }) : s.owner?.id === myId ? t('tbl.yourTask') : ''
 
   return (
-    <div className="sv-scene lamp orb tgs" style={{ '--H': INK[heat], '--S': SPOT[heat] } as React.CSSProperties} aria-roledescription="scene" aria-label={s.number}>
+    <div className="sv-scene lamp orb tgs" style={{ '--H': INK[tone], '--S': SPOT[tone] } as React.CSSProperties} aria-roledescription="scene" aria-label={s.number}>
       <div className="tg-st" style={{ width: `calc(${SAFE.w}px * var(--z))`, height: `calc(${SAFE.h}px * var(--z))` }}>
         <div className="tg-in" style={{ width: SAFE.w, height: SAFE.h }}>
           <div className="tg-spot" style={{ left: cx - 110, top: Math.round(cy - HANDS - leadH / 2 - 70) }} />
@@ -223,10 +226,12 @@ function SceneView({ s }: { s: Scene }) {
                 </div>
               )
             })}
-            {/* Мяч лежит на столе, но стоит ровно: стол поворачивается, мяч — обратно, как имена. */}
+            {/* Мяч лежит на столе, но стоит ровно: стол поворачивается, мяч — обратно, как имена.
+                Цвет — состояние: зелёный — тепло, оранжевый — жарко, горящий — горит,
+                синий — ход не твой, жёлтый — ждём клиента. */}
             <img
-              className={'tg-ball' + (mine ? ` ${heat}` : '')}
-              src={`${import.meta.env.BASE_URL}table/ball.webp`}
+              className={'tg-ball' + (mine ? ` ${tone}` : '')}
+              src={`${import.meta.env.BASE_URL}table/ball-${tone}.webp`}
               alt=""
               style={{ left: Math.round(300 + BALL_R * Math.cos(q) - CHIP / 2), top: Math.round(300 + BALL_R * Math.sin(q) - CHIP / 2), rotate: `${-G}deg` }}
             />
@@ -260,7 +265,7 @@ function SceneView({ s }: { s: Scene }) {
       </div>
       <div className="sv-info">
         <div className="sv-meta">
-          <span className="ob-tag">{t(`tbl.heat.${heat}`)}</span>
+          <span className="ob-tag">{t(`tbl.heat.${tone}`)}</span>
           <span className="tg-clk" title={t('tbl.clockHint')}>
             {clock(s.ball.waitingClientSince ?? s.ball.heldSince)}
           </span>
