@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { companyTools, EXCLUDED_TOOLS, pickProject, projectTools, type Ctx } from './assistant.js'
+import { companyTools, EXCLUDED_TOOLS, linkMentions, pickProject, projectTools, type Ctx } from './assistant.js'
 import { memoryTools } from './memory.js'
 
 const projects = [
@@ -89,5 +89,30 @@ describe('open_on_screen new_task — черновик, а не создание
   it('без открытого приложения — ничего не создаётся, предлагает создать напрямую', async () => {
     const h = companyTools(ctx()).handlers.open_on_screen!
     expect(await h({ what: 'new_task', title: 'Проверить сборку' })).toMatch(/nothing was opened/)
+  })
+})
+
+describe('linkMentions — «@Имя» ассистента становится упоминанием', () => {
+  const team = [
+    { id: 'u1', name: 'Hadeel Massarwa' },
+    { id: 'u2', name: 'Daniel Regev' },
+    { id: 'u3', name: 'Daniel Cohen' },
+    { id: 'u4', name: 'Артём Горловецкий' },
+  ]
+  it('однозначное имя и полное имя', () => {
+    expect(linkMentions('@Hadeel глянь', team)).toBe('@[Hadeel Massarwa](u1) глянь')
+    expect(linkMentions('cc @Daniel Regev, пожалуйста', team)).toBe('cc @[Daniel Regev](u2), пожалуйста')
+    expect(linkMentions('@артём проверь', team)).toBe('@[Артём Горловецкий](u4) проверь')
+  })
+  it('неоднозначное и чужое — остаётся текстом', () => {
+    expect(linkMentions('@Daniel привет', team)).toBe('@Daniel привет')
+    expect(linkMentions('@Someone', team)).toBe('@Someone')
+  })
+  it('почта и готовые упоминания не трогаются', () => {
+    expect(linkMentions('пиши на hadeel@mail.com', team)).toBe('пиши на hadeel@mail.com')
+    expect(linkMentions('@[Hadeel Massarwa](u1) ок', team)).toBe('@[Hadeel Massarwa](u1) ок')
+  })
+  it('у ассистента есть список команды с id', () => {
+    expect(companyTools(ctx()).tools.map((t) => t.name)).toContain('project_team')
   })
 })

@@ -194,7 +194,7 @@ function Page({ data, myId, lng }: { data: TaskFull; myId: string; lng: string }
           <TaskFiles task={task} canAttach={!task.closed} />
           <TaskResources task={task} canEdit={canEdit} />
           <TaskNotes task={task} canEdit={canEdit} />
-          <TaskDiscussion task={task} lng={lng} />
+          <TaskDiscussion task={task} lng={lng} mentions={mentions} />
           <TaskHistory task={task} lng={lng} />
         </div>
 

@@ -4,7 +4,7 @@ import { useNavigate } from 'react-router-dom'
 import { useTranslation } from 'react-i18next'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { api, API_URL, ensureMediaToken, getMediaToken, getSessionToken, inlineImageUrl, withInlineImageAuth } from '@/lib/api'
-import { RichEditor } from '@/components/ui/rich-editor'
+import { RichEditor, type RichMention } from '@/components/ui/rich-editor'
 import { errorCode, inProject, keys, useComments, useHandoffs, type Handoff, type Person, type TaskFull } from '../data'
 import { useUi } from '../ui'
 import { Icon } from '../Icon'
@@ -702,14 +702,17 @@ function CommentBody({ body }: { body: string }) {
 
 type Cmt = { id: string; body: string; createdAt: string; author: Person | null; deleted?: boolean }
 
-export function TaskDiscussion({ task, lng }: { task: TaskX; lng: string }) {
+export function TaskDiscussion({ task, lng, mentions }: { task: TaskX; lng: string; mentions: RichMention[] }) {
   const { t } = useTranslation('v2')
   const { flash } = useUi()
   const qc = useQueryClient()
   const pid = task.project!.id
   const handoffs = useHandoffs(task)
   const comments = useComments(task)
+  // Комментарий — тот же редактор, что в панели задачи: разметка и @ с уведомлением.
   const [text, setText] = useState('')
+  const [edKey, setEdKey] = useState(0)
+  const empty = !text.replace(/<[^>]*>/g, '').trim()
   const [att, setAtt] = useState<{ id: string; name: string }[]>([])
   const fileRef = useRef<HTMLInputElement>(null)
   const up = useMutation({
@@ -725,11 +728,12 @@ export function TaskDiscussion({ task, lng }: { task: TaskX; lng: string }) {
     mutationFn: () =>
       api(`/api/v1/tasks/${task.id}/comments`, {
         method: 'POST',
-        body: JSON.stringify({ body: text.trim(), attachmentIds: att.map((a) => a.id) }),
+        body: JSON.stringify({ body: text, attachmentIds: att.map((a) => a.id) }),
         ...inProject(pid),
       }),
     onSuccess: () => {
       setText('')
+      setEdKey((k) => k + 1)
       setAtt([])
       void qc.invalidateQueries({ queryKey: keys.comments(task.id) })
       if (att.length) void qc.invalidateQueries({ queryKey: ['v2', 'task-files', task.id] })
@@ -742,7 +746,7 @@ export function TaskDiscussion({ task, lng }: { task: TaskX; lng: string }) {
   const evs: Ev[] = [...(handoffs.data ?? []).map((h) => ({ at: h.createdAt, h })), ...live.map((c) => ({ at: c.createdAt, c }))].sort((a, b) =>
     a.at.localeCompare(b.at),
   )
-  const can = text.trim() && !send.isPending
+  const can = !empty && !send.isPending
   return (
     <div className="sec2">
       <h3>
@@ -771,19 +775,17 @@ export function TaskDiscussion({ task, lng }: { task: TaskX; lng: string }) {
           </div>
         )}
         <div className="composer">
-          <textarea
-            value={text}
-            dir="auto"
-            onChange={(e) => setText(e.target.value)}
-            onKeyDown={(e) => {
-              if (e.key === 'Enter' && (e.ctrlKey || e.metaKey) && can) {
-                e.preventDefault()
-                send.mutate()
-              }
-            }}
-            placeholder={t('task.commentPh')}
-            aria-label={t('task.commentAria')}
-          />
+          <div className="cbox-ed" aria-label={t('task.commentAria')}>
+            <RichEditor
+              key={edKey}
+              value={text}
+              onChange={(html) => setText(html)}
+              onSubmit={() => can && send.mutate()}
+              placeholder={t('task.commentPh')}
+              mentions={mentions}
+              preset="minimal"
+            />
+          </div>
           {att.length > 0 && (
             <div className="tp-att">
               {att.map((a) => (

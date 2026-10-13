@@ -129,10 +129,56 @@ export function projectTools(ctx: Ctx): { tools: ToolDef[]; handlers: Record<str
       ctx.used.push(t.name)
       const { [key]: _p, ...rest } = args
       const h = memoryTools(p.id, ctx.userId).handlers[t.name]
-      return h ? h(rest) : `Unknown tool ${t.name}`
+      if (!h) return `Unknown tool ${t.name}`
+      return h(await linkMentionArgs(p.id, rest))
     }
   }
   return { tools, handlers }
+}
+
+
+/** Поля, где ассистент пишет текст людям: в них «@Имя» должно стать упоминанием. */
+const MENTION_FIELDS = new Set(['description', 'body', 'text', 'note', 'content', 'message', 'comment'])
+
+async function teamOf(projectId: string) {
+  return db
+    .select({ id: users.id, name: users.name, email: users.email })
+    .from(projectMembers)
+    .innerJoin(users, eq(users.id, projectMembers.userId))
+    .where(eq(projectMembers.projectId, projectId))
+}
+
+/**
+ * Простое «@Hadeel» — это текст: ссылки нет, уведомления нет, человек не
+ * узнает, что к нему обращались. Упоминание — только @[Имя](id).
+ *
+ * Модель знает формат, но id берёт не всегда. Поэтому «@Имя» человека из
+ * команды проекта превращаем в упоминание сами — только если имя
+ * однозначное: полное имя целиком или имя, которое в команде одно. Адреса
+ * почты (a@b.c) и уже готовые @[..](..) не трогаем.
+ */
+export function linkMentions(text: string, team: { id: string; name: string | null }[]): string {
+  const people = team.filter((u) => u.name && u.name.trim())
+  if (!people.length || !text.includes('@')) return text
+  const low = (x: string) => x.toLocaleLowerCase()
+  return text.replace(/(^|[^\p{L}\p{N}_@.[])@(\p{L}[\p{L}\p{N}'’-]*)(?:[ \u00A0](\p{L}[\p{L}\p{N}'’-]*))?/gu, (all, pre: string, a: string, b?: string) => {
+    if (b) {
+      const full = people.filter((u) => low(u.name!.trim()) === low(`${a} ${b}`))
+      if (full.length === 1) return `${pre}@[${full[0]!.name}](${full[0]!.id})`
+    }
+    const first = people.filter((u) => low(u.name!.trim().split(/\s+/)[0]!) === low(a))
+    if (first.length === 1) return `${pre}@[${first[0]!.name}](${first[0]!.id})${b ? ` ${b}` : ''}`
+    return all
+  })
+}
+
+async function linkMentionArgs(projectId: string, args: Record<string, unknown>): Promise<Record<string, unknown>> {
+  const keys = Object.keys(args).filter((k) => MENTION_FIELDS.has(k) && typeof args[k] === 'string' && (args[k] as string).includes('@'))
+  if (!keys.length) return args
+  const team = await teamOf(projectId)
+  const out = { ...args }
+  for (const k of keys) out[k] = linkMentions(out[k] as string, team)
+  return out
 }
 
 async function taskIn(projectId: string, key: string) {
@@ -242,6 +288,13 @@ export function companyTools(ctx: Ctx): { tools: ToolDef[]; handlers: Record<str
         },
         required: ['action'],
       },
+    },
+    {
+      name: 'project_team',
+      description:
+        'People of a project with their ids, roles and job titles. Use it to pick who to hand work to, and to MENTION someone: ' +
+        'write @[Their Name](<id>) in a task description, comment or note — that links the person and notifies them.',
+      parameters: { type: 'object', properties: { project: PROJECT_PARAM } },
     },
     {
       name: 'open_on_screen',
@@ -409,6 +462,18 @@ export function companyTools(ctx: Ctx): { tools: ToolDef[]; handlers: Record<str
       return `Logged ${Math.round((ended.getTime() - started.getTime()) / 60000)} min on the company.`
     },
 
+    project_team: async (args) => {
+      used('project_team')
+      const p = pickProject(ctx, args.project)
+      if (typeof p === 'string') return p
+      const rows = await db
+        .select({ id: users.id, name: users.name, email: users.email, role: projectMembers.role })
+        .from(projectMembers)
+        .innerJoin(users, eq(users.id, projectMembers.userId))
+        .where(eq(projectMembers.projectId, p.id))
+      return json({ project: p.name, people: rows.map((r) => ({ id: r.id, name: r.name || r.email, role: r.role, mention: `@[${r.name || r.email}](${r.id})` })) })
+    },
+
     open_on_screen: async (args) => {
       used('open_on_screen')
       // Адрес собираем ЗДЕСЬ из проверенных записей, а не берём у модели:
@@ -438,7 +503,6 @@ export function companyTools(ctx: Ctx): { tools: ToolDef[]; handlers: Record<str
         const notes: string[] = []
         const title = typeof args.title === 'string' ? args.title.trim().slice(0, 300) : ''
         if (title) draft.title = title
-        if (typeof args.description === 'string' && args.description.trim()) draft.description = richText(args.description)
         // Проект: названный, открытый на экране, единственный — иначе форма спросит сама.
         const named = typeof args.project === 'string' && args.project.trim()
         if (named || ctx.screen.projectId || ctx.projects.length === 1) {
@@ -446,6 +510,10 @@ export function companyTools(ctx: Ctx): { tools: ToolDef[]; handlers: Record<str
           if (typeof p === 'string') {
             if (named) return p
           } else draft.projectId = p.id
+        }
+        if (typeof args.description === 'string' && args.description.trim()) {
+          const md = draft.projectId ? linkMentions(args.description, await teamOf(draft.projectId as string)) : args.description
+          draft.description = richText(md)
         }
         if (typeof args.assignee === 'string' && args.assignee.trim()) {
           if (!draft.projectId) notes.push('assignee skipped: pick the project first')
@@ -656,6 +724,7 @@ export async function assistantReply(input: {
       'All actions are permission-checked per person and project — on PERMISSION DENIED or REFUSED, explain plainly.',
       'about_chatick answers questions about the product itself — call it instead of guessing.',
       'OPENING THINGS: when the person asks to open, show or go to a task, document, note or section, call open_on_screen — the app switches to it. Do not paste a document\'s text into the chat instead of opening it.',
+      'MENTIONS: to address or pull in a person in anything you write (task description, comment, note), write @[Their Name](<userId>) — ids come from project_team. Plain "@Name" notifies nobody.',
       'NEW TASK FOR REVIEW: when they want a task drafted for them to check ("набросай", "заполни", "открой создание задачи"), call open_on_screen with what=new_task and every field you know — they only press Create. Create directly (quick_task/create_task) only when they plainly ask you to create it.',
       'FORMATTING: markdown renders. Lead with the answer; tables only to compare several items across the same fields; no "Sure!", no restating the question. Be concise.',
     ].join('\n'),
