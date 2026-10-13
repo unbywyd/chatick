@@ -257,5 +257,25 @@ html:has(.app .panel),html:has(.app .panel) body{overflow:hidden}
 
 /* Текст с направлением по содержимому (.bidi) — выравнивать к началу строки,
    а не влево: иначе заголовок на иврите прижимался к левому краю. */
-.app .bidi{text-align:start}
+/* (в списках — по краю интерфейса, иначе рваный край; см. ниже) */
 .app .kb h1.bidi,.app .kb .kb-title{unicode-bidi:plaintext;text-align:start;width:100%}
+
+/* Задачи «По проектам»: проект — свёрнутая группа с числом задач. */
+.app .bar .vmode{margin-inline-start:6px}
+.app .pgrp{border-top:1px solid var(--line)}
+.app .pgrp:first-of-type{border-top:0}
+.app .pgh{display:flex;align-items:center;gap:10px;width:100%;padding:12px 12px;border-radius:12px;text-align:start;font-weight:600;font-size:15px;color:var(--ink)}
+.app .pgh:hover{background:var(--soft)}
+.app .pgh .ic{color:var(--ink3)}
+.app .pgh .nm{flex:1;min-width:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.app .pgc{min-width:28px;height:24px;padding:0 8px;border-radius:8px;background:var(--soft);display:grid;place-items:center;font-size:13px;font-weight:700;color:var(--ink)}
+.app .pgrp.open .pgh{color:var(--ink)}
+.app[dir='rtl'] .pgh .ic{transform:scaleX(-1)}
+
+/* Направление текста по содержимому (.bidi), но край выравнивания — по
+   интерфейсу: в списке задач строки на иврите не прыгают вправо. */
+.app[dir='rtl'] .bidi{text-align:right}
+.app .bar .vmode button{width:38px;padding:0;justify-content:center}
+
+.app .lh-tag{white-space:nowrap}
+.app .lh-b{white-space:nowrap}

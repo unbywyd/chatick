@@ -1,0 +1,309 @@
+/*  Сгенерировано scripts/gen-rtl.mjs из стилей v2 — не править руками.  */
+.app[dir='rtl'] .au .lgo > i > b {
+    border-radius: 48% 52% 54% 46% / 55% 60% 40% 45%
+}
+.app[dir='rtl'] .gt-today {
+    border-radius: 10px 0 0 10px
+}
+.app[dir='rtl'] .rperson {
+    padding: 3px 3px 3px 6px
+}
+.app[dir='rtl'] .bidi {
+    text-align: right
+}
+.app[dir='rtl'] .hdr {
+    padding: 0 24px 0 20px
+}
+.app[dir='rtl'] .brand {
+    padding: 0 6px 0 12px
+}
+.app[dir='rtl'] .search {
+    padding: 0 14px 0 12px
+}
+.app[dir='rtl'] .timer {
+    padding: 0 14px 0 5px
+}
+.app[dir='rtl'] .lk {
+    padding: 2px 6px 2px 8px
+}
+.app[dir='rtl'] .fext {
+    left: auto;
+    right: 10px
+}
+.app[dir='rtl'] .ftask {
+    right: auto;
+    left: 8px
+}
+.app[dir='rtl'] .cn-ps > button {
+    padding: 0 5px 0 11px
+}
+.app[dir='rtl'] .tgt {
+    padding: 1px 4px 1px 8px
+}
+.app[dir='rtl'] .rchip {
+    padding: 0 6px 0 12px
+}
+.app[dir='rtl'] .composer {
+    padding: 12px 16px 10px 10px
+}
+.app[dir='rtl'] .track {
+    left: auto;
+    right: 50%
+}
+.app[dir='rtl'] .felt {
+    left: auto;
+    right: 94px
+}
+.app[dir='rtl'] .tuber {
+    left: auto;
+    right: 2px;
+    border-radius: 48% 52% 54% 46% / 55% 60% 40% 45%
+}
+.app[dir='rtl'] .tuber::before {
+    left: auto;
+    right: 9px
+}
+.app[dir='rtl'] .tuber::after {
+    left: auto;
+    right: 19px
+}
+.app[dir='rtl'] .steam {
+    left: auto;
+    right: 7px
+}
+.app[dir='rtl'] .mound {
+    left: auto;
+    right: 174px
+}
+.app[dir='rtl'] .mound::after {
+    left: auto;
+    right: 28px
+}
+.app[dir='rtl'] .ball {
+    padding: 12px 14px 12px 12px
+}
+.app[dir='rtl'] .okmark {
+    left: auto;
+    right: 174px
+}
+.app[dir='rtl'] .hero .hnav {
+    margin-left: 0;
+    margin-right: auto
+}
+.app[dir='rtl'] .hero h2 {
+    text-align: right
+}
+.app[dir='rtl'] .ih a {
+    margin-left: 0;
+    margin-right: auto
+}
+.app[dir='rtl'] .ev .bd {
+    text-align: right
+}
+.app[dir='rtl'] .cbx-f {
+    padding: 0 7px 0 12px
+}
+.app[dir='rtl'] .car {
+    padding: 2px 2px 6px 64px
+}
+.app[dir='rtl'] .chip {
+    padding: 0 8px 0 16px
+}
+.app[dir='rtl'] .car-more {
+    right: auto;
+    left: 0;
+    padding: 0 12px 0 4px
+}
+.app[dir='rtl'] .newt {
+    padding: 0 16px 0 10px
+}
+.app[dir='rtl'] .pin {
+    padding: 0 5px 0 10px
+}
+.app[dir='rtl'] .row {
+    padding: 10px 12px 10px 10px
+}
+.app[dir='rtl'] .row::before {
+    left: 12px;
+    right: 48px;
+    right: 48px;
+    left: 12px
+}
+.app[dir='rtl'] .aside {
+    border-left: 0;
+    border-right: 1px solid var(--line)
+}
+.app[dir='rtl'] .ah {
+    padding: 18px 20px 14px 16px
+}
+.app[dir='rtl'] .mu {
+    border-radius: 18px 18px 18px 6px
+}
+.app[dir='rtl'] .card {
+    padding: 10px 12px 10px 10px
+}
+.app[dir='rtl'] .card .t {
+    text-align: right
+}
+.app[dir='rtl'] .ain {
+    padding: 10px 14px 8px 8px
+}
+.app[dir='rtl'] .send {
+    margin-left: 0;
+    margin-right: auto
+}
+.app[dir='rtl'] .panel {
+    right: auto;
+    left: 0;
+    border-radius: 0 24px 0 0
+}
+.app[dir='rtl'] .ph {
+    padding: 16px 28px 0 16px
+}
+.app[dir='rtl'] .hand {
+    padding: 0 4px 0 12px
+}
+.app[dir='rtl'] .fld {
+    text-align: right
+}
+.app[dir='rtl'] .cm .n time {
+    margin-left: 0;
+    margin-right: 8px
+}
+.app[dir='rtl'] .optb {
+    text-align: right
+}
+.app[dir='rtl'] .pp {
+    padding: 0 6px 0 13px
+}
+.app[dir='rtl'] .toast {
+    left: auto;
+    right: 50%;
+    padding: 12px 14px 12px 18px
+}
+.app[dir='rtl'] .co-pj b {
+    text-align: right
+}
+.app[dir='rtl'] .co-pj small {
+    text-align: right
+}
+.app[dir='rtl'] .co-mem b {
+    text-align: right
+}
+.app[dir='rtl'] .co-mem small {
+    text-align: right
+}
+.app[dir='rtl'] .co-cand b {
+    text-align: right
+}
+.app[dir='rtl'] .co-bgt {
+    text-align: right
+}
+.app[dir='rtl'] .sv-floor {
+    left: auto;
+    right: 70px
+}
+.app[dir='rtl'] .sv-felt {
+    left: auto;
+    right: 125px
+}
+.app[dir='rtl'] .sv .seat {
+    left: auto;
+    right: auto
+}
+.app[dir='rtl'] .sv .okmark {
+    left: auto;
+    right: 270px
+}
+.app[dir='rtl'] .sv-title {
+    text-align: right
+}
+.app[dir='rtl'] .nw span {
+    text-align: right
+}
+.app[dir='rtl'] .lp-p {
+    left: auto;
+    right: 0;
+    margin: -40px -60px 0 0
+}
+.app[dir='rtl'] .lp-p .av {
+    left: auto;
+    right: 34px
+}
+.app[dir='rtl'] .lp-p .nm {
+    left: auto;
+    right: 50%
+}
+.app[dir='rtl'] .ob-seat {
+    left: auto;
+    right: 0;
+    margin: -22px -22px 0 0
+}
+.app[dir='rtl'] .ob-seat small {
+    left: auto;
+    right: 50%
+}
+.app[dir='rtl'] .ob-por {
+    left: auto;
+    right: 300px;
+    margin: -50px -50px 0 0
+}
+.app[dir='rtl'] .ob-ball {
+    left: auto;
+    right: 0
+}
+.app[dir='rtl'] .ob-clk {
+    left: auto;
+    right: 300px
+}
+.app[dir='rtl'] .tg-in {
+    left: auto;
+    right: 0
+}
+.app[dir='rtl'] .tg-spot {
+    left: auto;
+    right: 150px
+}
+.app[dir='rtl'] .tg-grp img {
+    left: auto;
+    right: 0
+}
+.app[dir='rtl'] .tg-hit {
+    margin: -60px -60px 0 0
+}
+.app[dir='rtl'] .tg-clk {
+    left: auto;
+    right: 16px
+}
+.app[dir='rtl'] .ai-fab {
+    right: auto;
+    left: 24px
+}
+.app[dir='rtl'] .lh {
+    padding: 6px 12px 2px 10px
+}
+.app[dir='rtl'] .stg .url {
+    padding: 12px 16px 12px 12px
+}
+.app[dir='rtl'] .stg .keys th {
+    padding: 6px 0 6px 10px
+}
+.app[dir='rtl'] .stg .keys td {
+    padding: 10px 0 10px 10px
+}
+.app[dir='rtl'] .tmv .rng {
+    padding: 0 10px 0 6px
+}
+.app[dir='rtl'] .tmv .cbx-f {
+    padding: 0 6px 0 10px
+}
+.app[dir='rtl'] .tmv .cbx-f.sm {
+    padding: 0 3px 0 8px
+}
+.app[dir='rtl'] .tmv .mdl {
+    left: auto;
+    right: 50%
+}
+.app[dir='rtl'] .tmv .prev {
+    text-align: right
+}

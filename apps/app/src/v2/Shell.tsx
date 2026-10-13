@@ -13,6 +13,7 @@ import { Icon } from './Icon'
 import { inkOn } from './util'
 import './styles/main.css'
 import './styles/fixes.css'
+import './styles/rtl.css'
 import './i18n'
 
 const ACCENT = '#D4F36B'

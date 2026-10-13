@@ -1,4 +1,6 @@
 import { useEffect, useState } from 'react'
+import { ShareTask } from '../ShareTask'
+import { TaskChecklist as ClassicChecklist } from '@/components/tabs/tasks/TaskChecklist'
 import { useNavigate } from 'react-router-dom'
 import { useTranslation } from 'react-i18next'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
@@ -42,8 +44,10 @@ export function TaskPanel({ taskId }: { taskId: string }) {
   }, [isNew, taskId])
 
   const task = full.data?.task
+  const [sharing, setSharing] = useState(false)
   return (
     <>
+      {sharing && task && <ShareTask taskId={task.id} title={`${task.number} · ${task.title}`} canPublish={Boolean(full.data?.can.edit)} onClose={() => setSharing(false)} />}
       <div className="scrim" onClick={closeTask} />
       <section className="panel" aria-label={t('panel.aria')}>
         <div className="ph">
@@ -55,6 +59,11 @@ export function TaskPanel({ taskId }: { taskId: string }) {
           )}
           <span className="tid">{task?.number}</span>
           <span style={{ flex: 1 }} />
+          {task && (
+            <button className="ib" aria-label={t('act.share')} title={t('act.share')} onClick={() => setSharing(true)}>
+              <Icon name="share" />
+            </button>
+          )}
           <button className="ib" aria-label={t('panel.full')} onClick={() => navigate(`${base}/task/${taskId}`)}>
             <Icon name="expand" />
           </button>
@@ -73,6 +82,10 @@ export function PanelBody({ data, myId, lng }: { data: TaskFull; myId: string; l
   const { t } = useTranslation('v2')
   const task = data.task
   const pid = task.project?.id ?? null
+  // Проект «с экрана» для старых виджетов (чек-лист, загрузка картинок).
+  // Ставим при отрисовке, а не в эффекте: дочерние компоненты начинают
+  // запросы раньше, чем срабатывают эффекты родителя.
+  setScreenProject(pid)
   useEffect(() => {
     setScreenProject(pid)
     return () => setScreenProject(null)
@@ -113,7 +126,9 @@ export function PanelBody({ data, myId, lng }: { data: TaskFull; myId: string; l
             {t('panel.noDesc')}
           </p>
         )}
-        <Checklist task={task} canEdit={Boolean(data.can.edit) || task.holder?.id === myId} />
+        <div className="cl-classic">
+          <ClassicChecklist taskId={task.id} canEdit={Boolean(data.can.edit)} />
+        </div>
         <Feed task={task} lng={lng} />
       </div>
       <CommentBox task={task} team={data.team} />

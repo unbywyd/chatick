@@ -1,4 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
+import { ShareTask } from '../ShareTask'
+import { TaskChecklist as ClassicChecklist } from '@/components/tabs/tasks/TaskChecklist'
 import { DatePop } from '../ui/Calendar'
 import { useLocation, useNavigate, useParams } from 'react-router-dom'
 import { useTranslation } from 'react-i18next'
@@ -18,7 +20,6 @@ import {
   I,
   PRIOS,
   PickPop,
-  TaskChecklist,
   TaskDiscussion,
   TaskFiles,
   TaskHistory,
@@ -80,7 +81,10 @@ function Page({ data, myId, lng }: { data: TaskFull; myId: string; lng: string }
   const refresh = useRefreshBall()
   const task = data.task as TaskX
   const pid = task.project!.id
-  // Редактор описания грузит вставленные картинки в проект «с экрана».
+  // Проект «с экрана» для старых виджетов (чек-лист, загрузка картинок).
+  // Ставим при отрисовке, а не в эффекте: дочерние компоненты начинают
+  // запросы раньше, чем срабатывают эффекты родителя.
+  setScreenProject(pid)
   useEffect(() => {
     setScreenProject(pid)
     return () => setScreenProject(null)
@@ -128,13 +132,9 @@ function Page({ data, myId, lng }: { data: TaskFull; myId: string; lng: string }
 
   const mentions = useMemo(() => data.team.map((p) => ({ id: p.id, label: p.name, avatarUrl: p.avatarUrl })), [data.team])
 
-  const share = () => {
-    const url = `${window.location.origin}${base}/task/${task.id}`
-    void navigator.clipboard?.writeText(url).then(
-      () => flash(t('task.copied')),
-      () => flash(url),
-    )
-  }
+  // «Поделиться» — диалог старого клиента: внутренняя и публичная ссылка.
+  const [sharing, setSharing] = useState(false)
+  const share = () => setSharing(true)
   const del = useMutation({
     mutationFn: () => api(`/api/v1/tasks/${task.id}`, { method: 'DELETE', ...inProject(pid) }),
     onSuccess: () => {
@@ -147,6 +147,7 @@ function Page({ data, myId, lng }: { data: TaskFull; myId: string; lng: string }
 
   return (
     <div className="wrap" style={{ maxWidth: 1120 }}>
+      {sharing && <ShareTask taskId={task.id} title={`${task.number} · ${task.title}`} canPublish={Boolean(data.can.edit)} onClose={() => setSharing(false)} />}
       <div className="tp-bar">
         <button className="back" onClick={() => navigate(base)}>
           <I name="back" />
@@ -186,7 +187,9 @@ function Page({ data, myId, lng }: { data: TaskFull; myId: string; lng: string }
               {t('task.noDesc')}
             </div>
           )}
-          <TaskChecklist task={task} canEdit={canEdit} />
+          {/* Чек-лист — тот же, что в старом клиенте: ответы на пункты, копирование,
+              перетаскивание. Проект он берёт «с экрана» (setScreenProject выше). */}
+          <ClassicChecklist taskId={task.id} canEdit={canEdit} />
           <TaskRelations task={task} canEdit={canEdit} />
           <TaskFiles task={task} canAttach={!task.closed} />
           <TaskResources task={task} canEdit={canEdit} />

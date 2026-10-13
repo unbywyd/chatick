@@ -102,6 +102,13 @@ const PATHS: Record<string, React.ReactNode> = {
     </>
   ),
   back: <path d="M9 14l-4-4 4-4M5 10h9a5 5 0 010 10h-2" />,
+  list: <path d="M9 6h11M9 12h11M9 18h11M4.5 6h.01M4.5 12h.01M4.5 18h.01" />,
+  folders: (
+    <>
+      <path d="M3.5 7.5a2 2 0 012-2h3.2l1.8 2h8a2 2 0 012 2v7a2 2 0 01-2 2h-13a2 2 0 01-2-2z" />
+      <path d="M3.5 10.5h17" />
+    </>
+  ),
   sliders: <path d="M4 7h10M18 7h2M4 17h4M12 17h8M14 5v4M8 15v4" />,
   grip: (
     <>

@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
+import { ShareTask } from '../ShareTask'
 import { useNavigate } from 'react-router-dom'
 import { useTranslation } from 'react-i18next'
 import { useMutation, useQuery } from '@tanstack/react-query'
@@ -62,7 +63,42 @@ export function TasksView() {
   const [focus, setFocus] = useState<Focus | null>(null)
   const [sortK, setSortK] = useState<SortKey | null>(null)
   const [sortD, setSortD] = useState<1 | -1>(1)
-  const [grpBy, setGrpBy] = useState<GroupBy>(() => pref('chatick_v2_group', 'due'))
+  const [grpBy, setGrpBy] = useState<GroupBy>(() => {
+    const g = pref<GroupBy>('chatick_v2_group', 'due')
+    return g === 'proj' ? 'due' : g
+  })
+  // «По проектам» — отдельный переключатель: каждый проект свёрнутой группой
+  // с числом задач. Сортировка колонок действует внутри каждого проекта.
+  const [byProj, setByProjState] = useState(() => localStorage.getItem('chatick_v2_byproj') === '1')
+  const setByProj = (v: boolean) => {
+    setByProjState(v)
+    try {
+      localStorage.setItem('chatick_v2_byproj', v ? '1' : '0')
+    } catch {
+      /* не запомним — не страшно */
+    }
+  }
+  const [prefs] = useProjectPrefs(companyId)
+  const openKey = `chatick_v2_projopen_${companyId}`
+  const [openProj, setOpenProj] = useState<Set<string>>(() => {
+    try {
+      return new Set(JSON.parse(localStorage.getItem(openKey) ?? '[]') as string[])
+    } catch {
+      return new Set()
+    }
+  })
+  const toggleProj = (id: string) =>
+    setOpenProj((prev) => {
+      const next = new Set(prev)
+      if (next.has(id)) next.delete(id)
+      else next.add(id)
+      try {
+        localStorage.setItem(openKey, JSON.stringify([...next]))
+      } catch {
+        /* не запомним — не страшно */
+      }
+      return next
+    })
   const setTab = (v: Tab) => {
     setTabState(v)
     setFocus(null)
@@ -104,7 +140,15 @@ export function TasksView() {
     }
     let G: [string, string][]
     let keyOf: (i: BallItem) => string
-    if (grpBy === 'proj') {
+    if (byProj && !project) {
+      // Проекты — в порядке, который человек настроил в ленте, дальше по числу задач.
+      keyOf = (i) => i.project?.id ?? ''
+      const present = new Map<string, NonNullable<BallItem['project']>>()
+      for (const i of list) if (i.project) present.set(i.project.id, i.project)
+      const n = (id: string) => list.filter((i) => i.project?.id === id).length
+      const ordered = orderProjects([...present.values()].map((p) => ({ ...p, companyId })), prefs, n)
+      G = ordered.map((p) => [p.id, p.name])
+    } else if (grpBy === 'proj') {
       keyOf = (i) => i.project?.id ?? ''
       G = [...new Map(list.map((i) => [keyOf(i), shortProject(i.project?.name ?? '—')])).entries()]
     } else if (grpBy === 'person') {
@@ -127,7 +171,7 @@ export function TasksView() {
     return G.map(([k, label]) => ({ k, label, rows: list.filter((i) => keyOf(i) === k).sort(cmp) })).filter((g) => g.rows.length)
     // personOf зависит от tab — он в зависимостях через tab
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [list, grpBy, sortK, sortD, tab, t])
+  }, [list, grpBy, sortK, sortD, tab, t, byProj, project, prefs, companyId])
 
   // Сводка — по «На мне» в выбранном проекте, как в макете.
   const mp = mineAll.filter(inProj)
@@ -156,16 +200,21 @@ export function TasksView() {
         }}
       >
         {label}
-        {k === 'prio' && on ? (
-          // Важность — не стрелкой, а словами: «сначала важные» понятнее, чем ↓.
-          <span className={'lh-tag ' + (sortD === 1 ? 'hi' : 'lo')}>{sortD === 1 ? t('tasks.prioFirst') : t('tasks.prioLast')}</span>
+        {(k === 'prio' || k === 'wait') && on ? (
+          // Важность и ожидание — не стрелкой, а словами: «сначала важные»,
+          // «сначала заждавшиеся» понятнее, чем ↓.
+          <span className={'lh-tag ' + (sortD === 1 ? 'hi' : 'lo')}>
+            {k === 'prio' ? (sortD === 1 ? t('tasks.prioFirst') : t('tasks.prioLast')) : sortD === 1 ? t('tasks.waitFirst') : t('tasks.waitLast')}
+          </span>
         ) : (
           <i>{on ? (sortD === -1 ? '↑' : '↓') : ''}</i>
         )}
       </button>
     )
   }
-  const GBO: GroupBy[] = ['due', 'proj', 'person', 'none']
+  // «По проекту» — теперь отдельным переключателем «Списком | По проектам».
+  const GBO: GroupBy[] = ['due', 'person', 'none']
+  const grouped = byProj && !project
   const gbLabel = grpBy === 'person' ? (tab === 'from' ? t('tasks.gb.personTo') : t('tasks.gb.personFrom')) : t(`tasks.gb.${grpBy}`)
 
   return (
@@ -187,6 +236,16 @@ export function TasksView() {
             <span className="n">{fromAll.filter(inProj).length}</span>
           </button>
         </div>
+        {!project && (
+          <div className="seg vmode" role="radiogroup" aria-label={t('tasks.view')}>
+            <button className={!byProj ? 'on' : ''} role="radio" aria-checked={!byProj} aria-label={t('tasks.viewFlat')} title={t('tasks.viewFlat')} onClick={() => setByProj(false)}>
+              <Icon name="list" sm />
+            </button>
+            <button className={byProj ? 'on' : ''} role="radio" aria-checked={byProj} aria-label={t('tasks.viewProj')} title={t('tasks.viewProj')} onClick={() => setByProj(true)}>
+              <Icon name="folders" sm />
+            </button>
+          </div>
+        )}
         <div style={{ flex: 1 }} />
         {FOCUS.map(([f, dot]) => {
           const c = src.filter(F[f]).length
@@ -203,7 +262,7 @@ export function TasksView() {
 
       <div className="sheet">
         <QuickAdd projects={projects.data ?? []} onCreated={(toMe) => setTab(toMe ? 'mine' : 'from')} />
-        <div className={'lh' + (sortK || grpBy !== 'due' ? ' pinned' : '')} role="toolbar">
+        <div className="lh pinned" role="toolbar">
           <span />
           <span style={{ display: 'flex', gap: 6 }}>
             {sortBtn('id', t('tasks.lh.id'))}
@@ -217,6 +276,7 @@ export function TasksView() {
             {sortBtn('wait', t('tasks.lh.wait'))}
           </span>
           <span style={{ textAlign: 'end' }}>
+            {!grouped && (
             <button
               className={'lh-g' + (grpBy !== 'due' ? ' on' : '')}
               onClick={() => {
@@ -228,20 +288,37 @@ export function TasksView() {
               {t('tasks.groups', { by: gbLabel })}
               <Icon name="sort" sm />
             </button>
+            )}
           </span>
         </div>
 
-        {groups.map((g) => (
-          <div key={g.k}>
-            <div className={'gh' + (grpBy === 'due' && g.k === 'late' ? ' late' : '')}>
-              {g.label}
-              <span className="n">{g.rows.length}</span>
+        {groups.map((g) => {
+          if (!grouped)
+            return (
+              <div key={g.k}>
+                <div className={'gh' + (grpBy === 'due' && g.k === 'late' ? ' late' : '')}>
+                  {g.label}
+                  <span className="n">{g.rows.length}</span>
+                </div>
+                {g.rows.map((i, n) => (
+                  <Row key={i.id} item={i} tab={tab} first={n === 0} myId={myId} person={personOf(i)} />
+                ))}
+              </div>
+            )
+          const open = openProj.has(g.k)
+          const p = g.rows[0]?.project ?? null
+          return (
+            <div key={g.k} className={'pgrp' + (open ? ' open' : '')}>
+              <button className="pgh" aria-expanded={open} onClick={() => toggleProj(g.k)}>
+                <Icon name={open ? 'chevron' : 'chevronEnd'} sm />
+                <ProjectLogo project={p} />
+                <span className="nm bidi">{g.label}</span>
+                <span className="pgc">{g.rows.length}</span>
+              </button>
+              {open && g.rows.map((i, n) => <Row key={i.id} item={i} tab={tab} first={n === 0} myId={myId} person={personOf(i)} />)}
             </div>
-            {g.rows.map((i, n) => (
-              <Row key={i.id} item={i} tab={tab} first={n === 0} myId={myId} person={personOf(i)} />
-            ))}
-          </div>
-        ))}
+          )
+        })}
         {!loading && !groups.length && (
           <div className="none">{focus ? t('tasks.noneFilter') : tab === 'mine' ? t('tasks.noneMine') : t('tasks.noneFrom')}</div>
         )}
@@ -384,6 +461,7 @@ function Row({ item: i, tab, first, myId, person }: { item: BallItem; tab: Tab; 
   const { t, i18n } = useTranslation('v2')
   const { openTask } = useUi()
   const a = useBallActions(i, myId)
+  const [sharing, setSharing] = useState(false)
   const mk = moveKey(i)
   const n = dueDiff(i.dueDate)
   const long = tab === 'mine' && a.mine && heatOf(i.ball.move, i.ball.heldSince) === 'burn' && !i.ball.waitingClientSince
@@ -423,6 +501,10 @@ function Row({ item: i, tab, first, myId, person }: { item: BallItem; tab: Tab; 
         }
       />
       <div className={'acts' + (a.isRev ? ' always' : '')}>
+        <button className="ib" aria-label={t('act.share')} title={t('act.share')} onClick={() => setSharing(true)}>
+          <Icon name="share" />
+        </button>
+        {sharing && <ShareTask taskId={i.id} title={`${i.number} · ${i.title}`} canPublish={a.mine || a.canTake} onClose={() => setSharing(false)} />}
         {a.isRev && (
           <>
             <button className="pass" onClick={a.back}>
