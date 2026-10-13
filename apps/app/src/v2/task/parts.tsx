@@ -50,9 +50,11 @@ const PATHS: Record<string, React.ReactNode> = {
   chevEnd: <path d="M9 6l6 6-6 6" />,
   reply: <path d="M9 14L4 9l5-5M4 9h10.5a5.5 5.5 0 010 11H11" />,
 }
+/** Стрелки «вперёд/назад» — в иврите зеркалятся сами (.ic.fw), как в общем Icon. */
+const FLOW = new Set(['back', 'chevEnd'])
 export function I({ name, sm, style }: { name: keyof typeof PATHS; sm?: boolean; style?: React.CSSProperties }) {
   return (
-    <svg className={'ic' + (sm ? ' sm' : '')} viewBox="0 0 24 24" aria-hidden="true" style={style}>
+    <svg className={'ic' + (sm ? ' sm' : '') + (FLOW.has(name) ? ' fw' : '')} viewBox="0 0 24 24" aria-hidden="true" style={style}>
       {PATHS[name]}
     </svg>
   )

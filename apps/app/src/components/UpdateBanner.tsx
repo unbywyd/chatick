@@ -1,7 +1,6 @@
 import { useEffect, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { RefreshCw } from 'lucide-react'
-import { Button } from '@/components/ui/button'
 
 // Уведомление о новой версии (SPEC §8.33).
 //
@@ -51,20 +50,25 @@ export function UpdateBanner() {
 
   if (!outdated) return null
 
+  // Вид — как у плавающей кнопки ассистента v2: тёмная «таблетка» внизу, лаймовая
+  // кнопка. Плашка живёт вне .app (её видно и на входе), поэтому цвета v2 здесь
+  // заданы значениями, а не переменными. Прежняя лаймовая полоса на всю ширину
+  // была из старого дизайна, и её кнопка при наведении становилась нечитаемой.
   return (
-    <div className="fixed inset-x-0 bottom-0 z-50 flex items-center justify-center gap-3 border-t bg-brand px-4 py-2 text-sm text-brand-foreground shadow-lg">
-      <RefreshCw className="size-4 shrink-0" />
-      <span className="font-medium">{t('update.available')}</span>
-      {/* Цвета кнопки задаём явно: вариант outline берёт светлый фон темы, а
-          на лаймовой полосе тёмный текст на нём становится нечитаемым. */}
-      <Button
-        size="sm"
-        variant="outline"
-        className="h-7 cursor-pointer border-brand-foreground bg-transparent text-brand-foreground hover:bg-brand-foreground hover:text-brand-ink"
+    <div
+      role="status"
+      className="fixed bottom-6 left-1/2 z-50 flex max-w-[calc(100vw-32px)] -translate-x-1/2 items-center gap-3 rounded-2xl bg-[#1F2B1B] py-2 ps-4 pe-2 text-sm text-[#EEF3E6] shadow-[0_14px_34px_-10px_rgba(0,0,0,.45)]"
+      style={{ fontFamily: "'Onest','Heebo',system-ui,sans-serif" }}
+    >
+      <RefreshCw className="size-4 shrink-0 text-[#D4F36B]" />
+      <span className="font-semibold">{t('update.available')}</span>
+      <button
+        type="button"
+        className="h-8 shrink-0 cursor-pointer rounded-[10px] bg-[#D4F36B] px-3.5 font-semibold text-[#1B1D1A] transition-colors hover:bg-[#C4E655]"
         onClick={() => window.location.reload()}
       >
         {t('update.reload')}
-      </Button>
+      </button>
     </div>
   )
 }
