@@ -5,7 +5,19 @@ import { useTranslation } from 'react-i18next'
 import { useMutation, useQuery } from '@tanstack/react-query'
 import type { TFunction } from 'i18next'
 import { api } from '@/lib/api'
-import { errorCode, useFromMe, useMe, useMine, useProjects, useRefreshBall, type BallItem, type CompanyProject } from '../data'
+import {
+  errorCode,
+  useAllTasks,
+  useClosed,
+  useClosedCount,
+  useFromMe,
+  useMe,
+  useMine,
+  useProjects,
+  useRefreshBall,
+  type BallItem,
+  type CompanyProject,
+} from '../data'
 import { useUi } from '../ui'
 import { ProjectLogo } from '../ProjectLogo'
 import { Icon } from '../Icon'
@@ -28,7 +40,7 @@ import {
   waitText,
 } from '../util'
 
-type Tab = 'mine' | 'from'
+type Tab = 'mine' | 'from' | 'all'
 type Focus = 'fresh' | 'prio' | 'late' | 'rev' | 'ans' | 'long'
 type SortKey = 'id' | 'title' | 'prio' | 'mv' | 'due' | 'who' | 'wait'
 type GroupBy = 'due' | 'proj' | 'person' | 'none'
@@ -60,6 +72,7 @@ export function TasksView() {
   const fromMe = useFromMe(companyId)
   const projects = useProjects(companyId)
   const [tab, setTabState] = useState<Tab>(() => pref('chatick_v2_tab', 'mine'))
+  const all = useAllTasks(companyId, tab === 'all')
   const [focus, setFocus] = useState<Focus | null>(null)
   const [sortK, setSortK] = useState<SortKey | null>(null)
   const [sortD, setSortD] = useState<1 | -1>(1)
@@ -109,7 +122,8 @@ export function TasksView() {
   const inProj = (i: BallItem) => !project || i.project?.id === project
   const mineAll = mine.data ?? []
   const fromAll = fromMe.data ?? []
-  const src = (tab === 'mine' ? mineAll : fromAll).filter(inProj)
+  const allAll = all.data ?? []
+  const src = (tab === 'mine' ? mineAll : tab === 'from' ? fromAll : allAll).filter(inProj)
 
   const F: Record<Focus, (i: BallItem) => boolean> = {
     fresh: (i) => i.isNew,
@@ -122,8 +136,8 @@ export function TasksView() {
   const list = focus ? src.filter(F[focus]) : src
 
   // «От кого» в «На мне» — кто отдал мяч (последний ход), иначе владелец.
-  // В «От меня» — у кого он сейчас.
-  const personOf = (i: BallItem) => (tab === 'from' ? i.holder : (i.last?.actor ?? i.owner))
+  // В «От меня» и «Все» — у кого он сейчас.
+  const personOf = (i: BallItem) => (tab === 'mine' ? (i.last?.actor ?? i.owner) : i.holder)
 
   const groups = useMemo(() => {
     const cmp = (a: BallItem, b: BallItem) => {
@@ -157,7 +171,7 @@ export function TasksView() {
         ...new Map(
           list.map((i) => {
             const p = personOf(i)
-            return [keyOf(i), p ? t(tab === 'from' ? 'tasks.gWith' : 'tasks.gFrom', { name: p.name }) : '—'] as [string, string]
+            return [keyOf(i), p ? t(tab === 'mine' ? 'tasks.gFrom' : 'tasks.gWith', { name: p.name }) : t('tasks.nobody')] as [string, string]
           }),
         ).entries(),
       ]
@@ -182,7 +196,7 @@ export function TasksView() {
   const head = mp.length ? t('tasks.headSome', { count: mp.length }) + (!project ? t('tasks.acrossProjects', { count: nProj }) : '') : t('tasks.headNone')
   const sub = mp.length ? (parts.length ? t('tasks.subStart', { parts: parts.join(', ') }) : t('tasks.subCalm')) : t('tasks.subNone')
 
-  const loading = mine.isLoading || fromMe.isLoading
+  const loading = tab === 'all' ? all.isLoading : mine.isLoading || fromMe.isLoading
   const sortBtn = (k: SortKey, label: string) => {
     const on = sortK === k
     return (
@@ -215,7 +229,7 @@ export function TasksView() {
   // «По проекту» — теперь отдельным переключателем «Списком | По проектам».
   const GBO: GroupBy[] = ['due', 'person', 'none']
   const grouped = byProj && !project
-  const gbLabel = grpBy === 'person' ? (tab === 'from' ? t('tasks.gb.personTo') : t('tasks.gb.personFrom')) : t(`tasks.gb.${grpBy}`)
+  const gbLabel = grpBy === 'person' ? (tab === 'mine' ? t('tasks.gb.personFrom') : t('tasks.gb.personTo')) : t(`tasks.gb.${grpBy}`)
 
   return (
     <div className="wrap">
@@ -235,6 +249,10 @@ export function TasksView() {
             {t('tasks.tabFrom')}
             <span className="n">{fromAll.filter(inProj).length}</span>
           </button>
+          <button className={tab === 'all' ? 'on' : ''} role="tab" aria-selected={tab === 'all'} onClick={() => setTab('all')}>
+            {t('tasks.tabAll')}
+            {all.data && <span className="n">{allAll.filter(inProj).length}</span>}
+          </button>
         </div>
         {!project && (
           <div className="seg vmode" role="radiogroup" aria-label={t('tasks.view')}>
@@ -250,6 +268,8 @@ export function TasksView() {
         {FOCUS.map(([f, dot]) => {
           const c = src.filter(F[f]).length
           const on = focus === f
+          // Пустой фокус прячем: с тремя вкладками всё в одну строку не помещалось.
+          if (!c && !on) return null
           return (
             <button key={f} className={'fx' + (on ? ' on' : '') + (!c && !on ? ' dim' : '')} aria-pressed={on} onClick={() => setFocus(on ? null : f)}>
               <i className={dot} />
@@ -272,7 +292,7 @@ export function TasksView() {
           <span>{sortBtn('mv', t('tasks.lh.mv'))}</span>
           <span>{sortBtn('due', t('tasks.lh.due'))}</span>
           <span>
-            {sortBtn('who', tab === 'from' ? t('tasks.lh.holder') : t('tasks.lh.from'))}
+            {sortBtn('who', tab === 'mine' ? t('tasks.lh.from') : t('tasks.lh.holder'))}
             {sortBtn('wait', t('tasks.lh.wait'))}
           </span>
           <span style={{ textAlign: 'end' }}>
@@ -320,9 +340,13 @@ export function TasksView() {
           )
         })}
         {!loading && !groups.length && (
-          <div className="none">{focus ? t('tasks.noneFilter') : tab === 'mine' ? t('tasks.noneMine') : t('tasks.noneFrom')}</div>
+          <div className="none">
+            {focus ? t('tasks.noneFilter') : tab === 'mine' ? t('tasks.noneMine') : tab === 'from' ? t('tasks.noneFrom') : t('tasks.noneAll')}
+          </div>
         )}
         {loading && <div className="none">{t('common.loading')}</div>}
+        {/* Фокус-фильтры — про текущую работу; закрытым под ними не место. */}
+        {!focus && <ClosedBlock key={`${tab}:${project ?? ''}`} tab={tab} project={project} />}
       </div>
     </div>
   )
@@ -466,7 +490,15 @@ function Row({ item: i, tab, first, myId, person }: { item: BallItem; tab: Tab; 
   const n = dueDiff(i.dueDate)
   const long = tab === 'mine' && a.mine && heatOf(i.ball.move, i.ball.heldSince) === 'burn' && !i.ball.waitingClientSince
   const fromMeSelf = tab === 'mine' && person?.id === myId
-  const wlabel = !person ? '—' : tab === 'from' ? t('tasks.with', { name: person.name }) : fromMeSelf ? t('tasks.yourTask') : t('tasks.from', { name: person.name })
+  const wlabel = !person
+    ? tab === 'mine'
+      ? '—'
+      : t('tasks.nobody')
+    : tab !== 'mine'
+      ? t('tasks.with', { name: person.name })
+      : fromMeSelf
+        ? t('tasks.yourTask')
+        : t('tasks.from', { name: person.name })
   const wait = i.ball.waitingClientSince
     ? t('wait.since', { date: new Date(i.ball.waitingClientSince).toLocaleDateString(i18n.language, { month: 'short', day: 'numeric' }) })
     : waitText(t, i.ball.heldSince)
@@ -491,7 +523,7 @@ function Row({ item: i, tab, first, myId, person }: { item: BallItem; tab: Tab; 
       <DueCell item={i} />
       <PersonCell
         item={i}
-        person={tab === 'from' ? i.holder : person}
+        person={tab === 'mine' ? person : i.holder}
         label={wlabel}
         wait={
           <span className={'wt' + (long ? ' long' : '')} title={long ? t('tasks.longTitle') : t('tasks.waitTitle')}>
@@ -536,6 +568,89 @@ function Row({ item: i, tab, first, myId, person }: { item: BallItem; tab: Tab; 
           </button>
         )}
       </div>
+    </div>
+  )
+}
+
+/**
+ * Завершённые — свёрнутым блоком под списком, как «показать выполненные» в
+ * первой версии. Свёрнутый показывает только число; строки грузятся по
+ * клику и дальше порциями по 30 — простыни из сотен закрытых задач нет.
+ * Смена вкладки или проекта сворачивает блок заново (key у родителя).
+ */
+function ClosedBlock({ tab, project }: { tab: Tab; project: string | null }) {
+  const { t } = useTranslation('v2')
+  const { companyId } = useUi()
+  const [open, setOpen] = useState(false)
+  const count = useClosedCount(companyId, tab, project)
+  const q = useClosed(companyId, tab, project, open)
+  const total = q.data?.pages[0]?.total ?? count.data ?? 0
+  if (!total) return null
+  const rows = q.data?.pages.flatMap((p) => p.items) ?? []
+  const left = total - rows.length
+  return (
+    <div className={'cgrp' + (open ? ' open' : '')}>
+      <button className="cgh" aria-expanded={open} onClick={() => setOpen(!open)}>
+        <Icon name={open ? 'chevron' : 'chevronEnd'} sm />
+        <span className="nm">{t('tasks.closed.head')}</span>
+        <span className="pgc">{total}</span>
+        <span className="cgh-h">{open ? t('tasks.closed.hide') : t('tasks.closed.show')}</span>
+      </button>
+      {open && rows.map((i) => <ClosedRow key={i.id} item={i} />)}
+      {open && q.isLoading && <div className="none">{t('tasks.closed.loading')}</div>}
+      {open && q.hasNextPage && (
+        <button className="cmore" disabled={q.isFetchingNextPage} onClick={() => void q.fetchNextPage()}>
+          {q.isFetchingNextPage ? t('tasks.closed.loading') : t('tasks.closed.more', { count: Math.min(30, left) })}
+        </button>
+      )}
+    </div>
+  )
+}
+
+/** Строка закрытой задачи: итог вместо хода, дата закрытия вместо срока, кто закрыл. */
+function ClosedRow({ item: i }: { item: BallItem }) {
+  const { t, i18n } = useTranslation('v2')
+  const { openTask } = useUi()
+  const done = i.status === 'done'
+  const closer = i.last && (i.last.action === 'accept' || i.last.action === 'cancel') ? i.last.actor : null
+  const who = closer ?? i.holder
+  const p = i.project
+  const at = i.closedAt ? new Date(i.closedAt).toLocaleDateString(i18n.language, { day: 'numeric', month: 'short' }) : ''
+  return (
+    <div className="row closed">
+      <ProjectLogo project={p} title={p?.name} />
+      <div style={{ minWidth: 0 }}>
+        <button className="ttl bidi" onClick={() => openTask(i.id)}>
+          {i.title}
+        </button>
+        <div className="meta">
+          <span className="tnum">{i.number}</span>
+          <span className="pn">{p ? shortProject(p.name) : ''}</span>
+        </div>
+      </div>
+      <span className="mvcell rcell">
+        <span className={'mv cst ' + (done ? 'cst-ok' : 'cst-x')}>
+          {done && <Icon name="check" sm />}
+          {done ? t('tasks.closed.done') : t('tasks.closed.cancelled')}
+        </span>
+      </span>
+      <span className="rcell">
+        <span className="due">
+          {at}
+          <small>{t('tasks.closed.at')}</small>
+        </span>
+      </span>
+      <span className="from rcell">
+        {who && (
+          <span className="rperson" title={closer ? t('tasks.closed.by', { name: closer.name }) : undefined}>
+            <span className="av" style={{ background: personColor(who.id) }}>
+              {letterOf(who.name)}
+            </span>
+            <span className="bidi">{who.name}</span>
+          </span>
+        )}
+      </span>
+      <div className="acts" />
     </div>
   )
 }

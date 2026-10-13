@@ -22,8 +22,8 @@ import { notifyHandoff } from './handoff-notify.js'
 import { matchPerson, matchProject } from './quick-task.js'
 import { imagesForFiles } from './vision.js'
 import { richText } from './markdown.js'
-import { fromMeList, mineList, myProjects, quickTask, type ProjectList } from '../routes/ball.js'
-import { canCreateProjects, companyRoleOf, ownsOrManages } from '../routes/projects.js'
+import { fromMeList, mineList, quickTask, visibleProjects, type ProjectList } from '../routes/ball.js'
+import { ownsOrManages } from '../routes/projects.js'
 import { signSessionToken } from '../auth.js'
 import { timeMineRoute } from '../routes/time.js'
 import { sendToUserAnywhere, tasksChanged } from '../ws.js'
@@ -625,21 +625,6 @@ async function describeScreen(ctx: Ctx): Promise<string> {
  * Ответ ассистента. Возвращает текст и какие инструменты понадобились; null —
  * ИИ недоступен (нет ключа, исчерпан пробный бюджет, провайдер упал).
  */
-/**
- * Проекты, с которыми ассистент работает: участнику — где он в команде;
- * менеджеру и админу компании — все живые проекты компании (одна лестница
- * ролей). Раньше брался только состав команд, и админ, открыв документ
- * проекта, где он не в команде, слышал «не читается ни из одного проекта».
- * Права на каждое действие проверяет сам инструмент, как и прежде.
- */
-async function visibleProjects(companyId: string, userId: string): Promise<ProjectList> {
-  if (!canCreateProjects(await companyRoleOf(companyId, userId))) return myProjects(companyId, userId)
-  return db
-    .select({ id: projects.id, name: projects.name, color: projects.color, logoUrl: projects.logoUrl, companyId: projects.companyId })
-    .from(projects)
-    .where(and(eq(projects.companyId, companyId), isNull(projects.archivedAt)))
-}
-
 export async function assistantReply(input: {
   companyId: string
   userId: string

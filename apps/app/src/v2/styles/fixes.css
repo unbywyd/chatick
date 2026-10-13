@@ -291,3 +291,22 @@ html:has(.app .panel),html:has(.app .panel) body{overflow:hidden}
 /* Комментарий на странице задачи: редактор внутри рамки composer — без своей подложки. */
 .app .composer .cbox-ed{background:transparent;padding:0;max-height:320px;min-height:46px;font-size:14.5px}
 .app .composer .cbox-ed:focus-within{box-shadow:none}
+
+/* Завершённые: свёрнутый блок под списком, строки приглушены. */
+.app .cgrp{margin-top:6px;border-top:1px solid var(--line)}
+.app .cgh{display:flex;align-items:center;gap:10px;width:100%;padding:12px 12px;border-radius:12px;text-align:start;font-weight:600;font-size:14px;color:var(--ink2)}
+.app .cgh:hover{background:var(--soft)}
+.app .cgh .ic{color:var(--ink3)}
+.app .cgh .cgh-h{margin-inline-start:auto;font-weight:500;font-size:13px;color:var(--ink3)}
+.app .cgh:hover .cgh-h{color:var(--ink)}
+.app .row.closed .ttl{color:var(--ink2);font-weight:500}
+.app .row.closed > :first-child{opacity:.7}
+.app .cst{gap:5px}
+.app .cst-ok{background:var(--ok-bg);color:var(--ok)}
+.app .cst-x{background:var(--soft);color:var(--ink3);text-decoration:line-through}
+.app .row.closed .rperson{display:inline-flex;align-items:center;gap:8px;font-size:13.5px;color:var(--ink2);min-width:0}
+.app .cmore{display:block;margin:6px auto 4px;padding:8px 16px;border-radius:10px;font-weight:600;font-size:13.5px;color:var(--ink);background:var(--soft)}
+.app .cmore:hover{background:var(--line)}
+.app .cmore:disabled{opacity:.6}
+.app[dir='rtl'] .cgh .ic{transform:scaleX(-1)}
+.app.lay-stage .row.closed .due small{display:block}

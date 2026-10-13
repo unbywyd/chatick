@@ -1,5 +1,5 @@
 import { useEffect } from 'react'
-import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
+import { useInfiniteQuery, useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { api, API_URL, ApiError, getSessionToken, type Me } from '@/lib/api'
 
 /**
@@ -23,6 +23,8 @@ export type BallItem = {
   priority: string
   dueDate: string | null
   createdAt: string
+  /** Только у закрытой задачи — когда закрыли. */
+  closedAt?: string | null
   project: ProjectRef | null
   owner: Person | null
   holder: Person | null
@@ -105,6 +107,9 @@ export const keys = {
   projects: (companyId: string) => ['v2', 'projects', companyId] as const,
   mine: (companyId: string) => ['v2', 'ball', 'mine', companyId] as const,
   fromMe: (companyId: string) => ['v2', 'ball', 'from-me', companyId] as const,
+  all: (companyId: string) => ['v2', 'ball', 'all', companyId] as const,
+  closed: (companyId: string, tab: string, project: string | null) => ['v2', 'ball', 'closed', companyId, tab, project ?? ''] as const,
+  closedCount: (companyId: string, tab: string, project: string | null) => ['v2', 'ball', 'closed-count', companyId, tab, project ?? ''] as const,
   task: (id: string) => ['v2', 'task', id] as const,
   handoffs: (id: string) => ['v2', 'handoffs', id] as const,
   comments: (id: string) => ['v2', 'comments', id] as const,
@@ -153,6 +158,47 @@ export function useFromMe(companyId: string) {
   return useQuery({
     queryKey: keys.fromMe(companyId),
     queryFn: () => api<{ items: BallItem[] }>(`/api/v1/ball/from-me?companyId=${encodeURIComponent(companyId)}`).then((r) => r.items),
+  })
+}
+
+/**
+ * «Все» — открытые задачи всех видимых проектов (руководителю — всей
+ * компании). Грузится, только когда вкладку открыли: список большой, а нужен
+ * не каждый раз.
+ */
+export function useAllTasks(companyId: string, enabled: boolean) {
+  return useQuery({
+    queryKey: keys.all(companyId),
+    queryFn: () => api<{ items: BallItem[] }>(`/api/v1/ball/all?companyId=${encodeURIComponent(companyId)}`).then((r) => r.items),
+    enabled,
+  })
+}
+
+export type ClosedTab = 'mine' | 'from' | 'all'
+const CLOSED_PAGE = 30
+const closedUrl = (companyId: string, tab: ClosedTab, project: string | null, limit: number, offset = 0) =>
+  `/api/v1/ball/closed?companyId=${encodeURIComponent(companyId)}&tab=${tab}&limit=${limit}&offset=${offset}${project ? `&project=${encodeURIComponent(project)}` : ''}`
+
+/** Сколько закрытых — для свёрнутого блока: число без строк. */
+export function useClosedCount(companyId: string, tab: ClosedTab, project: string | null) {
+  return useQuery({
+    queryKey: keys.closedCount(companyId, tab, project),
+    queryFn: () => api<{ total: number }>(closedUrl(companyId, tab, project, 0)).then((r) => r.total),
+    staleTime: 60_000,
+  })
+}
+
+/** Закрытые — порциями, только когда блок раскрыли. */
+export function useClosed(companyId: string, tab: ClosedTab, project: string | null, enabled: boolean) {
+  return useInfiniteQuery({
+    queryKey: keys.closed(companyId, tab, project),
+    queryFn: ({ pageParam }) => api<{ items: BallItem[]; total: number }>(closedUrl(companyId, tab, project, CLOSED_PAGE, pageParam)),
+    initialPageParam: 0,
+    getNextPageParam: (last, pages) => {
+      const loaded = pages.reduce((n, p) => n + p.items.length, 0)
+      return last.items.length && loaded < last.total ? loaded : undefined
+    },
+    enabled,
   })
 }
 

@@ -19,7 +19,6 @@ import {
   FilesView,
   I,
   PRIOS,
-  PickPop,
   TaskDiscussion,
   TaskFiles,
   TaskHistory,
@@ -219,7 +218,6 @@ function Page({ data, myId, lng }: { data: TaskFull; myId: string; lng: string }
               onChange={(b) => patch.mutate(b)}
             />
             <Screens refs={task.refs ?? ''} readOnly={!canEdit} onChange={(refs) => patch.mutate({ refs })} />
-            <Sprint projectId={pid} groupId={task.groupId ?? null} readOnly={!canEdit} onChange={(groupId) => patch.mutate({ groupId })} />
           </div>
           <div className="sbox" style={{ padding: 10, gap: 2 }}>
             <div className="side-acts">
@@ -462,44 +460,6 @@ function Screens({ refs, readOnly, onChange }: { refs: string; readOnly: boolean
               <Icon name="plus" sm />
             </button>
           ))}
-      </div>
-    </div>
-  )
-}
-
-/** Спринт — группа задач проекта. Групп нет — и выбирать не из чего. */
-function Sprint({ projectId, groupId, readOnly, onChange }: { projectId: string; groupId: string | null; readOnly: boolean; onChange: (id: string | null) => void }) {
-  const { t } = useTranslation('v2')
-  const [open, setOpen] = useState(false)
-  const groups = useQuery({
-    queryKey: ['v2', 'task-groups', projectId],
-    queryFn: () => api<{ id: string; name: string; color: string | null }[]>('/api/v1/tasks/groups', inProject(projectId)),
-    staleTime: 60_000,
-  })
-  const list = groups.data ?? []
-  if (!list.length) return null
-  const cur = list.find((g) => g.id === groupId)
-  return (
-    <div className="sf">
-      <div className="k">{t('task.sprint')}</div>
-      <div className="cbx">
-        <button className="fieldbtn" disabled={readOnly} onClick={() => setOpen(true)} aria-haspopup="listbox" aria-expanded={open}>
-          <i style={{ width: 8, height: 8, borderRadius: '50%', background: cur?.color || 'var(--ink3)', flex: 'none' }} />
-          <span>{cur?.name ?? t('task.noSprint')}</span>
-          <Icon name="chevron" />
-        </button>
-        {open && (
-          <PickPop
-            items={[{ id: '', label: t('task.noSprint') }, ...list.map((g) => ({ id: g.id, label: g.name }))]}
-            selected={groupId ?? ''}
-            ph={t('task.sprint')}
-            onClose={() => setOpen(false)}
-            onPick={(id) => {
-              setOpen(false)
-              if ((id || null) !== groupId) onChange(id || null)
-            }}
-          />
-        )}
       </div>
     </div>
   )

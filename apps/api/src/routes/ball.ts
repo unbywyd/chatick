@@ -6,7 +6,7 @@ import { alias } from 'drizzle-orm/pg-core'
 import { db } from '../db/client.js'
 import { companies, companyMembers, HANDOFF_ACTIONS, notifications, projectMembers, projects, taskHandoffs, tasks, TASK_MOVES, users } from '../db/schema.js'
 import { requireSession, type SessionEnv } from '../auth.js'
-import { hasPermission, ownsOrManages, projectRoleOf } from './projects.js'
+import { canCreateProjects, companyRoleOf, hasPermission, ownsOrManages, projectRoleOf } from './projects.js'
 import { insertTask, lastReviewFrom, mayHandoff, ownerOf, planHandoff, setOnTable, TABLE_LIMIT, type Via } from '../lib/ball.js'
 import { closedSql, isClosed } from '../lib/task-status.js'
 import { matchPerson, matchProject, parseQuick, type Match } from '../lib/quick-task.js'
@@ -16,7 +16,8 @@ import { logActivity } from '../lib/audit.js'
 import { tasksChanged } from '../ws.js'
 
 /**
- * Списки мяча (v2) — главный экран: «На столе», «На мне», «От меня».
+ * Списки мяча (v2) — главный экран: «На столе», «На мне», «От меня», «Все» и
+ * закрытые задачи по запросу.
  *
  * По всей компании сразу, на session-токене: человек думает не проектами, а
  * «что ждут от меня» и «что я жду от других». Обходить проекты по одному
@@ -54,6 +55,32 @@ export async function myProjects(companyId: string | null, userId: string) {
 }
 export type ProjectList = Awaited<ReturnType<typeof myProjects>>
 
+/**
+ * Проекты, которые человек видит целиком: участнику — где он в команде,
+ * менеджеру и админу компании — все живые проекты компании (одна лестница
+ * ролей). Права на каждое действие проверяются отдельно, как и прежде.
+ */
+export async function visibleProjects(companyId: string, userId: string): Promise<ProjectList> {
+  if (!canCreateProjects(await companyRoleOf(companyId, userId))) return myProjects(companyId, userId)
+  return db
+    .select({ id: projects.id, name: projects.name, color: projects.color, logoUrl: projects.logoUrl, companyId: projects.companyId })
+    .from(projects)
+    .where(and(eq(projects.companyId, companyId), isNull(projects.archivedAt)))
+}
+
+/**
+ * Для «Все»: видимые проекты, где человеку можно читать задачи. Доменные
+ * права проекта действуют и здесь — участник, которому закрыли задачи
+ * проекта, не увидит их и в общем списке. Менеджер и админ компании —
+ * админы в любом её проекте, проверять их по одному незачем.
+ */
+async function readableProjects(companyId: string, userId: string): Promise<ProjectList> {
+  if (canCreateProjects(await companyRoleOf(companyId, userId))) return visibleProjects(companyId, userId)
+  const mine = await myProjects(companyId, userId)
+  const ok = await Promise.all(mine.map((p) => hasPermission(p.id, userId, 'tasks.read')))
+  return mine.filter((_, i) => ok[i])
+}
+
 export const listFilters = z.object({
   project: z.string().optional(),
   move: z.enum(TASK_MOVES).optional(),
@@ -88,8 +115,8 @@ function orderFor(q: ListQuery, defaults: SQL[]): SQL[] {
 
 type Person = { id: string; name: string; avatarUrl: string | null }
 
-async function list(userId: string, q: ListQuery, where: SQL, defaults: SQL[], projectList: ProjectList) {
-  const rows = await db
+async function list(userId: string, q: ListQuery, where: SQL, defaults: SQL[], projectList: ProjectList, page?: { limit: number; offset: number }) {
+  const query = db
     .select({
       t: tasks,
       owner: { id: owner.id, name: owner.name, avatarUrl: owner.avatarUrl },
@@ -100,6 +127,8 @@ async function list(userId: string, q: ListQuery, where: SQL, defaults: SQL[], p
     .leftJoin(holder, eq(holder.id, tasks.assigneeId))
     .where(where)
     .orderBy(...orderFor(q, defaults))
+    .$dynamic()
+  const rows = page ? await query.limit(page.limit).offset(page.offset) : await query
 
   /**
    * Последняя передача — «почему это у меня». Одним запросом на весь список
@@ -160,6 +189,9 @@ async function list(userId: string, q: ListQuery, where: SQL, defaults: SQL[], p
       priority: t.priority,
       dueDate: t.dueDate,
       createdAt: t.createdAt,
+      // Отдельного поля «закрыта» нет: после закрытия задачу почти не правят,
+      // и время последней правки — это время закрытия.
+      closedAt: isClosed(t.status) ? t.updatedAt : null,
       project: projectBy.get(t.projectId) ?? null,
       owner: person(o as Person),
       holder: person(h as Person),
@@ -253,6 +285,67 @@ ballRoute.get('/from-me', zValidator('query', listQuery), async (c) => {
   const { sub } = c.get('session')
   const q = c.req.valid('query')
   return c.json(await fromMeList(sub, await myProjects(q.companyId, sub), q))
+})
+
+/**
+ * «Все»: открытые задачи всех проектов, которые человек видит, — бэклог,
+ * чужие, без исполнителя. Руководителю — по всей компании. Просроченные и
+ * важные сверху, дальше — дольше всех лежащие у держателя.
+ */
+export async function allList(userId: string, visible: ProjectList, q: ListQuery) {
+  if (!visible.length) return { items: [], groups: undefined }
+  const items = await list(
+    userId,
+    q,
+    and(...filters(q, visible.map((p) => p.id)))!,
+    [WAITING_LAST, OVERDUE_FIRST, PRIORITY_RANK, sql`${tasks.heldSince} asc nulls last`],
+    visible,
+  )
+  return { items, groups: groupBy(items, q.group) }
+}
+
+ballRoute.get('/all', zValidator('query', listQuery), async (c) => {
+  const { sub } = c.get('session')
+  const q = c.req.valid('query')
+  return c.json(await allList(sub, await readableProjects(q.companyId, sub), q))
+})
+
+const closedQuery = z.object({
+  companyId: z.string().min(1),
+  tab: z.enum(['mine', 'from', 'all']),
+  project: z.string().optional(),
+  /** 0 — только число: свёрнутый блок показывает его, не загружая строк. */
+  limit: z.coerce.number().int().min(0).max(100).default(30),
+  offset: z.coerce.number().int().min(0).default(0),
+})
+
+/**
+ * Закрытые задачи — по запросу и порциями: их сотни, а нужны они редко
+ * («где та задача, что закрыли на прошлой неделе»). Свежезакрытые сверху.
+ *
+ *   mine — задачи, где мяч был у меня (при закрытии он остаётся у последнего
+ *          держателя — часто у проверяющего, поэтому смотрим и передачи);
+ *   from — мои как владельца;
+ *   all  — всё в видимых проектах.
+ */
+ballRoute.get('/closed', zValidator('query', closedQuery), async (c) => {
+  const { sub } = c.get('session')
+  const q = c.req.valid('query')
+  const scope = q.tab === 'all' ? await readableProjects(q.companyId, sub) : await myProjects(q.companyId, sub)
+  const ids = scope.map((p) => p.id).filter((id) => !q.project || id === q.project)
+  if (!ids.length) return c.json({ items: [], total: 0 })
+  const who =
+    q.tab === 'mine'
+      ? sql`(${tasks.assigneeId} = ${sub} or exists (select 1 from ${taskHandoffs} where ${taskHandoffs.taskId} = ${tasks.id} and ${taskHandoffs.toId} = ${sub}))`
+      : q.tab === 'from'
+        ? sql`coalesce(${tasks.ownerId}, ${tasks.createdById}) = ${sub}`
+        : sql`true`
+  const where = and(inArray(tasks.projectId, ids), isNull(tasks.deletedAt), sql`${tasks.status} in ${closedSql}`, who)!
+  const [row] = await db.select({ n: sql<number>`count(*)::int` }).from(tasks).where(where)
+  const total = row?.n ?? 0
+  if (!q.limit || !total) return c.json({ items: [], total })
+  const items = await list(sub, {}, where, [sql`${tasks.updatedAt} desc`, sql`${tasks.id} asc`], scope, { limit: q.limit, offset: q.offset })
+  return c.json({ items, total })
 })
 
 /**
