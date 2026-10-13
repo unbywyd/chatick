@@ -22,10 +22,12 @@ import '../i18n/list'
 const TABLE = 300 // диаметр стола
 const TABLE_IMG = Math.round((744 * TABLE) / 442) // слой стола 744, в нём стол 442
 const HANDS = TABLE / 2 - 22 // руки героя лежат на бортике
-const BOX = 150 // герой вписан в квадрат
-const BALL_R = Math.round((TABLE / 2) * 0.55)
+const BOX = 136 // герой вписан в квадрат
+const BOX_LEAD = 188 // тот, чей ход, — крупнее остальных
+const SHIFT = 22 // стол чуть ниже центра: крупному держателю наверху нужно место
+const BALL_R = Math.round((TABLE / 2) * 0.46)
 const HIT_R = HANDS + 72
-const LABEL_R = 288
+const LABEL_R = HANDS - 26 // имя — на сукне перед руками
 const TOP = 270 // угол места держателя: сверху
 
 const SPOT = { warm: 'rgba(212,243,107,.7)', hot: 'rgba(255,181,71,.55)', burn: 'rgba(255,110,50,.55)', away: 'rgba(255,255,255,.95)' }
@@ -143,12 +145,13 @@ function SceneView({ s }: { s: Scene }) {
     <div className="sv-scene lamp orb tgs" style={{ '--H': INK[heat], '--S': SPOT[heat] } as React.CSSProperties} aria-roledescription="scene" aria-label={s.number}>
       <div className="tg-st">
         <div className="tg-in">
-          <div className="tg-spot" style={{ top: 0 }} />
-          <div className="tg-grp" style={{ transform: `rotate(${G}deg)` }}>
+          <div className="tg-spot" style={{ top: SHIFT - 14 }} />
+          <div className="tg-grp" style={{ transform: `translateY(${SHIFT}px) rotate(${G}deg)` }}>
             <img className="tg-tab2" src={`${import.meta.env.BASE_URL}table/table.webp`} alt="" style={{ width: TABLE_IMG, height: TABLE_IMG, left: (600 - TABLE_IMG) / 2, top: (600 - TABLE_IMG) / 2 }} />
             {s.seats.map((p, j) => {
               const h = heroOf(p)
-              const k = Math.min(BOX / h.w, BOX / h.h)
+              const box = j === hi ? BOX_LEAD : BOX
+              const k = Math.min(box / h.w, box / h.h)
               return (
                 <div key={p.id} className="tg-seat" style={{ transform: `rotate(${seatA(j) - TOP}deg)` }}>
                   <img className="tg-hero2" src={heroSrc(h.slug)} alt="" style={{ width: Math.round(h.w * k), height: Math.round(h.h * k), bottom: 300 + HANDS }} />
