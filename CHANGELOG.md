@@ -7,6 +7,64 @@ refuses to run otherwise, so a release can never ship without a description.
 
 Written in English only: this file is published on the website.
 
+## 2.0.0 — 2026-10-13
+
+A new Chatick, built around one idea: every task is a ball, and you always
+know whose hands it is in.
+
+### Changed
+
+- **Every task is a ball.** A task is always with one person and one move —
+  do it, review it, or answer a question. Handing it over is a move with a
+  note: send for review, accept, return, ask, answer, pass, take, wait for the
+  client. The status follows the moves; nobody sets it by hand, and nothing sits
+  "in progress" with nobody on it.
+- **One screen for the whole company.** Projects are a switcher at the top
+  instead of separate pages. "On me", "From me" and "All" tasks, documents,
+  hours, resources, files, releases and history live side by side. Old project
+  links still work: they redirect to the new addresses.
+- **Heat.** The longer the ball sits with someone, the hotter it gets. Doing:
+  hot after 3 days, burning after 5. A review or a question: hot after a day,
+  burning after 2.
+- **One ladder of roles.** Member, manager, admin — the same in every project
+  of the company. Leading a project is a checkbox, not a separate role.
+- **Sprints are gone from the interface.** The team chat lives in the mobile
+  app; the web app is about the work itself.
+
+### Added
+
+- **The table.** Put up to three of your most urgent tasks on the table: everyone
+  involved sits around it, and the ball lies in front of whoever's move it is.
+  Click a person to pass them the ball. Everyone gets a hero of their own, and
+  you can pick a different one in your profile.
+- **A company assistant.** Press Ctrl+J and ask about the workspace in plain
+  words; it can also fill in a new task for you. Answers stream as they are
+  written.
+- **Connect Claude by address.** Chatick serves MCP at
+  `https://api.chatick.com/mcp`, with sign-in in the browser: Claude, Claude
+  Code and other clients connect without installing anything. The ball works
+  there too — moves, links and company-wide access.
+- **Quick add.** Type a task with `@person` and `#project`, press Enter, and it
+  lands in their hands.
+- **Search and keys.** Ctrl+K finds anything; `?` lists the shortcuts.
+- **Who is in a task.** You see who else has the task open, and two people
+  editing the description no longer overwrite each other.
+- **Hours without a project.** Time can be logged on the company when it does
+  not belong to a task.
+- **Notifications by project,** with counters for your other companies. Any
+  notification opens the thing it is about.
+
+### Fixed
+
+- **Release authors no longer expose account data.** A release returned its
+  author's whole account record; now only the name and avatar.
+- **Resource files follow the secret rules.** Through the bridge, files of a
+  resource are visible only to people the resource's secrets are shared with —
+  the same rule as in the app.
+- **The trash for resources and files was always empty.** Deleted items can be
+  found and restored again.
+- **A company admin or manager could not be added to a project team.**
+
 ## 0.4.0 — 2026-08-19
 
 ### Added
