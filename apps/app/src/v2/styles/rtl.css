@@ -266,9 +266,9 @@
     left: auto;
     right: 0
 }
-.app[dir='rtl'] .tg-spot {
+.app[dir='rtl'] .tg-grp {
     left: auto;
-    right: 150px
+    right: 0
 }
 .app[dir='rtl'] .tg-grp img {
     left: auto;
@@ -276,10 +276,6 @@
 }
 .app[dir='rtl'] .tg-hit {
     margin: -60px -60px 0 0
-}
-.app[dir='rtl'] .tg-clk {
-    left: auto;
-    right: 16px
 }
 .app[dir='rtl'] .ai-fab {
     right: auto;
