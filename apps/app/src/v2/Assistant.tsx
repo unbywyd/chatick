@@ -58,7 +58,7 @@ export function Assistant() {
     const on = (e: Event) => {
       const { event, payload } = (e as CustomEvent<SocketMessage>).detail
       if (event !== 'assistant') return
-      const p = payload as { companyId: string; action: string; id?: string; replyTo?: string; text?: string; name?: string; path?: string; taskId?: string }
+      const p = payload as { companyId: string; action: string; id?: string; replyTo?: string; text?: string; name?: string; path?: string; taskId?: string; draft?: Record<string, unknown> }
       if (p.companyId !== companyId) return
       if (p.action === 'thinking' && p.id) setLive((l) => (l && l.text ? l : { replyTo: p.id!, text: '', tool: l?.tool ?? null }))
       // До ответа сервера на отправку id вопроса ещё нет — принимаем события и для «pending».
@@ -69,6 +69,8 @@ export function Assistant() {
       // проверенных записей; панель ассистента остаётся открытой.
       if (p.action === 'open') {
         if (p.taskId) openTask(p.taskId)
+        // Черновик задачи: форма заполнена, создаёт человек кнопкой.
+        else if (p.path === '/task/new') navigate(`${base}/task/new`, { state: { draft: p.draft ?? {} } })
         else if (typeof p.path === 'string' && (p.path === '' || p.path.startsWith('/') || p.path.startsWith('?'))) navigate(`${base}${p.path}`)
       }
       if (p.action === 'message') {

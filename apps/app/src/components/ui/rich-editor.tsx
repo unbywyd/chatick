@@ -105,6 +105,11 @@ export function RichEditor({
   // Направление блока под курсором — для подсветки кнопки. Пересчитывается на
   // каждое движение каретки, поэтому живёт в состоянии, а не в render.
   const [dir, setDir] = useState<TextDir | null>(null)
+  // Список людей читаем на каждое «@», а не берём снимок при создании
+  // редактора: команда проекта часто догружается позже (новая задача), и
+  // подсказка оставалась пустой навсегда.
+  const mentionsRef = useRef(mentions)
+  mentionsRef.current = mentions
 
   const editor = useEditor({
     editable: !readOnly,
@@ -133,7 +138,7 @@ export function RichEditor({
         HTMLAttributes: { class: 'underline', target: '_blank', rel: 'noopener noreferrer nofollow' },
       }),
       ...(preset === 'full' ? [TaskList, TaskItem.configure({ nested: true })] : []),
-      Mention.configure({ HTMLAttributes: { class: 'mention' }, suggestion: mentionSuggestion(() => mentions) as never }),
+      Mention.configure({ HTMLAttributes: { class: 'mention' }, suggestion: mentionSuggestion(() => mentionsRef.current) as never }),
       Image.configure({ inline: false, allowBase64: false, HTMLAttributes: { class: 'inline-doc-image' } }),
       TextDirection,
     ],

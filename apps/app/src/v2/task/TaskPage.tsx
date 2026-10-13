@@ -514,23 +514,44 @@ type Member = { user: { id: string; name: string; email?: string; avatarUrl: str
  * и файлы. Пока задачи нет, чек-лист и файлы копятся здесь и уходят на сервер
  * сразу после создания. «Подробно» из быстрого ввода приносит название и проект.
  */
+type Draft = {
+  title?: string
+  projectId?: string
+  description?: string
+  assigneeId?: string
+  priority?: string
+  dueDate?: string
+  estimateMinutes?: number
+  checklist?: string[]
+}
+
 export function TaskNew() {
+  // Новый черновик от ассистента, пока форма уже открыта, — заполнить заново.
+  return <TaskNewForm key={useLocation().key} />
+}
+
+function TaskNewForm() {
   const { t, i18n } = useTranslation('v2')
   const { companyId, base, project, flash } = useUi()
   const navigate = useNavigate()
   const location = useLocation()
-  const pre = (location.state ?? {}) as { title?: string; projectId?: string }
+  // «Подробно» из быстрого ввода приносит title/projectId; ассистент — черновик целиком.
+  const st = (location.state ?? {}) as { title?: string; projectId?: string; draft?: Draft }
+  const pre: Draft = { title: st.title, projectId: st.projectId, ...(st.draft ?? {}) }
+  const fromAi = Boolean(st.draft)
   const me = useMe()
   const projects = useProjects(companyId)
   const refresh = useRefreshBall()
   const [title, setTitle] = useState(pre.title ?? '')
   const [pid, setPid] = useState<string | null>(pre.projectId ?? project ?? null)
-  const [to, setTo] = useState<string | null>(null)
-  const [prio, setPrio] = useState('normal')
-  const [due, setDue] = useState<string | null>(null)
-  const [est, setEst] = useState<number | null>(null)
-  const [desc, setDesc] = useState('')
-  const [checks, setChecks] = useState<{ id: string; text: string; done: boolean }[]>([])
+  const [to, setTo] = useState<string | null>(pre.assigneeId ?? null)
+  const [prio, setPrio] = useState(pre.priority ?? 'normal')
+  const [due, setDue] = useState<string | null>(pre.dueDate ?? null)
+  const [est, setEst] = useState<number | null>(pre.estimateMinutes ?? null)
+  const [desc, setDesc] = useState(pre.description ?? '')
+  const [checks, setChecks] = useState<{ id: string; text: string; done: boolean }[]>(() =>
+    (pre.checklist ?? []).map((text, i) => ({ id: `a${i}`, text, done: false })),
+  )
   const [files, setFiles] = useState<File[]>([])
   const seq = useRef(0)
 
@@ -614,7 +635,7 @@ export function TaskNew() {
             placeholder={t('task.titlePh')}
             aria-label={t('task.titleAria')}
           />
-          <DescEditor value="" onChange={setDesc} readOnly={false} mentions={mentions} placeholder={t('task.descPh')} />
+          <DescEditor value={pre.description ?? ''} onChange={setDesc} readOnly={false} mentions={mentions} placeholder={t('task.descPh')} />
           <ChecklistView
             items={checks}
             canEdit
@@ -632,7 +653,7 @@ export function TaskNew() {
               <Icon name="spark" />
             </span>
             <div style={{ flex: 1 }}>
-              <p>{t('task.newHint')}</p>
+              <p>{fromAi ? t('task.aiDraftHint') : t('task.newHint')}</p>
             </div>
           </div>
         </div>

@@ -80,3 +80,14 @@ describe('open_on_screen — ассистент открывает экраны'
     expect(await h({ what: 'section', section: 'docs', project: 'Нет такого' })).toMatch(/No project/)
   })
 })
+
+describe('open_on_screen new_task — черновик, а не создание', () => {
+  it('названный, но незнакомый проект — переспросить', async () => {
+    const h = companyTools(ctx()).handlers.open_on_screen!
+    expect(await h({ what: 'new_task', title: 'x', project: 'Нет такого' })).toMatch(/No project/)
+  })
+  it('без открытого приложения — ничего не создаётся, предлагает создать напрямую', async () => {
+    const h = companyTools(ctx()).handlers.open_on_screen!
+    expect(await h({ what: 'new_task', title: 'Проверить сборку' })).toMatch(/nothing was opened/)
+  })
+})

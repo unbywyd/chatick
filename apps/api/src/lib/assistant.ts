@@ -21,6 +21,7 @@ import { handoff, setOnTable, TABLE_LIMIT } from './ball.js'
 import { notifyHandoff } from './handoff-notify.js'
 import { matchPerson, matchProject } from './quick-task.js'
 import { imagesForFiles } from './vision.js'
+import { richText } from './markdown.js'
 import { fromMeList, mineList, myProjects, quickTask, type ProjectList } from '../routes/ball.js'
 import { canCreateProjects, companyRoleOf, ownsOrManages } from '../routes/projects.js'
 import { signSessionToken } from '../auth.js'
@@ -248,11 +249,22 @@ export function companyTools(ctx: Ctx): { tools: ToolDef[]; handlers: Record<str
         'Open something on the person\'s screen: a task (in the side panel), a document, a note, or a whole section. ' +
         'Use it whenever they ask to open / show / go to something ("открой доку X", "покажи задачу 115", "перейди в часы") — ' +
         'open it instead of pasting its contents into the chat, then say in one line what you opened. ' +
-        'Also when they are about to look at the thing anyway. One place at a time — a screen that keeps jumping is worse than no help.',
+        'Also when they are about to look at the thing anyway. One place at a time — a screen that keeps jumping is worse than no help. ' +
+        'what=new_task opens the NEW TASK FORM already filled in (title, description, project, assignee, priority, due, estimate, checklist) — ' +
+        'nothing is created until the person presses "Create". Use it when they want to make a task but should see and confirm it first ' +
+        '("набросай задачу", "открой создание задачи", "заполни задачу"), or when details are unclear: fill what you know, they finish the rest. ' +
+        'Fill everything the person said or the conversation makes clear; leave the rest out — do not invent assignees or dates.',
       parameters: {
         type: 'object',
         properties: {
-          what: { type: 'string', enum: ['task', 'document', 'note', 'section'], description: 'What to open' },
+          what: { type: 'string', enum: ['task', 'document', 'note', 'section', 'new_task'], description: 'What to open' },
+          title: { type: 'string', description: 'new_task: title, in the project\'s language' },
+          description: { type: 'string', description: 'new_task: description, markdown' },
+          assignee: { type: 'string', description: 'new_task: who gets the ball — name, email or "me". Omit to leave it to the person.' },
+          priority: { type: 'string', enum: ['low', 'normal', 'high', 'urgent'], description: 'new_task' },
+          due: { type: 'string', description: 'new_task: due date YYYY-MM-DD' },
+          estimate_minutes: { type: 'number', description: 'new_task: estimate in minutes' },
+          checklist: { type: 'array', items: { type: 'string' }, description: 'new_task: checklist items' },
           id: { type: 'string', description: 'Task number (TASK-5) or id, document id, note id. Omit for a section.' },
           section: {
             type: 'string',
@@ -404,7 +416,7 @@ export function companyTools(ctx: Ctx): { tools: ToolDef[]; handlers: Record<str
       const what = String(args.what ?? '')
       const raw = typeof args.id === 'string' ? args.id.trim() : ''
       const visible = ctx.projects.map((p) => p.id)
-      const send = (payload: { path?: string; taskId?: string }) =>
+      const send = (payload: { path?: string; taskId?: string; draft?: Record<string, unknown> }) =>
         sendToUserAnywhere(ctx.userId, 'assistant', { companyId: ctx.companyId, action: 'open', ...payload }) > 0
       const done = (ok: boolean, label: string) =>
         ok ? `Opened ${label} on their screen. Say so in one line — do not paste its contents.` : 'Their app is not open — nothing was opened. Tell them where to find it instead.'
@@ -420,6 +432,38 @@ export function companyTools(ctx: Ctx): { tools: ToolDef[]; handlers: Record<str
           q = `?p=${p.id}`
         }
         return done(send({ path: `${section === 'tasks' ? '' : `/${section}`}${q}` }), `the ${section} section`)
+      }
+      if (what === 'new_task') {
+        const draft: Record<string, unknown> = {}
+        const notes: string[] = []
+        const title = typeof args.title === 'string' ? args.title.trim().slice(0, 300) : ''
+        if (title) draft.title = title
+        if (typeof args.description === 'string' && args.description.trim()) draft.description = richText(args.description)
+        // Проект: названный, открытый на экране, единственный — иначе форма спросит сама.
+        const named = typeof args.project === 'string' && args.project.trim()
+        if (named || ctx.screen.projectId || ctx.projects.length === 1) {
+          const p = pickProject(ctx, args.project)
+          if (typeof p === 'string') {
+            if (named) return p
+          } else draft.projectId = p.id
+        }
+        if (typeof args.assignee === 'string' && args.assignee.trim()) {
+          if (!draft.projectId) notes.push('assignee skipped: pick the project first')
+          else {
+            const who = await personIn(draft.projectId as string, args.assignee.trim(), ctx.userId)
+            if (who && typeof who === 'object') return who.error
+            if (who) draft.assigneeId = who
+          }
+        }
+        if (['low', 'normal', 'high', 'urgent'].includes(String(args.priority))) draft.priority = args.priority
+        if (typeof args.due === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(args.due.trim())) draft.dueDate = args.due.trim()
+        const est = Number(args.estimate_minutes)
+        if (Number.isFinite(est) && est > 0 && est <= 100 * 60) draft.estimateMinutes = Math.round(est)
+        if (Array.isArray(args.checklist))
+          draft.checklist = args.checklist.filter((x): x is string => typeof x === 'string' && Boolean(x.trim())).slice(0, 50).map((x) => x.trim().slice(0, 500))
+        const ok = send({ path: '/task/new', draft })
+        if (!ok) return 'Their app is not open — nothing was opened. Offer to create the task directly (create_task) instead.'
+        return `Opened the new task form, filled in: ${Object.keys(draft).join(', ') || 'nothing'}${notes.length ? ` (${notes.join('; ')})` : ''}. NOTHING IS CREATED YET — tell them, in their language, to check it and press the create button on the form; do not call create_task for it.`
       }
       if (!raw) return `Pass the ${what} id`
       if (what === 'task') {
@@ -612,6 +656,7 @@ export async function assistantReply(input: {
       'All actions are permission-checked per person and project — on PERMISSION DENIED or REFUSED, explain plainly.',
       'about_chatick answers questions about the product itself — call it instead of guessing.',
       'OPENING THINGS: when the person asks to open, show or go to a task, document, note or section, call open_on_screen — the app switches to it. Do not paste a document\'s text into the chat instead of opening it.',
+      'NEW TASK FOR REVIEW: when they want a task drafted for them to check ("набросай", "заполни", "открой создание задачи"), call open_on_screen with what=new_task and every field you know — they only press Create. Create directly (quick_task/create_task) only when they plainly ask you to create it.',
       'FORMATTING: markdown renders. Lead with the answer; tables only to compare several items across the same fields; no "Sure!", no restating the question. Be concise.',
     ].join('\n'),
     user: input.text,
