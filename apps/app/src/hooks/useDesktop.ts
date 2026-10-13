@@ -1,10 +1,16 @@
 import { useEffect, useRef, useState } from 'react'
 import { useLocation, useNavigate } from 'react-router-dom'
 import { useTranslation } from 'react-i18next'
-import { useQuery, useQueryClient } from '@tanstack/react-query'
+import { useQueries, useQuery, useQueryClient, type UseQueryResult } from '@tanstack/react-query'
 import { toast } from 'sonner'
-import { api, API_URL, getSessionToken, type Me } from '@/lib/api'
-import { acceptProjectRules } from '@/hooks/useProjectAccess'
+import { api, API_URL, getSessionToken, logout, type Me } from '@/lib/api'
+import { activeFromLocation, toV2Link } from '@/lib/v2-links'
+import { useTheme } from '@/providers/theme'
+import { keys, type BallItem, type Notice } from '@/v2/data'
+import { dueDiff, dueText, heatOf, letterOf, moveKey, personColor, projectColor, shortProject, timeAgo, waitText } from '@/v2/util'
+// Подписи панели — из пространства v2: ходы, «от кого», «вся компания».
+import '@/v2/i18n'
+import '@/v2/i18n/tray'
 
 // Связь веб-приложения с десктопной оболочкой (SPEC §8.33).
 //
@@ -81,20 +87,99 @@ type DesktopState = {
    */
   authed: boolean
   unread: number
-  timer: { id: string; description: string; startedAt: string; projectId: string; projectName?: string; taskId?: string | null } | null
-  notifications: { id: string; title: string; summary?: string | null; link: string; projectId: string; projectName?: string; unread: boolean }[]
-  tasks: { id: string; number: string; title: string; status: string; link: string; projectId: string; projectName?: string; due?: string }[]
-  projects: { id: string; name: string; companyId?: string; color?: string; logoUrl?: string | null; unread: number }[]
+  /**
+   * Идущий таймер. projectId = null — время на компанию без проекта (v2);
+   * тогда companyId говорит, на какую.
+   */
+  timer: {
+    id: string
+    description: string
+    startedAt: string
+    projectId: string | null
+    projectName?: string
+    taskId?: string | null
+    companyId?: string | null
+    taskNumber?: string | null
+  } | null
+  /**
+   * Уведомления. Поля после unread — для панели v2; старая панель их не
+   * знает и не ломается. Их нельзя выносить в новые поля верхнего уровня:
+   * установленная оболочка пересобирает состояние по списку полей
+   * (main.cjs, state:update) и всё незнакомое выбрасывает. Внутри массивов
+   * и объектов она ничего не трогает — туда и кладём.
+   */
+  notifications: {
+    id: string
+    title: string
+    summary?: string | null
+    link: string
+    projectId: string | null
+    projectName?: string
+    unread: boolean
+    companyId?: string | null
+    /** Кто сделал — жирным в начале строки; text — заголовок без его имени. */
+    who?: string
+    text?: string
+    /** Записка к передаче или выжимка — цитатой под строкой. */
+    note?: string | null
+    when?: string
+    color?: string
+    letter?: string
+  }[]
+  /**
+   * Задачи, где мяч у меня (v2, /ball/mine по всем компаниям). Подписи
+   * посчитаны здесь: склонения и даты живут в i18n веба, а у панели его нет.
+   */
+  tasks: {
+    id: string
+    number: string
+    title: string
+    status: string
+    link: string
+    projectId: string
+    projectName?: string
+    due?: string
+    companyId?: string
+    move?: string
+    moveLabel?: string
+    round?: string
+    from?: string
+    wait?: string
+    long?: boolean
+    late?: boolean
+    soon?: boolean
+    isNew?: boolean
+    /**
+     * Кнопка в строке по правилам мяча: держатель, но не владелец — «На
+     * проверку» (status review); владелец или проверяющий — «Принять» /
+     * «Готово» (status done). null — без записки нельзя (ответить, клиент).
+     */
+    action?: { status: 'review' | 'done'; label: string } | null
+  }[]
+  projects: { id: string; name: string; short?: string; companyId?: string; color?: string; logoUrl?: string | null; letter?: string; unread: number }[]
   project: { id: string; name: string } | null
   /**
-   * Компания и роль в ней: доступ ко всей компании выдают только админы и
-   * менеджеры, и панель не должна предлагать то, что сервер отклонит.
+   * Компания, открытая в окне (а если окно не в компании — первая). Роль в
+   * ней: доступ ко всей компании выдают только админы и менеджеры, и панель
+   * не должна предлагать то, что сервер отклонит.
    */
   company: { id: string; name: string; canGrantCompany: boolean } | null
   /** все компании человека: подключаться можно к любой, не только к первой */
-  companies: { id: string; name: string; canGrantCompany: boolean; mainProjectId?: string | null }[]
+  companies: {
+    id: string
+    name: string
+    canGrantCompany: boolean
+    mainProjectId?: string | null
+    logoUrl?: string | null
+    letter?: string
+    /** «5 задач» — подпись в списке компаний панели. */
+    meta?: string
+    unread?: number
+    /** Проект, выбранный для таймера в этой компании (тот же, что в шапке v2). */
+    timerProjectId?: string | null
+  }[]
   /** Кто вошёл: аватар в шапке панели отвечает на «от чьего имени всё это». */
-  user: { name: string; email: string; avatarUrl: string | null } | null
+  user: { name: string; email: string; avatarUrl: string | null; todayMinutes?: number | null } | null
   /** Действующие туннели ассистентов — их видно и можно закрыть из панели. */
   connections: { id: string; clientName: string; scope: 'company' | 'project' | 'all'; where: string }[]
   /**
@@ -114,9 +199,49 @@ type InboxItem = {
   readAt?: string | null
 }
 type Inbox = { unreadTotal: number; items: InboxItem[] }
-type Running = {
-  items: { id: string; description: string; startedAt: string; projectId: string; task?: { id: string } | null }[]
+/**
+ * Идущая запись — как её отдаёт /my/time/running. Ключ общий с шапкой v2
+ * (keys.running) и данные те же: первая запись или null. Свой тип, а не
+ * TimeRun из v2, только ради полей, которые там не описаны (компания, задача).
+ */
+type RunningItem = {
+  id: string
+  description?: string
+  startedAt: string
+  projectId: string | null
+  projectName?: string
+  companyId?: string | null
+  task?: { id: string; number?: string; title?: string } | null
 }
+type BallMine = { table: BallItem[]; items: BallItem[] }
+type CompanyInbox = { unreadTotal: number; items: Notice[] }
+
+/** Где хранится выбранный для таймера проект — тот же ключ, что у шапки v2. */
+const timerChoiceKey = (companyId: string) => `chatick_v2_timer_${companyId}`
+const readTimerChoice = (companyId: string): string | null => {
+  try {
+    return localStorage.getItem(timerChoiceKey(companyId))
+  } catch {
+    return null
+  }
+}
+const saveTimerChoice = (companyId: string, projectId: string | null) => {
+  try {
+    if (projectId) localStorage.setItem(timerChoiceKey(companyId), projectId)
+    else localStorage.removeItem(timerChoiceKey(companyId))
+  } catch {
+    // хранилище недоступно — выбор просто не запомнится
+  }
+}
+
+/**
+ * Склейка ответов по компаниям. Функция — на уровне модуля, а не в теле
+ * хука: useQueries пересчитывает combine заново, только если сменилась
+ * ссылка на неё или чей-то ответ. Стрелка в теле давала бы новый массив на
+ * каждую отрисовку — и состояние летело бы в трей без всякого повода.
+ */
+const mineData = (rs: UseQueryResult<BallMine>[]) => rs.map((r) => r.data)
+const inboxData = (rs: UseQueryResult<CompanyInbox>[]) => rs.map((r) => r.data)
 type ProjectLite = {
   id: string
   name: string
@@ -126,13 +251,6 @@ type ProjectLite = {
   isMember: boolean
   stats?: { unread: number }
 }
-type TaskLite = {
-  id: string
-  number: string
-  title: string
-  status: string
-  project: { id: string; name: string; color?: string }
-}
 type BridgeSessionLite = {
   id: string
   clientName: string
@@ -141,6 +259,12 @@ type BridgeSessionLite = {
   company: { id: string; name: string } | null
   lastUsedAt: string
 }
+type CompanyLite = { id: string; name: string; logoUrl?: string | null; myRole: 'admin' | 'manager' | 'member'; mainProjectId?: string | null }
+/** Задача «на мне» вместе с компанией: компания известна из запроса, в ответе её нет. */
+type TrayTask = BallItem & { companyId: string }
+type TrayNotice = Notice & { companyId: string }
+/** Куда пойдёт время: проект или компания целиком (v2). */
+type TimerTarget = { companyId: string | null; projectId: string | null }
 
 /**
  * Отмечает, в каком проекте человек сейчас (SPEC §8.33).
@@ -148,11 +272,15 @@ type BridgeSessionLite = {
  * Нужно ассистенту с доступом на всю компанию: без этого он либо
  * переспрашивает «в каком проекте?», либо угадывает. Работает и в браузере,
  * и в десктопе — присутствие не имеет отношения к оболочке.
+ *
+ * Проект — из адреса: в v2 это фильтр ?p=, на старых экранах /c/…/p/<id>.
+ * Раньше искали /p/<id> в начале адреса, а такого адреса нет с тех пор, как
+ * в него попала компания, — ассистент всегда видел «нигде».
  */
 export function usePresence() {
   const location = useLocation()
   const authed = Boolean(getSessionToken())
-  const projectId = location.pathname.match(/^\/p\/([^/]+)/)?.[1] ?? null
+  const projectId = activeFromLocation(location.pathname, location.search).projectId
 
   useEffect(() => {
     if (!authed) return
@@ -171,6 +299,8 @@ export function usePresence() {
  */
 export function useDesktopSync() {
   const { t, i18n } = useTranslation()
+  const { t: tv } = useTranslation('v2')
+  const { resolved: theme } = useTheme()
   const navigate = useNavigate()
   const location = useLocation()
   const qc = useQueryClient()
@@ -189,11 +319,14 @@ export function useDesktopSync() {
   // новых данных нажатие читало устаревшее замыкание — «плей» отвечал
   // «таймер уже идёт», а «стоп» промахивался мимо записи.
   const liveRef = useRef<{
-    timer?: Running['items'][0]
-    projectId?: string
-    tasks?: TaskLite[]
+    timer?: RunningItem | null
+    /** компания, открытая в окне (или первая) */
+    companyId?: string | null
+    tasks?: TrayTask[]
     /** проекты с их компаниями: адрес перехода из панели без компании не собрать */
     projects?: ProjectLite[]
+    companies?: CompanyLite[]
+    notifications?: TrayNotice[]
   }>({})
   useEffect(() => {
     const check = () => setAuthed(Boolean(getSessionToken()))
@@ -207,13 +340,15 @@ export function useDesktopSync() {
     }
   }, [])
 
-  // Активный проект — из адреса: /c/<companyId>/p/<id>/...
-  const activeProjectId = location.pathname.match(/^\/c\/[^/]+\/p\/([^/]+)/)?.[1]
+  // Где сейчас окно (l10). В v2 проект — фильтр ?p= на экране компании,
+  // задача — панель ?t=; старое /c/<co>/p/<id> тоже понимаем.
+  const here = activeFromLocation(location.pathname, location.search)
+  const on = Boolean(bridge) && authed
 
   // Кто вошёл — для аватарки в шапке панели. Ключ общий с приложением.
   const me = useQuery({
     queryKey: ['me'],
-    enabled: Boolean(bridge) && authed,
+    enabled: on,
     queryFn: () => api<Me>('/api/v1/auth/me'),
     staleTime: 5 * 60_000,
     // Свой опрос, как у остальных запросов панели. Без него единственная
@@ -223,31 +358,46 @@ export function useDesktopSync() {
     refetchInterval: 5 * 60_000,
   })
 
-  // Непрочитанные — то же, что показывает колокольчик: только адресованное мне.
+  // Непрочитанные по всем компаниям — бейдж на значке и в панели задач.
   const inbox = useQuery({
     queryKey: ['inbox'],
-    enabled: Boolean(bridge) && authed,
+    enabled: on,
     queryFn: () => api<Inbox>('/api/v1/inbox?onlyUnread=1&limit=50'),
     // Только для трея и бейджа: показ уведомлений идёт по сокету, мгновенно.
     refetchInterval: 60_000,
   })
 
+  // Таймер — тем же ключом и тем же запросом, что шапка v2 (useRunning):
+  // остановил там — панель узнала сразу, и наоборот. По сессии, а не по
+  // проекту: часы идут у человека, а не у окна.
   const running = useQuery({
-    queryKey: ['desktop-running'],
-    enabled: Boolean(bridge) && authed,
-    // По сессии, а не по project-токену: часы идут у человека, а не у окна.
-    // Со старым запросом панель не знала о таймере, пока не открыт проект —
-    // показывала «не запущен» и не давала остановить идущий.
-    queryFn: () => api<Running>('/api/v1/my/time/running'),
+    queryKey: keys.running,
+    enabled: on,
+    queryFn: () => api<{ items: RunningItem[] }>('/api/v1/my/time/running').then((r) => r.items[0] ?? null),
     refetchInterval: 30_000,
+  })
+
+  // «Сегодня 4:54» под таймером. Ключ и запрос — как у шапки v2 (useToday):
+  // минуты без идущего таймера, его панель досчитывает сама.
+  const today = useQuery({
+    queryKey: keys.today,
+    enabled: on,
+    queryFn: () => {
+      const from = new Date()
+      from.setHours(0, 0, 0, 0)
+      return api<{ totalMinutes: number }>(`/api/v1/my/time/summary?from=${encodeURIComponent(from.toISOString())}`).then(
+        (r) => r.totalMinutes ?? 0,
+      )
+    },
+    staleTime: 60_000,
+    refetchInterval: 5 * 60_000,
   })
 
   // Проекты нужны панели и для списка, и чтобы подписать, где что произошло.
   const companies = useQuery({
     queryKey: ['companies'],
-    enabled: Boolean(bridge) && authed,
-    queryFn: () =>
-      api<{ companies: { id: string; name: string; myRole: 'admin' | 'manager' | 'member'; mainProjectId?: string | null }[] }>('/api/v1/companies'),
+    enabled: on,
+    queryFn: () => api<{ companies: CompanyLite[] }>('/api/v1/companies'),
     // Этот опрос — единственное, что оживляет панель после падения запроса:
     // проверено на самой библиотеке. Упавший запрос оставляет data пустым, из
     // пустого списка компаний собирается пустой ключ, а он ВЫКЛЮЧАЕТ запрос
@@ -256,7 +406,6 @@ export function useDesktopSync() {
     refetchInterval: 60_000,
   })
   const myCompanies = companies.data?.companies ?? []
-  const company = myCompanies[0]
   const companyIds = myCompanies.map((c) => c.id)
 
   // Проекты СО ВСЕХ компаний: человек может состоять в нескольких — своей и
@@ -265,7 +414,7 @@ export function useDesktopSync() {
   // нельзя вовсе.
   const projects = useQuery({
     queryKey: ['tray-projects', companyIds.join(',')],
-    enabled: Boolean(bridge) && authed && companyIds.length > 0,
+    enabled: on && companyIds.length > 0,
     queryFn: async () => {
       const lists = await Promise.all(
         companyIds.map((id) =>
@@ -282,6 +431,31 @@ export function useDesktopSync() {
     refetchInterval: 60_000,
   })
 
+  // Задачи, где мяч у меня, — по каждой компании (v2). Ключ и запрос те же,
+  // что у списка «На мне»: любое движение мяча в приложении (и по сокету)
+  // освежает и панель, без своего опроса вдогонку.
+  const mine = useQueries({
+    queries: companyIds.map((id) => ({
+      queryKey: keys.mine(id),
+      queryFn: () => api<BallMine>(`/api/v1/ball/mine?companyId=${encodeURIComponent(id)}`),
+      enabled: on,
+      refetchInterval: 120_000,
+    })),
+    combine: mineData,
+  })
+
+  // Лента компании — как у колокольчика v2 (useInbox), тем же ключом:
+  // прочитал там — панель погасила сразу (n09).
+  const inboxes = useQueries({
+    queries: companyIds.map((id) => ({
+      queryKey: keys.inbox(id),
+      queryFn: () => api<CompanyInbox>(`/api/v1/inbox?limit=50&companyId=${encodeURIComponent(id)}`),
+      enabled: on,
+      refetchInterval: 60_000,
+    })),
+    combine: inboxData,
+  })
+
   // Действующие туннели ассистентов: их видно во вкладке «Доступ», и оттуда же
   // их можно закрыть — доступ от своего имени стоит держать на глазах.
   //
@@ -292,19 +466,40 @@ export function useDesktopSync() {
   const [awaitingTunnel, setAwaitingTunnel] = useState(false)
   const bridgeSessions = useQuery({
     queryKey: ['bridge-sessions'],
-    enabled: Boolean(bridge) && authed,
+    enabled: on,
     queryFn: () => api<{ items: BridgeSessionLite[] }>('/api/v1/auth/bridge/sessions'),
     refetchInterval: awaitingTunnel ? 2000 : 60_000,
   })
 
-  // Мои открытые задачи по ВСЕМ проектам: панель отвечает на «что мне делать»,
-  // и заставлять сначала зайти в проект — значит не отвечать вовсе.
-  const tasks = useQuery({
-    queryKey: ['desktop-tasks'],
-    enabled: Boolean(bridge) && authed,
-    queryFn: () => api<{ items: TaskLite[] }>('/api/v1/inbox/tasks'),
-    refetchInterval: 120_000,
-  })
+  /**
+   * Прочитанное — одно на оба клиента (n09).
+   *
+   * Колокольчик v2 сбрасывает ['v2','inbox',…], старые экраны и переходы из
+   * трея — ['inbox']. Каждый трогал только своё, и бейдж в трее отставал от
+   * прочитанного в приложении до минуты, а лента v2 — от прочитанного в трее.
+   *
+   * Мост в обе стороны. Флаг не даёт семьям гонять друг друга по кругу:
+   * оповещения кеша приходят синхронно, прямо внутри invalidateQueries. И
+   * пересылаем, только пока другая семья ещё свежая: на пять компаний пять
+   * пересылок дали бы пять одинаковых запросов.
+   */
+  useEffect(() => {
+    if (!bridge) return
+    let relaying = false
+    const cache = qc.getQueryCache()
+    return cache.subscribe((event) => {
+      if (relaying || event.type !== 'updated' || event.action?.type !== 'invalidate') return
+      const [a, b] = event.query.queryKey as unknown[]
+      const other = a === 'inbox' ? ['v2', 'inbox'] : a === 'v2' && b === 'inbox' ? ['inbox'] : null
+      if (!other || !cache.findAll({ queryKey: other }).some((q) => !q.state.isInvalidated)) return
+      relaying = true
+      try {
+        void qc.invalidateQueries({ queryKey: other })
+      } finally {
+        relaying = false
+      }
+    })
+  }, [bridge, qc])
 
   // --- состояние для трея и панели -------------------------------------------
   useEffect(() => {
@@ -318,81 +513,159 @@ export function useDesktopSync() {
     // перемонтируются, и список исчезал на ровном месте.
     const projectList = authed ? (projects.data ?? lastProjects.current).filter((p) => p.isMember) : []
     if (projects.data) lastProjects.current = projects.data
-    const nameOf = (id: string) => projectList.find((p) => p.id === id)?.name
-    // Компания проставлена при загрузке списков (см. запрос tray-projects):
-    // адрес проекта без неё не собрать.
-    const companyOf = (id: string) => projectList.find((p) => p.id === id)?.companyId
-    const timer = authed ? running.data?.items[0] : undefined
-    liveRef.current = { timer, projectId: activeProjectId, tasks: tasks.data?.items, projects: projectList }
+    const projectBy = new Map(projectList.map((p) => [p.id, p]))
+    const nameOf = (id: string | null | undefined) => (id ? projectBy.get(id)?.name : undefined)
+    const companyOf = (id: string | null | undefined) => (id ? projectBy.get(id)?.companyId : undefined)
+    const companyList = authed ? myCompanies : []
+    // Компания окна; окно не в компании (вход, список компаний) — первая.
+    const activeCompany = companyList.find((c) => c.id === here.companyId) ?? companyList[0]
+    const run = authed ? (running.data ?? null) : null
+    const myId = me.data?.id
+    const lng = i18n.resolvedLanguage ?? i18n.language
+
+    const ball: TrayTask[] = authed
+      ? companyIds.flatMap((cid, i) => {
+          const d = mine[i]
+          return d ? [...d.table, ...d.items].map((x) => ({ ...x, companyId: cid })) : []
+        })
+      : []
+    const notices: TrayNotice[] = authed
+      ? companyIds.flatMap((cid, i) => (inboxes[i]?.items ?? []).slice(0, 30).map((n) => ({ ...n, companyId: cid })))
+      : []
+    // Проект, на который смотрит окно: фильтр ?p= или проект открытой задачи.
+    const activeProjectId = here.projectId ?? (here.taskId ? ball.find((x) => x.id === here.taskId)?.project?.id : null) ?? null
+
+    liveRef.current = { timer: run, companyId: activeCompany?.id ?? null, tasks: ball, projects: projectList, companies: companyList, notifications: notices }
 
     bridge.setState({
       authed,
       unread: authed ? inbox.data?.unreadTotal ?? 0 : 0,
-      timer: timer
+      timer: run
         ? {
-            id: timer.id,
-            description: timer.description,
-            startedAt: timer.startedAt,
-            // Панели нужен id: по нему она блокирует выбор проекта на бегущем
-            // таймере и оставляет его выбранным после паузы.
-            projectId: timer.projectId,
-            projectName: nameOf(timer.projectId),
-            taskId: timer.task?.id ?? null,
+            id: run.id,
+            description: run.description ?? '',
+            startedAt: run.startedAt,
+            // Панели нужен id: по нему она узнаёт идущий проект в списке и
+            // ставит галочку. null — время на компанию.
+            projectId: run.projectId,
+            projectName: nameOf(run.projectId) ?? run.projectName,
+            taskId: run.task?.id ?? null,
+            taskNumber: run.task?.number ?? null,
+            companyId: run.companyId ?? companyOf(run.projectId) ?? null,
           }
         : null,
-      notifications: (authed ? inbox.data?.items ?? [] : []).slice(0, 20).map((n) => ({
-        id: n.id,
-        title: n.title,
-        summary: n.summary,
-        link: n.link,
-        projectId: n.projectId,
-        projectName: nameOf(n.projectId),
-        unread: !n.readAt,
-      })),
-      // сервер уже отдал только мои и только незакрытые, из всех проектов
-      tasks: (authed ? tasks.data?.items ?? [] : []).slice(0, 60).map((t) => ({
-        id: t.id,
-        number: t.number,
-        title: t.title,
-        status: t.status,
-        link: `/c/${companyOf(t.project.id) ?? ''}/p/${t.project.id}/tasks/${t.id}`,
-        projectId: t.project.id,
-        projectName: t.project.name,
-      })),
+      notifications: notices.map((n) => {
+        const who = n.actor?.name?.trim() ?? ''
+        // Заголовок сервер собирает как «{кто} {что}» — имя выносим жирным в
+        // начало, как в макете. Иначе строка идёт как есть.
+        const named = Boolean(who) && n.title.startsWith(who)
+        // Уведомление о задаче открывает её панелью — по id, а не разбором
+        // старой ссылки: так надёжнее.
+        const link =
+          n.entityType === 'task' && n.entityId
+            ? `/c/${n.companyId}?t=${encodeURIComponent(n.entityId)}`
+            : n.link
+              ? toV2Link(n.link, { companyId: n.companyId, companyOf })
+              : `/c/${n.companyId}/notifications`
+        return {
+          id: n.id,
+          title: n.title,
+          summary: n.summary,
+          link,
+          projectId: n.projectId,
+          projectName: n.projectName ? shortProject(n.projectName) : undefined,
+          unread: !n.readAt,
+          companyId: n.companyId,
+          who: named ? who : undefined,
+          text: named ? n.title.slice(who.length).trim() : n.title,
+          note: (n.summary || n.body || '').trim().slice(0, 240) || null,
+          when: timeAgo(lng, n.createdAt),
+          color: n.actor ? personColor(n.actor.id) : undefined,
+          letter: letterOf(n.actor?.name ?? 'C'),
+        }
+      }),
+      tasks: ball.slice(0, 150).map((x) => {
+        const mk = moveKey(x)
+        const client = Boolean(x.ball.waitingClientSince)
+        const n = dueDiff(x.dueDate)
+        // Владелец сам себе задачу не проверяет: «готово» закрывает. Задачу
+        // без владельца — тоже: отдать на проверку некому.
+        const owner = !x.owner || (Boolean(myId) && x.owner.id === myId)
+        // «От кого» — как в списке «На мне»: кто прислал последним, иначе владелец.
+        const person = x.last?.actor ?? x.owner
+        return {
+          id: x.id,
+          number: x.number,
+          title: x.title,
+          status: x.status,
+          // v2: задача открывается панелью поверх списка компании (l03).
+          link: `/c/${x.companyId}?t=${encodeURIComponent(x.id)}`,
+          projectId: x.project?.id ?? '',
+          projectName: x.project ? shortProject(x.project.name) : undefined,
+          due: x.dueDate ? dueText(tv, x.dueDate, lng) : undefined,
+          late: n !== null && n < 0,
+          soon: n !== null && n >= 0 && n <= 1,
+          companyId: x.companyId,
+          move: mk,
+          moveLabel: tv(`mv.${mk}`),
+          round: x.ball.round > 1 ? tv('round', { n: x.ball.round }) : undefined,
+          from: !person ? undefined : person.id === myId ? tv('tasks.yourTask') : tv('tasks.from', { name: person.name }),
+          wait: client
+            ? tv('wait.since', { date: new Date(x.ball.waitingClientSince!).toLocaleDateString(lng, { month: 'short', day: 'numeric' }) })
+            : waitText(tv, x.ball.heldSince),
+          long: !client && heatOf(x.ball.move, x.ball.heldSince) === 'burn',
+          isNew: x.isNew,
+          // Кнопка по правилам мяча (п. 5). Статусы — те, что понимает ручка
+          // трея: review — «на проверку» владельцу, done — принять/закрыть.
+          // Ответ на вопрос и «клиент ответил» требуют записки — только в приложении.
+          action:
+            client || mk === 'answer'
+              ? null
+              : mk === 'review'
+                ? { status: 'done' as const, label: tv('act.accept') }
+                : owner
+                  ? { status: 'done' as const, label: tv('tray.done') }
+                  : { status: 'review' as const, label: tv('act.review') },
+        }
+      }),
       projects: projectList.map((p) => ({
         id: p.id,
         name: p.name,
+        short: shortProject(p.name),
         companyId: p.companyId,
-        color: p.color,
+        color: projectColor({ id: p.id, color: p.color ?? null }),
         logoUrl: p.logoUrl,
+        letter: letterOf(p.name),
         unread: p.stats?.unread ?? 0,
       })),
       project: authed && activeProjectId ? { id: activeProjectId, name: nameOf(activeProjectId) ?? '' } : null,
       user:
         authed && me.data
-          ? { name: me.data.name, email: me.data.email, avatarUrl: me.data.avatarUrl }
+          ? { name: me.data.name, email: me.data.email, avatarUrl: me.data.avatarUrl, todayMinutes: today.data ?? null }
           : null,
-      company:
-        authed && company
-          ? {
-              id: company.id,
-              name: company.name,
-              // Подключиться к своей компании может любой её участник: туннель
-              // открывает только те проекты, где человек состоит, и с его же
-              // правами — больше своего он ассистенту не выдаст.
-              canGrantCompany: true,
-            }
-          : null,
-      companies: authed
-        ? myCompanies.map((c) => ({
-            id: c.id,
-            name: c.name,
+      company: activeCompany
+        ? {
+            id: activeCompany.id,
+            name: activeCompany.name,
+            // Подключиться к своей компании может любой её участник: туннель
+            // открывает только те проекты, где человек состоит, и с его же
+            // правами — больше своего он ассистенту не выдаст.
             canGrantCompany: true,
-            // Главный проект компании: панель подставляет его, когда человек
-            // ещё ничего не выбрал сам.
-            mainProjectId: c.mainProjectId ?? null,
-          }))
-        : [],
+          }
+        : null,
+      companies: companyList.map((c, i) => ({
+        id: c.id,
+        name: c.name,
+        canGrantCompany: true,
+        // Главный проект компании — для старой панели: она подставляла его,
+        // когда человек ещё ничего не выбрал сам.
+        mainProjectId: c.mainProjectId ?? null,
+        logoUrl: c.logoUrl ?? null,
+        letter: letterOf(c.name),
+        meta: tv('tray.tasks', { count: ball.filter((x) => x.companyId === c.id).length }),
+        unread: inboxes[i]?.unreadTotal ?? 0,
+        timerProjectId: readTimerChoice(c.id),
+      })),
       connections: (authed ? bridgeSessions.data?.items ?? [] : []).map((x) => ({
         id: x.id,
         clientName: x.clientName,
@@ -400,12 +673,24 @@ export function useDesktopSync() {
         where: (x.scope === 'all' ? t('connect.allProjects') : x.scope === 'company' ? x.company?.name : x.project?.name) ?? '',
       })),
       strings: {
+        // --- общие с оболочкой: меню трея и подсказка над значком (main.cjs) ---
         start: t('desktop.start'),
         stop: t('desktop.stop'),
         idle: t('desktop.idle'),
         idleNoProject: t('desktop.idleNoProject'),
         minShort: t('desktop.minShort'),
         noTask: t('time.noTask'),
+        openApp: t('desktop.openApp'),
+        close: t('desktop.close'),
+        unreadOne: t('desktop.unread'),
+        launchAtLogin: t('desktop.launchAtLogin'),
+        reload: t('desktop.reload'),
+        about: t('desktop.about'),
+        notifySettings: t('notif.system'),
+        updateReady: t('desktop.updateReady'),
+        quit: t('desktop.quit'),
+        signIn: t('desktop.signIn'),
+        // --- прежняя панель: она остаётся запасной копией внутри оболочки ---
         tabInbox: t('desktop.tabInbox'),
         tabTasks: t('desktop.tabTasks'),
         tabProjects: t('desktop.tabProjects'),
@@ -417,6 +702,20 @@ export function useDesktopSync() {
         statusInProgress: t('tasks.status.in_progress'),
         statusReview: t('tasks.status.review'),
         statusDone: t('tasks.status.done'),
+        emptyInbox: t('desktop.emptyInbox'),
+        emptyTasks: t('desktop.emptyTasks'),
+        emptyProjects: t('desktop.emptyProjects'),
+        openHours: t('desktop.openHours'),
+        openProfile: t('profile.title'),
+        allRead: t('desktop.allRead'),
+        due: t('desktop.due'),
+        pickProject: t('desktop.pickProject'),
+        showDone: t('desktop.showDone'),
+        timerRunning: t('desktop.timerRunning'),
+        signedOut: t('desktop.signedOut'),
+        signedOutHint: t('desktop.signedOutHint'),
+        // --- подключение ассистента (есть и в новой панели) ---
+        editElapsed: t('desktop.editElapsed'),
         connectHint: t('desktop.connectHint'),
         // строка-приглашение для ассистента — та же, что на вкладке «Подключение»
         inviteLine: `${t('connect.pastePrefix')} ${API_URL.replace(/\/$/, '')}/x`,
@@ -435,20 +734,6 @@ export function useDesktopSync() {
         connectBadCode: t('desktop.connectBadCode'),
         connectDone: t('desktop.connectDone'),
         connectFailed: t('desktop.connectFailed'),
-        emptyInbox: t('desktop.emptyInbox'),
-        emptyTasks: t('desktop.emptyTasks'),
-        emptyProjects: t('desktop.emptyProjects'),
-        openApp: t('desktop.openApp'),
-        openHours: t('desktop.openHours'),
-        openProfile: t('profile.title'),
-        editElapsed: t('desktop.editElapsed'),
-        close: t('desktop.close'),
-        unreadOne: t('desktop.unread'),
-        allRead: t('desktop.allRead'),
-        due: t('desktop.due'),
-        launchAtLogin: t('desktop.launchAtLogin'),
-        reload: t('desktop.reload'),
-        notifySettings: t('notif.system'),
         connectGroupCompanies: t('connect.groupCompanies'),
         connectGroupProjects: t('connect.groupProjects'),
         connectAllProjectsOf: t('connect.allProjectsOf'),
@@ -457,19 +742,67 @@ export function useDesktopSync() {
         connectMasterBadge: t('connect.allProjects'),
         connectSearch: t('connect.search'),
         connectNothingFound: t('connect.nothingFound'),
-        pickProject: t('desktop.pickProject'),
-        showDone: t('desktop.showDone'),
-        updateReady: t('desktop.updateReady'),
-        quit: t('desktop.quit'),
-        timerRunning: t('desktop.timerRunning'),
-        signIn: t('desktop.signIn'),
-        signedOut: t('desktop.signedOut'),
-        signedOutHint: t('desktop.signedOutHint'),
+        // --- панель v2 ---
+        mine: tv('tray.mine'),
+        waiting: tv('tray.waiting'),
+        all: tv('tray.all'),
+        openInApp: tv('tray.openInApp'),
+        emptyH: tv('tray.emptyH'),
+        emptyP: tv('tray.emptyP'),
+        inboxEmpty: tv('tray.inboxEmpty'),
+        allNotes: tv('tray.allNotes'),
+        loginH: tv('tray.loginH'),
+        loginP: tv('tray.loginP'),
+        loginBtn: tv('tray.loginBtn'),
+        startShort: tv('tray.startShort'),
+        timerIdle: tv('tray.idle'),
+        startTimer: tv('timer.start'),
+        stopTimer: tv('timer.stop'),
+        wholeCompany: tv('timer.company'),
+        trackTo: tv('timer.pickHead'),
+        findProj: tv('timer.find'),
+        // {{q}} подставляет панель: искомое она знает, а веб — нет.
+        noProj: tv('timer.none', { q: '{{q}}', interpolation: { escapeValue: false } }),
+        today: tv('head.today'),
+        companies: tv('head.companies'),
+        switchCo: tv('head.switchCompany'),
+        account: tv('tray.account'),
+        hours: tv('tray.hours'),
+        profile: tv('tray.profile'),
+        notifyPrefs: tv('tray.notifySettings'),
+        connectTitle: tv('tray.connect'),
+        back: tv('tray.back'),
+        sent: tv('tray.sent'),
+        logout: tv('me.logout'),
+        loading: tv('common.loading'),
         // на иврите панель должна разворачиваться, как и всё приложение
         dir: i18n.dir(),
+        lang: lng,
+        // Тема — та, что выбрана в приложении: панель — его продолжение.
+        theme,
       },
     })
-  }, [bridge, authed, inbox.data, running.data?.items, projects.data, tasks.data, bridgeSessions.data, company, me.data, activeProjectId, t, i18n, stateNonce])
+  }, [
+    bridge,
+    authed,
+    inbox.data,
+    running.data,
+    today.data,
+    projects.data,
+    companies.data,
+    mine,
+    inboxes,
+    bridgeSessions.data,
+    me.data,
+    here.companyId,
+    here.projectId,
+    here.taskId,
+    t,
+    tv,
+    i18n,
+    theme,
+    stateNonce,
+  ])
 
   // Системные уведомления показывает useSystemNotifications — общий хук для
   // веба и десктопа. Раньше это жило здесь и работало только в Electron.
@@ -477,30 +810,87 @@ export function useDesktopSync() {
   // --- команды из главного процесса -----------------------------------------
   useEffect(() => {
     if (!bridge) return
+
+    /** Таймер сменился — перечитать его везде, где он показан. */
+    const refreshTime = () => {
+      void qc.invalidateQueries({ queryKey: keys.running })
+      void qc.invalidateQueries({ queryKey: keys.today })
+      // старые экраны держат таймер под своими ключами
+      void qc.invalidateQueries({ queryKey: ['desktop-running'] })
+      void qc.invalidateQueries({ queryKey: ['time-running'] })
+      void qc.invalidateQueries({ queryKey: ['time-entries'] })
+    }
+
+    /**
+     * Цель таймера по id: панель шлёт то, что выбрал человек, — проект или
+     * компанию целиком (v2); старая панель — только проекты. Отличаем по
+     * своим спискам.
+     *
+     * Без id — как кнопка в шапке v2: выбранный там проект открытой
+     * компании, а если его нет — сама компания. Проект, которого нет в
+     * списке (список ещё грузится), отдаём серверу как есть: членство он
+     * проверит сам.
+     */
+    const targetOf = (id: string | null | undefined): TimerTarget | null => {
+      const live = liveRef.current
+      if (id) {
+        if (live.companies?.some((c) => c.id === id)) return { companyId: id, projectId: null }
+        return { companyId: live.projects?.find((p) => p.id === id)?.companyId ?? null, projectId: id }
+      }
+      const companyId = live.companyId ?? live.companies?.[0]?.id
+      if (!companyId) return null
+      const chosen = readTimerChoice(companyId)
+      const member = Boolean(chosen) && Boolean(live.projects?.some((p) => p.id === chosen && p.companyId === companyId))
+      return { companyId, projectId: member ? chosen : null }
+    }
+
+    /**
+     * Старт по сессии — /my/time, как у шапки v2: проектный заголовок и
+     * правила чата здесь не нужны, а время на компанию иначе и не завести.
+     */
+    const startOn = async (target: TimerTarget, extra: { taskId?: string; description?: string } = {}) => {
+      const body = target.projectId ? { projectId: target.projectId, ...extra } : { companyId: target.companyId }
+      await api('/api/v1/my/time/start', { method: 'POST', body: JSON.stringify(body) })
+      // Выбор запоминаем там же, где шапка v2: следующий «плей» — в шапке,
+      // в панели или по Ctrl+Shift+T — пойдёт туда же.
+      if (target.companyId) saveTimerChoice(target.companyId, target.projectId)
+    }
+    const stopRun = (run: RunningItem) => api(`/api/v1/my/time/${run.id}/stop`, { method: 'POST' })
+
     const offNav = bridge.onNavigate((payload) => {
-      // Панель присылает объект; строка — от старых вызовов (переход в проект).
-      const link = typeof payload === 'string' ? payload : payload?.link
+      // Панель присылает объект; строка — от старых вызовов (переход в проект)
+      // и от меню трея в оболочке.
+      const raw = typeof payload === 'string' ? payload : payload?.link
       const notificationId = typeof payload === 'string' ? null : payload?.notificationId
       const projectId = typeof payload === 'string' ? null : payload?.projectId
-      if (!link) return
-      // Старый трей слал «/p/<id>/…» без компании — такой адрес не совпадает
-      // ни с одним маршрутом, и вместо проекта открывался чёрный экран.
-      // Обновится трей не у всех и не сразу, поэтому чиним и здесь: компанию
-      // берём из того же списка проектов, что показывает панель.
-      const legacy = link.match(/^\/p\/([^/]+)(\/.*)?$/)
-      if (legacy) {
-        const pid = legacy[1]!
-        const cid = liveRef.current.projects?.find((p) => p.id === pid)?.companyId
-        navigate(cid ? `/c/${cid}/p/${pid}${legacy[2] ?? '/chat'}` : '/start')
+      if (!raw) return
+
+      // «Выйти» из меню панели. Своего вызова у оболочки для этого нет, а
+      // обновлять её ради одной кнопки нельзя — панель просит выход тем же
+      // путём, что и переход.
+      if (raw === '/logout') {
+        logout()
+        setAuthed(false)
+        navigate('/login')
         return
       }
-      navigate(link)
+
+      // Старые адреса — в v2 (l03): сервер пишет в уведомления
+      // /c/<co>/p/<p>/tasks/<id>, меню трея в оболочке шлёт
+      // /settings/notifications и /start. Компания для адресов без неё — та,
+      // откуда уведомление, иначе открытая в окне.
+      const live = liveRef.current
+      const companyOfProject = (pid: string) => live.projects?.find((p) => p.id === pid)?.companyId
+      const notice = notificationId ? live.notifications?.find((n) => n.id === notificationId) : undefined
+      const companyId =
+        notice?.companyId ?? (projectId ? companyOfProject(projectId) : undefined) ?? live.companyId ?? live.companies?.[0]?.id ?? null
+      navigate(toV2Link(raw, { companyId, companyOf: companyOfProject }))
 
       // Клик из панели — это прочтение: уведомление привело человека на место,
       // и висеть непрочитанным ему больше незачем. id приходит от панели: по
       // ссылке уведомления не различить, несколько ведут в одно место.
       //
-      // Уход в проект целиком (заголовок группы в «Мне») гасит все его
+      // Уход в проект целиком (старая панель, заголовок группы) гасит все его
       // уведомления: под заголовком показаны именно они, и человек их видел.
       const readBody = notificationId
         ? { ids: [notificationId] }
@@ -510,47 +900,48 @@ export function useDesktopSync() {
       if (!readBody) return
       api('/api/v1/inbox/read', { method: 'POST', body: JSON.stringify(readBody) })
         .then(() => {
-          qc.invalidateQueries({ queryKey: ['inbox'] })
-          qc.invalidateQueries({ queryKey: ['sidebar-projects'] })
-          qc.invalidateQueries({ queryKey: ['desktop-tasks'] })
+          // Обе семьи ключей (n09): бейдж трея и старые экраны — ['inbox'],
+          // колокольчик и списки v2 — ['v2', …].
+          void qc.invalidateQueries({ queryKey: ['inbox'] })
+          void qc.invalidateQueries({ queryKey: ['v2', 'inbox'] })
+          void qc.invalidateQueries({ queryKey: ['v2', 'ball'] })
+          void qc.invalidateQueries({ queryKey: ['sidebar-projects'] })
+          void qc.invalidateQueries({ queryKey: ['tray-projects'] })
         })
         .catch(() => {})
     })
-    // Проект, в котором работаем, называем запросу явно ({ project }), а не
-    // берём из адреса: таймер идёт в своём проекте, а окно может смотреть
-    // другой. Раньше здесь брался проектный токен и однажды клался в общий
-    // слот — окно на Avents получало токен Just Us, и таблица задач
-    // наполнялась чужими.
-    //
-    // Правила чата принимаем, как и прежде делал вход с acceptRules: true —
-    // иначе сервер ответит 428, а человек увидит лишь неподвижную кнопку.
-    const admit = (projectId: string) => acceptProjectRules(projectId)
 
-    const offTimer = bridge.onToggleTimer(async (panelProjectId) => {
+    /**
+     * Старт/стоп из панели и по Ctrl+Shift+T (l06).
+     *
+     * В v2 таймер по умолчанию идёт «на компанию», без проекта. Раньше здесь
+     * требовался проект: идущий на компанию таймер из трея было не
+     * остановить, а старт без выбранного проекта отвечал «откройте проект».
+     *
+     *   идёт, цель не названа или та же → стоп, что бы ни шло;
+     *   идёт, названа другая цель       → перенос: стоп и старт на ней
+     *                                      (выбор в панели и есть старт — как в шапке v2);
+     *   не идёт                          → старт на названной цели, а без неё —
+     *                                      как «плей» в шапке v2 (см. targetOf).
+     */
+    const offTimer = bridge.onToggleTimer(async (wanted) => {
       // Из ref, а не из замыкания: на момент нажатия данные могли смениться.
-      const current = liveRef.current.timer
-
-      // Проект, в котором работаем: для остановки — тот, где идёт таймер;
-      // для запуска — выбранный в панели (дропдаун в шапке), и лишь как
-      // запасной вариант — открытый в окне.
-      const target = current?.projectId ?? panelProjectId ?? liveRef.current.projectId
-      if (!target) {
-        // Запускать «куда-нибудь» нельзя: часы молча ушли бы не туда.
-        bridge.show()
-        toast.info(t('desktop.pickProjectForTimer'))
-        return
-      }
-
+      const current = liveRef.current.timer ?? null
       try {
-        // Проект нужный, а не открытый в окне. Без этого «плей» и «стоп»
-        // молча не срабатывали: запрос уходил в чужой проект и падал.
-        await admit(target)
-
         if (current) {
-          await api(`/api/v1/time/${current.id}/stop`, { method: 'POST' }, { project: target })
+          await stopRun(current)
+          const runningOn = current.projectId ?? current.companyId ?? null
+          const next = wanted && wanted !== runningOn ? targetOf(wanted) : null
+          if (next) await startOn(next)
         } else {
-          // projectId передаём явно — по той же причине, что и в веб-контроле
-          await api('/api/v1/time/start', { method: 'POST', body: JSON.stringify({ projectId: target }) }, { project: target })
+          const target = targetOf(wanted)
+          if (!target) {
+            // Компании нет вовсе — запускать некуда, говорим прямо.
+            bridge.show()
+            toast.info(t('desktop.pickProjectForTimer'))
+            return
+          }
+          await startOn(target)
         }
       } catch (e) {
         // Молчаливый отказ — худшее, что здесь может быть: кнопка выглядит
@@ -558,9 +949,7 @@ export function useDesktopSync() {
         toast.error(e instanceof Error ? e.message : String(e))
         bridge.show()
       }
-      qc.invalidateQueries({ queryKey: ['desktop-running'] })
-      qc.invalidateQueries({ queryKey: ['time-running'] })
-      qc.invalidateQueries({ queryKey: ['time-entries'] })
+      refreshTime()
     })
 
     // --- подключение ассистента из панели ------------------------------------
@@ -593,19 +982,14 @@ export function useDesktopSync() {
       }
     })
 
-    // Таймер прямо на задаче: перебивает текущий, потому что работают над
-    // чем-то одним, а два счётчика на одного человека — это уже путаница.
     /**
      * Правка натикавшего из панели трея.
      *
-     * Панель присылает МИНУТЫ, а не новую дату: считает веб — здесь и токен, и
-     * права, и показ ошибки. Новое начало получается как «сейчас минус
+     * Панель присылает СЕКУНДЫ, а не новую дату: считает веб — здесь и токен,
+     * и права, и показ ошибки. Новое начало получается как «сейчас минус
      * столько-то», поэтому день выставляется сам и отдельно его не трогаем —
      * ровно то, на чём горели в TASK-6, когда сдвиг одного края делал из трёх
      * минут сутки.
-     *
-     * Секунды обнуляем: в поле панели их нет, и невидимый остаток превращал бы
-     * набранное 1:03 в 1:03:47.
      */
     const offTimerElapsed = bridge.onTimerElapsed?.(async ({ id, seconds }) => {
       const current = liveRef.current.timer
@@ -622,70 +1006,66 @@ export function useDesktopSync() {
       const startedAt = new Date(Date.now() - seconds * 1000)
       try {
         await api(`/api/v1/my/time/${id}`, { method: 'PATCH', body: JSON.stringify({ startedAt: startedAt.toISOString() }) })
-        // Оба ключа: панель читает 'desktop-running', вкладка «Время» —
-        // 'time-running'. Инвалидируя один, я оставлял панель ждать
-        // следующего опроса — до 30 секунд со старым числом на экране.
-        qc.invalidateQueries({ queryKey: ['desktop-running'] })
-        qc.invalidateQueries({ queryKey: ['time-running'] })
       } catch (e) {
         // Панель ошибок не показывает — выводим в приложении, иначе правка
         // молча не применяется и человек считает, что всё получилось.
         toast.error(e instanceof Error ? e.message : String(e))
         bridge.show()
       }
+      // Все ключи таймера: панель и шапка v2 читают keys.running, старые
+      // экраны — свои. Инвалидируя один, я оставлял панель ждать следующего
+      // опроса — до 30 секунд со старым числом на экране.
+      refreshTime()
     })
 
+    // Таймер прямо на задаче: перебивает текущий, потому что работают над
+    // чем-то одним, а два счётчика на одного человека — это уже путаница.
     const offTaskTimer = bridge.onTaskTimer(async (taskId) => {
       // Из ref: список задач и текущий таймер к моменту нажатия могли смениться.
       const task = liveRef.current.tasks?.find((x) => x.id === taskId)
-      if (!task) return
+      if (!task?.project) return
       const current = liveRef.current.timer
       try {
-        // Остановить надо в том проекте, где часы идут, а запустить — в том,
-        // которому принадлежит задача. Это разные проекты — каждый запрос
-        // называет свой.
-        if (current) {
-          await admit(current.projectId)
-          await api(`/api/v1/time/${current.id}/stop`, { method: 'POST' }, { project: current.projectId })
-        }
+        if (current) await stopRun(current)
         // Уже шёл таймер именно по этой задаче — значит нажатие было «стоп».
         if (current?.task?.id !== taskId) {
-          await admit(task.project.id)
-          await api(
-            '/api/v1/time/start',
-            { method: 'POST', body: JSON.stringify({ projectId: task.project.id, taskId, description: task.title }) },
-            { project: task.project.id },
-          )
+          await startOn({ companyId: task.companyId, projectId: task.project.id }, { taskId, description: task.title })
         }
       } catch (e) {
         toast.error(e instanceof Error ? e.message : String(e))
         bridge.show()
       }
-      qc.invalidateQueries({ queryKey: ['desktop-running'] })
-      qc.invalidateQueries({ queryKey: ['time-running'] })
-      qc.invalidateQueries({ queryKey: ['time-entries'] })
+      refreshTime()
     })
 
-    // Статус задачи меняют прямо из панели: ради «взял в работу» открывать
-    // приложение и искать задачу — лишняя дорога.
+    // Кнопка в строке задачи: ручка трея переводит статус в ход мяча
+    // (review — на проверку владельцу, done — принять). Ради «отдал на
+    // проверку» открывать приложение и искать задачу — лишняя дорога.
     const offTaskStatus = bridge.onTaskStatus(async ({ taskId, status }) => {
       try {
         await api(`/api/v1/inbox/tasks/${taskId}`, { method: 'PATCH', body: JSON.stringify({ status }) })
-      } catch {
+      } catch (e) {
+        // Отказ сервера показываем: кнопка в панели уже «нажата», и без
+        // объяснения человек решит, что всё ушло.
+        toast.error(e instanceof Error ? e.message : String(e))
         bridge.show()
       }
-      qc.invalidateQueries({ queryKey: ['desktop-tasks'] })
-      qc.invalidateQueries({ queryKey: ['tasks'] })
+      void qc.invalidateQueries({ queryKey: ['v2', 'ball'] })
+      void qc.invalidateQueries({ queryKey: keys.task(taskId) })
+      void qc.invalidateQueries({ queryKey: keys.handoffs(taskId) })
+      void qc.invalidateQueries({ queryKey: ['v2', 'inbox'] })
+      void qc.invalidateQueries({ queryKey: ['desktop-tasks'] })
+      void qc.invalidateQueries({ queryKey: ['tasks'] })
     })
 
-    // Проект выбрали из панели: переходим в него, но окно не поднимаем —
-    // человек остался в панели намеренно.
+    // Проект выбрали из старой панели: в v2 проект — фильтр на экране
+    // компании. Окно не поднимаем — человек остался в панели намеренно.
     const offSetProject = bridge.onSetProject((id) => {
       if (!id) return
       // Компания — из того же списка, что панель показывает; из ref, потому что
       // подписка живёт дольше данных, на которых её создали.
-      const cid = liveRef.current.projects?.find((p) => p.id === id)?.companyId ?? ''
-      navigate(`/c/${cid}/p/${id}/chat`)
+      const cid = liveRef.current.projects?.find((p) => p.id === id)?.companyId
+      if (cid) navigate(`/c/${cid}?p=${encodeURIComponent(id)}`)
     })
 
     // «О проекте» из трея: окно уже поднято главным процессом, здесь только
@@ -707,16 +1087,18 @@ export function useDesktopSync() {
       // Панель открыли — значит на неё смотрят прямо сейчас. Пересылать старое
       // состояние мало: таймер мог запуститься минуту назад, а опрос идёт раз
       // в полминуты. Перезапрашиваем то, что панель показывает.
-      qc.invalidateQueries({ queryKey: ['desktop-running'] })
-      qc.invalidateQueries({ queryKey: ['inbox'] })
-      qc.invalidateQueries({ queryKey: ['desktop-tasks'] })
+      void qc.invalidateQueries({ queryKey: keys.running })
+      void qc.invalidateQueries({ queryKey: keys.today })
+      void qc.invalidateQueries({ queryKey: ['inbox'] })
+      void qc.invalidateQueries({ queryKey: ['v2', 'inbox'] })
+      void qc.invalidateQueries({ queryKey: ['v2', 'ball', 'mine'] })
       // И то, на чём держится сама панель. Раньше кнопка обновляла только
       // три запроса выше — те, что и так опрашивают себя сами. Когда человек
       // жмёт «обновить», он смотрит на пустую панель: сломано как раз то,
       // чего в этом списке не было.
-      qc.invalidateQueries({ queryKey: ['companies'] })
-      qc.invalidateQueries({ queryKey: ['tray-projects'] })
-      qc.invalidateQueries({ queryKey: ['me'] })
+      void qc.invalidateQueries({ queryKey: ['companies'] })
+      void qc.invalidateQueries({ queryKey: ['tray-projects'] })
+      void qc.invalidateQueries({ queryKey: ['me'] })
       setStateNonce((n) => n + 1)
     })
 
@@ -749,5 +1131,5 @@ export function useDesktopSync() {
     // Данных таймера в зависимостях нет намеренно: обработчики читают их из
     // liveRef. Иначе каждая смена проекта снимала и вешала подписки заново, и
     // нажатие в этот момент уходило в никуда.
-  }, [bridge, navigate, qc])
+  }, [bridge, navigate, qc, t])
 }
