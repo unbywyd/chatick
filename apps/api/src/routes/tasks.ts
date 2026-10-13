@@ -18,7 +18,7 @@ import { logActivity } from '../lib/audit.js'
 import { postTaskDone, postTaskAssigned } from '../lib/task-events.js'
 import { richText } from '../lib/markdown.js'
 import { normalizeRefs, MAX_REFS_LENGTH } from '../lib/task-refs.js'
-import { handoff, insertTask, updateTask, type BallError } from '../lib/ball.js'
+import { handoff, HandoffRefused, insertTask, updateTask, type BallError } from '../lib/ball.js'
 import { notifyHandoff } from '../lib/handoff-notify.js'
 
 // Задачи проекта — project-токен; права per-user (SPEC §4.3) на каждое действие
@@ -553,7 +553,13 @@ tasksRoute.patch(
 
     // Статус и исполнитель — через мяч: старый клиент шлёт статусы, а в журнал
     // ложится передача (lib/ball.ts).
-    const { task: row } = await updateTask(task, patch, { actorId: sub, via: 'ui' })
+    let row: typeof task
+    try {
+      row = (await updateTask(task, patch, { actorId: sub, via: 'ui' })).task
+    } catch (e) {
+      if (e instanceof HandoffRefused) return c.json({ error: 'forbidden', action: e.action }, 403)
+      throw e
+    }
     const assignee = row!.assigneeId ? await db.query.users.findFirst({ where: eq(users.id, row!.assigneeId) }) : null
     void notifyTask(projectId, sub, row!, {
       assigneeChanged: body.assigneeId !== undefined && body.assigneeId !== task.assigneeId && Boolean(row!.assigneeId),
@@ -1853,27 +1859,28 @@ tasksRoute.delete('/:taskId/comments/:commentId', async (c) => {
   const comment = await db.query.taskComments.findFirst({ where: and(eq(taskComments.id, commentId), eq(taskComments.projectId, projectId)) })
   if (!comment) return c.json({ error: 'Not found' }, 404)
   if (comment.authorId !== sub && role !== 'owner' && role !== 'admin') return c.json({ error: 'Forbidden' }, 403)
+  await softDeleteComment(comment, sub)
+  return c.json({ ok: true })
+})
+
+/**
+ * Мягкое удаление комментария — одно на веб и мост (MCP).
+ *
+ * Раньше строка исчезала навсегда и в журнал ничего не писалось: комментарий
+ * пропадал бесследно, а уведомление о нём оставалось и вело в задачу, где
+ * ничего нет. Живой случай: человек удалил комментарий в одной задаче и
+ * написал тот же текст в другой — в инбоксе осталась ссылка в пустоту, и
+ * доказать, что комментарий был, оказалось нечем.
+ *
+ * Тело оставляем: «комментарий удалён» рисует клиент, а восстановить
+ * содержимое иногда нужно — по обсуждению потом выясняют, о чём
+ * договорились. Кто удалил и когда — в истории задачи.
+ */
+export async function softDeleteComment(comment: typeof taskComments.$inferSelect, actorId: string) {
   // Уже удалён — второй раз не перезаписываем: кто и когда удалил, важнее
   // последнего нажатия кнопки.
-  if (comment.deletedAt) return c.json({ ok: true })
-
-  /**
-   * Мягкое удаление, а не DELETE.
-   *
-   * Раньше строка исчезала навсегда и в журнал ничего не писалось: комментарий
-   * пропадал бесследно, а уведомление о нём оставалось и вело в задачу, где
-   * ничего нет. Живой случай: человек удалил комментарий в одной задаче и
-   * написал тот же текст в другой — в инбоксе осталась ссылка в пустоту, и
-   * доказать, что комментарий был, оказалось нечем.
-   *
-   * Тело оставляем: «комментарий удалён» рисует клиент, а восстановить
-   * содержимое иногда нужно — по обсуждению потом выясняют, о чём
-   * договорились. Кто удалил и когда — в истории задачи.
-   */
-  await db
-    .update(taskComments)
-    .set({ deletedAt: new Date(), deletedById: sub })
-    .where(eq(taskComments.id, commentId))
+  if (comment.deletedAt) return
+  await db.update(taskComments).set({ deletedAt: new Date(), deletedById: actorId }).where(eq(taskComments.id, comment.id))
 
   /**
    * Гасим уведомления об этом комментарии: они ведут в никуда.
@@ -1890,27 +1897,26 @@ tasksRoute.delete('/:taskId/comments/:commentId', async (c) => {
     const watchers = commentWatchers({
       assigneeId: task.assigneeId,
       createdById: task.createdById,
-      actorId: comment.authorId ?? sub,
+      actorId: comment.authorId ?? actorId,
       mentioned: extractMentions(comment.body),
     })
     for (const userId of watchers) {
-      void dropNotice({ userId, event: 'task_comment', entityId: task.id, dedupeKey: `task_comment:${commentId}` })
+      void dropNotice({ userId, event: 'task_comment', entityId: task.id, dedupeKey: `task_comment:${comment.id}` })
     }
   }
 
   void logActivity({
-    projectId,
-    actorId: sub,
+    projectId: comment.projectId,
+    actorId,
     action: 'delete',
     entityType: 'comment',
-    entityId: commentId,
+    entityId: comment.id,
     // Кусок текста в подписи: «удалил комментарий» без содержимого не даёт
     // понять, о чём речь, а тело в журнал целиком класть незачем.
-    entityLabel: comment.body.replace(/<[^>]*>/g, ' ').replace(/s+/g, ' ').trim().slice(0, 80),
+    entityLabel: comment.body.replace(/<[^>]*>/g, ' ').replace(/\s+/g, ' ').trim().slice(0, 80),
   })
-  broadcast(projectId, 'task_comments_changed', { taskId: comment.taskId })
-  return c.json({ ok: true })
-})
+  broadcast(comment.projectId, 'task_comments_changed', { taskId: comment.taskId })
+}
 
 // ИИ-валидация задачи в форме создания/редактирования (SPEC §8.6): «Проверить мою задачу».
 // Не сохраняет ничего — возвращает совет + улучшенный вариант для apply.

@@ -472,6 +472,35 @@ export async function handoff(
  * Перечитываем задачу и применяем ещё раз — правка «как прислали» побеждает,
  * как и было до v2.
  */
+/**
+ * Ход, который старый путь («поменять статус / исполнителя») сделать не вправе.
+ *
+ * Этим путём ходят MCP, ассистент, трей и экраны первой версии. Раньше ему
+ * хватало права читать задачи: любой в команде через Claude Code закрывал,
+ * отменял и открывал заново чужую задачу, хотя в вебе v2 те же ходы может
+ * только владелец или руководитель. Правило одно — mayHandoff — на оба пути.
+ */
+export class HandoffRefused extends Error {
+  constructor(public readonly action: HandoffAction) {
+    super(`handoff refused: ${action}`)
+  }
+}
+
+const REFUSAL_HINT: Partial<Record<HandoffAction, string>> = {
+  accept: 'Only the task owner or a project manager can close it. The holder sends it for review instead (handoff action=review).',
+  cancel: 'Only the task owner or a project manager can cancel it.',
+  reopen: 'Only the task owner or a project manager can reopen it.',
+  return: 'Only the owner, or the reviewer holding it, can return it for rework.',
+  review: 'Only the holder or the owner can send it for review.',
+  pass: 'Only the holder or the owner can hand it to someone else; a free task can be taken (handoff action=take).',
+  take: 'Only the owner can take a task someone else is holding.',
+}
+
+/** Текст отказа для ИИ и MCP: что нельзя и что можно вместо этого. */
+export function refusalText(e: HandoffRefused): string {
+  return `REFUSED by the ball rules (${e.action}). ${REFUSAL_HINT[e.action] ?? ''}`.trim()
+}
+
 export async function updateTask(
   existing: Task,
   patch: Record<string, unknown>,
@@ -496,6 +525,13 @@ export async function updateTask(
           ? await lastReviewFrom(current.id)
           : null,
     })
+    // Смена статуса или исполнителя — это ход мяча, и права на него те же,
+    // что у хода из веба. Системные правки (без автора) не проверяем.
+    if (plan.handoff?.action && ctx.actorId) {
+      const { ownsOrManages } = await import('../routes/projects.js')
+      const isManager = await ownsOrManages(current.projectId, ctx.actorId, [])
+      if (!mayHandoff(plan.handoff.action as HandoffAction, current, ctx.actorId, isManager)) throw new HandoffRefused(plan.handoff.action as HandoffAction)
+    }
     const row = await apply(current, plan, other)
     if (row) return { task: row, handoff: plan.handoff }
     const fresh = await db.query.tasks.findFirst({ where: eq(tasks.id, existing.id) })

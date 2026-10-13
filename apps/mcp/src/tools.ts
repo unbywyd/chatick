@@ -2374,6 +2374,9 @@ server.registerTool(
 
 // --- Всё остальное -----------------------------------------------------------
 
+/** Какие DELETE пропускает chatick_request: только то, что развязывает, а не стирает. */
+const DELETE_ALLOWED = [/^\/tasks\/[^/]+\/links\/[^/]+$/, /^\/tasks\/[^/]+\/blockers\/[^/]+$/, /^\/shares\/[^/]+\/[^/]+$/]
+
 server.registerTool(
   'chatick_request',
   {
@@ -2383,7 +2386,9 @@ server.registerTool(
       'task links (GET/POST /tasks/<id>/links, DELETE /tasks/<id>/links/<linkId> — links say where a task came from, ' +
       'they never block anything), ' +
       'files, chat, notes. Read GET /x/guide first — it lists every path and the exact permissions of this person. ' +
-      'Paths start with a slash and omit the /x prefix: "/sprints", "/documents/<id>/append".',
+      'Paths start with a slash and omit the /x prefix: "/sprints", "/documents/<id>/append". ' +
+      'DELETE only unlinks: a task link or blocker, or a public share. Deleting work itself (tasks, documents, notes, ' +
+      'messages, files, resources, secrets) is not available to an assistant — tell the person where to do it in Chatick.',
     inputSchema: {
       method: z.enum(['GET', 'POST', 'PATCH', 'DELETE']),
       path: z.string().describe('e.g. /sprints or /documents/abc/append'),
@@ -2393,6 +2398,12 @@ server.registerTool(
   },
   async ({ method, path, project, body }) => {
     try {
+      // Удалять работу людей ассистенту нельзя: сырой DELETE пропускаем только
+      // для развязок (связь, блокер) и отзыва публичной ссылки — они ничего не
+      // стирают, а ошибочную связь иначе не убрать.
+      if (method === 'DELETE' && !DELETE_ALLOWED.some((re) => re.test(path))) {
+        return fail(new Error('Deleting is not available to an assistant. Only task links, blockers and public shares can be removed here; tell the person to delete it in Chatick.'))
+      }
       const scope = await need()
       return json(await call({ ...scope, projectId: project ?? scope.projectId }, method, path, body))
     } catch (e) {

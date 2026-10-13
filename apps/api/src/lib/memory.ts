@@ -27,7 +27,7 @@ import { visionEnabled, SUPPORTED, MAX_BYTES } from './vision.js'
 import { getObjectStream, resolveStorage } from './s3.js'
 import { env } from '../env.js'
 import { logActivity } from './audit.js'
-import { insertTask, updateTask } from './ball.js'
+import { HandoffRefused, insertTask, refusalText, updateTask } from './ball.js'
 import { CHATICK_HELP } from './chatick-help.js'
 import { sendToUser } from '../ws.js'
 
@@ -1518,7 +1518,13 @@ export function memoryTools(projectId: string, actorUserId: string): { tools: To
       if (due !== undefined) setDue(patch, due)
       if (typeof args.estimateMinutes === 'number') patch.estimateMinutes = String(Math.max(0, Math.round(args.estimateMinutes)))
       if (!Object.keys(patch).length) return 'Nothing to update.'
-      const { task: row } = await updateTask(t, patch, { actorId: actorUserId, via: 'ai' })
+      let row: typeof t
+      try {
+        row = (await updateTask(t, patch, { actorId: actorUserId, via: 'ai' })).task
+      } catch (e) {
+        if (e instanceof HandoffRefused) return `${refusalText(e)} Use move_ball for ball moves.`
+        throw e
+      }
       await notifyTaskChange(projectId, actorUserId, row!, {
         assigned: assigneeId !== undefined && assigneeId !== t.assigneeId && Boolean(assigneeId),
         statusChanged: patch.status !== undefined && patch.status !== t.status,
@@ -1536,7 +1542,12 @@ export function memoryTools(projectId: string, actorUserId: string): { tools: To
       if (!t) return 'Task not found.'
       const status = String(args.status ?? '')
       if (!(TASK_STATUSES as readonly string[]).includes(status)) return 'Invalid status.'
-      await updateTask(t, { status }, { actorId: actorUserId, via: 'ai' })
+      try {
+        await updateTask(t, { status }, { actorId: actorUserId, via: 'ai' })
+      } catch (e) {
+        if (e instanceof HandoffRefused) return `${refusalText(e)} Use move_ball for ball moves.`
+        throw e
+      }
       broadcast(projectId, 'tasks_changed', {})
       return `${t.number} → ${status}.`
     },
@@ -1631,8 +1642,16 @@ export function memoryTools(projectId: string, actorUserId: string): { tools: To
       if (!Object.keys(patch).length) return 'Nothing to update: "changes" had no recognised fields.'
 
       const updated: string[] = []
+      const refused: string[] = []
       for (const t of selected.rows) {
-        const { task: row } = await updateTask(t, patch, { actorId: actorUserId, via: 'ai' })
+        let row: typeof t
+        try {
+          row = (await updateTask(t, patch, { actorId: actorUserId, via: 'ai' })).task
+        } catch (e) {
+          if (!(e instanceof HandoffRefused)) throw e
+          refused.push(`${t.number}: ${refusalText(e)}`)
+          continue
+        }
         await notifyTaskChange(projectId, actorUserId, row!, {
           assigned: assigneeId !== undefined && assigneeId !== t.assigneeId && Boolean(assigneeId),
           statusChanged: patch.status !== undefined && patch.status !== t.status,
@@ -1641,7 +1660,7 @@ export function memoryTools(projectId: string, actorUserId: string): { tools: To
         updated.push(t.number)
       }
       broadcast(projectId, 'tasks_changed', {})
-      return `Updated ${updated.length} task(s): ${updated.join(', ')}.`
+      return `Updated ${updated.length} task(s): ${updated.join(', ')}.${refused.length ? ` Not changed: ${refused.join(' ')}` : ''}`
     },
 
     delete_tasks: async (args) => {

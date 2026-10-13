@@ -67,7 +67,7 @@ import { canPublish, createShare, locate, revokeShare, type ShareEntityType } fr
 import { notifyChatMentions } from './messages.js'
 import { notify, extractMentions, commentWatchers } from '../lib/notify.js'
 import { setDue } from '../lib/notify-config.js'
-import { notifyTask, unassignNotice, dependentsOf, blockersOf, checklistAnswerNotice } from './tasks.js'
+import { notifyTask, unassignNotice, dependentsOf, blockersOf, checklistAnswerNotice, softDeleteComment } from './tasks.js'
 import { projectPath, projectUrl, companyOf } from '../lib/links.js'
 import { htmlToText, sanitizeHtml } from '../lib/sanitize-html.js'
 import { searchInDocument, searchInText, DEFAULT_CONTEXT } from '../lib/doc-search.js'
@@ -85,7 +85,8 @@ import { REPORT_KINDS, submitAssistantReport, type ReportKind } from '../lib/ass
 import { randomBytes } from 'node:crypto'
 import { notifyReleaseStage } from './releases.js'
 import { env } from '../env.js'
-import { handoff, insertTask, updateTask, type BallError } from '../lib/ball.js'
+import { handoff, HandoffRefused, insertTask, refusalText, updateTask, type BallError } from '../lib/ball.js'
+import { canSeeSecrets } from './resources.js'
 import { notifyHandoff } from '../lib/handoff-notify.js'
 import { releaseMember } from '../lib/member-leave.js'
 import { fromMeList, listFilters, mineList, myProjects, quickTask, tableToggle } from './ball.js'
@@ -2207,7 +2208,16 @@ bridgeRoute.patch('/tasks/bulk', async (c) => {
       continue
     }
 
-    const { task: row } = await updateTask(existing, own, { actorId: id.userId, via: 'mcp' })
+    let res: Awaited<ReturnType<typeof updateTask>>
+    try {
+      res = await updateTask(existing, own, { actorId: id.userId, via: 'mcp' })
+    } catch (e) {
+      if (!(e instanceof HandoffRefused)) throw e
+      failed.push({ task: existing.number, error: refusalText(e) })
+      continue
+    }
+    const row = res.task
+    if (res.handoff) void notifyHandoff(row, res.handoff)
     void logActivity({
       projectId: scope.projectId,
       actorId: id.userId,
@@ -2219,9 +2229,10 @@ bridgeRoute.patch('/tasks/bulk', async (c) => {
     // Уведомления те же, что поштучно: партия не повод молча менять чужую
     // задачу — человек должен узнать, что с его работой что-то сделали.
     const assigneeChanged = own.assigneeId !== undefined && own.assigneeId !== existing.assigneeId
+    // Ход мяча уже разослал своё «задача на тебе» — второй раз не зовём.
     void notifyTask(scope.projectId, id.userId, row!, {
-      assigneeChanged: assigneeChanged && Boolean(row!.assigneeId),
-      statusChanged: own.status !== undefined && own.status !== existing.status,
+      assigneeChanged: assigneeChanged && Boolean(row!.assigneeId) && !res.handoff,
+      statusChanged: own.status !== undefined && own.status !== existing.status && !res.handoff,
       mentions: own.description !== undefined && own.description !== existing.description,
     })
     if (assigneeChanged && existing.assigneeId) void unassignNotice(existing.assigneeId, existing.id)
@@ -2814,7 +2825,19 @@ bridgeRoute.patch('/tasks/:id', async (c) => {
 
   // Пустой set() — ошибка драйвера, а не безобидный no-op: запрос, меняющий
   // только вложения или ресурсы, не трогает полей самой задачи.
-  const row = Object.keys(patch).length ? (await updateTask(existing, patch, { actorId: id.userId, via: 'mcp' })).task : existing
+  let moved: Awaited<ReturnType<typeof updateTask>>['handoff'] = null
+  let row = existing
+  if (Object.keys(patch).length) {
+    try {
+      const r = await updateTask(existing, patch, { actorId: id.userId, via: 'mcp' })
+      row = r.task
+      moved = r.handoff
+    } catch (e) {
+      if (e instanceof HandoffRefused) return c.json({ error: refusalText(e), hint: 'Use chatick_handoff for ball moves.' }, 403)
+      throw e
+    }
+  }
+  if (moved) void notifyHandoff(row, moved)
   void logActivity({
     projectId: scope.projectId,
     actorId: id.userId,
@@ -2834,8 +2857,8 @@ bridgeRoute.patch('/tasks/:id', async (c) => {
   // Те же уведомления, что из интерфейса: назначили — сказали, сняли — убрали.
   const assigneeChanged = patch.assigneeId !== undefined && patch.assigneeId !== existing.assigneeId
   void notifyTask(scope.projectId, id.userId, row!, {
-    assigneeChanged: assigneeChanged && Boolean(row!.assigneeId),
-    statusChanged: patch.status !== undefined && patch.status !== existing.status,
+    assigneeChanged: assigneeChanged && Boolean(row!.assigneeId) && !moved,
+    statusChanged: patch.status !== undefined && patch.status !== existing.status && !moved,
     mentions: patch.description !== undefined && patch.description !== existing.description,
   })
   if (assigneeChanged && existing.assigneeId) void unassignNotice(existing.assigneeId, existing.id)
@@ -3588,6 +3611,11 @@ bridgeRoute.get('/resources/:id/files', async (c) => {
     ),
   })
   if (!resource) return c.json({ error: 'Resource not found' }, 404)
+  // Файлы ресурса — те же секреты, что пароли: видит автор и те, кому их
+  // открыли. Права «читать ресурсы» мало — так решает и веб (resources.ts).
+  if (!(await canSeeSecrets(resource, auth(c as never).userId))) {
+    return c.json({ error: 'Forbidden: the secrets of this resource are not shared with you' }, 403)
+  }
 
   const rows = await db
     .select({ id: resourceFiles.id, name: resourceFiles.name, size: resourceFiles.size, mime: resourceFiles.mime })
@@ -3694,6 +3722,9 @@ bridgeRoute.get('/resources/:id/files/:fileId', async (c) => {
     ),
   })
   if (!resource) return c.json({ error: 'Resource not found' }, 404)
+  if (!(await canSeeSecrets(resource, id.userId))) {
+    return c.json({ error: 'Forbidden: the secrets of this resource are not shared with you' }, 403)
+  }
 
   const file = await db.query.resourceFiles.findFirst({
     where: and(eq(resourceFiles.id, c.req.param('fileId')), eq(resourceFiles.resourceId, resource.id)),
@@ -3749,6 +3780,9 @@ bridgeRoute.delete('/resources/:id/files/:fileId', async (c) => {
     ),
   })
   if (!resource) return c.json({ error: 'Resource not found' }, 404)
+  if (!(await canSeeSecrets(resource, id.userId))) {
+    return c.json({ error: 'Forbidden: the secrets of this resource are not shared with you' }, 403)
+  }
 
   const [gone] = await db
     .delete(resourceFiles)
@@ -4460,8 +4494,9 @@ bridgeRoute.delete('/tasks/:id/comments/:commentId', async (c) => {
   const found = await commentForWrite(c as never, scope, c.req.param('commentId'))
   if ('error' in found) return c.json({ error: found.error }, found.status)
 
-  await db.delete(taskComments).where(eq(taskComments.id, found.comment.id))
-  broadcast(scope.projectId, 'task_comments_changed', { taskId: found.comment.taskId })
+  // Мягко, как в вебе: строка остаётся с пометкой «удалён», уведомления о нём
+  // гаснут, в журнал ложится запись. Раньше мост стирал её бесследно.
+  await softDeleteComment(found.comment, auth(c as never).userId)
   return c.json({ ok: true })
 })
 

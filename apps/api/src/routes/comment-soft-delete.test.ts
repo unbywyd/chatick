@@ -32,7 +32,16 @@ describe('удаление не стирает строку', () => {
     // Саботаж: вернуть db.delete(taskComments) — тест падает.
     expect(handler, 'обработчик удаления исчез').toBeTruthy()
     expect(handler, 'комментарий удаляется физически').not.toMatch(/db\s*\.delete\(taskComments\)/)
-    expect(handler, 'нет мягкого удаления').toMatch(/deletedAt: new Date\(\), deletedById: sub/)
+    expect(handler, 'нет мягкого удаления').toMatch(/deletedAt: new Date\(\), deletedById: actorId/)
+  })
+
+  it('мост (MCP) удаляет тем же мягким путём, что и веб', () => {
+    // Раньше мост делал db.delete(taskComments) — комментарий исчезал бесследно.
+    // Саботаж: вернуть физическое удаление в мост — тест падает.
+    const route = bridge.slice(bridge.indexOf("bridgeRoute.delete('/tasks/:id/comments/:commentId'"))
+    const body = route.slice(0, route.indexOf('\n})\n'))
+    expect(body, 'мост удаляет физически').not.toMatch(/db\s*\.delete\(taskComments\)/)
+    expect(body, 'мост не зовёт общую функцию').toMatch(/softDeleteComment\(/)
   })
 
   it('колонки есть в схеме', () => {
@@ -63,7 +72,7 @@ describe('удаление не стирает строку', () => {
     // Саботаж: убрать dropNotice — тест падает.
     expect(handler, 'уведомления не гасятся').toMatch(/dropNotice\(\{ userId/)
     // Ключ ТОТ ЖЕ, что при отправке, иначе гасить нечего.
-    expect(handler, 'ключ дедупа не совпадает с отправкой').toMatch(/task_comment:\$\{commentId\}/)
+    expect(handler, 'ключ дедупа не совпадает с отправкой').toMatch(/task_comment:\$\{comment\.id\}/)
   })
 })
 

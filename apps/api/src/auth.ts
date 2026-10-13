@@ -166,9 +166,11 @@ export const requireProject = createMiddleware<ProjectEnv>(async (c, next) => {
       const exists = await db.query.projects.findFirst({ where: eq(projects.id, projectId), columns: { id: true } })
       return exists ? c.json({ error: 'Forbidden' }, 403) : c.json({ error: 'Not found' }, 404)
     }
-    // Правила чата принимаются до первого входа (SPEC §4.2). Проектный токен
-    // выдавался только после согласия; без токена ту же дверь держим здесь.
-    if (!membership.rulesAcceptedAt) {
+    // Правила чата принимаются до первого входа в ЧАТ (SPEC §4.2). Раньше дверь
+    // стояла на всём проекте: веб v2, где чата нет, у нового участника отвечал
+    // 428 на комментарии, ходы, документы и файлы, а принять правила там негде.
+    // Чат живёт в мобильном приложении — там и спрашиваем.
+    if (!membership.rulesAcceptedAt && c.req.path.startsWith('/api/v1/messages')) {
       const project = await db.query.projects.findFirst({
         where: eq(projects.id, projectId),
         columns: { name: true, chatRules: true },
