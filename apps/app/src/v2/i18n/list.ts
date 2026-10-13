@@ -24,7 +24,7 @@ const ru = {
     on: 'На стол',
     onDone: 'Задача на столе',
     full: 'На столе уже три задачи — сначала убери одну',
-    heat: { warm: 'Тепло', hot: 'Жарко', burn: 'Горит', away: 'Ждём', client: 'Ждём клиента' },
+    heat: { warm: 'Тепло', hot: 'Жарко', burn: 'Горит', client: 'Ждём клиента' },
     doing: { do: 'делает', review: 'проверяет', answer: 'отвечает', client: 'ждёт клиента' },
   },
   hero: {
@@ -308,7 +308,7 @@ const en: typeof ru = {
     on: 'Put on the table',
     onDone: 'On the table',
     full: 'There are already three tasks on the table — take one off first',
-    heat: { warm: 'Warm', hot: 'Hot', burn: 'Burning', away: 'Waiting', client: 'Waiting on client' },
+    heat: { warm: 'Warm', hot: 'Hot', burn: 'Burning', client: 'Waiting on client' },
     doing: { do: 'is doing', review: 'is reviewing', answer: 'is answering', client: 'is waiting on the client' },
   },
   hero: {
@@ -592,7 +592,7 @@ const he: typeof ru = {
     on: 'לשולחן',
     onDone: 'המשימה על השולחן',
     full: 'כבר יש שלוש משימות על השולחן — קודם להוריד אחת',
-    heat: { warm: 'חמים', hot: 'חם', burn: 'בוער', away: 'מחכים', client: 'מחכים ללקוח' },
+    heat: { warm: 'חמים', hot: 'חם', burn: 'בוער', client: 'מחכים ללקוח' },
     doing: { do: 'עושה', review: 'בודק/ת', answer: 'עונה', client: 'מחכה ללקוח' },
   },
   hero: {

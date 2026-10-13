@@ -68,8 +68,8 @@ function heroBox(p: Seat, lead: boolean) {
 
 
 // Состояние сцены — одним цветом: метка, часы, подсветка за держателем и мяч (table/ball-<состояние>.webp).
-const SPOT = { warm: 'rgba(212,243,107,.7)', hot: 'rgba(255,181,71,.55)', burn: 'rgba(255,110,50,.55)', away: 'rgba(255,255,255,.95)', client: 'rgba(255,214,51,.55)' }
-const INK = { warm: '#4D7A12', hot: '#855600', burn: '#C2410C', away: '#4E524C', client: '#7A5C00' }
+const SPOT = { warm: 'rgba(212,243,107,.7)', hot: 'rgba(255,181,71,.55)', burn: 'rgba(255,110,50,.55)', client: 'rgba(255,214,51,.55)' }
+const INK = { warm: '#4D7A12', hot: '#855600', burn: '#C2410C', client: '#7A5C00' }
 
 function useTick(on: boolean) {
   const [, set] = useState(0)
@@ -152,7 +152,7 @@ export function TableScenes({ project }: { project: string | null }) {
             {list.length > 1 &&
               list.map((s) => (
                 <button key={s.id} className={'sv-tab' + (s.id === scene?.id ? ' on' : '')} aria-pressed={s.id === scene?.id} onClick={() => setCur(s.id)} title={s.title}>
-                  <i className={side === 'mine' ? heatOf(s.ball.move, s.ball.heldSince) : ''} />
+                  <i className={heatOf(s.ball.move, s.ball.heldSince)} />
                   <span className="m">{s.number}</span>
                   <span className="t">{s.title}</span>
                 </button>
@@ -174,7 +174,9 @@ function SceneView({ s }: { s: Scene }) {
   const a = useBallActions(s, myId)
   const mine = s.holder?.id === myId
   const client = Boolean(s.ball.waitingClientSince)
-  const heat = mine ? heatOf(s.ball.move, s.ball.heldSince) : 'away'
+  // Срочность — по тому, сколько мяч лежит у держателя, чей бы ход ни был:
+  // у другого горит — значит, пора ему напомнить.
+  const heat = heatOf(s.ball.move, s.ball.heldSince)
   // Ждём клиента — пауза поверх хода: не «тепло» и не «горит», а своё состояние.
   const tone = client ? 'client' : heat
   useTick(true)
@@ -227,8 +229,8 @@ function SceneView({ s }: { s: Scene }) {
               )
             })}
             {/* Мяч лежит на столе, но стоит ровно: стол поворачивается, мяч — обратно, как имена.
-                Цвет — состояние: зелёный — тепло, оранжевый — жарко, горящий — горит,
-                синий — ход не твой, жёлтый — ждём клиента. */}
+                Цвет — сколько ждём: зелёный — тепло, оранжевый — жарко, горящий — горит,
+                жёлтый — ждём клиента. Пульсирует только свой: ход за тобой. */}
             <img
               className={'tg-ball' + (mine ? ` ${tone}` : '')}
               src={`${import.meta.env.BASE_URL}table/ball-${tone}.webp`}
