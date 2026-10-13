@@ -3,6 +3,7 @@ import { TASK_STATUSES, SETTLED_STATUSES, closedSql, isClosed, type TaskStatus }
 import { Hono } from 'hono'
 import { and, asc, desc, eq, gt, gte, ilike, inArray, isNull, lt, lte, notInArray, or, sql } from 'drizzle-orm'
 import { db } from '../db/client.js'
+import { canSeeSecrets } from './resources.js'
 import {
   activityLog,
   chatSummaries,
@@ -3360,6 +3361,11 @@ bridgeRoute.get('/resources/:id/files', async (c) => {
     ),
   })
   if (!resource) return c.json({ error: 'Resource not found' }, 404)
+  // Файлы ресурса — те же секреты, что пароли: видит автор и те, кому их
+  // открыли. Права «читать ресурсы» мало — так решает и веб (resources.ts).
+  if (!(await canSeeSecrets(resource, auth(c as never).userId))) {
+    return c.json({ error: 'Forbidden: the secrets of this resource are not shared with you' }, 403)
+  }
 
   const rows = await db
     .select({ id: resourceFiles.id, name: resourceFiles.name, size: resourceFiles.size, mime: resourceFiles.mime })
@@ -3466,6 +3472,11 @@ bridgeRoute.get('/resources/:id/files/:fileId', async (c) => {
     ),
   })
   if (!resource) return c.json({ error: 'Resource not found' }, 404)
+  // Файлы ресурса — те же секреты, что пароли: видит автор и те, кому их
+  // открыли. Права «читать ресурсы» мало — так решает и веб (resources.ts).
+  if (!(await canSeeSecrets(resource, auth(c as never).userId))) {
+    return c.json({ error: 'Forbidden: the secrets of this resource are not shared with you' }, 403)
+  }
 
   const file = await db.query.resourceFiles.findFirst({
     where: and(eq(resourceFiles.id, c.req.param('fileId')), eq(resourceFiles.resourceId, resource.id)),
@@ -3521,6 +3532,11 @@ bridgeRoute.delete('/resources/:id/files/:fileId', async (c) => {
     ),
   })
   if (!resource) return c.json({ error: 'Resource not found' }, 404)
+  // Файлы ресурса — те же секреты, что пароли: видит автор и те, кому их
+  // открыли. Права «читать ресурсы» мало — так решает и веб (resources.ts).
+  if (!(await canSeeSecrets(resource, auth(c as never).userId))) {
+    return c.json({ error: 'Forbidden: the secrets of this resource are not shared with you' }, 403)
+  }
 
   const [gone] = await db
     .delete(resourceFiles)

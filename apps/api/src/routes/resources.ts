@@ -45,7 +45,7 @@ async function audit(projectId: string, userId: string, action: 'reveal' | 'crea
  * входит: администратор проекта управляет ресурсами, но это не повод читать
  * чужие пароли.
  */
-async function canSeeSecrets(resource: { id: string; createdById: string | null }, userId: string): Promise<boolean> {
+export async function canSeeSecrets(resource: { id: string; createdById: string | null }, userId: string): Promise<boolean> {
   if (resource.createdById === userId) return true
   const row = await db.query.resourceViewers.findFirst({
     where: and(eq(resourceViewers.resourceId, resource.id), eq(resourceViewers.userId, userId)),
