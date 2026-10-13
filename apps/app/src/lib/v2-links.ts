@@ -10,7 +10,7 @@
  * значит переводить надо здесь, в вебе, на входе.
  *
  * Чистые функции без React и без запросов: их проверяет
- * scripts/check-v2-links.mjs, и по ним видно все случаи разом.
+ * тест сервера (apps/api/src/lib/links-v2.test.ts), и по нему видно все случаи разом.
  */
 
 export type LinkContext = {
@@ -23,6 +23,8 @@ export type LinkContext = {
   companyOf?: (projectId: string) => string | null | undefined
 }
 
+import { v2Path } from '../v2/legacy'
+
 const withQuery = (path: string, params: Record<string, string | null | undefined>): string => {
   const q = new URLSearchParams()
   for (const [k, v] of Object.entries(params)) if (v) q.set(k, v)
@@ -30,40 +32,26 @@ const withQuery = (path: string, params: Record<string, string | null | undefine
   return s ? `${path}?${s}` : path
 }
 
-/** Раздел старого проекта → то же место в v2. */
+/**
+ * Раздел старого проекта → то же место в v2.
+ *
+ * Правило одно с сервером и переадресацией старых адресов (v2/legacy.ts,
+ * v2Path). Отличие одно: задачу внутри приложения открываем панелью поверх
+ * списка, как это делает сам v2, а не отдельной страницей.
+ */
 function fromProject(companyId: string, projectId: string, rest: string[], query: URLSearchParams): string {
   const base = `/c/${companyId}`
   const [section, id] = rest
   switch (section) {
     case 'tasks': {
-      // Задача — панелью поверх списка: так её открывает и сам v2. Проект в
-      // фильтр не ставим — человек вернётся туда, где был.
+      // Проект в фильтр не ставим — человек вернётся туда, где был.
       const task = id ?? query.get('task')
       return task ? withQuery(base, { t: task }) : withQuery(base, { p: projectId })
     }
-    case 'notes': {
-      const note = id ?? query.get('note')
-      return note ? `${base}/notes/n/${note}` : withQuery(`${base}/notes`, { p: projectId })
+    default: {
+      const q = query.toString()
+      return v2Path(companyId, projectId, `/${rest.join('/')}${q ? `?${q}` : ''}`)
     }
-    case 'documents':
-      return id ? `${base}/docs/d/${projectId}/${id}` : withQuery(`${base}/docs`, { p: projectId })
-    case 'time':
-      return withQuery(`${base}/time`, { p: projectId })
-    case 'files':
-      return withQuery(`${base}/files`, { p: projectId })
-    case 'resources':
-      return withQuery(`${base}/resources`, { p: projectId })
-    case 'releases':
-      return withQuery(`${base}/versions`, { p: projectId })
-    case 'history':
-      return withQuery(`${base}/history`, { p: projectId })
-    case 'notifications':
-      // Вкладка проекта «Уведомления» была настройкой — в v2 настройка одна.
-      return `${base}/settings/notifications`
-    default:
-      // Чат, команда, журнал, ИИ — отдельных экранов в v2 нет: ведём в
-      // проект, а не в пустоту.
-      return withQuery(base, { p: projectId })
   }
 }
 

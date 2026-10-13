@@ -43,7 +43,8 @@ export function v2Path(companyId: string, projectId: string, tail = ''): string 
     case 'team':
       return `${c}/company`
     case 'notifications':
-      return `${c}/notifications`
+      // Вкладка проекта «Уведомления» была настройкой — в v2 настройка одна.
+      return `${c}/settings/notifications`
     default:
       // '', chat, ai, worklog, shortcuts — экранов нет, ведём к задачам проекта
       return `${c}?p=${p}`

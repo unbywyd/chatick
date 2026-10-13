@@ -3,6 +3,8 @@ import { v2Path } from './links.js'
 import { parseTaskRef } from './short-links.js'
 // Клиентская копия того же перевода: ею открываются старые ссылки из писем.
 import { v2Path as clientV2Path, legacyTarget } from '../../../app/src/v2/legacy.js'
+// Перевод входящих ссылок в трее и системных уведомлениях (useDesktop).
+import { toV2Link, activeFromLocation } from '../../../app/src/lib/v2-links.js'
 
 /**
  * Адреса v2. Ссылки строят уведомления, письма, короткие ссылки, мост (MCP) и
@@ -33,7 +35,7 @@ const CASES: [string, string][] = [
   ['/time', `/c/${C}/time`],
   ['/history', `/c/${C}/history?p=${P}`],
   ['/team', `/c/${C}/company`],
-  ['/notifications', `/c/${C}/notifications`],
+  ['/notifications', `/c/${C}/settings/notifications`],
   ['/ai/usage', `/c/${C}?p=${P}`],
   ['/worklog', `/c/${C}?p=${P}`],
   ['tasks/t1', `/c/${C}/task/t1`],
@@ -80,5 +82,53 @@ describe('MCP: ссылка v2 на задачу распознаётся', () =
   it('старые формы работают как раньше', () => {
     expect(parseTaskRef('.../#/c/co1/p/pr1/tasks/t9')).toEqual({ kind: 'long', projectId: 'pr1', taskId: 't9' })
     expect(parseTaskRef('TASK-81')).toEqual({ kind: 'number', number: 'TASK-81' })
+  })
+})
+
+describe('toV2Link — ссылки, которые приходят в трей и системные уведомления', () => {
+  const ctx = { companyId: 'CO', companyOf: (p: string) => (p === 'P1' ? 'C1' : null) }
+  const cases: [string, string][] = [
+    // задачи внутри приложения — панелью поверх списка
+    ['/c/C1/p/P1/tasks/T1', '/c/C1?t=T1'],
+    ['/c/C1/p/P1/tasks?task=T1', '/c/C1?t=T1'],
+    ['/c/C1/p/P1/tasks', '/c/C1?p=P1'],
+    ['/c/C1/p/P1/tasks/', '/c/C1?p=P1'],
+    // чата в v2 нет — в проект
+    ['/c/C1/p/P1/chat', '/c/C1?p=P1'],
+    ['/c/C1/p/P1/chat?msg=M1', '/c/C1?p=P1'],
+    ['/c/C1/p/P1', '/c/C1?p=P1'],
+    // остальное — общим правилом v2Path: у файла и версии свои адреса
+    ['/c/C1/p/P1/notes?note=N1', '/c/C1/notes/n/N1'],
+    ['/c/C1/p/P1/notes/N1', '/c/C1/notes/n/N1'],
+    ['/c/C1/p/P1/notes', '/c/C1/notes?p=P1'],
+    ['/c/C1/p/P1/documents/D1', '/c/C1/docs/d/P1/D1'],
+    ['/c/C1/p/P1/time', '/c/C1/time'],
+    ['/c/C1/p/P1/releases/R1', '/c/C1/versions/v/P1/R1'],
+    ['/c/C1/p/P1/files/F1', '/c/C1/files/f/P1/F1'],
+    ['/c/C1/p/P1/notifications', '/c/C1/settings/notifications'],
+    ['https://app.chatick.com/#/c/C1/p/P1/tasks/T1', '/c/C1?t=T1'],
+    ['/p/P1/tasks/T1', '/c/C1?t=T1'],
+    ['/p/P2/chat', '/p/P2/chat'],
+    ['/inbox', '/c/CO/notifications'],
+    ['/settings/notifications', '/c/CO/settings/notifications'],
+    ['/settings/profile', '/c/CO/settings/profile'],
+    ['/start', '/c/CO'],
+    ['/tasks?task=T9', '/c/CO?t=T9'],
+    ['/notes?note=N9', '/c/CO/notes/n/N9'],
+    ['/c/C1?t=T1', '/c/C1?t=T1'],
+    ['/c/C1/task/T1', '/c/C1/task/T1'],
+    ['/c/C1/time', '/c/C1/time'],
+    ['/login', '/login'],
+  ]
+  for (const [from, want] of cases) it(`${from} → ${want}`, () => expect(toV2Link(from, ctx)).toBe(want))
+  it('без компании в контексте адреса без компании не трогаем', () => {
+    expect(toV2Link('/settings/notifications', {})).toBe('/settings/notifications')
+    expect(toV2Link('/inbox')).toBe('/inbox')
+  })
+  it('где сейчас окно', () => {
+    expect(activeFromLocation('/c/C1', '?p=P1&t=T1')).toEqual({ companyId: 'C1', projectId: 'P1', taskId: 'T1' })
+    expect(activeFromLocation('/c/C1/task/T2', '')).toEqual({ companyId: 'C1', projectId: null, taskId: 'T2' })
+    expect(activeFromLocation('/c/C1/task/new', '')).toEqual({ companyId: 'C1', projectId: null, taskId: null })
+    expect(activeFromLocation('/companies', '')).toEqual({ companyId: null, projectId: null, taskId: null })
   })
 })
