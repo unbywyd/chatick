@@ -4,6 +4,7 @@ import { useTranslation } from 'react-i18next'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { api } from '@/lib/api'
 import { useProjects, type Notice } from '../data'
+import { noticeTarget, useOpenNotice } from '../notices'
 import { useUi } from '../ui'
 import { ProjectLogo } from '../ProjectLogo'
 import { letterOf, personColor, shortProject, timeAgo } from '../util'
@@ -34,8 +35,8 @@ const PAGE = 40
  * «Все уведомления» — то же, что в колокольчике, но целиком и с фильтрами.
  *
  * Заголовок уведомления пишет сервер на языке получателя в момент рассылки —
- * показываем его как есть, имя автора выделяем. Открыть можно задачу: другие
- * сущности (чат, записки) в вебе v2 своих экранов не имеют.
+ * показываем его как есть, имя автора выделяем. Куда ведёт клик — решает
+ * noticeTarget (v2/notices.ts): задача, заметка, документ, часы и т. д.
  */
 export function NotificationsView() {
   const { t, i18n } = useTranslation('v2')
@@ -93,9 +94,10 @@ export function NotificationsView() {
     read.mutate({ all: true, companyId }, { onSuccess: () => flash(t('notices.allRead')) })
     if (ids.length) read.mutate({ ids })
   }
+  const openIt = useOpenNotice()
   const open = (n: Notice) => {
     if (!n.readAt) read.mutate({ ids: [n.id] })
-    if (n.entityType === 'task' && n.entityId) openTask(n.entityId)
+    openIt(n)
   }
 
   return (
@@ -136,7 +138,7 @@ export function NotificationsView() {
             <div className="dh">{t(`notices.g.${g.key}`)}</div>
             {g.items.map((n) => {
               const isNew = !n.readAt
-              const canOpen = n.entityType === 'task' && Boolean(n.entityId)
+              const canOpen = Boolean(noticeTarget(n))
               const p = n.projectId ? byId.get(n.projectId) : undefined
               const ref = /\b[A-Z][A-Z0-9]*-\d+\b/.exec(n.title)?.[0]
               const quote = n.summary || (n.body && n.body !== n.title ? n.body : '')

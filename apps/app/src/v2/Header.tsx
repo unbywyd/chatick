@@ -7,6 +7,7 @@ import { LOCALES } from '@/i18n'
 import { useTheme } from '@/providers/theme'
 import { keys, useCompanies, useInbox, useMe, useProjects, useRunning, useToday, type Notice } from './data'
 import { useUi } from './ui'
+import { useOpenNotice } from './notices'
 import { ProjectLogo } from './ProjectLogo'
 import { Icon } from './Icon'
 import { fmtClock, fmtHm, letterOf, personColor, projectColor, shortProject, timeAgo } from './util'
@@ -343,10 +344,11 @@ function Bell() {
       void qc.invalidateQueries({ queryKey: ['v2', 'ball'] })
     },
   })
+  const openIt = useOpenNotice()
   const openNotice = (n: Notice) => {
     setOpen(false)
     read.mutate({ ids: [n.id] })
-    if (n.entityType === 'task' && n.entityId) openTask(n.entityId)
+    openIt(n)
   }
   const count = inbox.data?.unreadTotal ?? unread.length
   return (
@@ -400,7 +402,15 @@ function MeMenu() {
   const me = useMe()
   const { theme, setTheme } = useTheme()
   const navigate = useNavigate()
-  const [open, setOpen] = useState(false)
+  const qc = useQueryClient()
+  const [open, setOpenState] = useState(false)
+  // Выход — в два нажатия: пункт стоит рядом с «Компанией», и промах выкидывал
+  // из аккаунта посреди работы.
+  const [sure, setSure] = useState(false)
+  const setOpen = (v: boolean) => {
+    setOpenState(v)
+    if (!v) setSure(false)
+  }
   const go = (path: string) => {
     setOpen(false)
     navigate(path)
@@ -464,12 +474,18 @@ function MeMenu() {
               className="me-i"
               role="menuitem"
               onClick={() => {
+                if (!sure) return setSure(true)
                 logout()
-                navigate('/login')
+                // Кэш — целиком: в нём профиль, компании и задачи ушедшего
+                // человека, и следующий на этом компьютере видел их до ответа
+                // сервера (до пяти минут). replace — чтобы «назад» не вёл в
+                // чужую компанию.
+                qc.clear()
+                navigate('/login', { replace: true })
               }}
             >
               <Icon name="logout" sm />
-              {t('me.logout')}
+              {sure ? t('me.logoutSure') : t('me.logout')}
             </button>
           </div>
         </>

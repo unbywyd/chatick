@@ -4,14 +4,14 @@ import { z } from 'zod'
 import { and, desc, eq, gte, inArray, lte, or, sql } from 'drizzle-orm'
 import { companyOf, projectPath } from '../lib/links.js'
 import { db } from '../db/client.js'
-import { messages, notes, projects, tasks, users } from '../db/schema.js'
+import { companyMembers, messages, notes, projects, tasks, users } from '../db/schema.js'
 import { requireProject, type ProjectEnv, requireSession, type SessionEnv } from '../auth.js'
 import { hasPermission, ownsOrManages, companyRoleOf } from './projects.js'
 import { enqueue, searchNoteIds } from '../lib/embeddings.js'
 import { logActivity } from '../lib/audit.js'
 import { htmlToText, sanitizeHtml } from '../lib/sanitize-html.js'
 import { notify } from '../lib/notify.js'
-import { broadcast } from '../ws.js'
+import { broadcast, sendToUserAnywhere } from '../ws.js'
 import { insertTask } from '../lib/ball.js'
 
 // Заметки проекта (SPEC §8.31): журнал решений, противоречий и напоминаний.
@@ -608,6 +608,31 @@ companyNotesRoute.get('/:companyId/notes', async (c) => {
   })
 })
 
+/**
+ * Заметка изменилась (ручки базы знаний компании, ими пишет веб v2).
+ *
+ * Раньше эти ручки молчали: правка из v2 не попадала в историю проекта, а
+ * другие открытые окна узнавали о ней только после перезагрузки. Журнал — по
+ * проекту, если он у заметки есть (у заметок компании проекта нет, и журнала
+ * для них нет). Событие — в комнату проекта для старых окон и каждому в
+ * компании в личный канал: веб v2 комнат проектов не слушает.
+ */
+async function noteChanged(row: typeof notes.$inferSelect, action: 'create' | 'update' | 'delete', actorId: string) {
+  if (row.projectId) {
+    void logActivity({
+      projectId: row.projectId,
+      actorId,
+      action,
+      entityType: 'note',
+      entityId: row.id,
+      entityLabel: row.title || htmlToText(row.body).slice(0, 80),
+    })
+    broadcast(row.projectId, 'notes', { action, id: row.id })
+  }
+  const members = await db.select({ id: companyMembers.userId }).from(companyMembers).where(eq(companyMembers.companyId, row.companyId))
+  for (const m of members) if (m.id !== actorId) sendToUserAnywhere(m.id, 'notes', { companyId: row.companyId, action, id: row.id })
+}
+
 companyNotesRoute.post('/:companyId/notes', zValidator('json', bodySchema), async (c) => {
   const { sub } = c.get('session')
   const access = await kbAccess(c.req.param('companyId'), sub)
@@ -642,6 +667,7 @@ companyNotesRoute.post('/:companyId/notes', zValidator('json', bodySchema), asyn
 
   // Поиск по смыслу: вектор считается фоном, как и на остальных путях.
   void enqueue('note', row!.id, projectId)
+  void noteChanged(row!, 'create', sub)
   return c.json(serialize(row!), 201)
 })
 
@@ -671,6 +697,7 @@ companyNotesRoute.patch('/:companyId/notes/:id', zValidator('json', bodySchema.p
 
   const [row] = await db.update(notes).set(patch).where(eq(notes.id, existing.id)).returning()
   void enqueue('note', row!.id, row!.projectId)
+  void noteChanged(row!, 'update', sub)
   return c.json(serialize(row!))
 })
 
@@ -688,6 +715,7 @@ companyNotesRoute.delete('/:companyId/notes/:id', async (c) => {
   }
 
   await db.update(notes).set({ deletedAt: new Date(), deletedById: sub }).where(eq(notes.id, existing.id))
+  void noteChanged(existing, 'delete', sub)
   return c.json({ ok: true })
 })
 

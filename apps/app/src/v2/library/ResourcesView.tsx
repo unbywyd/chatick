@@ -2,13 +2,14 @@ import { useMemo, useRef, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { api, API_URL, ApiError, getSessionToken } from '@/lib/api'
-import { inProject, type CompanyProject } from '../data'
+import { RichEditor } from '@/components/ui/rich-editor'
+import { inProject, useMe, type CompanyProject } from '../data'
 import { useUi } from '../ui'
 import { Carousel } from '../tasks/TasksView'
 import { ProjectLogo } from '../ProjectLogo'
 import { Icon } from '../Icon'
 import { ShareItem } from '../ShareTask'
-import { shortProject } from '../util'
+import { letterOf, personColor, shortProject } from '../util'
 import { errText, Modal, ProjectCombo, uploadTo, useCopy, useLibProjects, usePerProject } from './shared'
 
 type Res = {
@@ -24,7 +25,8 @@ type Res = {
   creator: { id: string; name: string } | null
 }
 type Row = Res & { project: CompanyProject; kind: Kind; text: string }
-type Detail = { id: string; canSeeSecrets: boolean; secretCount: number; secrets: { id: string; label: string }[]; authorId: string | null }
+type Detail = { id: string; canSeeSecrets: boolean; secretCount: number; secrets: { id: string; label: string }[]; authorId: string | null; viewers: string[] }
+type Member = { user: { id: string; name: string; avatarUrl: string | null }; permissions?: Record<string, boolean> }
 type LockedFile = { id: string; name: string; mime: string; size: number }
 
 type Kind = 'code' | 'design' | 'server' | 'admin' | 'db' | 'link'
@@ -306,6 +308,9 @@ function ResourceModal({
   const [title, setTitle] = useState(row?.name ?? '')
   const [desc, setDesc] = useState(row?.description ?? '')
   const [descTouched, setDescTouched] = useState(false)
+  // Кто видит секреты. null — не трогали: у нового ресурса это вся команда
+  // (так решает и сервер), у существующего — его нынешний список.
+  const [viewers, setViewers] = useState<string[] | null>(null)
   const [secrets, setSecrets] = useState<NewSecret[]>(row ? [] : [{ label: '', value: '' }])
   const [files, setFiles] = useState<File[]>([])
   const [shown, setShown] = useState<Record<string, string>>({})
@@ -325,6 +330,23 @@ function ResourceModal({
     enabled: Boolean(row),
   })
   const canSee = Boolean(row && detail.data?.canSeeSecrets)
+  const me = useMe()
+  const team = useQuery({
+    queryKey: ['v2', 'project-members', pid],
+    queryFn: () => api<Member[]>(`/api/v1/projects/${pid}/members`),
+    enabled: Boolean(pid),
+    staleTime: 60_000,
+  })
+  // Автор видит секреты всегда — в списке его нет, снять его нельзя. У нового
+  // ресурса автор — я. Без права читать ресурсы человек не увидит и карточку,
+  // поэтому выбрать его нельзя.
+  const authorId = row ? (detail.data?.authorId ?? null) : (me.data?.id ?? null)
+  const people = (team.data ?? []).map((m) => m.user).filter((u) => u.id !== authorId)
+  const readers = new Set((team.data ?? []).filter((m) => m.permissions?.['resources.read'] !== false).map((m) => m.user.id))
+  const effViewers = viewers ?? (row ? (detail.data?.viewers ?? []) : people.filter((p) => readers.has(p.id)).map((p) => p.id))
+  // Список правит только автор (так решает сервер).
+  const canEditViewers = !row || (Boolean(me.data?.id) && detail.data?.authorId === me.data?.id)
+  const toggleViewer = (id: string) => setViewers(effViewers.includes(id) ? effViewers.filter((x) => x !== id) : [...effViewers, id])
   const locked = useQuery({
     queryKey: ['v2', 'lib', 'res-files', row?.id],
     queryFn: () => api<{ items: LockedFile[] }>(`/api/v1/resources/${row!.id}/files`, inProject(row!.project.id)).then((r) => r.items),
@@ -353,15 +375,22 @@ function ResourceModal({
           method: 'PATCH',
           // Описание — только если его правили: в базе оно бывает HTML-ем из
           // старого редактора, и сохранять его текстом без нужды — терять разметку.
-          body: JSON.stringify({ name: title.trim(), url: link, ...(descTouched ? { description: desc } : {}) }),
+          body: JSON.stringify({
+            name: title.trim(),
+            url: link,
+            ...(descTouched ? { description: desc } : {}),
+            // Список — только если его меняли: PATCH со списком разрешён лишь
+            // автору, и правка описания чужого ресурса ловила бы 403.
+            ...(viewers !== null && canEditViewers ? { viewers } : {}),
+          }),
           ...inProject(pid!),
         })
         for (const s of filled) await api(`/api/v1/resources/${row.id}/secrets`, { method: 'POST', body: JSON.stringify(s), ...inProject(pid!) })
       } else {
-        // Кто видит секреты — решает сервер: по умолчанию вся команда проекта.
+        // Кто видит секреты — список из формы (по умолчанию вся команда проекта).
         const made = await api<{ id: string }>('/api/v1/resources', {
           method: 'POST',
-          body: JSON.stringify({ name: title.trim(), url: link, description: desc, secrets: filled }),
+          body: JSON.stringify({ name: title.trim(), url: link, description: desc, secrets: filled, viewers: effViewers }),
           ...inProject(pid!),
         })
         id = made.id
@@ -455,16 +484,21 @@ function ResourceModal({
       </div>
       <input className="nin big" value={url} onChange={(e) => setUrl(e.target.value)} placeholder={t('library.res.urlPh')} aria-label={t('library.res.urlAria')} inputMode="url" spellCheck={false} autoFocus={!row} />
       <input className="nin bidi" value={title} onChange={(e) => setTitle(e.target.value)} placeholder={t('library.res.titlePh')} aria-label={t('library.res.titleAria')} />
-      <textarea
-        className="ta bidi"
-        value={desc}
-        onChange={(e) => {
-          setDesc(e.target.value)
-          setDescTouched(true)
-        }}
-        placeholder={t('library.res.descPh')}
-        aria-label={t('library.res.descAria')}
-      />
+      {/* Описание — тем же редактором, что и везде: в базе оно часто HTML из
+          старого редактора, и простое поле показывало теги, а сохранение
+          превращало разметку в текст. */}
+      <div className="ta res-desc" aria-label={t('library.res.descAria')}>
+        <RichEditor
+          value={desc}
+          onChange={(html) => {
+            setDesc(html)
+            setDescTouched(true)
+          }}
+          placeholder={t('library.res.descPh')}
+          mentions={[]}
+          preset="minimal"
+        />
+      </div>
       <div className="secbox">
         <h4>
           <Svg sm>{LOCK}</Svg>
@@ -565,6 +599,56 @@ function ResourceModal({
           }}
         />
         <div className="note-s">{t('library.res.lockedNote')}</div>
+        {/* Кто видит секреты и закрытые файлы — сразу, пока их добавляют: о
+            доступе думают в тот момент, когда вводят пароль. */}
+        {(secrets.length > 0 || (detail.data?.secretCount ?? 0) > 0 || (locked.data?.length ?? 0) > 0 || files.length > 0) && (
+          <>
+            <div style={{ height: 1, background: 'var(--line)' }} />
+            <h4>
+              <Svg sm>{LOCK}</Svg>
+              {t('library.res.whoSees')}
+            </h4>
+            {canEditViewers ? (
+              <>
+                <div className="res-who" role="group" aria-label={t('library.res.whoSees')}>
+                  {people.map((p) => {
+                    const on = effViewers.includes(p.id)
+                    const can = readers.has(p.id)
+                    return (
+                      <button
+                        key={p.id}
+                        className={'res-who-p' + (on ? ' on' : '')}
+                        aria-pressed={on}
+                        disabled={!can}
+                        title={can ? undefined : t('library.res.noReadAccess')}
+                        onClick={() => toggleViewer(p.id)}
+                      >
+                        <span className="av" style={{ background: personColor(p.id) }}>
+                          {letterOf(p.name)}
+                        </span>
+                        <span className="bidi">{p.name}</span>
+                        {on && <Icon name="check" sm />}
+                      </button>
+                    )
+                  })}
+                </div>
+                <div className="note-s">
+                  {t('library.res.authorSees')}
+                  {!effViewers.length ? ` ${t('library.res.onlyYou')}` : ''}
+                </div>
+              </>
+            ) : (
+              <div className="note-s">
+                {detail.data?.viewers.length
+                  ? (team.data ?? [])
+                      .filter((m) => detail.data!.viewers.includes(m.user.id))
+                      .map((m) => m.user.name)
+                      .join(', ')
+                  : t('library.res.onlyAuthor')}
+              </div>
+            )}
+          </>
+        )}
       </div>
       <div className="mf">
         <div className="res" role={error ? 'alert' : undefined} style={error ? { color: 'var(--signal)' } : undefined}>

@@ -310,3 +310,13 @@ html:has(.app .panel),html:has(.app .panel) body{overflow:hidden}
 .app .cmore:disabled{opacity:.6}
 .app[dir='rtl'] .cgh .ic{transform:scaleX(-1)}
 .app.lay-stage .row.closed .due small{display:block}
+
+/* Ресурс: описание в редакторе и выбор, кто видит секреты. */
+.app .ta.res-desc{min-height:72px;padding:10px 14px}
+.app .ta.res-desc .ProseMirror{outline:none;min-height:48px}
+.app .ta.res-desc .ProseMirror p{margin:0}
+.app .res-who{display:flex;flex-wrap:wrap;gap:6px}
+.app .res-who-p{display:inline-flex;align-items:center;gap:7px;padding-block:4px;padding-inline:4px 10px;border-radius:99px;background:var(--soft);color:var(--ink2);font-size:13px;font-weight:500;border:1px solid transparent}
+.app .res-who-p .av{width:22px;height:22px;border-radius:50%;display:grid;place-items:center;color:#fff;font-size:11px;font-weight:700}
+.app .res-who-p.on{background:var(--sheet);color:var(--ink);border-color:var(--ink)}
+.app .res-who-p:disabled{opacity:.45;cursor:not-allowed}

@@ -217,7 +217,6 @@ function Page({ data, myId, lng }: { data: TaskFull; myId: string; lng: string }
               lng={lng}
               onChange={(b) => patch.mutate(b)}
             />
-            <Screens refs={task.refs ?? ''} readOnly={!canEdit} onChange={(refs) => patch.mutate({ refs })} />
           </div>
           <div className="sbox" style={{ padding: 10, gap: 2 }}>
             <div className="side-acts">
@@ -406,64 +405,6 @@ function Fields({
   )
 }
 
-/** «Экраны в макете» — свои номера задачи (refs), через запятую. */
-function Screens({ refs, readOnly, onChange }: { refs: string; readOnly: boolean; onChange: (refs: string) => void }) {
-  const { t } = useTranslation('v2')
-  const [adding, setAdding] = useState(false)
-  const [text, setText] = useState('')
-  const list = refs
-    .split(',')
-    .map((s) => s.trim())
-    .filter(Boolean)
-  if (readOnly && !list.length) return null
-  const commit = () => {
-    const add = text
-      .split(',')
-      .map((s) => s.trim())
-      .filter((s) => s && !list.includes(s))
-    if (add.length) onChange([...list, ...add].join(', '))
-    setText('')
-    setAdding(false)
-  }
-  return (
-    <div className="sf">
-      <div className="k">{t('task.screens')}</div>
-      <div className="chs">
-        {list.map((s) =>
-          readOnly ? (
-            <span key={s} className="ch" style={{ padding: '0 10px' }}>
-              {s}
-            </span>
-          ) : (
-            <button key={s} className="ch tp-ref" style={{ padding: '0 10px' }} aria-label={t('task.removeScreen', { n: s })} title={t('task.removeScreen', { n: s })} onClick={() => onChange(list.filter((x) => x !== s).join(', '))}>
-              {s}
-            </button>
-          ),
-        )}
-        {!readOnly &&
-          (adding ? (
-            <input
-              className="ch tp-ref-in"
-              autoFocus
-              value={text}
-              onChange={(e) => setText(e.target.value)}
-              onBlur={commit}
-              onKeyDown={(e) => {
-                if (e.key === 'Enter') commit()
-                if (e.key === 'Escape') setAdding(false)
-              }}
-              placeholder={t('task.screenPh')}
-              aria-label={t('task.addScreen')}
-            />
-          ) : (
-            <button className="ch" aria-label={t('task.addScreen')} onClick={() => setAdding(true)}>
-              <Icon name="plus" sm />
-            </button>
-          ))}
-      </div>
-    </div>
-  )
-}
 
 /* ───────────────────────── Новая задача ───────────────────────── */
 

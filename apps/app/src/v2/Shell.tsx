@@ -1,9 +1,10 @@
 import { useEffect } from 'react'
-import { Navigate, Outlet, useParams } from 'react-router-dom'
+import { Navigate, Outlet, useLocation, useParams } from 'react-router-dom'
 import { useTranslation } from 'react-i18next'
 import { getSessionToken } from '@/lib/api'
 import { useTheme } from '@/providers/theme'
 import { useCompanies, useUserSocket } from './data'
+import { setNext } from './auth/paths'
 import { UiProvider, useUi } from './ui'
 import { Header } from './Header'
 import { Assistant } from './Assistant'
@@ -26,8 +27,14 @@ export function Shell() {
   const { companyId } = useParams()
   const companies = useCompanies()
   const signedIn = Boolean(getSessionToken())
+  const loc = useLocation()
   useUserSocket(signedIn)
-  if (!signedIn) return <Navigate to="/login" replace />
+  if (!signedIn) {
+    // Ссылку на задачу или документ открыли без входа — запоминаем, куда
+    // шли: после входа вернём туда, а не в последнюю компанию.
+    setNext(loc.pathname + loc.search)
+    return <Navigate to="/login" replace />
+  }
   if (!companies.data) return <Frame>{companies.isError ? <Failed onRetry={() => void companies.refetch()} /> : null}</Frame>
   const company = companies.data.find((c) => c.id === companyId)
   if (!company) return <Navigate to="/start" replace />

@@ -49,6 +49,7 @@ const ru = {
     ai: 'Подключить ИИ',
     company: 'Настройки компании',
     logout: 'Выйти',
+    logoutSure: 'Точно выйти? Нажми ещё раз',
     roles: { admin: 'админ', manager: 'менеджер', member: 'участник' },
   },
   car: {
@@ -335,6 +336,7 @@ const en: Bundle = {
     ai: 'Connect AI',
     company: 'Company settings',
     logout: 'Log out',
+    logoutSure: 'Log out? Click again',
     roles: { admin: 'admin', manager: 'manager', member: 'member' },
   },
   car: { prev: 'Back', next: 'More projects', find: 'Project…', findAria: 'Find project', all: 'All projects', none: 'No project "{{q}}"', more: '{{n}} more' },
@@ -611,6 +613,7 @@ const he: Bundle = {
     ai: 'חיבור AI',
     company: 'הגדרות החברה',
     logout: 'יציאה',
+    logoutSure: 'לצאת? לחצו שוב',
     roles: { admin: 'מנהל מערכת', manager: 'מנהל', member: 'חבר צוות' },
   },
   car: { prev: 'אחורה', next: 'עוד פרויקטים', find: 'פרויקט…', findAria: 'חיפוש פרויקט', all: 'כל הפרויקטים', none: 'אין פרויקט "{{q}}"', more: 'עוד {{n}}' },

@@ -425,7 +425,7 @@ function Meta({
 }
 
 /** Меню «ещё»: ссылка, публичный доступ, удаление — удаление со вторым шагом. */
-function MoreMenu({ title, children, onDelete }: { title: string; children?: (close: () => void) => React.ReactNode; onDelete: (() => void) | null }) {
+function MoreMenu({ title, path, children, onDelete }: { title: string; path: string; children?: (close: () => void) => React.ReactNode; onDelete: (() => void) | null }) {
   const { t } = useTranslation('v2')
   const { flash } = useUi()
   const [open, setOpen] = useState(false)
@@ -460,7 +460,9 @@ function MoreMenu({ title, children, onDelete }: { title: string; children?: (cl
                 <button
                   role="menuitem"
                   onClick={() => {
-                    void navigator.clipboard?.writeText(window.location.href).catch(() => {})
+                    // Адрес самой записи, а не строки браузера: открытый по умолчанию
+                    // (первый в дереве) документ живёт на адресе списка без своего id.
+                    void navigator.clipboard?.writeText(`${window.location.origin}${window.location.pathname}#${path}`).catch(() => {})
                     flash(t('docs.linkCopied'))
                     close()
                   }}
@@ -618,7 +620,7 @@ function DocArticle({
           canEdit
           onToggle={toggle}
           menu={
-            <MoreMenu title={shownTitle} onDelete={() => remove.mutate()}>
+            <MoreMenu title={shownTitle} path={`/c/${companyId}/docs/d/${projectId}/${docId}`} onDelete={() => remove.mutate()}>
               {(close) => (
                 <>
                   {d.publicSlug && (
@@ -768,7 +770,7 @@ function NoteArticle({ note, project, editInit, onDeleted }: { note: NoteRow; pr
             setEditing(!editing)
           }}
           menu={
-            <MoreMenu title={shownTitle} onDelete={canEdit ? () => remove.mutate() : null}>
+            <MoreMenu title={shownTitle} path={`/c/${companyId}/notes/n/${note.id}`} onDelete={canEdit ? () => remove.mutate() : null}>
               {(close) =>
                 // Наружу делятся заметкой проекта; заметка компании — только ссылкой для своих.
                 note.projectId && (

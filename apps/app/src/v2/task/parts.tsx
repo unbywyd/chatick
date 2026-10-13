@@ -5,6 +5,7 @@ import { useTranslation } from 'react-i18next'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { api, API_URL, ensureMediaToken, getMediaToken, getSessionToken, inlineImageUrl, withInlineImageAuth } from '@/lib/api'
 import { RichEditor, type RichMention } from '@/components/ui/rich-editor'
+import { parseDuration } from '@/lib/time-parse'
 import { errorCode, inProject, keys, useComments, useHandoffs, type Handoff, type Person, type TaskFull } from '../data'
 import { useUi } from '../ui'
 import { Icon } from '../Icon'
@@ -61,16 +62,22 @@ export const PRIOS: [string, string][] = [
   ['urgent', 'var(--signal)'],
 ]
 
-/** «1:30», «1.5», «2», «90м» → минуты. Пусто — без оценки. */
+/**
+ * Оценка → минуты. Правило то же, что у часов и в первой версии
+ * (lib/time-parse): голое число читается как на часах — «45» это 45 минут,
+ * «230» это 2:30. Раньше голое число здесь было часами, и привычные «230»
+ * давали оценку в 230 часов. Русские и ивритские единицы приводим к h/m:
+ * «2ч», «1ч30», «90мин», «2 ש». Пусто — без оценки, непонятное — undefined.
+ */
 export function parseEstimate(s: string): number | null | undefined {
   const v = s.trim().toLowerCase()
   if (!v) return null
-  const hm = v.match(/^(\d+):(\d{1,2})$/)
-  if (hm) return Number(hm[1]) * 60 + Number(hm[2])
-  const m = v.match(/^(\d+)\s*(m|м|min|мин|דק)/)
-  if (m) return Number(m[1])
-  const h = Number(v.replace(',', '.').replace(/\s*(h|ч|ש).*$/, ''))
-  return Number.isFinite(h) && h >= 0 ? Math.round(h * 60) : undefined
+  const norm = v
+    .replace(/\s+/g, '')
+    .replace(/(часов|часа|час|ч|שעות|שעה|ש)/g, 'h')
+    .replace(/(минуты|минут|мин|м|דקות|דק)/g, 'm')
+  const n = parseDuration(norm)
+  return n === null ? undefined : n
 }
 
 /** Загрузка файла в проект: FormData, поэтому мимо api() с его JSON. */
