@@ -7,6 +7,9 @@ import { useUi } from '../ui'
 import { Icon } from '../Icon'
 import { ProjectLogo } from '../ProjectLogo'
 import { shortProject } from '../util'
+import { PROJECT_LANGUAGES } from '@/lib/languages'
+import { Select } from '../ui/Calendar'
+import '../i18n/project'
 import { coError, useCoRefresh } from './data'
 
 function Shell({ title, icon, onClose, children }: { title: string; icon: string; onClose: () => void; children: React.ReactNode }) {
@@ -31,15 +34,24 @@ function Shell({ title, icon, onClose, children }: { title: string; icon: string
   )
 }
 
-/** Новый проект: только название — остальное настраивается в команде проекта. */
+/**
+ * Новый проект: название, о чём он и на каком языке работает. Остальное —
+ * в панели проекта после создания.
+ */
 export function NewProjectModal({ onClose, onCreated }: { onClose: () => void; onCreated: (id: string) => void }) {
   const { t } = useTranslation('v2')
-  const { companyId, flash } = useUi()
+  const { companyId, company, flash } = useUi()
   const refresh = useCoRefresh()
   const [name, setName] = useState('')
+  const [about, setAbout] = useState('')
+  const [lang, setLang] = useState(company.locale ?? 'en')
   const [err, setErr] = useState<string | null>(null)
   const create = useMutation({
-    mutationFn: () => api<{ id: string }>('/api/v1/projects', { method: 'POST', body: JSON.stringify({ companyId, name: name.trim() }) }),
+    mutationFn: () =>
+      api<{ id: string }>('/api/v1/projects', {
+        method: 'POST',
+        body: JSON.stringify({ companyId, name: name.trim(), about: about.trim(), aiConfig: { language: lang } }),
+      }),
     onSuccess: (p) => {
       refresh()
       flash(t('company.created', { name: name.trim() }))
@@ -63,6 +75,27 @@ export function NewProjectModal({ onClose, onCreated }: { onClose: () => void; o
         placeholder={t('company.npName')}
         aria-label={t('company.npName')}
       />
+      <textarea
+        className="nin psx-ta bidi"
+        value={about}
+        rows={3}
+        maxLength={5000}
+        onChange={(e) => setAbout(e.target.value)}
+        placeholder={t('proj.descPh')}
+        aria-label={t('proj.desc')}
+      />
+      <div className="psx-row">
+        <span className="lbl" style={{ margin: 0 }}>
+          {t('proj.lang')}
+        </span>
+        <Select
+          value={lang}
+          searchable
+          ariaLabel={t('proj.lang')}
+          options={PROJECT_LANGUAGES.map((l) => ({ value: l.code, label: l.label, hint: l.english !== l.label ? l.english : undefined }))}
+          onChange={setLang}
+        />
+      </div>
       <div className="mf">
         <div className="res" role={err ? 'alert' : undefined} style={err ? { color: 'var(--signal)' } : undefined}>
           {err ?? t('company.npHint')}

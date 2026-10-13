@@ -1,9 +1,9 @@
 import { useMemo, useState } from 'react'
 import { Navigate, useNavigate, useParams } from 'react-router-dom'
 import { useTranslation } from 'react-i18next'
-import { useMutation } from '@tanstack/react-query'
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { api } from '@/lib/api'
-import { useMe, useProjects, type CompanyRole } from '../data'
+import { keys, useMe, useProjects, type CompanyProject, type CompanyRole } from '../data'
 import { useUi } from '../ui'
 import { Icon } from '../Icon'
 import { ProjectLogo } from '../ProjectLogo'
@@ -47,6 +47,23 @@ function Company() {
   const teamsQ = useTeams(companyId)
   const invitesQ = useInvites(companyId)
   const refresh = useCoRefresh()
+  const qc = useQueryClient()
+  // Архив — отдельным запросом: в общий список проектов законченные не попадают.
+  const archivedQ = useQuery({
+    queryKey: ['v2', 'archived', companyId],
+    queryFn: () => api<CompanyProject[] | { projects: CompanyProject[] }>(`/api/v1/projects?companyId=${encodeURIComponent(companyId)}&archived=1`).then((r) => (Array.isArray(r) ? r : r.projects)),
+  })
+  const archived = archivedQ.data ?? []
+  const unarchive = useMutation({
+    mutationFn: (p: CompanyProject) => api(`/api/v1/projects/${p.id}/archive`, { method: 'DELETE' }),
+    onSuccess: (_d, p) => flash(t('proj.unarchived', { name: shortProject(p.name) })),
+    onError: (e) => flash(coError(t, e)),
+    onSettled: () => {
+      refresh()
+      void qc.invalidateQueries({ queryKey: ['v2', 'archived', companyId] })
+      void qc.invalidateQueries({ queryKey: keys.projects(companyId) })
+    },
+  })
   const [q, setQ] = useState('')
   const [f, setF] = useState('all')
   const [sel, setSel] = useState<string | null>(null)
@@ -112,6 +129,7 @@ function Company() {
       ? [
           ['all', t('company.f.all'), projects.length, ''],
           ['lead', t('company.f.lead'), gapLead, 'var(--signal)'],
+          ...(archived.length ? ([['archive', t('proj.archive'), archived.length, '']] as [string, string, number, string][]) : []),
         ]
       : tab === 'people'
         ? [
@@ -189,7 +207,30 @@ function Company() {
 
         {loading && <div className="none">…</div>}
 
-        {!loading && tab === 'proj' && (
+        {!loading && tab === 'proj' && f === 'archive' && (
+          <div className="co-tbl">
+            {archived
+              .filter((p) => !s || p.name.toLowerCase().includes(s))
+              .map((p) => (
+                <div key={p.id} className="co-prow co-arch">
+                  <span className="co-pj">
+                    <ProjectLogo project={p} size="md" />
+                    <span>
+                      <b>{shortProject(p.name)}</b>
+                      <small>{clientOf(p.name)}</small>
+                    </span>
+                  </span>
+                  <span className="co-pa">
+                    <button className="mini" disabled={unarchive.isPending} onClick={() => unarchive.mutate(p)}>
+                      {t('proj.unarchive')}
+                    </button>
+                  </span>
+                </div>
+              ))}
+          </div>
+        )}
+
+        {!loading && tab === 'proj' && f !== 'archive' && (
           <div className="co-tbl">
             <div className="co-hrow">
               <span>{t('company.col.project')}</span>

@@ -74,7 +74,10 @@ describe('проект — из адреса или назван явно', () =
 
   it('десктоп называет проект таймера явно, а не берёт из адреса', () => {
     const desktop = app('hooks/useDesktop.ts')
-    expect((desktop.match(/\{ project: (target|current\.projectId|task\.project\.id) \}/g) ?? []).length).toBeGreaterThanOrEqual(4)
+    // Таймер в v2 — личный (/my/time/*): проект или компания едут в теле
+    // запроса, заголовок проекта из адреса окна ему не нужен вовсе.
+    expect(desktop).toContain("api('/api/v1/my/time/start', { method: 'POST', body: JSON.stringify(body) })")
+    expect(desktop).toMatch(/api\(`\/api\/v1\/my\/time\/\$\{run\.id\}\/stop`/)
     // Запрос в проект таймера «по адресу» ушёл бы в проект, открытый в окне.
     expect(desktop, "запрос таймера снова идёт по адресу окна").not.toMatch(/\/api\/v1\/time\/[^\n]*'project'\)/)
   })

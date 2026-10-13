@@ -1,4 +1,7 @@
 /*  Сгенерировано scripts/gen-rtl.mjs из стилей v2 — не править руками.  */
+.app[dir='rtl'] .psx-acc {
+    padding: 6px 44px 4px 0
+}
 .app[dir='rtl'] .gt-today {
     border-radius: 10px 0 0 10px
 }

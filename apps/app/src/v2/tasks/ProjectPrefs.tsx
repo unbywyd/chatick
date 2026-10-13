@@ -3,7 +3,9 @@ import { useTranslation } from 'react-i18next'
 import { DndContext, PointerSensor, KeyboardSensor, useSensor, useSensors, closestCenter, type DragEndEvent } from '@dnd-kit/core'
 import { SortableContext, useSortable, verticalListSortingStrategy, arrayMove, sortableKeyboardCoordinates } from '@dnd-kit/sortable'
 import { CSS } from '@dnd-kit/utilities'
-import type { CompanyProject } from '../data'
+import { useQueryClient } from '@tanstack/react-query'
+import { api } from '@/lib/api'
+import { keys, useProjects, type CompanyProject } from '../data'
 import { ProjectLogo } from '../ProjectLogo'
 import { Icon } from '../Icon'
 import { shortProject } from '../util'
@@ -12,27 +14,61 @@ import { shortProject } from '../util'
  * Свои проекты в карусели: какие показывать и в каком порядке.
  *
  * У человека бывают десятки проектов, а важны несколько. Порядок —
- * перетаскиванием (важные первыми), видимость — переключателем. Настройка
- * своя у каждого и хранится в браузере по компании: на чужой экран она не
- * влияет. Проекты, которых в списке порядка нет (новые), идут после
- * упорядоченных, как раньше — по числу задач.
+ * перетаскиванием (важные первыми), видимость — переключателем. Проекты,
+ * которых в списке порядка нет (новые), идут после упорядоченных, как раньше —
+ * по числу задач.
+ *
+ * Скрытые — на сервере, как в первой версии: человек скрыл проект на работе и
+ * видит то же самое дома и в приложении. Порядок — пока в браузере.
  */
 export type ProjectPrefs = { order: string[]; hidden: string[] }
 
 const key = (companyId: string) => `chatick_v2_projprefs_${companyId}`
 
 export function useProjectPrefs(companyId: string) {
-  const [prefs, setPrefs] = useState<ProjectPrefs>(() => read(companyId))
-  useEffect(() => setPrefs(read(companyId)), [companyId])
+  const projects = useProjects(companyId)
+  const qc = useQueryClient()
+  const [local, setLocal] = useState<ProjectPrefs>(() => read(companyId))
+  useEffect(() => setLocal(read(companyId)), [companyId])
+  const serverHidden = useMemo(() => (projects.data ?? []).filter((p) => p.hidden).map((p) => p.id), [projects.data])
+  // Пока сервер не ответил — показываем то, что человек только что выбрал.
+  const [pending, setPending] = useState<string[] | null>(null)
+  const prefs: ProjectPrefs = { order: local.order, hidden: pending ?? serverHidden }
+
+  const push = (before: string[], after: string[]) => {
+    const was = new Set(before)
+    const now = new Set(after)
+    const changed = [...new Set([...before, ...after])].filter((id) => was.has(id) !== now.has(id))
+    if (!changed.length) return
+    setPending(after)
+    void Promise.all(changed.map((id) => api(`/api/v1/projects/${id}/hide?hide=${now.has(id) ? '1' : '0'}`, { method: 'POST' }).catch(() => {})))
+      .then(() => qc.invalidateQueries({ queryKey: keys.projects(companyId) }))
+      .finally(() => setPending(null))
+  }
+
+  // Скрытые раньше в этом браузере — один раз переносим на сервер.
+  useEffect(() => {
+    if (!projects.data || !local.hidden.length) return
+    push(serverHidden, [...new Set([...serverHidden, ...local.hidden])])
+    write(companyId, { order: local.order, hidden: [] })
+    setLocal({ order: local.order, hidden: [] })
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [projects.data, companyId])
+
   const save = (p: ProjectPrefs) => {
-    setPrefs(p)
-    try {
-      localStorage.setItem(key(companyId), JSON.stringify(p))
-    } catch {
-      /* хранилище закрыто — настройка проживёт до перезагрузки */
-    }
+    setLocal({ order: p.order, hidden: [] })
+    write(companyId, { order: p.order, hidden: [] })
+    push(prefs.hidden, p.hidden)
   }
   return [prefs, save] as const
+}
+
+function write(companyId: string, p: ProjectPrefs) {
+  try {
+    localStorage.setItem(key(companyId), JSON.stringify(p))
+  } catch {
+    /* хранилище закрыто — порядок проживёт до перезагрузки */
+  }
 }
 
 function read(companyId: string): ProjectPrefs {

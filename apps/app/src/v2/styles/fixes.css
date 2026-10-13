@@ -356,3 +356,9 @@ html:has(.app .panel),html:has(.app .panel) body{overflow:hidden}
 .app .hd-logo{flex:none;display:grid;place-items:center;width:36px;height:36px;border-radius:10px;margin-inline-end:-6px}
 .app .hd-logo:hover{background:var(--soft)}
 .app .hd-logo img{width:28px;height:28px;display:block}
+
+/* «О программе» */
+.app .me2-about{display:flex;align-items:center;gap:14px;margin:4px 0 6px}
+.app .me2-about img{width:48px;height:48px;display:block}
+.app .me2-about b{display:block;font-size:17px}
+.app .me2-about span{color:var(--ink3);font-size:13.5px}

@@ -11,6 +11,7 @@ import { useOpenNotice } from './notices'
 import { ProjectLogo } from './ProjectLogo'
 import { Icon } from './Icon'
 import { fmtClock, fmtHm, letterOf, personColor, projectColor, shortProject, timeAgo } from './util'
+import { AboutModal, ReportModal } from './MeModals'
 
 const NAV = ['', 'docs', 'notes', 'time', 'resources', 'files', 'versions', 'history'] as const
 const NAV_LABEL: Record<string, string> = { '': 'tasks', docs: 'docs', notes: 'notes', time: 'time', resources: 'resources', files: 'files', versions: 'versions', history: 'history' }
@@ -420,9 +421,29 @@ function MeMenu() {
     setOpen(false)
     navigate(path)
   }
+  // «О программе» и «Сообщить о проблеме». Трей просит первое адресом ?about=1.
+  const [modal, setModal] = useState<'about' | 'report' | null>(null)
+  const loc = useLocation()
+  useEffect(() => {
+    const qs = new URLSearchParams(loc.search)
+    if (qs.get('about') !== '1') return
+    setModal('about')
+    qs.delete('about')
+    const rest = qs.toString()
+    navigate(loc.pathname + (rest ? `?${rest}` : ''), { replace: true })
+  }, [loc.search, loc.pathname, navigate])
+  // Язык — и интерфейсу, и профилю: на нём сервер пишет письма и уведомления.
+  const setLang = (code: string) => {
+    void i18n.changeLanguage(code)
+    void api('/api/v1/auth/me', { method: 'PATCH', body: JSON.stringify({ locale: code }) })
+      .then(() => qc.invalidateQueries({ queryKey: keys.me }))
+      .catch(() => {})
+  }
   const name = me.data?.name ?? ''
   return (
     <div className="mew">
+      {modal === 'about' && <AboutModal onClose={() => setModal(null)} onReport={() => setModal('report')} />}
+      {modal === 'report' && <ReportModal onClose={() => setModal(null)} />}
       <button className="me" aria-label={t('me.profileAria')} aria-haspopup="menu" aria-expanded={open} onClick={() => setOpen(!open)}>
         {me.data?.avatarUrl ? <img src={me.data.avatarUrl} alt="" /> : letterOf(name)}
       </button>
@@ -443,7 +464,7 @@ function MeMenu() {
               <span>{t('me.language')}</span>
               <div className="me-seg">
                 {LOCALES.map((l) => (
-                  <button key={l.code} className={i18n.resolvedLanguage === l.code ? 'on' : ''} onClick={() => void i18n.changeLanguage(l.code)} lang={l.code}>
+                  <button key={l.code} className={i18n.resolvedLanguage === l.code ? 'on' : ''} onClick={() => setLang(l.code)} lang={l.code}>
                     {LANG_SHORT[l.code]}
                   </button>
                 ))}
@@ -474,6 +495,29 @@ function MeMenu() {
                 {t('me.company')}
               </button>
             )}
+            <div className="me-d" />
+            <button
+              className="me-i"
+              role="menuitem"
+              onClick={() => {
+                setOpen(false)
+                setModal('report')
+              }}
+            >
+              <Icon name="mail" sm />
+              {t('me2.report')}
+            </button>
+            <button
+              className="me-i"
+              role="menuitem"
+              onClick={() => {
+                setOpen(false)
+                setModal('about')
+              }}
+            >
+              <Icon name="info" sm />
+              {t('me2.aboutTitle')}
+            </button>
             <div className="me-d" />
             <button
               className="me-i"

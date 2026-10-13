@@ -20,6 +20,7 @@ import { companyMail, sendVia, dropTransport } from '../lib/company-mail.js'
 import { companyStorageFor } from '../lib/s3.js'
 import { membersLockedForCompany, MEMBERS_LOCKED } from '../lib/members-locked.js'
 import { timeConfigSchema } from './projects.js'
+import { companyTaskAi, setCompanyTaskAi } from '../lib/company-task-ai.js'
 import { readTimeConfig } from './time.js'
 import { NOTIFY_EVENTS, readNotifyConfig } from '../lib/notify-config.js'
 import { LLM_PROVIDERS, testLlm, type LlmProvider } from '../lib/llm.js'
@@ -2215,6 +2216,30 @@ companiesRoute.patch(
       projectsViaApiOnly: updated!.projectsViaApiOnly,
       membersViaApiOnly: updated!.membersViaApiOnly,
     })
+  },
+)
+
+/**
+ * ИИ при создании задачи — улучшать формулировку и дописывать заметки.
+ * Настройка компании; хранится в проектах (см. lib/company-task-ai.ts).
+ */
+companiesRoute.get('/:companyId/ai-tasks', async (c) => {
+  const { sub } = c.get('session')
+  const companyId = c.req.param('companyId')
+  if ((await memberRoleIn(companyId, sub)) !== 'admin') return c.json({ error: 'Forbidden' }, 403)
+  return c.json(await companyTaskAi(companyId))
+})
+
+companiesRoute.patch(
+  '/:companyId/ai-tasks',
+  zValidator('json', z.object({ improveTasks: z.boolean().optional(), generateTaskNotes: z.boolean().optional() })),
+  async (c) => {
+    const { sub } = c.get('session')
+    const companyId = c.req.param('companyId')
+    if ((await memberRoleIn(companyId, sub)) !== 'admin') return c.json({ error: 'Forbidden' }, 403)
+    const b = c.req.valid('json')
+    if (b.improveTasks === undefined && b.generateTaskNotes === undefined) return c.json({ error: 'Nothing to change.' }, 400)
+    return c.json(await setCompanyTaskAi(companyId, b))
   },
 )
 

@@ -169,3 +169,5 @@
 .app .ntf .it:hover .acts,.app .ntf .it:focus-within .acts{opacity:1}
 .app .ntf .empty{padding:50px 20px;text-align:center;color:var(--ink3)}
 .app .ntf .more{display:block;margin:14px auto 0}
+.app .stg .mship-p{display:flex;align-items:center;gap:10px;min-width:0}
+.app .stg .mship-p .bidi{white-space:nowrap;overflow:hidden;text-overflow:ellipsis}

@@ -8,6 +8,7 @@ import { useUi } from '../ui'
 import { Icon } from '../Icon'
 import { letterOf, timeAgo } from '../util'
 import { Confirm, Sw, copyText, errText, fmtBytes, upload, useFail } from './parts'
+import { CompanyDanger, CompanyIntegration, CompanyLocaleRow, CompanyTime, TaskAiRows } from './CompanyMore'
 
 /**
  * Настройки компании (только админ): название и логотип, бэкап, ключ ИИ,
@@ -22,11 +23,14 @@ export function CompanySettings() {
   return (
     <>
       <CompanyProfile />
-      <Backup />
+      <CompanyTime />
       <CompanyAi />
+      <Backup />
       <StorageAndMail />
+      <CompanyIntegration />
       <ApiKeys />
       <Webhooks />
+      <CompanyDanger />
     </>
   )
 }
@@ -129,6 +133,7 @@ function CompanyProfile() {
           )}
         </div>
       </div>
+      <CompanyLocaleRow />
     </section>
   )
 }
@@ -177,6 +182,10 @@ function Backup() {
   const [busy, setBusy] = useState(false)
   const [pending, setPending] = useState<{ name: string; data: Record<string, unknown> } | null>(null)
   const [pwd, setPwd] = useState('')
+  // Секреты ресурсов в архив — только под паролем: без него сервер их не кладёт.
+  const [withSecrets, setWithSecrets] = useState(false)
+  const [expPwd, setExpPwd] = useState('')
+  const [warnings, setWarnings] = useState<{ companyId: string; list: string[] } | null>(null)
   const refresh = () => {
     void qc.invalidateQueries({ queryKey: ['v2', 'co-auto-backup', companyId] })
     void qc.invalidateQueries({ queryKey: ['v2', 'co-backup-storage', companyId] })
@@ -202,12 +211,14 @@ function Backup() {
   })
   const restore = useMutation({
     mutationFn: (b: { backup: Record<string, unknown>; password?: string }) =>
-      api<{ companyId: string }>('/api/v1/backup/import', { method: 'POST', body: JSON.stringify(b) }),
+      api<{ companyId: string; warnings?: string[] }>('/api/v1/backup/import', { method: 'POST', body: JSON.stringify(b) }),
     onSuccess: (r) => {
       setPending(null)
       void qc.invalidateQueries({ queryKey: keys.companies })
       flash(t('settings.backup.restored'))
-      navigate(`/c/${r.companyId}`)
+      // Есть что сказать (секреты пропущены, пароль не подошёл) — сначала это, потом переход.
+      if (r.warnings?.length) setWarnings({ companyId: r.companyId, list: r.warnings })
+      else navigate(`/c/${r.companyId}`)
     },
     onError: fail,
   })
@@ -219,7 +230,7 @@ function Backup() {
       const res = await fetch(`${API_URL}/api/v1/backup/${companyId}/export`, {
         method: 'POST',
         headers: { Authorization: `Bearer ${getSessionToken()}`, 'content-type': 'application/json' },
-        body: '{}',
+        body: JSON.stringify(withSecrets ? { includeSecrets: true, password: expPwd } : {}),
       })
       if (!res.ok) throw new Error(((await res.json().catch(() => ({}))) as { error?: string }).error ?? res.statusText)
       const blob = await res.blob()
@@ -284,11 +295,35 @@ function Backup() {
             {now.isPending ? t('settings.backup.nowBusy') : t('settings.backup.now')}
           </button>
         )}
-        <button className="btn sm" onClick={() => void download()} disabled={busy}>
+        <button className="btn sm" onClick={() => void download()} disabled={busy || (withSecrets && expPwd.length < 8)}>
           {busy ? t('settings.backup.downloading') : t('settings.backup.download')}
         </button>
       </div>
       <div className="row first">
+        <span className="l">
+          {t('coset.secrets')}
+          <small>{t('coset.secretsHint')}</small>
+        </span>
+        <div className="inl">
+          <Sw on={withSecrets} label={t('coset.secrets')} onChange={setWithSecrets} />
+          {withSecrets && (
+            <label className="f" style={{ width: 240 }}>
+              <input type="password" value={expPwd} onChange={(e) => setExpPwd(e.target.value)} placeholder={t('coset.secretsPwd')} aria-label={t('coset.secretsPwd')} autoComplete="new-password" />
+            </label>
+          )}
+        </div>
+      </div>
+      {warnings && (
+        <div className="conf" role="alert" style={{ margin: '12px 0 0' }}>
+          <span>
+            {t('coset.restoredWarn')} {warnings.list.join(' · ')}
+          </span>
+          <button className="btn sm" onClick={() => navigate(`/c/${warnings.companyId}`)}>
+            {t('coset.openRestored')}
+          </button>
+        </div>
+      )}
+      <div className="row">
         <span className="l">
           {t('settings.backup.where')}
           <small>{t('settings.backup.whereHint')}</small>
@@ -579,6 +614,7 @@ function CompanyAi() {
           </div>
         </div>
       )}
+      <TaskAiRows />
       {d.configured && (
         <div className="row">
           <span className="l">

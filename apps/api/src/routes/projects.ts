@@ -1,4 +1,5 @@
 import { closedSql } from '../lib/task-status.js'
+import { companyTaskAi } from '../lib/company-task-ai.js'
 import { Hono } from 'hono'
 import { zValidator } from '@hono/zod-validator'
 import { z } from 'zod'
@@ -555,7 +556,8 @@ projectsRoute.post(
         // Язык не прислали — берём у компании, а не оставляем умолчание.
         // Интерфейс его передаёт, но любой другой вызывающий (мост, скрипт,
         // интеграция) о поле не знает, и проект молча заводился английским.
-        aiConfig: JSON.stringify({ language: company?.locale || 'en', ...aiConfig }),
+        // ИИ при создании задач — как у остальных проектов компании (настройка компании).
+        aiConfig: JSON.stringify({ language: company?.locale || 'en', ...(await companyTaskAi(companyId)), ...aiConfig }),
         // цвет раздаём сразу: в свёрнутом сайдбаре проекты различают по нему,
         // и заставлять человека выбирать его вручную незачем
         color: PROJECT_COLORS[Math.floor(Math.random() * PROJECT_COLORS.length)]!,

@@ -352,7 +352,11 @@
       }
       .tr-ev:not(.new) .q { color: var(--ink2); }
       .tr-ev .l3 { font-size: 11.5px; color: var(--ink3); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; unicode-bidi: plaintext; }
-      [dir='ltr'] .tr-ev .l1, [dir='ltr'] .tr-ev .q, [dir='ltr'] .tr-ev .l3 { text-align: left; }
+      /* Направление строки — по её тексту, а не по интерфейсу: уведомление на
+         иврите в русском трее выравнивается справа. Имя автора стоит первым и
+         пишется латиницей — изолируем его, иначе вся строка считалась левой. */
+      .tr-ev .l1, .tr-ev .q, .tr-ev .l3 { text-align: start; }
+      .tr-ev .l1 b { unicode-bidi: isolate; }
       [dir='rtl'] .tr-ev .l1, [dir='rtl'] .tr-ev .q, [dir='rtl'] .tr-ev .l3 { text-align: right; }
       .tr-ev time { flex: none; font-size: 11.5px; color: var(--ink3); white-space: nowrap; }
       .tr-allnot { display: block; margin: 4px auto 0; padding: 6px 10px; border-radius: 8px; color: var(--ink3); font-size: 12px; }

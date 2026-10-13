@@ -14,6 +14,7 @@ import { Icon } from '../Icon'
 import { letterOf, personColor, timeAgo } from '../util'
 import { Confirm, Sw, copyText, upload, useFail } from './parts'
 import { CompanySettings } from './CompanySettings'
+import { Membership } from './Membership'
 import '../i18n/settings'
 import '../styles/settings.css'
 
@@ -68,7 +69,12 @@ export function SettingsView() {
           )}
         </nav>
         <div>
-          {cur === 'profile' && <Profile />}
+          {cur === 'profile' && (
+            <>
+              <Profile />
+              <Membership />
+            </>
+          )}
           {cur === 'notifications' && <Notify />}
           {cur === 'ai' && <AiConnections />}
           {cur === 'company' && <CompanySettings />}
@@ -461,6 +467,7 @@ function clientMark(name: string): { bg: string; l: string } {
 }
 
 function AiConnections() {
+  const navigate = useNavigate()
   const { t, i18n } = useTranslation('v2')
   const { flash } = useUi()
   const qc = useQueryClient()
@@ -516,6 +523,10 @@ function AiConnections() {
           </li>
           <li>{t('settings.ai.consent')}</li>
         </ul>
+        {/* Ассистент показал код — ввести его здесь (экран подключения по коду). */}
+        <button className="btn sm" onClick={() => navigate('/connect')}>
+          {t('mship.enterCode')}
+        </button>
       </section>
       <section className="card sec">
         <h2>{t('settings.ai.listTitle')}</h2>

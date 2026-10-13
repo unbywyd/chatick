@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import { useTranslation } from 'react-i18next'
-import { useMutation } from '@tanstack/react-query'
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { api } from '@/lib/api'
 import type { CompanyProject } from '../data'
 import { useUi } from '../ui'
@@ -8,6 +8,8 @@ import { Icon } from '../Icon'
 import { ProjectLogo } from '../ProjectLogo'
 import { letterOf, personColor, shortProject } from '../util'
 import { PersonCombo } from './PersonCombo'
+import { Select } from '../ui/Calendar'
+import { ProjectAbout, ProjectDelete, ProjectReminders, ProjectStorage } from './ProjectSettings'
 import { coError, isLead, passAll, useCoRefresh, type CoMember, type OpenTask, type TeamRow } from './data'
 
 /**
@@ -43,10 +45,14 @@ export function TeamPanel({
   const { t } = useTranslation('v2')
   const { flash } = useUi()
   const refresh = useCoRefresh()
+  const qc = useQueryClient()
   const [rm, setRm] = useState<string | null>(null)
   const [rmTo, setRmTo] = useState<string | null>(null)
   const [addQ, setAddQ] = useState('')
   const [sure, setSure] = useState(false)
+  // Чьи доступы раскрыты и чью роль меняем (смена роли сбрасывает права — спрашиваем).
+  const [openId, setOpenId] = useState<string | null>(null)
+  const [leadAsk, setLeadAsk] = useState<{ userId: string; on: boolean } | null>(null)
   const pj = shortProject(project.name)
   const heldBy = (k: string) => open.filter((x) => x.holderId === k)
   const nameOf = (k: string) => team.find((m) => m.userId === k)?.name ?? ''
@@ -57,9 +63,15 @@ export function TeamPanel({
   const lead = useMutation({
     mutationFn: (v: { userId: string; on: boolean }) =>
       api(`/api/v1/projects/${project.id}/members/${v.userId}/role`, { method: 'PATCH', body: JSON.stringify({ role: v.on ? 'admin' : 'member' }) }),
-    onSuccess: (_d, v) => flash(t(v.on ? 'company.leadOn' : 'company.leadOff', { name: nameOf(v.userId), project: pj })),
+    onSuccess: (_d, v) => {
+      setLeadAsk(null)
+      flash(t(v.on ? 'company.leadOn' : 'company.leadOff', { name: nameOf(v.userId), project: pj }))
+    },
     onError: fail,
-    onSettled: refresh,
+    onSettled: () => {
+      refresh()
+      void qc.invalidateQueries({ queryKey: ['v2', 'project-members', project.id] })
+    },
   })
 
   const remove = useMutation({
@@ -141,13 +153,13 @@ export function TeamPanel({
                   <span className="av lg" style={{ background: personColor(m.userId) }}>
                     {letterOf(m.name)}
                   </span>
-                  <span style={{ minWidth: 0 }}>
+                  <button className="co-memn" aria-expanded={openId === m.userId} onClick={() => setOpenId(openId === m.userId ? null : m.userId)} title={t('proj.access')}>
                     <b>
                       {m.name}
                       {m.userId === myId ? t('company.you') : ''}
                     </b>
                     <small>{owner ? t('company.creator') : m.email}</small>
-                  </span>
+                  </button>
                   <span className="co-balls">
                     {nb > 0 && (
                       <>
@@ -161,7 +173,7 @@ export function TeamPanel({
                     aria-pressed={on}
                     disabled={owner || lead.isPending}
                     title={owner ? t('company.creator') : undefined}
-                    onClick={() => lead.mutate({ userId: m.userId, on: !on })}
+                    onClick={() => setLeadAsk({ userId: m.userId, on: !on })}
                   >
                     <span className="co-cb">
                       <Icon name="check" sm />
@@ -181,6 +193,20 @@ export function TeamPanel({
                       <Icon name="close" sm />
                     </button>
                   )}
+                  {leadAsk?.userId === m.userId && (
+                    <div className="co-warn co-memx" role="alert">
+                      <p>{t(leadAsk.on ? 'proj.leadAskOn' : 'proj.leadAskOff', { name: m.name })}</p>
+                      <div className="co-foot" style={{ marginTop: 0 }}>
+                        <button className={'btn-acc' + (lead.isPending ? ' dis' : '')} onClick={() => lead.mutate(leadAsk)}>
+                          {t('proj.leadYes')}
+                        </button>
+                        <button className="btn" onClick={() => setLeadAsk(null)}>
+                          {t('company.cancel')}
+                        </button>
+                      </div>
+                    </div>
+                  )}
+                  {openId === m.userId && !owner && <MemberAccess projectId={project.id} userId={m.userId} />}
                 </div>
               )
             })}
@@ -255,6 +281,10 @@ export function TeamPanel({
             </div>
           )}
 
+          <ProjectAbout project={project} />
+          <ProjectReminders projectId={project.id} />
+          <ProjectStorage projectId={project.id} />
+
           <div className="co-sec">
             {sure ? (
               <div className="co-foot" style={{ marginTop: 0 }}>
@@ -273,9 +303,56 @@ export function TeamPanel({
               </button>
             )}
             <p className="co-hint">{t('company.archiveHint')}</p>
+            <div style={{ marginTop: 14 }}>
+              <ProjectDelete project={project} onDone={onClose} />
+            </div>
           </div>
         </div>
       </section>
     </>
+  )
+}
+
+const DOMAINS = ['tasks', 'documents', 'files', 'resources', 'releases'] as const
+const LEVELS = ['none', 'read', 'write', 'crud'] as const
+type Level = (typeof LEVELS)[number]
+
+/**
+ * Доступы человека по разделам проекта: задачи, документы, файлы, ресурсы,
+ * версии — от «нет доступа» до «всё, включая удаление».
+ */
+function MemberAccess({ projectId, userId }: { projectId: string; userId: string }) {
+  const { t } = useTranslation('v2')
+  const { flash } = useUi()
+  const qc = useQueryClient()
+  const key = ['v2', 'project-members', projectId]
+  const q = useQuery({
+    queryKey: key,
+    queryFn: () => api<{ user: { id: string }; domains: Record<string, Level> }[]>(`/api/v1/projects/${projectId}/members`),
+  })
+  const save = useMutation({
+    mutationFn: (b: Record<string, Level>) => api(`/api/v1/projects/${projectId}/members/${userId}/permissions`, { method: 'PATCH', body: JSON.stringify(b) }),
+    onSuccess: () => {
+      void qc.invalidateQueries({ queryKey: key })
+      flash(t('proj.saved'))
+    },
+    onError: (e) => flash(coError(t, e)),
+  })
+  const row = q.data?.find((r) => r.user.id === userId)
+  if (!row) return <div className="co-memx co-hint">…</div>
+  return (
+    <div className="co-memx psx-acc">
+      {DOMAINS.map((d) => (
+        <div key={d} className="psx-accr">
+          <span>{t(`proj.dom.${d}`)}</span>
+          <Select
+            value={row.domains[d] ?? 'none'}
+            ariaLabel={t(`proj.dom.${d}`)}
+            options={LEVELS.map((l) => ({ value: l, label: t(`proj.lvl.${l}`) }))}
+            onChange={(v) => save.mutate({ [d]: v })}
+          />
+        </div>
+      ))}
+    </div>
   )
 }

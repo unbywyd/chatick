@@ -34,9 +34,28 @@ export type BallItem = {
 }
 
 export type CompanyRole = 'admin' | 'manager' | 'member'
-export type Company = { id: string; name: string; logoUrl: string | null; myRole: CompanyRole; isOwner: boolean; projectsCount: number; mainProjectId?: string | null }
+export type Company = {
+  id: string
+  name: string
+  logoUrl: string | null
+  myRole: CompanyRole
+  isOwner: boolean
+  projectsCount: number
+  mainProjectId?: string | null
+  /** Язык писем приглашённым и умолчание для новых проектов. */
+  locale?: string
+  externalSystemName?: string | null
+  externalProjectUrl?: string | null
+  projectsViaApiOnly?: boolean
+  membersViaApiOnly?: boolean
+}
 
-export type CompanyProject = ProjectRef & { companyId: string; myRole?: string | null }
+export type CompanyProject = ProjectRef & {
+  companyId: string
+  myRole?: string | null
+  /** Скрыт человеком (хранится на сервере); с непрочитанным сервер снова его показывает. */
+  hidden?: boolean
+}
 
 export type HandoffAction = 'review' | 'accept' | 'return' | 'ask' | 'answer' | 'pass' | 'take' | 'wait_client' | 'client_replied' | 'cancel' | 'reopen'
 
