@@ -5,13 +5,15 @@ import { useMutation, useQueryClient } from '@tanstack/react-query'
 import { api, logout } from '@/lib/api'
 import { LOCALES } from '@/i18n'
 import { useTheme } from '@/providers/theme'
-import { keys, useCompanies, useInbox, useMe, useProjects, useRunning, useToday, type Notice } from './data'
+import { keys, useCompanies, useInbox, useMe, useProjects, useRunning, useToday, useUnreadByCompany, type Notice } from './data'
 import { useUi } from './ui'
 import { useOpenNotice } from './notices'
 import { ProjectLogo } from './ProjectLogo'
 import { Icon } from './Icon'
 import { fmtClock, fmtHm, letterOf, personColor, projectColor, shortProject, timeAgo } from './util'
 import { AboutModal, ReportModal } from './MeModals'
+import { openSearch } from './Palette'
+import { showCombo, useBindings } from './keys'
 
 const NAV = ['', 'team', 'docs', 'notes', 'time', 'resources', 'files', 'versions', 'history'] as const
 const NAV_LABEL: Record<string, string> = { '': 'tasks', team: 'team', docs: 'docs', notes: 'notes', time: 'time', resources: 'resources', files: 'files', versions: 'versions', history: 'history' }
@@ -40,6 +42,7 @@ export function Header() {
       <CompanyMenu />
       <SectionsNav />
       <div style={{ flex: 1 }} />
+      <SearchButton />
       <TimerPill companyId={companyId} />
       <Bell />
       <MeMenu />
@@ -122,14 +125,23 @@ function CompanyMenu() {
   const { t } = useTranslation('v2')
   const { company, base } = useUi()
   const companies = useCompanies()
+  const unreadBy = useUnreadByCompany()
   const navigate = useNavigate()
   const [open, setOpen] = useState(false)
   const boss = company.myRole === 'admin' || company.myRole === 'manager'
+  // Новое в других компаниях: точка на кнопке, число — в меню у каждой.
+  const elsewhere = (companies.data ?? []).filter((c) => c.id !== company.id).reduce((s, c) => s + (unreadBy.data?.[c.id] ?? 0), 0)
   return (
     <div className="cwrap">
-      <button className="brand" aria-label={t('head.switchCompany')} aria-expanded={open} onClick={() => setOpen(!open)}>
+      <button
+        className="brand"
+        aria-label={elsewhere ? `${t('head.switchCompany')} · ${t('head.elsewhere', { count: elsewhere })}` : t('head.switchCompany')}
+        aria-expanded={open}
+        onClick={() => setOpen(!open)}
+      >
         <span className="mark" style={{ background: '#2F6FEB', color: '#fff' }}>
           {company.logoUrl ? <img src={company.logoUrl} alt="" style={{ width: 32, height: 32, borderRadius: 10, objectFit: 'cover' }} /> : letterOf(company.name)}
+          {elsewhere > 0 && <i className="co-dot" aria-hidden="true" />}
         </span>
         <span className="bidi">{company.name}</span>
         <Icon name="chevron" sm />
@@ -156,6 +168,11 @@ function CompanyMenu() {
                   <b className="bidi">{c.name}</b>
                   <small>{t(`me.roles.${c.myRole}`)}</small>
                 </span>
+                {c.id !== company.id && (unreadBy.data?.[c.id] ?? 0) > 0 && (
+                  <span className="co-n" title={t('head.elsewhere', { count: unreadBy.data![c.id] })}>
+                    {unreadBy.data![c.id]! > 99 ? '99+' : unreadBy.data![c.id]}
+                  </span>
+                )}
                 {c.id === company.id && <Icon name="check" />}
               </button>
             ))}
@@ -335,14 +352,35 @@ function Hours() {
   )
 }
 
+function SearchButton() {
+  const { t } = useTranslation('v2')
+  const keys = useBindings()
+  return (
+    <button className="hd-search" onClick={openSearch} aria-label={t('head.search')} title={`${t('head.search')} · ${showCombo(keys.search)}`}>
+      <Icon name="search" sm />
+      <span>{t('head.search')}</span>
+      <kbd>{showCombo(keys.search)}</kbd>
+    </button>
+  )
+}
+
 function Bell() {
   const { t, i18n } = useTranslation('v2')
   const { companyId, base, openTask } = useUi()
   const qc = useQueryClient()
   const navigate = useNavigate()
   const inbox = useInbox(companyId)
+  const projects = useProjects(companyId)
   const [open, setOpen] = useState(false)
   const unread = (inbox.data?.items ?? []).filter((n) => !n.readAt)
+  // По проектам, свежие сверху: что пришло и откуда видно сразу, и проект
+  // гасится целиком одной кнопкой. Объявления компании — своей группой.
+  const groups: { pid: string | null; name: string; items: Notice[] }[] = []
+  for (const n of unread) {
+    const g = groups.find((x) => x.pid === n.projectId)
+    if (g) g.items.push(n)
+    else groups.push({ pid: n.projectId, name: n.projectName ?? '', items: [n] })
+  }
   const read = useMutation({
     mutationFn: (body: Record<string, unknown>) => api('/api/v1/inbox/read', { method: 'POST', body: JSON.stringify(body) }),
     onSettled: () => {
@@ -371,17 +409,49 @@ function Bell() {
               {t('bell.title')}
               {unread.length > 0 && <button onClick={() => read.mutate({ all: true, companyId, ids: unread.map((n) => n.id) })}>{t('bell.readAll')}</button>}
             </div>
-            {unread.slice(0, 6).map((n) => (
-              <button key={n.id} className="bi unread" onClick={() => openNotice(n)}>
-                <span className="av lg" style={{ background: personColor(n.actor?.id) }}>
-                  {letterOf(n.actor?.name ?? 'C')}
-                </span>
-                <span className="tx">
-                  <b>{n.actor?.name ?? 'Chatick'}</b> {n.summary || n.title}
-                </span>
-                <time>{timeAgo(i18n.language, n.createdAt)}</time>
-              </button>
-            ))}
+            <div className="bgs">
+              {groups.map((g) => {
+                const p = g.pid ? projects.data?.find((x) => x.id === g.pid) : undefined
+                const total = (g.pid && inbox.data?.unreadByProject?.[g.pid]) || g.items.length
+                return (
+                  <section key={g.pid ?? '_company'} className="bg">
+                    <div className="bgh">
+                      {g.pid ? <ProjectLogo project={p ?? { id: g.pid, name: g.name, color: null }} size="xs" /> : <Icon name="info" sm />}
+                      <span className="bidi">{g.pid ? shortProject(p?.name ?? g.name) : t('bell.company')}</span>
+                      <span className="bgn">{total}</span>
+                      <button
+                        onClick={() => read.mutate(g.pid ? { projectId: g.pid } : { ids: g.items.map((n) => n.id) })}
+                        aria-label={t('bell.readProjectAria', { name: g.pid ? (p?.name ?? g.name) : t('bell.company') })}
+                      >
+                        {t('bell.readProject')}
+                      </button>
+                    </div>
+                    {g.items.slice(0, 3).map((n) => (
+                      <button key={n.id} className="bi unread" onClick={() => openNotice(n)}>
+                        <span className="av lg" style={{ background: personColor(n.actor?.id) }}>
+                          {letterOf(n.actor?.name ?? 'C')}
+                        </span>
+                        <span className="tx" dir="auto">
+                          <b>{n.actor?.name ?? 'Chatick'}</b> {n.summary || n.title}
+                        </span>
+                        <time>{timeAgo(i18n.language, n.createdAt)}</time>
+                      </button>
+                    ))}
+                    {total > 3 && (
+                      <button
+                        className="bmore"
+                        onClick={() => {
+                          setOpen(false)
+                          navigate(`${base}/notifications`)
+                        }}
+                      >
+                        {t('bell.more', { count: total - 3 })}
+                      </button>
+                    )}
+                  </section>
+                )
+              })}
+            </div>
             {!unread.length && <div className="cbx-none">{t('bell.empty')}</div>}
             <div className="ft">
               <button

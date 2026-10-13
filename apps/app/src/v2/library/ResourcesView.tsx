@@ -768,7 +768,7 @@ function ShareLinkModal({ row, onClose }: { row: Row; onClose: () => void }) {
         <div className="ext">
           <button onClick={() => open(`https://wa.me/?text=${encodeURIComponent(text)}`)}>WhatsApp</button>
           <button onClick={() => open(`https://t.me/share/url?url=${encodeURIComponent(link)}&text=${encodeURIComponent(msg.trim() || row.name)}`)}>Telegram</button>
-          <button onClick={() => (window.location.href = `mailto:?subject=${encodeURIComponent(row.name || link)}&body=${encodeURIComponent(text)}`)}>Email</button>
+          <button onClick={() => (window.location.href = `mailto:?subject=${encodeURIComponent(row.name || link)}&body=${encodeURIComponent(text)}`)}>{t('library.res.email')}</button>
         </div>
       </div>
       <button className="mini" onClick={() => setInApp(true)}>

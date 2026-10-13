@@ -515,14 +515,25 @@ tasksRoute.patch(
 
 tasksRoute.patch(
   '/:taskId',
-  zValidator('json', z.object({ ...taskShape, title: taskShape.title.optional(), status: z.enum(STATUSES).optional(), priority: z.enum(PRIORITIES).optional(), description: z.string().max(10_000).optional() })),
+  zValidator(
+    'json',
+    z.object({
+      ...taskShape,
+      title: taskShape.title.optional(),
+      status: z.enum(STATUSES).optional(),
+      priority: z.enum(PRIORITIES).optional(),
+      description: z.string().max(10_000).optional(),
+      /** С какого текста человек начинал править: другой в базе — значит, его успели поменять. */
+      prevDescription: z.string().max(10_000).optional(),
+    }),
+  ),
   async (c) => {
     const { projectId, sub } = c.get('auth')
     const taskId = c.req.param('taskId')
     const task = await db.query.tasks.findFirst({ where: and(eq(tasks.id, taskId), eq(tasks.projectId, projectId)) })
     if (!task) return c.json({ error: 'Not found' }, 404)
 
-    const body = c.req.valid('json')
+    const { prevDescription, ...body } = c.req.valid('json')
     const keys = Object.keys(body)
     // drag: смена статуса/группы/порядка — по changeStatus (лёгкое перемещение на доске)
     const statusOnly = keys.every((k) => k === 'status' || k === 'sortOrder' || k === 'groupId')
@@ -536,6 +547,13 @@ tasksRoute.patch(
       : (await hasPermission(projectId, sub, 'tasks.edit')) &&
         (await ownsOrManages(projectId, sub, [task.createdById, task.assigneeId]))
     if (!permitted) return c.json({ error: 'Forbidden' }, 403)
+
+    // Пока человек печатал, описание сохранил кто-то другой. Записать поверх
+    // значило бы молча стереть чужую правку — отвечаем 409 и текущим текстом,
+    // пусть человек решит сам.
+    if (body.description !== undefined && prevDescription !== undefined && (task.description ?? '') !== prevDescription) {
+      return c.json({ error: 'description_conflict', description: task.description ?? '' }, 409)
+    }
 
     const patch: Record<string, unknown> = {}
     if (body.title !== undefined) patch.title = body.title

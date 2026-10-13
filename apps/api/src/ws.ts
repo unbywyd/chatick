@@ -1,9 +1,9 @@
 import { WebSocketServer, WebSocket } from 'ws'
 import type { Server } from 'node:http'
-import { and, eq } from 'drizzle-orm'
+import { and, eq, inArray } from 'drizzle-orm'
 import { verifyToken } from './auth.js'
 import { db } from './db/client.js'
-import { projectMembers, users } from './db/schema.js'
+import { projectMembers, tasks, users } from './db/schema.js'
 
 // Realtime-хаб: presence (кто онлайн в проекте) + бродкаст событий (новые сообщения и т.п.).
 // Подключение: /ws?token=<project-JWT> — комната = projectId из токена.
@@ -13,6 +13,9 @@ type Client = {
   userId: string
   projectId: string
   docId?: string // открытый сейчас документ (SPEC §8.25)
+  /** v2: какую задачу человек сейчас смотрит и правит ли её описание. */
+  taskId?: string
+  editing?: boolean
 }
 
 type PresenceUser = { id: string; name: string; avatarUrl: string | null }
@@ -235,6 +238,60 @@ async function pushDocPresence(projectId: string, docId: string) {
   }
 }
 
+// --- Кто сейчас в задаче (v2) ---
+//
+// В v2 сокет личный, комнат проектов нет — и при совместной правке описание
+// молча перезаписывалось: никто не знал, что задачу открыл кто-то ещё.
+// Клиент сообщает, какую задачу смотрит и правит ли описание; мы рассылаем
+// список всем, кто смотрит ту же задачу. Пускаем только тех, кому задача
+// видна: иначе сам факт «кто смотрит» утекал бы мимо прав.
+
+function taskViewers(taskId: string): Client[] {
+  const out: Client[] = []
+  for (const set of byUser.values()) for (const c of set) if (c.taskId === taskId) out.push(c)
+  return out
+}
+
+async function pushTaskPresence(taskId: string) {
+  try {
+    const viewers = taskViewers(taskId)
+    if (!viewers.length) return
+    const editing = new Map<string, boolean>()
+    for (const c of viewers) editing.set(c.userId, Boolean(editing.get(c.userId) || c.editing))
+    const rows = await db.select({ id: users.id, name: users.name, avatarUrl: users.avatarUrl }).from(users).where(inArray(users.id, [...editing.keys()]))
+    const payload = { taskId, users: rows.map((u) => ({ ...u, editing: editing.get(u.id) ?? false })) }
+    const msg = JSON.stringify({ event: 'task_presence', payload })
+    for (const c of viewers) if (c.ws.readyState === WebSocket.OPEN) c.ws.send(msg)
+  } catch (e) {
+    console.error('task presence push failed', e)
+  }
+}
+
+async function viewTask(client: Client, taskId: string, editing: boolean) {
+  if (client.taskId === taskId) {
+    if (Boolean(client.editing) === editing) return
+    client.editing = editing
+    return pushTaskPresence(taskId)
+  }
+  const t = await db.query.tasks.findFirst({ where: eq(tasks.id, taskId), columns: { projectId: true } })
+  if (!t) return
+  // Ленивая загрузка: projects.ts сам тянет этот модуль ради broadcast.
+  const { hasPermission } = await import('./routes/projects.js')
+  if (!(await hasPermission(t.projectId, client.userId, 'tasks.read'))) return
+  const prev = client.taskId
+  client.taskId = taskId
+  client.editing = editing
+  if (prev) void pushTaskPresence(prev)
+  void pushTaskPresence(taskId)
+}
+
+function leaveTask(client: Client) {
+  const prev = client.taskId
+  client.taskId = undefined
+  client.editing = false
+  if (prev) void pushTaskPresence(prev)
+}
+
 export function attachWs(server: Server) {
   // noServer + ручной роутинг апгрейда: два WebSocketServer с опцией `server`
   // вешают каждый свой обработчик 'upgrade' и рвут чужие пути с 400 (см. yjs.ts).
@@ -286,11 +343,21 @@ export function attachWs(server: Server) {
     userClients(client.userId).add(client)
     if (notifyOnly) {
       // Дальше — presence, локи и команды проекта: сессионному клиенту нечего
-      // там делать, он только слушает.
+      // там делать. Он только слушает — и говорит, какую задачу открыл (v2).
+      ws.on('message', (data) => {
+        try {
+          const m = JSON.parse(String(data)) as { event?: string; taskId?: string; editing?: boolean }
+          if (m.event === 'task_view' && typeof m.taskId === 'string' && m.taskId) void viewTask(client, m.taskId, Boolean(m.editing))
+          else if (m.event === 'task_leave') leaveTask(client)
+        } catch {
+          /* мусор не разбираем */
+        }
+      })
       ws.on('close', () => {
         const mine = byUser.get(client.userId)
         mine?.delete(client)
         if (mine?.size === 0) byUser.delete(client.userId)
+        if (client.taskId) void pushTaskPresence(client.taskId)
       })
       ws.on('error', () => ws.close())
       return

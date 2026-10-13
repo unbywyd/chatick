@@ -280,17 +280,19 @@ type TimerTarget = { companyId: string | null; projectId: string | null }
 export function usePresence() {
   const location = useLocation()
   const authed = Boolean(getSessionToken())
-  const projectId = activeFromLocation(location.pathname, location.search).projectId
+  const { projectId, taskId } = activeFromLocation(location.pathname, location.search)
 
   useEffect(() => {
     if (!authed) return
+    // Открыта задача, а проекта в адресе нет (страница задачи, панель поверх
+    // «Всех проектов») — проект по задаче найдёт сервер.
     const send = () =>
-      api('/api/v1/auth/presence', { method: 'POST', body: JSON.stringify({ projectId }) }).catch(() => {})
+      api('/api/v1/auth/presence', { method: 'POST', body: JSON.stringify({ projectId, taskId }) }).catch(() => {})
     send()
     // Отметка живёт 15 минут — подтверждаем, пока вкладка открыта.
     const timer = setInterval(send, 5 * 60_000)
     return () => clearInterval(timer)
-  }, [authed, projectId])
+  }, [authed, projectId, taskId])
 }
 
 /**

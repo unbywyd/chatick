@@ -44,7 +44,7 @@ export function AuthLayout({ children }: { children: React.ReactNode }) {
           Chatick
         </div>
         {/* Языки — там, где в макете были кнопки прототипа: на входе шапки нет. */}
-        <div className="lft-tools" role="group" aria-label="Language">
+        <div className="lft-tools" role="group" aria-label={t('me.language')}>
           {LOCALES.map((l) => (
             <button key={l.code} lang={l.code} className={i18n.resolvedLanguage === l.code ? 'on' : ''} onClick={() => void i18n.changeLanguage(l.code)}>
               {LANG_SHORT[l.code]}

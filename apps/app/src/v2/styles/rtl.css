@@ -224,6 +224,9 @@
 .app[dir='rtl'] .nw span {
     text-align: right
 }
+.app[dir='rtl'] .bpop .bmore {
+    padding: 4px 52px 6px 10px
+}
 .app[dir='rtl'] .lp-p {
     left: auto;
     right: 0;
@@ -284,6 +287,9 @@
 }
 .app[dir='rtl'] .lh {
     padding: 6px 12px 2px 10px
+}
+.app[dir='rtl'] .hd-search {
+    padding: 0 12px 0 10px
 }
 .app[dir='rtl'] .stg .url {
     padding: 12px 16px 12px 12px

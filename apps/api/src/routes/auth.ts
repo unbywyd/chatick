@@ -6,7 +6,7 @@ import { nanoid } from 'nanoid'
 import sharp from 'sharp'
 import { PutObjectCommand } from '@aws-sdk/client-s3'
 import { db } from '../db/client.js'
-import { companies, companyInvites, companyMembers, projects, users, supportLogins } from '../db/schema.js'
+import { companies, companyInvites, companyMembers, projects, tasks, users, supportLogins } from '../db/schema.js'
 import { signMediaToken, signSessionToken, requireSession, type SessionEnv } from '../auth.js'
 import { env } from '../env.js'
 import { s3Client, s3Bucket, getObjectStream, S3_KEY_PREFIX } from '../lib/s3.js'
@@ -472,13 +472,22 @@ export function readPresence(userId: string): Presence | null {
 auth.post('/presence', requireSession, async (c) => {
   const { sub } = c.get('session')
   const body = (await c.req.json().catch(() => ({}))) as Record<string, unknown>
-  const projectId = typeof body.projectId === 'string' ? body.projectId : ''
+  let projectId = typeof body.projectId === 'string' ? body.projectId : ''
+  // Открыта задача без проекта в адресе (страница задачи v2, панель поверх
+  // «Всех проектов»): проект — по задаче. Только если она человеку видна:
+  // мост покажет этот проект ассистенту как «где ты сейчас».
+  const taskId = typeof body.taskId === 'string' ? body.taskId : ''
+  if (!projectId && taskId) {
+    const t = await db.query.tasks.findFirst({ where: eq(tasks.id, taskId), columns: { projectId: true } })
+    const { hasPermission } = await import('./projects.js')
+    if (t && (await hasPermission(t.projectId, sub, 'tasks.read'))) projectId = t.projectId
+  }
   if (!projectId) {
     presence.delete(sub)
     return c.json({ ok: true })
   }
   presence.set(sub, { projectId, at: Date.now() })
-  return c.json({ ok: true })
+  return c.json({ ok: true, projectId })
 })
 
 // POST /api/v1/auth/media-token — токен для картинок в адресе (см. signMediaToken).

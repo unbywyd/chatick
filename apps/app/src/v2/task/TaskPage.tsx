@@ -5,7 +5,8 @@ import { DatePop } from '../ui/Calendar'
 import { useLocation, useNavigate, useParams } from 'react-router-dom'
 import { useTranslation } from 'react-i18next'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { api, setScreenProject } from '@/lib/api'
+import { ApiError, api, setScreenProject } from '@/lib/api'
+import { TaskPeers, useTaskPresence } from './presence'
 import { errorCode, inProject, keys, useMe, useProjects, useRefreshBall, useTask, type TaskFull } from '../data'
 import { useUi } from '../ui'
 import { ProjectLogo } from '../ProjectLogo'
@@ -103,6 +104,8 @@ function Page({ data, myId, lng }: { data: TaskFull; myId: string; lng: string }
     },
     onSuccess: () => setSaving('idle'),
     onError: (e) => {
+      // Спор за описание разбирается отдельно (saveDesc) — это не сбой.
+      if (e instanceof ApiError && e.status === 409) return
       setSaving('failed')
       flash(errorCode(e) === '403' ? t('err.forbidden') : t('task.saveFailed'))
     },
@@ -110,15 +113,48 @@ function Page({ data, myId, lng }: { data: TaskFull; myId: string; lng: string }
   })
 
   // Описание — с задержкой: сохраняем, когда человек перестал печатать.
+  // С собой отдаём текст, с которого начинали (descBase): если в базе уже другой,
+  // сервер ответит 409 — кто-то успел сохранить своё, и затирать его молча нельзя.
   const pending = useRef<string | null>(null)
   const timer = useRef<number | undefined>(undefined)
+  const descBase = useRef(task.description ?? '')
+  const [descKey, setDescKey] = useState(0)
+  const [conflict, setConflict] = useState<{ mine: string; theirs: string } | null>(null)
+  const conflictRef = useRef(conflict)
+  conflictRef.current = conflict
+  const saveDesc = (html: string, prev: string) => {
+    descBase.current = html
+    patch.mutate(
+      { description: html, prevDescription: prev },
+      {
+        onError: (e) => {
+          if (!(e instanceof ApiError) || e.status !== 409) return
+          const theirs = (e.body as { description?: string } | undefined)?.description ?? ''
+          descBase.current = theirs
+          setSaving('idle')
+          setConflict({ mine: html, theirs })
+        },
+      },
+    )
+  }
   const flushDesc = () => {
     window.clearTimeout(timer.current)
-    if (pending.current === null) return
+    // Пока не решили, чья версия, — не сохраняем: иначе спор решился бы сам.
+    if (pending.current === null || conflictRef.current) return
     const html = pending.current
     pending.current = null
-    patch.mutate({ description: html })
+    saveDesc(html, descBase.current)
   }
+  // Описание поменяли снаружи, а у нас нет несохранённого — показываем новое.
+  useEffect(() => {
+    const now = task.description ?? ''
+    if (pending.current === null && !conflictRef.current && now !== descBase.current) {
+      descBase.current = now
+      setDescKey((k) => k + 1)
+    }
+  }, [task.description])
+  const [descFocus, setDescFocus] = useState(false)
+  const peers = useTaskPresence(task.id, descFocus, myId)
   const flushRef = useRef(flushDesc)
   flushRef.current = flushDesc
   useEffect(() => () => flushRef.current(), [])
@@ -158,6 +194,7 @@ function Page({ data, myId, lng }: { data: TaskFull; myId: string; lng: string }
           <span>/</span>
           <span>{task.number}</span>
         </div>
+        <TaskPeers users={peers} />
         <span className="saved" role="status">
           {saving === 'idle' && canEdit && (
             <>
@@ -179,8 +216,42 @@ function Page({ data, myId, lng }: { data: TaskFull; myId: string; lng: string }
             <TitleField value={task.title} readOnly={!canEdit} onSave={(title) => patch.mutate({ title })} />
             <Ball data={data} myId={myId} lng={lng} />
           </div>
+          {conflict && (
+            <div className="need desc-clash" role="alert">
+              <span>{t('peers.clash')}</span>
+              <span className="desc-clash-b">
+                <button
+                  className="mini"
+                  onClick={() => {
+                    // Их версия: показать её, моё забыть.
+                    pending.current = null
+                    descBase.current = conflict.theirs
+                    setConflict(null)
+                    setDescKey((k) => k + 1)
+                    qc.setQueryData<TaskFull>(keys.task(task.id), (old) => (old ? { ...old, task: { ...old.task, description: conflict.theirs } } : old))
+                  }}
+                >
+                  {t('peers.takeTheirs')}
+                </button>
+                <button
+                  className="mini on"
+                  onClick={() => {
+                    // Моя версия — сознательно поверх их.
+                    const mine = pending.current ?? conflict.mine
+                    pending.current = null
+                    setConflict(null)
+                    saveDesc(mine, conflict.theirs)
+                  }}
+                >
+                  {t('peers.keepMine')}
+                </button>
+              </span>
+            </div>
+          )}
           {canEdit || task.description?.trim() ? (
-            <DescEditor value={task.description ?? ''} onChange={onDesc} readOnly={!canEdit} mentions={mentions} placeholder={t('task.descPh')} />
+            <div onFocusCapture={() => setDescFocus(true)} onBlurCapture={() => setDescFocus(false)}>
+              <DescEditor key={descKey} value={descBase.current} onChange={onDesc} readOnly={!canEdit} mentions={mentions} placeholder={t('task.descPh')} />
+            </div>
           ) : (
             <div className="doc doc-ph" style={{ minHeight: 0 }}>
               {t('task.noDesc')}

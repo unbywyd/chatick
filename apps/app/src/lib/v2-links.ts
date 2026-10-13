@@ -117,7 +117,9 @@ export function activeFromLocation(pathname: string, search: string): { companyI
   const v1 = pathname.match(/^\/c\/[^/]+\/p\/([^/]+)(?:\/tasks\/([^/]+))?/)
   const legacy = pathname.match(/^\/p\/([^/]+)/)
   const page = pathname.match(/^\/c\/[^/]+\/task\/([^/]+)/)?.[1]
-  const projectId = v1?.[1] ?? legacy?.[1] ?? q.get('p') ?? null
+  // Документ, файл, ресурс, версия: проект — прямо в адресе (/docs/d/<проект>/<id>).
+  const item = pathname.match(/^\/c\/[^/]+\/(?:docs\/d|files\/f|resources\/r|versions\/v)\/([^/]+)/)?.[1]
+  const projectId = v1?.[1] ?? legacy?.[1] ?? item ?? q.get('p') ?? null
   const taskId = q.get('t') ?? (page && page !== 'new' ? page : null) ?? v1?.[2] ?? null
   return { companyId, projectId, taskId }
 }

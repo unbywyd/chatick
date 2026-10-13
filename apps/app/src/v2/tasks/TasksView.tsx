@@ -521,7 +521,7 @@ export function Carousel({
             <Icon name="chevronStart" />
           </button>
         )}
-        <div ref={car} className="car" role="tablist" aria-label="Projects">
+        <div ref={car} className="car" role="tablist" aria-label={t('car.aria')}>
           <button className={'chip' + (!selected ? ' sel' : '')} role="tab" aria-selected={!selected} onClick={() => onPick(null)} title={t('car.all')}>
             <span className="logo all">
               <Icon name="grid" sm />

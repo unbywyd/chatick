@@ -255,7 +255,19 @@ export function useComments(task: TaskFull['task'] | undefined) {
 export function useInbox(companyId: string) {
   return useQuery({
     queryKey: keys.inbox(companyId),
-    queryFn: () => api<{ unreadTotal: number; items: Notice[] }>(`/api/v1/inbox?limit=50&companyId=${encodeURIComponent(companyId)}`),
+    queryFn: () =>
+      api<{ unreadTotal: number; unreadByProject: Record<string, number>; items: Notice[] }>(
+        `/api/v1/inbox?limit=50&companyId=${encodeURIComponent(companyId)}`,
+      ),
+  })
+}
+
+/** Непрочитанное в каждой компании — для меню компаний. Ключ под ['v2','inbox']: гасится вместе с лентой. */
+export function useUnreadByCompany() {
+  return useQuery({
+    queryKey: ['v2', 'inbox', '_companies'],
+    queryFn: () => api<{ counts: Record<string, number> }>('/api/v1/inbox/companies').then((r) => r.counts),
+    staleTime: 30_000,
   })
 }
 
@@ -333,6 +345,21 @@ export function errorCode(e: unknown): string {
 export const SOCKET_EVENT = 'chatick:v2-socket'
 export type SocketMessage = { event: string; payload: unknown }
 
+// Открытый личный сокет и задача, которую сейчас смотрят: при переподключении
+// сервер должен узнать её заново — иначе «кто здесь» пропадёт молча.
+let liveWs: WebSocket | null = null
+let viewing: { taskId: string; editing: boolean } | null = null
+const sendView = () => {
+  if (liveWs?.readyState !== WebSocket.OPEN) return
+  liveWs.send(JSON.stringify(viewing ? { event: 'task_view', ...viewing } : { event: 'task_leave' }))
+}
+/** Сказать серверу, какую задачу открыли (и правят ли описание); null — закрыли. */
+export function setTaskView(v: { taskId: string; editing: boolean } | null) {
+  if (v && viewing && v.taskId === viewing.taskId && v.editing === viewing.editing) return
+  viewing = v
+  sendView()
+}
+
 export function useUserSocket(enabled: boolean) {
   const qc = useQueryClient()
   useEffect(() => {
@@ -346,7 +373,9 @@ export function useUserSocket(enabled: boolean) {
       if (closed || !token) return
       if (ws && (ws.readyState === WebSocket.OPEN || ws.readyState === WebSocket.CONNECTING)) return
       ws = new WebSocket(`${API_URL.replace(/^http/, 'ws')}/ws?token=${encodeURIComponent(token)}`)
+      liveWs = ws
       ws.onopen = () => {
+        if (viewing) sendView()
         // Пока связи не было, события ушли в никуда — перечитываем.
         if (attempt > 0) void qc.invalidateQueries({ queryKey: ['v2'] })
         attempt = 0

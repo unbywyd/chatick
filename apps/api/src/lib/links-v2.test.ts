@@ -130,5 +130,10 @@ describe('toV2Link — ссылки, которые приходят в трей
     expect(activeFromLocation('/c/C1/task/T2', '')).toEqual({ companyId: 'C1', projectId: null, taskId: 'T2' })
     expect(activeFromLocation('/c/C1/task/new', '')).toEqual({ companyId: 'C1', projectId: null, taskId: null })
     expect(activeFromLocation('/companies', '')).toEqual({ companyId: null, projectId: null, taskId: null })
+    // Документ, файл, ресурс, версия — проект в самом адресе.
+    expect(activeFromLocation('/c/C1/docs/d/P3/D1', '')).toEqual({ companyId: 'C1', projectId: 'P3', taskId: null })
+    expect(activeFromLocation('/c/C1/files/f/P4/F1', '')).toEqual({ companyId: 'C1', projectId: 'P4', taskId: null })
+    expect(activeFromLocation('/c/C1/resources/r/P5/R1', '')).toEqual({ companyId: 'C1', projectId: 'P5', taskId: null })
+    expect(activeFromLocation('/c/C1/versions/v/P6/V1', '')).toEqual({ companyId: 'C1', projectId: 'P6', taskId: null })
   })
 })

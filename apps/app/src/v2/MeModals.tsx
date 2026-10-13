@@ -5,6 +5,7 @@ import { useQuery } from '@tanstack/react-query'
 import { api, API_URL, getSessionToken } from '@/lib/api'
 import { Icon } from './Icon'
 import './i18n/project'
+import { isMac } from './keys'
 
 const SUPPORT = 'support@chatick.com'
 const MAX_SHOT = 8 * 1024 * 1024
@@ -145,7 +146,7 @@ export function ReportModal({ onClose }: { onClose: () => void }) {
             {shot && <span className="co-hint bidi" style={{ margin: 0 }}>{shot.name}</span>}
             <input ref={fileRef} type="file" accept="image/*" hidden onChange={(e) => attach(e.target.files?.[0])} />
           </div>
-          <p className="co-hint">{t('me2.shotHint')}</p>
+          <p className="co-hint">{t('me2.shotHint', { key: isMac ? '⌘V' : 'Ctrl+V' })}</p>
           <div className="mf">
             <div className="res" role={err ? 'alert' : undefined} style={err ? { color: 'var(--signal)' } : undefined}>
               {err}

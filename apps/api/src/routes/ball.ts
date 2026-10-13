@@ -1,10 +1,10 @@
 import { Hono } from 'hono'
 import { zValidator } from '@hono/zod-validator'
 import { z } from 'zod'
-import { and, eq, inArray, isNotNull, isNull, ne, or, sql, type SQL } from 'drizzle-orm'
+import { and, desc, eq, ilike, inArray, isNotNull, isNull, ne, or, sql, type SQL } from 'drizzle-orm'
 import { alias } from 'drizzle-orm/pg-core'
 import { db } from '../db/client.js'
-import { companies, companyMembers, files, HANDOFF_ACTIONS, notifications, projectMembers, projects, taskBlockers, taskHandoffs, tasks, TASK_MOVES, timeEntries, users } from '../db/schema.js'
+import { companies, companyMembers, credentials, documents, files, HANDOFF_ACTIONS, notes, notifications, projectMembers, projects, taskBlockers, taskHandoffs, tasks, TASK_MOVES, timeEntries, users } from '../db/schema.js'
 import { requireSession, type SessionEnv } from '../auth.js'
 import { canCreateProjects, companyRoleOf, hasPermission, ownsOrManages, projectRoleOf } from './projects.js'
 import { insertTask, lastReviewFrom, mayHandoff, ownerOf, planHandoff, setOnTable, TABLE_LIMIT, type Via } from '../lib/ball.js'
@@ -79,6 +79,91 @@ async function readableProjects(companyId: string, userId: string): Promise<Proj
   const mine = await myProjects(companyId, userId)
   const ok = await Promise.all(mine.map((p) => hasPermission(p.id, userId, 'tasks.read')))
   return mine.filter((_, i) => ok[i])
+}
+
+/**
+ * Поиск по Ctrl+K: задачи, документы, файлы, ресурсы и заметки компании —
+ * по названию (задачи ещё по номеру).
+ *
+ * Права — те же, что у каждого списка: проекты, где человеку можно читать
+ * именно это. Менеджер и админ компании — админы в любом её проекте. У
+ * ресурса — только имя: секреты остаются за своей проверкой.
+ */
+export async function searchCompany(companyId: string, userId: string, role: string, q: string) {
+  const like = `%${q.replace(/[%_\\]/g, (m) => `\\${m}`)}%`
+  // Роль уже известна — не спрашиваем её заново на каждом шаге: каждый лишний
+  // запрос к базе человек ждёт, глядя на пустое окно поиска.
+  const boss = canCreateProjects(role as Parameters<typeof canCreateProjects>[0])
+  const visible = boss
+    ? await db
+        .select({ id: projects.id, name: projects.name, color: projects.color, logoUrl: projects.logoUrl, companyId: projects.companyId })
+        .from(projects)
+        .where(and(eq(projects.companyId, companyId), isNull(projects.archivedAt)))
+    : await myProjects(companyId, userId)
+  const names = new Map(visible.map((p) => [p.id, p.name]))
+  const allowed = async (perm: Parameters<typeof hasPermission>[2]) => {
+    if (boss) return visible.map((p) => p.id)
+    const ok = await Promise.all(visible.map((p) => hasPermission(p.id, userId, perm)))
+    return visible.filter((_, i) => ok[i]).map((p) => p.id)
+  }
+  const [taskP, docP, fileP, resP] = await Promise.all([allowed('tasks.read'), allowed('documents.read'), allowed('files.read'), allowed('credentials.read')])
+  // Заметки — база знаний компании: состоишь в компании — читаешь (canUseKnowledge в notes.ts).
+  const kb = true
+  const [t, d, f, r, n] = await Promise.all([
+    taskP.length
+      ? db
+          .select({ id: tasks.id, number: tasks.number, title: tasks.title, projectId: tasks.projectId, status: tasks.status })
+          .from(tasks)
+          .where(and(inArray(tasks.projectId, taskP), isNull(tasks.deletedAt), or(ilike(tasks.title, like), ilike(tasks.number, like))))
+          // Открытые — выше: закрытую ищут реже.
+          .orderBy(
+            // Точный номер (TASK-12, 12) — первым, иначе TASK-120 и TASK-124 его заслоняют.
+            sql`case when lower(${tasks.number}) = lower(${q}) or ${tasks.number} ilike ${'%-' + q.replace(/^.*-/, '')} then 0 else 1 end`,
+            sql`case when ${tasks.status} in ${closedSql} then 1 else 0 end`,
+            desc(tasks.updatedAt),
+          )
+          .limit(8)
+      : [],
+    docP.length
+      ? db
+          .select({ id: documents.id, title: documents.title, projectId: documents.projectId })
+          .from(documents)
+          .where(and(inArray(documents.projectId, docP), isNull(documents.deletedAt), ilike(documents.title, like)))
+          .orderBy(desc(documents.updatedAt))
+          .limit(5)
+      : [],
+    fileP.length
+      ? db
+          .select({ id: files.id, name: files.name, projectId: files.projectId })
+          .from(files)
+          .where(and(inArray(files.projectId, fileP), isNull(files.deletedAt), isNull(files.pendingUntil), ilike(files.name, like)))
+          .orderBy(desc(files.createdAt))
+          .limit(5)
+      : [],
+    resP.length
+      ? db
+          .select({ id: credentials.id, name: credentials.name, projectId: credentials.projectId })
+          .from(credentials)
+          .where(and(inArray(credentials.projectId, resP), isNull(credentials.deletedAt), ilike(credentials.name, like)))
+          .limit(5)
+      : [],
+    kb
+      ? db
+          .select({ id: notes.id, title: notes.title, projectId: notes.projectId })
+          .from(notes)
+          .where(and(eq(notes.companyId, companyId), isNull(notes.deletedAt), ilike(notes.title, like)))
+          .orderBy(desc(notes.updatedAt))
+          .limit(5)
+      : [],
+  ])
+  const pn = (id: string | null) => (id ? (names.get(id) ?? null) : null)
+  return {
+    tasks: t.map((x) => ({ ...x, closed: isClosed(x.status), projectName: pn(x.projectId) })),
+    docs: d.map((x) => ({ ...x, projectName: pn(x.projectId) })),
+    files: f.map((x) => ({ ...x, projectName: pn(x.projectId) })),
+    resources: r.map((x) => ({ ...x, projectName: pn(x.projectId) })),
+    notes: n.map((x) => ({ ...x, projectName: pn(x.projectId) })),
+  }
 }
 
 export const listFilters = z.object({
@@ -288,6 +373,14 @@ export async function mineList(userId: string, mine: ProjectList, q: ListQuery) 
   const rest = items.filter((i) => !i.ball.onTable)
   return { table, items: rest, groups: groupBy(rest, q.group), tableLimit: TABLE_LIMIT }
 }
+
+ballRoute.get('/search', zValidator('query', z.object({ companyId: z.string().min(1), q: z.string().trim().min(1).max(100) })), async (c) => {
+  const { sub } = c.get('session')
+  const { companyId, q } = c.req.valid('query')
+  const role = await companyRoleOf(companyId, sub)
+  if (!role) return c.json({ error: 'Forbidden' }, 403)
+  return c.json(await searchCompany(companyId, sub, role, q))
+})
 
 ballRoute.get('/mine', zValidator('query', listQuery), async (c) => {
   const { sub } = c.get('session')

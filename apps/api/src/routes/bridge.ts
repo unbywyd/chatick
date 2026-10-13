@@ -119,8 +119,10 @@ bridgeRoute.post('/device', async (c) => {
     userCode,
     deviceCode,
     verifyUrl: `${APP()}/#/connect`,
+    // Ссылка с уже вписанным кодом: человеку остаётся выбрать доступ.
+    verifyUrlComplete: `${APP()}/#/connect?code=${encodeURIComponent(userCode)}`,
     expiresInSec,
-    instructions: `Tell the human: open ${APP()}/#/connect and enter code ${userCode}. Then poll /x/device/poll with deviceCode.`,
+    instructions: `Tell the human: open ${APP()}/#/connect?code=${encodeURIComponent(userCode)} (or ${APP()}/#/connect and enter code ${userCode}). Then poll /x/device/poll with deviceCode.`,
   })
 })
 

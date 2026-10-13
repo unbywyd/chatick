@@ -12,6 +12,8 @@ export const AUTH = {
   callback: '/auth',
   invite: (token: string) => `/invite/${encodeURIComponent(token)}`,
   consent: (oauthId: string) => `/connect?oauth=${encodeURIComponent(oauthId)}`,
+  /** Подключение по коду (Claude Code и др. через device flow). */
+  connect: (code?: string) => (code ? `/connect?code=${encodeURIComponent(code)}` : '/connect'),
   companies: '/companies',
 }
 

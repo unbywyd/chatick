@@ -104,6 +104,23 @@ inboxRoute.get(
   })
 })
 
+/**
+ * Непрочитанное по компаниям — для меню компаний.
+ *
+ * Лента и колокольчик показывают одну компанию, и новое в соседней было не
+ * видно, пока туда не зайдёшь: человек с двумя компаниями пропускал вопросы
+ * во второй неделями.
+ */
+inboxRoute.get('/companies', async (c) => {
+  const { sub } = c.get('session')
+  const rows = await db
+    .select({ companyId: notifications.companyId, count: sql<number>`count(*)::int` })
+    .from(notifications)
+    .where(and(eq(notifications.userId, sub), isNull(notifications.readAt)))
+    .groupBy(notifications.companyId)
+  return c.json({ counts: Object.fromEntries(rows.filter((r) => r.companyId).map((r) => [r.companyId, r.count])) })
+})
+
 // Только счётчик (для бейджа — дёшево, часто)
 inboxRoute.get('/count', async (c) => {
   const { sub } = c.get('session')

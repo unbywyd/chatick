@@ -3,7 +3,6 @@ import { Navigate, useNavigate, useSearchParams } from 'react-router-dom'
 import { useTranslation } from 'react-i18next'
 import { useMutation, useQuery } from '@tanstack/react-query'
 import { ApiError, api, getSessionToken, logout, type ProjectListItem } from '@/lib/api'
-import { ConnectScreen } from '@/screens/ConnectScreen'
 import { useCompanies } from '../data'
 import { letterOf, personColor, shortProject } from '../util'
 import { ProjectLogo } from '../ProjectLogo'
@@ -11,6 +10,8 @@ import { AuthLayout, useMeIf } from './Frame'
 import { AUTH, setNext } from './paths'
 
 type Pick = { kind: 'company'; id: string } | { kind: 'project' } | { kind: 'all' }
+/** Откуда запрос: OAuth (Claude по адресу) или код, который показал ассистент (device flow). */
+type Src = { kind: 'oauth'; id: string } | { kind: 'code'; code: string }
 type Proj = { id: string; name: string; color: string | null; logoUrl: string | null; companyId: string }
 
 /**
@@ -23,21 +24,69 @@ type Proj = { id: string; name: string; color: string | null; logoUrl: string | 
  * и экран обещал бы то, чего нет. Выбор проектов — один, не несколько: так
  * устроена область на сервере.
  *
- * Без ?oauth= это старый экран подключения по коду — его отдаём как есть.
+ * Без ?oauth= — подключение по коду: ассистент (Claude Code и др.) показал
+ * код, человек вводит его здесь и выбирает ту же область. Тот же экран, что
+ * у OAuth, — раньше здесь открывался экран первой версии.
  */
 export function ConsentV2() {
   const [params] = useSearchParams()
   const oauthId = params.get('oauth') ?? ''
+  const code = (params.get('code') ?? '').trim().toUpperCase()
   const signedIn = Boolean(getSessionToken())
+  const here = oauthId ? AUTH.consent(oauthId) : AUTH.connect(code || undefined)
   useEffect(() => {
-    if (oauthId && !signedIn) setNext(AUTH.consent(oauthId))
-  }, [oauthId, signedIn])
-  if (!oauthId) return <ConnectScreen />
+    if (!signedIn) setNext(here)
+  }, [here, signedIn])
   if (!signedIn) return <Navigate to={AUTH.login} replace />
-  return <Consent oauthId={oauthId} />
+  if (oauthId) return <Consent src={{ kind: 'oauth', id: oauthId }} />
+  if (!code) return <CodeEntry />
+  return <Consent key={code} src={{ kind: 'code', code }} />
 }
 
-function Consent({ oauthId }: { oauthId: string }) {
+/** Ввод кода, который показал ассистент: XXXX-XXXX. */
+function CodeEntry() {
+  const { t } = useTranslation('v2')
+  const navigate = useNavigate()
+  const [v, setV] = useState('')
+  // Код без путаницы букв: сервер выдаёт 8 знаков, дефис ставим сами.
+  const clean = v.toUpperCase().replace(/[^A-Z0-9]/g, '').slice(0, 8)
+  const shown = clean.length > 4 ? `${clean.slice(0, 4)}-${clean.slice(4)}` : clean
+  const ok = clean.length === 8
+  const go = () => ok && navigate(AUTH.connect(shown))
+  return (
+    <AuthLayout>
+      <h1>{t('auth.connect.title')}</h1>
+      <p className="l">{t('auth.connect.lead')}</p>
+      <label className="lab" htmlFor="au-bridge">
+        {t('auth.connect.label')}
+      </label>
+      <label className="fld">
+        <input
+          id="au-bridge"
+          dir="ltr"
+          autoFocus
+          autoComplete="off"
+          spellCheck={false}
+          value={shown}
+          onChange={(e) => setV(e.target.value)}
+          onKeyDown={(e) => e.key === 'Enter' && go()}
+          placeholder="ABCD-2345"
+          style={{ fontFamily: "'JetBrains Mono', monospace", letterSpacing: '.12em', textTransform: 'uppercase' }}
+        />
+      </label>
+      <div style={{ height: 12 }} />
+      <button className={'btn pr' + (ok ? '' : ' dis')} disabled={!ok} onClick={go}>
+        {t('auth.connect.next')}
+      </button>
+      <p className="sm" style={{ marginTop: 16 }}>
+        {t('auth.connect.hint')}
+      </p>
+    </AuthLayout>
+  )
+}
+
+function Consent({ src }: { src: Src }) {
+  const oauth = src.kind === 'oauth'
   const { t } = useTranslation('v2')
   const navigate = useNavigate()
   const me = useMeIf(true)
@@ -45,11 +94,14 @@ function Consent({ oauthId }: { oauthId: string }) {
   const list = companies.data ?? []
 
   const request = useQuery({
-    queryKey: ['v2', 'auth', 'oauth', oauthId],
-    queryFn: () => api<{ client: { name: string } }>(`/api/v1/auth/oauth/${encodeURIComponent(oauthId)}`),
+    queryKey: ['v2', 'auth', src.kind, src.kind === 'oauth' ? src.id : src.code],
+    queryFn: () =>
+      src.kind === 'oauth'
+        ? api<{ client: { name: string } }>(`/api/v1/auth/oauth/${encodeURIComponent(src.id)}`).then((r) => r.client.name)
+        : api<{ clientName: string }>(`/api/v1/auth/bridge/code/${encodeURIComponent(src.code)}`).then((r) => r.clientName),
     retry: false,
   })
-  const client = request.data?.client.name ?? 'Claude'
+  const client = request.data ?? 'Claude'
 
   // Проекты всех компаний человека: сервер вернёт только те, что он видит.
   const ids = list.map((c) => c.id)
@@ -89,18 +141,25 @@ function Consent({ oauthId }: { oauthId: string }) {
   const body = () =>
     cur?.kind === 'all' ? { all: true } : cur?.kind === 'company' ? { companyId: cur.id } : { projectId: project?.id }
   const allow = useMutation({
-    mutationFn: () => api<{ redirect: string }>(`/api/v1/auth/oauth/${encodeURIComponent(oauthId)}/approve`, { method: 'POST', body: JSON.stringify(body()) }),
+    mutationFn: () =>
+      src.kind === 'oauth'
+        ? api<{ redirect: string }>(`/api/v1/auth/oauth/${encodeURIComponent(src.id)}/approve`, { method: 'POST', body: JSON.stringify(body()) })
+        : api<{ redirect?: string }>('/api/v1/auth/bridge/approve', { method: 'POST', body: JSON.stringify({ code: src.code, ...body() }) }),
     onSuccess: (r) => {
       setResult('allowed')
-      // Обратно в Claude: он ждёт код на своём адресе.
-      window.location.href = r.redirect
+      // Обратно в Claude: он ждёт код на своём адресе. По коду ассистент
+      // сам заберёт доступ — возвращать некуда.
+      if (r.redirect) window.location.href = r.redirect
     },
   })
   const deny = useMutation({
-    mutationFn: () => api<{ redirect: string }>(`/api/v1/auth/oauth/${encodeURIComponent(oauthId)}/deny`, { method: 'POST' }),
+    mutationFn: () =>
+      src.kind === 'oauth'
+        ? api<{ redirect: string }>(`/api/v1/auth/oauth/${encodeURIComponent(src.id)}/deny`, { method: 'POST' })
+        : api<{ redirect?: string }>('/api/v1/auth/bridge/deny', { method: 'POST', body: JSON.stringify({ code: src.code }) }),
     onSuccess: (r) => {
       setResult('denied')
-      window.location.href = r.redirect
+      if (r.redirect) window.location.href = r.redirect
     },
   })
 
@@ -120,9 +179,14 @@ function Consent({ oauthId }: { oauthId: string }) {
   if (request.isError || (allow.error instanceof ApiError && allow.error.status === 404))
     return (
       <AuthLayout>
-        <h1>{t('auth.consent.expired')}</h1>
-        <p className="l">{t('auth.consent.expiredLead')}</p>
-        <button className="btn gh" onClick={() => navigate('/start')}>
+        <h1>{oauth ? t('auth.consent.expired') : t('auth.connect.expired')}</h1>
+        <p className="l">{oauth ? t('auth.consent.expiredLead') : t('auth.connect.expiredLead')}</p>
+        {!oauth && (
+          <button className="btn pr" onClick={() => navigate(AUTH.connect())}>
+            {t('auth.connect.other')}
+          </button>
+        )}
+        <button className="btn gh" style={oauth ? undefined : { marginTop: 10 }} onClick={() => navigate('/start')}>
           {t('auth.invite.toApp')}
         </button>
       </AuthLayout>
@@ -138,7 +202,20 @@ function Consent({ oauthId }: { oauthId: string }) {
             </svg>
           </div>
           <h1>{result === 'allowed' ? t('auth.consent.done', { client }) : t('auth.consent.denied')}</h1>
-          <p className="l">{result === 'allowed' ? t('auth.consent.doneLead') : t('auth.consent.deniedLead')}</p>
+          <p className="l">
+            {oauth
+              ? result === 'allowed'
+                ? t('auth.consent.doneLead')
+                : t('auth.consent.deniedLead')
+              : result === 'allowed'
+                ? t('auth.connect.doneLead', { client })
+                : t('auth.connect.deniedLead')}
+          </p>
+          {!oauth && (
+            <button className="btn gh" onClick={() => navigate('/start')}>
+              {t('auth.invite.toApp')}
+            </button>
+          )}
           {result === 'allowed' && defaultCompany && (
             <a className="btn gh" href={`#/c/${defaultCompany.id}/settings/ai`}>
               {t('auth.consent.connections')}
@@ -191,7 +268,7 @@ function Consent({ oauthId }: { oauthId: string }) {
         <button
           onClick={() => {
             logout()
-            setNext(AUTH.consent(oauthId))
+            setNext(src.kind === 'oauth' ? AUTH.consent(src.id) : AUTH.connect(src.code))
             navigate(AUTH.login)
           }}
         >

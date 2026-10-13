@@ -47,6 +47,15 @@ export function NotificationsView() {
   const [f, setFilter] = useState<Filter>('all')
   // Лента длинная (до 200): показываем порциями, чтобы страница не тянулась на метры.
   const [count, setCount] = useState(PAGE)
+  // Развёрнутые цитаты: длинный текст в ленте обрезан до трёх строк.
+  const [full, setFull] = useState<Set<string>>(new Set())
+  const toggleFull = (id: string) =>
+    setFull((s) => {
+      const x = new Set(s)
+      if (x.has(id)) x.delete(id)
+      else x.add(id)
+      return x
+    })
   const setF = (k: Filter) => {
     setFilter(k)
     setCount(PAGE)
@@ -141,7 +150,12 @@ export function NotificationsView() {
               const canOpen = Boolean(noticeTarget(n))
               const p = n.projectId ? byId.get(n.projectId) : undefined
               const ref = /\b[A-Z][A-Z0-9]*-\d+\b/.exec(n.title)?.[0]
-              const quote = n.summary || (n.body && n.body !== n.title ? n.body : '')
+              const body = n.body && n.body !== n.title ? n.body : ''
+              const quote = n.summary || body
+              const isFull = full.has(n.id)
+              // Целиком — сам текст (сводка ИИ короче), и только если есть что разворачивать.
+              const shown = isFull ? body || quote : quote
+              const long = shown.length > 220 || shown.split('\n').length > 3 || (Boolean(n.summary) && body.length > n.summary!.length)
               const name = n.actor?.name
               const title = name && n.title.startsWith(name) ? n.title.slice(name.length) : n.title
               const hasName = Boolean(name && n.title.startsWith(name))
@@ -168,9 +182,21 @@ export function NotificationsView() {
                       {title}
                     </div>
                     {quote && (
-                      <div className="q" dir="auto">
-                        {quote}
+                      <div className={'q' + (isFull ? ' full' : '')} dir="auto">
+                        {shown}
                       </div>
+                    )}
+                    {quote && long && (
+                      <button
+                        className="qx"
+                        aria-expanded={isFull}
+                        onClick={(e) => {
+                          e.stopPropagation()
+                          toggleFull(n.id)
+                        }}
+                      >
+                        {isFull ? t('notices.less') : t('notices.whole')}
+                      </button>
                     )}
                     {(p || n.projectName || ref) && (
                       <div className="m">

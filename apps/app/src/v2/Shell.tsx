@@ -1,9 +1,10 @@
-import { useEffect } from 'react'
-import { Navigate, Outlet, useLocation, useParams } from 'react-router-dom'
+import { useCallback, useEffect, useState } from 'react'
+import { useQuery } from '@tanstack/react-query'
+import { Navigate, Outlet, useLocation, useNavigate, useParams } from 'react-router-dom'
 import { useTranslation } from 'react-i18next'
-import { getSessionToken } from '@/lib/api'
+import { api, getSessionToken, type CompanyInvite } from '@/lib/api'
 import { useTheme } from '@/providers/theme'
-import { useCompanies, useUserSocket } from './data'
+import { useCompanies, useUserSocket, type Company } from './data'
 import { setNext } from './auth/paths'
 import { UiProvider, useUi } from './ui'
 import { Header } from './Header'
@@ -11,6 +12,8 @@ import { Assistant } from './Assistant'
 import { TaskPanel } from './tasks/TaskPanel'
 import { HandoffDialog } from './tasks/Handoff'
 import { Icon } from './Icon'
+import { comboOf, showCombo, typing, useBindings, type KeyAction } from './keys'
+import { KeysSheet, SearchPalette, useSearchOpener } from './Palette'
 import { inkOn } from './util'
 import './styles/main.css'
 import './styles/fixes.css'
@@ -65,18 +68,41 @@ function Frame({ children }: { children: React.ReactNode }) {
 
 function Body() {
   const { t } = useTranslation('v2')
-  const { aiOpen, setAiOpen, toast, openTaskId, ho } = useUi()
-  // Ctrl+J — ассистент, как подписано на кнопке.
+  const { aiOpen, setAiOpen, toast, openTaskId, ho, base, project } = useUi()
+  const navigate = useNavigate()
+  const keys = useBindings()
+  const [pal, setPal] = useState(false)
+  const [sheet, setSheet] = useState(false)
+  useSearchOpener(useCallback(() => setPal(true), []))
+  // Горячие клавиши (v2/keys.ts): поиск, ассистент, новая задача, разделы; «?» — шпаргалка.
   useEffect(() => {
+    const run = (a: KeyAction) => {
+      if (a === 'search') return setPal((v) => !v)
+      if (a === 'assistant') return setAiOpen(!aiOpen)
+      setPal(false)
+      if (a === 'newTask') return navigate(`${base}/task/new`, { state: { projectId: project ?? undefined } })
+      const path = { goTasks: '', goDocs: '/docs', goNotes: '/notes', goFiles: '/files', goTime: '/time', notifications: '/notifications' }[a]
+      navigate(`${base}${path}`)
+    }
     const onKey = (e: KeyboardEvent) => {
-      if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'j') {
+      if (e.defaultPrevented) return
+      if (e.key === '?' && !e.ctrlKey && !e.metaKey && !e.altKey && !typing(e)) {
         e.preventDefault()
-        setAiOpen(!aiOpen)
+        setSheet(true)
+        return
       }
+      const c = comboOf(e)
+      if (!c) return
+      const a = (Object.keys(keys) as KeyAction[]).find((k) => keys[k] === c)
+      if (!a) return
+      // В поле ввода — только Ctrl/⌘: ⌥ на Mac набирает символы.
+      if (typing(e) && !/Ctrl|Meta/.test(c)) return
+      e.preventDefault()
+      run(a)
     }
     window.addEventListener('keydown', onKey)
     return () => window.removeEventListener('keydown', onKey)
-  }, [aiOpen, setAiOpen])
+  }, [aiOpen, setAiOpen, keys, navigate, base, project])
   return (
     <>
       <div className="shell">
@@ -90,11 +116,13 @@ function Body() {
               <Icon name="spark" sm />
             </span>
             {t('ai.open')}
-            <kbd>Ctrl J</kbd>
+            <kbd>{showCombo(keys.assistant)}</kbd>
           </button>
         )}
       </div>
       {openTaskId && <TaskPanel key={openTaskId} taskId={openTaskId} />}
+      {pal && <SearchPalette onClose={() => setPal(false)} onKeys={() => setSheet(true)} />}
+      {sheet && <KeysSheet onClose={() => setSheet(false)} />}
       {ho && <HandoffDialog key={ho.taskId + ho.action} />}
       {toast && (
         <div className="toast" role="status">
@@ -118,13 +146,24 @@ function Failed({ onRetry }: { onRetry: () => void }) {
 /** Без компании в адресе — последняя открытая или первая из списка. */
 export function StartRedirect() {
   const companies = useCompanies()
+  // Без компаний — сначала проверить приглашения: вошедший не по ссылке из
+  // письма иначе попадал сразу в «Создать компанию» и не знал, что его ждут.
+  const none = companies.data?.length === 0
+  const all = useQuery({
+    queryKey: ['v2', 'auth', 'companies'],
+    queryFn: () => api<{ companies: Company[]; invites: CompanyInvite[] }>('/api/v1/companies'),
+    enabled: none,
+  })
   if (!getSessionToken()) return <Navigate to="/login" replace />
   if (!companies.data) return null
   const last = localStorage.getItem('chatick_v2_company')
   // Иначе — та, где больше всего проектов: обычно это и есть рабочая компания.
   const pick = companies.data.find((c) => c.id === last) ?? [...companies.data].sort((a, b) => b.projectsCount - a.projectsCount)[0]
   // Компаний нет — завести свою (или принять приглашение со списка компаний).
-  if (!pick) return <Navigate to="/new-company" replace />
+  if (!pick) {
+    if (!all.data) return null
+    return <Navigate to={all.data.invites.length ? '/companies' : '/new-company'} replace />
+  }
   return <Navigate to={`/c/${pick.id}`} replace />
 }
 

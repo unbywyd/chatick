@@ -13,6 +13,7 @@ import { ShareItem } from '../ShareTask'
 import { firstName, shortProject } from '../util'
 import { byDay, dayLabel, errText, fmtSize, Modal, ProjectCombo, uploadTo, useDebounced, useLibProjects, usePerProject } from './shared'
 import { kindOf, srcOf, Viewer, type FileItem, type Kind, type Row, type Src } from './FileViewer'
+import { isMac } from '../keys'
 
 type Page = { items: FileItem[]; hasMore: boolean; storage?: { used: number; limit: number; custom?: boolean } }
 const SRCS: ('all' | Src)[] = ['all', 'chat', 'task', 'up']
@@ -212,7 +213,7 @@ export function FilesView() {
       if (files.length) start(files)
       else flash(t('library.files.pasteEmpty'))
     } catch {
-      flash(t('library.files.pasteHint'))
+      flash(t('library.files.pasteHint', { key: isMac ? '⌘V' : 'Ctrl+V' }))
     }
   }
 

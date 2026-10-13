@@ -11,6 +11,7 @@ import { useUi } from '../ui'
 import { ProjectLogo } from '../ProjectLogo'
 import { Icon } from '../Icon'
 import { TaskDiscussion, TaskHistory } from '../task/parts'
+import { TaskPeers, useTaskPresence } from '../task/presence'
 import { useBallActions } from './actions'
 import { dueDiff, dueText, fmtHm, heatOf, letterOf, personColor, projectColor, waitText } from '../util'
 
@@ -45,6 +46,7 @@ export function TaskPanel({ taskId }: { taskId: string }) {
 
   const task = full.data?.task
   const [sharing, setSharing] = useState(false)
+  const peers = useTaskPresence(taskId, false, me.data?.id)
   return (
     <>
       {sharing && task && <ShareTask taskId={task.id} title={`${task.number} · ${task.title}`} canPublish={Boolean(full.data?.can.edit)} onClose={() => setSharing(false)} />}
@@ -59,6 +61,7 @@ export function TaskPanel({ taskId }: { taskId: string }) {
           )}
           <span className="tid">{task?.number}</span>
           <span style={{ flex: 1 }} />
+          <TaskPeers users={peers} />
           {task && (
             <button className="ib" aria-label={t('act.share')} title={t('act.share')} onClick={() => setSharing(true)}>
               <Icon name="share" />
