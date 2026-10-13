@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { useTranslation } from 'react-i18next'
-import { useMutation, useQueries, useQueryClient } from '@tanstack/react-query'
+import { useMutation, useQueries, useQuery, useQueryClient } from '@tanstack/react-query'
+import { useLocation, useNavigate, useParams } from 'react-router-dom'
 import { api, ensureMediaToken, getMediaToken, inlineImageUrl } from '@/lib/api'
 import { inProject, type CompanyProject } from '../data'
 import { useUi } from '../ui'
@@ -52,8 +53,13 @@ const extOf = (name: string) => (name.match(/\.([a-z0-9]+)$/i)?.[1] ?? '').toUpp
  */
 export function FilesView() {
   const { t, i18n } = useTranslation('v2')
-  const { companyId, project, setProject, flash } = useUi()
+  const { companyId, base, project, setProject, flash } = useUi()
   const qc = useQueryClient()
+  const navigate = useNavigate()
+  const { search } = useLocation()
+  // Адрес файла: /files/f/<проект>/<id> — им делятся, и открываться он должен
+  // сразу файлом, а не списком, где его ещё искать.
+  const deep = /^f\/([^/]+)\/([^/]+)/.exec(useParams()['*'] ?? '')
   const { list: projects } = useLibProjects(companyId)
   const [q, setQ] = useState('')
   const dq = useDebounced(q.trim())
@@ -91,6 +97,33 @@ export function FilesView() {
     const extra = selected ? more.flatMap((r) => mk(selected, r.data?.items ?? [])) : []
     return [...base, ...extra].sort((a, b) => b.createdAt.localeCompare(a.createdAt))
   }, [per.parts, more, selected])
+  // Открыт по адресу: берём из списка, а если файла нет в первой порции —
+  // спрашиваем сервер о нём одном.
+  const deepId = deep?.[2] ?? null
+  const deepProject = deep?.[1] ?? null
+  const single = useQuery({
+    queryKey: ['v2', 'lib', 'file', deepId],
+    queryFn: () => api<FileItem & { deleted?: boolean }>(`/api/v1/files/${deepId}`, inProject(deepProject!)),
+    enabled: Boolean(deepId && deepProject && !all.some((f) => f.id === deepId)),
+    retry: false,
+  })
+  useEffect(() => {
+    if (!deepId) return setOpen(null)
+    const inList = all.find((f) => f.id === deepId)
+    const p = projects.find((x) => x.id === deepProject)
+    if (inList) setOpen(inList)
+    else if (single.data && p) setOpen({ ...single.data, taskNumber: single.data.taskNumber ?? null, project: p, kind: kindOf(single.data), src: srcOf(single.data) })
+    // all меняется при каждой подгрузке — открытый файл от этого не меняется
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [deepId, deepProject, single.data, projects.length, all.length])
+  const openFile = (f: Row) => {
+    setOpen(f)
+    navigate(`${base}/files/f/${f.project.id}/${f.id}${search}`)
+  }
+  const closeFile = () => {
+    setOpen(null)
+    if (deepId) navigate(`${base}/files${search}`)
+  }
   const lastPage = selected ? (pages === 1 ? per.parts.find((x) => x.project.id === selected.id)?.data : more[more.length - 1]?.data) : null
   const hasMore = Boolean(lastPage?.hasMore)
 
@@ -248,7 +281,7 @@ export function FilesView() {
             </div>
             <div className="fgrid">
               {d.items.map((f) => (
-                <Tile key={f.id} f={f} onOpen={() => setOpen(f)} />
+                <Tile key={f.id} f={f} onOpen={() => openFile(f)} />
               ))}
             </div>
           </div>
@@ -279,7 +312,7 @@ export function FilesView() {
           }}
         />
       )}
-      {open && <Viewer f={open} onClose={() => setOpen(null)} />}
+      {open && <Viewer f={open} onClose={closeFile} />}
     </div>
   )
 }
@@ -419,7 +452,7 @@ function Viewer({ f, onClose }: { f: Row; onClose: () => void }) {
   return (
     <>
     {sharing && (
-      <ShareItem type="file" id={f.id} title={f.name} path={`/p/${f.project.id}/files/${f.id}`} canPublish={boss} onClose={() => setSharing(false)} />
+      <ShareItem type="file" id={f.id} title={f.name} path={`/files/f/${f.project.id}/${f.id}`} canPublish={boss} onClose={() => setSharing(false)} />
     )}
     <div className="lib-view" role="dialog" aria-modal="true" aria-label={f.name} onMouseDown={(e) => e.target === e.currentTarget && onClose()}>
       <div className="lib-view-bar">

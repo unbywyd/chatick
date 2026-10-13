@@ -17,21 +17,23 @@ import { projectPath, projectUrl } from './links.js'
 const read = (p: string) => readFileSync(join(import.meta.dirname, p), 'utf8')
 
 describe('сборка адреса проекта', () => {
-  it('включает компанию', () => {
-    expect(projectPath('c1', 'p1')).toBe('/c/c1/p/p1')
-    expect(projectPath('c1', 'p1', '/tasks')).toBe('/c/c1/p/p1/tasks')
+  it('включает компанию — и ведёт в экраны v2', () => {
+    // Экраны проекта первой версии убраны: адрес собирается сразу в v2
+    // (lib/links.ts, v2Path; полный набор случаев — links-v2.test.ts).
+    expect(projectPath('c1', 'p1')).toBe('/c/c1?p=p1')
+    expect(projectPath('c1', 'p1', '/tasks/t1')).toBe('/c/c1/task/t1')
   })
 
   it('полный адрес — с хэшем: роутер во фронте хэшевый', () => {
-    expect(projectUrl('https://app.chatick.com', 'c1', 'p1')).toBe('https://app.chatick.com/#/c/c1/p/p1')
+    expect(projectUrl('https://app.chatick.com', 'c1', 'p1')).toBe('https://app.chatick.com/#/c/c1?p=p1')
   })
 
   it('не удваивает слэш, когда хвост уже с ним', () => {
     expect(projectPath('c1', 'p1', '/tasks')).toBe(projectPath('c1', 'p1', 'tasks'))
   })
 
-  it('query-хвост цепляется без слэша', () => {
-    expect(projectPath('c1', 'p1', '?msg=m1')).toBe('/c/c1/p/p1?msg=m1')
+  it('query-хвост понимается без слэша', () => {
+    expect(projectPath('c1', 'p1', '?task=t1')).toBe('/c/c1/task/t1')
   })
 })
 

@@ -320,3 +320,25 @@ html:has(.app .panel),html:has(.app .panel) body{overflow:hidden}
 .app .res-who-p .av{width:22px;height:22px;border-radius:50%;display:grid;place-items:center;color:#fff;font-size:11px;font-weight:700}
 .app .res-who-p.on{background:var(--sheet);color:var(--ink);border-color:var(--ink)}
 .app .res-who-p:disabled{opacity:.45;cursor:not-allowed}
+
+/* Карточка версии: стадия, ссылки, задачи, лента стадий. */
+.app .modal.rc{width:min(620px,calc(100vw - 32px));display:flex;flex-direction:column;gap:16px}
+.app .rc h3 b{font-weight:700;margin-inline-start:6px}
+.app .rc-stage{display:flex;align-items:center;gap:12px;flex-wrap:wrap}
+.app .rc-st{font-weight:600;font-size:14px;padding:5px 12px;border-radius:9px;background:var(--rev-bg);color:var(--rev)}
+.app .rc-st.live{background:var(--ok-bg);color:var(--ok)}
+.app .rc-links{display:flex;gap:8px;flex-wrap:wrap}
+.app .rc-links .btn{display:inline-flex;align-items:center;gap:6px;text-decoration:none}
+.app .rc-tasks{display:flex;flex-direction:column;gap:6px}
+.app .rc-tasks .tchip{display:flex;gap:8px;align-items:center;justify-content:flex-start;max-width:100%;text-align:start}
+.app .rc-tasks .tchip span{overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-weight:400;color:var(--ink2)}
+.app .rc-notes{margin:0;white-space:pre-wrap;color:var(--ink2);max-height:160px;overflow:auto}
+.app .rc-mute{color:var(--ink3);font-size:13px}
+.app .rc-tl{list-style:none;margin:6px 0 0;padding:0;display:flex;flex-direction:column;gap:12px;max-height:320px;overflow:auto}
+.app .rc-tl li{display:grid;grid-template-columns:26px minmax(0,1fr);gap:10px;align-items:start}
+.app .rc-tl .av{width:26px;height:26px;border-radius:50%;display:grid;place-items:center;color:#fff;font-size:12px;font-weight:700}
+.app .rc-tl-h{display:flex;flex-wrap:wrap;gap:4px 10px;align-items:baseline;font-size:13.5px}
+.app .rc-tl-h time{color:var(--ink3);font-size:12px}
+.app .rc-tl p{margin:3px 0 0;color:var(--ink2);font-size:13.5px;white-space:pre-wrap}
+.app .vopen{font:inherit;font-weight:700;color:var(--ink);padding:0;background:none;border:0;cursor:pointer;text-align:start}
+.app .vopen:hover{text-decoration:underline}

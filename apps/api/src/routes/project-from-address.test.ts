@@ -42,10 +42,12 @@ describe('requireProject принимает оба пути', () => {
     expect(auth).toContain("c.set('auth', { typ: 'project', sub: payload.sub, email: payload.email, projectId, role: membership.role })")
   })
 
-  it('без токена правила чата держит сам requireProject (428)', () => {
+  it('без токена правила чата держит сам requireProject (428) — на ручках чата', () => {
     // Проектный токен выдавался только после согласия. Без токена эту дверь
     // держать больше некому — саботаж: убрать проверку, и правила обходятся.
-    expect(auth).toContain('if (!membership.rulesAcceptedAt) {')
+    // Дверь стоит только на чате: веб v2 (чата там нет) новому участнику
+    // иначе отвечал 428 на всё; чат — в мобильном приложении.
+    expect(auth).toContain("if (!membership.rulesAcceptedAt && c.req.path.startsWith('/api/v1/messages')) {")
     expect(auth).toMatch(/needRulesAccept: true[\s\S]{0,200}428/)
   })
 

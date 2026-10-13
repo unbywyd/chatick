@@ -3,6 +3,7 @@ import { eq } from 'drizzle-orm'
 import { db } from '../db/client.js'
 import { companies, credentials, files, notes, projects, tasks, releases } from '../db/schema.js'
 import { parseShortPath, resolveShortCode } from '../lib/short-links.js'
+import { v2Path } from '../lib/links.js'
 
 /**
  * Превью ссылки на проект для мессенджеров (Open Graph).
@@ -73,6 +74,40 @@ linkPreviewRoute.get('/c/:companyId/p/:projectId', render)
 linkPreviewRoute.get('/c/:companyId/p/:projectId/*', render)
 
 /**
+ * Длинные адреса v2: задача, документ, файл, ресурс, версия — с названием
+ * сущности в превью, как у короткой ссылки. Раньше превью знало только адреса
+ * первой версии, и ссылка из v2 уходила в мессенджер безымянной.
+ */
+linkPreviewRoute.get('/c/:companyId/task/:taskId', async (c) => {
+  const task = await db.query.tasks.findFirst({ where: eq(tasks.id, c.req.param('taskId')) })
+  const project = task ? await db.query.projects.findFirst({ where: eq(projects.id, task.projectId) }) : null
+  return renderEntity(c, project ?? null, task ? `${task.number} ${task.title}` : null)
+})
+for (const [seg, type] of [
+  ['docs/d', 'document'],
+  ['files/f', 'file'],
+  ['resources/r', 'resource'],
+  ['versions/v', 'release'],
+] as const) {
+  linkPreviewRoute.get(`/c/:companyId/${seg}/:projectId/:id`, async (c) => {
+    const project = await db.query.projects.findFirst({ where: eq(projects.id, c.req.param('projectId')) })
+    return renderEntity(c, project ?? null, await titleOf(type, c.req.param('id')))
+  })
+}
+
+async function renderEntity(c: Context, project: typeof projects.$inferSelect | null, title: string | null) {
+  const appPath = c.req.path.replace(/^\/link/, '')
+  if (!project) return renderCard(c, null, null, `${APP()}/#${appPath}`)
+  const company = await db.query.companies.findFirst({ where: eq(companies.id, project.companyId) })
+  const image = project.logoKey
+    ? `${API()}/api/v1/projects/${project.id}/logo`
+    : company?.logoKey
+      ? `${API()}/api/v1/companies/${company.id}/logo`
+      : `${APP()}/logo.png`
+  return renderCard(c, project, title, `${APP()}/#${appPath}`, undefined, image)
+}
+
+/**
  * Короткая ссылка: /t-AbC12.
  *
  * Отдаёт то же превью, что и длинная, — иначе ради компактности пришлось бы
@@ -93,7 +128,8 @@ linkPreviewRoute.get('/:short{[a-z]-[2-9a-zA-Z]{4,12}}', async (c) => {
   if (!project) return renderCard(c, null, null, `${APP()}/`)
 
   const title = await titleOf(link.entityType, link.entityId)
-  const path = `/c/${project.companyId}/p/${project.id}/${TAB_OF[link.entityType] ?? 'tasks'}/${link.entityId}`
+  // Адрес — сразу в v2 (то же правило, что у уведомлений и писем).
+  const path = v2Path(project.companyId, project.id, `/${TAB_OF[link.entityType] ?? 'tasks'}/${link.entityId}`)
   // Та же ступенька, что у длинной ссылки: логотип проекта, иначе компании,
   // иначе значок приложения.
   const company = await db.query.companies.findFirst({ where: eq(companies.id, project.companyId) })
@@ -189,9 +225,10 @@ async function render(c: Context) {
       ? `${API()}/api/v1/companies/${company.id}/logo`
       : `${APP()}/logo.png`
 
-  // Куда идти человеку: тот самый хэшевый адрес. Мессенджер показывает
-  // превью, а по нажатию открывается приложение на нужном месте.
-  const target = `${APP()}/#${appPath}`
+  // Куда идти человеку: тот же экран, но уже в адресах v2. Мессенджер
+  // показывает превью, а по нажатию открывается приложение на нужном месте.
+  const tail = appPath.split('/').slice(5).join('/')
+  const target = project ? `${APP()}/#${v2Path(project.companyId, project.id, tail ? `/${tail}` : '')}` : `${APP()}/#${appPath}`
 
   return renderCard(c, project ?? null, null, target, subtitle, image)
 }

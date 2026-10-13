@@ -1,6 +1,6 @@
 import { StrictMode, useEffect, useState } from 'react'
 import { createRoot } from 'react-dom/client'
-import { HashRouter, Routes, Route, Navigate, useParams, useNavigate } from 'react-router-dom'
+import { HashRouter, Routes, Route, Navigate, useLocation, useParams, useNavigate } from 'react-router-dom'
 import { useTranslation } from 'react-i18next'
 import { Compass } from 'lucide-react'
 import { QueryClient, QueryClientProvider, useQuery } from '@tanstack/react-query'
@@ -16,29 +16,11 @@ import { UpdateBanner } from './components/UpdateBanner'
 import { NotifyPermissionPrompt } from './components/NotifyPermissionPrompt'
 import { ThemeProvider } from './providers/theme'
 import { ConfirmProvider } from './components/ui/confirm'
-import { ProjectLayout, useProjectCtx } from './screens/ProjectScreen'
 import { EnterScreen } from './screens/EnterScreen'
 import { PublicShareScreen } from './screens/PublicShareScreen'
-import { StartScreen } from './screens/StartScreen'
-import { InboxScreen } from './screens/InboxScreen'
-import { NotifySettingsScreen } from './screens/NotifySettingsScreen'
-import { ProfileScreen } from './screens/ProfileScreen'
-import { TasksTab } from './components/tabs/TasksTab'
-import { FilesTab } from './components/tabs/FilesTab'
-import { ResourcesTab } from './components/tabs/ResourcesTab'
-import { ProjectTeamTab } from './components/tabs/ProjectTeamTab'
-import { NotificationsTab } from './components/tabs/NotificationsTab'
-import { AiUsageTab } from './components/tabs/AiUsageTab'
-import { HistoryTab } from './components/tabs/HistoryTab'
-import { WorkLogTab } from './components/tabs/WorkLogTab'
-import { DocumentsTab } from './components/tabs/DocumentsTab'
-import { ReleasesTab } from './components/tabs/ReleasesTab'
-import { ReleasePage as ReleaseDetailsTab } from './components/tabs/ReleasePage'
-import { NotesTab } from './components/tabs/NotesTab'
-import { TimeTab } from './components/tabs/TimeTab'
-import { ShortcutsTab } from './components/tabs/ShortcutsTab'
 import { ImageViewer } from './components/ImageViewer'
 import { Shell, StartRedirect } from './v2/Shell'
+import { legacyTarget } from './v2/legacy'
 import { TasksView } from './v2/tasks/TasksView'
 import { TaskPage, TaskNew } from './v2/task/TaskPage'
 import { DocsView, NotesView } from './v2/docs/DocsView'
@@ -165,7 +147,23 @@ function LegacyProjectRedirect() {
   })
   if (isError) return <Navigate to="/start" replace />
   if (!data) return null
-  return <Navigate to={`/c/${data.companyId}/p/${id}`} replace />
+  return <Navigate to={`/c/${data.companyId}?p=${encodeURIComponent(id ?? '')}`} replace />
+}
+
+/**
+ * Старый адрес первой версии — в адрес v2. Чем переводить — v2/legacy.ts
+ * (там же сказано, почему такие ссылки нельзя просто выбросить).
+ */
+function LegacyRedirect() {
+  const { pathname, search } = useLocation()
+  let last: string | null = null
+  try {
+    last = localStorage.getItem('chatick_v2_company')
+  } catch {
+    last = null
+  }
+  const to = legacyTarget(pathname, search, last)
+  return to ? <Navigate to={to} replace /> : <NotFoundScreen />
 }
 
 /**
@@ -201,136 +199,7 @@ function NotFoundScreen() {
 }
 
 // Обёртки: тянут контекст layout'а (Outlet) и параметры URL
-function TasksPage() {
-  const { meId } = useProjectCtx()
-  const { id } = useParams()
-  return id ? <TasksTab projectId={id} meId={meId} /> : null
-}
-function FilesPage() {
-  const { project } = useProjectCtx()
-  const { id } = useParams()
-  return id ? <FilesTab projectId={id} isAdmin={project?.myRole === 'owner' || project?.myRole === 'admin'} /> : null
-}
-function ResourcesPage() {
-  const { project } = useProjectCtx()
-  const { id } = useParams()
-  return id ? <ResourcesTab projectId={id} isAdmin={project?.myRole === 'owner' || project?.myRole === 'admin'} /> : null
-}
-function TeamPage() {
-  const { project } = useProjectCtx()
-  const { id, companyId } = useParams()
 
-  // Админ компании распоряжается любым её проектом, даже не состоя в нём —
-  // так решает и сервер. Без этого он видел список без единой кнопки, имея
-  // при этом все права.
-  const companies = useQuery({
-    queryKey: ['companies'],
-    queryFn: () => api<{ companies: { id: string; myRole: string }[] }>('/api/v1/companies'),
-  })
-  const isCompanyAdmin = companies.data?.companies.find((c) => c.id === companyId)?.myRole === 'admin'
-
-  return id ? (
-    <ProjectTeamTab
-      projectId={id}
-      companyId={project?.companyId}
-      // Внешний состав НЕ отнимает право менять роли: добавление и удаление
-      // людей гасит canChangeMembers внутри компонента, а роли, права и
-      // должность — наша часть, и сервер их не запирает (см.
-      // members-locked.test: «иначе некому назначить админа»).
-      //
-      // Гасили здесь целиком — и админ видел свою же команду под замком, с
-      // текстом «роли по-прежнему меняются здесь» прямо над списком.
-      canEdit={project?.myRole === 'owner' || project?.myRole === 'admin' || isCompanyAdmin}
-      // Звать людей со стороны — решение уровня компании: приглашение
-      // заводит человека и в неё, а не только в проект. Сервер это и так
-      // требует; здесь лишь не показываем кнопку тому, кто упрётся в отказ.
-      canInvite={isCompanyAdmin}
-      managedExternally={Boolean(project?.membersViaApiOnly)}
-    />
-  ) : null
-}
-function NotificationsPage() {
-  const { project } = useProjectCtx()
-  const { id, companyId } = useParams()
-  return id ? (
-    <NotificationsTab
-      projectId={id}
-      isAdmin={project?.myRole === 'owner' || project?.myRole === 'admin'}
-      projectPath={companyId ? `/c/${companyId}/p/${id}/notifications` : undefined}
-    />
-  ) : null
-}
-function AiPage() {
-  const { project } = useProjectCtx()
-  const { id, companyId } = useParams()
-
-  // Начальство проекта либо начальство компании — та же тройка, что на сервере
-  // и в команде проекта. Админ компании менял общий ключ компании, а ключ её
-  // же отдельного проекта не мог: видел форму без кнопки.
-  const companies = useQuery({
-    queryKey: ['companies'],
-    queryFn: () => api<{ companies: { id: string; myRole: string }[] }>('/api/v1/companies'),
-  })
-  const companyRole = companies.data?.companies.find((c) => c.id === companyId)?.myRole
-  // admin и manager — ровно то, что пропускает canCreateProjects на сервере.
-  // Разойдись списки, человек получил бы кнопку, дающую отказ.
-  const isCompanyBoss = companyRole === 'admin' || companyRole === 'manager'
-
-  return id ? (
-    <AiUsageTab
-      projectId={id}
-      isAdmin={project?.myRole === 'owner' || project?.myRole === 'admin' || isCompanyBoss}
-    />
-  ) : null
-}
-function TimePage() {
-  const { id } = useParams()
-  return id ? <TimeTab projectId={id} /> : null
-}
-
-function NotesPage() {
-  const { id } = useParams()
-  return id ? <NotesTab projectId={id} /> : null
-}
-
-function ReleaseDetailsPage() {
-  const { project } = useProjectCtx()
-  const { id } = useParams()
-  const canManage = project?.myRole === 'owner' || project?.myRole === 'admin'
-  return id ? <ReleaseDetailsTab projectId={id} canManage={canManage} /> : null
-}
-
-function ReleasesPage() {
-  const { project } = useProjectCtx()
-  const { id } = useParams()
-  // Заводить версии и двигать стадии — дело начальства проекта; смотреть может
-  // любой участник, за этим на вкладку и приходят.
-  const canManage = project?.myRole === 'owner' || project?.myRole === 'admin'
-  return id ? <ReleasesTab projectId={id} canManage={canManage} /> : null
-}
-
-function DocumentsPage() {
-  const { meId } = useProjectCtx()
-  const { id } = useParams()
-  return id ? <DocumentsTab projectId={id} meId={meId} /> : null
-}
-/**
- * Журнал работы — страница проекта, но НЕ вкладка.
- *
- * Тот же приём, что у трекинга времени: в ряду вкладок ему не место — туда
- * заходят не каждый день, а ряд и так длинный. Попадают из меню на задачах.
- */
-function WorkLogPage() {
-  const { meId } = useProjectCtx()
-  const { id } = useParams()
-  return id ? <WorkLogTab projectId={id} meId={meId} /> : null
-}
-
-function HistoryPage() {
-  const { project } = useProjectCtx()
-  const { id } = useParams()
-  return id ? <HistoryTab projectId={id} isAdmin={project?.myRole === 'owner' || project?.myRole === 'admin'} /> : null
-}
 
 createRoot(document.getElementById('root')!).render(
   <StrictMode>
@@ -363,13 +232,13 @@ createRoot(document.getElementById('root')!).render(
               {/* Компания и её табы адресуемы: /start/:companyId/(projects|team|settings) */}
               {/* уведомления — глобальная страница: они приходят из всех
                   проектов сразу, и разбирают их тоже сразу все */}
-              <Route path="/inbox" element={<InboxScreen />} />
+              <Route path="/inbox" element={<LegacyRedirect />} />
               {/* системные уведомления — настройка программы, не проекта */}
-              <Route path="/settings/notifications" element={<NotifySettingsScreen />} />
-              <Route path="/settings/profile" element={<ProfileScreen />} />
+              <Route path="/settings/notifications" element={<LegacyRedirect />} />
+              <Route path="/settings/profile" element={<LegacyRedirect />} />
               {/* v2: один экран на компанию, проекты — фильтр сверху. */}
               <Route path="/start" element={<StartRedirect />} />
-              <Route path="/onboarding" element={<StartScreen />} />
+              <Route path="/onboarding" element={<LegacyRedirect />} />
               <Route path="/c/:companyId" element={<Shell />}>
                 <Route index element={<TasksView />} />
                 <Route path="task/new" element={<TaskNew />} />
@@ -377,16 +246,16 @@ createRoot(document.getElementById('root')!).render(
                 <Route path="docs/*" element={<DocsView />} />
                 <Route path="notes/*" element={<NotesView />} />
                 <Route path="time/*" element={<TimeView />} />
-                <Route path="resources" element={<ResourcesView />} />
-                <Route path="files" element={<FilesView />} />
-                <Route path="versions" element={<VersionsView />} />
+                <Route path="resources/*" element={<ResourcesView />} />
+                <Route path="files/*" element={<FilesView />} />
+                <Route path="versions/*" element={<VersionsView />} />
                 <Route path="history" element={<HistoryView />} />
                 <Route path="company/*" element={<CompanyView />} />
                 <Route path="settings/:tab?" element={<SettingsView />} />
                 <Route path="notifications" element={<NotificationsView />} />
               </Route>
-              <Route path="/start/:companyId" element={<StartScreen />} />
-              <Route path="/start/:companyId/:companyTab" element={<StartScreen />} />
+              <Route path="/start/:companyId" element={<LegacyRedirect />} />
+              <Route path="/start/:companyId/:companyTab" element={<LegacyRedirect />} />
               {/* Компания в адресе: контекст известен до загрузки проекта.
                   Пока он грузился, шапка подставляла первую компанию из
                   списка — человек видел чужое название над своим проектом. */}
@@ -396,41 +265,8 @@ createRoot(document.getElementById('root')!).render(
                   иначе человек снова получит белый экран. Узнаём компанию и
                   переводим на нынешний адрес. */}
               <Route path="/p/:id" element={<LegacyProjectRedirect />} />
-              <Route path="/c/:companyId/p/:id" element={<ProjectLayout />}>
-                {/* чат — такая же вкладка проекта, с собственным URL */}
-                <Route index element={<Navigate to="chat" replace />} />
-                {/* /chat — режим «только чат» для узкого экрана; на широком
-                    ProjectScreen сам переводит адрес на /tasks, чтобы вкладка
-                    и содержимое совпадали */}
-                <Route path="chat" element={<TasksPage />} />
-                {/* :taskId — прямая ссылка на задачу (drawer открыт по URL) */}
-                <Route path="tasks/:taskId?" element={<TasksPage />} />
-                {/* :fileId и далее — прямые ссылки на сущности: ими делятся
-                    в чате, и открываться они должны сразу нужной, а не
-                    списком, в котором надо ещё найти. */}
-                <Route path="files/:fileId?" element={<FilesPage />} />
-                <Route path="resources/:resourceId?" element={<ResourcesPage />} />
-                <Route path="team" element={<TeamPage />} />
-                <Route path="notifications" element={<NotificationsPage />} />
-                {/* :aiTab — таб страницы ИИ в адресе: ссылкой делятся, и
-                    открываться она должна сразу нужным табом */}
-                <Route path="ai/:aiTab?" element={<AiPage />} />
-                <Route path="history" element={<HistoryPage />} />
-                {/* журнал работы — страница проекта, но НЕ вкладка: попадают
-                    из меню на странице задач */}
-                <Route path="worklog" element={<WorkLogPage />} />
-                <Route path="documents/:documentId?" element={<DocumentsPage />} />
-                <Route path="notes/:noteId?" element={<NotesPage />} />
-                {/* вкладка есть, только если функция включена в проекте */}
-                <Route path="releases" element={<ReleasesPage />} />
-                {/* Отдельная страница версии: у ленты стадий должен быть свой
-                    адрес — иначе ею нельзя поделиться. */}
-                <Route path="releases/:releaseId" element={<ReleaseDetailsPage />} />
-                {/* трекинг — страница проекта, но НЕ вкладка: попадают из сайдбара */}
-                <Route path="time" element={<TimePage />} />
-                {/* горячие клавиши — страница настройки, из меню профиля */}
-                <Route path="shortcuts" element={<ShortcutsTab />} />
-              </Route>
+              {/* Экраны проекта первой версии убраны: старые адреса — в v2 (v2/legacy.ts). */}
+              <Route path="/c/:companyId/p/:id/*" element={<LegacyRedirect />} />
               {/* Всё остальное. Без этого неизвестный адрес давал пустой
                   экран: роутер не находит маршрут и не рисует ничего, а
                   человек видит белую страницу вместо объяснения. */}

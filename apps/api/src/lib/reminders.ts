@@ -313,7 +313,7 @@ async function sweepRunningTimers() {
           actorName: user?.name || '',
           // ключ включает номер напоминания, иначе дедуп проглотит повторы
           dedupeKey: `timer_running:${e.id}:${cfg.idleAction === 'stop' ? 'auto' : due}`,
-          link: e.projectId ? projectPath(companyId, e.projectId, '/time') : `/start/${companyId}/time`,
+          link: `/c/${companyId}/time`,
           preview: e.description || '',
           vars: { hours: String(Math.floor(hours)) },
           entityType: 'time',

@@ -99,7 +99,7 @@ export async function announce(input: {
     title: input.title.slice(0, 300),
     body: preview,
     // Ссылка ведёт на инбокс: открывать нечего, объявление и есть текст.
-    link: '/inbox',
+    link: `/c/${input.companyId}/notifications`,
     entityType: 'announcement',
     entityId: null,
   }))
@@ -126,7 +126,7 @@ export async function announce(input: {
             // Говорим прямо, что отписаться нельзя: иначе человек будет
             // искать настройку, которой нет.
             'Объявления компании приходят всем и не отключаются.',
-            `${env.APP_URL}/#/inbox`,
+            `${env.APP_URL}/#/c/${input.companyId}/notifications`,
           ].join('\n'),
           companyId: input.companyId,
         })

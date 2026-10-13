@@ -186,7 +186,7 @@ describe('GET /projects/:externalId/status', () => {
     // должен ничего знать про наши id.
     expect(body.memberExternalIds).toEqual(['atlas-448'])
     // Компания в адресе: без неё приложение подставляло первую из списка.
-    expect(body.url).toBe('https://app.chatick.com/#/c/c1/p/p-internal')
+    expect(body.url).toBe('https://app.chatick.com/#/c/c1?p=p-internal')
   })
 
   // Ключ компании А не должен видеть проекты компании Б — даже зная externalId,

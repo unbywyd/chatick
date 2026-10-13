@@ -1,5 +1,6 @@
 import { useState } from 'react'
 import { useTranslation } from 'react-i18next'
+import { useLocation, useNavigate, useParams } from 'react-router-dom'
 import { useUi } from '../ui'
 import { Icon } from '../Icon'
 import { ProjectLogo } from '../ProjectLogo'
@@ -10,6 +11,7 @@ import { platLabel, stageLabel } from './labels'
 import { ConnectModal } from './ConnectModal'
 import { BuildModal } from './BuildModal'
 import { StageModal } from './StageModal'
+import { ReleaseCard } from './ReleaseCard'
 import '../i18n/versions'
 
 type Plat = 'all' | 'ios' | 'android'
@@ -29,9 +31,14 @@ const SF: Record<StageF, (r: Row) => boolean> = {
  * «Версии» в проекте нет. Проекты сверху — фильтр, как во всех списках.
  */
 export function VersionsView() {
+  // Адрес версии: /versions/v/<проект>/<id> — открывает её карточку.
+  const deep = /^v\/([^/]+)\/([^/]+)/.exec(useParams()['*'] ?? '')
+  const navigate = useNavigate()
+  const { search } = useLocation()
   const { t } = useTranslation('v2')
-  const { companyId, project, setProject } = useUi()
+  const { companyId, base: appBase, project, setProject } = useUi()
   const data = useVersionsData(companyId)
+  const deepRow = deep ? (data.rows.find((r) => r.id === deep[2]) ?? null) : null
   const [plat, setPlat] = useState<Plat>('all')
   const [stage, setStage] = useState<StageF | null>(null)
   const [modal, setModal] = useState<Modal>(null)
@@ -111,7 +118,13 @@ export function VersionsView() {
                 <span className="n">{g.rows.length}</span>
               </div>
               {g.rows.map((r, i) => (
-                <VRow key={r.id} r={r} first={i === 0} onStage={() => setModal({ kind: 'stage', row: r })} />
+                <VRow
+                  key={r.id}
+                  r={r}
+                  first={i === 0}
+                  onStage={() => setModal({ kind: 'stage', row: r })}
+                  onOpen={() => navigate(`${appBase}/versions/v/${r.project.id}/${r.id}${search}`)}
+                />
               ))}
             </div>
           )
@@ -137,11 +150,12 @@ export function VersionsView() {
         />
       )}
       {modal?.kind === 'stage' && <StageModal row={modal.row} buildTypes={data.buildTypes} onClose={() => setModal(null)} />}
+      {deepRow && <ReleaseCard row={deepRow} buildTypes={data.buildTypes} onClose={() => navigate(`${appBase}/versions${search}`)} />}
     </div>
   )
 }
 
-function VRow({ r, first, onStage }: { r: Row; first: boolean; onStage: () => void }) {
+function VRow({ r, first, onStage, onOpen }: { r: Row; first: boolean; onStage: () => void; onOpen: () => void }) {
   const { t, i18n } = useTranslation('v2')
   const { openTask } = useUi()
   const label = r.step === 0 ? t('versions.st.requested') : stageLabel(t, r.buildType, r.status, r.statusLabel)
@@ -156,7 +170,9 @@ function VRow({ r, first, onStage }: { r: Row; first: boolean; onStage: () => vo
     <div className={'vrow' + (first ? ' first' : '')}>
       <span className="plat">{platLabel(r)}</span>
       <div className="vv" style={{ minWidth: 0 }}>
-        <b dir="ltr">{r.version}</b>
+        <button className="vopen" dir="ltr" onClick={onOpen} title={t('versions.card.open')}>
+          {r.version}
+        </button>
         <span className="bidi" title={r.notes ?? undefined}>
           {note}
         </span>

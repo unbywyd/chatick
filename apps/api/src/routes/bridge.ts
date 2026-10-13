@@ -2361,7 +2361,7 @@ bridgeRoute.get('/open', async (c) => {
     return c.json(
       {
         error:
-          'Could not read that as a task. Pass a task link (https://chatick.com/t-abc12 or .../p/<project>/tasks/<id>) or a number like TASK-81.',
+          'Could not read that as a task. Pass a task link (https://chatick.com/t-abc12, .../#/c/<company>/task/<id> or .../p/<project>/tasks/<id>) or a number like TASK-81.',
       },
       400,
     )
@@ -2379,6 +2379,12 @@ bridgeRoute.get('/open', async (c) => {
   } else if (ref.kind === 'long') {
     projectId = ref.projectId
     key = ref.taskId
+  } else if (ref.kind === 'id') {
+    // Ссылка v2: проект берём у самой задачи; членство проверяется ниже.
+    const t = await db.query.tasks.findFirst({ where: and(eq(tasks.id, ref.taskId), isNull(tasks.deletedAt)) })
+    if (!t) return c.json({ error: 'Task not found' }, 404)
+    projectId = t.projectId
+    key = t.id
   } else {
     const scope = await resolveProject(c as never)
     if ('error' in scope) return c.json({ error: scope.error }, scope.status)

@@ -16,35 +16,13 @@ import { join } from 'node:path'
  * чем сервер, и противоречил собственной подписи.
  */
 
-const main = readFileSync(join(import.meta.dirname, '../../../app/src/main.tsx'), 'utf8')
 const tab = readFileSync(
   join(import.meta.dirname, '../../../app/src/components/tabs/ProjectTeamTab.tsx'),
   'utf8',
 )
 
-/** Значение пропса canEdit в разметке TeamPage. */
-const canEditProp = (() => {
-  const at = main.indexOf('<ProjectTeamTab')
-  const block = main.slice(at, main.indexOf('/>', at))
-  const m = block.match(/canEdit=\{([\s\S]*?)\}\s*\n/)
-  return m ? m[1] : ''
-})()
-
-describe('роли правятся и при внешнем составе', () => {
-  it('canEdit НЕ зависит от membersViaApiOnly', () => {
-    // Саботаж: вернуть `&& !project?.membersViaApiOnly` — админ снова
-    // потеряет кнопки ролей на проектах Atlas.
-    expect(canEditProp, 'canEdit не найден').toBeTruthy()
-    expect(canEditProp).not.toMatch(/membersViaApiOnly/)
-  })
-
-  it('canEdit по-прежнему требует прав', () => {
-    // Убрав зависимость от внешнего состава, нельзя случайно открыть всем.
-    expect(canEditProp).toMatch(/myRole === 'owner'/)
-    expect(canEditProp).toMatch(/myRole === 'admin'/)
-    expect(canEditProp).toMatch(/isCompanyAdmin/)
-  })
-})
+// Обёртка TeamPage в main.tsx (canEdit без membersViaApiOnly) убрана вместе с
+// экранами проекта первой версии; команда в v2 — CompanyView.
 
 describe('состав при этом остаётся закрытым', () => {
   it('добавление и удаление гасит canChangeMembers', () => {

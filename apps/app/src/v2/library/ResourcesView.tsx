@@ -1,6 +1,7 @@
 import { useMemo, useRef, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
+import { useLocation, useNavigate, useParams } from 'react-router-dom'
 import { api, API_URL, ApiError, getSessionToken } from '@/lib/api'
 import { RichEditor } from '@/components/ui/rich-editor'
 import { inProject, useMe, type CompanyProject } from '../data'
@@ -24,7 +25,8 @@ type Res = {
   createdAt: string
   creator: { id: string; name: string } | null
 }
-type Row = Res & { project: CompanyProject; kind: Kind; text: string }
+// description в строке — уже текст для превью; descHtml — исходник для правки.
+type Row = Res & { project: CompanyProject; kind: Kind; text: string; descHtml: string }
 type Detail = { id: string; canSeeSecrets: boolean; secretCount: number; secrets: { id: string; label: string }[]; authorId: string | null; viewers: string[] }
 type Member = { user: { id: string; name: string; avatarUrl: string | null }; permissions?: Record<string, boolean> }
 type LockedFile = { id: string; name: string; mime: string; size: number }
@@ -128,8 +130,12 @@ const withScheme = (u: string) => (/^[a-z][a-z0-9+.-]*:/i.test(u) ? u : `https:/
  */
 export function ResourcesView() {
   const { t } = useTranslation('v2')
-  const { companyId, project, setProject } = useUi()
+  const { companyId, base, project, setProject } = useUi()
   const copy = useCopy()
+  const navigate = useNavigate()
+  const { search } = useLocation()
+  // Адрес ресурса: /resources/r/<проект>/<id> — открывается сразу окном ресурса.
+  const deep = /^r\/([^/]+)\/([^/]+)/.exec(useParams()['*'] ?? '')
   const { list: projects } = useLibProjects(companyId)
   const per = usePerProject<Res[]>('res', projects, '/api/v1/resources')
   const [q, setQ] = useState('')
@@ -143,11 +149,39 @@ export function ResourcesView() {
       per.parts.flatMap(({ project: p, data }) =>
         (data ?? []).map((r) => {
           const desc = plain(r.description ?? '')
-          return { ...r, description: desc, project: p, kind: kindOf(r.url, r.name), text: `${r.name} ${r.url ?? ''} ${desc}`.toLowerCase() }
+          return { ...r, description: desc, descHtml: r.description ?? '', project: p, kind: kindOf(r.url, r.name), text: `${r.name} ${r.url ?? ''} ${desc}`.toLowerCase() }
         }),
       ),
     [per.parts],
   )
+  const deepId = deep?.[2] ?? null
+  const deepProject = projects.find((p) => p.id === deep?.[1]) ?? null
+  // Список проектов грузится очередью — по адресу ресурс берём напрямую, не
+  // дожидаясь, пока до его проекта дойдёт очередь.
+  const single = useQuery({
+    queryKey: ['v2', 'lib', 'res-one', deepId],
+    queryFn: () => api<Res>(`/api/v1/resources/${deepId}`, inProject(deep![1]!)),
+    enabled: Boolean(deepId && deepProject && !all.some((r) => r.id === deepId)),
+    retry: false,
+  })
+  const deepRow: Row | null = deepId
+    ? (all.find((r) => r.id === deepId) ??
+      (single.data && deepProject
+        ? {
+            ...single.data,
+            description: plain(single.data.description ?? ''),
+            descHtml: single.data.description ?? '',
+            project: deepProject,
+            kind: kindOf(single.data.url, single.data.name),
+            text: '',
+          }
+        : null))
+    : null
+  const openEdit = (r: Row) => navigate(`${base}/resources/r/${r.project.id}/${r.id}${search}`)
+  const closeModal = () => {
+    setModal(null)
+    if (deepId) navigate(`${base}/resources${search}`)
+  }
   const s = q.trim().toLowerCase()
   const inView = all.filter((r) => (!project || r.project.id === project) && (!s || r.text.includes(s)))
   const F: Record<Filter, (r: Row) => boolean> = {
@@ -225,7 +259,7 @@ export function ResourcesView() {
                       <button
                         className="lk"
                         title={r.canSeeSecrets ? t('library.res.secretsOpen') : t('library.res.secretsClosed')}
-                        onClick={() => setModal({ mode: 'edit', row: r })}
+                        onClick={() => openEdit(r)}
                       >
                         <Svg sm>{LOCK}</Svg>
                         {r.secretCount}
@@ -250,7 +284,7 @@ export function ResourcesView() {
                       <Icon name="share" />
                     </button>
                   )}
-                  <button className="ib" aria-label={t('library.res.edit')} title={t('library.res.edit')} onClick={() => setModal({ mode: 'edit', row: r })}>
+                  <button className="ib" aria-label={t('library.res.edit')} title={t('library.res.edit')} onClick={() => openEdit(r)}>
                     <Svg>{EDIT}</Svg>
                   </button>
                 </div>
@@ -262,13 +296,13 @@ export function ResourcesView() {
         {per.loading && !groups.length && <div className="none">{t('common.loading')}</div>}
       </div>
 
-      {modal && (
+      {(modal || deepRow) && (
         <ResourceModal
-          key={modal.mode === 'edit' ? modal.row.id : 'new'}
+          key={deepRow ? deepRow.id : modal?.mode === 'edit' ? modal.row.id : 'new'}
           projects={projects}
-          row={modal.mode === 'edit' ? modal.row : null}
+          row={deepRow ?? (modal?.mode === 'edit' ? modal.row : null)}
           defaultProject={project}
-          onClose={() => setModal(null)}
+          onClose={closeModal}
           onSaved={(pid) => {
             setKind('all')
             if (project && project !== pid) setProject(pid)
@@ -306,7 +340,7 @@ function ResourceModal({
   const pid = picked ?? defaultProject ?? projects[0]?.id ?? null
   const [url, setUrl] = useState(row?.url ?? '')
   const [title, setTitle] = useState(row?.name ?? '')
-  const [desc, setDesc] = useState(row?.description ?? '')
+  const [desc, setDesc] = useState(row?.descHtml ?? '')
   const [descTouched, setDescTouched] = useState(false)
   // Кто видит секреты. null — не трогали: у нового ресурса это вся команда
   // (так решает и сервер), у существующего — его нынешний список.
@@ -725,7 +759,7 @@ function ShareModal({ row, onClose }: { row: Row; onClose: () => void }) {
           type="resource"
           id={row.id}
           title={row.name || row.url || ''}
-          path={`/p/${row.project.id}/resources/${row.id}`}
+          path={`/resources/r/${row.project.id}/${row.id}`}
           canPublish={company.myRole === 'admin' || company.myRole === 'manager'}
           onClose={() => setInApp(false)}
         />

@@ -148,7 +148,9 @@ export async function resolveShortCode(type: string, code: string) {
  * известны лишь базе. Поэтому разрешать её умеет только сервер — сам
  * ассистент из «t-cDfWe» не выведет ничего.
  */
-export function parseTaskRef(raw: string): { kind: 'short'; code: string } | { kind: 'long'; projectId: string; taskId: string } | { kind: 'number'; number: string } | null {
+export function parseTaskRef(
+  raw: string,
+): { kind: 'short'; code: string } | { kind: 'long'; projectId: string; taskId: string } | { kind: 'id'; taskId: string } | { kind: 'number'; number: string } | null {
   const v = raw.trim()
   if (!v) return null
 
@@ -161,6 +163,11 @@ export function parseTaskRef(raw: string): { kind: 'short'; code: string } | { k
   // лишний повод разойтись.
   const long = /\/p\/([\w-]+)\/tasks\/([\w-]+)/.exec(v)
   if (long) return { kind: 'long', projectId: long[1]!, taskId: long[2]! }
+
+  // Адреса v2: .../#/c/<company>/task/<id> и панель задачи ?t=<id>. Проекта
+  // в них нет — его знает сама задача.
+  const v2 = /\/c\/[\w-]+\/task\/([\w-]+)/.exec(v) ?? /[?&]t=([\w-]+)/.exec(v)
+  if (v2) return { kind: 'id', taskId: v2[1]! }
 
   // Голый номер: TASK-81. Раз уж разбираем ссылки, разберём и его.
   const num = /^([A-Za-z]+-\d+)$/.exec(v)

@@ -111,7 +111,10 @@ export function consumeReturnTo(): string | null {
  */
 export function previewUrl(appPath: string): string {
   const origin = typeof window === 'undefined' ? '' : window.location.origin
-  return /^\/c\/[^/]+\/p\/[^/]+/.test(appPath) ? `${API_URL}/link${appPath}` : `${origin}/#${appPath}`
+  // Превью умеет адреса проекта первой версии и адреса сущностей v2: задачу,
+  // документ, файл, ресурс, версию (routes/link-preview.ts у API).
+  const withPreview = /^\/c\/[^/]+\/(p\/[^/]+|task\/[^/?]+|(docs\/d|files\/f|resources\/r|versions\/v)\/[^/]+\/[^/?]+)/
+  return withPreview.test(appPath) ? `${API_URL}/link${appPath}` : `${origin}/#${appPath}`
 }
 
 /**

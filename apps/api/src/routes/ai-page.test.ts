@@ -18,11 +18,7 @@ const fields = app('components/AiBehaviorFields.tsx')
 const route = readFileSync(join(import.meta.dirname, 'ai.ts'), 'utf8')
 
 describe('страница ИИ: табы через роутинг', () => {
-  it('таб берётся из адреса, а не из состояния', () => {
-    // Иначе ссылкой на таб не поделиться и обновление страницы его теряет.
-    expect(main, 'маршрут без необязательного сегмента таба').toMatch(/path="ai\/:aiTab\?"/)
-    expect(tab, 'таб не читается из useParams').toMatch(/const \{ companyId, aiTab \} = useParams\(\)/)
-  })
+  // Страница ИИ проекта (первая версия) убрана вместе с экранами проекта: ИИ в v2 — только на уровне компании.
 
   it('чужой таб в адресе откатывается к дефолту, а не роняет экран', () => {
     expect(tab).toMatch(/AI_TABS\.includes\(aiTab as AiTab\) \? \(aiTab as AiTab\) : 'settings'/)
@@ -80,11 +76,7 @@ describe('права на настройки ИИ проекта', () => {
     for (const m of puts) expect(m[0]).toMatch(/mayManageAi/)
   })
 
-  it('фронт пропускает ровно тех же, кого сервер', () => {
-    // canCreateProjects на сервере — это admin ИЛИ manager. Разойдись списки,
-    // человек получил бы кнопку, дающую отказ.
-    expect(main).toMatch(/companyRole === 'admin' \|\| companyRole === 'manager'/)
-  })
+  // Страница ИИ проекта (первая версия) убрана вместе с экранами проекта: ИИ в v2 — только на уровне компании.
 })
 
 describe('ключ проекта проверяется до сохранения', () => {
