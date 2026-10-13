@@ -280,6 +280,7 @@
       .tr-gh:hover .nm { color: var(--ink); text-decoration: underline; text-underline-offset: 3px; }
       .tr-gh .nm { min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; unicode-bidi: plaintext; }
       .tr-gh .n { color: var(--ink3); font-weight: 500; }
+      .tr-gh .n.hot { background: var(--accent); color: var(--accent-ink); border-radius: 999px; padding: 0 6px; font-size: 11px; font-weight: 600; line-height: 17px; }
 
       .tr-row { position: relative; border-radius: 10px; }
       .tr-row:hover, .tr-row:focus-within { background: var(--card); }
@@ -516,8 +517,8 @@
           <button class="tr-go" id="goBtn" type="button"></button>
         </div>
         <div class="tr-tabs" role="tablist">
+          <button role="tab" data-tab="inbox" type="button"><span id="tabInbox">Notifications</span><span class="n" id="nInbox" hidden></span></button>
           <button role="tab" data-tab="mine" type="button"><span id="tabMine">On me</span><span class="n" id="nMine"></span></button>
-          <button role="tab" data-tab="inbox" type="button"><span id="tabInbox">Waiting on me</span><span class="n" id="nInbox" hidden></span></button>
         </div>
         <div class="tr-chips" id="chips" hidden></div>
         <div class="tr-list" id="list"></div>
@@ -591,7 +592,9 @@
       const canEditElapsed = typeof P.setTimerElapsed === 'function'
 
       // --- что выбрано в самой панели -----------------------------------------
-      let tab = store.get('chatick.tray.tab') === 'inbox' ? 'inbox' : 'mine'
+      // По умолчанию — уведомления, как в первой версии: трей открывают, чтобы
+      // узнать, что нового. Ключ новый — прежний запоминал «На мне» первым.
+      let tab = store.get('chatick.tray.tab2') === 'mine' ? 'mine' : 'inbox'
       let chip = 'all'
       let view = 'main' // 'main' | 'connect'
       let overlay = null // 'pick' | 'menu' | null
@@ -851,7 +854,7 @@
         const c = company()
         const unread = typeof c?.unread === 'number' ? c.unread : myNotices().filter((n) => n.unread).length
         $('tabMine').textContent = T('mine', 'On me')
-        $('tabInbox').textContent = T('waiting', 'Waiting on me')
+        $('tabInbox').textContent = T('notices', 'Notifications')
         $('nMine').textContent = tasks.length || ''
         $('nInbox').hidden = !unread
         $('nInbox').className = 'n hot'
@@ -960,21 +963,43 @@
           ? `<button class="tr-allnot" type="button" data-open="/c/${esc(coSel)}/notifications">${esc(T('allNotes', 'All notifications in Chatick'))}</button>`
           : ''
         if (!items.length) return `<p class="tr-quiet">${esc(T('inboxEmpty', 'Nothing new'))}</p>${all}`
-        const rows = items.map((n) => {
-          // Старое состояние: ни автора, ни цвета — строка как была.
-          const text = n.text ?? n.summary ?? n.title
-          const note = n.note && n.note !== text ? n.note : null
-          return `<button class="tr-ev${n.unread ? ' new' : ''}" type="button" data-open="${esc(n.link)}" data-notification="${esc(n.id)}">
-              <span class="tr-av" style="background:${esc(n.color || colorOf(n.projectId))}">${esc(n.letter || letterOf(n.projectName || 'C'))}</span>
-              <span class="b">
-                <span class="l1">${n.who ? `<b>${esc(n.who)}</b> ` : ''}${esc(text)}</span>
-                ${note ? `<q class="q">${esc(note)}</q>` : ''}
-                ${n.projectName ? `<span class="l3">${esc(n.projectName)}</span>` : ''}
-              </span>
-              ${n.when ? `<time>${esc(n.when)}</time>` : ''}
-            </button>`
-        })
-        return `<div style="padding-top:8px">${rows.join('')}${all}</div>`
+        // По проектам, как в первой версии. Уведомления приходят от свежих к
+        // старым, так что сверху — проект, где что-то случилось последним.
+        const groups = new Map()
+        for (const n of items) {
+          const key = n.projectId || ''
+          if (!groups.has(key)) groups.set(key, [])
+          groups.get(key).push(n)
+        }
+        let html = ''
+        for (const [pid, list] of groups) {
+          const unread = list.filter((n) => n.unread).length
+          const cnt = unread ? `<span class="n hot">${unread}</span>` : ''
+          if (pid) {
+            const p = projectById(pid) || { id: pid, name: list[0].projectName || '—' }
+            html += `<button class="tr-gh" type="button" data-project="${esc(pid)}" data-co="${esc(list[0].companyId || coSel || '')}" title="${esc(T('openInApp', 'Opens in Chatick'))}">
+                ${projectLogo(p, 'sm')}<span class="nm">${esc(list[0].projectName || shortName(p))}</span>${cnt}</button>`
+          } else {
+            const c = company()
+            html += `<div class="tr-gh">${companyLogo(c, 'sm')}<span class="nm">${esc(c?.name || T('wholeCompany', 'Whole company'))}</span>${cnt}</div>`
+          }
+          html += list.slice(0, 8).map(noticeRow).join('')
+        }
+        return `<div>${html}${all}</div>`
+      }
+
+      function noticeRow(n) {
+        // Старое состояние: ни автора, ни цвета — строка как была.
+        const text = n.text ?? n.summary ?? n.title
+        const note = n.note && n.note !== text ? n.note : null
+        return `<button class="tr-ev${n.unread ? ' new' : ''}" type="button" data-open="${esc(n.link)}" data-notification="${esc(n.id)}">
+            <span class="tr-av" style="background:${esc(n.color || colorOf(n.projectId))}">${esc(n.letter || letterOf(n.projectName || 'C'))}</span>
+            <span class="b">
+              <span class="l1">${n.who ? `<b>${esc(n.who)}</b> ` : ''}${esc(text)}</span>
+              ${note ? `<q class="q">${esc(note)}</q>` : ''}
+            </span>
+            ${n.when ? `<time>${esc(n.when)}</time>` : ''}
+          </button>`
       }
 
       // --- выбор проекта для таймера ------------------------------------------------
@@ -1323,7 +1348,7 @@
       document.querySelectorAll('.tr-tabs button').forEach((b) => {
         b.onclick = () => {
           tab = b.dataset.tab
-          store.set('chatick.tray.tab', tab)
+          store.set('chatick.tray.tab2', tab)
           renderTabs()
           $('list').scrollTop = 0
           renderList()

@@ -745,6 +745,7 @@ export function useDesktopSync() {
         // --- панель v2 ---
         mine: tv('tray.mine'),
         waiting: tv('tray.waiting'),
+        notices: tv('tray.notices'),
         all: tv('tray.all'),
         openInApp: tv('tray.openInApp'),
         emptyH: tv('tray.emptyH'),
