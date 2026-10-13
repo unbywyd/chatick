@@ -5,586 +5,552 @@
     <title>Chatick</title>
     <style>
       /* Панель живёт отдельно от веб-приложения: она должна открываться
-         мгновенно, поэтому никаких фреймворков и загрузок — только свой CSS. */
+         мгновенно, поэтому никаких фреймворков и загрузок — только свой CSS.
+
+         Вид — макет Tray.dc.html (v2): шапка с компанией, карточка таймера,
+         две вкладки «На мне» / «Ждут меня». Цвета — те же, что у веба v2
+         (v2/styles/main.css), светлая и тёмная тема.
+
+         Окно панели создаёт установленная оболочка (380×520, без рамки), и
+         говорит она с ней только через window.panel из preload-panel.cjs.
+         Оболочку обновляет магазин, а не мы, — поэтому здесь нет ни одного
+         вызова, которого там нет, и панель обязана жить со старым состоянием. */
+
+      /* Иврит системными шрифтами выглядит чужеродно — тот же сабсет Heebo,
+         что у приложения. Путь относительный: панель раздаётся с сайта рядом с
+         /fonts. У вшитой копии (file://) шрифта нет — подставится системный. */
+      @font-face {
+        font-family: 'Heebo';
+        src: url('fonts/heebo-hebrew.woff2') format('woff2');
+        font-weight: 100 900;
+        font-display: swap;
+        unicode-range: U+0307-0308, U+0590-05FF, U+200C-2010, U+20AA, U+25CC, U+FB1D-FB4F;
+      }
+
       :root {
+        color-scheme: light;
+        --bg: #ffffff;
+        --card: #f2f3ef;
+        --card2: #e8eae3;
+        --tab-on: #ffffff;
+        --tab-shadow: 0 1px 2px rgba(27, 29, 26, 0.1);
+        --pop: #ffffff;
+        --pop-shadow: 0 20px 50px -10px rgba(27, 29, 26, 0.28), 0 0 0 1px var(--line);
+        --line: #e3e5df;
+        --ink: #1b1d1a;
+        --ink2: #4e524c;
+        --ink3: #686c65;
+        --accent: #d4f36b;
+        --accent-ink: #1b1d1a;
+        --moss: #1f2b1b;
+        --moss-ink: #eef3e6;
+        --moss2: #aeb9a5;
+        --moss-hover: rgba(238, 243, 230, 0.1);
+        --signal: #c2410c;
+        --work: #855600;
+        --work-bg: #f7ebcf;
+        --rev: #2f4fc2;
+        --rev-bg: #e6ebfb;
+        --ask: #6a3bc0;
+        --ask-bg: #eee7fa;
+        --hover: rgba(27, 29, 26, 0.05);
+        --scrim: rgba(27, 29, 26, 0.22);
+        --scroll: #cfd2ca;
+      }
+      /* Тёмная — когда приложение в тёмной теме; пока оно не сказало, какая
+         тема, — по системе. Блок повторяется дважды намеренно: атрибут и
+         медиазапрос не объединить в один селектор. */
+      @media (prefers-color-scheme: dark) {
+        :root:not([data-theme='light']) {
+          color-scheme: dark;
+          --bg: #0f0f0f;
+          --card: #181a17;
+          --card2: #20231f;
+          --tab-on: #20231f;
+          --tab-shadow: none;
+          --pop: #1b1d1a;
+          --pop-shadow: 0 20px 50px -10px rgba(0, 0, 0, 0.7), 0 0 0 1px var(--line);
+          --line: #2a2d28;
+          --ink: #edefe8;
+          --ink2: #b7bcb1;
+          --ink3: #8b9086;
+          --moss: #1f2b1b;
+          --moss-ink: #edefe8;
+          --signal: #ff8f57;
+          --work: #f0c565;
+          --work-bg: #33290f;
+          --rev: #a3b6ff;
+          --rev-bg: #1f2742;
+          --ask: #c7aeff;
+          --ask-bg: #2a2140;
+          --hover: rgba(255, 255, 255, 0.05);
+          --scrim: rgba(0, 0, 0, 0.45);
+          --scroll: #33362f;
+        }
+      }
+      :root[data-theme='dark'] {
         color-scheme: dark;
         --bg: #0f0f0f;
-        --card: #171717;
-        --line: #262626;
-        --text: #ededed;
-        --muted: #8a8a8a;
-        --brand: #d4f34a;
-        --warn: #f5a524;
+        --card: #181a17;
+        --card2: #20231f;
+        --tab-on: #20231f;
+        --tab-shadow: none;
+        --pop: #1b1d1a;
+        --pop-shadow: 0 20px 50px -10px rgba(0, 0, 0, 0.7), 0 0 0 1px var(--line);
+        --line: #2a2d28;
+        --ink: #edefe8;
+        --ink2: #b7bcb1;
+        --ink3: #8b9086;
+        --moss: #1f2b1b;
+        --moss-ink: #edefe8;
+        --signal: #ff8f57;
+        --work: #f0c565;
+        --work-bg: #33290f;
+        --rev: #a3b6ff;
+        --rev-bg: #1f2742;
+        --ask: #c7aeff;
+        --ask-bg: #2a2140;
+        --hover: rgba(255, 255, 255, 0.05);
+        --scrim: rgba(0, 0, 0, 0.45);
+        --scroll: #33362f;
       }
+
       * { box-sizing: border-box; }
+      html, body { height: 100%; }
       body {
         margin: 0;
-        font: 13px/1.45 system-ui, -apple-system, 'Segoe UI', sans-serif;
         background: var(--bg);
-        color: var(--text);
-        height: 100vh;
-        display: flex;
-        flex-direction: column;
+        color: var(--ink);
+        font: 13px/1.4 'Onest', 'Heebo', system-ui, 'Segoe UI', sans-serif;
+        font-feature-settings: 'tnum' 1;
         overflow: hidden;
         user-select: none;
       }
+      button { font: inherit; color: inherit; background: none; border: 0; padding: 0; cursor: pointer; }
+      button:disabled { cursor: default; }
+      input { font: inherit; color: inherit; }
+      :focus-visible { outline: 2px solid var(--rev); outline-offset: 2px; border-radius: 6px; }
+      [hidden] { display: none !important; }
 
-      /* --- таймер: главное, ради чего открывают панель --- */
-      .timer {
-        display: flex;
-        align-items: center;
-        gap: 12px;
-        padding: 14px 16px;
-        border-bottom: 1px solid var(--line);
-        /* Полоса с таймером работает ручкой: окно без рамки иначе не сдвинуть,
-           а его позиция от значка в трее подходит не всем и не всегда. */
+      .tr { position: relative; height: 100vh; display: flex; flex-direction: column; overflow: hidden; }
+      .tr-view { flex: 1; min-height: 0; display: flex; flex-direction: column; }
+      .ic { width: 16px; height: 16px; fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; flex: none; }
+      .ic.s { width: 14px; height: 14px; }
+      .ic.fl { fill: currentColor; stroke: none; }
+      /* Стрелки «назад/вперёд» в иврите смотрят в другую сторону. */
+      [dir='rtl'] .flip { transform: scaleX(-1); }
+
+      /* --- шапка: она же ручка — окно без рамки иначе не сдвинуть --- */
+      .tr-head {
+        height: 46px; flex: none;
+        display: flex; align-items: center; gap: 4px;
+        padding-inline: 10px 6px;
         -webkit-app-region: drag;
       }
-      /* Кнопка внутри ручки должна оставаться кнопкой. Текст рядом — нет:
-         он был исключён из зоны перетаскивания заодно с кнопкой, и панель
-         переставала таскаться, стоило навести курсор на надпись. */
-      .play { -webkit-app-region: no-drag; }
-      /* Часы проекта — из панели туда попасть было нечем: «Открыть Chatick»
-         ведёт в приложение вообще, а клик по названию — в чат проекта. */
-      .hours-btn {
-        -webkit-app-region: no-drag;
+      .tr-head button { -webkit-app-region: no-drag; }
+      .tr-co {
+        display: flex; align-items: center; gap: 8px; min-width: 0;
+        height: 32px; padding-inline: 4px 8px; border-radius: 9px;
+        font-weight: 600; font-size: 14px;
+      }
+      .tr-co:not(:disabled):hover { background: var(--card2); }
+      .tr-co .nm { min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; unicode-bidi: plaintext; }
+      .tr-co .ic { color: var(--ink3); }
+      .tr-sp { flex: 1; min-width: 8px; }
+      .tr-ib {
+        width: 32px; height: 32px; flex: none; border-radius: 9px;
+        display: grid; place-items: center; color: var(--ink2);
+      }
+      .tr-ib:hover { background: var(--card2); color: var(--ink); }
+      .tr-me {
+        width: 26px; height: 26px; border-radius: 50%; overflow: hidden;
         display: grid; place-items: center;
-        width: 28px; height: 28px; flex: 0 0 auto;
-        border: 0; background: transparent; border-radius: 8px;
-        color: var(--muted); cursor: pointer;
+        background: #6b5f55; color: #fff; font-weight: 600; font-size: 12px;
       }
-      .hours-btn:hover { background: #2a2a2a; color: var(--fg); }
-      .hours-btn[hidden] { display: none; }
-      /* Выделять текст в ручке всё равно нельзя — только мешает перетаскиванию. */
-      .timer-info { user-select: none; }
-      .play {
-        width: 40px; height: 40px;
-        flex: 0 0 auto;
-        border: 0; border-radius: 50%;
-        background: var(--brand); color: #111;
-        font-size: 15px; cursor: pointer;
-        display: grid; place-items: center;
-      }
-      .play.running { background: #2a2a2a; color: var(--brand); }
-      .play:disabled { opacity: .45; cursor: default; }
-      .play:not(:disabled):hover { background: #e2ff62; }
-      .play.running:hover { background: #333; }
-      .timer-info { min-width: 0; flex: 1; }
-      .elapsed {
-        /* inline-block, а не блок: блочный див занимает всю строку, и клик
-           справа от цифр попадал «в счётчик», хотя визуально мимо. Теперь
-           кликабельно ровно то, что видно. */
-        display: inline-block;
-        font: 600 20px/1.1 ui-monospace, 'SF Mono', Menlo, monospace;
-        font-variant-numeric: tabular-nums;
-        color: var(--brand);
-      }
-      /* display в .elapsed перебивает атрибут hidden — счётчик оставался
-         виден рядом с полем правки, и время двоилось. Правило ПОСЛЕ него. */
-      .elapsed[hidden] { display: none; }
-      .elapsed.idle { color: var(--muted); font-weight: 400; font-size: 14px; }
-      /* Счётчик правится на месте: набрал 103 — стало 1:03, начало уехало
-         назад. Иначе «работаю два часа, а таймер включил только что»
-         исправлялось лишь в приложении. */
-      .elapsed.editable { cursor: text; -webkit-app-region: no-drag; }
-      .elapsed.editable:hover { text-decoration: underline dotted; text-underline-offset: 3px; }
-      .elapsed-input {
-        /* Полоса таймера — ручка перетаскивания окна: без no-drag по полю
-           нельзя ни кликнуть, ни выделить текст. */
-        -webkit-app-region: no-drag;
-        /* Ширина под самый длинный вариант — «20:10:00», восемь знаков.
-           Было 5.5ch и растягивание по родителю: поле занимало почти всю
-           панель, и клик рядом с цифрами попадал в пустоту, а выглядело это
-           как «нажал и ничего не произошло».
+      .tr-me img, .tr-lg img { width: 100%; height: 100%; object-fit: cover; display: block; }
 
-           Фиксированная, а не по содержимому: шрифт моноширинный, разница
-           между «0:05» и «20:10:00» — четыре знака, и прыгающая на каждый
-           символ ширина раздражала бы сильнее лишнего пустого места. */
-        /* 80px хватает на «20:10:00» моноширинным двадцатым кеглем.
-           flex: 0 0 auto обязателен: родитель .timer-info растянут (flex: 1),
-           и без запрета поле тянулось под него — почти во всю панель. */
-        width: 80px; flex: 0 0 auto; min-width: 0; padding: 0; margin: 0; text-align: center;
-        border: 0; border-bottom: 1px solid var(--brand); border-radius: 0;
-        background: transparent; color: var(--brand); outline: none;
-        font: 600 20px/1.1 ui-monospace, 'SF Mono', Menlo, monospace;
-        font-variant-numeric: tabular-nums;
-      }
-      .elapsed-input.bad { border-bottom-color: #ff6b6b; color: #ff6b6b; }
-      /* Кнопки подтверждения рядом с полем: без них непонятно, чем закончить
-         правку, а нажать мимо — значит потерять набранное. */
-      .elapsed-edit { display: inline-flex; align-items: center; gap: 4px; flex: 0 0 auto; -webkit-app-region: no-drag; }
-      .elapsed-edit[hidden] { display: none; }
-      .elapsed-ok, .elapsed-cancel {
-        -webkit-app-region: no-drag;
+      /* Значок проекта/компании: логотип или буква на цвете — как в v2. */
+      .tr-lg {
+        width: 22px; height: 22px; flex: none; border-radius: 7px; overflow: hidden;
         display: grid; place-items: center;
-        width: 22px; height: 22px; flex: 0 0 auto;
-        border: 0; border-radius: 6px; background: transparent; cursor: pointer;
+        color: #fff; font-weight: 700; font-size: 11px; line-height: 1;
       }
-      .elapsed-ok { color: var(--brand); }
-      .elapsed-ok:hover { background: #2a2a2a; }
-      .elapsed-cancel { color: var(--muted); }
-      .elapsed-cancel:hover { background: #2a2a2a; color: var(--text); }
-      /* Проект таймера — дропдаун в шапке. Пока часы идут, он заблокирован:
-         пауза → выбрал другой проект → запустил снова. Один предсказуемый
-         путь вместо трёх кнопок, которые могли разойтись друг с другом. */
-      .proj-btn {
-        -webkit-app-region: no-drag;
-        margin-top: 3px;
-        display: flex; align-items: center; gap: 6px;
-        max-width: 100%;
-        border: 1px solid transparent; border-radius: 6px;
-        background: none; color: var(--muted);
-        font: inherit; font-size: 12px;
-        padding: 2px 7px 2px 5px; cursor: pointer;
-      }
-      .proj-btn:not(:disabled):hover { border-color: var(--line); color: var(--text); background: var(--card); }
-      .proj-btn:disabled { cursor: default; }
-      .proj-btn .dot { width: 8px; height: 8px; flex: 0 0 auto; border-radius: 3px; background: #3a3a3a; }
-      .proj-btn .name { min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-      .proj-btn .chev { flex: 0 0 auto; transition: transform .12s; }
-      .proj-btn.open .chev { transform: rotate(180deg); }
-      .proj-btn:disabled .chev { display: none; }
-      .proj-menu {
-        -webkit-app-region: no-drag;
-        position: absolute; z-index: 30;
-        top: 64px; left: 12px; right: 12px;
-        padding: 8px;
-        border: 1px solid var(--line); border-radius: 10px;
-        background: var(--card); box-shadow: 0 12px 32px rgba(0,0,0,.55);
-      }
-      .proj-menu .picker { max-height: 240px; }
-      .proj-menu .pick { background: transparent; }
-      .proj-menu .pick:hover { background: #222; }
-      body.guest .proj-menu { display: none; }
+      .tr-lg.co { background: var(--moss); color: var(--accent); }
+      .tr-lg.sm { width: 18px; height: 18px; font-size: 9.5px; border-radius: 5px; }
 
-      /* Группы: проект как заголовок, под ним его события или задачи. */
-      .group-head {
+      /* --- таймер: главное, ради чего открывают панель --- */
+      .tr-timer {
+        margin: 0 10px; height: 52px; flex: none;
         display: flex; align-items: center; gap: 8px;
-        padding: 7px 10px 5px;
-        cursor: pointer; border-radius: 8px;
-      }
-      .group-head:hover { background: var(--card); }
-      /* Проект без дел — приглушённый. Раньше он выглядел так же ярко, как
-         проект с задачами: список горел целиком, и по нему нельзя было понять,
-         где действительно что-то есть. Наведение возвращает полную яркость —
-         это дорожка в проект, а не мёртвая строка. */
-      .group-head.quiet .group-name { color: var(--muted); font-weight: 500; }
-      .group-head.quiet:hover .group-name { color: var(--text); }
-      .group-title { min-width: 0; flex: 1; display: flex; align-items: baseline; gap: 7px; }
-      .group-name { font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-      .group-sub { color: var(--muted); font-size: 10.5px; flex: 0 1 auto; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-      .group-cnt {
-        flex: 0 0 auto;
-        background: var(--brand); color: #111;
-        border-radius: 9px; padding: 0 6px;
-        font-size: 10px; font-weight: 700; line-height: 16px;
-      }
-      .group-chev { flex: 0 0 auto; color: var(--muted); transition: transform .12s; }
-      /* Закрытая группа: стрелка указывает ТУДА, КУДА РАСКРОЕТСЯ.
-         В латинице это вправо (−90° от «вниз»), в иврите — влево, иначе она
-         показывает за пределы списка и читается как «уйти отсюда». */
-      .group-head.closed .group-chev { transform: rotate(-90deg); }
-      [dir='rtl'] .group-head.closed .group-chev { transform: rotate(90deg); }
-      /* Стрелка, нарисованная вправо в разметке: в иврите зеркалим. Класс
-         отдельный, потому что у этих групп нет состояния closed — они всегда
-         свёрнуты, и поворачивать нечего, только отразить. */
-      [dir='rtl'] .rtl-flip { transform: scaleX(-1); }
-      .filter-wrap { padding: 4px 4px 6px; }
-      /* Кем вошли: маленький ответ на большой вопрос «от чьего имени всё это». */
-      /* Аватар ведёт в профиль: имя и фото человек правит отсюда чаще
-         всего, а раньше их было видно, но не нажать. */
-      .me-avatar {
-        width: 28px; height: 28px; font-size: 11px;
-        -webkit-app-region: no-drag; cursor: pointer;
-        border: 0; padding: 0;
-        transition: opacity .12s;
-      }
-      .me-avatar:hover { opacity: .75; }
-      /* .avatar задаёт display: grid, и оно перебивает браузерное скрытие по
-         [hidden] — пустой кружок висел даже когда показывать нечего. */
-      .avatar[hidden] { display: none; }
-      /* Тумблер завершённых: ссылка, а не кнопка — действие второстепенное. */
-      .done-toggle {
-        border: 0; background: none; cursor: pointer;
-        color: var(--muted); font: inherit; font-size: 11px;
-        padding: 2px 6px; margin: 0 4px 4px;
-      }
-      .done-toggle:hover { color: var(--text); }
-      .done-toggle.on { color: var(--brand); }
-      .row.done-row { opacity: .55; }
-      .row.done-row:hover { opacity: 1; }
-
-      /* --- вкладки --- */
-      nav {
-        display: flex;
-        gap: 2px;
-        padding: 8px 12px 0;
-        border-bottom: 1px solid var(--line);
-      }
-      nav button {
-        border: 0; background: none;
-        color: var(--muted);
-        font: inherit;
-        padding: 6px 10px 8px;
-        border-bottom: 2px solid transparent;
-        cursor: pointer;
-      }
-      nav button.active { color: var(--text); border-bottom-color: var(--brand); }
-      nav .count {
-        margin-inline-start: 5px;
-        background: var(--brand); color: #111;
-        border-radius: 9px; padding: 0 5px;
-        font-size: 10px; font-weight: 700;
-      }
-
-      main { flex: 1; overflow-y: auto; padding: 6px; }
-      main::-webkit-scrollbar { width: 8px; }
-      main::-webkit-scrollbar-thumb { background: #2e2e2e; border-radius: 4px; }
-
-      .row {
-        display: flex; align-items: flex-start; gap: 9px;
-        width: 100%;
-        padding: 8px 10px;
-        border: 0; border-radius: 8px;
-        background: none; color: inherit;
-        font: inherit; text-align: start;
-        cursor: pointer;
-      }
-      .row:hover { background: var(--card); }
-      .avatar {
-        width: 26px; height: 26px; flex: 0 0 auto;
-        border-radius: 50%;
-        background: #2a2a2a;
-        display: grid; place-items: center;
-        font-size: 11px; font-weight: 600; color: var(--muted);
-        overflow: hidden;
-      }
-      .avatar img { width: 100%; height: 100%; object-fit: cover; }
-      .badge-dot {
-        width: 7px; height: 7px; flex: 0 0 auto;
-        border-radius: 50%; background: var(--brand);
-        margin-top: 8px;
-      }
-      .body { min-width: 0; flex: 1; }
-      /* Кнопка-обёртка вокруг названия задачи. Стили были инлайновыми, и
-         кнопка оставалась строчной — вложенный текст в две строки в ней не
-         раскладывался. */
-      .body-btn {
-        display: block;
-        border: 0; padding: 0;
-        background: none; color: inherit;
-        font: inherit; text-align: start; cursor: pointer;
-      }
-      .title { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-      /* Задачи — не строка списка, а формулировка: обрезать её посередине
-         значит прятать смысл. Переносим на две строки, дальше многоточие.
-         Длинное слово (ссылка, путь) рвём принудительно, иначе оно вылезает
-         за край независимо от переноса. */
-      .row .title.wrap {
-        white-space: normal;
-        display: -webkit-box;
-        -webkit-line-clamp: 2;
-        -webkit-box-orient: vertical;
-        overflow-wrap: anywhere;
-        line-height: 1.35;
-      }
-      .sub {
-        color: var(--muted); font-size: 11.5px;
-        white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
-      }
-      .num {
-        font: 11px ui-monospace, monospace;
-        color: var(--muted);
-        flex: 0 0 auto; padding-top: 2px;
-      }
-      .empty { padding: 34px 16px; text-align: center; color: var(--muted); }
-      /* В блоке подключения места мало: та же пустота на 34px читается как
-         «панель сломалась», а не как «список пуст». */
-      .picker .empty { padding: 16px 10px; font-size: 12px; }
-
-      /* Задача — то, на что тратится время: статус и таймер должны меняться
-         здесь же, без похода в приложение. */
-      .task-actions {
-        display: flex; gap: 3px; flex: 0 0 auto; align-self: center;
-        /* Кнопки шли внахлёст на текст: у flex-элемента с текстом внутри
-           минимальная ширина по содержимому, и он не давал себя сжать. */
-        margin-inline-start: 4px;
-      }
-      /* Кнопки не должны налезать на текст: место под них резервируем всегда. */
-      .row .body { min-width: 0; }
-
-      /* Выбор статуса: список вместо «следующего по кругу» — гадать, куда
-         попадёшь, не нужно. */
-      .status-menu {
-        position: absolute; z-index: 20;
-        min-width: 150px; padding: 4px;
-        border: 1px solid var(--line); border-radius: 8px;
-        background: var(--card); box-shadow: 0 8px 24px rgba(0,0,0,.5);
-      }
-      .status-menu button {
-        display: flex; align-items: center; gap: 8px;
-        width: 100%; padding: 6px 8px;
-        border: 0; border-radius: 6px;
-        background: none; color: var(--text);
-        font: inherit; text-align: start; cursor: pointer;
-      }
-      .status-menu button:hover { background: #232323; }
-      .status-menu button.on { color: var(--brand); }
-      .mini {
-        width: 22px; height: 22px;
-        /* flex + центрирование по обеим осям и НУЛЕВЫЕ отступы: любой паддинг
-           или строчный контекст сдвигают иконку с середины. */
-        display: flex; align-items: center; justify-content: center;
-        padding: 0; margin: 0; line-height: 0;
-        border: 1px solid var(--line); border-radius: 6px;
-        background: none; color: var(--muted);
-        font: 11px/1 system-ui, sans-serif; cursor: pointer;
-        transition: border-color .12s, color .12s, background .12s;
-      }
-      .mini:hover { border-color: var(--brand); color: var(--brand); }
-      .mini.on { background: var(--brand); border-color: var(--brand); color: #111; }
-      /* Иконки статуса — те же, что в приложении: круг → круг с точкой →
-         глаз → галочка, и те же цвета. */
-      .status-icon { flex: 0 0 auto; align-self: center; display: block; }
-      /* Внутри кнопки центрирование задаёт сама кнопка — своё выравнивание и
-         отступы иконки здесь только мешают. */
-      .mini .status-icon { align-self: auto; margin: 0; display: block; }
-      .st-todo { color: var(--muted); }
-      .st-in_progress { color: #38bdf8; }
-      .st-review { color: #a78bfa; }
-      .st-done { color: var(--brand); }
-
-      /* Активный проект: с ним работает таймер и его видит ассистент —
-         значит он должен быть виден и здесь, а не угадываться. */
-      .row.active { background: #1a1a1a; }
-      .row.active .title { color: var(--brand); }
-      .row-open {
-        flex: 0 0 auto; align-self: center;
-        border: 1px solid var(--line); border-radius: 6px;
-        background: none; color: var(--muted);
-        font: inherit; font-size: 11px; padding: 3px 8px; cursor: pointer;
-      }
-      .row-open:hover { border-color: var(--brand); color: var(--brand); }
-      .row-here {
-        flex: 0 0 auto; align-self: center;
-        font-size: 10px; color: var(--brand);
-        border: 1px solid var(--brand); border-radius: 5px; padding: 1px 6px;
-      }
-
-      /* --- подключение ассистента --- */
-      .connect { padding: 12px 10px; }
-      .connect-hint { color: var(--muted); margin-bottom: 10px; }
-      /* Строка-приглашение для ассистента: без неё за кодом всё равно надо
-         идти в приложение, и вкладка теряет смысл. */
-      .invite { margin-bottom: 12px; }
-      .invite-row { display: flex; gap: 6px; }
-      .invite-row code {
-        min-width: 0; flex: 1;
-        border: 1px solid var(--line); border-radius: 7px;
-        background: var(--bg); color: var(--muted);
-        font: 11px/1.5 ui-monospace, 'SF Mono', Menlo, monospace;
-        padding: 7px 9px;
-        white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
-      }
-      .invite-row button {
-        flex: 0 0 auto;
-        border: 1px solid var(--brand); border-radius: 7px;
-        background: var(--brand); color: #111;
-        font: inherit; font-weight: 600; padding: 0 11px; cursor: pointer;
-      }
-      .invite-row button:hover { background: #e2ff62; }
-      .invite-row button.done { background: var(--card); border-color: var(--line); color: var(--brand); }
-
-      .code-input {
-        width: 100%;
-        border: 1px solid var(--line); border-radius: 8px;
-        background: var(--card); color: var(--text);
-        font: 600 15px/1 ui-monospace, 'SF Mono', Menlo, monospace;
-        letter-spacing: .12em; text-align: center; text-transform: uppercase;
-        padding: 11px 10px;
-      }
-      .code-input:focus { outline: 0; border-color: var(--brand); }
-      .connect-box {
-        margin-top: 10px; padding: 11px 12px;
-        border: 1px solid var(--line); border-radius: 8px;
+        padding-inline: 6px 6px; border-radius: 14px;
         background: var(--card);
       }
-      .connect-who { font-size: 13.5px; font-weight: 700; letter-spacing: -.01em; }
-      .connect-warn { margin-top: 4px; color: var(--muted); font-size: 11.5px; }
-      .connect-label {
-        display: block; margin: 12px 0 6px;
-        color: var(--muted); font-size: 10px;
-        text-transform: uppercase; letter-spacing: .07em; font-weight: 600;
+      .tr-timer.on { background: var(--moss); color: var(--moss-ink); }
+      .tr-proj {
+        display: flex; align-items: center; gap: 8px; min-width: 0; flex: 1;
+        height: 40px; padding-inline: 4px 8px; border-radius: 9px; text-align: start;
       }
-
-      /* Свой список, а не <select>: нативный выпадающий список — отдельное
-         окно ОС, оно забирает фокус, и панель закрывалась по blur на каждом
-         клике. Заодно он не поддаётся оформлению. */
-      .picker { display: flex; flex-direction: column; gap: 3px; max-height: 176px; overflow-y: auto; }
-      .picker::-webkit-scrollbar { width: 6px; }
-      .picker::-webkit-scrollbar-thumb { background: #2e2e2e; border-radius: 3px; }
-      .pick {
-        display: flex; align-items: center; gap: 8px;
-        border: 1px solid transparent; border-radius: 7px;
-        background: var(--bg); color: var(--text);
-        font: inherit; text-align: start;
-        padding: 7px 9px; cursor: pointer;
+      .tr-proj:hover { background: var(--hover); }
+      .tr-timer.on .tr-proj:hover { background: var(--moss-hover); }
+      .tr-proj .tx { min-width: 0; flex: 1; display: flex; flex-direction: column; }
+      .tr-proj .nm { font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; unicode-bidi: plaintext; text-align: start; }
+      .tr-proj .sub { font-size: 11.5px; color: var(--ink3); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; text-align: start; }
+      .tr-proj .ic { color: var(--ink3); }
+      .tr-timer.on .tr-proj .sub, .tr-timer.on .tr-proj .ic { color: var(--moss2); }
+      .tr-time { display: flex; align-items: center; gap: 7px; flex: none; }
+      .tr-clock {
+        font-size: 18px; font-weight: 600; letter-spacing: 0.01em;
+        font-variant-numeric: tabular-nums; direction: ltr;
+        border-radius: 6px; padding: 0 2px;
       }
-      .pick:hover { background: #1e1e1e; }
-      .pick.on { border-color: var(--brand); background: rgba(201, 242, 77, .08); }
-      .pick.on .pick-name { color: var(--brand); }
-      .pick-body { display: flex; flex-direction: column; align-items: flex-start; gap: 1px; min-width: 0; flex: 1; }
-      .pick-sub { font-size: 10px; color: #7a7a7a; }
-      .pick-group {
-        font-size: 9px; text-transform: uppercase; letter-spacing: .08em;
-        color: #6a6a6a; padding: 6px 2px 2px; font-weight: 600;
+      /* Счётчик правится на месте: «работаю два часа, а таймер включил только
+         что» иначе исправлялось лишь в приложении. */
+      .tr-clock.editable:hover { text-decoration: underline dotted; text-underline-offset: 4px; }
+      .tr-dot { width: 7px; height: 7px; border-radius: 50%; background: var(--accent); animation: trp 1.6s ease-in-out infinite; }
+      @keyframes trp { 50% { opacity: 0.3; } }
+      @media (prefers-reduced-motion: reduce) { .tr-dot { animation: none; } }
+      .tr-edit { display: inline-flex; align-items: center; gap: 2px; flex: none; }
+      .tr-edit input {
+        /* Ширина под «20:10:00» — восемь знаков моноширинного счёта. */
+        width: 84px; padding: 0; margin: 0; text-align: center; direction: ltr;
+        border: 0; border-bottom: 1.5px solid var(--accent); border-radius: 0;
+        background: transparent; outline: none;
+        font-size: 17px; font-weight: 600; font-variant-numeric: tabular-nums;
       }
-      .target-search {
-        width: 100%; box-sizing: border-box; margin-bottom: 7px; padding: 8px 10px;
-        background: var(--bg); border: 1px solid #2a2a2a; border-radius: 8px;
-        color: #e8e8e8; font-size: 12px; outline: none;
-      }
-      .target-search:focus { border-color: var(--brand); }
-      .pick .dot {
-        width: 9px; height: 9px; flex: 0 0 auto;
-        border-radius: 3px; background: #3a3a3a;
-      }
-      .pick .pick-name { min-width: 0; flex: 1; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-      .pick .pick-tag {
-        flex: 0 0 auto; font-size: 10px; color: var(--muted);
-        border: 1px solid var(--line); border-radius: 5px; padding: 1px 5px;
-      }
-
-      /* Действующие подключения */
-      .conns { margin-top: 14px; border-top: 1px solid var(--line); padding-top: 11px; }
-      .conns-title { color: var(--muted); font-size: 11.5px; margin-bottom: 7px; }
-      .conn {
-        display: flex; align-items: center; gap: 8px;
-        padding: 7px 9px; border-radius: 7px; background: var(--card);
-      }
-      .conn + .conn { margin-top: 4px; }
-      .conn-body { min-width: 0; flex: 1; }
-      .conn-name { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-      .conn-where { color: var(--muted); font-size: 11px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-      .conn-kill {
-        flex: 0 0 auto;
-        border: 1px solid var(--line); border-radius: 6px;
-        background: none; color: var(--muted);
-        font: inherit; font-size: 11px; padding: 3px 8px; cursor: pointer;
-      }
-      .conn-kill:hover { border-color: #f5736f; color: #f5736f; }
-      .connect-actions { margin-top: 12px; display: flex; gap: 8px; }
-      /* Разрешить — главное действие, отмена вспомогательное: равные по весу
-         кнопки заставляют читать обе, чтобы понять, какая из них какая. */
-      .connect-actions .allow { flex: 2; }
-      .connect-actions button {
-        flex: 1;
-        border: 1px solid var(--line); border-radius: 8px;
-        background: var(--card); color: var(--muted);
-        font: inherit; font-size: 12.5px; padding: 9px; cursor: pointer;
-        transition: background .12s, color .12s;
-      }
-      .connect-actions button:hover { background: #232323; color: var(--text); }
-      .connect-actions .allow { background: var(--brand); border-color: var(--brand); color: #111; font-weight: 600; }
-      .connect-actions .allow:hover { background: #e2ff62; border-color: #e2ff62; color: #111; }
-      .connect-actions .allow:disabled { opacity: .5; cursor: default; }
-      .connect-msg { margin-top: 9px; font-size: 12px; }
-      .connect-msg.ok { color: var(--brand); }
-      .connect-msg.err { color: #f5736f; }
-
-      /* --- до входа: панель не притворяется пустой, а говорит почему --- */
-      body.guest .timer,
-      body.guest nav { display: none; }
-      .guest-screen { display: none; }
-      body.guest .guest-screen {
-        flex: 1;
-        display: flex; flex-direction: column;
-        align-items: center; justify-content: center;
-        gap: 6px; padding: 24px 20px; text-align: center;
-      }
-      body.guest main { display: none; }
-      .guest-logo {
-        width: 46px; height: 46px; margin-bottom: 6px;
-        border-radius: 12px;
-        background: var(--brand); color: #111;
+      .tr-edit input.bad { border-bottom-color: var(--signal); color: var(--signal); }
+      .tr-edit button { width: 24px; height: 24px; border-radius: 7px; display: grid; place-items: center; color: var(--moss2); }
+      .tr-edit button:hover { background: var(--moss-hover); color: var(--moss-ink); }
+      .tr-go {
+        width: 40px; height: 40px; flex: none; border-radius: 11px;
         display: grid; place-items: center;
-        font: 700 20px/1 system-ui, sans-serif;
+        background: var(--accent); color: var(--accent-ink);
       }
-      .guest-title { font-size: 15px; font-weight: 600; }
-      .guest-hint { color: var(--muted); }
+      .tr-go.start { width: auto; padding-inline: 14px; display: inline-flex; align-items: center; gap: 6px; font-weight: 600; }
+      .tr-go:not(:disabled):hover { filter: brightness(0.96); }
+      .tr-go:disabled { opacity: 0.55; }
 
-      /* --- низ --- */
-      footer {
-        display: flex; gap: 8px;
-        padding: 8px 12px;
-        border-top: 1px solid var(--line);
+      /* --- вкладки --- */
+      .tr-tabs {
+        display: flex; gap: 4px; flex: none;
+        margin: 10px 10px 0; padding: 3px; border-radius: 11px;
+        background: var(--card);
       }
-      footer button {
-        flex: 1;
-        border: 1px solid var(--line); border-radius: 7px;
-        background: var(--card); color: var(--muted);
-        font: inherit; padding: 7px;
-        cursor: pointer;
-        transition: background .12s, color .12s;
+      .tr-tabs button {
+        flex: 1; min-width: 0; height: 32px; border-radius: 8px;
+        display: inline-flex; align-items: center; justify-content: center; gap: 6px;
+        color: var(--ink2); font-weight: 500; white-space: nowrap;
       }
-      footer button:hover { background: #232323; color: var(--text); }
-      /* Заливку задаём явно и в обычном, и в наведённом состоянии: brightness
-         поверх незаданного фона гасил кнопку вместе с текстом. */
-      footer .primary { background: var(--brand); border-color: var(--brand); color: #111; font-weight: 600; }
-      footer .primary:hover { background: #e2ff62; border-color: #e2ff62; color: #111; }
+      .tr-tabs button.on { background: var(--tab-on); color: var(--ink); box-shadow: var(--tab-shadow); }
+      .tr-tabs .n { color: var(--ink3); font-weight: 500; }
+      .tr-tabs .n.hot { background: var(--accent); color: var(--accent-ink); border-radius: 999px; padding: 0 6px; font-size: 11.5px; font-weight: 600; line-height: 18px; }
+
+      /* --- проекты-фильтры --- */
+      .tr-chips {
+        display: flex; gap: 6px; flex: none; overflow-x: auto;
+        padding: 10px 10px 4px; scrollbar-width: none;
+      }
+      .tr-chips::-webkit-scrollbar { display: none; }
+      .tr-chip {
+        flex: none; height: 28px; padding-inline: 4px 9px; border-radius: 9px;
+        display: inline-flex; align-items: center; gap: 6px;
+        background: var(--card); color: var(--ink2); font-weight: 500; white-space: nowrap;
+      }
+      .tr-chip.all { padding-inline: 10px; }
+      .tr-chip:hover { color: var(--ink); }
+      .tr-chip.on { background: var(--ink); color: var(--bg); }
+      .tr-chip .c { color: var(--ink3); font-weight: 600; }
+      .tr-chip.on .c { color: var(--bg); opacity: 0.6; }
+      .tr-chip .nm { max-width: 150px; overflow: hidden; text-overflow: ellipsis; unicode-bidi: plaintext; }
+
+      /* --- списки --- */
+      .tr-list {
+        flex: 1; min-height: 0; overflow-y: auto; position: relative;
+        padding: 0 6px 10px;
+        scrollbar-width: thin; scrollbar-color: var(--scroll) transparent;
+      }
+      .tr-list::-webkit-scrollbar { width: 8px; }
+      .tr-list::-webkit-scrollbar-thumb { background: var(--scroll); border-radius: 4px; }
+      .tr-gh {
+        position: sticky; top: 0; z-index: 1;
+        display: flex; align-items: center; gap: 8px; width: 100%;
+        padding: 10px 6px 4px; background: var(--bg);
+        font-size: 12px; font-weight: 600; color: var(--ink2); text-align: start;
+      }
+      .tr-gh:hover .nm { color: var(--ink); text-decoration: underline; text-underline-offset: 3px; }
+      .tr-gh .nm { min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; unicode-bidi: plaintext; }
+      .tr-gh .n { color: var(--ink3); font-weight: 500; }
+
+      .tr-row { position: relative; border-radius: 10px; }
+      .tr-row:hover, .tr-row:focus-within { background: var(--card); }
+      .tr-row.busy { opacity: 0.5; pointer-events: none; }
+      .tr-open { display: block; width: 100%; padding: 8px 8px 9px; text-align: start; border-radius: 10px; }
+      .tr-t {
+        display: flex; align-items: center; gap: 6px;
+        font-size: 13.5px; font-weight: 500;
+      }
+      .tr-t .tx { min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; unicode-bidi: plaintext; }
+      [dir='ltr'] .tr-t .tx { text-align: left; }
+      [dir='rtl'] .tr-t .tx { text-align: right; }
+      /* Новое по задаче — непрочитанное уведомление о ней. */
+      .tr-new { width: 7px; height: 7px; flex: none; border-radius: 50%; background: var(--accent); box-shadow: 0 0 0 1.5px var(--moss); }
+      .tr-m {
+        display: flex; align-items: center; gap: 8px; margin-top: 3px;
+        font-size: 12px; color: var(--ink3); white-space: nowrap; overflow: hidden;
+      }
+      .tr-m > span { flex: none; }
+      .tr-m .from { flex: 0 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; unicode-bidi: plaintext; }
+      .tr-mv {
+        display: inline-flex; align-items: center; gap: 5px;
+        height: 20px; padding: 0 7px; border-radius: 6px;
+        background: var(--card2); color: var(--ink); font-weight: 600; font-size: 11.5px;
+      }
+      .tr-mv i { width: 6px; height: 6px; border-radius: 50%; background: currentColor; }
+      .tr-mv.review { background: var(--rev-bg); color: var(--rev); }
+      .tr-mv.answer { background: var(--ask-bg); color: var(--ask); }
+      .tr-mv.client { background: var(--work-bg); color: var(--work); }
+      .tr-row:hover .tr-mv.do, .tr-row:focus-within .tr-mv.do { background: var(--bg); }
+      .tr-rnd, .tr-late { color: var(--signal); font-weight: 600; }
+      .tr-soon { color: var(--work); font-weight: 600; }
+      .tr-long { color: var(--work); font-weight: 600; display: inline-flex; align-items: center; gap: 3px; }
+      .tr-long .ic { width: 12px; height: 12px; }
+      /* Ход по мячу — кнопкой в строке. Появляется под курсором и с клавиатуры:
+         постоянная кнопка на каждой строке съела бы треть ширины названий. */
+      .tr-act {
+        position: absolute; inset-inline-end: 8px; top: 50%; transform: translateY(-50%);
+        height: 28px; padding-inline: 11px; border-radius: 8px;
+        background: var(--bg); box-shadow: inset 0 0 0 1px var(--line), -14px 0 12px -2px var(--card);
+        font-weight: 600; font-size: 12.5px; white-space: nowrap;
+        opacity: 0; pointer-events: none; transition: opacity 0.12s;
+      }
+      [dir='rtl'] .tr-act { box-shadow: inset 0 0 0 1px var(--line), 14px 0 12px -2px var(--card); }
+      .tr-act.acc { background: var(--accent); color: var(--accent-ink); }
+      .tr-row:hover .tr-act, .tr-row:focus-within .tr-act { opacity: 1; pointer-events: auto; }
+      .tr-act:hover { filter: brightness(0.96); }
+
+      .tr-ev { display: flex; gap: 10px; width: 100%; padding: 9px 8px; border-radius: 10px; text-align: start; }
+      .tr-ev:hover { background: var(--card); }
+      .tr-av {
+        width: 28px; height: 28px; flex: none; border-radius: 50%;
+        display: grid; place-items: center;
+        background: #71717a; color: #fff; font-weight: 700; font-size: 12px;
+      }
+      .tr-ev.new .tr-av { box-shadow: 0 0 0 2px var(--bg), 0 0 0 4px var(--accent); }
+      .tr-ev .b { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 3px; }
+      .tr-ev .l1 {
+        font-size: 13px; color: var(--ink2); line-height: 1.38;
+        display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden;
+        unicode-bidi: plaintext; overflow-wrap: anywhere;
+      }
+      .tr-ev .l1 b { color: var(--ink); font-weight: 600; }
+      .tr-ev:not(.new) .l1 { color: var(--ink3); }
+      .tr-ev .q {
+        color: var(--ink); line-height: 1.4;
+        display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden;
+        unicode-bidi: plaintext; overflow-wrap: anywhere;
+      }
+      .tr-ev:not(.new) .q { color: var(--ink2); }
+      .tr-ev .l3 { font-size: 11.5px; color: var(--ink3); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; unicode-bidi: plaintext; }
+      [dir='ltr'] .tr-ev .l1, [dir='ltr'] .tr-ev .q, [dir='ltr'] .tr-ev .l3 { text-align: left; }
+      [dir='rtl'] .tr-ev .l1, [dir='rtl'] .tr-ev .q, [dir='rtl'] .tr-ev .l3 { text-align: right; }
+      .tr-ev time { flex: none; font-size: 11.5px; color: var(--ink3); white-space: nowrap; }
+      .tr-allnot { display: block; margin: 4px auto 0; padding: 6px 10px; border-radius: 8px; color: var(--ink3); font-size: 12px; }
+      .tr-allnot:hover { color: var(--ink); background: var(--card); }
+      .tr-quiet { padding: 34px 24px; text-align: center; color: var(--ink3); }
+
+      /* --- пусто / не вошли --- */
+      .tr-empty {
+        flex: 1; display: flex; flex-direction: column; align-items: center; justify-content: center;
+        gap: 8px; padding: 24px 34px; text-align: center; color: var(--ink2);
+      }
+      .tr-empty b { font-size: 16px; color: var(--ink); }
+      .tr-big { width: 52px; height: 52px; border-radius: 16px; margin-bottom: 6px; display: grid; place-items: center; background: var(--moss); color: var(--accent); }
+      .tr-big .ic { width: 24px; height: 24px; }
+      .tr-btn {
+        margin-top: 8px; height: 40px; padding-inline: 16px; border-radius: 11px;
+        display: inline-flex; align-items: center; gap: 8px;
+        background: var(--accent); color: var(--accent-ink); font-weight: 600;
+      }
+      .tr-btn:hover { filter: brightness(0.96); }
+
+      /* --- всплывающее: выбор проекта и меню аккаунта --- */
+      .tr-scrim { position: absolute; inset: 0; z-index: 5; background: var(--scrim); }
+      .tr-scrim.low { top: 104px; }
+      .tr-pop {
+        position: absolute; z-index: 6; inset-inline: 10px;
+        padding: 6px; border-radius: 14px;
+        background: var(--pop); box-shadow: var(--pop-shadow);
+        overflow-y: auto; scrollbar-width: thin; scrollbar-color: var(--scroll) transparent;
+      }
+      .tr-pick { top: 104px; max-height: 360px; }
+      .tr-menu { top: 44px; max-height: 466px; }
+      .tr-pop .hd { padding: 6px 8px 4px; font-size: 11.5px; color: var(--ink3); }
+      .tr-q {
+        display: flex; align-items: center; gap: 8px;
+        height: 36px; margin: 0 2px 4px; padding: 0 10px; border-radius: 9px;
+        background: var(--card2); color: var(--ink3);
+      }
+      .tr-q input { flex: 1; min-width: 0; height: 100%; border: 0; outline: 0; background: none; color: var(--ink); }
+      .tr-q:focus-within { box-shadow: inset 0 0 0 1px var(--ink3); }
+      .tr-mi {
+        display: flex; align-items: center; gap: 10px; width: 100%;
+        height: 38px; padding-inline: 8px; border-radius: 9px;
+        text-align: start; font-weight: 500;
+      }
+      .tr-mi:hover { background: var(--card2); }
+      .tr-mi .nm { min-width: 0; flex: 1; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; unicode-bidi: plaintext; }
+      .tr-mi .meta { flex: none; font-size: 11.5px; color: var(--ink3); font-weight: 400; }
+      .tr-mi .chk { flex: none; color: var(--rev); }
+      .tr-mi > .ic { color: var(--ink3); }
+      .tr-mi.danger, .tr-mi.danger > .ic { color: var(--signal); }
+      .tr-mi .cnt { flex: none; background: var(--accent); color: var(--accent-ink); border-radius: 999px; padding: 0 6px; font-size: 11px; font-weight: 600; line-height: 17px; }
+      .tr-div { height: 1px; margin: 4px 6px; background: var(--line); }
+      .tr-who { display: flex; align-items: center; gap: 10px; padding: 8px 8px 10px; }
+      .tr-who .tr-me { width: 34px; height: 34px; font-size: 14px; }
+      .tr-who .tx { min-width: 0; }
+      .tr-who b, .tr-who small { display: block; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+      .tr-who b { font-weight: 600; unicode-bidi: plaintext; }
+      .tr-who small { color: var(--ink3); font-size: 12px; }
+      .tr-none { padding: 10px 8px; color: var(--ink3); }
+
+      .tr-toast {
+        position: absolute; z-index: 7; inset-inline: 10px; bottom: 10px;
+        display: flex; align-items: center; gap: 8px;
+        padding: 10px 12px; border-radius: 11px;
+        background: var(--ink); color: var(--bg); font-weight: 500;
+      }
+
+      /* --- подключение ассистента: отдельный экран из меню аккаунта --- */
+      .tr-subhead { display: flex; align-items: center; gap: 6px; flex: none; padding: 0 10px 4px 6px; font-weight: 600; font-size: 14px; }
+      .cn { padding: 6px 6px 12px; }
+      .cn-hint { margin: 0 0 8px; color: var(--ink2); }
+      .cn-invite { display: flex; gap: 6px; margin-bottom: 14px; }
+      .cn-invite code {
+        min-width: 0; flex: 1; padding: 8px 10px; border-radius: 9px;
+        background: var(--card); color: var(--ink2); direction: ltr; text-align: left;
+        font: 11.5px/1.5 ui-monospace, 'Cascadia Mono', Consolas, monospace;
+        white-space: nowrap; overflow: hidden; text-overflow: ellipsis; user-select: text;
+      }
+      .cn-btn { flex: none; height: 34px; padding-inline: 12px; border-radius: 9px; background: var(--accent); color: var(--accent-ink); font-weight: 600; }
+      .cn-btn.ok { background: var(--card2); color: var(--ink); }
+      .cn-btn:disabled { opacity: 0.5; }
+      .cn-btn.ghost { background: var(--card); color: var(--ink2); }
+      .cn-code {
+        width: 100%; padding: 11px 10px; border: 0; border-radius: 10px; outline: none;
+        background: var(--card); box-shadow: inset 0 0 0 1px var(--line);
+        font: 600 15px/1 ui-monospace, 'Cascadia Mono', Consolas, monospace;
+        letter-spacing: 0.12em; text-align: center; text-transform: uppercase; direction: ltr;
+      }
+      .cn-code:focus { box-shadow: inset 0 0 0 1.5px var(--ink); }
+      .cn-box { margin-top: 4px; padding: 10px; border-radius: 12px; background: var(--card); }
+      .cn-who { font-size: 14px; font-weight: 700; }
+      .cn-warn { margin-top: 2px; color: var(--ink3); font-size: 12px; }
+      .cn-label { display: block; margin: 10px 0 6px; color: var(--ink3); font-size: 11.5px; }
+      .cn-box .tr-q { margin: 0 0 6px; background: var(--bg); }
+      .cn-picker { max-height: 168px; overflow-y: auto; display: flex; flex-direction: column; gap: 2px; }
+      .cn-pick { display: flex; align-items: center; gap: 8px; width: 100%; padding: 6px 8px; border-radius: 9px; text-align: start; }
+      .cn-pick:hover { background: var(--card2); }
+      .cn-pick.on { background: var(--bg); box-shadow: inset 0 0 0 1.5px var(--rev); }
+      .cn-pick .tx { min-width: 0; flex: 1; display: flex; flex-direction: column; }
+      .cn-pick .nm { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; unicode-bidi: plaintext; }
+      .cn-pick .sub { font-size: 11px; color: var(--ink3); }
+      .cn-group { padding: 6px 2px 2px; font-size: 11px; color: var(--ink3); }
+      .cn-actions { display: flex; gap: 8px; margin-top: 10px; }
+      .cn-actions .cn-btn { flex: 1; height: 36px; }
+      .cn-actions .cn-btn.main { flex: 2; }
+      .cn-msg { margin: 10px 0 0; font-size: 12.5px; }
+      .cn-msg.ok { color: var(--ink); }
+      .cn-msg.err { color: var(--signal); }
+      .cn-conns { margin-top: 16px; padding-top: 10px; border-top: 1px solid var(--line); }
+      .cn-conns .hd { margin-bottom: 6px; color: var(--ink3); font-size: 11.5px; }
+      .cn-conn { display: flex; align-items: center; gap: 8px; padding: 7px 9px; border-radius: 9px; background: var(--card); }
+      .cn-conn + .cn-conn { margin-top: 4px; }
+      .cn-conn .tx { min-width: 0; flex: 1; }
+      .cn-conn .nm, .cn-conn .where { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+      .cn-conn .where { color: var(--ink3); font-size: 11.5px; }
+      .cn-kill { flex: none; height: 26px; padding-inline: 9px; border-radius: 7px; color: var(--ink2); box-shadow: inset 0 0 0 1px var(--line); font-size: 12px; }
+      .cn-kill:hover { color: var(--signal); box-shadow: inset 0 0 0 1px var(--signal); }
     </style>
   </head>
   <body>
-    <div class="timer">
-      <button class="play" id="play"></button>
-      <div class="timer-info">
-        <div class="elapsed idle" id="elapsed">No timer running</div>
-        <span class="elapsed-edit" id="elapsedEdit" hidden>
-          <input class="elapsed-input" id="elapsedInput" spellcheck="false" inputmode="numeric" />
-          <button class="elapsed-ok" id="elapsedOk" title="OK">
-            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"/></svg>
+    <div class="tr" id="tr">
+      <header class="tr-head">
+        <button class="tr-co" id="coBtn" type="button">
+          <span class="tr-lg" id="coLogo">C</span>
+          <span class="nm" id="coName">Chatick</span>
+          <svg class="ic s" id="coChev" viewBox="0 0 24 24"><path d="M6 9l6 6 6-6" /></svg>
+        </button>
+        <span class="tr-sp"></span>
+        <button class="tr-ib" id="openApp" type="button">
+          <svg class="ic" viewBox="0 0 24 24"><path d="M14 4h6v6M20 4l-9 9" /><path d="M18 14v4a2 2 0 01-2 2H6a2 2 0 01-2-2V8a2 2 0 012-2h4" /></svg>
+        </button>
+        <button class="tr-ib" id="meBtn" type="button" hidden><span class="tr-me" id="meAv"></span></button>
+        <button class="tr-ib" id="closeBtn" type="button">
+          <svg class="ic" viewBox="0 0 24 24"><path d="M6 6l12 12M18 6L6 18" /></svg>
+        </button>
+      </header>
+
+      <!-- рабочий экран: таймер, вкладки, список -->
+      <div class="tr-view" id="mainView">
+        <div class="tr-timer" id="timer">
+          <button class="tr-proj" id="projBtn" type="button" aria-haspopup="listbox">
+            <span class="tr-lg co" id="tLogo">C</span>
+            <span class="tx"><span class="nm" id="tName">—</span><span class="sub" id="tSub"></span></span>
+            <svg class="ic s" viewBox="0 0 24 24"><path d="M6 9l6 6 6-6" /></svg>
           </button>
-          <button class="elapsed-cancel" id="elapsedCancel" title="Esc">
-            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="M18 6 6 18M6 6l12 12"/></svg>
-          </button>
-        </span>
-        <button class="proj-btn" id="projBtn">
-          <span class="dot" id="projDot"></span>
-          <span class="name" id="projName">—</span>
-          <svg class="chev" width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="m6 9 6 6 6-6"/></svg>
+          <span class="tr-time" id="tTime" hidden><span class="tr-dot"></span><button class="tr-clock" id="tClock" type="button"></button></span>
+          <span class="tr-edit" id="tEdit" hidden>
+            <input id="tInput" spellcheck="false" inputmode="numeric" />
+            <button id="tOk" type="button"><svg class="ic s" viewBox="0 0 24 24"><path d="M5 12.5l4.5 4.5L19 7.5" /></svg></button>
+            <button id="tCancel" type="button"><svg class="ic s" viewBox="0 0 24 24"><path d="M6 6l12 12M18 6L6 18" /></svg></button>
+          </span>
+          <button class="tr-go" id="goBtn" type="button"></button>
+        </div>
+        <div class="tr-tabs" role="tablist">
+          <button role="tab" data-tab="mine" type="button"><span id="tabMine">On me</span><span class="n" id="nMine"></span></button>
+          <button role="tab" data-tab="inbox" type="button"><span id="tabInbox">Waiting on me</span><span class="n" id="nInbox" hidden></span></button>
+        </div>
+        <div class="tr-chips" id="chips" hidden></div>
+        <div class="tr-list" id="list"></div>
+      </div>
+
+      <!-- подключение ассистента -->
+      <div class="tr-view" id="connectView" hidden>
+        <div class="tr-subhead">
+          <button class="tr-ib" id="backBtn" type="button"><svg class="ic flip" viewBox="0 0 24 24"><path d="M15 18l-6-6 6-6" /></svg></button>
+          <span id="connectTitle">Connect an assistant</span>
+        </div>
+        <div class="tr-list" id="connectBody"></div>
+      </div>
+
+      <!-- не вошли -->
+      <div class="tr-empty" id="loginView" hidden>
+        <span class="tr-big"><svg class="ic" viewBox="0 0 24 24"><circle cx="12" cy="8.5" r="3.5" /><path d="M5 20c.8-3.6 3.6-5.5 7-5.5s6.2 1.9 7 5.5" /></svg></span>
+        <b id="loginH">You’re not signed in</b>
+        <span id="loginP">Sign in to Chatick and your tasks and timer will show up here.</span>
+        <button class="tr-btn" id="loginBtn" type="button">
+          <svg class="ic" viewBox="0 0 24 24"><path d="M14 4h6v6M20 4l-9 9" /><path d="M18 14v4a2 2 0 01-2 2H6a2 2 0 01-2-2V8a2 2 0 012-2h4" /></svg>
+          <span id="loginBtnL">Open Chatick and sign in</span>
         </button>
       </div>
-      <button class="hours-btn" id="hoursBtn" hidden>
-        <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></svg>
-      </button>
-      <button class="avatar me-avatar" id="meAvatar" hidden></button>
+
+      <div class="tr-scrim" id="scrim" hidden></div>
+      <div class="tr-pop tr-pick" id="pick" role="listbox" hidden>
+        <div class="hd" id="pickHd">Track time to</div>
+        <label class="tr-q">
+          <svg class="ic s" viewBox="0 0 24 24"><circle cx="11" cy="11" r="6.5" /><path d="M20 20l-4.2-4.2" /></svg>
+          <input id="pickQ" spellcheck="false" />
+        </label>
+        <div id="pickList"></div>
+      </div>
+      <div class="tr-pop tr-menu" id="menu" role="menu" hidden></div>
+      <div class="tr-toast" id="toast" role="status" hidden></div>
     </div>
-    <div class="proj-menu" id="projMenu" hidden>
-      <input id="projSearch" class="target-search" spellcheck="false" data-ph="connectSearch" placeholder="Search…" />
-      <div class="picker" id="projList"></div>
-    </div>
-
-    <nav>
-      <button data-tab="inbox" class="active"><span data-t="tabInbox">For me</span><span class="count" id="cnt" hidden></span></button>
-      <button data-tab="tasks" data-t="tabTasks">Tasks</button>
-      <button data-tab="connect" data-t="tabConnect">Connect</button>
-    </nav>
-
-    <main id="list"></main>
-
-    <div class="guest-screen">
-      <div class="guest-logo">C</div>
-      <div class="guest-title" id="guestTitle">Not signed in</div>
-      <div class="guest-hint" id="guestHint">Sign in to see your timer, tasks and notifications</div>
-    </div>
-
-    <footer>
-      <button id="openApp" class="primary" data-t="openApp">Open Chatick</button>
-      <button id="close" data-t="close">Close</button>
-    </footer>
 
     <script>
-      let state = { authed: true, unread: 0, timer: null, notifications: [], tasks: [], projects: [], project: null, strings: {} }
+      'use strict'
+
+      const P = window.panel
+      let state = { authed: true, unread: 0, timer: null, notifications: [], tasks: [], projects: [], companies: [], strings: {} }
 
       /**
        * Подписи приходят из веба вместе с состоянием: язык выбирают в
@@ -592,828 +558,644 @@
        * на первые миллисекунды, пока состояние не пришло.
        */
       const T = (key, fallback) => state.strings?.[key] || fallback
-      let tab = 'inbox'
       const $ = (id) => document.getElementById(id)
-
-      // Проект, в который пойдёт время. Живёт в панели и переживает перезапуск:
-      // это выбор человека, а не производная от открытой в окне страницы.
-      let timerProject = null
-      try { timerProject = localStorage.getItem('chatick.timerProject') } catch {}
-      let projMenuOpen = false
-      let projQ = ''
-      // Фильтры вкладок и свёрнутые группы задач.
-      let inboxQ = ''
-      let taskQ = ''
-      let collapsed = {}
-      try { collapsed = JSON.parse(localStorage.getItem('chatick.collapsedTasks') || '{}') } catch {}
-      let showDone = false
-      try { showDone = localStorage.getItem('chatick.showDone') === '1' } catch {}
-
-      const projectById = (id) => (state.projects || []).find((p) => p.id === id)
-      // Подпись компании — только когда компаний больше одной: иначе это шум.
-      const companyNameOf = (p) => {
-        if (!p || (state.companies || []).length < 2) return ''
-        return (state.companies || []).find((c) => c.id === p.companyId)?.name || ''
-      }
-      // Путь в проект. Компания в адресе обязательна: маршрут в приложении —
-      // /c/<companyId>/p/<projectId>. Без неё ссылка не совпадала ни с одним
-      // маршрутом, и клик по проекту открывал ЧЁРНЫЙ ЭКРАН — пустой роутер.
-      //
-      // Берём companyId из самого проекта, а если его нет (проект пришёл из
-      // уведомления одной лишь парой id+имя) — ищем в общем списке.
-      const openProjectLink = (id) => {
-        const p = projectById(id)
-        const companyId = p?.companyId
-        // Компанию не нашли — ведём на стартовый экран, а не в никуда: там
-        // проект хотя бы можно выбрать руками.
-        if (!companyId) return '/start'
-        return `/c/${companyId}/p/${id}/chat`
-      }
-      /**
-       * Часы ПРОЕКТА, а не компании.
-       *
-       * Компанейская вкладка «Часы» показывает всю картину и просилась сюда
-       * сильнее, но она открывается только руководству (canManage). Для
-       * рядового участника кнопка вела бы в настройки — то есть в никуда.
-       * Часы проекта видит каждый, и они ровно про тот таймер, рядом с
-       * которым кнопка стоит.
-       */
-      const openHoursLink = (id) => {
-        const companyId = projectById(id)?.companyId
-        return companyId ? `/c/${companyId}/p/${id}/time` : null
-      }
-      const refocus = (id) => {
-        const el = $(id)
-        if (el) { el.focus(); el.setSelectionRange(el.value.length, el.value.length) }
-      }
-
-      /**
-       * Иконка статуса задачи. Рисуем svg вручную: тянуть библиотеку иконок
-       * в панель ради четырёх фигур несоразмерно.
-       */
-      /** Плей и пауза — тоже svg: текстовые символы сидят на базовой линии
-          и в квадратной кнопке смотрятся смещёнными. */
-      const PLAY_ICON =
-        '<svg class="status-icon" width="11" height="11" viewBox="0 0 24 24" fill="currentColor"><path d="M7 4.5v15l13-7.5z"/></svg>'
-      const PAUSE_ICON =
-        '<svg class="status-icon" width="11" height="11" viewBox="0 0 24 24" fill="currentColor"><path d="M7 4.5h3.5v15H7zM13.5 4.5H17v15h-3.5z"/></svg>'
-
-      const STATUS_ICONS = {
-        todo: '<circle cx="12" cy="12" r="9"/>',
-        in_progress: '<circle cx="12" cy="12" r="9"/><circle cx="12" cy="12" r="3.5" fill="currentColor" stroke="none"/>',
-        review: '<path d="M2 12s3.5-6 10-6 10 6 10 6-3.5 6-10 6-10-6-10-6Z"/><circle cx="12" cy="12" r="3"/>',
-        done: '<circle cx="12" cy="12" r="9"/><path d="m8.5 12 2.5 2.5 4.5-5"/>',
-      }
-      const statusIcon = (status, size = 14) => {
-        const key = STATUS_ICONS[status] ? status : 'todo'
-        return `<svg class="status-icon st-${key}" width="${size}" height="${size}" viewBox="0 0 24 24"
-                     fill="none" stroke="currentColor" stroke-width="2"
-                     stroke-linecap="round" stroke-linejoin="round">${STATUS_ICONS[key]}</svg>`
-      }
-
-      /** Инициалы вместо картинки, когда аватарки нет. */
-      const initials = (name) =>
-        String(name || '?')
-          .split(/\s+/)
-          .slice(0, 2)
-          .map((w) => w[0])
-          .join('')
-          .toUpperCase()
-
-      const escape = (s) =>
+      const esc = (s) =>
         String(s ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c])
-
-      function elapsedText(timer) {
-        // Битую дату отсекаем здесь же: иначе в счётчике появится NaN:NaN.
-        const started = timer?.startedAt ? new Date(timer.startedAt).getTime() : NaN
-        if (Number.isNaN(started)) return ''
-        const sec = Math.max(0, Math.floor((Date.now() - started) / 1000))
-        const h = Math.floor(sec / 3600)
-        const m = Math.floor((sec % 3600) / 60)
-        const s = sec % 60
-        return h
-          ? `${h}:${String(m).padStart(2, '0')}:${String(s).padStart(2, '0')}`
-          : `${m}:${String(s).padStart(2, '0')}`
+      const store = {
+        get(k) {
+          try { return localStorage.getItem(k) } catch { return null }
+        },
+        set(k, v) {
+          try { v == null ? localStorage.removeItem(k) : localStorage.setItem(k, v) } catch {}
+        },
       }
 
       /**
-       * Умеет ли установленное приложение принять правку времени.
+       * Умеет ли установленная оболочка принять правку времени.
        *
        * preload живёт ВНУТРИ приложения, а панель грузится с сайта. Приложение
        * лежит в магазине и обновляется не по нашей воле, поэтому панель обязана
        * работать со СТАРОЙ оболочкой: нет метода — правку не предлагаем вовсе,
        * а не роняем панель на первом же клике.
-       *
-       * Объявление ДО renderTimer намеренно: const не поднимается, и обращение
-       * из отрисовки к переменной, объявленной ниже, дало бы ReferenceError —
-       * то есть пустую панель, ровно то, от чего здесь и защищаемся.
        */
-      const canEditElapsed = typeof window.panel.setTimerElapsed === 'function'
+      const canEditElapsed = typeof P.setTimerElapsed === 'function'
+
+      // --- что выбрано в самой панели -----------------------------------------
+      let tab = store.get('chatick.tray.tab') === 'inbox' ? 'inbox' : 'mine'
+      let chip = 'all'
+      let view = 'main' // 'main' | 'connect'
+      let overlay = null // 'pick' | 'menu' | null
+      /**
+       * Компания панели. Своя, а не «та, что в окне»: в трее смотрят задачи
+       * другой компании, не трогая открытое приложение. Но когда компанию
+       * меняют в окне, панель идёт следом — иначе после переключения там она
+       * показывала бы прежнюю, и это читалось бы как баг.
+       */
+      let coSel = store.get('chatick.tray.company')
+      let coSeen = store.get('chatick.tray.winCompany')
+      /** Таймер нажат, ответа ещё нет — кнопка не принимает второй клик. */
+      let busy = { until: 0, timerId: null }
+      /**
+       * Запрет второго клика — не дольше четырёх секунд. Отказ сервера нового
+       * состояния не присылает (таймер как был), и без своего срока кнопка так
+       * и осталась бы серой.
+       */
+      function holdTimer() {
+        busy = { until: Date.now() + 4000, timerId: state.timer?.id || null }
+        setTimeout(() => state.authed !== false && view === 'main' && renderTimer(), 4100)
+      }
+      /** Задачи, по которым нажали ход, — до прихода нового состояния. */
+      const sent = new Map()
+
+      // --- справочники ----------------------------------------------------------
+      const companies = () => (Array.isArray(state.companies) ? state.companies : [])
+      const company = () => companies().find((c) => c.id === coSel) || null
+      const projectById = (id) => (state.projects || []).find((p) => p.id === id)
+      /** Компания задачи/уведомления. Старое состояние её не знает — тогда по проекту. */
+      const companyOf = (x) => x?.companyId || projectById(x?.projectId)?.companyId || null
+      /** Не знаем компанию — показываем везде: потерять дело хуже, чем показать лишнее. */
+      const inCompany = (x) => {
+        const c = companyOf(x)
+        return !coSel || !c || c === coSel
+      }
+      const myTasks = () => (state.tasks || []).filter(inCompany)
+      const myNotices = () => (state.notifications || []).filter(inCompany)
 
       /**
-       * Разбор натикавшего: 103 → 1:03, 45 → 0:45, 2:30 → 2:30.
-       *
-       * КОПИЯ логики parseDuration из apps/app/src/lib/time-parse.ts. Панель —
-       * отдельный html без сборщика, импортировать оттуда нечем. Меняете
-       * здесь — поменяйте и там: иначе панель и приложение начнут понимать
-       * один и тот же ввод по-разному, а заметят это не сразу.
-       *
+       * Цвет человека/компании по id — копия personColor из v2/util.ts: в
+       * панели нет сборщика, импортировать оттуда нечем.
+       */
+      const PALETTE = ['#2F5FD0', '#B4441A', '#6D3FC4', '#0F766E', '#86198F', '#9A3412', '#1D4ED8', '#4D7C0F', '#BE185D', '#0E7490', '#B45309', '#334155']
+      function colorOf(id) {
+        if (!id) return '#71717A'
+        let h = 0
+        for (let i = 0; i < id.length; i++) h = (h * 31 + id.charCodeAt(i)) | 0
+        return PALETTE[Math.abs(h) % PALETTE.length]
+      }
+      const letterOf = (name) => (String(name || '').trim()[0] || '?').toUpperCase()
+      const initials = (name) =>
+        String(name || '?').trim().split(/\s+/).slice(0, 2).map((w) => w[0]).join('').toUpperCase()
+
+      /** Значок: картинка, если есть, иначе буква на цвете. */
+      function logo(o, cls = '') {
+        const letter = esc(o.letter || letterOf(o.name))
+        if (o.logoUrl) {
+          // Картинка не загрузилась (нет сети, file://) — возвращаем букву.
+          return `<span class="tr-lg ${cls}" style="background:${esc(o.color || '#71717A')}"><img src="${esc(o.logoUrl)}" alt="" onerror="this.parentNode.textContent='${letter}'"></span>`
+        }
+        return `<span class="tr-lg ${cls}" style="background:${esc(o.color || '#71717A')}">${letter}</span>`
+      }
+      const companyLogo = (c, cls = '') => logo({ name: c?.name, logoUrl: c?.logoUrl, color: c?.color || colorOf(c?.id), letter: c?.letter }, cls)
+      const projectLogo = (p, cls = '') => logo({ name: p?.name, logoUrl: p?.logoUrl, color: p?.color || colorOf(p?.id), letter: p?.letter }, cls)
+      const shortName = (p) => p?.short || p?.name || ''
+
+      const ICON = {
+        play: '<svg class="ic s fl" viewBox="0 0 24 24"><path d="M8 5.5v13l11-6.5z"/></svg>',
+        stop: '<svg class="ic fl" viewBox="0 0 24 24"><rect x="7" y="7" width="10" height="10" rx="1.5"/></svg>',
+        check: '<svg class="ic chk" viewBox="0 0 24 24"><path d="M5 12.5l4.5 4.5L19 7.5"/></svg>',
+        hourglass: '<svg class="ic" viewBox="0 0 24 24"><path d="M6.5 3h11M6.5 21h11M8 3v3.5a4 4 0 004 4 4 4 0 014 4V21M16 3v3.5a4 4 0 01-4 4 4 4 0 00-4 4V21"/></svg>',
+        done: '<svg class="ic" viewBox="0 0 24 24"><path d="M5 12.5l4.5 4.5L19 7.5"/></svg>',
+        clock: '<svg class="ic" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></svg>',
+        bell: '<svg class="ic" viewBox="0 0 24 24"><path d="M6 8a6 6 0 0112 0c0 7 3 9 3 9H3s3-2 3-9"/><path d="M10.3 21a1.94 1.94 0 003.4 0"/></svg>',
+        user: '<svg class="ic" viewBox="0 0 24 24"><circle cx="12" cy="8.5" r="3.5"/><path d="M5 20c.8-3.6 3.6-5.5 7-5.5s6.2 1.9 7 5.5"/></svg>',
+        plug: '<svg class="ic" viewBox="0 0 24 24"><path d="M9 2v5M15 2v5M6 7h12v4a6 6 0 01-12 0zM12 17v5"/></svg>',
+        logout: '<svg class="ic" viewBox="0 0 24 24"><path d="M8 21H5a2 2 0 01-2-2V5a2 2 0 012-2h3M16 17l5-5-5-5M21 12H9"/></svg>',
+        chevEnd: '<svg class="ic s flip" viewBox="0 0 24 24"><path d="M9 6l6 6-6 6"/></svg>',
+      }
+
+      // --- время ----------------------------------------------------------------
+      function elapsedSec(timer) {
+        const started = timer?.startedAt ? new Date(timer.startedAt).getTime() : NaN
+        return Number.isNaN(started) ? null : Math.max(0, Math.floor((Date.now() - started) / 1000))
+      }
+      /**
+       * Счётчик: м:сс, пока часа нет, и ч:мм:сс после. Поле правки читает
+       * В ТОМ ЖЕ формате (parseElapsed) — иначе одно и то же время значило бы
+       * на экране и в поле разное.
+       */
+      function clockText(timer) {
+        const sec = elapsedSec(timer)
+        if (sec === null) return ''
+        const h = Math.floor(sec / 3600)
+        const m = Math.floor((sec % 3600) / 60)
+        const s = sec % 60
+        return h ? `${h}:${String(m).padStart(2, '0')}:${String(s).padStart(2, '0')}` : `${m}:${String(s).padStart(2, '0')}`
+      }
+      const fmtHm = (min) => `${Math.floor(min / 60)}:${String(Math.floor(min % 60)).padStart(2, '0')}`
+
+      /**
+       * Разбор натикавшего: «1:03:00» → 1 ч 3 мин, «45:10» → 45 мин 10 с.
        * Возвращает СЕКУНДЫ или null.
        *
-       * Именно секунды, а не минуты: округление до минуты делало правку одних
-       * секунд бессмысленной — «10:10» и «10:20» давали одно и то же, и
-       * человек видел, что ввод не применился.
+       * Голые цифры НЕ принимаем — только формат счётчика. Раньше «200»
+       * читалось как два часа, а «2:00» — как две минуты: одна мысль давала
+       * два ответа. Пусть лучше не примет, чем примет НЕ ТО.
        */
       function parseElapsed(input) {
         const raw = String(input).trim().toLowerCase().replace(/\s+/g, '')
-        if (!raw) return null
-        /**
-         * Читаем В ТОМ ЖЕ формате, в каком показываем, — иначе одно и то же
-         * время значит на экране и в поле разное.
-         *
-         * «ч:мм:сс» — когда час уже набежал. «мм:сс» — пока нет: на счётчике
-         * «2:02» это две минуты две секунды, и прочитать это как два часа
-         * значит записать человеку время, которого он не вводил.
-         *
-         * Секунды округляем до минуты: правка идёт в минутах, а хранить
-         * невидимый остаток значит показать 1:03, а записать 1:03:47.
-         */
         const hms = raw.match(/^(\d{1,3}):(\d{1,2}):(\d{1,2})$/)
         if (hms) {
-          const [, h, m, sec] = hms
-          if (Number(m) > 59 || Number(sec) > 59) return null
-          return Number(h) * 3600 + Number(m) * 60 + Number(sec)
+          const [, h, m, s] = hms
+          if (Number(m) > 59 || Number(s) > 59) return null
+          return Number(h) * 3600 + Number(m) * 60 + Number(s)
         }
         const ms = raw.match(/^(\d{1,3}):(\d{1,2})$/)
         if (ms) {
-          const [, m, sec] = ms
-          if (Number(sec) > 59) return null
-          return Number(m) * 60 + Number(sec)
+          const [, m, s] = ms
+          if (Number(s) > 59) return null
+          return Number(m) * 60 + Number(s)
         }
-        /**
-         * Голые цифры БОЛЬШЕ НЕ ПРИНИМАЕМ — только формат счётчика.
-         *
-         * Раньше «200» читалось как два часа, а «2:00» — как две минуты. Одна
-         * и та же мысль давала два разных ответа в зависимости от того,
-         * поставил человек двоеточие или нет, и заметить это можно было
-         * только по чужим часам в отчёте.
-         *
-         * Теперь правило одно: как показано на счётчике, так и вводится.
-         * «45» без двоеточия — отказ, поле подсветится: пусть лучше не
-         * примет, чем примет НЕ ТО.
-         */
         return null
       }
 
-      /** Минуты → «1:03», как в поле ввода (без секунд). */
-      function elapsedShort(minutes) {
-        const m = Math.max(0, Math.round(minutes))
-        return `${Math.floor(m / 60)}:${String(m % 60).padStart(2, '0')}`
-      }
-
+      // --- таймер: цель -------------------------------------------------------------
       /**
-       * Правка натикавшего: двигаем НАЧАЛО назад, конца у идущего таймера нет.
-       *
-       * Дату не трогаем отдельно — она получается сама из «сейчас минус
-       * столько-то». Секунды обнуляем: в поле их нет, и оставлять невидимый
-       * остаток значило бы, что 1:03 превращается в 1:03:47.
+       * Куда идёт время. Цель — id проекта или id компании («вся компания»,
+       * v2): то же самое панель и отдаёт вебу в toggleTimer, а он отличает
+       * одно от другого по своим спискам.
        */
-      function commitElapsed() {
-        const inp = $('elapsedInput')
-        // СЕКУНДЫ, не минуты: в базе лежат метки времени, и округление до
-        // минуты делало правку одних секунд бессмысленной — «10:10» и
-        // «10:20» давали одинаковый результат.
-        const seconds = parseElapsed(inp.value)
-        const t = state.timer
-        if (seconds === null || !t) { inp.classList.add('bad'); return }
-        // Потолок в сутки: тот же, что стоит на сервере. Здесь он не защита, а
-        // подсказка — отказ до отправки понятнее, чем ошибка после.
-        if (seconds > 24 * 3600) { inp.classList.add('bad'); return }
-        // preload живёт ВНУТРИ установленного приложения, а панель грузится с
-        // сайта. Приложение лежит в магазине и обновляется не по нашей воле —
-        // значит панель обязана работать со СТАРОЙ оболочкой. Нет метода —
-        // молча закрываем поле, а не роняем панель.
-        window.panel.setTimerElapsed?.(t.id, seconds)
-        closeElapsedEdit()
+      const runningTarget = () => (state.timer ? state.timer.projectId || state.timer.companyId || null : null)
+      /** Выбранное для этой компании — то же, что в шапке v2; без выбора — сама компания. */
+      function chosenTarget() {
+        const c = company()
+        const pid = c?.timerProjectId
+        const p = pid ? projectById(pid) : null
+        if (p && (!p.companyId || p.companyId === coSel)) return p.id
+        return coSel
       }
-
-      function closeElapsedEdit() {
-        $('elapsedEdit').hidden = true
-        $('elapsedInput').classList.remove('bad')
-        $('elapsed').hidden = false
-      }
-
-      function openElapsedEdit() {
-        const t = state.timer
-        if (!t) return
-        const started = new Date(t.startedAt).getTime()
-        if (Number.isNaN(started)) return
-        const inp = $('elapsedInput')
-        /**
-         * В поле — ЧАСЫ И МИНУТЫ, всегда с часами: «0:02».
-         *
-         * Счётчик показывает мм:сс, пока часа нет, и ч:мм:сс после. Подставить
-         * его как есть нельзя: «2:02» на экране значит две минуты, а в поле
-         * прочиталось бы как два часа — человек правит одно, получает другое.
-         *
-         * Пересчитывать в чистые минуты тоже нельзя: у таймера, идущего пять
-         * секунд, выходил «0:00», и время выглядело потерянным.
-         *
-         * Поэтому один формат ч:мм с округлением вверх до минуты: 5 секунд —
-         * это «0:01», а не ноль и не «0:05».
-         */
-        // Ровно то, что человек видел на счётчике. Любой пересчёт означал бы
-        // два разных числа для одного времени: на экране 2:02, в поле 0:02.
-        inp.value = elapsedText(t)
-        inp.classList.remove('bad')
-        $('elapsed').hidden = true
-        $('elapsedEdit').hidden = false
-        inp.focus()
-        inp.select()
-      }
-
-      /** Проект таймера: бегущий диктует свой, иначе — выбор человека. */
-      function currentTimerProject() {
-        if (state.timer?.projectId) return state.timer.projectId
-        if (timerProject && projectById(timerProject)) return timerProject
-        /**
-         * Главный проект компании — умолчание, когда своего выбора ещё нет.
-         *
-         * Панель открывалась с «Выберите проект», и таймер нельзя было
-         * запустить, пока не выберешь: на новой машине каждый раз заново.
-         *
-         * СТРОГО после личного выбора: жёсткая настройка перетирала бы его
-         * при каждой перерисовке. И только если человек в этом проекте
-         * состоит — projectById вернёт его лишь тогда; иначе панель повела бы
-         * туда, где его не ждут.
-         */
-        for (const c of state.companies || []) {
-          if (c.mainProjectId && projectById(c.mainProjectId)) return c.mainProjectId
+      /** Что показать про цель: значок, имя, компания. */
+      function targetView(id, fallbackName) {
+        const p = id ? projectById(id) : null
+        if (p) return { logo: projectLogo(p), name: shortName(p), companyId: p.companyId || null }
+        const c = companies().find((x) => x.id === id) || (id ? null : company())
+        if (c || !id) {
+          return {
+            // Значок самой компании, как в шапке: на зелёной карточке идущего
+            // таймера моховый квадратик сливался с фоном.
+            logo: c ? companyLogo(c) : '<span class="tr-lg co">C</span>',
+            name: T('wholeCompany', 'Whole company'),
+            companyId: c?.id || null,
+          }
         }
-        // Разумное умолчание — проект, открытый в приложении.
-        if (state.project?.id && projectById(state.project.id)) return state.project.id
-        return null
+        // Проекта нет в списке (не участник, список ещё грузится) — имя из таймера.
+        return { logo: `<span class="tr-lg" style="background:${colorOf(id)}">${esc(letterOf(fallbackName))}</span>`, name: fallbackName || '—', companyId: null }
+      }
+
+      // --- отрисовка ------------------------------------------------------------
+      /**
+       * Значок в шапке и в таймере меняем, только когда он другой. Таймер
+       * перерисовывается каждую секунду, и логотип-картинка иначе грузился бы
+       * заново на каждом тике — мигал бы.
+       */
+      const logoCache = {}
+      function swapLogo(id, html) {
+        if (logoCache[id] === html) return
+        logoCache[id] = html
+        $(id).outerHTML = html.replace('<span class="tr-lg', '<span id="' + id + '" class="tr-lg')
+      }
+
+      function applyLook() {
+        const s = state.strings || {}
+        document.documentElement.dir = s.dir === 'rtl' ? 'rtl' : 'ltr'
+        if (s.lang) document.documentElement.lang = s.lang
+        if (s.theme === 'dark' || s.theme === 'light') document.documentElement.dataset.theme = s.theme
+        else delete document.documentElement.dataset.theme
+      }
+
+      function renderHeader() {
+        const guest = state.authed === false
+        // Не вошли — бренд, а не компания из прошлой сессии.
+        const c = guest ? null : company()
+        swapLogo('coLogo', c ? companyLogo(c) : '<span class="tr-lg co">C</span>')
+        $('coName').textContent = c?.name || 'Chatick'
+        $('coChev').style.display = guest || !c ? 'none' : ''
+        $('coBtn').disabled = guest || !c
+        $('coBtn').title = T('switchCo', 'Switch company')
+        $('openApp').title = $('openApp').ariaLabel = T('openApp', 'Open Chatick')
+        $('closeBtn').title = $('closeBtn').ariaLabel = T('close', 'Close')
+
+        const me = state.user
+        $('meBtn').hidden = guest || !me
+        if (me) {
+          $('meBtn').title = $('meBtn').ariaLabel = `${me.name || ''}${me.email ? ` · ${me.email}` : ''}`
+          // Только data: — картинку по https из file:// не загрузить; готовую
+          // строку присылает главный процесс. Пока её нет — инициалы.
+          const fb = esc(initials(me.name || me.email))
+          $('meAv').innerHTML = me.avatarData ? `<img src="${esc(me.avatarData)}" alt="" onerror="this.parentNode.textContent='${fb}'">` : fb
+          $('meAv').style.background = me.avatarData ? 'transparent' : colorOf(me.email || me.name)
+        }
       }
 
       function renderTimer() {
         const t = state.timer
-        // svg, а не символ: текстовый глиф в круглой кнопке сидит не по центру
-        $('play').innerHTML = (t ? PAUSE_ICON : PLAY_ICON).replace(/width="11" height="11"/, 'width="15" height="15"')
-        $('play').classList.toggle('running', Boolean(t))
-        $('play').title = t ? T('stop', 'Stop') : T('start', 'Start timer')
+        const running = Boolean(t)
+        $('timer').classList.toggle('on', running)
 
-        const selId = currentTimerProject()
-        const sel = selId ? projectById(selId) : null
-        if (t) {
-          // Пока правят — не перетираем поле тиканьем: иначе набранное
-          // затирается на следующей секунде.
-          if ($('elapsedEdit').hidden) $('elapsed').textContent = elapsedText(t)
-          $('elapsed').classList.remove('idle')
-          $('elapsed').classList.toggle('editable', canEditElapsed)
-          if (canEditElapsed) $('elapsed').title = T('editElapsed', 'Click to correct the time')
+        const id = running ? runningTarget() : chosenTarget()
+        const tv = targetView(id, t?.projectName)
+        swapLogo('tLogo', tv.logo)
+        $('tName').textContent = tv.name
+
+        // «Сегодня 4:54»: минуты с сервера плюс то, что натикало сейчас.
+        const sec = running ? elapsedSec(t) || 0 : 0
+        const todayMin = typeof state.user?.todayMinutes === 'number' ? state.user.todayMinutes + sec / 60 : null
+        const today = todayMin === null ? '' : `${T('today', 'Today')} ${fmtHm(todayMin)}`
+        const parts = []
+        if (running) {
+          // Таймер идёт в другой компании — говорим, в какой: иначе «Вся
+          // компания» читалась бы как эта.
+          if (tv.companyId && coSel && tv.companyId !== coSel) parts.push(companies().find((c) => c.id === tv.companyId)?.name)
+          parts.push(t.taskNumber || t.description)
         } else {
-          $('elapsed').textContent = T('idle', 'No timer running')
-          $('elapsed').classList.add('idle')
-          // Без таймера править нечего — и подсказку не показываем.
-          $('elapsed').classList.remove('editable')
-          $('elapsed').removeAttribute('title')
-          closeElapsedEdit()
+          parts.push(T('timerIdle', 'Timer stopped'))
+        }
+        parts.push(today)
+        $('tSub').textContent = parts.filter(Boolean).join(' · ')
+        $('projBtn').title = $('projBtn').ariaLabel = T('trackTo', 'Track time to')
+
+        // Пока правят — не перетираем поле тиканьем: иначе набранное
+        // затирается на следующей секунде.
+        const editing = !$('tEdit').hidden
+        $('tTime').hidden = !running || editing
+        if (!running && editing) closeEdit()
+        if (running && !editing) {
+          $('tClock').textContent = clockText(t)
+          $('tClock').classList.toggle('editable', canEditElapsed)
+          $('tClock').disabled = !canEditElapsed
+          $('tClock').title = canEditElapsed ? T('editElapsed', 'Click to correct the time') : ''
         }
 
-        // Часы проекта: без проекта вести некуда, и кнопка прячется — серая
-        // неактивная обещала бы страницу, которой сейчас нет.
-        const hours = $('hoursBtn')
-        hours.hidden = !selId
-        hours.title = T('openHours', 'Time in this project')
-        // Обработчик НЕ вешаем здесь — см. делегированный клик ниже.
-
-        // Пока часы идут, выбор заблокирован: пауза разблокирует. Один
-        // предсказуемый порядок — пауза → другой проект → плей.
-        const btn = $('projBtn')
-        btn.disabled = Boolean(t)
-        btn.classList.toggle('open', projMenuOpen)
-        const label = (p) => {
-          const cname = companyNameOf(p)
-          return cname ? `${cname} · ${p.name}` : p.name
-        }
-        const name = t
-          ? `${sel ? label(sel) : t.projectName || '—'}${t.description ? ` · ${t.description}` : ''}`
-          : sel
-            ? label(sel)
-            : T('pickProject', 'Choose a project')
-        $('projName').textContent = name
-        $('projDot').style.background = sel?.color || '#3a3a3a'
-        // Плей гаснет, только когда стартовать некуда.
-        $('play').disabled = !t && !selId
-        if (!projMenuOpen) $('projMenu').hidden = true
-
-        const me = state.user
-        const av = $('meAvatar')
-        av.hidden = !me
-        if (me) {
-          av.title = `${me.name ? me.name + ' · ' : ''}${me.email}
-${T('openProfile', 'Profile')}`
-          // Только data: — панель в file:// не может загрузить картинку по
-          // https, это для неё внешний ресурс. Готовую строку присылает
-          // главный процесс; пока её нет, показываем инициалы.
-          const fallback = escape(initials(me.name || me.email))
-          av.innerHTML = me.avatarData
-            ? `<img src="${escape(me.avatarData)}" alt="" onerror="this.parentNode.textContent='${fallback}'">`
-            : fallback
-        }
+        const go = $('goBtn')
+        go.classList.toggle('start', !running)
+        go.innerHTML = running ? ICON.stop : `${ICON.play}<span>${esc(T('startShort', 'Start'))}</span>`
+        go.ariaLabel = go.title = running ? T('stopTimer', 'Stop timer') : T('startTimer', 'Start timer')
+        go.disabled = Date.now() < busy.until && (state.timer?.id || null) === busy.timerId
+        go.hidden = editing
       }
 
-      /** Список проектов дропдауна: поиск + группировка по компаниям. */
-      function renderProjMenu() {
-        const q = projQ.trim().toLowerCase()
-        const list = (state.projects || []).filter(
-          (p) => !q || p.name.toLowerCase().includes(q) || companyNameOf(p).toLowerCase().includes(q),
-        )
-        const selId = currentTimerProject()
-        // Компания — подписью у каждого проекта, а не заголовком группы:
-        // одноимённые проекты (и даже одноимённые компании) иначе не различить.
-        let html = ''
-        for (const p of list) {
-          const cname = companyNameOf(p)
-          html += `
-              <button class="pick ${p.id === selId ? 'on' : ''}" data-proj="${escape(p.id)}">
-                <span class="dot" style="background:${escape(p.color || '#3a3a3a')}"></span>
-                <span class="pick-body">
-                  <span class="pick-name">${escape(p.name)}</span>
-                  ${cname ? `<span class="pick-sub">${escape(cname)}</span>` : ''}
-                </span>
-              </button>`
-        }
-        $('projList').innerHTML = html || `<p class="empty">${T('connectNothingFound', 'Nothing found')}</p>`
+      function renderTabs() {
+        const tasks = myTasks()
+        const c = company()
+        const unread = typeof c?.unread === 'number' ? c.unread : myNotices().filter((n) => n.unread).length
+        $('tabMine').textContent = T('mine', 'On me')
+        $('tabInbox').textContent = T('waiting', 'Waiting on me')
+        $('nMine').textContent = tasks.length || ''
+        $('nInbox').hidden = !unread
+        $('nInbox').className = 'n hot'
+        $('nInbox').textContent = unread > 99 ? '99+' : String(unread)
+        document.querySelectorAll('.tr-tabs button').forEach((b) => {
+          const on = b.dataset.tab === tab
+          b.classList.toggle('on', on)
+          b.ariaSelected = String(on)
+        })
       }
+
+      /** Состояние ещё не пришло: по пустым спискам «на тебе ничего» было бы враньём. */
+      const loading = () => state.authed !== false && !state.user && !companies().length
 
       function renderList() {
         const el = $('list')
-        const rows = []
-
-        if (tab === 'inbox') {
-          const projects = state.projects || []
-          const items = state.notifications || []
-          if (!projects.length && !items.length) {
-            el.innerHTML = `<p class="empty">${T('emptyInbox', 'Anything that concerns you<br>will show up here')}</p>`
-            return
-          }
-          const q = inboxQ.trim().toLowerCase()
-          const byProject = new Map()
-          for (const n of items) {
-            const key = n.projectId || '?'
-            if (!byProject.has(key)) byProject.set(key, [])
-            byProject.get(key).push(n)
-          }
-          // Сначала проекты, где что-то произошло (в порядке свежести), потом
-          // пустые — как дорожки в проект. Отдельная вкладка «Проекты» от
-          // этого больше не нужна: отсюда попадаешь куда угодно.
-          const nonEmpty = [...byProject.keys()].map(
-            (id) => projectById(id) || { id, name: byProject.get(id)[0]?.projectName || '—' },
-          )
-          const rest = projects.filter((p) => !byProject.has(p.id))
-          const match = (p) => !q || p.name.toLowerCase().includes(q) || companyNameOf(p).toLowerCase().includes(q)
-
-          rows.push(`<div class="filter-wrap"><input id="inboxSearch" class="target-search" spellcheck="false"
-                       placeholder="${T('connectSearch', 'Search…')}" value="${escape(inboxQ)}" /></div>`)
-
-          // Заголовок группы: имя ведёт в проект — стрелка справа подсказывает.
-          const groupHead = (p, right, quiet) => `
-              <div class="group-head${quiet ? ' quiet' : ''}" data-open-project="${escape(p.id)}">
-                <span class="avatar" style="width:20px;height:20px;border-radius:6px;font-size:9px;background:${escape(p.color || '#2a2a2a')};color:#fff">
-                  ${p.logoUrl ? `<img src="${escape(p.logoUrl)}" alt="">` : escape(initials(p.name))}
-                </span>
-                <span class="group-title">
-                  <span class="group-name">${escape(p.name)}</span>
-                  ${companyNameOf(p) ? `<span class="group-sub">${escape(companyNameOf(p))}</span>` : ''}
-                </span>
-                ${right}
-                <svg class="group-chev rtl-flip" width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="m9 6 6 6-6 6"/></svg>
-              </div>`
-
-          for (const p of nonEmpty) {
-            if (!match(p)) continue
-            const list = byProject.get(p.id) || []
-            const unread = list.filter((n) => n.unread).length
-            // Ничего не пишем, когда всё прочитано: «всё прочитано» напротив
-            // каждой строки — это шум в списке, где строк десяток. Бейдж и так
-            // говорит всё: есть число — есть непрочитанное, нет числа — нет.
-            rows.push(groupHead(p, unread ? `<span class="group-cnt">${unread}</span>` : ''))
-            for (const n of list.slice(0, 8)) {
-              rows.push(`
-              <button class="row" data-link="${escape(n.link)}" data-notification="${escape(n.id)}">
-                ${n.unread ? '<span class="badge-dot"></span>' : '<span class="badge-dot" style="background:transparent"></span>'}
-                <span class="body">
-                  <span class="title wrap">${escape(n.summary || n.title)}</span>
-                  ${n.summary ? `<span class="sub">${escape(n.title)}</span>` : ''}
-                </span>
-              </button>`)
-            }
-          }
-          for (const p of rest) {
-            if (!match(p)) continue
-            // Приглушаем только те, где вообще ничего нет: с непрочитанным
-            // проект остаётся ярким, даже если он в этой группе.
-            rows.push(groupHead(p, p.unread
-              ? `<span class="group-sub">${p.unread} ${T('unreadOne', 'unread')}</span>`
-              : '', !p.unread))
-          }
-        }
-
-        if (tab === 'tasks') {
-          const items = state.tasks || []
-          if (!items.length) {
-            el.innerHTML = `<p class="empty">${T('emptyTasks', 'No open tasks')}</p>`
-            return
-          }
-          const q = taskQ.trim().toLowerCase()
-          rows.push(`<div class="filter-wrap"><input id="taskSearch" class="target-search" spellcheck="false"
-                       placeholder="${T('connectSearch', 'Search…')}" value="${escape(taskQ)}" /></div>`)
-          // Завершённые прячутся за тумблером: случайное «готово» отменяется
-          // здесь же, но обычно этот хвост только мешал бы.
-          const doneCount = items.filter((t) => t.status === 'done').length
-          if (doneCount) {
-            rows.push(`<button class="done-toggle ${showDone ? 'on' : ''}" id="doneToggle">
-              ${showDone ? '✓ ' : ''}${T('showDone', 'show recently done')} (${doneCount})</button>`)
-          }
-          const byProject = new Map()
-          for (const t of items) {
-            if (t.status === 'done' && !showDone) continue
-            const key = t.projectId || '?'
-            if (!byProject.has(key)) byProject.set(key, [])
-            byProject.get(key).push(t)
-          }
-          for (const [pid, list] of byProject) {
-            const p = projectById(pid) || { id: pid, name: list[0].projectName || '—' }
-            const cname = companyNameOf(p)
-            const filtered = q
-              ? list.filter(
-                  (t) =>
-                    `${t.number} ${t.title}`.toLowerCase().includes(q) ||
-                    p.name.toLowerCase().includes(q) ||
-                    cname.toLowerCase().includes(q),
-                )
-              : list
-            if (!filtered.length) continue
-            // Во время поиска свёрнутость игнорируем: найденное должно быть видно.
-            const isClosed = Boolean(collapsed[pid]) && !q
-            rows.push(`
-              <div class="group-head ${isClosed ? 'closed' : ''}" data-collapse="${escape(pid)}">
-                <svg class="group-chev" width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="m6 9 6 6 6-6"/></svg>
-                <span class="group-title">
-                  <span class="group-name">${escape(p.name)}</span>
-                  ${cname ? `<span class="group-sub">${escape(cname)}</span>` : ''}
-                </span>
-                <span class="group-sub">${filtered.filter((t) => t.status !== 'done').length}</span>
-              </div>`)
-            if (isClosed) continue
-            filtered.sort((a, b) => (a.status === 'done' ? 1 : 0) - (b.status === 'done' ? 1 : 0))
-            // Кнопки плей здесь больше нет: таймер живёт в одном месте — в
-            // шапке. Второй путь к нему был источником рассинхрона и багов.
-            for (const t of filtered) {
-              rows.push(`
-              <div class="row ${t.status === 'done' ? 'done-row' : ''}">
-                ${statusIcon(t.status || 'todo', 15)}
-                <button class="body body-btn" data-link="${escape(t.link)}">
-                  <span class="title wrap">${escape(t.number)} ${escape(t.title)}</span>
-                  ${t.due ? `<span class="sub">${T('due', 'due')} ${escape(t.due)}</span>` : ''}
-                </button>
-                <span class="task-actions">
-                  <button class="mini" data-status="${escape(t.id)}" data-current="${escape(t.status || 'todo')}"
-                          title="${T('taskSetStatus', 'Change status')}">${statusIcon(t.status || 'todo', 13)}</button>
-                </span>
-              </div>`)
-            }
-          }
-        }
-
-        if (tab === 'connect') {
-          el.innerHTML = renderConnect()
-          bindConnect()
+        const top = el.scrollTop
+        if (loading()) {
+          $('chips').hidden = true
+          el.innerHTML = `<p class="tr-quiet">${esc(T('loading', 'Loading…'))}</p>`
           return
         }
-
-        el.innerHTML = rows.join('')
+        if (tab === 'inbox') {
+          $('chips').hidden = true
+          el.innerHTML = renderInbox()
+        } else {
+          el.innerHTML = renderMine()
+        }
+        el.scrollTop = top
       }
 
-      /** Меню статусов рядом с кнопкой. Закрывается по выбору или клику мимо. */
-      function openStatusMenu(btn) {
-        document.querySelector('.status-menu')?.remove()
-
-        const labels = {
-          todo: T('statusTodo', 'To do'),
-          in_progress: T('statusInProgress', 'In progress'),
-          review: T('statusReview', 'Review'),
-          done: T('statusDone', 'Done'),
+      function renderMine() {
+        const tasks = myTasks()
+        if (!tasks.length) {
+          $('chips').hidden = true
+          return `<div class="tr-empty" style="height:100%">
+              <span class="tr-big">${ICON.done}</span>
+              <b>${esc(T('emptyH', 'Nothing on you'))}</b>
+              <span>${esc(T('emptyP', 'The timer works without tasks too. New ones will show up here.'))}</span>
+            </div>`
         }
-        const current = btn.dataset.current
-        const menu = document.createElement('div')
-        menu.className = 'status-menu'
-        menu.innerHTML = Object.entries(labels)
-          .map(
-            ([key, label]) => `
-              <button data-pick-status="${key}" class="${key === current ? 'on' : ''}">
-                ${statusIcon(key, 15)}${escape(label)}
-              </button>`,
-          )
-          .join('')
 
-        // Ставим под кнопкой, не вылезая за правый край панели.
-        const r = btn.getBoundingClientRect()
-        menu.style.top = `${r.bottom + 4}px`
-        menu.style.left = `${Math.max(6, Math.min(r.left, window.innerWidth - 156))}px`
-        document.body.appendChild(menu)
-
-        menu.onclick = (e) => {
-          const pick = e.target.closest('[data-pick-status]')
-          if (!pick) return
-          window.panel.taskStatus(btn.dataset.status, pick.dataset.pickStatus)
-          menu.remove()
+        // Группы — проекты, крупные сверху (как в макете); внутри — порядок
+        // сервера: вопрос, проверка, дело, просроченное раньше.
+        const groups = new Map()
+        for (const t of tasks) {
+          const key = t.projectId || '?'
+          if (!groups.has(key)) groups.set(key, [])
+          groups.get(key).push(t)
         }
-        // Клик мимо закрывает — но не тот же самый, что меню открыл.
-        setTimeout(() => {
-          const off = (e) => {
-            if (!menu.contains(e.target)) {
-              menu.remove()
-              document.removeEventListener('click', off)
-            }
+        const order = [...groups.keys()].sort((a, b) => groups.get(b).length - groups.get(a).length)
+        if (chip !== 'all' && !groups.has(chip)) chip = 'all'
+
+        // Фильтр проектами — только когда проектов больше одного: «Все 3 ·
+        // Vpure 3» ничего не фильтрует, только занимает строку.
+        const chips = $('chips')
+        chips.hidden = order.length < 2
+        if (order.length >= 2) {
+          chips.innerHTML =
+            `<button class="tr-chip all ${chip === 'all' ? 'on' : ''}" data-chip="all" type="button">${esc(T('all', 'All'))} <span class="c">${tasks.length}</span></button>` +
+            order
+              .map((pid) => {
+                const list = groups.get(pid)
+                const p = projectById(pid) || { id: pid, name: list[0].projectName || '—' }
+                return `<button class="tr-chip ${chip === pid ? 'on' : ''}" data-chip="${esc(pid)}" type="button" title="${esc(p.name)}">
+                  ${projectLogo(p, 'sm')}<span class="nm">${esc(list[0].projectName || shortName(p))}</span><span class="c">${list.length}</span></button>`
+              })
+              .join('')
+        }
+
+        let html = ''
+        for (const pid of order) {
+          if (chip !== 'all' && chip !== pid) continue
+          const list = groups.get(pid)
+          const p = projectById(pid) || { id: pid, name: list[0].projectName || '—' }
+          const co = companyOf(list[0])
+          html += `<button class="tr-gh" type="button" data-project="${esc(pid)}" data-co="${esc(co || '')}" title="${esc(T('openInApp', 'Opens in Chatick'))}">
+              ${projectLogo(p, 'sm')}<span class="nm">${esc(list[0].projectName || shortName(p))}</span><span class="n">${list.length}</span></button>`
+          for (const t of list) html += taskRow(t)
+        }
+        return html
+      }
+
+      function taskRow(t) {
+        const busyRow = sent.has(t.id)
+        const meta = []
+        if (t.moveLabel) meta.push(`<span class="tr-mv ${esc(t.move || 'do')}"><i></i>${esc(t.moveLabel)}</span>`)
+        else meta.push(`<span>${esc(t.number)}</span>`) // старое состояние: ходов не знает
+        if (t.round) meta.push(`<span class="tr-rnd">${esc(t.round)}</span>`)
+        if (t.from) meta.push(`<span class="from">${esc(t.from)}</span>`)
+        if (t.wait) meta.push(`<span class="${t.long ? 'tr-long' : ''}">${t.long ? ICON.hourglass : ''}${esc(t.wait)}</span>`)
+        if (t.due) meta.push(`<span class="${t.late ? 'tr-late' : t.soon ? 'tr-soon' : ''}">${esc(t.due)}</span>`)
+        const act = t.action
+        return `<div class="tr-row${busyRow ? ' busy' : ''}">
+            <button class="tr-open" type="button" data-open="${esc(t.link)}" title="${esc(`${t.number} · ${T('openInApp', 'Opens in Chatick')}`)}">
+              <span class="tr-t">${t.isNew ? '<i class="tr-new"></i>' : ''}<span class="tx">${esc(t.title)}</span></span>
+              <span class="tr-m">${meta.join('')}</span>
+            </button>
+            ${act ? `<button class="tr-act${act.status === 'done' ? ' acc' : ''}" type="button" data-act="${esc(t.id)}" data-status="${esc(act.status)}">${esc(act.label)}</button>` : ''}
+          </div>`
+      }
+
+      function renderInbox() {
+        const items = myNotices()
+        const all = coSel
+          ? `<button class="tr-allnot" type="button" data-open="/c/${esc(coSel)}/notifications">${esc(T('allNotes', 'All notifications in Chatick'))}</button>`
+          : ''
+        if (!items.length) return `<p class="tr-quiet">${esc(T('inboxEmpty', 'Nothing new'))}</p>${all}`
+        const rows = items.map((n) => {
+          // Старое состояние: ни автора, ни цвета — строка как была.
+          const text = n.text ?? n.summary ?? n.title
+          const note = n.note && n.note !== text ? n.note : null
+          return `<button class="tr-ev${n.unread ? ' new' : ''}" type="button" data-open="${esc(n.link)}" data-notification="${esc(n.id)}">
+              <span class="tr-av" style="background:${esc(n.color || colorOf(n.projectId))}">${esc(n.letter || letterOf(n.projectName || 'C'))}</span>
+              <span class="b">
+                <span class="l1">${n.who ? `<b>${esc(n.who)}</b> ` : ''}${esc(text)}</span>
+                ${note ? `<q class="q">${esc(note)}</q>` : ''}
+                ${n.projectName ? `<span class="l3">${esc(n.projectName)}</span>` : ''}
+              </span>
+              ${n.when ? `<time>${esc(n.when)}</time>` : ''}
+            </button>`
+        })
+        return `<div style="padding-top:8px">${rows.join('')}${all}</div>`
+      }
+
+      // --- выбор проекта для таймера ------------------------------------------------
+      let pickQ = ''
+      function pickItems() {
+        const q = pickQ.trim().toLowerCase()
+        const list = (state.projects || []).filter((p) => (!p.companyId || p.companyId === coSel) && (!q || p.name.toLowerCase().includes(q)))
+        const whole = T('wholeCompany', 'Whole company')
+        const items = []
+        if (coSel && (!q || whole.toLowerCase().includes(q) || (company()?.name || '').toLowerCase().includes(q))) {
+          items.push({ id: coSel, html: `${companyLogo(company())}<span class="nm">${esc(whole)}</span>` })
+        }
+        for (const p of list) items.push({ id: p.id, html: `${projectLogo(p)}<span class="nm">${esc(p.name)}</span>` })
+        return items
+      }
+      function renderPick() {
+        $('pickHd').textContent = T('trackTo', 'Track time to')
+        $('pickQ').placeholder = T('findProj', 'Find project')
+        const items = pickItems()
+        const cur = state.timer ? runningTarget() : chosenTarget()
+        $('pickList').innerHTML =
+          items
+            .map((x) => `<button class="tr-mi" role="option" type="button" data-target="${esc(x.id)}" aria-selected="${x.id === cur}">${x.html}${x.id === cur ? ICON.check : ''}</button>`)
+            .join('') || `<div class="tr-none">${esc(T('noProj', 'No project “{{q}}”').replace('{{q}}', pickQ.trim()))}</div>`
+      }
+      /**
+       * Выбор и есть старт — как в шапке v2. Идёт таймер на другом — веб
+       * переносит его: стоп и старт на выбранном. Тот же — ничего не делаем.
+       */
+      function choose(id) {
+        closeOverlay()
+        if (!id) return
+        if (state.timer && runningTarget() === id) return
+        holdTimer()
+        P.toggleTimer(id)
+        renderTimer()
+      }
+
+      // --- меню аккаунта ---------------------------------------------------------------
+      function renderMenu() {
+        const me = state.user
+        const fb = esc(initials(me?.name || me?.email))
+        const av = me?.avatarData ? `<img src="${esc(me.avatarData)}" alt="">` : fb
+        const cos = companies()
+        let html = ''
+        if (me) {
+          html += `<div class="tr-who"><span class="tr-me" style="background:${me.avatarData ? 'transparent' : colorOf(me.email || me.name)}">${av}</span>
+            <span class="tx"><b>${esc(me.name)}</b><small>${esc(me.email)}</small></span></div><div class="tr-div"></div>`
+        }
+        if (cos.length) {
+          html += `<div class="hd">${esc(T('companies', 'Companies'))}</div>`
+          for (const c of cos) {
+            const cur = c.id === coSel
+            const right = cur ? ICON.check : c.unread ? `<span class="cnt">${c.unread}</span>` : c.meta ? `<span class="meta">${esc(c.meta)}</span>` : ''
+            html += `<button class="tr-mi" role="menuitemradio" aria-checked="${cur}" type="button" data-company="${esc(c.id)}">${companyLogo(c)}<span class="nm">${esc(c.name)}</span>${right}</button>`
           }
-          document.addEventListener('click', off)
-        }, 0)
+          html += '<div class="tr-div"></div>'
+        }
+        const item = (go, icon, label, cls = '') => `<button class="tr-mi ${cls}" role="menuitem" type="button" data-go="${go}">${icon}<span class="nm">${esc(label)}</span></button>`
+        if (coSel) {
+          html += item('hours', ICON.clock, T('hours', 'My hours'))
+          html += item('notify', ICON.bell, T('notifyPrefs', 'Notification settings'))
+          html += item('profile', ICON.user, T('profile', 'Profile'))
+        }
+        html += item('connect', ICON.plug, T('connectTitle', 'Connect an assistant'))
+        html += '<div class="tr-div"></div>'
+        html += item('logout', ICON.logout, T('logout', 'Sign out'), 'danger')
+        $('menu').innerHTML = html
       }
 
-      // --- подключение ассистента ---------------------------------------------
+      function openOverlay(kind) {
+        overlay = kind
+        closeEdit()
+        $('scrim').hidden = false
+        $('scrim').classList.toggle('low', kind === 'pick')
+        $('pick').hidden = kind !== 'pick'
+        $('menu').hidden = kind !== 'menu'
+        $('projBtn').ariaExpanded = String(kind === 'pick')
+        if (kind === 'pick') {
+          pickQ = ''
+          $('pickQ').value = ''
+          renderPick()
+          $('pickQ').focus()
+        } else {
+          renderMenu()
+          $('menu').querySelector('button')?.focus()
+        }
+      }
+      function closeOverlay() {
+        overlay = null
+        $('scrim').hidden = true
+        $('pick').hidden = true
+        $('menu').hidden = true
+        $('projBtn').ariaExpanded = 'false'
+      }
+
+      // --- правка натикавшего --------------------------------------------------------
+      function openEdit() {
+        const t = state.timer
+        if (!t || !canEditElapsed) return
+        const inp = $('tInput')
+        // Ровно то, что человек видел на счётчике: любой пересчёт дал бы два
+        // разных числа для одного времени.
+        inp.value = clockText(t)
+        inp.classList.remove('bad')
+        $('tTime').hidden = true
+        $('goBtn').hidden = true
+        $('tEdit').hidden = false
+        inp.focus()
+        inp.select()
+      }
+      function closeEdit() {
+        if ($('tEdit').hidden) return
+        $('tEdit').hidden = true
+        $('tInput').classList.remove('bad')
+        renderTimer()
+      }
+      function commitEdit() {
+        const inp = $('tInput')
+        const seconds = parseElapsed(inp.value)
+        const t = state.timer
+        // Потолок в сутки — тот же, что на сервере: отказ до отправки
+        // понятнее ошибки после.
+        if (seconds === null || !t || seconds > 24 * 3600) {
+          inp.classList.add('bad')
+          return
+        }
+        P.setTimerElapsed?.(t.id, seconds)
+        closeEdit()
+      }
+
+      // --- подключение ассистента -------------------------------------------------------
       //
       // Коды приходят из редактора или терминала, и лезть за ними в браузер
       // неудобно — панель уже открыта. Проверку и подтверждение делает веб:
       // права и сессия есть только у него.
+      let connect = { code: '', clientName: null, msg: null, msgKind: null, busy: false, target: null, q: '' }
 
-      let connect = { code: '', clientName: null, msg: null, msgKind: null, busy: false, target: null }
+      function connectTargets() {
+        const grantable = companies().filter((c) => c.canGrantCompany)
+        const names = new Map(companies().map((c) => [c.id, c.name]))
+        return [
+          // Мастер-доступ — отдельной строкой: это решение другого рода,
+          // открыть всё сразу, включая компании, куда позовут позже.
+          { key: 'a:all', name: T('connectMasterTitle', 'All my projects'), sub: T('connectMasterNote', 'every company and project, including future ones'), logo: '<span class="tr-lg co">∗</span>' },
+          ...grantable.map((c) => ({ key: `c:${c.id}`, name: c.name, sub: T('connectAllProjectsOf', 'all projects, including future ones'), logo: companyLogo(c) })),
+          ...(state.projects || []).map((p) => ({ key: `p:${p.id}`, name: p.name, sub: names.size > 1 ? names.get(p.companyId) || null : null, logo: projectLogo(p) })),
+        ]
+      }
 
       function renderConnect() {
-        const projects = state.projects || []
-        const company = state.company
-
-        // Компанию целиком показываем только тем, кто вправе её выдать:
-        // сервер всё равно откажет, а предлагать неисполнимое — обманывать.
-        // Все компании, которыми человек управляет, — не только первая:
-        // подключить ассистента к компании, куда его позвали, было нельзя.
-        const grantable = (state.companies || []).filter((c) => c.canGrantCompany)
-        const companyNames = new Map((state.companies || []).map((c) => [c.id, c.name]))
-        const targets = [
-          // Мастер-доступ — первой строкой и отдельной группой: это не «ещё
-          // одна цель», а решение другого рода, открыть всё сразу, включая
-          // компании, куда позовут позже. В плоском списке панели тумблер
-          // разместить негде, поэтому выделяем группой и подписью.
-          {
-            key: 'a:all',
-            name: T('connectMasterTitle', 'All my projects'),
-            sub: T('connectMasterNote', 'every company and project, including future ones'),
-            color: null,
-          },
-          ...grantable.map((c) => ({
-            key: `c:${c.id}`,
-            name: c.name,
-            sub: T('connectAllProjectsOf', 'all projects, including future ones'),
-            color: null,
-          })),
-          // Подпись компанией: с несколькими компаниями одинаковые названия
-          // проектов не редкость, и без неё непонятно, какой из них какой.
-          ...projects.map((p) => ({
-            key: `p:${p.id}`,
-            name: p.name,
-            color: p.color,
-            sub: companyNames.size > 1 ? companyNames.get(p.companyId) || null : null,
-          })),
-        ]
-        // Автовыбор — НИКОГДА не мастер-строка: она стоит первой, и человек
-        // нажал бы «Разрешить», молча открыв всё. Берём первую обычную цель.
-        if (!connect.target) {
-          const first = targets.find((x) => x.key[0] !== 'a')
-          if (first) connect.target = first.key
+        const targets = connectTargets()
+        // Автовыбор — НИКОГДА не мастер-строка: человек нажал бы «Разрешить»,
+        // молча открыв всё. Берём первую обычную цель.
+        if (!connect.target) connect.target = targets.find((x) => x.key[0] !== 'a')?.key || null
+        const q = connect.q.trim().toLowerCase()
+        const shown = q ? targets.filter((x) => x.name.toLowerCase().includes(q) || (x.sub || '').toLowerCase().includes(q)) : targets
+        const row = (x) => `<button class="cn-pick ${x.key === connect.target ? 'on' : ''}" type="button" data-target="${esc(x.key)}">
+            ${x.logo}<span class="tx"><span class="nm">${esc(x.name)}</span>${x.sub ? `<span class="sub">${esc(x.sub)}</span>` : ''}</span></button>`
+        const group = (kind, title) => {
+          const list = shown.filter((x) => x.key[0] === kind)
+          return list.length ? (title ? `<div class="cn-group">${esc(title)}</div>` : '') + list.map(row).join('') : ''
         }
-
-        // Поиск: с десятком проектов в двух компаниях список превращается в
-        // простыню, и кнопку «Разрешить» приходится искать прокруткой.
-        const q = (connect.q || '').trim().toLowerCase()
-        const shown = q
-          ? targets.filter((x) => x.name.toLowerCase().includes(q) || (x.sub || '').toLowerCase().includes(q))
-          : targets
-
-        // Компании и проекты — разное: выдать компанию значит открыть доступ ко
-        // всем её проектам, включая будущие. В плоском списке это терялось.
-        const row = (x) => `
-              <button class="pick ${x.key === connect.target ? 'on' : ''}" data-target="${escape(x.key)}">
-                <span class="dot" style="background:${escape(x.color || '#3a3a3a')}"></span>
-                <span class="pick-body">
-                  <span class="pick-name">${escape(x.name)}</span>
-                  ${x.sub ? `<span class="pick-sub">${escape(x.sub)}</span>` : ''}
-                </span>
-              </button>`
-        const groupMaster = shown.filter((x) => x.key[0] === 'a')
-        const groupCompanies = shown.filter((x) => x.key[0] === 'c')
-        const groupProjects = shown.filter((x) => x.key[0] === 'p')
-        const picker =
-          groupMaster.map(row).join('') +
-          (groupCompanies.length
-            ? `<div class="pick-group">${T('connectGroupCompanies', 'Companies')}</div>` +
-              groupCompanies.map(row).join('')
-            : '') +
-          (groupProjects.length
-            ? `<div class="pick-group">${T('connectGroupProjects', 'Projects')}</div>` +
-              groupProjects.map(row).join('')
-            : '')
-
+        const picker = group('a') + group('c', T('connectGroupCompanies', 'Companies')) + group('p', T('connectGroupProjects', 'Projects'))
+        // Код опознан — на экране остаётся только выбор области: главное
+        // действие должно быть видно целиком, без прокрутки.
+        const deciding = Boolean(connect.clientName)
         const conns = (state.connections || [])
           .map(
-            (c) => `
-              <div class="conn">
-                <div class="conn-body">
-                  <div class="conn-name">${escape(c.clientName)}</div>
-                  <div class="conn-where">${escape(c.where)}${c.scope === 'all' ? ` · ${T('connectMasterBadge', 'master access')}` : c.scope === 'company' ? ` · ${T('connectWholeCompany', 'whole company')}` : ''}</div>
-                </div>
-                <button class="conn-kill" data-revoke="${escape(c.id)}">${T('connectRevoke', 'Revoke')}</button>
-              </div>`,
+            (c) => `<div class="cn-conn"><span class="tx"><div class="nm">${esc(c.clientName)}</div>
+              <div class="where">${esc(c.where)}${c.scope === 'all' ? ` · ${esc(T('connectMasterBadge', 'master access'))}` : c.scope === 'company' ? ` · ${esc(T('connectWholeCompany', 'whole company'))}` : ''}</div></span>
+              <button class="cn-kill" type="button" data-revoke="${esc(c.id)}">${esc(T('connectRevoke', 'Revoke'))}</button></div>`,
           )
           .join('')
-
-        // Код опознан — на экране остаётся только выбор области. Строка-
-        // приглашение, поле кода и список туннелей в этот момент не нужны, а
-        // места в панели мало: главное действие должно быть целиком видно,
-        // без прокрутки. «Отмена» возвращает всё обратно.
-        const deciding = Boolean(connect.clientName)
-
-        return `
-          <div class="connect">
-            ${
-              deciding
-                ? ''
-                : `<div class="invite">
-              <p class="connect-hint">${T('connectInviteHint', 'Paste this into your assistant:')}</p>
-              <div class="invite-row">
-                <code id="inviteLine">${escape(state.strings?.inviteLine || '')}</code>
-                <button id="copyInvite">${T('connectCopy', 'Copy')}</button>
-              </div>
-            </div>
-
-            <p class="connect-hint">${T('connectHint', 'Enter the code shown by your assistant')}</p>
-            <input id="codeInput" class="code-input" maxlength="12" spellcheck="false"
-                   placeholder="XXXX-XXXX" value="${escape(connect.code)}" />`
-            }
-            ${
-              connect.clientName
-                ? `<div class="connect-box">
-                     <div class="connect-who">${escape(connect.clientName)}</div>
-                     <div class="connect-warn">${T('connectActsAsYou', 'Will act on your behalf in the chosen project')}</div>
-                     <label class="connect-label">${T('connectWhere', 'Where to grant access')}</label>
-                     <input id="targetSearch" class="target-search" spellcheck="false"
-                            placeholder="${T('connectSearch', 'Search…')}" value="${escape(connect.q || '')}" />
-                     <div class="picker">${
-                       picker ||
-                       `<p class="empty">${
-                         q ? T('connectNothingFound', 'Nothing found') : T('emptyProjects', 'No projects yet')
-                       }</p>`
-                     }</div>
-                     <div class="connect-actions">
-                       <button class="allow" id="connectAllow" ${targets.length && !connect.busy ? '' : 'disabled'}>
-                         ${T('connectAllow', 'Allow')}
-                       </button>
-                       <button id="connectCancel">${T('connectCancel', 'Cancel')}</button>
-                     </div>
-                   </div>`
-                : ''
-            }
-            ${connect.msg ? `<p class="connect-msg ${connect.msgKind || ''}">${escape(connect.msg)}</p>` : ''}
-            ${
-              conns && !deciding
-                ? `<div class="conns">
-                     <div class="conns-title">${T('connectActive', 'Active connections')}</div>
-                     ${conns}
-                   </div>`
-                : ''
-            }
-          </div>`
+        return `<div class="cn">
+          ${
+            deciding
+              ? ''
+              : `<p class="cn-hint">${esc(T('connectInviteHint', 'Paste this into your assistant:'))}</p>
+                 <div class="cn-invite"><code>${esc(state.strings?.inviteLine || '')}</code>
+                   <button class="cn-btn" id="cnCopy" type="button">${esc(T('connectCopy', 'Copy'))}</button></div>
+                 <p class="cn-hint">${esc(T('connectHint', 'Enter the code shown by your assistant'))}</p>
+                 <input id="cnCode" class="cn-code" maxlength="12" spellcheck="false" placeholder="XXXX-XXXX" value="${esc(connect.code)}" />`
+          }
+          ${
+            deciding
+              ? `<div class="cn-box">
+                   <div class="cn-who">${esc(connect.clientName)}</div>
+                   <div class="cn-warn">${esc(T('connectActsAsYou', 'Will act on your behalf in the chosen project'))}</div>
+                   <label class="cn-label">${esc(T('connectWhere', 'Where to grant access'))}</label>
+                   <label class="tr-q"><svg class="ic s" viewBox="0 0 24 24"><circle cx="11" cy="11" r="6.5"/><path d="M20 20l-4.2-4.2"/></svg>
+                     <input id="cnSearch" spellcheck="false" placeholder="${esc(T('connectSearch', 'Search…'))}" value="${esc(connect.q)}" /></label>
+                   <div class="cn-picker">${picker || `<div class="tr-none">${esc(q ? T('connectNothingFound', 'Nothing found') : T('emptyProjects', 'No projects yet'))}</div>`}</div>
+                   <div class="cn-actions">
+                     <button class="cn-btn main" id="cnAllow" type="button" ${connect.target && !connect.busy ? '' : 'disabled'}>${esc(T('connectAllow', 'Allow'))}</button>
+                     <button class="cn-btn ghost" id="cnCancel" type="button">${esc(T('connectCancel', 'Cancel'))}</button>
+                   </div>
+                 </div>`
+              : ''
+          }
+          ${connect.msg ? `<p class="cn-msg ${connect.msgKind || ''}">${esc(connect.msg)}</p>` : ''}
+          ${conns && !deciding ? `<div class="cn-conns"><div class="hd">${esc(T('connectActive', 'Active connections'))}</div>${conns}</div>` : ''}
+        </div>`
       }
 
-      /**
-       * Перерисовка вкладки. Отдельно от renderList: пересобирать поле ввода
-       * на каждый ответ значит терять курсор посреди набора.
-       */
+      /** Перерисовка экрана подключения без потери курсора в поле. */
       function refreshConnect() {
-        const el = $('list')
-        const focused = document.activeElement?.id === 'codeInput'
-        const caret = focused ? $('codeInput').selectionStart : null
-        el.innerHTML = renderConnect()
-        bindConnect()
-        if (focused) {
-          const input = $('codeInput')
-          input.focus()
-          if (caret !== null) input.setSelectionRange(caret, caret)
+        const focused = document.activeElement?.id
+        const caret = focused === 'cnCode' || focused === 'cnSearch' ? document.activeElement.selectionStart : null
+        $('connectTitle').textContent = T('connectTitle', 'Connect an assistant')
+        $('connectBody').innerHTML = renderConnect()
+        const again = focused ? $(focused) : null
+        if (again) {
+          again.focus()
+          if (caret !== null) again.setSelectionRange(caret, caret)
+        } else if (!connect.clientName) {
+          // Курсор в поле сразу: экран открывают ровно затем, чтобы вставить код.
+          $('cnCode')?.focus()
         }
       }
 
-      function bindConnect() {
-        // Поля кода нет, когда код уже опознан и на экране только выбор
-        // области, — но кнопки «Разрешить» и «Отмена» ниже подключить всё
-        // равно надо, иначе они перестают работать.
-        const input = $('codeInput')
-        if (input) bindCodeInput(input)
-
-        bindConnectActions()
-      }
-
-      function bindCodeInput(input) {
-        // Курсор в поле сразу: вкладку открывают ровно затем, чтобы вставить код.
-        if (!connect.clientName && document.activeElement !== input) input.focus()
-
-        input.oninput = () => {
-          connect.code = input.value.trim()
-          connect.clientName = null
-          connect.msg = null
-          // Код формата XXXX-XXXX: как только набрана нужная длина, спрашиваем,
-          // кто это, — вручную нажимать «проверить» незачем.
-          if (connect.code.replace(/[^0-9a-z]/gi, '').length >= 8) {
-            connect.busy = true
-            window.panel.checkCode(connect.code)
-          }
-        }
-
-      }
-
-      /** Кнопки, которые есть и с полем кода, и без него. */
-      function bindConnectActions() {
-        for (const btn of document.querySelectorAll('.pick')) {
-          btn.onclick = () => {
-            connect.target = btn.dataset.target
-            refreshConnect()
-          }
-        }
-
-        const copyBtn = $('copyInvite')
-        if (copyBtn) {
-          copyBtn.onclick = async () => {
-            try {
-              await navigator.clipboard.writeText(state.strings?.inviteLine || '')
-              copyBtn.textContent = T('connectCopied', 'Copied')
-              copyBtn.classList.add('done')
-              // Возвращаем подпись: кнопка должна снова выглядеть нажимаемой.
-              setTimeout(() => {
-                copyBtn.textContent = T('connectCopy', 'Copy')
-                copyBtn.classList.remove('done')
-              }, 1600)
-            } catch {
-              /* буфер недоступен — строку видно, можно выделить руками */
-            }
-          }
-        }
-
-        const allow = $('connectAllow')
-        if (allow) {
-          allow.onclick = () => {
-            if (!connect.target) return
-            const [kind, id] = [connect.target.slice(0, 1), connect.target.slice(2)]
-            connect.busy = true
-            connect.msg = null
-            refreshConnect()
-            window.panel.approveCode(
-              connect.code,
-              kind === 'a' ? { all: true } : kind === 'c' ? { companyId: id } : { projectId: id },
-            )
-          }
-        }
-
-        const cancel = $('connectCancel')
-        if (cancel) {
-          cancel.onclick = () => {
-            connect = { code: '', clientName: null, msg: null, msgKind: null, busy: false, target: null }
-            refreshConnect()
-          }
-        }
-
-        for (const btn of document.querySelectorAll('.conn-kill')) {
-          btn.onclick = () => {
-            btn.disabled = true
-            window.panel.revokeConnection(btn.dataset.revoke)
-          }
-        }
-      }
-
-      window.panel.onConnect((r) => {
+      P.onConnect?.((r) => {
         connect.busy = false
         if (r.step === 'found') {
           connect.clientName = r.clientName
           connect.msg = null
         } else if (r.step === 'invalid') {
-          // Пока код набирают по символу, «не найден» — обычное состояние,
-          // а не ошибка: ругаемся только на полностью введённый код.
+          // Пока код набирают, «не найден» — обычное состояние: ругаемся
+          // только на полностью введённый.
           connect.clientName = null
           connect.msg = connect.code.length >= 9 ? T('connectBadCode', 'Code not found or expired') : null
           connect.msgKind = 'err'
         } else if (r.step === 'approved') {
-          connect = {
-            code: '', clientName: null, target: null, busy: false,
-            msg: T('connectDone', 'Go back to your assistant and finish connecting'), msgKind: 'ok',
-          }
+          connect = { code: '', clientName: null, target: null, busy: false, q: '', msg: T('connectDone', 'Go back to your assistant and finish connecting'), msgKind: 'ok' }
         } else if (r.step === 'revoked') {
           connect.msg = T('connectRevoked', 'Connection closed')
           connect.msgKind = 'ok'
@@ -1421,215 +1203,282 @@ ${T('openProfile', 'Profile')}`
           connect.msg = r.error || T('connectFailed', 'Could not grant access')
           connect.msgKind = 'err'
         }
-        if (tab === 'connect') refreshConnect()
+        if (view === 'connect') refreshConnect()
       })
+
+      function setView(next) {
+        view = next
+        closeOverlay()
+        if (next === 'connect') {
+          // Список подключений живёт минутным опросом — при открытии экрана
+          // обновляем сразу, иначе только что выданный доступ не видно.
+          P.refreshConnections?.()
+          refreshConnect()
+        }
+        render()
+      }
+
+      // --- общий проход -------------------------------------------------------------
+      let toastTimer = 0
+      function toast(text) {
+        const el = $('toast')
+        el.textContent = text
+        el.hidden = false
+        clearTimeout(toastTimer)
+        toastTimer = setTimeout(() => (el.hidden = true), 2200)
+      }
 
       function render() {
-        // статичные подписи: вкладки и кнопки внизу
-        document.querySelectorAll('[data-t]').forEach((el) => {
-          const val = state.strings?.[el.dataset.t]
-          if (val) el.textContent = val
-        })
-        // Поля ввода переводятся через placeholder, а не текстом внутри:
-        // поиск в шапке оставался английским, пока это не учитывалось.
-        document.querySelectorAll('[data-ph]').forEach((el) => {
-          const val = state.strings?.[el.dataset.ph]
-          if (val) el.placeholder = val
-        })
-        document.documentElement.dir = state.strings?.dir === 'rtl' ? 'rtl' : 'ltr'
-
-        // Пока не вошли, показывать нечего — и кнопка внизу зовёт войти,
-        // а не «открыть», потому что открывать пока некуда.
-        document.body.classList.toggle('guest', state.authed === false)
-        if (state.authed === false) {
-          $('guestTitle').textContent = T('signedOut', 'Not signed in')
-          $('guestHint').innerHTML = T('signedOutHint', 'Sign in to see your timer,<br>tasks and notifications')
-          $('openApp').textContent = T('signIn', 'Sign in')
-          $('cnt').hidden = true
+        applyLook()
+        const guest = state.authed === false
+        renderHeader()
+        $('loginView').hidden = !guest
+        $('mainView').hidden = guest || view !== 'main'
+        $('connectView').hidden = guest || view !== 'connect'
+        if (guest) {
+          closeOverlay()
+          $('loginH').textContent = T('loginH', 'You’re not signed in')
+          $('loginP').textContent = T('loginP', 'Sign in to Chatick and your tasks and timer will show up here.')
+          $('loginBtnL').textContent = T('loginBtn', 'Open Chatick and sign in')
           return
         }
-
+        $('backBtn').title = $('backBtn').ariaLabel = T('back', 'Back')
+        if (view === 'connect') return refreshConnect()
         renderTimer()
-        const cnt = $('cnt')
-        cnt.hidden = !state.unread
-        cnt.textContent = state.unread > 99 ? '99+' : state.unread
+        renderTabs()
         renderList()
+        if (overlay === 'pick') renderPick()
+        if (overlay === 'menu') renderMenu()
       }
 
-      // --- события ---
-      // Стоп проекта не требует; старт уходит в выбранный в шапке.
-      $('play').onclick = () => window.panel.toggleTimer(state.timer ? null : currentTimerProject())
-
-      $('projBtn').onclick = () => {
-        if ($('projBtn').disabled) return
-        projMenuOpen = !projMenuOpen
-        $('projMenu').hidden = !projMenuOpen
-        $('projBtn').classList.toggle('open', projMenuOpen)
-        if (projMenuOpen) {
-          projQ = ''
-          $('projSearch').value = ''
-          renderProjMenu()
-          $('projSearch').focus()
+      /** Компания панели: своя, но следует за окном, когда там переключились. */
+      function syncCompany() {
+        const win = state.company?.id || null
+        if (win && win !== coSeen) {
+          coSeen = win
+          coSel = win
+          store.set('chatick.tray.winCompany', win)
+          store.set('chatick.tray.company', win)
+        }
+        const cos = companies()
+        if (cos.length && !cos.some((c) => c.id === coSel)) {
+          coSel = win || cos[0].id
+          store.set('chatick.tray.company', coSel)
         }
       }
-      $('projMenu').onclick = (e) => {
-        const pick = e.target.closest('[data-proj]')
-        if (!pick) return
-        timerProject = pick.dataset.proj
-        try { localStorage.setItem('chatick.timerProject', timerProject) } catch {}
-        projMenuOpen = false
-        $('projMenu').hidden = true
+
+      // --- события -------------------------------------------------------------------
+      $('openApp').onclick = () => P.openApp()
+      $('loginBtn').onclick = () => P.openApp()
+      $('closeBtn').onclick = () => P.close()
+      $('coBtn').onclick = () => (overlay === 'menu' ? closeOverlay() : openOverlay('menu'))
+      $('meBtn').onclick = () => (overlay === 'menu' ? closeOverlay() : openOverlay('menu'))
+      $('projBtn').onclick = () => (overlay === 'pick' ? closeOverlay() : openOverlay('pick'))
+      $('scrim').onclick = () => closeOverlay()
+      $('backBtn').onclick = () => setView('main')
+
+      // Стоп — что бы ни шло (веб сам знает, что). Старт — на выбранном для
+      // этой компании, а без выбора — на самой компании (v2).
+      $('goBtn').onclick = () => {
+        const target = state.timer ? null : chosenTarget()
+        holdTimer()
+        P.toggleTimer(target)
         renderTimer()
       }
-      // Клик мимо меню закрывает его.
-      document.addEventListener('click', (e) => {
-        if (!projMenuOpen) return
-        if (e.target.closest('#projMenu') || e.target.closest('#projBtn')) return
-        projMenuOpen = false
-        $('projMenu').hidden = true
-        $('projBtn').classList.remove('open')
-      })
-      /**
-       * Часы проекта — делегированно, как у остальных рабочих кнопок панели.
-       *
-       * Прямой onclick внутри renderTimer не срабатывал: отрисовка проходит не
-       * при каждом состоянии (например, при выходе она уходит в ранний return),
-       * и кнопка оставалась без обработчика — видимой, с подсветкой при
-       * наведении и полностью мёртвой.
-       *
-       * Слушатель на документе живёт с загрузки и от отрисовки не зависит.
-       * Ссылку считаем в момент клика: список проектов приезжает после первой
-       * отрисовки, и замкнутая раньше была бы пустой.
-       */
-      // Профиль — адрес личный, компания в нём не нужна: это не проект.
-      document.addEventListener('click', (e) => {
-        if (!e.target.closest('#meAvatar')) return
-        window.panel.openProject('/settings/profile', null)
-      })
-      document.addEventListener('click', (e) => {
-        if (!e.target.closest('#hoursBtn')) return
-        const id = currentTimerProject()
-        // Проекта нет — вести некуда, но и молчать нельзя: /start даёт выбрать
-        // его руками, а бездействие читается как «сломано».
-        window.panel.openProject(id ? openHoursLink(id) || '/start' : '/start', null)
-      })
-      $('elapsed').onclick = () => { if (state.timer && canEditElapsed) openElapsedEdit() }
-      // Enter применяет, Escape отменяет: панель маленькая, промахнуться легко,
-      // и без отмены случайный клик по времени превращается в ловушку.
-      // Пускаем только цифры и двоеточие: буквы и знаки всё равно кончатся
-      // отказом при разборе, но человек узнает об этом лишь нажав галочку.
-      // Дешевле не дать набрать, чем потом объяснять, почему не приняли.
-      // Длина ограничена «20:10:00» — восемь знаков.
-      $('elapsedInput').oninput = (e) => {
+
+      $('tClock').onclick = () => openEdit()
+      // Пускаем только цифры и двоеточие: дешевле не дать набрать, чем потом
+      // объяснять, почему не приняли. Длина — до «20:10:00».
+      $('tInput').oninput = (e) => {
         const cleaned = e.target.value.replace(/[^\d:]/g, '').slice(0, 8)
         if (cleaned !== e.target.value) e.target.value = cleaned
         e.target.classList.remove('bad')
       }
-      $('elapsedInput').onkeydown = (e) => {
-        if (e.key === 'Enter') { e.preventDefault(); commitElapsed() }
-        else if (e.key === 'Escape') { e.preventDefault(); closeElapsedEdit() }
+      $('tInput').onkeydown = (e) => {
+        if (e.key === 'Enter') { e.preventDefault(); commitEdit() }
+        else if (e.key === 'Escape') { e.preventDefault(); e.stopPropagation(); closeEdit() }
       }
-      // Ушли мимо — закрываем без сохранения. Но НЕ когда нажимают галочку:
-      // blur срабатывает раньше клика, и правка терялась ровно в тот момент,
-      // когда её подтверждали.
-      $('elapsedInput').onblur = (e) => {
-        if (e.relatedTarget && e.relatedTarget.closest('#elapsedEdit')) return
-        closeElapsedEdit()
+      // Ушли мимо — закрываем без сохранения. Но НЕ когда жмут галочку:
+      // blur приходит раньше клика, и правка терялась бы в момент подтверждения.
+      $('tInput').onblur = (e) => {
+        if (e.relatedTarget && e.relatedTarget.closest('#tEdit')) return
+        closeEdit()
       }
-      $('elapsedOk').onclick = () => commitElapsed()
-      $('elapsedCancel').onclick = () => closeElapsedEdit()
-      $('openApp').onclick = () => window.panel.openApp()
-      $('close').onclick = () => window.panel.close()
+      $('tOk').onclick = () => commitEdit()
+      $('tCancel').onclick = () => closeEdit()
 
-      document.querySelectorAll('nav button').forEach((btn) => {
-        btn.onclick = () => {
-          tab = btn.dataset.tab
-          document.querySelectorAll('nav button').forEach((b) => b.classList.toggle('active', b === btn))
-          // Список подключений живёт минутным опросом — при открытии вкладки
-          // обновляем сразу, иначе только что выданный доступ не видно.
-          if (tab === 'connect') window.panel.refreshConnections()
+      document.querySelectorAll('.tr-tabs button').forEach((b) => {
+        b.onclick = () => {
+          tab = b.dataset.tab
+          store.set('chatick.tray.tab', tab)
+          renderTabs()
+          $('list').scrollTop = 0
           renderList()
         }
       })
+
+      $('chips').onclick = (e) => {
+        const c = e.target.closest('[data-chip]')
+        if (!c) return
+        chip = c.dataset.chip
+        $('list').scrollTop = 0
+        renderList()
+      }
+      // Колесо над фильтрами листает их вбок: мышь без горизонтальной прокрутки
+      // иначе до дальних проектов не доставала.
+      $('chips').addEventListener('wheel', (e) => {
+        if (!e.deltaY || e.deltaX) return
+        e.preventDefault()
+        $('chips').scrollBy({ left: document.documentElement.dir === 'rtl' ? -e.deltaY : e.deltaY })
+      }, { passive: false })
 
       $('list').onclick = (e) => {
-        // Статус выбирают из списка: «следующий по кругу» заставлял бы
-        // угадывать, куда попадёшь, и жать несколько раз.
-        const status = e.target.closest('[data-status]')
-        if (status) {
-          openStatusMenu(status)
-          return
-        }
-        // Показать/спрятать недавно завершённые.
-        if (e.target.closest('#doneToggle')) {
-          showDone = !showDone
-          try { localStorage.setItem('chatick.showDone', showDone ? '1' : '0') } catch {}
+        const act = e.target.closest('[data-act]')
+        if (act) {
+          // Ход по мячу. Строку гасим сразу: ответ придёт новым состоянием, а
+          // кнопка, которая после клика выглядит как прежде, зовёт нажать ещё раз.
+          const task = (state.tasks || []).find((t) => t.id === act.dataset.act)
+          sent.set(act.dataset.act, Date.now())
+          P.taskStatus(act.dataset.act, act.dataset.status)
+          toast(`${T('sent', 'Sent')}: ${act.textContent.trim()} · ${task?.number || ''}`)
           renderList()
           return
         }
-        // Свернуть/развернуть группу задач.
-        const coll = e.target.closest('[data-collapse]')
-        if (coll) {
-          collapsed[coll.dataset.collapse] = !collapsed[coll.dataset.collapse]
-          try { localStorage.setItem('chatick.collapsedTasks', JSON.stringify(collapsed)) } catch {}
-          renderList()
-          return
-        }
-        // Заголовок группы в «Мне» — дорожка в проект.
-        const head = e.target.closest('[data-open-project]')
+        const head = e.target.closest('[data-project]')
         if (head) {
-          // Проект передаём отдельно: под заголовком показаны все его
-          // уведомления, и уходя по этой дорожке человек видит их все. Раньше
-          // не гасло ни одного, и бейдж висел после просмотра.
-          window.panel.openProject(openProjectLink(head.dataset.openProject), head.dataset.openProject)
+          const co = head.dataset.co || coSel
+          if (co) P.open(`/c/${co}?p=${encodeURIComponent(head.dataset.project)}`)
           return
         }
-        const open = e.target.closest('[data-link]')
+        const open = e.target.closest('[data-open]')
         if (open) {
           // id уведомления передаём явно: по ссылке их не различить —
-          // несколько уведомлений одного проекта ведут в одно место.
-          window.panel.open(open.dataset.link, open.dataset.notification || null)
-          return
+          // несколько уведомлений ведут в одно место.
+          P.open(open.dataset.open, open.dataset.notification || null)
         }
-        const row = e.target.closest('.row')
-        if (row?.dataset.link) window.panel.open(row.dataset.link)
       }
 
-      // Все поисковые поля: перерисовываем список, не теряя фокус и курсор.
-      document.addEventListener('input', (e) => {
-        const id = e.target?.id
-        if (id === 'targetSearch') {
-          connect.q = e.target.value
-          render()
-          refocus('targetSearch')
-        } else if (id === 'projSearch') {
-          projQ = e.target.value
-          renderProjMenu()
-        } else if (id === 'inboxSearch') {
-          inboxQ = e.target.value
-          renderList()
-          refocus('inboxSearch')
-        } else if (id === 'taskSearch') {
-          taskQ = e.target.value
-          renderList()
-          refocus('taskSearch')
+      $('pickList').onclick = (e) => {
+        const b = e.target.closest('[data-target]')
+        if (b) choose(b.dataset.target)
+      }
+      $('pickQ').oninput = (e) => {
+        pickQ = e.target.value
+        renderPick()
+      }
+      $('pickQ').onkeydown = (e) => {
+        if (e.key === 'Enter') {
+          e.preventDefault()
+          choose(pickItems()[0]?.id)
         }
+      }
+
+      $('menu').onclick = (e) => {
+        const c = e.target.closest('[data-company]')
+        if (c) {
+          coSel = c.dataset.company
+          store.set('chatick.tray.company', coSel)
+          chip = 'all'
+          closeOverlay()
+          $('list').scrollTop = 0
+          render()
+          return
+        }
+        const go = e.target.closest('[data-go]')?.dataset.go
+        if (!go) return
+        closeOverlay()
+        const base = coSel ? `/c/${coSel}` : null
+        if (go === 'connect') return setView('connect')
+        // Выход — особым адресом: у оболочки нет своего вызова, а переход есть.
+        if (go === 'logout') return P.open('/logout')
+        if (!base) return
+        if (go === 'hours') P.open(`${base}/time`)
+        else if (go === 'notify') P.open(`${base}/settings/notifications`)
+        else if (go === 'profile') P.open(`${base}/settings/profile`)
+      }
+
+      $('connectBody').onclick = async (e) => {
+        const pick = e.target.closest('[data-target]')
+        if (pick) {
+          connect.target = pick.dataset.target
+          return refreshConnect()
+        }
+        const kill = e.target.closest('[data-revoke]')
+        if (kill) {
+          kill.disabled = true
+          return P.revokeConnection(kill.dataset.revoke)
+        }
+        if (e.target.closest('#cnCopy')) {
+          const btn = $('cnCopy')
+          try {
+            await navigator.clipboard.writeText(state.strings?.inviteLine || '')
+            btn.textContent = T('connectCopied', 'Copied')
+            btn.classList.add('ok')
+            setTimeout(() => {
+              btn.textContent = T('connectCopy', 'Copy')
+              btn.classList.remove('ok')
+            }, 1600)
+          } catch {
+            /* буфер недоступен — строку видно, можно выделить руками */
+          }
+          return
+        }
+        if (e.target.closest('#cnAllow')) {
+          if (!connect.target) return
+          const kind = connect.target[0]
+          const id = connect.target.slice(2)
+          connect.busy = true
+          connect.msg = null
+          refreshConnect()
+          P.approveCode(connect.code, kind === 'a' ? { all: true } : kind === 'c' ? { companyId: id } : { projectId: id })
+          return
+        }
+        if (e.target.closest('#cnCancel')) {
+          connect = { code: '', clientName: null, msg: null, msgKind: null, busy: false, target: null, q: '' }
+          refreshConnect()
+        }
+      }
+      $('connectBody').oninput = (e) => {
+        if (e.target.id === 'cnCode') {
+          connect.code = e.target.value.trim()
+          connect.clientName = null
+          connect.msg = null
+          // XXXX-XXXX: набрали нужную длину — спрашиваем, кто это; жать
+          // «проверить» вручную незачем.
+          if (connect.code.replace(/[^0-9a-z]/gi, '').length >= 8) {
+            connect.busy = true
+            P.checkCode(connect.code)
+          }
+        } else if (e.target.id === 'cnSearch') {
+          connect.q = e.target.value
+          refreshConnect()
+        }
+      }
+
+      // Escape — шаг назад: меню, экран подключения, а потом и сама панель.
+      document.addEventListener('keydown', (e) => {
+        if (e.key !== 'Escape' || e.defaultPrevented) return
+        if (overlay) return closeOverlay()
+        if (view !== 'main') return setView('main')
+        P.close()
       })
 
-      window.panel.onState((next) => {
+      P.onState((next) => {
+        const prevTimer = state.timer?.id || null
         state = { ...state, ...next }
-        // Пока часы идут, выбор следует за ними: после паузы человек
-        // продолжает там же, где остановился.
-        if (state.timer?.projectId) {
-          timerProject = state.timer.projectId
-          try { localStorage.setItem('chatick.timerProject', timerProject) } catch {}
-        }
-        if (projMenuOpen) renderProjMenu()
+        syncCompany()
+        // Ответ пришёл: таймер сменился — кнопка снова принимает клики.
+        if ((state.timer?.id || null) !== prevTimer) busy = { until: 0, timerId: null }
+        // Ход по задаче принят — строка ушла из списка или сменила ход; держим
+        // пометку не дольше пары обновлений, чтобы отказ не оставил её серой.
+        for (const [id, at] of sent) if (Date.now() - at > 1500) sent.delete(id)
         render()
       })
 
       // Секунды должны идти: панель открыта, пока на неё смотрят.
-      setInterval(() => state.timer && renderTimer(), 1000)
+      setInterval(() => {
+        if (state.timer && view === 'main' && state.authed !== false) renderTimer()
+      }, 1000)
       render()
     </script>
   </body>
