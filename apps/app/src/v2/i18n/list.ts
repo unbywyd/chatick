@@ -3,6 +3,22 @@ import i18n from '@/i18n'
 /** Строки инструментов списка задач: поиск, меню строки, массовые действия, Excel, пустой список. */
 const ru = {
   tasks: { dueWord: 'Срок' },
+  task: {
+    keepOrig: 'Без сжатия',
+    keepOrigHint: 'Картинки загрузятся как есть, без уменьшения — для макетов и скриншотов.',
+    relRemove: 'Убрать связь',
+    resRemove: 'Отвязать ресурс',
+    resNew: 'Новый ресурс',
+    resName: 'Название ресурса',
+    resUrl: 'Ссылка',
+    resCreate: 'Создать и привязать',
+    cmtEdit: 'Изменить',
+    cmtDelete: 'Удалить',
+    cmtDeleteSure: 'Точно удалить?',
+    cmtSave: 'Сохранить',
+    cmtGone: 'Комментарий удалён',
+    hist: { unassign: 'снял исполнителя', estimate: 'оценка: {{to}}', estimateOff: 'убрал оценку' },
+  },
   lt: {
     failed: 'Не получилось',
     open: 'Открыть',
@@ -124,6 +140,22 @@ const ru = {
 
 const en: typeof ru = {
   tasks: { dueWord: 'Due' },
+  task: {
+    keepOrig: 'No compression',
+    keepOrigHint: 'Images upload as they are, not downscaled — for mockups and screenshots.',
+    relRemove: 'Remove link',
+    resRemove: 'Unlink resource',
+    resNew: 'New resource',
+    resName: 'Resource name',
+    resUrl: 'Link',
+    resCreate: 'Create and link',
+    cmtEdit: 'Edit',
+    cmtDelete: 'Delete',
+    cmtDeleteSure: 'Really delete?',
+    cmtSave: 'Save',
+    cmtGone: 'Comment deleted',
+    hist: { unassign: 'removed the assignee', estimate: 'estimate: {{to}}', estimateOff: 'removed the estimate' },
+  },
   lt: {
     failed: 'Didn’t work',
     open: 'Open',
@@ -245,6 +277,22 @@ const en: typeof ru = {
 
 const he: typeof ru = {
   tasks: { dueWord: 'מועד' },
+  task: {
+    keepOrig: 'בלי דחיסה',
+    keepOrigHint: 'התמונות יועלו כמו שהן, בלי הקטנה — לעיצובים ולצילומי מסך.',
+    relRemove: 'הסרת הקישור',
+    resRemove: 'ניתוק המשאב',
+    resNew: 'משאב חדש',
+    resName: 'שם המשאב',
+    resUrl: 'קישור',
+    resCreate: 'ליצור ולקשר',
+    cmtEdit: 'עריכה',
+    cmtDelete: 'מחיקה',
+    cmtDeleteSure: 'למחוק בטוח?',
+    cmtSave: 'שמירה',
+    cmtGone: 'התגובה נמחקה',
+    hist: { unassign: 'הסיר/ה את האחראי', estimate: 'הערכה: {{to}}', estimateOff: 'הסיר/ה את ההערכה' },
+  },
   lt: {
     failed: 'לא הצליח',
     open: 'פתיחה',

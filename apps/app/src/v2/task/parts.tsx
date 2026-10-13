@@ -6,11 +6,13 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { api, API_URL, ensureMediaToken, getMediaToken, getSessionToken, inlineImageUrl, withInlineImageAuth } from '@/lib/api'
 import { RichEditor, type RichMention } from '@/components/ui/rich-editor'
 import { parseDuration } from '@/lib/time-parse'
-import { errorCode, inProject, keys, useComments, useHandoffs, type Handoff, type Person, type TaskFull } from '../data'
+import { errorCode, inProject, keys, useComments, useHandoffs, useMe, type Handoff, type Person, type TaskFull } from '../data'
+import { kindOf as libKind, srcOf, Viewer, type FileItem, type Row as FileRowFull } from '../library/FileViewer'
+import '../i18n/list'
 import { useUi } from '../ui'
 import { Icon } from '../Icon'
 import { Clamp } from '../Clamp'
-import { letterOf, personColor, timeAgo } from '../util'
+import { fmtHm, letterOf, personColor, timeAgo } from '../util'
 
 /**
  * Куски страницы задачи: общие для полной страницы и для новой задачи —
@@ -82,10 +84,12 @@ export function parseEstimate(s: string): number | null | undefined {
 }
 
 /** Загрузка файла в проект: FormData, поэтому мимо api() с его JSON. */
-export async function uploadFile(projectId: string, file: File, taskId?: string): Promise<{ id: string; name: string }> {
+export async function uploadFile(projectId: string, file: File, taskId?: string, opts?: { keepOriginal?: boolean }): Promise<{ id: string; name: string }> {
   const fd = new FormData()
   fd.append('file', file)
   if (taskId) fd.append('taskId', taskId)
+  // «Без сжатия»: картинка сохранится как есть — для макетов и скриншотов, где важен каждый пиксель.
+  if (opts?.keepOriginal) fd.append('keepOriginal', '1')
   const token = getSessionToken()
   const res = await fetch(`${API_URL}/api/v1/files`, {
     method: 'POST',
@@ -317,7 +321,7 @@ const kindOf = (f: { name: string; mime: string }) => {
  * Плитки вложений и плитка «перетащи или вставь». Вставка из буфера ловится
  * на всей странице, кроме полей ввода и редактора: там вставка — это текст.
  */
-export function FilesView({ tiles, onAdd, busy, note }: { tiles: Tile[]; onAdd?: (files: File[]) => void; busy?: boolean; note?: string }) {
+export function FilesView({ tiles, onAdd, busy, note, extra }: { tiles: Tile[]; onAdd?: (files: File[]) => void; busy?: boolean; note?: string; extra?: React.ReactNode }) {
   const { t } = useTranslation('v2')
   const input = useRef<HTMLInputElement>(null)
   const [over, setOver] = useState(false)
@@ -341,6 +345,7 @@ export function FilesView({ tiles, onAdd, busy, note }: { tiles: Tile[]; onAdd?:
         <Icon name="attach" />
         {t('task.files')}
         <span className="n">{tiles.length || ''}</span>
+        {extra}
         {onAdd && (
           <button className="addl act" onClick={() => input.current?.click()}>
             <Icon name="plus" sm />
@@ -408,6 +413,25 @@ export function FilesView({ tiles, onAdd, busy, note }: { tiles: Tile[]; onAdd?:
 
 type FileRow = { id: string; name: string; mime: string; deleted?: boolean }
 
+/**
+ * Просмотр файла задачи — тот же, что в «Файлах»: посмотреть, скачать,
+ * поделиться, удалить. Файл берём целиком с сервера: в списках задачи у него
+ * нет размера и автора.
+ */
+function useFileViewer(project: TaskX['project'], onDeleted?: () => void) {
+  const { t } = useTranslation('v2')
+  const { flash } = useUi()
+  const [row, setRow] = useState<FileRowFull | null>(null)
+  const open = (id: string) => {
+    if (!project) return
+    void api<FileItem>(`/api/v1/files/${id}`, inProject(project.id))
+      .then((f) => setRow({ ...f, taskNumber: f.taskNumber ?? null, project: { ...project }, kind: libKind(f), src: srcOf(f) }))
+      .catch(() => flash(t('err.generic')))
+  }
+  const node = row ? <Viewer f={row} onClose={() => setRow(null)} onDeleted={onDeleted} /> : null
+  return { open, node }
+}
+
 /** Вложения существующей задачи: список с сервера, загрузка сразу в задачу. */
 export function TaskFiles({ task, canAttach }: { task: TaskX; canAttach: boolean }) {
   const { t } = useTranslation('v2')
@@ -423,26 +447,41 @@ export function TaskFiles({ task, canAttach }: { task: TaskX; canAttach: boolean
     queryKey: key,
     queryFn: () => api<{ items: FileRow[] }>(`/api/v1/files?taskId=${encodeURIComponent(task.id)}`, inProject(pid)).then((r) => r.items),
   })
+  const [keep, setKeep] = useState(false)
   const up = useMutation({
     mutationFn: async (files: File[]) => {
-      for (const f of files) await uploadFile(pid, f, task.id)
+      for (const f of files) await uploadFile(pid, f, task.id, { keepOriginal: keep })
     },
     onError: () => flash(t('task.uploadFailed')),
     onSettled: () => void qc.invalidateQueries({ queryKey: key }),
   })
-  const open = (f: FileRow) =>
-    void api<{ url: string }>(`/api/v1/files/${f.id}/view-url`, inProject(pid))
-      .then((r) => window.open(r.url, '_blank', 'noopener'))
-      .catch(() => flash(t('err.generic')))
+  const viewer = useFileViewer(task.project, () => void qc.invalidateQueries({ queryKey: key }))
   const tiles: Tile[] = (q.data ?? [])
     .filter((f) => !f.deleted)
-    .map((f) => ({ key: f.id, name: f.name, mime: f.mime, src: media ? withInlineImageAuth(inlineImageUrl(f.id)) : null, onOpen: () => open(f) }))
-  return <FilesView tiles={tiles} onAdd={canAttach ? (fs) => up.mutate(fs) : undefined} busy={up.isPending} />
+    .map((f) => ({ key: f.id, name: f.name, mime: f.mime, src: media ? withInlineImageAuth(inlineImageUrl(f.id)) : null, onOpen: () => viewer.open(f.id) }))
+  return (
+    <>
+      <FilesView
+        tiles={tiles}
+        onAdd={canAttach ? (fs) => up.mutate(fs) : undefined}
+        busy={up.isPending}
+        extra={
+          canAttach ? (
+            <label className="keep-orig" title={t('task.keepOrigHint')}>
+              <input type="checkbox" checked={keep} onChange={(e) => setKeep(e.target.checked)} />
+              {t('task.keepOrig')}
+            </label>
+          ) : null
+        }
+      />
+      {viewer.node}
+    </>
+  )
 }
 
 /* ───────────── Связи ───────────── */
 
-type LinkTask = { id: string; number: string; title: string; status: string }
+type LinkTask = { id: string; number: string; title: string; status: string; linkId?: string }
 type RelKind = 'blockers' | 'blocking' | 'from' | 'into' | 'related'
 
 export function TaskRelations({ task, canEdit }: { task: TaskX; canEdit: boolean }) {
@@ -495,6 +534,16 @@ export function TaskRelations({ task, canEdit }: { task: TaskX; canEdit: boolean
       void qc.invalidateQueries({ queryKey: lKey })
     },
   })
+  // Ошибочную связь или снятый блокер — убрать.
+  const drop = useMutation({
+    mutationFn: ({ kind, linkId }: { kind: RelKind; linkId: string }) =>
+      api(`/api/v1/tasks/${task.id}/${kind === 'blockers' || kind === 'blocking' ? 'blockers' : 'links'}/${linkId}`, { method: 'DELETE', ...inProject(pid) }),
+    onError: (e) => flash(t(`err.${errorCode(e)}`, { defaultValue: t('err.generic') })),
+    onSettled: () => {
+      void qc.invalidateQueries({ queryKey: bKey })
+      void qc.invalidateQueries({ queryKey: lKey })
+    },
+  })
   const rows: [RelKind, LinkTask[]][] = [
     ['blockers', blockers.data?.blockers ?? []],
     ['blocking', blockers.data?.blocking ?? []],
@@ -516,9 +565,16 @@ export function TaskRelations({ task, canEdit }: { task: TaskX; canEdit: boolean
               <span className="k">{label}</span>
               <div className="v">
                 {items.map((x) => (
-                  <button key={x.id} className="tchip tp-chip" title={x.title} onClick={() => navigate(`${base}/task/${x.id}`)}>
-                    {x.number} <span className="bidi">{x.title}</span>
-                  </button>
+                  <span key={x.id} className="tchip tp-chip rel-chip">
+                    <button className="rel-go" title={x.title} onClick={() => navigate(`${base}/task/${x.id}`)}>
+                      {x.number} <span className="bidi">{x.title}</span>
+                    </button>
+                    {canEdit && x.linkId && (
+                      <button className="rel-x" aria-label={t('task.relRemove')} title={t('task.relRemove')} disabled={drop.isPending} onClick={() => drop.mutate({ kind, linkId: x.linkId! })}>
+                        <Icon name="close" sm />
+                      </button>
+                    )}
+                  </span>
                 ))}
                 {!items.length && <span>{empty}</span>}
               </div>
@@ -582,6 +638,31 @@ export function TaskResources({ task, canEdit }: { task: TaskX; canEdit: boolean
       void qc.invalidateQueries({ queryKey: ['v2', 'task-res-cands', task.id] })
     },
   })
+  const unlink = useMutation({
+    mutationFn: (id: string) => api(`/api/v1/tasks/${task.id}/resources/${id}`, { method: 'DELETE', ...inProject(pid) }),
+    onError: (e) => flash(t(`err.${errorCode(e)}`, { defaultValue: t('err.generic') })),
+    onSettled: () => {
+      void qc.invalidateQueries({ queryKey: key })
+      void qc.invalidateQueries({ queryKey: ['v2', 'task-res-cands', task.id] })
+    },
+  })
+  // Новый ресурс прямо из задачи: завести и сразу привязать.
+  const [creating, setCreating] = useState(false)
+  const [rName, setRName] = useState('')
+  const [rUrl, setRUrl] = useState('')
+  const create = useMutation({
+    mutationFn: async () => {
+      const r = await api<{ id: string }>('/api/v1/resources', { method: 'POST', body: JSON.stringify({ name: rName.trim(), url: rUrl.trim() || null }), ...inProject(pid) })
+      await api(`/api/v1/tasks/${task.id}/resources`, { method: 'POST', body: JSON.stringify({ resourceIds: [r.id] }), ...inProject(pid) })
+    },
+    onSuccess: () => {
+      setCreating(false)
+      setRName('')
+      setRUrl('')
+    },
+    onError: (e) => flash(t(`err.${errorCode(e)}`, { defaultValue: t('err.generic') })),
+    onSettled: () => void qc.invalidateQueries({ queryKey: key }),
+  })
   const items = q.data ?? []
   return (
     <div className="sec2">
@@ -605,9 +686,25 @@ export function TaskResources({ task, canEdit }: { task: TaskX; canEdit: boolean
                 }}
               />
             )}
+            <button className="addl" onClick={() => setCreating(!creating)}>
+              <Icon name="plus" sm />
+              {t('task.resNew')}
+            </button>
           </span>
         )}
       </h3>
+      {creating && (
+        <div className="res-new">
+          <input className="nin bidi" autoFocus value={rName} maxLength={200} onChange={(e) => setRName(e.target.value)} placeholder={t('task.resName')} aria-label={t('task.resName')} />
+          <input className="nin" dir="ltr" value={rUrl} maxLength={2000} onChange={(e) => setRUrl(e.target.value)} placeholder="https://" aria-label={t('task.resUrl')} />
+          <button className={'btn-acc' + (rName.trim() && !create.isPending ? '' : ' dis')} onClick={() => rName.trim() && create.mutate()}>
+            {t('task.resCreate')}
+          </button>
+          <button className="btn" onClick={() => setCreating(false)}>
+            {t('lt.cancel')}
+          </button>
+        </div>
+      )}
       <div className="minis">
         {items.map((r) => {
           const inner = (
@@ -618,13 +715,22 @@ export function TaskResources({ task, canEdit }: { task: TaskX; canEdit: boolean
               <span className="bidi">{r.name}</span>
             </>
           )
+          const x = canEdit ? (
+            <button className="rel-x" aria-label={t('task.resRemove')} title={t('task.resRemove')} disabled={unlink.isPending} onClick={() => unlink.mutate(r.id)}>
+              <Icon name="close" sm />
+            </button>
+          ) : null
           return r.url ? (
-            <a key={r.id} className="rchip" href={r.url} target="_blank" rel="noopener noreferrer">
-              {inner}
-            </a>
+            <span key={r.id} className="rchip-w">
+              <a className="rchip" href={r.url} target="_blank" rel="noopener noreferrer">
+                {inner}
+              </a>
+              {x}
+            </span>
           ) : (
-            <span key={r.id} className="rchip">
-              {inner}
+            <span key={r.id} className="rchip-w">
+              <span className="rchip">{inner}</span>
+              {x}
             </span>
           )
         })}
@@ -708,7 +814,7 @@ function CommentBody({ body }: { body: string }) {
   )
 }
 
-type Cmt = { id: string; body: string; createdAt: string; author: Person | null; deleted?: boolean; replyToId?: string | null }
+type Cmt = { id: string; body: string; createdAt: string; author: Person | null; deleted?: boolean; replyToId?: string | null; files?: FileRow[] }
 
 /** Текст комментария одной строкой — для цитаты над ответом. */
 const plainOf = (html: string) =>
@@ -783,6 +889,25 @@ export function TaskDiscussion({ task, lng, mentions }: { task: TaskX; lng: stri
   const pid = task.project!.id
   const handoffs = useHandoffs(task)
   const comments = useComments(task)
+  const myId = useMe().data?.id
+  // Свой комментарий можно поправить или удалить (удалённый остаётся плашкой).
+  const [editing, setEditing] = useState<string | null>(null)
+  const [editText, setEditText] = useState('')
+  const [delAsk, setDelAsk] = useState<string | null>(null)
+  const refreshCmts = () => void qc.invalidateQueries({ queryKey: keys.comments(task.id) })
+  const edit = useMutation({
+    mutationFn: (id: string) => api(`/api/v1/tasks/${task.id}/comments/${id}`, { method: 'PATCH', body: JSON.stringify({ body: editText }), ...inProject(pid) }),
+    onSuccess: () => setEditing(null),
+    onError: (e) => flash(t(`err.${errorCode(e)}`, { defaultValue: t('err.generic') })),
+    onSettled: refreshCmts,
+  })
+  const del = useMutation({
+    mutationFn: (id: string) => api(`/api/v1/tasks/${task.id}/comments/${id}`, { method: 'DELETE', ...inProject(pid) }),
+    onSuccess: () => setDelAsk(null),
+    onError: (e) => flash(t(`err.${errorCode(e)}`, { defaultValue: t('err.generic') })),
+    onSettled: refreshCmts,
+  })
+  const viewer = useFileViewer(task.project, () => void qc.invalidateQueries({ queryKey: ['v2', 'task-files', task.id] }))
   // Комментарий — тот же редактор, что в панели задачи: разметка и @ с уведомлением.
   const [text, setText] = useState('')
   const [edKey, setEdKey] = useState(0)
@@ -828,7 +953,8 @@ export function TaskDiscussion({ task, lng, mentions }: { task: TaskX; lng: stri
     boxRef.current?.scrollIntoView({ block: 'nearest', behavior: 'smooth' })
     boxRef.current?.querySelector<HTMLElement>('.ProseMirror')?.focus()
   }
-  const evs: Ev[] = [...(handoffs.data ?? []).map((h) => ({ at: h.createdAt, h })), ...live.map((c) => ({ at: c.createdAt, c }))].sort((a, b) =>
+  // Удалённый остаётся в ленте плашкой: на него могли отвечать, и разговор не рвётся.
+  const evs: Ev[] = [...(handoffs.data ?? []).map((h) => ({ at: h.createdAt, h })), ...list.map((c) => ({ at: c.createdAt, c }))].sort((a, b) =>
     a.at.localeCompare(b.at),
   )
   const can = !empty && !send.isPending
@@ -844,6 +970,17 @@ export function TaskDiscussion({ task, lng, mentions }: { task: TaskX; lng: stri
             {evs.map((e) =>
               e.h ? (
                 <PassEv key={e.h.id} h={e.h} lng={lng} />
+              ) : e.c!.deleted ? (
+                <div key={e.c!.id} id={`cmt-${e.c!.id}`} className="cmt gone">
+                  {personAv(e.c!.author, 'av lg')}
+                  <div className="b">
+                    <div className="n">
+                      <span className="bidi">{e.c!.author?.name ?? '—'}</span>
+                      <time>{timeAgo(lng, e.at)}</time>
+                    </div>
+                    <div className="cmt-gone">{t('task.cmtGone')}</div>
+                  </div>
+                </div>
               ) : (
                 <div key={e.c!.id} id={`cmt-${e.c!.id}`} className="cmt">
                   {personAv(e.c!.author, 'av lg')}
@@ -855,9 +992,53 @@ export function TaskDiscussion({ task, lng, mentions }: { task: TaskX; lng: stri
                         <I name="reply" sm />
                         {t('task.reply')}
                       </button>
+                      {myId && e.c!.author?.id === myId && editing !== e.c!.id && (
+                        <>
+                          <button
+                            className="cmt-act"
+                            onClick={() => {
+                              setEditing(e.c!.id)
+                              setEditText(e.c!.body)
+                            }}
+                          >
+                            {t('task.cmtEdit')}
+                          </button>
+                          <button className={'cmt-act' + (delAsk === e.c!.id ? ' danger' : '')} onClick={() => (delAsk === e.c!.id ? del.mutate(e.c!.id) : setDelAsk(e.c!.id))} onBlur={() => setDelAsk(null)}>
+                            {delAsk === e.c!.id ? t('task.cmtDeleteSure') : t('task.cmtDelete')}
+                          </button>
+                        </>
+                      )}
                     </div>
                     {e.c!.replyToId && <ReplyQuote parent={byId.get(e.c!.replyToId)} />}
-                    <CommentBody body={e.c!.body} />
+                    {editing === e.c!.id ? (
+                      <div className="cmt-edit">
+                        <div className="cbox-ed">
+                          <RichEditor value={editText} onChange={setEditText} onSubmit={() => edit.mutate(e.c!.id)} mentions={mentions} preset="minimal" />
+                        </div>
+                        <div className="co-foot" style={{ marginTop: 8 }}>
+                          <button className={'btn-acc' + (edit.isPending ? ' dis' : '')} onClick={() => edit.mutate(e.c!.id)}>
+                            {t('task.cmtSave')}
+                          </button>
+                          <button className="btn" onClick={() => setEditing(null)}>
+                            {t('lt.cancel')}
+                          </button>
+                        </div>
+                      </div>
+                    ) : (
+                      <CommentBody body={e.c!.body} />
+                    )}
+                    {(e.c!.files ?? []).filter((f) => !f.deleted).length > 0 && (
+                      <div className="cmt-files">
+                        {(e.c!.files ?? [])
+                          .filter((f) => !f.deleted)
+                          .map((f) => (
+                            <button key={f.id} className="tchip" onClick={() => viewer.open(f.id)} title={f.name}>
+                              <Icon name="attach" sm />
+                              <span className="bidi">{f.name}</span>
+                            </button>
+                          ))}
+                      </div>
+                    )}
                   </div>
                 </div>
               ),
@@ -919,6 +1100,7 @@ export function TaskDiscussion({ task, lng, mentions }: { task: TaskX; lng: stri
           </div>
         </div>
       </div>
+      {viewer.node}
     </div>
   )
 }
@@ -953,7 +1135,8 @@ export function TaskHistory({ task, lng }: { task: TaskX; lng: string }) {
     const b = x.meta?.before ?? {}
     const parts: string[] = []
     if ('status' in a) parts.push(t('task.hist.status', { from: st(b.status), to: st(a.status) }))
-    if ('assigneeId' in a) parts.push(t('task.hist.assign', { to: a.assigneeId ? (people[String(a.assigneeId)] ?? '—') : '—' }))
+    if ('assigneeId' in a) parts.push(a.assigneeId ? t('task.hist.assign', { to: people[String(a.assigneeId)] ?? '—' }) : t('task.hist.unassign'))
+    if ('estimateMinutes' in a) parts.push(a.estimateMinutes ? t('task.hist.estimate', { to: fmtHm(Number(a.estimateMinutes)) }) : t('task.hist.estimateOff'))
     if ('priority' in a) parts.push(t('task.hist.priority', { from: pr(b.priority), to: pr(a.priority) }))
     if ('dueDate' in a)
       parts.push(t('task.hist.due', { to: a.dueDate ? new Date(String(a.dueDate)).toLocaleDateString(lng, { month: 'short', day: 'numeric' }) : t('due.none') }))

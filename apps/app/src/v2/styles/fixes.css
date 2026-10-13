@@ -411,3 +411,22 @@ html:has(.app .panel),html:has(.app .panel) body{overflow:hidden}
 .app .lh .lh-end .ib{width:30px;height:30px}
 .app .rsearch:focus-within{box-shadow:inset 0 0 0 1.5px var(--ink)}
 .app .rsearch input:focus-visible{outline:none}
+
+/* Страница задачи: вложения без сжатия, убрать связь/ресурс, правка комментария. */
+.app .keep-orig{display:inline-flex;align-items:center;gap:6px;font-size:13px;font-weight:500;color:var(--ink3);margin-inline-start:auto;cursor:pointer}
+.app .keep-orig + .addl{margin-inline-start:6px}
+.app .rel-chip{display:inline-flex;align-items:center;gap:2px;padding-inline-end:4px}
+.app .rel-chip .rel-go{display:inline-flex;align-items:center;gap:6px;min-width:0;text-align:start}
+.app .rel-x{display:grid;place-items:center;width:20px;height:20px;border-radius:6px;color:var(--ink3);flex:none}
+.app .rel-x:hover{background:var(--soft);color:var(--signal)}
+.app .rchip-w{display:inline-flex;align-items:center;gap:2px}
+.app .res-new{display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin:-4px 0 12px}
+.app .res-new .nin{flex:1;min-width:180px;height:40px}
+.app .cmt-act.danger{color:var(--signal)}
+.app .cmt.gone .av{opacity:.5}
+.app .cmt-gone{font-size:13.5px;font-style:italic;color:var(--ink3);margin-top:4px}
+.app .cmt-edit{margin-top:6px}
+.app .cmt-edit .cbox-ed{background:var(--paper);box-shadow:inset 0 0 0 1px var(--line)}
+.app .cmt-files{display:flex;gap:6px;flex-wrap:wrap;margin-top:8px}
+.app .cmt-files .tchip{display:inline-flex;align-items:center;gap:6px;max-width:260px}
+.app .cmt-files .tchip .bidi{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
