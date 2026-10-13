@@ -9,7 +9,7 @@ import i18n from '@/i18n'
  */
 const ru = {
   navMenu: { aria: 'Разделы', more: 'Все разделы', head: 'Разделы', pin: 'Показывать «{{name}}» в шапке', pinHint: 'Показывать в шапке', hint: 'Переключатель — показывать раздел в шапке. Остальные всегда здесь.' },
-  nav: { tasks: 'Задачи', docs: 'Документы', time: 'Часы', resources: 'Ресурсы', files: 'Файлы', versions: 'Версии', history: 'История' },
+  nav: { tasks: 'Задачи', docs: 'Документы', notes: 'Заметки', time: 'Часы', resources: 'Ресурсы', files: 'Файлы', versions: 'Версии', history: 'История' },
   mv: { do: 'Сделать', review: 'Проверить', answer: 'Ответить', client: 'Ждём клиента' },
   head: {
     companies: 'Компании',
@@ -282,7 +282,7 @@ type Bundle = typeof ru
 
 const en: Bundle = {
   navMenu: { aria: 'Sections', more: 'All sections', head: 'Sections', pin: 'Show “{{name}}” in the header', pinHint: 'Show in the header', hint: 'The switch shows a section in the header. The rest are always here.' },
-  nav: { tasks: 'Tasks', docs: 'Docs', time: 'Hours', resources: 'Resources', files: 'Files', versions: 'Versions', history: 'History' },
+  nav: { tasks: 'Tasks', docs: 'Docs', notes: 'Notes', time: 'Hours', resources: 'Resources', files: 'Files', versions: 'Versions', history: 'History' },
   mv: { do: 'Do', review: 'Review', answer: 'Answer', client: 'Waiting on client' },
   head: {
     companies: 'Companies',
@@ -539,7 +539,7 @@ const en: Bundle = {
 
 const he: Bundle = {
   navMenu: { aria: 'אזורים', more: 'כל האזורים', head: 'אזורים', pin: 'להציג את „{{name}}” בכותרת', pinHint: 'להציג בכותרת', hint: 'המתג מציג אזור בכותרת. השאר תמיד כאן.' },
-  nav: { tasks: 'משימות', docs: 'מסמכים', time: 'שעות', resources: 'משאבים', files: 'קבצים', versions: 'גרסאות', history: 'היסטוריה' },
+  nav: { tasks: 'משימות', docs: 'מסמכים', notes: 'הערות', time: 'שעות', resources: 'משאבים', files: 'קבצים', versions: 'גרסאות', history: 'היסטוריה' },
   mv: { do: 'לבצע', review: 'לבדוק', answer: 'לענות', client: 'מחכים ללקוח' },
   head: {
     companies: 'חברות',

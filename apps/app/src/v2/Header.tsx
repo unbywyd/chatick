@@ -11,8 +11,8 @@ import { ProjectLogo } from './ProjectLogo'
 import { Icon } from './Icon'
 import { fmtClock, fmtHm, letterOf, personColor, projectColor, shortProject, timeAgo } from './util'
 
-const NAV = ['', 'docs', 'time', 'resources', 'files', 'versions', 'history'] as const
-const NAV_LABEL: Record<string, string> = { '': 'tasks', docs: 'docs', time: 'time', resources: 'resources', files: 'files', versions: 'versions', history: 'history' }
+const NAV = ['', 'docs', 'notes', 'time', 'resources', 'files', 'versions', 'history'] as const
+const NAV_LABEL: Record<string, string> = { '': 'tasks', docs: 'docs', notes: 'notes', time: 'time', resources: 'resources', files: 'files', versions: 'versions', history: 'history' }
 const PINS_KEY = 'chatick_v2_nav'
 
 /** Какие разделы человек вынес в шапку. По умолчанию — только задачи. */

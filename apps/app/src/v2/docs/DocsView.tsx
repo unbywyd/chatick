@@ -53,7 +53,12 @@ function Svg({ d, sm = true }: { d: React.ReactNode; sm?: boolean }) {
   )
 }
 
-export function DocsView() {
+/** Документы и заметки — две страницы на одном экране: /docs и /notes. */
+export function NotesView() {
+  return <DocsView mode="note" />
+}
+
+export function DocsView({ mode = 'doc' }: { mode?: 'doc' | 'note' }) {
   const { t } = useTranslation('v2')
   const { companyId, base, project, setProject, flash } = useUi()
   const navigate = useNavigate()
@@ -96,7 +101,17 @@ export function DocsView() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [docs.items, allNotes, notesHit.data, semantic, t])
 
-  const visible = items.filter((i) => (!project || i.projectId === project) && (!s || (semantic && i.kind === 'note') || i.text.toLowerCase().includes(s)))
+  // Документы и заметки — разные вещи: документы правят вместе, заметки —
+  // короткие записи-решения (их пишут ИИ и мост). Одним деревом они путались,
+  // поэтому дерево показывает что-то одно, переключателем сверху.
+  const kind = mode
+  // Ссылка на заметку со страницы документов (старый адрес) — на страницу заметок.
+  const misplaced = mode === 'doc' && rest.startsWith('n/')
+  useEffect(() => {
+    if (misplaced) navigate({ pathname: `${base}/notes/${rest}`, search: loc.search }, { replace: true })
+  }, [misplaced, rest, base, loc.search, navigate])
+  const matches = (i: Item) => (!project || i.projectId === project) && (!s || (semantic && i.kind === 'note') || i.text.toLowerCase().includes(s))
+  const visible = items.filter((i) => i.kind === kind && matches(i))
 
   // Группы: сначала компания, потом проекты — где правили последним, тот выше.
   const groups = useMemo(() => {
@@ -106,7 +121,8 @@ export function DocsView() {
       by.set(k, [...(by.get(k) ?? []), i])
     }
     const out: { key: string; project: ProjectLike | null; rows: Item[] }[] = []
-    if (!project && (by.get('') || !s)) out.push({ key: '', project: null, rows: by.get('') ?? [] })
+    // «Компания» — только у заметок: документ всегда живёт в проекте.
+    if (!project && (by.get('') || (!s && kind === 'note'))) out.push({ key: '', project: null, rows: by.get('') ?? [] })
     const keys = [...by.keys()].filter((k) => k)
     if (project && !keys.includes(project) && !s) keys.push(project)
     for (const k of keys) {
@@ -116,7 +132,7 @@ export function DocsView() {
     return out
     // projectOf читает pmap
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [visible, project, s, pmap, allNotes])
+  }, [visible, project, s, pmap, allNotes, kind])
 
   const loading = projects.isLoading || docs.loading || notesAll.isLoading
   const routeSel = parseSel(rest)
@@ -128,8 +144,11 @@ export function DocsView() {
 
   const go = useCallback(
     (to: Sel, edit = false) =>
-      navigate({ pathname: !to ? `${base}/docs` : to.kind === 'doc' ? `${base}/docs/d/${to.projectId}/${to.id}` : `${base}/docs/n/${to.id}`, search: loc.search }, { state: edit ? { edit: true } : null }),
-    [navigate, base, loc.search],
+      navigate(
+        { pathname: !to ? `${base}/${mode === 'note' ? 'notes' : 'docs'}` : to.kind === 'doc' ? `${base}/docs/d/${to.projectId}/${to.id}` : `${base}/notes/n/${to.id}`, search: loc.search },
+        { state: edit ? { edit: true } : null },
+      ),
+    [navigate, base, loc.search, mode],
   )
 
   const fail = (e: unknown) => flash(errorCode(e).startsWith('Forbidden') || errorCode(e) === '403' ? t('docs.noRights') : t('err.generic'))
@@ -165,7 +184,7 @@ export function DocsView() {
   }
   const busy = createDoc.isPending || createNote.isPending
 
-  const counts = items.filter((i) => i.projectId).map((i) => ({ project: { id: i.projectId! } }))
+  const counts = items.filter((i) => i.projectId && i.kind === kind).map((i) => ({ project: { id: i.projectId! } }))
 
   // Группы дерева свёрнуты: десятки документов в столбик растягивали боковую
   // колонку на несколько экранов. Раскрыта та, где открытый документ, все —
@@ -196,29 +215,33 @@ export function DocsView() {
     <div className="kb">
       <div className="ph">
         <div>
-          <h1>{t('docs.title')}</h1>
-          <p>{t('docs.sub')}</p>
+          <h1>{mode === 'note' ? t('docs.notesTitle') : t('docs.docsTitle')}</h1>
+          <p>{mode === 'note' ? t('docs.notesSub') : t('docs.sub')}</p>
         </div>
         <span className="sp" />
-        <button className="btn" onClick={() => createNote.mutate(project)} disabled={busy}>
-          {t('docs.note')}
-        </button>
-        <div className="kb-pk">
-          <button className="btn moss" onClick={newDoc} disabled={busy} aria-expanded={pick}>
+        {mode === 'note' ? (
+          <button className="btn moss" onClick={() => createNote.mutate(project)} disabled={busy}>
             <Icon name="plus" sm />
-            {t('docs.doc')}
+            {t('docs.note')}
           </button>
-          {pick && (
-            <ProjectPick
-              projects={plist}
-              onClose={() => setPick(false)}
-              onPick={(id) => {
-                setPick(false)
-                createDoc.mutate(id)
-              }}
-            />
-          )}
-        </div>
+        ) : (
+          <div className="kb-pk">
+            <button className="btn moss" onClick={newDoc} disabled={busy} aria-expanded={pick}>
+              <Icon name="plus" sm />
+              {t('docs.doc')}
+            </button>
+            {pick && (
+              <ProjectPick
+                projects={plist}
+                onClose={() => setPick(false)}
+                onPick={(id) => {
+                  setPick(false)
+                  createDoc.mutate(id)
+                }}
+              />
+            )}
+          </div>
+        )}
       </div>
 
       <Carousel projects={plist} counts={counts} selected={project} onPick={setProject} />
@@ -237,7 +260,7 @@ export function DocsView() {
                   setApplied('')
                 }
               }}
-              placeholder={t('docs.find')}
+              placeholder={mode === 'note' ? t('docs.findNotes') : t('docs.find')}
               aria-label={t('docs.find')}
               title={t('docs.findHint')}
             />
@@ -253,7 +276,7 @@ export function DocsView() {
                 </button>
                 {(!g.project || pmap.has(g.project.id)) && (
                   <button
-                    onClick={() => (g.project ? createDoc.mutate(g.project.id) : createNote.mutate(null))}
+                    onClick={() => (g.project && mode === 'doc' ? createDoc.mutate(g.project.id) : createNote.mutate(g.project?.id ?? null))}
                     disabled={busy}
                     aria-label={t('docs.addIn', { name: g.project ? shortProject(g.project.name) : t('docs.company') })}
                     title={t('docs.addIn', { name: g.project ? shortProject(g.project.name) : t('docs.company') })}

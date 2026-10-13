@@ -250,3 +250,12 @@ html:has(.app .panel),html:has(.app .panel) body{overflow:hidden}
 
 /* Кнопка-заголовок группы — не квадратная «+» из правила .tg > button. */
 .app .kb .tg > button.tg-tog{display:flex;width:auto;height:auto;margin-inline-start:-4px;place-items:initial}
+
+/* Дерево: «Документы | Заметки» — что-то одно, а не вперемешку. */
+.app .kb .kb-kind{display:flex;margin-bottom:10px}
+.app .kb .kb-kind button{flex:1;justify-content:center}
+
+/* Текст с направлением по содержимому (.bidi) — выравнивать к началу строки,
+   а не влево: иначе заголовок на иврите прижимался к левому краю. */
+.app .bidi{text-align:start}
+.app .kb h1.bidi,.app .kb .kb-title{unicode-bidi:plaintext;text-align:start;width:100%}

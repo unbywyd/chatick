@@ -41,7 +41,7 @@ import { ImageViewer } from './components/ImageViewer'
 import { Shell, StartRedirect } from './v2/Shell'
 import { TasksView } from './v2/tasks/TasksView'
 import { TaskPage, TaskNew } from './v2/task/TaskPage'
-import { DocsView } from './v2/docs/DocsView'
+import { DocsView, NotesView } from './v2/docs/DocsView'
 import { TimeView } from './v2/time/TimeView'
 import { ResourcesView } from './v2/library/ResourcesView'
 import { FilesView } from './v2/library/FilesView'
@@ -375,6 +375,7 @@ createRoot(document.getElementById('root')!).render(
                 <Route path="task/new" element={<TaskNew />} />
                 <Route path="task/:taskId" element={<TaskPage />} />
                 <Route path="docs/*" element={<DocsView />} />
+                <Route path="notes/*" element={<NotesView />} />
                 <Route path="time/*" element={<TimeView />} />
                 <Route path="resources" element={<ResourcesView />} />
                 <Route path="files" element={<FilesView />} />
