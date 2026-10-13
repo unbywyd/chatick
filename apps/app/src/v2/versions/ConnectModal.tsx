@@ -72,6 +72,19 @@ export function ConnectModal({ data, initial, onClose }: { data: Data; initial: 
     onError: (e) => setErr(httpStatus(e) === 403 ? t('versions.err.rights') : t('versions.err.generic')),
   })
 
+  // Отключить: секрет вебхука перестаёт действовать, новые сборки сюда не придут.
+  const [offAsk, setOffAsk] = useState(false)
+  const off = useMutation({
+    mutationFn: (projectId: string) => api('/api/v1/integrations/expo', { method: 'DELETE', ...inProject(projectId) }),
+    onSuccess: (_d, projectId) => {
+      setOffAsk(false)
+      void qc.invalidateQueries({ queryKey: vkeys.expo(projectId) })
+      void qc.invalidateQueries({ queryKey: vkeys.all })
+      flash(t('cn2.offDone'))
+    },
+    onError: (e) => setErr(httpStatus(e) === 403 ? t('versions.err.rights') : t('versions.err.generic')),
+  })
+
   const cmd = st?.url && st.secret ? `eas webhook:create --event BUILD --url ${st.url} --secret ${st.secret}` : ''
   const prompt = cmd && p ? t('versions.cn.prompt', { name: shortProject(p.name), cmd, interpolation: { escapeValue: false } }) : ''
 
@@ -163,6 +176,15 @@ export function ConnectModal({ data, initial, onClose }: { data: Data; initial: 
             <span className="d" />
             {st.live ? t('versions.cn.ok') : t('versions.cn.wait')}
             {!st.live && <small style={{ whiteSpace: 'nowrap' }}>{t('versions.cn.waitHint')}</small>}
+            {offAsk ? (
+              <button className="mini danger on" style={{ marginInlineStart: 'auto' }} disabled={off.isPending} onClick={() => pid && off.mutate(pid)}>
+                {t('cn2.offSure')}
+              </button>
+            ) : (
+              <button className="mini" style={{ marginInlineStart: 'auto' }} onClick={() => setOffAsk(true)}>
+                {t('cn2.off')}
+              </button>
+            )}
           </div>
         )}
       </div>

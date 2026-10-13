@@ -301,3 +301,97 @@ export function CompanyDanger() {
     </section>
   )
 }
+
+type UsageRow = { calls: number; tokensIn: number; tokensOut: number; costUsd: number }
+type Usage = {
+  totalUsd: number
+  byModel: (UsageRow & { model: string; source: string })[]
+  byFeature: (UsageRow & { feature: string })[]
+  log: { id: string; model: string; source: string; feature: string | null; tokensIn: number; tokensOut: number; costUsd: number | null; createdAt: string; project: string | null }[]
+}
+const usd = (n: number) => `$${n < 0.01 && n > 0 ? n.toFixed(4) : n.toFixed(2)}`
+
+/** Расход ИИ компании за 30 дней: итог, по задачам ИИ, по моделям, последние вызовы. */
+export function CompanyAiUsage() {
+  const { t, i18n } = useTranslation('v2')
+  const { companyId } = useUi()
+  const [log, setLog] = useState(false)
+  const q = useQuery({ queryKey: ['v2', 'co-ai-usage', companyId], queryFn: () => api<Usage>(`/api/v1/companies/${companyId}/ai-usage?days=30`) })
+  const d = q.data
+  if (!d) return null
+  return (
+    <section className="card sec">
+      <h2>
+        {t('aiu.title')} <small>{t('settings.adminOnly')}</small>
+      </h2>
+      <p className="d">{t('aiu.sub', { total: usd(d.totalUsd) })}</p>
+      {!d.byFeature.length && <p className="d">{t('aiu.none')}</p>}
+      {d.byFeature.length > 0 && (
+        <table className="aiu">
+          <thead>
+            <tr>
+              <th>{t('aiu.feature')}</th>
+              <th>{t('aiu.calls')}</th>
+              <th>{t('aiu.tokens')}</th>
+              <th>{t('aiu.cost')}</th>
+            </tr>
+          </thead>
+          <tbody>
+            {d.byFeature.map((r) => (
+              <tr key={r.feature}>
+                <td>{t(`aiu.f.${r.feature}`, { defaultValue: r.feature })}</td>
+                <td>{r.calls}</td>
+                <td>{(r.tokensIn + r.tokensOut).toLocaleString(i18n.language)}</td>
+                <td>{usd(r.costUsd)}</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      )}
+      {d.byModel.length > 0 && (
+        <table className="aiu">
+          <thead>
+            <tr>
+              <th>{t('aiu.model')}</th>
+              <th>{t('aiu.calls')}</th>
+              <th>{t('aiu.tokens')}</th>
+              <th>{t('aiu.cost')}</th>
+            </tr>
+          </thead>
+          <tbody>
+            {d.byModel.map((r) => (
+              <tr key={r.model + r.source}>
+                <td dir="ltr">
+                  {r.model} {r.source === 'trial' && <span className="aiu-tag">{t('aiu.trial')}</span>}
+                </td>
+                <td>{r.calls}</td>
+                <td>{(r.tokensIn + r.tokensOut).toLocaleString(i18n.language)}</td>
+                <td>{usd(r.costUsd)}</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      )}
+      {d.log.length > 0 && (
+        <button className="btn sm" onClick={() => setLog(!log)}>
+          {log ? t('aiu.hideLog') : t('aiu.showLog', { count: d.log.length })}
+        </button>
+      )}
+      {log && (
+        <table className="aiu">
+          <tbody>
+            {d.log.map((r) => (
+              <tr key={r.id}>
+                <td>{new Date(r.createdAt).toLocaleString(i18n.language, { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' })}</td>
+                <td>{t(`aiu.f.${r.feature ?? 'other'}`, { defaultValue: r.feature ?? '—' })}</td>
+                <td className="bidi">{r.project ?? t('aiu.company')}</td>
+                <td dir="ltr">{r.model}</td>
+                <td>{r.costUsd === null ? '—' : usd(r.costUsd)}</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      )}
+    </section>
+  )
+}

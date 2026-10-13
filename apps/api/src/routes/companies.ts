@@ -2,14 +2,14 @@ import { closedSql, settledSql } from '../lib/task-status.js'
 import { Hono } from 'hono'
 import { zValidator } from '@hono/zod-validator'
 import { z } from 'zod'
-import { and, eq, inArray, isNull, or, sql } from 'drizzle-orm'
+import { and, eq, gte, inArray, isNull, or, sql } from 'drizzle-orm'
 import { nanoid } from 'nanoid'
 import sharp from 'sharp'
 import { DeleteObjectCommand, PutObjectCommand, S3Client } from '@aws-sdk/client-s3'
 import { deleteObject, getObjectStream, resolveStorage, s3Bucket, s3Client, S3_KEY_PREFIX } from '../lib/s3.js'
 import { sendDeletedMail } from '../lib/mails.js'
 import { db } from '../db/client.js'
-import { companyBackupStorage, companyStorage, companies, companyMembers, companyInvites, companyWebhooks, files, messages, notifications, projectMembers, projects, tasks, timeEntries, users } from '../db/schema.js'
+import { aiUsageLog, companyBackupStorage, companyStorage, companies, companyMembers, companyInvites, companyWebhooks, files, messages, notifications, projectMembers, projects, tasks, timeEntries, users } from '../db/schema.js'
 import { requireSession, type SessionEnv } from '../auth.js'
 import { sendInviteMail } from '../lib/mail-invite.js'
 import { projectLocale } from '../lib/locale.js'
@@ -2218,6 +2218,42 @@ companiesRoute.patch(
     })
   },
 )
+
+/**
+ * Расход ИИ компании: сколько потрачено, на каких моделях, на что (ассистент,
+ * разбор задач, заметки…) и последние вызовы. Ассистент компании пишет расход
+ * без проекта — раньше его не было видно нигде.
+ */
+companiesRoute.get('/:companyId/ai-usage', async (c) => {
+  const { sub } = c.get('session')
+  const companyId = c.req.param('companyId')
+  if ((await memberRoleIn(companyId, sub)) !== 'admin') return c.json({ error: 'Forbidden' }, 403)
+  const since = new Date(Date.now() - Math.min(365, Math.max(1, Number(c.req.query('days')) || 30)) * 86_400_000)
+  const where = and(eq(aiUsageLog.companyId, companyId), gte(aiUsageLog.createdAt, since))
+  const agg = {
+    calls: sql<number>`count(*)::int`,
+    tokensIn: sql<string>`coalesce(sum(cast(${aiUsageLog.tokensIn} as bigint)),0)`,
+    tokensOut: sql<string>`coalesce(sum(cast(${aiUsageLog.tokensOut} as bigint)),0)`,
+    costUsd: sql<string>`coalesce(sum(cast(${aiUsageLog.costUsd} as numeric)),0)`,
+  }
+  const byModel = await db.select({ model: aiUsageLog.model, source: aiUsageLog.source, ...agg }).from(aiUsageLog).where(where).groupBy(aiUsageLog.model, aiUsageLog.source).orderBy(sql`count(*) desc`)
+  const byFeature = await db.select({ feature: aiUsageLog.feature, ...agg }).from(aiUsageLog).where(where).groupBy(aiUsageLog.feature).orderBy(sql`count(*) desc`)
+  const log = await db
+    .select({ id: aiUsageLog.id, model: aiUsageLog.model, source: aiUsageLog.source, feature: aiUsageLog.feature, tokensIn: aiUsageLog.tokensIn, tokensOut: aiUsageLog.tokensOut, costUsd: aiUsageLog.costUsd, createdAt: aiUsageLog.createdAt, project: projects.name })
+    .from(aiUsageLog)
+    .leftJoin(projects, eq(projects.id, aiUsageLog.projectId))
+    .where(where)
+    .orderBy(sql`${aiUsageLog.createdAt} desc`)
+    .limit(60)
+  const num = (r: { calls: number; tokensIn: string; tokensOut: string; costUsd: string }) => ({ calls: r.calls, tokensIn: Number(r.tokensIn), tokensOut: Number(r.tokensOut), costUsd: Number(r.costUsd) })
+  return c.json({
+    since,
+    totalUsd: byModel.reduce((a, r) => a + Number(r.costUsd), 0),
+    byModel: byModel.map((r) => ({ model: r.model, source: r.source, ...num(r) })),
+    byFeature: byFeature.map((r) => ({ feature: r.feature ?? 'other', ...num(r) })),
+    log: log.map((r) => ({ ...r, tokensIn: Number(r.tokensIn), tokensOut: Number(r.tokensOut), costUsd: r.costUsd === null ? null : Number(r.costUsd) })),
+  })
+})
 
 /**
  * ИИ при создании задачи — улучшать формулировку и дописывать заметки.

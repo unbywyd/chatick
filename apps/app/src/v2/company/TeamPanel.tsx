@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { api } from '@/lib/api'
@@ -10,6 +10,8 @@ import { letterOf, personColor, shortProject } from '../util'
 import { PersonCombo } from './PersonCombo'
 import { Select } from '../ui/Calendar'
 import { ProjectAbout, ProjectDelete, ProjectReminders, ProjectStorage } from './ProjectSettings'
+import { DbConnections } from '@/components/tabs/DbConnections'
+import { setScreenProject } from '@/lib/api'
 import { coError, isLead, passAll, useCoRefresh, type CoMember, type OpenTask, type TeamRow } from './data'
 
 /**
@@ -284,6 +286,7 @@ export function TeamPanel({
           <ProjectAbout project={project} />
           <ProjectReminders projectId={project.id} />
           <ProjectStorage projectId={project.id} />
+          <DbSection projectId={project.id} />
 
           <div className="co-sec">
             {sure ? (
@@ -353,6 +356,38 @@ function MemberAccess({ projectId, userId }: { projectId: string; userId: string
           />
         </div>
       ))}
+    </div>
+  )
+}
+
+/**
+ * Базы данных проекта для ассистента: подключить, выбрать таблицы, скрыть
+ * колонки. Компонент первой версии берёт проект «с экрана» — ставим его на
+ * время, пока раздел открыт.
+ */
+function DbSection({ projectId }: { projectId: string }) {
+  const { t } = useTranslation('v2')
+  setScreenProject(projectId)
+  useEffect(() => {
+    setScreenProject(projectId)
+    return () => setScreenProject(null)
+  }, [projectId])
+  // Функция включается на сервере (DB_CONNECTIONS_ENABLED): выключена — 404, раздел не показываем.
+  const on = useQuery({
+    queryKey: ['v2', 'db-on', projectId],
+    queryFn: () => api(`/api/v1/db-connections`, { headers: { 'X-Project': projectId } }).then(() => true, () => false),
+    staleTime: 10 * 60_000,
+  })
+  if (!on.data) return null
+  return (
+    <div className="co-sec">
+      <h3>{t('cn2.db')}</h3>
+      <p className="co-hint" style={{ marginTop: 0 }}>
+        {t('cn2.dbHint')}
+      </p>
+      <div className="v2-v1">
+        <DbConnections projectId={projectId} />
+      </div>
     </div>
   )
 }

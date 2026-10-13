@@ -8,7 +8,7 @@ import { useUi } from '../ui'
 import { Icon } from '../Icon'
 import { letterOf, timeAgo } from '../util'
 import { Confirm, Sw, copyText, errText, fmtBytes, upload, useFail } from './parts'
-import { CompanyDanger, CompanyIntegration, CompanyLocaleRow, CompanyTime, TaskAiRows } from './CompanyMore'
+import { CompanyAiUsage, CompanyDanger, CompanyIntegration, CompanyLocaleRow, CompanyTime, TaskAiRows } from './CompanyMore'
 
 /**
  * Настройки компании (только админ): название и логотип, бэкап, ключ ИИ,
@@ -25,6 +25,7 @@ export function CompanySettings() {
       <CompanyProfile />
       <CompanyTime />
       <CompanyAi />
+      <CompanyAiUsage />
       <Backup />
       <StorageAndMail />
       <CompanyIntegration />

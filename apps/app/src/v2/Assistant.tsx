@@ -5,7 +5,9 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import Markdown from 'react-markdown'
 import remarkGfm from 'remark-gfm'
 import { api } from '@/lib/api'
-import { errorCode, SOCKET_EVENT, type SocketMessage } from './data'
+import { errorCode, SOCKET_EVENT, useProjects, type SocketMessage } from './data'
+import { uploadFile } from './task/parts'
+import './i18n/list'
 import { useUi, type AskContext } from './ui'
 import { Icon } from './Icon'
 import { AssistantInput, type AssistantInputHandle } from './AssistantInput'
@@ -53,6 +55,38 @@ export function Assistant() {
   const [note, setNote] = useState<string | null>(null)
   const end = useRef<HTMLDivElement>(null)
   const input = useRef<AssistantInputHandle>(null)
+  // Готов ли ИИ — заранее: без ключа панель скажет почему и кто может починить.
+  const status = useQuery({
+    queryKey: ['v2', 'assistant-status', companyId],
+    queryFn: () => api<{ ready: boolean; reason: 'no_key' | 'trial_over' | null; isAdmin: boolean }>(`/api/v1/assistant/${companyId}/status`),
+    staleTime: 60_000,
+  })
+  const notReady = status.data && !status.data.ready ? status.data : null
+  // Скриншоты и файлы к вопросу: временно в проект на экране (или первый свой),
+  // сервер покажет их модели и сам уберёт непривязанные через сутки.
+  const projects = useProjects(companyId)
+  const upProject = project ?? projects.data?.[0]?.id ?? null
+  const [files, setFiles] = useState<{ id: string; name: string }[]>([])
+  const [uploading, setUploading] = useState(0)
+  const fileRef = useRef<HTMLInputElement>(null)
+  const attach = async (list: File[]) => {
+    if (!upProject) return
+    for (const f of list.slice(0, Math.max(0, 6 - files.length))) {
+      setUploading((n) => n + 1)
+      try {
+        const r = await uploadFile(upProject, f)
+        setFiles((x) => [...x, { id: r.id, name: r.name ?? f.name }])
+      } catch {
+        setNote(t('task.uploadFailed'))
+      } finally {
+        setUploading((n) => n - 1)
+      }
+    }
+  }
+  // Раньше: история приходит последними 50, старое — по кнопке.
+  const [older, setOlder] = useState<Msg[]>([])
+  const [olderDone, setOlderDone] = useState(false)
+  const [clearSure, setClearSure] = useState(false)
 
   useEffect(() => {
     const on = (e: Event) => {
@@ -84,7 +118,7 @@ export function Assistant() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [companyId, qc])
 
-  const items = history.data?.items ?? []
+  const items = [...older, ...(history.data?.items ?? [])]
   const lastAsked = [...items].reverse().find((x) => x.role === 'user')?.text ?? ''
   const busy = Boolean(history.data?.busy)
 
@@ -113,7 +147,7 @@ export function Assistant() {
     mutationFn: (v: { text: string; context?: AskContext }) =>
       api<Msg>(`/api/v1/assistant/${companyId}/messages`, {
         method: 'POST',
-        body: JSON.stringify({ text: v.text, context: { ...screenCtx(), ...(v.context ?? {}) } }),
+        body: JSON.stringify({ text: v.text, context: { ...screenCtx(), ...(files.length ? { fileIds: files.map((f) => f.id) } : {}), ...(v.context ?? {}) } }),
       }),
     onMutate: () => {
       setNote(null)
@@ -122,6 +156,7 @@ export function Assistant() {
     },
     onSuccess: (m) => {
       setText('')
+      setFiles([])
       input.current?.clear()
       qc.setQueryData<{ items: Msg[]; busy: boolean }>(key, (old) => ({ items: [...(old?.items ?? []).filter((x) => x.id !== m.id), m], busy: true }))
       setLive((l) => (l && (l.replyTo === PENDING || l.replyTo === BUSY) ? { ...l, replyTo: m.id } : l))
@@ -133,7 +168,22 @@ export function Assistant() {
   })
   const clear = useMutation({
     mutationFn: () => api(`/api/v1/assistant/${companyId}/messages`, { method: 'DELETE' }),
-    onSuccess: () => qc.setQueryData(key, { items: [], busy: false }),
+    onSuccess: () => {
+      setClearSure(false)
+      setOlder([])
+      setOlderDone(false)
+      qc.setQueryData(key, { items: [], busy: false })
+    },
+  })
+  const loadOlder = useMutation({
+    mutationFn: () => {
+      const first = older[0] ?? history.data?.items[0]
+      return api<{ items: Msg[] }>(`/api/v1/assistant/${companyId}/messages?limit=50${first ? `&before=${encodeURIComponent(first.createdAt)}` : ''}`)
+    },
+    onSuccess: (r) => {
+      setOlder((x) => [...r.items, ...x])
+      if (r.items.length < 50) setOlderDone(true)
+    },
   })
 
   const ask = (msg: string, context?: AskContext) => {
@@ -161,16 +211,26 @@ export function Assistant() {
           <div className="nm">{t('ai.name')}</div>
           <div className="s bidi">{t('ai.sees', { company: company.name })}</div>
         </div>
-        {items.length > 0 && (
-          <button className="ib" style={{ marginInlineStart: 'auto' }} aria-label={t('ai.clear')} title={t('ai.clear')} onClick={() => clear.mutate()}>
-            <Icon name="reopen" />
-          </button>
-        )}
+        {items.length > 0 &&
+          (clearSure ? (
+            <button className="mini danger on" style={{ marginInlineStart: 'auto' }} onClick={() => clear.mutate()} onBlur={() => setClearSure(false)}>
+              {t('ai2.clearSure')}
+            </button>
+          ) : (
+            <button className="ib" style={{ marginInlineStart: 'auto' }} aria-label={t('ai.clear')} title={t('ai.clear')} onClick={() => setClearSure(true)}>
+              <Icon name="reopen" />
+            </button>
+          ))}
         <button className="ib" style={{ marginInlineStart: items.length ? 0 : 'auto' }} aria-label={t('ai.collapse')} onClick={() => setAiOpen(false)}>
           <Icon name="sidebar" />
         </button>
       </div>
       <div className="msgs" aria-live="polite">
+        {(history.data?.items.length ?? 0) >= 50 && !olderDone && (
+          <button className="more2 ai-older" disabled={loadOlder.isPending} onClick={() => loadOlder.mutate()}>
+            {t('ai2.earlier')}
+          </button>
+        )}
         {items.map((m) =>
           m.role === 'user' ? (
             <div key={m.id} className="mu bidi">
@@ -210,6 +270,21 @@ export function Assistant() {
           ))}
         </div>
       )}
+      {notReady && (
+        <div className="need ai-off" role="status" style={{ margin: '0 16px 8px' }}>
+          <Icon name="info" />
+          <span>
+            {t(`ai2.off.${notReady.reason ?? 'no_key'}`)}{' '}
+            {notReady.isAdmin ? (
+              <button className="lt-link" onClick={() => navigate(`${base}/settings/company`)}>
+                {t('ai2.fix')}
+              </button>
+            ) : (
+              t('ai2.askAdmin')
+            )}
+          </span>
+        </div>
+      )}
       {note && (
         <div className="need" role="alert" style={{ margin: '0 16px 8px' }}>
           <Icon name="info" />
@@ -221,9 +296,35 @@ export function Assistant() {
           <Icon name="target" sm />
           <span>{ctx}</span>
         </div>
-        <AssistantInput ref={input} placeholder={t('ai.ph')} disabled={Boolean(live)} onChange={setText} onSubmit={(md) => ask(md)} />
+        {files.length > 0 && (
+          <div className="ai-files">
+            {files.map((f) => (
+              <span key={f.id} className="tchip bidi">
+                {f.name}
+                <button aria-label={t('ai2.removeFile')} onClick={() => setFiles((x) => x.filter((y) => y.id !== f.id))}>
+                  <Icon name="close" sm />
+                </button>
+              </span>
+            ))}
+          </div>
+        )}
+        <AssistantInput ref={input} placeholder={t('ai.ph')} disabled={Boolean(live) || Boolean(notReady)} onChange={setText} onSubmit={(md) => ask(md)} onFiles={(fs) => void attach(fs)} />
         <div className="r">
-          <span style={{ fontSize: 12, color: 'var(--ink3)', flex: 1 }} />
+          <button className="ib" aria-label={t('ai2.attach')} title={t('ai2.attachHint')} disabled={!upProject || files.length >= 6 || Boolean(notReady)} onClick={() => fileRef.current?.click()}>
+            <Icon name="attach" />
+          </button>
+          <input
+            ref={fileRef}
+            type="file"
+            multiple
+            hidden
+            onChange={(e) => {
+              const list = Array.from(e.target.files ?? [])
+              e.target.value = ''
+              if (list.length) void attach(list)
+            }}
+          />
+          <span style={{ fontSize: 12, color: 'var(--ink3)', flex: 1 }}>{uploading ? t('task.uploading') : ''}</span>
           <button className="send" aria-label={t('ai.send')} onClick={() => ask(text)} disabled={!text.trim() || Boolean(live) || send.isPending}>
             <Icon name="send" />
           </button>

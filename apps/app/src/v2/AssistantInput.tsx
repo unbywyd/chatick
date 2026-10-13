@@ -14,13 +14,21 @@ export type AssistantInputHandle = { clear: () => void; focus: () => void }
  */
 export const AssistantInput = forwardRef<
   AssistantInputHandle,
-  { placeholder: string; disabled?: boolean; onChange: (md: string) => void; onSubmit: (md: string) => void }
->(function AssistantInput({ placeholder, disabled, onChange, onSubmit }, ref) {
+  { placeholder: string; disabled?: boolean; onChange: (md: string) => void; onSubmit: (md: string) => void; onFiles?: (files: File[]) => void }
+>(function AssistantInput({ placeholder, disabled, onChange, onSubmit, onFiles }, ref) {
   const editor = useEditor({
     extensions: [StarterKit.configure({ heading: false, horizontalRule: false }), TextDirection, Placeholder.configure({ placeholder })],
     editable: !disabled,
     editorProps: {
       attributes: { class: 'ai-ed', 'aria-label': placeholder },
+      // Скриншот из буфера — сразу вложением к вопросу, а не текстом.
+      handlePaste: (_v, event) => {
+        const files = Array.from(event.clipboardData?.files ?? []).filter((f) => f.type.startsWith('image/'))
+        if (!files.length || !onFiles) return false
+        event.preventDefault()
+        onFiles(files)
+        return true
+      },
       handleKeyDown: (view, event) => {
         if (event.key !== 'Enter' || event.shiftKey || event.isComposing) return false
         // В блоке кода Enter — перенос строки, как в редакторе.

@@ -171,3 +171,7 @@
 .app .ntf .more{display:block;margin:14px auto 0}
 .app .stg .mship-p{display:flex;align-items:center;gap:10px;min-width:0}
 .app .stg .mship-p .bidi{white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.app .stg .aiu{width:100%;border-collapse:collapse;margin:10px 0 14px;font-size:13.5px}
+.app .stg .aiu th{text-align:start;font-weight:500;color:var(--ink3);padding:6px 8px;border-bottom:1px solid var(--line)}
+.app .stg .aiu td{padding:7px 8px;border-bottom:1px solid var(--line);font-variant-numeric:tabular-nums}
+.app .stg .aiu-tag{margin-inline-start:6px;padding:0 6px;border-radius:6px;background:var(--soft);font-size:11px;color:var(--ink2)}

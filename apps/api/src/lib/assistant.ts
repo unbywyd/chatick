@@ -1,8 +1,9 @@
-import { and, desc, eq, inArray, isNull, or } from 'drizzle-orm'
+import { and, desc, eq, ilike, inArray, isNull, or } from 'drizzle-orm'
 import { db } from '../db/client.js'
 import {
   assistantMessages,
   companies,
+  credentials,
   documents,
   files,
   HANDOFF_ACTIONS,
@@ -10,6 +11,7 @@ import {
   notifications,
   projectMembers,
   projects,
+  releases,
   tasks,
   timeEntries,
   users,
@@ -17,6 +19,7 @@ import {
 } from '../db/schema.js'
 import { companyAssistantLlm, completeWithTools, type StreamEvent, type ToolDef, type ToolHandler } from './llm.js'
 import { memoryTools } from './memory.js'
+import { profilesForProject } from './job-title.js'
 import { handoff, setOnTable, TABLE_LIMIT } from './ball.js'
 import { notifyHandoff } from './handoff-notify.js'
 import { matchPerson, matchProject } from './quick-task.js'
@@ -228,7 +231,7 @@ export function companyTools(ctx: Ctx): { tools: ToolDef[]; handlers: Record<str
   const tools: ToolDef[] = [
     {
       name: 'list_my_projects',
-      description: 'The projects this person is in, in this company — ids and names.',
+      description: 'The projects this person is in, in this company — ids, names, language and what each is about (its description). Read the description before planning work in a project.',
       parameters: { type: 'object', properties: {} },
     },
     {
@@ -299,7 +302,7 @@ export function companyTools(ctx: Ctx): { tools: ToolDef[]; handlers: Record<str
     {
       name: 'open_on_screen',
       description:
-        'Open something on the person\'s screen: a task (in the side panel), a document, a note, or a whole section. ' +
+        'Open something on the person\'s screen: a task (in the side panel), a document, a note, a file, a resource, an app version, or a whole section. ' +
         'Use it whenever they ask to open / show / go to something ("открой доку X", "покажи задачу 115", "перейди в часы") — ' +
         'open it instead of pasting its contents into the chat, then say in one line what you opened. ' +
         'Also when they are about to look at the thing anyway. One place at a time — a screen that keeps jumping is worse than no help. ' +
@@ -310,7 +313,7 @@ export function companyTools(ctx: Ctx): { tools: ToolDef[]; handlers: Record<str
       parameters: {
         type: 'object',
         properties: {
-          what: { type: 'string', enum: ['task', 'document', 'note', 'section', 'new_task'], description: 'What to open' },
+          what: { type: 'string', enum: ['task', 'document', 'note', 'file', 'resource', 'version', 'section', 'new_task'], description: 'What to open' },
           title: { type: 'string', description: 'new_task: title, in the project\'s language' },
           description: { type: 'string', description: 'new_task: description, markdown' },
           assignee: { type: 'string', description: 'new_task: who gets the ball — name, email or "me". Omit to leave it to the person.' },
@@ -318,7 +321,7 @@ export function companyTools(ctx: Ctx): { tools: ToolDef[]; handlers: Record<str
           due: { type: 'string', description: 'new_task: due date YYYY-MM-DD' },
           estimate_minutes: { type: 'number', description: 'new_task: estimate in minutes' },
           checklist: { type: 'array', items: { type: 'string' }, description: 'new_task: checklist items' },
-          id: { type: 'string', description: 'Task number (TASK-5) or id, document id, note id. Omit for a section.' },
+          id: { type: 'string', description: 'Task number (TASK-5) or id; document, note, file, resource or version (release) id. Omit for a section.' },
           section: {
             type: 'string',
             enum: ['tasks', 'docs', 'notes', 'time', 'resources', 'files', 'versions', 'history', 'company', 'settings', 'notifications'],
@@ -328,6 +331,13 @@ export function companyTools(ctx: Ctx): { tools: ToolDef[]; handlers: Record<str
         },
         required: ['what'],
       },
+    },
+    {
+      name: 'search_my_conversation',
+      description:
+        'Search everything this person and you wrote to each other before, in this company — older than what you remember. ' +
+        'Use it for "what did I ask you about X", "you told me last week…", "найди, что мы обсуждали про…".',
+      parameters: { type: 'object', properties: { query: { type: 'string', description: 'Words to look for' }, limit: { type: 'number' } }, required: ['query'] },
     },
     {
       name: 'my_inbox',
@@ -343,7 +353,21 @@ export function companyTools(ctx: Ctx): { tools: ToolDef[]; handlers: Record<str
   const handlers: Record<string, ToolHandler> = {
     list_my_projects: async () => {
       used('list_my_projects')
-      return json(ctx.projects.map((p) => ({ id: p.id, name: p.name })))
+      const ids = ctx.projects.map((p) => p.id)
+      const extra = ids.length
+        ? new Map(
+            (await db.select({ id: projects.id, about: projects.about, aiConfig: projects.aiConfig }).from(projects).where(inArray(projects.id, ids))).map((r) => {
+              let language: string | undefined
+              try {
+                language = (JSON.parse(r.aiConfig || '{}') as { language?: string }).language
+              } catch {
+                /* язык не задан */
+              }
+              return [r.id, { about: (r.about ?? '').trim().slice(0, 400), language }] as const
+            }),
+          )
+        : new Map<string, { about: string; language?: string }>()
+      return json(ctx.projects.map((p) => ({ id: p.id, name: p.name, language: extra.get(p.id)?.language, about: extra.get(p.id)?.about || undefined })))
     },
 
     my_ball: async (args) => {
@@ -471,7 +495,19 @@ export function companyTools(ctx: Ctx): { tools: ToolDef[]; handlers: Record<str
         .from(projectMembers)
         .innerJoin(users, eq(users.id, projectMembers.userId))
         .where(eq(projectMembers.projectId, p.id))
-      return json({ project: p.name, people: rows.map((r) => ({ id: r.id, name: r.name || r.email, role: r.role, mention: `@[${r.name || r.email}](${r.id})` })) })
+      // Должность и зона ответственности — по ним ассистент решает, кому что поручать.
+      const profiles = await profilesForProject(p.id)
+      return json({
+        project: p.name,
+        people: rows.map((r) => ({
+          id: r.id,
+          name: r.name || r.email,
+          role: r.role,
+          jobTitle: profiles.get(r.id)?.jobTitle || undefined,
+          responsibility: profiles.get(r.id)?.responsibility || undefined,
+          mention: `@[${r.name || r.email}](${r.id})`,
+        })),
+      })
     },
 
     open_on_screen: async (args) => {
@@ -569,7 +605,44 @@ export function companyTools(ctx: Ctx): { tools: ToolDef[]; handlers: Record<str
         if (!n) return `No note ${raw} in this company. Find its id with list_notes.`
         return done(send({ path: `/notes/n/${n.id}` }), `the note «${n.title}»`)
       }
+      if (what === 'file') {
+        const f = await db.query.files.findFirst({ where: and(eq(files.id, raw), isNull(files.deletedAt)) })
+        if (!f?.projectId || !visible.includes(f.projectId)) return `No file ${raw} in the person's projects.`
+        return done(send({ path: `/files/f/${f.projectId}/${f.id}` }), `the file «${f.name}»`)
+      }
+      if (what === 'resource') {
+        const r = await db.query.credentials.findFirst({ where: eq(credentials.id, raw) })
+        if (!r || !visible.includes(r.projectId)) return `No resource ${raw} in the person's projects.`
+        return done(send({ path: `/resources/r/${r.projectId}/${r.id}` }), `the resource «${r.name}»`)
+      }
+      if (what === 'version') {
+        const v = await db.query.releases.findFirst({ where: eq(releases.id, raw) })
+        if (!v || !visible.includes(v.projectId)) return `No app version ${raw} in the person's projects.`
+        return done(send({ path: `/versions/v/${v.projectId}/${v.id}` }), `version ${v.version}`)
+      }
       return `Unknown target: ${what}`
+    },
+
+    search_my_conversation: async (args) => {
+      used('search_my_conversation')
+      const q = String(args.query ?? '').trim()
+      if (q.length < 2) return 'Pass at least two characters to look for.'
+      const limit = Math.min(30, Math.max(1, Number(args.limit) || 10))
+      const like = `%${q.replace(/[%_\\]/g, (m) => `\\${m}`)}%`
+      const rows = await db
+        .select({ role: assistantMessages.role, text: assistantMessages.text, at: assistantMessages.createdAt })
+        .from(assistantMessages)
+        .where(and(eq(assistantMessages.companyId, ctx.companyId), eq(assistantMessages.userId, ctx.userId), ilike(assistantMessages.text, like)))
+        .orderBy(desc(assistantMessages.createdAt))
+        .limit(limit)
+      if (!rows.length) return `Nothing about «${q}» in your earlier conversation.`
+      return json(
+        rows.map((r) => {
+          const i = r.text.toLowerCase().indexOf(q.toLowerCase())
+          const from = Math.max(0, i - 160)
+          return { who: r.role === 'user' ? 'person' : 'you', at: r.at, text: `${from ? '…' : ''}${r.text.slice(from, from + 500)}` }
+        }),
+      )
     },
 
     my_inbox: async (args) => {
@@ -721,7 +794,9 @@ export async function assistantReply(input: {
       'CONFIRMATION RULE: never change or move anything that is not plainly what the person asked for. For updates to other people\'s work, state exactly what you will change and wait for a yes. A clear explicit request counts as the yes.',
       'All actions are permission-checked per person and project — on PERMISSION DENIED or REFUSED, explain plainly.',
       'about_chatick answers questions about the product itself — call it instead of guessing.',
-      'OPENING THINGS: when the person asks to open, show or go to a task, document, note or section, call open_on_screen — the app switches to it. Do not paste a document\'s text into the chat instead of opening it.',
+      'OPENING THINGS: when the person asks to open, show or go to a task, document, note, file, resource, app version or section, call open_on_screen — the app switches to it. Do not paste a document\'s text into the chat instead of opening it.',
+      'WHO DOES WHAT: project_team gives each person\'s job title and area of responsibility — use them to decide who should get a task. list_my_projects gives each project\'s description: read it before planning work there.',
+      'MEMORY: you only see the latest part of this conversation. When the person refers to something discussed earlier, search_my_conversation before saying you do not know.',
       'MENTIONS: to address or pull in a person in anything you write (task description, comment, note), write @[Their Name](<userId>) — ids come from project_team. Plain "@Name" notifies nobody.',
       'NEW TASK FOR REVIEW: when they want a task drafted for them to check ("набросай", "заполни", "открой создание задачи"), call open_on_screen with what=new_task and every field you know — they only press Create. Create directly (quick_task/create_task) only when they plainly ask you to create it.',
       'FORMATTING: markdown renders. Lead with the answer; tables only to compare several items across the same fields; no "Sure!", no restating the question. Be concise.',

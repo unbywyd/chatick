@@ -7,7 +7,9 @@ import { assistantMessages, companyMembers, files } from '../db/schema.js'
 import { myProjects } from './ball.js'
 import { requireSession, type SessionEnv } from '../auth.js'
 import { assistantReply, type ScreenContext } from '../lib/assistant.js'
-import type { StreamEvent } from '../lib/llm.js'
+import { companyLlm, type StreamEvent } from '../lib/llm.js'
+import { companyTrialSpendUsd } from '../lib/ai-usage.js'
+import { env } from '../env.js'
 import { sendToUserAnywhere } from '../ws.js'
 
 /**
@@ -46,6 +48,27 @@ const view = (m: typeof assistantMessages.$inferSelect) => ({
   tools: JSON.parse(m.tools || '[]') as string[],
   failed: m.failed,
   createdAt: m.createdAt,
+})
+
+/**
+ * Можно ли сейчас говорить с ассистентом — и если нет, почему. Чтобы панель
+ * сказала это сразу («нет ключа», «пробный кончился» и кто может починить), а
+ * не после первого вопроса общим «недоступен, попробуйте позже».
+ */
+assistantRoute.get('/:companyId/status', async (c) => {
+  const { sub } = c.get('session')
+  const companyId = c.req.param('companyId')
+  const m = await member(companyId, sub)
+  if (!m) return c.json({ error: 'Forbidden' }, 403)
+  const isAdmin = m.role === 'admin'
+  if (await companyLlm(companyId)) return c.json({ ready: true, source: 'company', reason: null, isAdmin })
+  if (env.AI_TRIAL_KEY) {
+    const spent = await companyTrialSpendUsd(companyId)
+    const budget = env.AI_TRIAL_BUDGET_USD
+    if (spent < budget) return c.json({ ready: true, source: 'trial', reason: null, isAdmin, trial: { spentUsd: spent, budgetUsd: budget } })
+    return c.json({ ready: false, source: null, reason: 'trial_over', isAdmin, trial: { spentUsd: spent, budgetUsd: budget } })
+  }
+  return c.json({ ready: false, source: null, reason: 'no_key', isAdmin })
 })
 
 assistantRoute.get('/:companyId/messages', async (c) => {
