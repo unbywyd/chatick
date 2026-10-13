@@ -33,8 +33,7 @@ export function CompanyView() {
 }
 
 function Company() {
-  const { t, i18n } = useTranslation('v2')
-  const rtl = i18n.dir() === 'rtl'
+  const { t } = useTranslation('v2')
   const { companyId, company, base, flash } = useUi()
   const navigate = useNavigate()
   const sub = useParams()['*'] ?? ''
@@ -287,7 +286,7 @@ function Company() {
                       {long > 0 ? <small className="long">{t('company.long', { count: long })}</small> : <small>{t('company.open')}</small>}
                     </span>
                     <span className="co-chev" style={{ display: 'grid' }}>
-                      <Icon name={rtl ? 'chevronStart' : 'chevronEnd'} sm />
+                      <Icon name="chevronEnd" sm />
                     </span>
                   </button>
                 )

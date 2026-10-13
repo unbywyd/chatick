@@ -51,7 +51,9 @@ function Top() {
   return (
     <header className="top">
       <div className="wm">
-        <span className="mk">C</span>Chatick
+        {/* Знак — тот же, что в шапке и у установленного приложения. */}
+        <img className="mk" src={`${import.meta.env.BASE_URL}favicon.svg`} alt="" />
+        Chatick
       </div>
       <div style={{ flex: 1 }} />
       <div className="langw">

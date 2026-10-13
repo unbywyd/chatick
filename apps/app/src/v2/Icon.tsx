@@ -159,9 +159,16 @@ const PATHS: Record<string, React.ReactNode> = {
 
 export type IconName = keyof typeof PATHS
 
+/**
+ * Стрелки указывают «вперёд» и «назад» по ходу чтения: в иврите они
+ * зеркалятся сами (класс fw, правило в main.css). Руками в разметке и в
+ * стилях отдельных мест их больше не переворачиваем — иначе выйдет дважды.
+ */
+const FLOW = new Set(['chevronEnd', 'chevronStart', 'arrow', 'back', 'logout'])
+
 export function Icon({ name, sm, fill, style }: { name: IconName | string; sm?: boolean; fill?: boolean; style?: React.CSSProperties }) {
   return (
-    <svg className={'ic' + (sm ? ' sm' : '') + (fill ? ' fl' : '')} viewBox="0 0 24 24" aria-hidden="true" style={style}>
+    <svg className={'ic' + (sm ? ' sm' : '') + (fill ? ' fl' : '') + (FLOW.has(name) ? ' fw' : '')} viewBox="0 0 24 24" aria-hidden="true" style={style}>
       {PATHS[name]}
     </svg>
   )

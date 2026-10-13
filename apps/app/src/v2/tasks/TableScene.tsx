@@ -124,7 +124,17 @@ export function TableScenes({ project }: { project: string | null }) {
     if (side === 'away' && !away.length && mine.length) setSide('mine')
   }, [side, mine.length, away.length])
   const scene = list.find((s) => s.id === cur) ?? list[0]
-  if (!mine.length && !away.length) return null
+  if (!table.data) return null
+  // Пустой стол не прячем: иначе никто не узнает, что он есть и как на него класть.
+  if (!mine.length && !away.length)
+    return (
+      <section className="sv-hot sv-empty" aria-label={t('tbl.title')}>
+        <div className="sv-h">
+          <h2>{t('tbl.title')}</h2>
+          <span className="sv-sub">{t('tbl.empty')}</span>
+        </div>
+      </section>
+    )
 
   return (
     <section className="sv-hot" aria-label={t('tbl.title')}>

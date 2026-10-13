@@ -163,8 +163,8 @@ function CompanyMenu() {
                   navigate(`/c/${c.id}`)
                 }}
               >
-                <span className="clg" style={{ background: personColor(c.id), color: '#fff' }}>
-                  {letterOf(c.name)}
+                <span className="clg" style={{ background: c.logoUrl ? 'var(--sheet)' : personColor(c.id), color: '#fff' }}>
+                  {c.logoUrl ? <img src={c.logoUrl} alt="" /> : letterOf(c.name)}
                 </span>
                 <span className="cb">
                   <b className="bidi">{c.name}</b>
@@ -284,8 +284,8 @@ function TimerPill({ companyId }: { companyId: string }) {
         {cur ? (
           <ProjectLogo project={cur} />
         ) : (
-          <span className="logo sm" style={{ background: 'var(--moss)' }}>
-            {letterOf(company.name)}
+          <span className="logo sm" style={{ background: company.logoUrl ? 'var(--sheet)' : 'var(--moss)' }}>
+            {company.logoUrl ? <img src={company.logoUrl} alt="" /> : letterOf(company.name)}
           </span>
         )}
         <span className="nm">{label}</span>
@@ -315,8 +315,8 @@ function TimerPill({ companyId }: { companyId: string }) {
             </label>
             {!q && (
               <button className={'gp' + (!current ? ' sel' : '')} role="option" aria-selected={!current} onClick={() => choose(null)}>
-                <span className="logo sm" style={{ background: 'var(--moss)' }}>
-                  {letterOf(company.name)}
+                <span className="logo sm" style={{ background: company.logoUrl ? 'var(--sheet)' : 'var(--moss)' }}>
+                  {company.logoUrl ? <img src={company.logoUrl} alt="" /> : letterOf(company.name)}
                 </span>
                 <span className="nm">{t('timer.company')}</span>
                 {!current && <Icon name="check" />}

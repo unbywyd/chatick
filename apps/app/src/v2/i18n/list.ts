@@ -15,6 +15,7 @@ const ru = {
   tbl: {
     title: 'На столе',
     sub: 'Самое срочное. Не больше трёх задач, где ход твой.',
+    empty: 'Пока пусто. Положи сюда до трёх срочных задач: правый клик по задаче или меню открытой задачи → «На стол».',
     whose: 'Чей ход',
     mine: 'Твой ход',
     away: 'Ждём других',
@@ -308,6 +309,7 @@ const en: typeof ru = {
   tbl: {
     title: 'On the table',
     sub: 'The most urgent. No more than three tasks where it’s your move.',
+    empty: 'Empty for now. Put up to three urgent tasks here: right-click a task, or use the menu of an open task → “Put on the table”.',
     whose: 'Whose move',
     mine: 'Your move',
     away: 'Waiting on others',
@@ -601,6 +603,7 @@ const he: typeof ru = {
   tbl: {
     title: 'על השולחן',
     sub: 'הכי דחוף. לא יותר משלוש משימות שבהן התור שלך.',
+    empty: 'עדיין ריק. אפשר להניח כאן עד שלוש משימות דחופות: קליק ימני על משימה, או בתפריט של משימה פתוחה ← "לשולחן".',
     whose: 'של מי התור',
     mine: 'התור שלך',
     away: 'מחכים לאחרים',

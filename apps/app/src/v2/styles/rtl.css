@@ -26,6 +26,12 @@
 .app[dir='rtl'] .timer {
     padding: 0 14px 0 5px
 }
+.app[dir='rtl'] .rgh .pn {
+    text-align: right
+}
+.app[dir='rtl'] .rt b {
+    text-align: right
+}
 .app[dir='rtl'] .lk {
     padding: 2px 6px 2px 8px
 }
@@ -43,15 +49,40 @@
 .app[dir='rtl'] .tgt {
     padding: 1px 4px 1px 8px
 }
+.app[dir='rtl'] .tgt span {
+    text-align: right
+}
+.app[dir='rtl'] .trow .nm {
+    text-align: right
+}
+.app[dir='rtl'] .crumb .pn {
+    text-align: right
+}
+.app[dir='rtl'] .cli2 span:last-child {
+    text-align: right
+}
 .app[dir='rtl'] .rchip {
-    padding: 0 6px 0 12px
+    padding: 0 6px 0 12px;
+    text-align: right
 }
 .app[dir='rtl'] .composer {
     padding: 12px 16px 10px 10px
 }
+.app[dir='rtl'] .fieldbtn span {
+    text-align: right
+}
+.app[dir='rtl'] .gt-proj .nm {
+    text-align: right
+}
+.app[dir='rtl'] .gp .nm {
+    text-align: right
+}
 .app[dir='rtl'] .track {
     left: auto;
     right: 50%
+}
+.app[dir='rtl'] .sc-top .pn {
+    text-align: right
 }
 .app[dir='rtl'] .felt {
     left: auto;
@@ -82,12 +113,36 @@
     left: auto;
     right: 28px
 }
+.app[dir='rtl'] .pp .pn {
+    text-align: right
+}
+.app[dir='rtl'] .hnote {
+    text-align: right
+}
+.app[dir='rtl'] .ev .q {
+    text-align: right
+}
+.app[dir='rtl'] .ev .l3 {
+    text-align: right
+}
 .app[dir='rtl'] .ball {
     padding: 12px 14px 12px 12px
+}
+.app[dir='rtl'] .pass-ev .note2 {
+    text-align: right
+}
+.app[dir='rtl'] .sc-note {
+    text-align: right
 }
 .app[dir='rtl'] .okmark {
     left: auto;
     right: 174px
+}
+.app[dir='rtl'] .bq {
+    text-align: right
+}
+.app[dir='rtl'] .hero .proj {
+    text-align: right
 }
 .app[dir='rtl'] .hero .hnav {
     margin-left: 0;
@@ -103,14 +158,23 @@
 .app[dir='rtl'] .ev .bd {
     text-align: right
 }
+.app[dir='rtl'] .ev .l2 {
+    text-align: right
+}
 .app[dir='rtl'] .cbx-f {
     padding: 0 7px 0 12px
+}
+.app[dir='rtl'] .cbx-n {
+    text-align: right
 }
 .app[dir='rtl'] .car {
     padding: 2px 2px 6px 64px
 }
 .app[dir='rtl'] .chip {
     padding: 0 8px 0 16px
+}
+.app[dir='rtl'] .chip .nm {
+    text-align: right
 }
 .app[dir='rtl'] .car-more {
     right: auto;
@@ -123,6 +187,9 @@
 .app[dir='rtl'] .pin {
     padding: 0 5px 0 10px
 }
+.app[dir='rtl'] .pin span {
+    text-align: right
+}
 .app[dir='rtl'] .row {
     padding: 10px 12px 10px 10px
 }
@@ -131,6 +198,9 @@
     right: 48px;
     right: 48px;
     left: 12px
+}
+.app[dir='rtl'] .meta .pn {
+    text-align: right
 }
 .app[dir='rtl'] .aside {
     border-left: 0;
@@ -148,6 +218,9 @@
 .app[dir='rtl'] .card .t {
     text-align: right
 }
+.app[dir='rtl'] .ctx span {
+    text-align: right
+}
 .app[dir='rtl'] .ain {
     padding: 10px 14px 8px 8px
 }
@@ -163,6 +236,9 @@
 .app[dir='rtl'] .ph {
     padding: 16px 28px 0 16px
 }
+.app[dir='rtl'] .ph .pn {
+    text-align: right
+}
 .app[dir='rtl'] .hand {
     padding: 0 4px 0 12px
 }
@@ -172,6 +248,9 @@
 .app[dir='rtl'] .cm .n time {
     margin-left: 0;
     margin-right: 8px
+}
+.app[dir='rtl'] .mh .s {
+    text-align: right
 }
 .app[dir='rtl'] .optb {
     text-align: right
@@ -199,6 +278,9 @@
 .app[dir='rtl'] .co-cand b {
     text-align: right
 }
+.app[dir='rtl'] .co-bgh b {
+    text-align: right
+}
 .app[dir='rtl'] .co-bgt {
     text-align: right
 }
@@ -218,7 +300,19 @@
     left: auto;
     right: 270px
 }
+.app[dir='rtl'] .sv-meta .pn {
+    text-align: right
+}
 .app[dir='rtl'] .sv-title {
+    text-align: right
+}
+.app[dir='rtl'] .sv-note {
+    text-align: right
+}
+.app[dir='rtl'] .sv-tab .t {
+    text-align: right
+}
+.app[dir='rtl'] .sv-th .t {
     text-align: right
 }
 .app[dir='rtl'] .nw span {

@@ -47,7 +47,6 @@ export function Shell() {
     <UiProvider company={company}>
       <Frame>
         <Header />
-        <MovedBanner company={company} />
         <Body />
       </Frame>
     </UiProvider>
@@ -70,7 +69,7 @@ function Frame({ children }: { children: React.ReactNode }) {
 
 function Body() {
   const { t } = useTranslation('v2')
-  const { aiOpen, setAiOpen, toast, openTaskId, ho, base, project } = useUi()
+  const { aiOpen, setAiOpen, toast, openTaskId, ho, base, project, company } = useUi()
   const navigate = useNavigate()
   const keys = useBindings()
   const [pal, setPal] = useState(false)
@@ -109,6 +108,9 @@ function Body() {
     <>
       <div className="shell">
         <main className="main">
+          {/* В колонке, а не над всем экраном: ассистент рядом прилипает к
+              шапке на всю высоту, и полоса над ним уводила его низ за экран. */}
+          <MovedBanner company={company} />
           <Outlet />
         </main>
         {aiOpen && <Assistant />}
