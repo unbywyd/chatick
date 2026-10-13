@@ -1,0 +1,2 @@
+// Сгенерировано scripts/heroes-sync.mjs — руками не править: слаги берутся из apps/app/src/v2/heroes.json.
+export const HEROES = ["wizard","knight","robot","pirate","owl","dragon","boy","astronaut","fox","panda","girl","cat","shark","hamster","beaver","droid","businessman","lady","bear","bunny","plush","kitten","penguin","deer","fedora","beret","gentleman","chef","disco","boater","gamer","redhead","hipster","student","flannel","sweater","grandpa","skater","cardigan","builder"] as const

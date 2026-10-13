@@ -1,0 +1,298 @@
+[
+  {
+    "slug": "wizard",
+    "image": "2cbad809-f65e-4c44-8e9f-d0678d858f9f",
+    "title": "Old Wizard in Starry Purple Robe",
+    "w": 360,
+    "h": 488
+  },
+  {
+    "slug": "knight",
+    "image": "a5ae4fe2-5c93-4a42-adfd-2115dc2f7b03",
+    "title": "Knight in Silver Armor Leaning Forward",
+    "w": 360,
+    "h": 473
+  },
+  {
+    "slug": "robot",
+    "image": "e0d516d2-972f-4cea-a823-ba6c4c60c25b",
+    "title": "Cute orange robot in office chair",
+    "w": 360,
+    "h": 421
+  },
+  {
+    "slug": "pirate",
+    "image": "0fc9d9a0-3788-4d5b-a15a-f1c77c9f76b6",
+    "title": "Pirate Character in Barrel",
+    "w": 360,
+    "h": 396
+  },
+  {
+    "slug": "owl",
+    "image": "d2ec7a88-cad5-4bbc-8820-866358939e05",
+    "title": "Wise owl in green armchair",
+    "w": 360,
+    "h": 405
+  },
+  {
+    "slug": "dragon",
+    "image": "53f27f6b-21be-4f8c-aadf-421eb4f00977",
+    "title": "Adorable green dragon seated with scarf",
+    "w": 360,
+    "h": 402
+  },
+  {
+    "slug": "boy",
+    "image": "26c58e15-571b-4766-a3e2-143f3d5e89bb",
+    "title": "Child Character with Brown Hair in Armchair",
+    "w": 360,
+    "h": 354
+  },
+  {
+    "slug": "astronaut",
+    "image": "2e17eab1-c318-4f86-af21-4c6d00ff5647",
+    "title": "Astronaut sitting in a green chair",
+    "w": 360,
+    "h": 412
+  },
+  {
+    "slug": "fox",
+    "image": "06bda350-3a73-44ca-bd3a-f8a914f62fca",
+    "title": "Orange fox character sitting in a chair",
+    "w": 360,
+    "h": 355
+  },
+  {
+    "slug": "panda",
+    "image": "e0c4f6c8-2f3f-4a10-bf59-bdbfc60d8d10",
+    "title": "Panda Character Resting on a Chair",
+    "w": 360,
+    "h": 386
+  },
+  {
+    "slug": "girl",
+    "image": "30ec0662-f613-4018-b80f-f2496cbf62f3",
+    "title": "Girl with Pink Hair in Gamer Chair",
+    "w": 360,
+    "h": 415
+  },
+  {
+    "slug": "cat",
+    "image": "fb7e0988-84fc-48ad-b946-1a2968bb8ff4",
+    "title": "Stylish cat in hoodie on chair",
+    "w": 360,
+    "h": 368
+  },
+  {
+    "slug": "shark",
+    "image": "c90a5c53-b07a-4fb6-b535-61ce380d9dc6",
+    "title": "Angry cartoon shark character",
+    "w": 360,
+    "h": 460
+  },
+  {
+    "slug": "hamster",
+    "image": "01d049b2-f5a8-4d4e-85c2-f72d635cd0e2",
+    "title": "Angry hamster in a yellow hoodie",
+    "w": 360,
+    "h": 429
+  },
+  {
+    "slug": "beaver",
+    "image": "a06c881e-26f4-4f18-9a36-3366324ad448",
+    "title": "Angry beaver character in flannel",
+    "w": 360,
+    "h": 410
+  },
+  {
+    "slug": "droid",
+    "image": "deb9f17b-7544-4987-b658-44f0c860dd76",
+    "title": "Green robot character with glowing eyes",
+    "w": 360,
+    "h": 442
+  },
+  {
+    "slug": "businessman",
+    "image": "d1ff794d-d23b-45ba-98f4-a233a217f791",
+    "title": "Businessman Concentrating at Table",
+    "w": 360,
+    "h": 420
+  },
+  {
+    "slug": "lady",
+    "image": "74fc19e6-c588-4540-b07d-f227bdd3acb9",
+    "title": "Character in a Red Suit at a Table",
+    "w": 360,
+    "h": 460
+  },
+  {
+    "slug": "bear",
+    "image": "d3c543ef-dd8c-47c6-be74-a38702512c52",
+    "title": "Cute bear character with sweater",
+    "w": 360,
+    "h": 412
+  },
+  {
+    "slug": "bunny",
+    "image": "cb042617-932c-4f6d-93b0-af329e795532",
+    "title": "Cute pink rabbit at a table",
+    "w": 360,
+    "h": 477
+  },
+  {
+    "slug": "plush",
+    "image": "8129ec79-2b2c-4e39-ba03-4de4dabc0123",
+    "title": "Cute pink bunny plush toy",
+    "w": 360,
+    "h": 404
+  },
+  {
+    "slug": "kitten",
+    "image": "a88b0cc2-2290-4b95-b2b6-5ee933188d94",
+    "title": "Cute grey cat in a hoodie",
+    "w": 360,
+    "h": 429
+  },
+  {
+    "slug": "penguin",
+    "image": "eb489ece-fa04-4941-af09-040091671b61",
+    "title": "Cute penguin sitting in a chair",
+    "w": 360,
+    "h": 420
+  },
+  {
+    "slug": "deer",
+    "image": "c51c4e85-fab2-41db-9eb0-aefb700a2a11",
+    "title": "Cute deer character with pink coat",
+    "w": 360,
+    "h": 436
+  },
+  {
+    "slug": "fedora",
+    "image": "4cd3dc87-3d0e-49d3-a635-4dbc67d301df",
+    "title": "Stylish character in a hat with a cigar",
+    "w": 360,
+    "h": 449
+  },
+  {
+    "slug": "beret",
+    "image": "47173dc3-87b3-44f9-92e3-f75ee8d0633a",
+    "title": "Stylish Character Seated with Beret",
+    "w": 360,
+    "h": 469
+  },
+  {
+    "slug": "gentleman",
+    "image": "896d7057-357c-406a-ab19-f37e10d9e1bd",
+    "title": "Stylish man with monocle and mustache",
+    "w": 360,
+    "h": 454
+  },
+  {
+    "slug": "chef",
+    "image": "cff49da0-6146-4fd2-9642-b6ceaab4e568",
+    "title": "Stylish cartoon chef with mustache",
+    "w": 360,
+    "h": 444
+  },
+  {
+    "slug": "disco",
+    "image": "ae260ff2-9c55-49ac-8ac6-521e40b7db74",
+    "title": "Stylish character with curly hair and sunglasses",
+    "w": 360,
+    "h": 420
+  },
+  {
+    "slug": "boater",
+    "image": "93bc923e-cf42-4515-b118-68656803f7bb",
+    "title": "Stylish character with a straw hat",
+    "w": 360,
+    "h": 424
+  },
+  {
+    "slug": "gamer",
+    "image": "e41b8fad-6994-46a1-b09b-a0e2d363aabc",
+    "title": "Focused young gamer with headphones",
+    "w": 360,
+    "h": 427
+  },
+  {
+    "slug": "redhead",
+    "image": "533a3059-2f83-4fc0-b9d1-77bd66fa4d42",
+    "title": "Overhead View of Gamer with Headphones",
+    "w": 360,
+    "h": 456
+  },
+  {
+    "slug": "hipster",
+    "image": "9345aa35-ec61-4f66-8656-36cf2e90d81e",
+    "title": "Stylized IT Specialist at Table",
+    "w": 360,
+    "h": 422
+  },
+  {
+    "slug": "student",
+    "image": "6318d75f-25d2-4f82-ad95-168bfb895d25",
+    "title": "Top View of a Character at a Table",
+    "w": 360,
+    "h": 434
+  },
+  {
+    "slug": "astronaut-2",
+    "image": "a426810d-f517-4286-8cca-336a73ff263f",
+    "title": "Cute astronaut character seated with hands on table",
+    "w": 360,
+    "h": 449,
+    "skip": true
+  },
+  {
+    "slug": "flannel",
+    "image": "7a381a34-4e90-4edc-adb6-ca0183c781e7",
+    "title": "Top View of Focused Gamer Character",
+    "w": 360,
+    "h": 429
+  },
+  {
+    "slug": "sweater",
+    "image": "43bb5ce6-1983-41b5-9b82-753be7816910",
+    "title": "Thoughtful woman with brown hair",
+    "w": 360,
+    "h": 467
+  },
+  {
+    "slug": "grandpa",
+    "image": "e992a567-4d25-4a48-a458-e37316bbeebc",
+    "title": "Elderly man with glasses and white hair",
+    "w": 360,
+    "h": 420
+  },
+  {
+    "slug": "skater",
+    "image": "7544ad01-a901-44d7-95d2-911bc0d2a227",
+    "title": "Focused gamer in a red cap",
+    "w": 360,
+    "h": 438
+  },
+  {
+    "slug": "chef-2",
+    "image": "bddcceab-f9b6-454b-ba6f-10e5d9a5e9c7",
+    "title": "Chef with white hat and bowtie",
+    "w": 360,
+    "h": 451,
+    "skip": true
+  },
+  {
+    "slug": "cardigan",
+    "image": "0bd256df-1340-41fe-8e4b-d9e872d80cc9",
+    "title": "Character Focusing on Table with Hands Together",
+    "w": 360,
+    "h": 480
+  },
+  {
+    "slug": "builder",
+    "image": "25697ab6-a43f-4518-bcdc-966e52840e7b",
+    "title": "Builder Character with Yellow Helmet",
+    "w": 360,
+    "h": 431
+  }
+]

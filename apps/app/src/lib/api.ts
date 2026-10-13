@@ -250,7 +250,7 @@ export async function uploadInlineImage(file: File): Promise<{ id: string; url: 
 }
 
 // --- types ---
-export type Me = { id: string; email: string; name: string; locale: string; phone: string | null; avatarUrl: string | null }
+export type Me = { id: string; email: string; name: string; locale: string; phone: string | null; avatarUrl: string | null; hero?: string | null }
 export type Company = {
   id: string
   name: string

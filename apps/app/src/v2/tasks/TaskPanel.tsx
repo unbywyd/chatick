@@ -12,7 +12,7 @@ import { ProjectLogo } from '../ProjectLogo'
 import { Icon } from '../Icon'
 import { TaskDiscussion, TaskHistory } from '../task/parts'
 import { TaskPeers, useTaskPresence } from '../task/presence'
-import { useBallActions } from './actions'
+import { useBallActions, useTableToggle } from './actions'
 import { dueDiff, dueText, fmtHm, heatOf, letterOf, personColor, projectColor, waitText } from '../util'
 
 type CheckItem = { id: string; text: string; done: boolean }
@@ -147,6 +147,7 @@ export function Ball({ data, myId, lng }: { data: TaskFull; myId: string; lng: s
   const { t } = useTranslation('v2')
   const task = data.task
   const a = useBallActions(task, myId)
+  const toggleTable = useTableToggle()
   const [menu, setMenu] = useState(false)
   const closed = task.closed
   const mine = task.holder?.id === myId
@@ -258,6 +259,12 @@ export function Ball({ data, myId, lng }: { data: TaskFull; myId: string; lng: s
                 <button role="menuitem" onClick={a.take}>
                   <Icon name="hand" sm />
                   {t('act.take')}
+                </button>
+              )}
+              {data.can.table && (
+                <button role="menuitem" onClick={() => void toggleTable(task.id, !task.ball.onTable)}>
+                  <Icon name="fire" sm />
+                  {task.ball.onTable ? t('tbl.off') : t('tbl.on')}
                 </button>
               )}
               {a.canClient && (

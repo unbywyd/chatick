@@ -10,7 +10,7 @@ import { Icon } from '../Icon'
 import { DateField } from '../ui/Calendar'
 import { isImportant, shortProject } from '../util'
 import { exportBall, downloadTemplate, parseImport, type ImportRow } from './excel'
-import { useBallActions } from './actions'
+import { useBallActions, useTableToggle } from './actions'
 import '../i18n/list'
 
 const appRoot = () => document.querySelector('.app') ?? document.body
@@ -52,6 +52,7 @@ export function RowMenu({ item, x, y, myId, onClose }: { item: BallItem; x: numb
   const qc = useQueryClient()
   const refresh = useRefreshBall()
   const a = useBallActions(item, myId)
+  const toggleTable = useTableToggle()
   const pid = item.project?.id ?? null
   const fail = (e: unknown) => flash(e instanceof Error && e.message ? e.message : t('lt.failed'))
   const run = (fn: () => Promise<unknown>, done?: string) => () => {
@@ -93,6 +94,12 @@ export function RowMenu({ item, x, y, myId, onClose }: { item: BallItem; x: numb
         >
           <Icon name="fire" sm />
           {important ? t('lt.unimportant') : t('lt.important')}
+        </button>
+      )}
+      {a.open && item.holder && (a.mine || item.owner?.id === myId) && (
+        <button className="lt-i" role="menuitem" onClick={() => (onClose(), void toggleTable(item.id, !item.ball.onTable))}>
+          <Icon name="fire" sm />
+          {item.ball.onTable ? t('tbl.off') : t('tbl.on')}
         </button>
       )}
       {a.canTake && (

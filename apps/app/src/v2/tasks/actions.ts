@@ -1,4 +1,7 @@
 import { useTranslation } from 'react-i18next'
+import { useQueryClient } from '@tanstack/react-query'
+import { api } from '@/lib/api'
+import '../i18n/list'
 import { errorCode, useHandoff, type HandoffAction } from '../data'
 import { useUi } from '../ui'
 
@@ -19,6 +22,25 @@ type Ballish = {
  * забрать, клиент ответил) уходят сразу. Окончательное слово — за сервером:
  * если он откажет, человек увидит почему.
  */
+/**
+ * На стол / со стола. Стол — срочное держателя, не больше трёх: четвёртую
+ * сервер не кладёт (table_full), и мы говорим об этом словами.
+ */
+export function useTableToggle() {
+  const { t } = useTranslation('v2')
+  const { flash } = useUi()
+  const qc = useQueryClient()
+  return (taskId: string, on: boolean) =>
+    api('/api/v1/ball/table', { method: 'POST', body: JSON.stringify({ taskId, on }) }).then(
+      () => {
+        void qc.invalidateQueries({ queryKey: ['v2', 'ball'] })
+        void qc.invalidateQueries({ queryKey: ['v2', 'task'] })
+        flash(on ? t('tbl.onDone') : t('tbl.offDone'))
+      },
+      (e) => flash(errorCode(e) === 'table_full' ? t('tbl.full') : t('err.generic')),
+    )
+}
+
 export function useBallActions(task: Ballish, myId: string | undefined) {
   const { t } = useTranslation('v2')
   const { openHo, flash } = useUi()

@@ -291,6 +291,10 @@
 .app[dir='rtl'] .hd-search {
     padding: 0 12px 0 10px
 }
+.app[dir='rtl'] .tg-seat img.tg-hero2 {
+    left: auto;
+    right: 50%
+}
 .app[dir='rtl'] .stg .url {
     padding: 12px 16px 12px 12px
 }

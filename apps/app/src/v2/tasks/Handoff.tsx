@@ -206,7 +206,7 @@ export function HandoffDialog() {
             <span className="lbl" style={{ margin: 0 }}>
               {need ? t('ho.note') : t('ho.noteOpt')}
             </span>
-            <span className="kb">{t('ho.keys')}</span>
+            <span className="nkeys">{t('ho.keys')}</span>
           </div>
           <textarea
             ref={ta}

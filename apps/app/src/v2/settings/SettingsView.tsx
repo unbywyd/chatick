@@ -15,6 +15,7 @@ import { letterOf, personColor, timeAgo } from '../util'
 import { Confirm, Sw, copyText, upload, useFail } from './parts'
 import { CompanySettings } from './CompanySettings'
 import { Membership } from './Membership'
+import { HeroPick } from './HeroPick'
 import '../i18n/settings'
 import '../styles/settings.css'
 
@@ -72,6 +73,7 @@ export function SettingsView() {
           {cur === 'profile' && (
             <>
               <Profile />
+              <HeroPick />
               <Membership />
             </>
           )}

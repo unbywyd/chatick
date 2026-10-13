@@ -1,5 +1,5 @@
 import { Hono } from 'hono'
-import { and, eq, gt, isNull, sql } from 'drizzle-orm'
+import { and, eq, gt, inArray, isNotNull, isNull, sql } from 'drizzle-orm'
 import { zValidator } from '@hono/zod-validator'
 import { z } from 'zod'
 import { nanoid } from 'nanoid'
@@ -7,6 +7,7 @@ import sharp from 'sharp'
 import { PutObjectCommand } from '@aws-sdk/client-s3'
 import { db } from '../db/client.js'
 import { companies, companyInvites, companyMembers, projects, tasks, users, supportLogins } from '../db/schema.js'
+import { ensureHeroes, HEROES, isHero } from '../lib/heroes.js'
 import { signMediaToken, signSessionToken, requireSession, type SessionEnv } from '../auth.js'
 import { env } from '../env.js'
 import { s3Client, s3Bucket, getObjectStream, S3_KEY_PREFIX } from '../lib/s3.js'
@@ -504,6 +505,8 @@ auth.get('/me', requireSession, async (c) => {
   const { sub } = c.get('session')
   const user = await db.query.users.findFirst({ where: eq(users.id, sub) })
   if (!user) return c.json({ error: 'Not found' }, 404)
+  // Герой за столом — раздаётся при первом входе (lib/heroes.ts).
+  const hero = (await ensureHeroes([sub])).get(sub) ?? null
   return c.json({
     id: user.id,
     email: user.email,
@@ -511,6 +514,7 @@ auth.get('/me', requireSession, async (c) => {
     locale: user.locale,
     phone: user.phone,
     avatarUrl: user.avatarUrl,
+    hero,
     // Видел ли вводный тур. Отдаём булевым: интерфейсу нужен ответ «показывать
     // или нет», а не дата — по ней он всё равно ничего не решает.
     tourSeen: Boolean(user.tourSeenAt),
@@ -563,14 +567,20 @@ auth.patch(
        * где это меняется: места для этого не было вовсе.
        */
       locale: z.enum(['en', 'ru', 'he']).optional(),
+      /** Герой за столом — из каталога (lib/heroes.ts). */
+      hero: z.string().max(40).optional(),
     }),
   ),
   async (c) => {
     const { sub } = c.get('session')
-    const { name, locale } = c.req.valid('json')
+    const { name, locale, hero } = c.req.valid('json')
 
     const patch: Record<string, unknown> = {}
     if (name !== undefined) patch.name = name.trim()
+    if (hero !== undefined) {
+      if (!isHero(hero)) return c.json({ error: 'Unknown hero' }, 400)
+      patch.hero = hero
+    }
     if (locale !== undefined) {
       patch.locale = locale
       // Выбор человека, а не унаследованное значение: с этой отметкой его
@@ -580,9 +590,27 @@ auth.patch(
     if (!Object.keys(patch).length) return c.json({ error: 'Nothing to update' }, 400)
 
     await db.update(users).set(patch).where(eq(users.id, sub))
-    return c.json({ ok: true, ...(patch.name ? { name: patch.name } : {}), ...(locale ? { locale } : {}) })
+    return c.json({ ok: true, ...(patch.name ? { name: patch.name } : {}), ...(locale ? { locale } : {}), ...(hero ? { hero } : {}) })
   },
 )
+
+/**
+ * Герои для выбора в профиле: какие у кого из коллег (по всем компаниям
+ * человека) — чтобы видеть, что герой уже занят, и по возможности брать свободного.
+ */
+auth.get('/me/heroes', requireSession, async (c) => {
+  const { sub } = c.get('session')
+  const mine = (await ensureHeroes([sub])).get(sub) ?? null
+  const companies = db.select({ id: companyMembers.companyId }).from(companyMembers).where(eq(companyMembers.userId, sub))
+  const rows = await db
+    .selectDistinct({ id: users.id, name: users.name, hero: users.hero })
+    .from(users)
+    .innerJoin(companyMembers, eq(companyMembers.userId, users.id))
+    .where(and(inArray(companyMembers.companyId, companies), isNotNull(users.hero)))
+  const taken: Record<string, { id: string; name: string }[]> = {}
+  for (const r of rows) if (r.id !== sub && r.hero) (taken[r.hero] ??= []).push({ id: r.id, name: r.name })
+  return c.json({ heroes: HEROES, mine, taken })
+})
 
 // POST /api/v1/auth/me/avatar — загрузка аватара (webp, приватный бакет; раздаём через /avatar/:userId)
 auth.post('/me/avatar', requireSession, async (c) => {

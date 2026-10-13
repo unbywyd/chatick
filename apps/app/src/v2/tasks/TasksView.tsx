@@ -43,6 +43,8 @@ import {
   waitText,
 } from '../util'
 
+import { TableScenes } from './TableScene'
+
 type Tab = 'mine' | 'from' | 'all'
 type Focus = 'fresh' | 'prio' | 'late' | 'rev' | 'ans' | 'long'
 type SortKey = 'id' | 'title' | 'prio' | 'mv' | 'due' | 'who' | 'wait' | ExtraSort
@@ -258,6 +260,8 @@ export function TasksView() {
       <p className="date">{new Date().toLocaleDateString(i18n.language, { weekday: 'long', month: 'long', day: 'numeric' })}</p>
       <h1 className="head">{head}</h1>
       <p className="sub">{sub}</p>
+
+      <TableScenes project={project} />
 
       <Carousel projects={projects.data ?? []} counts={mineAll} selected={project} onPick={setProject} />
 

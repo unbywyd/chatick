@@ -462,7 +462,7 @@ a{color:inherit}a:hover{color:inherit}
 .need{font-size:12.5px;color:var(--work);display:flex;gap:6px;align-items:center;font-weight:500}
 .need .ic{width:14px;height:14px}
 .nrow{display:flex;align-items:center;gap:8px}
-.kb{font-size:12px;color:var(--ink3);margin-inline-start:auto}
+.nkeys{font-size:12px;color:var(--ink3);margin-inline-start:auto}
 .ownr{display:flex;align-items:center;gap:10px}
 .ownr .b{flex:1;min-width:0;font-weight:600}
 .ownr .b small{display:block;font-weight:400;color:var(--ink3);font-size:12px}
@@ -1153,3 +1153,27 @@ button.keys-c:hover{background:var(--soft)}
 .desc-clash{display:flex;align-items:center;gap:12px;flex-wrap:wrap}
 .desc-clash > span:first-child{flex:1;min-width:220px}
 .desc-clash-b{display:inline-flex;gap:8px}
+
+/* Стол с героями: отдельные спрайты вместо слоёв 600×600 из макета */
+.sv-hot{margin-top:22px}
+.tg-grp img.tg-tab2{width:auto;height:auto}
+.tg-seat{position:absolute;inset:0;transform-origin:300px 300px;pointer-events:none}
+.tg-seat img.tg-hero2{position:absolute;left:50%;top:auto;transform:translateX(-50%);filter:drop-shadow(0 0 10px rgba(27,29,26,.22));pointer-events:none;user-select:none}
+.tg-grp .tg-lab{transition:transform .9s cubic-bezier(.65,0,.35,1)}
+.hero-pick{display:grid;grid-template-columns:repeat(auto-fill,minmax(96px,1fr));gap:10px;margin-top:12px}
+.hero-pick button{position:relative;aspect-ratio:1;border-radius:16px;background:var(--paper);overflow:hidden;box-shadow:inset 0 0 0 1px var(--line)}
+.hero-pick button:hover{box-shadow:inset 0 0 0 1px var(--ink3)}
+.hero-pick button.on{box-shadow:inset 0 0 0 2px var(--ink);background:color-mix(in srgb,var(--accent) 22%,var(--paper))}
+.hero-pick button img{position:absolute;inset:8px;width:calc(100% - 16px);height:calc(100% - 16px);object-fit:contain}
+.hero-pick button.taken img{opacity:.55}
+.hero-pick .who{position:absolute;inset-inline-end:6px;bottom:6px;width:22px;height:22px;border-radius:50%;font-size:10px;font-weight:700;color:#fff;display:grid;place-items:center;box-shadow:0 0 0 2px var(--sheet)}
+.hero-me{display:flex;align-items:center;gap:16px}
+.hero-me img{width:96px;height:96px;object-fit:contain}
+/* Сцена — картинка: в иврите её не зеркалим, места, поворот и мяч считаются в координатах. */
+.app[dir='rtl'] .tg-st .tg-in{left:0;right:auto}
+.app[dir='rtl'] .tg-st .tg-spot{left:150px;right:auto}
+.app[dir='rtl'] .tg-st .tg-grp img{left:0;right:auto}
+.app[dir='rtl'] .tg-st .tg-hit{margin:-60px 0 0 -60px}
+.app[dir='rtl'] .tg-st .tg-seat img.tg-hero2{left:50%;right:auto}
+.tg-st{direction:ltr}
+.sc-acts .lnk2 + .lnk2{margin-inline-start:0}

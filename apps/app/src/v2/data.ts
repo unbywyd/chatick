@@ -12,7 +12,7 @@ import { api, API_URL, ApiError, getSessionToken, type Me } from '@/lib/api'
  */
 
 export type Move = 'do' | 'review' | 'answer'
-export type Person = { id: string; name: string; avatarUrl: string | null }
+export type Person = { id: string; name: string; avatarUrl: string | null; hero?: string | null }
 export type ProjectRef = { id: string; name: string; color: string | null; logoUrl: string | null }
 
 export type BallItem = {
@@ -140,6 +140,17 @@ export const keys = {
   inbox: (companyId: string) => ['v2', 'inbox', companyId] as const,
   running: ['v2', 'time', 'running'] as const,
   today: ['v2', 'time', 'today'] as const,
+}
+
+/** Сцена «На столе»: задача с людьми за столом и моими ходами. */
+export type Scene = BallItem & { seats: Person[]; can: string[] }
+
+/** «На столе» — срочное, где ход мой (mine) и что я отдал и жду (away). */
+export function useTable(companyId: string) {
+  return useQuery({
+    queryKey: ['v2', 'ball', 'table', companyId],
+    queryFn: () => api<{ mine: Scene[]; away: Scene[] }>(`/api/v1/ball/table?companyId=${encodeURIComponent(companyId)}`),
+  })
 }
 
 export function useMe() {

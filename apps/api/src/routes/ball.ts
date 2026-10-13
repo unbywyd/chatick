@@ -14,6 +14,7 @@ import { notifyTask } from './tasks.js'
 import { postTaskAssigned } from '../lib/task-events.js'
 import { logActivity } from '../lib/audit.js'
 import { tasksChanged } from '../ws.js'
+import { ensureHeroes } from '../lib/heroes.js'
 
 /**
  * Списки мяча (v2) — главный экран: «На столе», «На мне», «От меня», «Все» и
@@ -386,6 +387,85 @@ ballRoute.get('/mine', zValidator('query', listQuery), async (c) => {
   const { sub } = c.get('session')
   const q = c.req.valid('query')
   return c.json(await mineList(sub, await myProjects(q.companyId, sub), q))
+})
+
+/**
+ * «На столе» (v2): срочные задачи, где ход мой, и срочные, что я отдал и жду
+ * (я владелец, мяч у другого).
+ *
+ * Для сцены за круглым столом каждой задаче нужны люди: владелец, все, через
+ * кого прошёл мяч, держатель и сам человек — не больше шести, владелец,
+ * держатель и я остаются всегда. У каждого — герой (раздаём, если нет).
+ * И ходы, которые мне доступны: клик по герою за столом — это передача.
+ */
+export async function tableScenes(userId: string, projectList: ProjectList) {
+  if (!projectList.length) return { mine: [], away: [] }
+  const items = await list(
+    userId,
+    {},
+    and(
+      ...filters({}, projectList.map((p) => p.id)),
+      eq(tasks.onTable, true),
+      or(eq(tasks.assigneeId, userId), sql`coalesce(${tasks.ownerId}, ${tasks.createdById}) = ${userId}`),
+    )!,
+    [MOVE_RANK, OVERDUE_FIRST, sql`${tasks.heldSince} asc nulls last`],
+    projectList,
+  )
+  if (!items.length) return { mine: [], away: [] }
+  const ids = items.map((i) => i.id)
+  const [rows, hops] = await Promise.all([
+    db.select().from(tasks).where(inArray(tasks.id, ids)),
+    db
+      .select({ taskId: taskHandoffs.taskId, fromId: taskHandoffs.fromId, toId: taskHandoffs.toId })
+      .from(taskHandoffs)
+      .where(inArray(taskHandoffs.taskId, ids))
+      .orderBy(taskHandoffs.createdAt),
+  ])
+  const rowBy = new Map(rows.map((r) => [r.id, r]))
+  const seatsOf = new Map<string, string[]>()
+  for (const i of items) {
+    const t = rowBy.get(i.id)!
+    const owner = ownerOf(t)
+    const chain: string[] = []
+    for (const h of hops) if (h.taskId === i.id) for (const p of [h.fromId, h.toId]) if (p && !chain.includes(p)) chain.push(p)
+    const must = [owner, t.assigneeId, userId].filter((x): x is string => Boolean(x))
+    const order: string[] = []
+    for (const p of [owner, ...chain, t.assigneeId, userId]) if (p && !order.includes(p)) order.push(p)
+    // Больше шести — убираем из середины цепочки: владелец, держатель и я остаются.
+    while (order.length > 6) {
+      const k = order.findIndex((p) => !must.includes(p))
+      if (k < 0) break
+      order.splice(k, 1)
+    }
+    seatsOf.set(i.id, order)
+  }
+  const everyone = [...new Set([...seatsOf.values()].flat())]
+  const [people, heroes] = await Promise.all([
+    db.select({ id: users.id, name: users.name, avatarUrl: users.avatarUrl }).from(users).where(inArray(users.id, everyone)),
+    ensureHeroes(everyone),
+  ])
+  const personBy = new Map(people.map((p) => [p.id, { ...p, hero: heroes.get(p.id) ?? null }]))
+  const mgr = new Map<string, boolean>()
+  const scenes = []
+  for (const i of items) {
+    const t = rowBy.get(i.id)!
+    if (!mgr.has(t.projectId)) mgr.set(t.projectId, await ownsOrManages(t.projectId, userId, []))
+    const isManager = mgr.get(t.projectId)!
+    const can = HANDOFF_ACTIONS.filter(
+      (a) => a !== 'create' && !(a === 'take' && t.assigneeId === userId) && mayHandoff(a, t, userId, isManager) && planHandoff(t, a, { actorId: userId, to: '?', note: '-' }).ok,
+    )
+    scenes.push({
+      ...i,
+      seats: seatsOf.get(i.id)!.map((id) => personBy.get(id)).filter(Boolean),
+      can,
+    })
+  }
+  return { mine: scenes.filter((x) => x.holder?.id === userId), away: scenes.filter((x) => x.holder?.id !== userId) }
+}
+
+ballRoute.get('/table', zValidator('query', z.object({ companyId: z.string().min(1) })), async (c) => {
+  const { sub } = c.get('session')
+  return c.json(await tableScenes(sub, await myProjects(c.req.valid('query').companyId, sub)))
 })
 
 /**
