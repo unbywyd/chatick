@@ -6,13 +6,13 @@ import { useTranslation } from 'react-i18next'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { api, setScreenProject } from '@/lib/api'
 import { RichEditor } from '@/components/ui/rich-editor'
-import { inProject, keys, useComments, useHandoffs, useMe, useRefreshBall, useTask, type Handoff, type TaskFull } from '../data'
+import { inProject, useMe, useRefreshBall, useTask, type TaskFull } from '../data'
 import { useUi } from '../ui'
 import { ProjectLogo } from '../ProjectLogo'
 import { Icon } from '../Icon'
-import { Clamp } from '../Clamp'
+import { TaskDiscussion, TaskHistory } from '../task/parts'
 import { useBallActions } from './actions'
-import { dueDiff, dueText, fmtHm, heatOf, letterOf, personColor, projectColor, timeAgo, waitText } from '../util'
+import { dueDiff, dueText, fmtHm, heatOf, letterOf, personColor, projectColor, waitText } from '../util'
 
 type CheckItem = { id: string; text: string; done: boolean }
 
@@ -129,9 +129,13 @@ export function PanelBody({ data, myId, lng }: { data: TaskFull; myId: string; l
         <div className="cl-classic">
           <div className="v2chk"><ClassicChecklist taskId={task.id} canEdit={Boolean(data.can.edit)} /></div>
         </div>
-        <Feed task={task} lng={lng} />
+        {task.project && (
+          <>
+            <TaskDiscussion task={task} lng={lng} mentions={data.team.map((p) => ({ id: p.id, label: p.name, avatarUrl: p.avatarUrl }))} />
+            <TaskHistory task={task} lng={lng} />
+          </>
+        )}
       </div>
-      <CommentBox task={task} team={data.team} />
     </>
   )
 }
@@ -300,131 +304,7 @@ function Checklist({ task, canEdit }: { task: TaskFull['task']; canEdit: boolean
   )
 }
 
-/** Передачи и комментарии — одной лентой по времени. */
-function Feed({ task, lng }: { task: TaskFull['task']; lng: string }) {
-  const { t } = useTranslation('v2')
-  const handoffs = useHandoffs(task)
-  const comments = useComments(task)
-  type Ev = { at: string; h?: Handoff; c?: { id: string; body: string; author: { id: string; name: string } | null; deleted?: boolean } }
-  const evs: Ev[] = [
-    ...(handoffs.data ?? []).map((h) => ({ at: h.createdAt, h })),
-    ...(comments.data ?? []).filter((c) => !(c as { deleted?: boolean }).deleted).map((c) => ({ at: c.createdAt, c })),
-  ].sort((a, b) => a.at.localeCompare(b.at))
-  if (!evs.length) return null
-  return (
-    <div>
-      <h3 className="sec">{t('panel.feed')}</h3>
-      <div className="feed">
-        {evs.map((e) =>
-          e.h ? (
-            <PassEv key={e.h.id} h={e.h} lng={lng} />
-          ) : (
-            <div key={e.c!.id} className="cm">
-              <span className="av lg" style={{ background: personColor(e.c!.author?.id) }}>
-                {letterOf(e.c!.author?.name)}
-              </span>
-              <div className="b">
-                <div className="n">
-                  <span className="bidi">{e.c!.author?.name ?? '—'}</span>
-                  <time>{timeAgo(lng, e.at)}</time>
-                </div>
-                <Clamp>
-                  <div className="x cbody">
-                    <RichEditor value={e.c!.body} onChange={() => {}} mentions={[]} preset="minimal" readOnly />
-                  </div>
-                </Clamp>
-              </div>
-            </div>
-          ),
-        )}
-      </div>
-    </div>
-  )
-}
-
-export function PassEv({ h, lng }: { h: Handoff; lng: string }) {
-  const { t } = useTranslation('v2')
-  const who = h.actor ?? h.from
-  const to = h.to
-  const verb = t(`panel.verb.${h.action}`, { defaultValue: '' })
-  const showMv = ['review', 'ask', 'answer', 'pass', 'return'].includes(h.action) && h.moveAfter
-  return (
-    <div className={'pass-ev' + (h.action === 'return' ? ' ret' : h.action === 'accept' ? ' ok' : '')}>
-      <div className="hd2">
-        <span className="av" style={{ background: personColor(who?.id) }}>
-          {letterOf(who?.name)}
-        </span>
-        <b className="bidi">{who?.name ?? 'Chatick'}</b>
-        {to && to.id !== who?.id && h.action !== 'accept' && h.action !== 'cancel' && (
-          <>
-            <span className="ar3">
-              <Icon name="arrow" sm />
-            </span>
-            <span className="av" style={{ background: personColor(to.id) }}>
-              {letterOf(to.name)}
-            </span>
-            <b className="bidi">{to.name}</b>
-          </>
-        )}
-        {showMv && (
-          <span className={`mv mv-${h.moveAfter}`}>
-            <i />
-            {t(`mv.${h.moveAfter}`)}
-          </span>
-        )}
-        {verb && !showMv && <span className="vt">{verb}</span>}
-        <time>{timeAgo(lng, h.createdAt)}</time>
-      </div>
-      {h.note && (
-        <Clamp max={160}>
-          <div className="note2 cbody">
-            <RichEditor value={h.note} onChange={() => {}} mentions={[]} preset="minimal" readOnly />
-          </div>
-        </Clamp>
-      )}
-    </div>
-  )
-}
-
 export const stripHtml = (s: string) =>
   s.includes('<')
     ? new DOMParser().parseFromString(s.replace(/<br\s*\/?>/gi, '\n').replace(/<\/p>/gi, '\n'), 'text/html').body.textContent?.trim() ?? ''
     : s
-
-/** Поле комментария — тот же редактор, что в старом чате задач: разметка, @упоминания команды. Ctrl+Enter — отправить. */
-function CommentBox({ task, team }: { task: TaskFull['task']; team: TaskFull['team'] }) {
-  const { t } = useTranslation('v2')
-  const qc = useQueryClient()
-  const [text, setText] = useState('')
-  const [key, setKey] = useState(0)
-  const empty = !text.replace(/<[^>]*>/g, '').trim()
-  const send = useMutation({
-    mutationFn: () =>
-      api(`/api/v1/tasks/${task.id}/comments`, { method: 'POST', body: JSON.stringify({ body: text }), ...inProject(task.project!.id) }),
-    onSuccess: () => {
-      setText('')
-      setKey((k) => k + 1)
-      void qc.invalidateQueries({ queryKey: keys.comments(task.id) })
-    },
-  })
-  if (!task.project) return null
-  const submit = () => !empty && !send.isPending && send.mutate()
-  return (
-    <div className="pf cbox">
-      <div className="cbox-ed">
-        <RichEditor
-          key={key}
-          value={text}
-          onChange={(html) => setText(html)}
-          onSubmit={submit}
-          placeholder={t('panel.comment')}
-          mentions={team.map((m) => ({ id: m.id, label: m.name }))}
-          preset="minimal"
-        />
-      </div>
-      <button className={'btn-acc' + (empty ? ' dis' : '')} style={{ height: 42 }} onClick={submit} disabled={send.isPending} title="Ctrl+Enter">
-        {t('panel.send')}
-      </button>
-    </div>
-  )
-}

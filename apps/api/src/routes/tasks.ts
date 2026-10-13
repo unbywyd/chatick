@@ -1796,7 +1796,13 @@ tasksRoute.post(
     if (!task) return c.json({ error: 'Not found' }, 404)
 
     const { body, replyToId, attachmentIds } = c.req.valid('json')
-    const [row] = await db.insert(taskComments).values({ taskId, projectId, authorId: sub, body, replyToId: replyToId ?? null }).returning()
+    // Отвечать можно только на реплику из этой же задачи — как в мосте: иначе
+    // ветка укажет в чужое обсуждение, и цитата в интерфейсе не найдётся.
+    const parent = replyToId
+      ? await db.query.taskComments.findFirst({ where: and(eq(taskComments.id, replyToId), eq(taskComments.taskId, taskId)) })
+      : null
+    if (replyToId && !parent) return c.json({ error: 'replyTo: no such comment in this task' }, 400)
+    const [row] = await db.insert(taskComments).values({ taskId, projectId, authorId: sub, body, replyToId: parent?.id ?? null }).returning()
 
     // привязать файлы к комментарию + задаче (файл появляется и в разделе Files задачи)
     if (attachmentIds.length) {
@@ -1818,6 +1824,7 @@ tasksRoute.post(
     const watchers = commentWatchers({
       assigneeId: task.assigneeId,
       createdById: task.createdById,
+      replyToAuthorId: parent?.authorId ?? null,
       mentioned,
       actorId: sub,
     })

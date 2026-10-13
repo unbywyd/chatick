@@ -9,7 +9,7 @@ import { parseDuration } from '@/lib/time-parse'
 import { errorCode, inProject, keys, useComments, useHandoffs, type Handoff, type Person, type TaskFull } from '../data'
 import { useUi } from '../ui'
 import { Icon } from '../Icon'
-import { PassEv } from '../tasks/TaskPanel'
+import { Clamp } from '../Clamp'
 import { letterOf, personColor, timeAgo } from '../util'
 
 /**
@@ -46,6 +46,7 @@ const PATHS: Record<string, React.ReactNode> = {
   ),
   refresh: <path d="M20 11a8 8 0 10-2.3 5.7M20 5v6h-6" />,
   chevEnd: <path d="M9 6l6 6-6 6" />,
+  reply: <path d="M9 14L4 9l5-5M4 9h10.5a5.5 5.5 0 010 11H11" />,
 }
 export function I({ name, sm, style }: { name: keyof typeof PATHS; sm?: boolean; style?: React.CSSProperties }) {
   return (
@@ -707,7 +708,73 @@ function CommentBody({ body }: { body: string }) {
   )
 }
 
-type Cmt = { id: string; body: string; createdAt: string; author: Person | null; deleted?: boolean }
+type Cmt = { id: string; body: string; createdAt: string; author: Person | null; deleted?: boolean; replyToId?: string | null }
+
+/** Текст комментария одной строкой — для цитаты над ответом. */
+const plainOf = (html: string) =>
+  (new DOMParser().parseFromString(html.replace(/<br\s*\/?>|<\/(p|li|h\d)>/gi, ' '), 'text/html').body.textContent ?? '').replace(/@\[([^\]]+)\]\([^)]+\)/g, '@$1').replace(/\s+/g, ' ').trim()
+
+/** Над ответом — на что отвечают. Щелчок ведёт к исходной реплике. */
+function ReplyQuote({ parent }: { parent: Cmt | undefined }) {
+  const { t } = useTranslation('v2')
+  const gone = !parent || parent.deleted
+  return (
+    <button
+      className="cmt-quote"
+      disabled={gone}
+      onClick={() => parent && document.getElementById(`cmt-${parent.id}`)?.scrollIntoView({ block: 'center', behavior: 'smooth' })}
+    >
+      <I name="reply" sm />
+      {!gone && parent.author && <b className="bidi">{parent.author.name}</b>}
+      <span className="bidi">{gone ? t('task.cmtDeleted') : plainOf(parent.body)}</span>
+    </button>
+  )
+}
+
+/** Передача мяча в ленте обсуждения: кто → кому, какой ход, записка. */
+export function PassEv({ h, lng }: { h: Handoff; lng: string }) {
+  const { t } = useTranslation('v2')
+  const who = h.actor ?? h.from
+  const to = h.to
+  const verb = t(`panel.verb.${h.action}`, { defaultValue: '' })
+  const showMv = ['review', 'ask', 'answer', 'pass', 'return'].includes(h.action) && h.moveAfter
+  return (
+    <div className={'pass-ev' + (h.action === 'return' ? ' ret' : h.action === 'accept' ? ' ok' : '')}>
+      <div className="hd2">
+        <span className="av" style={{ background: personColor(who?.id) }}>
+          {letterOf(who?.name)}
+        </span>
+        <b className="bidi">{who?.name ?? 'Chatick'}</b>
+        {to && to.id !== who?.id && h.action !== 'accept' && h.action !== 'cancel' && (
+          <>
+            <span className="ar3">
+              <Icon name="arrow" sm />
+            </span>
+            <span className="av" style={{ background: personColor(to.id) }}>
+              {letterOf(to.name)}
+            </span>
+            <b className="bidi">{to.name}</b>
+          </>
+        )}
+        {showMv && (
+          <span className={`mv mv-${h.moveAfter}`}>
+            <i />
+            {t(`mv.${h.moveAfter}`)}
+          </span>
+        )}
+        {verb && !showMv && <span className="vt">{verb}</span>}
+        <time>{timeAgo(lng, h.createdAt)}</time>
+      </div>
+      {h.note && (
+        <Clamp max={160}>
+          <div className="note2 cbody">
+            <RichEditor value={h.note} onChange={() => {}} mentions={[]} preset="minimal" readOnly />
+          </div>
+        </Clamp>
+      )}
+    </div>
+  )
+}
 
 export function TaskDiscussion({ task, lng, mentions }: { task: TaskX; lng: string; mentions: RichMention[] }) {
   const { t } = useTranslation('v2')
@@ -721,6 +788,8 @@ export function TaskDiscussion({ task, lng, mentions }: { task: TaskX; lng: stri
   const [edKey, setEdKey] = useState(0)
   const empty = !text.replace(/<[^>]*>/g, '').trim()
   const [att, setAtt] = useState<{ id: string; name: string }[]>([])
+  const [replyTo, setReplyTo] = useState<Cmt | null>(null)
+  const boxRef = useRef<HTMLDivElement>(null)
   const fileRef = useRef<HTMLInputElement>(null)
   const up = useMutation({
     mutationFn: async (files: File[]) => {
@@ -735,13 +804,14 @@ export function TaskDiscussion({ task, lng, mentions }: { task: TaskX; lng: stri
     mutationFn: () =>
       api(`/api/v1/tasks/${task.id}/comments`, {
         method: 'POST',
-        body: JSON.stringify({ body: text, attachmentIds: att.map((a) => a.id) }),
+        body: JSON.stringify({ body: text, replyToId: replyTo?.id ?? null, attachmentIds: att.map((a) => a.id) }),
         ...inProject(pid),
       }),
     onSuccess: () => {
       setText('')
       setEdKey((k) => k + 1)
       setAtt([])
+      setReplyTo(null)
       void qc.invalidateQueries({ queryKey: keys.comments(task.id) })
       if (att.length) void qc.invalidateQueries({ queryKey: ['v2', 'task-files', task.id] })
     },
@@ -750,6 +820,14 @@ export function TaskDiscussion({ task, lng, mentions }: { task: TaskX; lng: stri
   type Ev = { at: string; h?: Handoff; c?: Cmt }
   const list = (comments.data ?? []) as Cmt[]
   const live = list.filter((c) => !c.deleted)
+  // Удалённые тоже: ответ на удалённую реплику показывает «комментарий удалён».
+  const byId = new Map(list.map((c) => [c.id, c]))
+  // Поле — под лентой: подвести к нему и поставить курсор.
+  const reply = (c: Cmt) => {
+    setReplyTo(c)
+    boxRef.current?.scrollIntoView({ block: 'nearest', behavior: 'smooth' })
+    boxRef.current?.querySelector<HTMLElement>('.ProseMirror')?.focus()
+  }
   const evs: Ev[] = [...(handoffs.data ?? []).map((h) => ({ at: h.createdAt, h })), ...live.map((c) => ({ at: c.createdAt, c }))].sort((a, b) =>
     a.at.localeCompare(b.at),
   )
@@ -767,13 +845,18 @@ export function TaskDiscussion({ task, lng, mentions }: { task: TaskX; lng: stri
               e.h ? (
                 <PassEv key={e.h.id} h={e.h} lng={lng} />
               ) : (
-                <div key={e.c!.id} className="cmt">
+                <div key={e.c!.id} id={`cmt-${e.c!.id}`} className="cmt">
                   {personAv(e.c!.author, 'av lg')}
                   <div className="b">
                     <div className="n">
                       <span className="bidi">{e.c!.author?.name ?? '—'}</span>
                       <time>{timeAgo(lng, e.at)}</time>
+                      <button className="cmt-act" onClick={() => reply(e.c!)}>
+                        <I name="reply" sm />
+                        {t('task.reply')}
+                      </button>
                     </div>
+                    {e.c!.replyToId && <ReplyQuote parent={byId.get(e.c!.replyToId)} />}
                     <CommentBody body={e.c!.body} />
                   </div>
                 </div>
@@ -781,7 +864,16 @@ export function TaskDiscussion({ task, lng, mentions }: { task: TaskX; lng: stri
             )}
           </div>
         )}
-        <div className="composer">
+        <div className="composer" ref={boxRef}>
+          {replyTo && (
+            <div className="cmt-replying">
+              <I name="reply" sm />
+              <span className="bidi">{t('task.replyTo', { name: replyTo.author?.name ?? '—' })}</span>
+              <button aria-label={t('task.cancelReply')} title={t('task.cancelReply')} onClick={() => setReplyTo(null)}>
+                <Icon name="close" sm />
+              </button>
+            </div>
+          )}
           <div className="cbox-ed" aria-label={t('task.commentAria')}>
             <RichEditor
               key={edKey}

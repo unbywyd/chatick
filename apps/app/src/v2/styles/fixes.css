@@ -342,3 +342,17 @@ html:has(.app .panel),html:has(.app .panel) body{overflow:hidden}
 .app .rc-tl p{margin:3px 0 0;color:var(--ink2);font-size:13.5px;white-space:pre-wrap}
 .app .vopen{font:inherit;font-weight:700;color:var(--ink);padding:0;background:none;border:0;cursor:pointer;text-align:start}
 .app .vopen:hover{text-decoration:underline}
+
+/* Поле комментария — одна карточка: рамку фокуса рисует сама карточка,
+   а кольцо редактора внутри (общий RichEditor) давало вторую, скруглённую. */
+.app .composer .cbox-ed > .relative{box-shadow:none !important}
+
+/* Упоминание не решает направление строки. «@Artyom האם…» — строка на
+   иврите, но первая сильная буква латинская, и без изоляции вся строка
+   уходила влево. Изолированный фрагмент алгоритм направления пропускает. */
+.app .mention{unicode-bidi:isolate}
+
+/* Знак Chatick в шапке, перед компанией. */
+.app .hd-logo{flex:none;display:grid;place-items:center;width:36px;height:36px;border-radius:10px;margin-inline-end:-6px}
+.app .hd-logo:hover{background:var(--soft)}
+.app .hd-logo img{width:28px;height:28px;display:block}

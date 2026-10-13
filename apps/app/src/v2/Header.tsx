@@ -28,9 +28,14 @@ function readPins(): string[] {
 }
 
 export function Header() {
-  const { companyId } = useUi()
+  const { companyId, base } = useUi()
+  const navigate = useNavigate()
   return (
     <header className="hdr">
+      {/* Знак — тот же, что у установленного приложения; ведёт к задачам компании. */}
+      <button className="hd-logo" aria-label="Chatick" title="Chatick" onClick={() => navigate(base)}>
+        <img src={`${import.meta.env.BASE_URL}favicon.svg`} alt="" />
+      </button>
       <CompanyMenu />
       <SectionsNav />
       <div style={{ flex: 1 }} />

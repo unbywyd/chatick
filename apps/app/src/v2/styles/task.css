@@ -62,3 +62,17 @@
 .app .tp-edit .doc > div > .flex.flex-wrap > button:hover{background:var(--sheet);color:var(--ink)}
 .app .tp-edit .doc > div > .flex.flex-wrap > button svg{width:17px;height:17px}
 .app .addrow input:focus-visible,.app .tp-title:focus-visible,.app .tp-est:focus-visible,.app .tp-ref-in:focus-visible{outline:none}
+
+/* Ответ на комментарий: действие у реплики, цитата над ответом, плашка в поле. */
+.app .cmt-act{display:inline-flex;align-items:center;gap:4px;margin-inline-start:10px;font-size:12.5px;font-weight:500;color:var(--ink3);vertical-align:baseline}
+.app .cmt-act:hover{color:var(--ink)}
+.app .cmt-act .ic.sm,.app .cmt-quote .ic.sm,.app .cmt-replying .ic.sm{width:13px;height:13px;flex:none}
+.app .cmt-quote{display:flex;align-items:center;gap:6px;max-width:100%;margin-top:6px;padding:5px 10px;border-radius:8px;background:var(--soft);color:var(--ink2);font-size:13px;text-align:start}
+.app .cmt-quote:not(:disabled):hover{color:var(--ink)}
+.app .cmt-quote:disabled{cursor:default;font-style:italic;color:var(--ink3)}
+.app .cmt-quote b{flex:none;font-weight:600}
+.app .cmt-quote span{min-width:0;overflow:hidden;white-space:nowrap;text-overflow:ellipsis}
+.app .cmt-replying{display:flex;align-items:center;gap:6px;font-size:12.5px;font-weight:500;color:var(--ink2)}
+.app .cmt-replying button{display:grid;place-items:center;width:22px;height:22px;border-radius:6px;color:var(--ink3)}
+.app .cmt-replying button:hover{background:var(--soft);color:var(--ink)}
+.app[dir='rtl'] .cmt-act .ic,.app[dir='rtl'] .cmt-quote .ic,.app[dir='rtl'] .cmt-replying > .ic{transform:scaleX(-1)}
