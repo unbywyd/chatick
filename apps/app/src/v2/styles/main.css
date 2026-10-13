@@ -1180,11 +1180,10 @@ button.keys-c:hover{background:var(--soft)}
 .tg-st{direction:ltr}
 .sc-acts .lnk2 + .lnk2{margin-inline-start:0}
 
-/* Мяч: тепло — лежит, жарко — светится, горит — ещё и пульсирует. Поворот — отдельным свойством rotate,
+/* Мяч: срочность и так видна по метке, часам и подсветке за держателем; на «горит» мяч ещё и пульсирует. Поворот — отдельным свойством rotate,
    чтобы пульсация (scale) его не сбивала. */
 .tg-grp img.tg-ball{width:54px;height:54px;filter:drop-shadow(0 4px 5px rgba(0,0,0,.38));transition:left .7s ease,top .7s ease,rotate .9s cubic-bezier(.65,0,.35,1)}
-.tg-grp img.tg-ball.hot{filter:drop-shadow(0 4px 5px rgba(0,0,0,.38)) drop-shadow(0 0 10px rgba(255,181,71,.9))}
-.tg-grp img.tg-ball.burn{filter:drop-shadow(0 4px 5px rgba(0,0,0,.38)) drop-shadow(0 0 12px rgba(255,110,40,.95));animation:tgBall 1.6s ease-in-out infinite}
+.tg-grp img.tg-ball.burn{animation:tgBall 1.6s ease-in-out infinite}
 @keyframes tgBall{0%,100%{scale:1}50%{scale:1.08}}
 @media (prefers-reduced-motion:reduce){.tg-grp img.tg-ball{transition:none;animation:none}}
 .me-i img.me-hero{width:22px;height:22px;object-fit:contain;flex:none;margin:-3px 0}
