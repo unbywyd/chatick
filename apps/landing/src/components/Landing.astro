@@ -303,8 +303,8 @@ const ICON_GH =
       <p class="sub">{c.products.sub}</p>
       <div class="prods">
         {PRODUCTS.map((p) => (
-          <a class="pr" href={p.url} target="_blank" rel="noopener">
-            <i class="pr-mark" style={`background:${p.tile}`} aria-hidden="true" set:html={p.mark} />
+          <a class="prd" href={p.url} target="_blank" rel="noopener">
+            <i class="prd-mark" style={`background:${p.tile}`} aria-hidden="true" set:html={p.mark} />
             <b>{p.name}</b>
             <span>{p.text}</span>
             <em dir="ltr">{p.host} ↗</em>
@@ -1255,7 +1255,7 @@ const ICON_GH =
     gap: 12px;
     margin-top: 40px;
   }
-  .pr {
+  .prd {
     display: flex;
     flex-direction: column;
     gap: 12px;
@@ -1266,10 +1266,10 @@ const ICON_GH =
     text-decoration: none;
     transition: box-shadow 0.15s;
   }
-  .pr:hover {
+  .prd:hover {
     box-shadow: inset 0 0 0 1.5px var(--ink);
   }
-  .pr-mark {
+  .prd-mark {
     width: 48px;
     height: 48px;
     border-radius: 14px;
@@ -1278,16 +1278,16 @@ const ICON_GH =
     box-shadow: inset 0 0 0 1px rgba(22, 24, 15, 0.08);
     margin-bottom: 6px;
   }
-  .pr b {
+  .prd b {
     font-size: 22px;
     letter-spacing: -0.02em;
   }
-  .pr span {
+  .prd span {
     color: var(--ink2);
     font-size: 16px;
     line-height: 1.5;
   }
-  .pr em {
+  .prd em {
     font-style: normal;
     font: 600 13px/1 var(--font-mono);
     color: var(--ink3);
@@ -1296,7 +1296,7 @@ const ICON_GH =
     align-self: flex-start;
     unicode-bidi: isolate;
   }
-  .pr:hover em {
+  .prd:hover em {
     color: var(--ink);
   }
 
