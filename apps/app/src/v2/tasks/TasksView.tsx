@@ -902,6 +902,9 @@ function QuickAdd({ projects, onCreated }: { projects: CompanyProject[]; onCreat
     create.mutate()
   }
   const pin = preview?.project ?? projects.find((p) => p.id === project) ?? null
+  // Задачу из строки сервер создаёт только в проектах, где ты участник
+  // (myProjects): чужие в подсказках и в чипе давали «нет такого проекта».
+  const mine = projects.filter((p) => p.myRole)
   const toMe = !preview?.assignee || preview.assignee.id === me.data?.id
   const who = toMe ? (me.data ? { id: me.data.id, name: me.data.name } : null) : preview!.assignee
   return (
@@ -912,7 +915,7 @@ function QuickAdd({ projects, onCreated }: { projects: CompanyProject[]; onCreat
           ref={input}
           placeholder={t('tasks.newPh')}
           people={(people.data ?? []).map((u) => ({ id: u.id, label: u.name, kind: 'person' as const }))}
-          projects={projects.map((p) => ({ id: p.id, label: p.name, color: p.color, logoUrl: p.logoUrl, kind: 'project' as const }))}
+          projects={mine.map((p) => ({ id: p.id, label: p.name, color: p.color, logoUrl: p.logoUrl, kind: 'project' as const }))}
           emptyPeople={t('tasks.noPerson')}
           emptyProjects={t('tasks.noProject')}
           onChange={setText}
@@ -923,10 +926,21 @@ function QuickAdd({ projects, onCreated }: { projects: CompanyProject[]; onCreat
           }}
         />
         {text.trim() && pin && (
-          <span className="pin" title={t('tasks.toProject')}>
-            <ProjectLogo project={pin} size="xs" />
-            <span className="bidi">{shortProject(pin.name)}</span>
-          </span>
+          <ChipPick
+            className="pin"
+            title={t('tasks.toProject')}
+            face={
+              <>
+                <ProjectLogo project={pin} size="xs" />
+                <span className="bidi">{shortProject(pin.name)}</span>
+              </>
+            }
+            items={mine.map((p) => ({ id: p.id, name: shortProject(p.name), full: p.name, icon: <ProjectLogo project={p} size="xs" /> }))}
+            value={pin.id}
+            find={t('library.findProject', { n: mine.length })}
+            none={(q) => t('car.none', { q })}
+            onPick={(it) => input.current?.setPick('project', { id: it.id, label: it.full })}
+          />
         )}
         {text.trim() && preview?.due && (
           <span className="pin" title={t('tasks.dueWord')}>
@@ -935,12 +949,34 @@ function QuickAdd({ projects, onCreated }: { projects: CompanyProject[]; onCreat
           </span>
         )}
         {text.trim() && who && (
-          <span className="qwho" title={t('tasks.toWhom')}>
-            <span className="av" style={{ background: personColor(who.id) }}>
-              {letterOf(who.name)}
-            </span>
-            <span className="bidi">{toMe ? t('tasks.toMe') : who.name}</span>
-          </span>
+          <ChipPick
+            className="qwho"
+            title={t('tasks.toWhom')}
+            face={
+              <>
+                <span className="av" style={{ background: personColor(who.id) }}>
+                  {letterOf(who.name)}
+                </span>
+                <span className="bidi">{toMe ? t('tasks.toMe') : who.name}</span>
+              </>
+            }
+            items={[
+              ...(me.data ? [{ id: me.data.id, name: t('tasks.toMe'), full: me.data.name }] : []),
+              ...(people.data ?? []).filter((u) => u.id !== me.data?.id).map((u) => ({ id: u.id, name: u.name, full: u.name })),
+            ].map((u) => ({
+              ...u,
+              icon: (
+                <span className="av pcav" style={{ background: personColor(u.id) }}>
+                  {letterOf(u.full)}
+                </span>
+              ),
+            }))}
+            value={who.id}
+            find={t('library.findPerson', { n: people.data?.length ?? 0 })}
+            none={(q) => t('library.noPerson', { q })}
+            // «Мне» — снять метку: без неё задача и так у того, кто пишет.
+            onPick={(it) => input.current?.setPick('person', it.id === me.data?.id ? null : { id: it.id, label: it.full })}
+          />
         )}
         <button className="mini" onClick={() => navigate(`${base}/task/new`, { state: { title: text.trim(), projectId: pin?.id } })}>
           {t('tasks.details')}
@@ -953,6 +989,76 @@ function QuickAdd({ projects, onCreated }: { projects: CompanyProject[]; onCreat
         </div>
       )}
     </>
+  )
+}
+
+type ChipItem = { id: string; name: string; full: string; icon: React.ReactNode }
+
+/**
+ * Чип быстрой строки с выбором — проект или кому. Выбор ставит метку в текст
+ * (QuickInput.setPick): источником правды остаётся строка, и сервер разбирает
+ * её как обычно, так что чип и набранное руками не расходятся.
+ */
+function ChipPick({ className, title, face, items, value, find, none, onPick }: {
+  className: string
+  title: string
+  face: React.ReactNode
+  items: ChipItem[]
+  value: string | null
+  find: string
+  none: (q: string) => string
+  onPick: (it: ChipItem) => void
+}) {
+  const [open, setOpen] = useState(false)
+  const [q, setQ] = useState('')
+  const s = q.trim().toLowerCase()
+  const list = items.filter((it) => !s || it.name.toLowerCase().includes(s) || it.full.toLowerCase().includes(s))
+  const pick = (it: ChipItem) => {
+    setOpen(false)
+    setQ('')
+    onPick(it)
+  }
+  return (
+    <span className="cbx qpick">
+      <button type="button" className={className + ' qp-b'} title={title} aria-haspopup="listbox" aria-expanded={open} onClick={() => setOpen(!open)}>
+        {face}
+        <Icon name="chevron" sm />
+      </button>
+      {open && (
+        <>
+          <div className="cbx-scrim" onClick={() => setOpen(false)} />
+          <div className="cbx-pop">
+            <label className="cbx-s">
+              <Icon name="search" sm />
+              <input
+                value={q}
+                onChange={(e) => setQ(e.target.value)}
+                onKeyDown={(e) => {
+                  if (e.key === 'Escape') setOpen(false)
+                  if (e.key === 'Enter' && list[0]) {
+                    e.preventDefault()
+                    pick(list[0])
+                  }
+                }}
+                placeholder={find}
+                aria-label={find}
+                autoFocus
+              />
+            </label>
+            <div className="cbx-l" role="listbox">
+              {list.map((it) => (
+                <button key={it.id} type="button" className="cbx-o" role="option" aria-selected={it.id === value} onClick={() => pick(it)}>
+                  {it.icon}
+                  <span className="cbx-n">{it.name}</span>
+                  {it.id === value && <Icon name="check" sm />}
+                </button>
+              ))}
+              {!list.length && <div className="cbx-none">{none(q)}</div>}
+            </div>
+          </div>
+        </>
+      )}
+    </span>
   )
 }
 

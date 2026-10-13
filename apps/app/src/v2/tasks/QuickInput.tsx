@@ -11,7 +11,12 @@ import { useLivePlaceholder, useRepaintPlaceholder } from '../livePlaceholder'
 import { letterOf, personColor, projectColor, shortProject } from '../util'
 
 export type Pick = { id: string; label: string; color?: string | null; logoUrl?: string | null; kind: 'person' | 'project' }
-export type QuickInputHandle = { clear: () => void; focus: () => void }
+export type QuickInputHandle = {
+  clear: () => void
+  focus: () => void
+  /** Поставить метку проекта или человека (null — снять): выбор из чипа над строкой. */
+  setPick: (kind: 'person' | 'project', pick: { id: string; label: string } | null) => void
+}
 
 type Doc = { type?: string; text?: string; attrs?: { id?: string; label?: string }; content?: Doc[] }
 
@@ -215,15 +220,34 @@ export const QuickInput = forwardRef<
     focus: () => {
       editor?.commands.focus('end')
     },
+    // Источник правды — текст: прежняя метка того же вида (плашкой или набранная
+    // руками — @имя, #"Проект") снимается, новая встаёт плашкой в конец строки,
+    // и сервер разбирает строку как обычно.
+    setPick: (kind, pick) => {
+      if (!editor) return
+      const { state } = editor
+      const tr = state.tr
+      const re = kind === 'person' ? /(^|\s)@("[^"]*"|\S+)/g : /(^|\s)#("[^"]*"|\S+)/g
+      const cut: [number, number][] = []
+      state.doc.descendants((n, pos) => {
+        if (n.type.name === kind) cut.push([pos, pos + n.nodeSize])
+        else if (n.isText)
+          for (const m of (n.text ?? '').matchAll(re)) {
+            const from = pos + (m.index ?? 0) + m[1]!.length
+            cut.push([from, from + m[0].length - m[1]!.length])
+          }
+      })
+      for (const [a, b] of cut.sort((x, y) => y[0] - x[0])) tr.delete(a, b)
+      if (pick) {
+        const end = tr.doc.content.size - 1
+        const prev = end > 1 ? tr.doc.textBetween(end - 1, end, '', '￼') : ''
+        const node = state.schema.nodes[kind]!.create({ id: pick.id, label: pick.label })
+        tr.insert(end, [...(prev && prev !== ' ' ? [state.schema.text(' ')] : []), node, state.schema.text(' ')])
+      }
+      editor.view.dispatch(tr)
+      editor.commands.focus('end')
+    },
   }))
-
-  useEffect(() => {
-    if (!editor) return
-    const ext = editor.extensionManager.extensions.find((x) => x.name === 'placeholder')
-    if (!ext || ext.options.placeholder === p.placeholder) return
-    ext.options.placeholder = p.placeholder
-    editor.view.dispatch(editor.state.tr)
-  }, [editor, p.placeholder])
 
   return <EditorContent editor={editor} className="qwrap" />
 })

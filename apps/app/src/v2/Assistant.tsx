@@ -204,7 +204,9 @@ export function Assistant() {
   return (
     <aside className="aside" aria-label={t('ai.aria')}>
       <div className="ah">
-        <img className="ah-mk" src={`${import.meta.env.BASE_URL}favicon.svg`} alt="" />
+        <span className="spark">
+          <Icon name="spark" />
+        </span>
         <div style={{ minWidth: 0 }}>
           <div className="nm">{t('ai.name')}</div>
           <div className="s bidi">{t('ai.sees', { company: company.name })}</div>

@@ -1,6 +1,8 @@
+import { useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { Link } from 'react-router-dom'
 import type { Company } from './data'
+import { Icon } from './Icon'
 import './i18n/list'
 
 /**
@@ -10,10 +12,35 @@ import './i18n/list'
  *
  * С deleteAt данные компании пока лежат здесь витриной — сравнить. Говорим,
  * когда их удалят и что правки отсюда в их систему не попадут.
+ *
+ * Крестик прячет баннер — посмотреть работу без него. Запоминаем для этой
+ * компании вместе с датой удаления: сменится дата или адрес — покажем снова.
  */
+const HIDE_KEY = (id: string) => `chatick_v2_moved_hidden:${id}`
+// Хранилище недоступно (приватный режим) — помним до перезагрузки.
+const hiddenNow = new Set<string>()
+
 export function MovedBanner({ company }: { company: Company }) {
   const { t, i18n } = useTranslation('v2')
+  const [, redraw] = useState(0)
   if (!company.moved) return null
+  const stamp = `${company.moved.url ?? ''}|${company.moved.deleteAt ?? ''}`
+  let hidden = hiddenNow.has(HIDE_KEY(company.id) + stamp)
+  try {
+    hidden ||= localStorage.getItem(HIDE_KEY(company.id)) === stamp
+  } catch {
+    /* хранилище недоступно — остаётся то, что в памяти */
+  }
+  if (hidden) return null
+  const hide = () => {
+    hiddenNow.add(HIDE_KEY(company.id) + stamp)
+    try {
+      localStorage.setItem(HIDE_KEY(company.id), stamp)
+    } catch {
+      /* не запомнили надолго — спрятано до перезагрузки */
+    }
+    redraw((n) => n + 1)
+  }
   const url = company.moved.url
   const host = url ? url.replace(/^https?:\/\//, '').replace(/\/$/, '') : null
   const at = company.moved.deleteAt
@@ -23,6 +50,9 @@ export function MovedBanner({ company }: { company: Company }) {
     : null
   return (
     <section className="moved" role="status">
+      <button className="ib moved-x" aria-label={t('moved.hide')} title={t('moved.hide')} onClick={hide}>
+        <Icon name="close" sm />
+      </button>
       <div className="moved-in">
         <div className="moved-t">
           <b>{t('moved.title')}</b>

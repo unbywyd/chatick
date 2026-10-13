@@ -491,5 +491,17 @@ html:has(.app .mwrap){overflow:hidden}
 .app .pn-more span{flex:1;min-width:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .app .pn-more:hover{color:var(--ink2)}
 .app .pn-more:hover b{color:var(--ink)}
-/* Шапка ассистента — знак Чатика, как в шапке приложения. */
-.app .ah .ah-mk{width:34px;height:34px;flex:none;display:block}
+/* Значок в шапке ассистента — как на кнопке «Спросить ассистента»: лайм и тёмный знак. */
+.app .ah .spark{background:var(--accent);color:var(--accent-ink)}
+/* Чипы быстрой строки (проект, кому) — кнопки со стрелкой и списком выбора. */
+.app .newt .qpick{display:inline-flex;flex:none}
+.app .newt .qp-b{cursor:pointer;gap:6px}
+.app .newt .qwho.qp-b{height:32px;padding:0 8px 0 5px;border-radius:10px}
+.app .newt .qp-b > .ic:last-child{color:var(--ink3);flex:none}
+.app .newt .qp-b:hover,.app .newt .qp-b[aria-expanded='true']{box-shadow:inset 0 0 0 1px var(--ink3)}
+.app .newt .qpick .cbx-pop{inset-inline:auto 0;width:280px}
+/* Крестик баннера «компания переехала» — в углу, текст под ним не заезжает. */
+.app .moved{position:relative}
+.app .moved-x{position:absolute;top:10px;inset-inline-end:10px;width:30px;height:30px;color:var(--ink2)}
+.app .moved-x:hover{color:var(--ink)}
+.app .moved-in{padding-inline-end:48px}
