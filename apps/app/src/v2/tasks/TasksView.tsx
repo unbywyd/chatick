@@ -62,6 +62,15 @@ const MOVE_ORDER: Record<string, number> = { review: 0, answer: 1, do: 2, client
 
 const pref = <T extends string>(key: string, fallback: T): T => (localStorage.getItem(key) as T | null) ?? fallback
 
+// Сортировка, как и группы, переживает уход со страницы: «колонка:направление».
+// Неизвестную колонку (из старой версии) не берём — список без сортировки.
+const SORT_KEYS: readonly SortKey[] = ['id', 'title', 'prio', 'mv', 'due', 'who', 'wait', 'est', 'created', 'blk']
+const SORT_PREF = 'chatick_v2_sort'
+function sortPref(): { k: SortKey | null; d: 1 | -1 } {
+  const [k, d] = (localStorage.getItem(SORT_PREF) ?? '').split(':')
+  return SORT_KEYS.includes(k as SortKey) ? { k: k as SortKey, d: d === '-1' ? -1 : 1 } : { k: null, d: 1 }
+}
+
 /**
  * Главный экран (v2) — «что на мне и что важнее всего».
  *
@@ -79,8 +88,12 @@ export function TasksView() {
   const [tab, setTabState] = useState<Tab>(() => pref('chatick_v2_tab', 'mine'))
   const all = useAllTasks(companyId, tab === 'all')
   const [focus, setFocus] = useState<Focus | null>(null)
-  const [sortK, setSortK] = useState<SortKey | null>(null)
-  const [sortD, setSortD] = useState<1 | -1>(1)
+  const [sortK, setSortK] = useState<SortKey | null>(() => sortPref().k)
+  const [sortD, setSortD] = useState<1 | -1>(() => sortPref().d)
+  useEffect(() => {
+    if (sortK) localStorage.setItem(SORT_PREF, `${sortK}:${sortD}`)
+    else localStorage.removeItem(SORT_PREF)
+  }, [sortK, sortD])
   const [grpBy, setGrpBy] = useState<GroupBy>(() => {
     const g = pref<GroupBy>('chatick_v2_group', 'due')
     return g === 'proj' ? 'due' : g
@@ -520,19 +533,20 @@ export function Carousel({
             aria-label={t('car.findAria')}
           />
         </label>
+        {/* «Все проекты» — вне ленты: долистав до конца, к ним не надо листать обратно. */}
+        <button className={'chip' + (!selected ? ' sel' : '')} aria-pressed={!selected} onClick={() => onPick(null)} title={t('car.all')}>
+          <span className="logo all">
+            <Icon name="grid" sm />
+          </span>
+          <span className="nm">{t('car.all')}</span>
+          {counts.length > 0 && <span className="c">{counts.length}</span>}
+        </button>
         {edge.prev && (
           <button className="car-arr prev" aria-label={t('car.prev')} onClick={() => page(-1)}>
             <Icon name="chevronStart" />
           </button>
         )}
         <div ref={car} className="car" role="tablist" aria-label={t('car.aria')}>
-          <button className={'chip' + (!selected ? ' sel' : '')} role="tab" aria-selected={!selected} onClick={() => onPick(null)} title={t('car.all')}>
-            <span className="logo all">
-              <Icon name="grid" sm />
-            </span>
-            <span className="nm">{t('car.all')}</span>
-            {counts.length > 0 && <span className="c">{counts.length}</span>}
-          </button>
           {shown.map((p) => {
             const n = by.get(p.id) ?? 0
             const sel = selected === p.id
@@ -544,13 +558,13 @@ export function Carousel({
               </button>
             )
           })}
+          {none && <span className="car-none">{t('car.none', { q })}</span>}
         </div>
         {edge.next && (
           <button className="car-arr next" aria-label={t('car.next')} onClick={() => page(1)}>
             <Icon name="chevronEnd" />
           </button>
         )}
-        {none && <span className="car-none">{t('car.none', { q })}</span>}
         <button className="car-set" aria-label={t('pprefs.open')} title={t('pprefs.open')} aria-expanded={setup} onClick={() => setSetup(!setup)}>
           <Icon name="sliders" />
         </button>

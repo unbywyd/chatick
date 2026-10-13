@@ -7,6 +7,7 @@ import Mention from '@tiptap/extension-mention'
 import type { SuggestionProps, SuggestionKeyDownProps } from '@tiptap/suggestion'
 import tippy, { type Instance } from 'tippy.js'
 import { TextDirection } from '@/components/ui/text-direction'
+import { useLivePlaceholder, useRepaintPlaceholder } from '../livePlaceholder'
 import { letterOf, personColor, projectColor, shortProject } from '../util'
 
 export type Pick = { id: string; label: string; color?: string | null; logoUrl?: string | null; kind: 'person' | 'project' }
@@ -158,6 +159,7 @@ export const QuickInput = forwardRef<
   textsRef.current = { people: p.emptyPeople, projects: p.emptyProjects }
   handlers.current = p
   const open = useRef(0)
+  const ph = useLivePlaceholder(p.placeholder)
 
   const editor = useEditor({
     extensions: [
@@ -181,7 +183,7 @@ export const QuickInput = forwardRef<
         trailingNode: false,
       }),
       TextDirection,
-      Placeholder.configure({ placeholder: p.placeholder }),
+      Placeholder.configure({ placeholder: ph }),
       suggest('person', '@', () => peopleRef.current, () => textsRef.current.people, open),
       suggest('project', '#', () => projectsRef.current, () => textsRef.current.projects, open),
     ],
@@ -204,6 +206,7 @@ export const QuickInput = forwardRef<
     },
     onUpdate: ({ editor: ed }) => handlers.current.onChange(serialize(ed.getJSON() as Doc)),
   })
+  useRepaintPlaceholder(editor, p.placeholder, true)
 
   useImperativeHandle(ref, () => ({
     clear: () => {

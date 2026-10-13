@@ -16,6 +16,7 @@ import { createPortal } from 'react-dom'
 import { CollabProvider, userColor } from '@/lib/yjs-provider'
 import { mentionSuggestion, type RichMention } from '@/components/ui/rich-editor'
 import { TextDirection } from '@/components/ui/text-direction'
+import { useLivePlaceholder, useRepaintPlaceholder } from '../livePlaceholder'
 import { ResizableImage } from '@/components/documents/ResizableImage'
 
 /**
@@ -28,7 +29,7 @@ import { ResizableImage } from '@/components/documents/ResizableImage'
  * в старом редакторе: формат Y.Doc у обоих клиентов обязан совпадать.
  */
 
-function extensions(placeholder: string, mentions: RichMention[] | null, collab: boolean) {
+function extensions(placeholder: string | (() => string), mentions: RichMention[] | null, collab: boolean) {
   return [
     // С совместной правкой отмену ведёт Yjs — своя история StarterKit мешала бы.
     StarterKit.configure({ link: { openOnClick: false }, ...(collab ? { undoRedo: false as const } : {}) }),
@@ -65,13 +66,15 @@ export function KbView({ html }: { html: string }) {
 
 /** Простая правка (заметки): значение снаружи, сохранение — по «Готово». */
 export function PlainEditor({ value, onChange, placeholder }: { value: string; onChange: (html: string) => void; placeholder: string }) {
+  const ph = useLivePlaceholder(placeholder)
   const editor = useEditor({
-    extensions: extensions(placeholder, null, false),
+    extensions: extensions(ph, null, false),
     content: withInlineImageAuth(value),
     autofocus: 'end',
     editorProps: { attributes: { class: 'doc-editor body kb-ed' } },
     onUpdate: ({ editor: e }) => onChange(stripInlineImageAuth(e.getHTML())),
   })
+  useRepaintPlaceholder(editor, placeholder)
   if (!editor) return null
   return (
     <div className="kb-edw">
@@ -170,10 +173,11 @@ export function CollabEditor({
 
   const fileRef = useRef<HTMLInputElement>(null)
   const [gallery, setGallery] = useState(false)
+  const ph = useLivePlaceholder(placeholder)
   const editor = useEditor(
     {
       extensions: [
-        ...extensions(placeholder, mentions, true),
+        ...extensions(ph, mentions, true),
         ...(provider
           ? [
               Collaboration.configure({ document: provider.doc }),
@@ -203,6 +207,7 @@ export function CollabEditor({
     },
     [provider, documentId],
   )
+  useRepaintPlaceholder(editor, placeholder)
 
   // Пока не пришло состояние с сервера — только чтение: иначе первая буква
   // ляжет в пустой документ раньше настоящего текста.

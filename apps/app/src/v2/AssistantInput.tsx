@@ -4,6 +4,7 @@ import StarterKit from '@tiptap/starter-kit'
 import Placeholder from '@tiptap/extension-placeholder'
 import { TextDirection } from '@/components/ui/text-direction'
 import { serializeToMarkdown } from '@/components/chat/Composer'
+import { useLivePlaceholder, useRepaintPlaceholder } from './livePlaceholder'
 
 export type AssistantInputHandle = { clear: () => void; focus: () => void }
 
@@ -16,8 +17,9 @@ export const AssistantInput = forwardRef<
   AssistantInputHandle,
   { placeholder: string; disabled?: boolean; onChange: (md: string) => void; onSubmit: (md: string) => void; onFiles?: (files: File[]) => void }
 >(function AssistantInput({ placeholder, disabled, onChange, onSubmit, onFiles }, ref) {
+  const ph = useLivePlaceholder(placeholder)
   const editor = useEditor({
-    extensions: [StarterKit.configure({ heading: false, horizontalRule: false }), TextDirection, Placeholder.configure({ placeholder })],
+    extensions: [StarterKit.configure({ heading: false, horizontalRule: false }), TextDirection, Placeholder.configure({ placeholder: ph })],
     editable: !disabled,
     editorProps: {
       attributes: { class: 'ai-ed', 'aria-label': placeholder },
@@ -58,6 +60,7 @@ export const AssistantInput = forwardRef<
   useEffect(() => {
     editor?.setEditable(!disabled)
   }, [editor, disabled])
+  useRepaintPlaceholder(editor, placeholder, true)
 
   // Язык сменили — подсказка в поле тоже (редактор при этом не пересоздаём).
   useEffect(() => {

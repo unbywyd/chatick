@@ -110,7 +110,22 @@ html:has(.app .mwrap){overflow:hidden}
    краю, и панель с затемнением закрывали ассистента целиком. */
 .app[dir='rtl'] .panel{box-shadow:-30px 0 60px -20px rgba(0,0,0,.25)}
 .app:has(.panel) .aside{z-index:11}
-@media (min-width:901px){.app:has(.aside) .panel{width:min(780px,calc(100% - 400px))}}
+/* Ассистент забирает свободное место справа от контента и встаёт в 20px от
+   него. Раньше основная колонка забирала весь простор (flex-grow 999), и на
+   экране в 2000px ассистент оставался в 340px: строки по пять слов, а между
+   ним и контентом — пустота. Ширина контента своя у каждой страницы; от 340px
+   до 960px, чтобы на сверхшироком мониторе строки не уезжали в бесконечность.
+   Панель задачи считает его ширину по той же формуле. */
+.app{--content-w:1040px;--aside-min:340px;--aside-max:960px}
+.app:has(.main .tpw){--content-w:1120px}
+.app:has(.main .stg),.app:has(.main .ntf){--content-w:1240px}
+.app:has(.main .tmv){--content-w:1280px}
+.app:has(.main .kb){--content-w:1340px}
+@media (min-width:901px){
+  .app .aside:not(.col){flex:0 0 clamp(var(--aside-min),calc(100% - var(--content-w) - 60px),var(--aside-max));max-width:none}
+  .app:has(.aside) .main{padding-inline-end:20px}
+  .app:has(.aside) .panel{width:min(780px,calc(100% - clamp(var(--aside-min),calc(100% - var(--content-w) - 60px),var(--aside-max)) - 8px))}
+}
 
 /* Полосы прокрутки — тонкие, в цвет линий, во всём приложении. */
 .app,.app *{scrollbar-width:thin;scrollbar-color:color-mix(in srgb,var(--ink3) 45%,transparent) transparent}
@@ -237,6 +252,11 @@ html:has(.app .mwrap){overflow:hidden}
 /* Лента проектов: стрелки по краям вместо полосы прокрутки. */
 .app .car-arr{flex:none;width:36px;height:44px;border-radius:12px;display:grid;place-items:center;background:var(--sheet);box-shadow:inset 0 0 0 1px var(--line);color:var(--ink)}
 .app .car-arr:hover{box-shadow:inset 0 0 0 1px var(--ink3)}
+/* «Ничего не нашлось» — в ленте, после чипов: «Все проекты» теперь перед лентой, и
+   прежняя позиция по отступу от края наезжала бы на них. */
+.app .car .car-none{position:static;align-self:center;padding-inline:6px}
+/* Лента растворяется к своему концу: в иврите это левый край, а не правый. */
+.app[dir='rtl'] .car{-webkit-mask-image:linear-gradient(270deg,#000 88%,transparent);mask-image:linear-gradient(270deg,#000 88%,transparent)}
 
 /* Номер задачи виден всегда (в макете проступал только при наведении). */
 .app.lay-stage .row .meta .pn + span{opacity:1}
@@ -423,6 +443,13 @@ html:has(.app .mwrap){overflow:hidden}
 .app .lt-link{color:var(--ink);font-weight:600;text-decoration:underline;text-underline-offset:3px}
 .app .lh .lh-end{display:flex;align-items:center;justify-content:flex-end;gap:4px}
 .app .lh .lh-end .ib{width:30px;height:30px}
+/* Шапка списка — тихая: колонки, «Ещё», группы и меню проявляются при наведении
+   на список или с клавиатуры. Выбранная сортировка и группировка не «по сроку»
+   видны всегда: по ним понятно, почему список стоит в таком порядке. :where —
+   чтобы правила «показать» перебивали «спрятать» без гонки специфичности. */
+.app .lh :where(.lh-b,.lh-g):not(.on),.app .lh :where(.lh-end .ib):not([aria-expanded='true']){opacity:0;transition:opacity .2s}
+.app .sheet:hover .lh :is(.lh-b,.lh-g,.ib),.app .lh:focus-within :is(.lh-b,.lh-g,.ib){opacity:1}
+@media (hover:none){.app .lh :is(.lh-b,.lh-g,.ib){opacity:1}}
 .app .rsearch:focus-within{box-shadow:inset 0 0 0 1.5px var(--ink)}
 .app .rsearch input:focus-visible{outline:none}
 

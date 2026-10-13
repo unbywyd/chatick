@@ -58,7 +58,7 @@ export function TaskPage() {
 
   if (!full.data || !me.data || !full.data.task.project)
     return (
-      <div className="wrap" style={{ maxWidth: 1120 }}>
+      <div className="wrap tpw" style={{ maxWidth: 1120 }}>
         <div className="tp-bar">
           <button className="back" onClick={() => navigate(base)}>
             <I name="back" />
@@ -181,7 +181,7 @@ function Page({ data, myId, lng }: { data: TaskFull; myId: string; lng: string }
   })
 
   return (
-    <div className="wrap" style={{ maxWidth: 1120 }}>
+    <div className="wrap tpw" style={{ maxWidth: 1120 }}>
       {sharing && <ShareTask taskId={task.id} title={`${task.number} · ${task.title}`} canPublish={Boolean(data.can.edit)} onClose={() => setSharing(false)} />}
       <div className="tp-bar">
         <button className="back" onClick={() => navigate(base)}>
@@ -587,7 +587,7 @@ function TaskNewForm() {
   const mentions = useMemo(() => team.map((p) => ({ id: p.id, label: p.name })), [team])
 
   return (
-    <div className="wrap" style={{ maxWidth: 1120 }}>
+    <div className="wrap tpw" style={{ maxWidth: 1120 }}>
       <div className="tp-bar">
         <button className="back" onClick={() => navigate(base)}>
           <I name="back" />
