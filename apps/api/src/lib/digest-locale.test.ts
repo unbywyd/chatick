@@ -30,7 +30,8 @@ describe('язык письма', () => {
   })
 
   it('компания берётся из проектов, о которых письмо', () => {
-    expect(digest).toMatch(/const companyId = items\[0\]!\.project\.companyId/)
+    // live — те же проекты без переехавших компаний: письмо только о них
+    expect(digest).toMatch(/const companyId = live\[0\]!\.project\.companyId/)
   })
 
   it('личный выбор по-прежнему сильнее языка компании', () => {

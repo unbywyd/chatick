@@ -3,6 +3,7 @@ import { db } from '../db/client.js'
 import { notifications, projects, users, userNotificationPrefs } from '../db/schema.js'
 import { sendDigestMail } from './mails.js'
 import { localeFor } from './locale.js'
+import { movedCompaniesCached } from './moved-companies.js'
 import { env } from '../env.js'
 
 // Суточный email-дайджест непрочитанных уведомлений (SPEC §8.22).
@@ -151,15 +152,22 @@ export async function sendDailyDigests(): Promise<void> {
         .limit(100)
       if (!items.length) continue
 
+      // Переехавшие компании — витрина: работа идёт у них, и сводка отсюда
+      // звала бы людей не в ту систему.
+      const moved = await movedCompaniesCached()
+      const live = items.filter((it) => !moved.has(it.project.companyId))
+      if (!live.length) continue
+      const count = live.length === items.length ? r.count : live.length
+
       // Компания — из проектов, о которых письмо. Без неё localeFor не имеет
       // куда падать: личный язык у большинства не выбран (колонка NOT NULL
       // DEFAULT 'en'), и сводка уходила по-английски в израильскую фирму, где
       // у компании стоит he. Берём первую: дайджест почти всегда про одну
       // компанию, а при нескольких выбор всё равно произволен.
-      const companyId = items[0]!.project.companyId
+      const companyId = live[0]!.project.companyId
 
       const byProject = new Map<string, { name: string; lines: string[] }>()
-      for (const it of items) {
+      for (const it of live) {
         const g = byProject.get(it.project.id) ?? { name: it.project.name, lines: [] }
         g.lines.push(`  • ${it.n.title}${it.n.body ? ` — ${it.n.body.slice(0, 120)}` : ''}`)
         byProject.set(it.project.id, g)
@@ -170,7 +178,7 @@ export async function sendDailyDigests(): Promise<void> {
         // Дайджест охватывает несколько проектов, поэтому только личный язык
         // и язык компании: user.locale сам по себе — дефолтный 'en'.
         locale: await localeFor({ userId: user.id, companyId }),
-        count: r.count,
+        count,
         groups: [...byProject.values()].map((g) => ({
           name: g.name,
           lines: g.lines.map((l) => l.trim().replace(/^• /, '')),
@@ -183,7 +191,7 @@ export async function sendDailyDigests(): Promise<void> {
       } else {
         await db.insert(userNotificationPrefs).values({ userId: r.userId, lastDigestAt: new Date() })
       }
-      console.log(`[digest] sent to ${user.email} (${r.count} unread)`)
+      console.log(`[digest] sent to ${user.email} (${count} unread)`)
     }
   } catch (err) {
     console.error('[digest] failed:', err)

@@ -17,6 +17,7 @@ import { runDueBackups } from './auto-backup.js'
 import { localeFor } from './locale.js'
 import { notifyConfigForProject } from './notify-config.js'
 import { checkSpendAlert } from './spend-alert.js'
+import { movedCompaniesCached } from './moved-companies.js'
 import { flushQueue as flushEmbeddingQueue, sweepStaleTasks } from './embeddings.js'
 
 // Планировщик напоминаний об открытых задачах (SPEC §8.9).
@@ -75,6 +76,11 @@ function isDue(r: typeof taskReminders.$inferSelect, now: Date): boolean {
 async function runReminder(r: typeof taskReminders.$inferSelect) {
   const project = await db.query.projects.findFirst({ where: eq(projects.id, r.projectId) })
   if (!project) return
+  // Компания переехала — здесь витрина, напоминание звало бы не в ту систему.
+  if ((await movedCompaniesCached()).has(project.companyId)) {
+    await db.update(taskReminders).set({ lastSentAt: new Date() }).where(eq(taskReminders.id, r.id))
+    return
+  }
 
   const statuses = r.statuses.split(',').filter(Boolean) as TaskStatus[]
   if (!statuses.length) return

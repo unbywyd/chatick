@@ -1198,5 +1198,6 @@ button.keys-c:hover{background:var(--soft)}
 .moved-t{display:flex;flex-direction:column;gap:2px;min-width:0}
 .moved-t b{font-size:15px}
 .moved-t span{font-size:13.5px;color:var(--ink2)}
+.moved-t .moved-keep{color:var(--ink);font-weight:500}
 .moved-go{font-size:13.5px;font-weight:600;color:var(--ink);text-decoration:underline;text-underline-offset:2px}
 .moved-try{display:flex;align-items:center;gap:12px;font-size:13.5px;color:var(--ink2);flex-wrap:wrap}

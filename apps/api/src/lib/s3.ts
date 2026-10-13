@@ -6,6 +6,7 @@ import { env } from '../env.js'
 import { db } from '../db/client.js'
 import { companyBackupStorage, companyStorage, projects, projectStorage } from '../db/schema.js'
 import { decrypt } from './crypto.js'
+import { movedCompaniesCached } from './moved-companies.js'
 
 // R2: ключи старого аккаунта, файлы chatick-next живут под префиксом chatick-next/
 export const S3_KEY_PREFIX = 'chatick-next'
@@ -42,6 +43,41 @@ export type ResolvedStorage = {
 }
 
 const customCache = new Map<string, { fp: string; client: S3Client }>()
+
+/**
+ * Хранилище переехавшей компании (см. moved-companies) — только на чтение.
+ *
+ * Их копия на своей инфраструктуре смотрит в тот же бакет и на те же ключи:
+ * файл, удалённый у нас, пропал бы и у них. Поэтому удаления такой компании
+ * в бакет не уходят вовсе — запись у нас удаляется, объект остаётся. Одна
+ * заглушка на клиенте закрывает все пути разом: корзину, уборку, удаление
+ * проекта, ротацию бэкапов.
+ *
+ * Не смогли узнать, переехала ли, — тоже не удаляем: лишний объект в бакете
+ * дешевле пропавшего чужого файла.
+ */
+export function keepObjectsWhen(client: S3Client, isMoved: () => Promise<boolean>): S3Client {
+  client.middlewareStack.add(
+    (next, context) => async (args) => {
+      if (context.commandName === 'DeleteObjectCommand' || context.commandName === 'DeleteObjectsCommand') {
+        const keep = await isMoved().catch(() => true)
+        if (keep) {
+          console.warn(`[storage] ${context.commandName} skipped: company moved, its bucket is shared with its own copy`)
+          return { output: { $metadata: {} }, response: {} } as Awaited<ReturnType<typeof next>>
+        }
+      }
+      return next(args)
+    },
+    { step: 'initialize', name: 'keepMovedCompanyObjects' },
+  )
+  return client
+}
+
+/** Клиент своего хранилища компании — с защитой на случай её переезда. */
+function customClient(companyId: string, region: string | null, endpoint: string, accessKeyId: string, secretAccessKey: string) {
+  const client = new S3Client({ region: region || 'auto', endpoint, credentials: { accessKeyId, secretAccessKey } })
+  return keepObjectsWhen(client, async () => (await movedCompaniesCached()).has(companyId))
+}
 
 /**
  * Настройка хранилища для проекта — то есть настройка его компании.
@@ -89,11 +125,7 @@ export async function companyStorageFor(
       const cacheKey = `backup:${companyId}`
       let cached = customCache.get(cacheKey)
       if (!cached || cached.fp !== fp) {
-        const client = new S3Client({
-          region: b.region || 'auto',
-          endpoint: b.endpoint,
-          credentials: { accessKeyId, secretAccessKey },
-        })
+        const client = customClient(companyId, b.region, b.endpoint, accessKeyId, secretAccessKey)
         cached = { fp, client }
         customCache.set(cacheKey, cached)
       }
@@ -109,7 +141,7 @@ export async function companyStorageFor(
   const fp = `${cfg.endpoint}|${cfg.region}|${cfg.bucket}|${accessKeyId.slice(0, 6)}`
   let cached = customCache.get(companyId)
   if (!cached || cached.fp !== fp) {
-    const client = new S3Client({ region: cfg.region || 'auto', endpoint: cfg.endpoint, credentials: { accessKeyId, secretAccessKey } })
+    const client = customClient(companyId, cfg.region, cfg.endpoint, accessKeyId, secretAccessKey)
     cached = { fp, client }
     customCache.set(companyId, cached)
   }
@@ -124,7 +156,8 @@ export async function resolveStorage(projectId: string): Promise<ResolvedStorage
     const fp = `${cfg.endpoint}|${cfg.region}|${cfg.bucket}|${accessKeyId.slice(0, 6)}`
     let cached = customCache.get(scope)
     if (!cached || cached.fp !== fp) {
-      const client = new S3Client({ region: cfg.region || 'auto', endpoint: cfg.endpoint, credentials: { accessKeyId, secretAccessKey } })
+      // scope здесь — компания проекта (storageConfigFor)
+      const client = customClient(scope, cfg.region, cfg.endpoint, accessKeyId, secretAccessKey)
       cached = { fp, client }
       customCache.set(scope, cached)
     }

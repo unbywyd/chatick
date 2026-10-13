@@ -47,7 +47,7 @@ export type Company = {
   isOwner: boolean
   projectsCount: number
   /** Компания переехала на свою инфраструктуру — баннер; url — куда (platform_settings). */
-  moved?: { url: string | null } | null
+  moved?: { url: string | null; deleteAt?: string | null } | null
   mainProjectId?: string | null
   /** Язык писем приглашённым и умолчание для новых проектов. */
   locale?: string

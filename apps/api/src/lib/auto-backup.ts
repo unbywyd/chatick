@@ -7,6 +7,7 @@ import { exportCompany } from './backup.js'
 import { companyStorageFor, type ResolvedStorage } from './s3.js'
 import { sendMail } from './mail.js'
 import { localeFor } from './locale.js'
+import { movedCompaniesCached } from './moved-companies.js'
 
 // Автобэкап компании (SPEC §8.48).
 //
@@ -91,9 +92,12 @@ const isDue = (last: Date | null) => !last || Date.now() - last.getTime() >= 24 
  */
 export async function runDueBackups(): Promise<void> {
   const rows = await db.query.companies.findMany({ where: eq(companies.autoBackup, true) })
+  // Переехавшая компания бэкапится у себя: её хранилище общее с её копией,
+  // и наши архивы и ротация мешались бы их собственным.
+  const moved = await movedCompaniesCached()
 
   for (const c of rows) {
-    if (!isDue(c.lastBackupAt)) continue
+    if (!isDue(c.lastBackupAt) || moved.has(c.id)) continue
     try {
       const out = await backupCompany(c.id)
       await db
