@@ -1,4 +1,5 @@
 import { closedSql, settledSql } from '../lib/task-status.js'
+import { movedCompanies } from '../lib/moved-companies.js'
 import { Hono } from 'hono'
 import { zValidator } from '@hono/zod-validator'
 import { z } from 'zod'
@@ -86,6 +87,8 @@ companiesRoute.get('/', async (c) => {
         .groupBy(projects.companyId)
     : []
   const byCompany = new Map(counts.map((r) => [r.companyId, r.count]))
+  // Переехавшие компании (platform_settings 'companies.moved'): люди видят баннер.
+  const moved = await movedCompanies()
 
   return c.json({
     companies: memberships.map((m) => ({
@@ -96,6 +99,7 @@ companiesRoute.get('/', async (c) => {
       // компанию», и возможность из неё выйти, и права в опасной зоне.
       isOwner: m.company.createdById === sub,
       projectsCount: byCompany.get(m.company.id) ?? 0,
+      moved: moved.get(m.company.id) ?? null,
     })),
     invites: invites.map((i) => ({ id: i.id, token: i.token, role: i.role, company: { id: i.company.id, name: i.company.name, logoUrl: i.company.logoUrl } })),
   })

@@ -3,6 +3,13 @@ import i18n from '@/i18n'
 /** Строки инструментов списка задач: поиск, меню строки, массовые действия, Excel, пустой список. */
 const ru = {
   tasks: { dueWord: 'Срок' },
+  moved: {
+    title: 'Простите, ваша компания переехала',
+    thanks: 'Спасибо за сотрудничество! Работа {{company}} теперь идёт в собственной системе.',
+    open: 'Открыть {{host}}',
+    tryText: 'У нас новый подход к работе — если интересно, попробуйте его со своей компанией.',
+    try: 'Попробовать',
+  },
   tbl: {
     title: 'На столе',
     sub: 'Самое срочное. Не больше трёх задач, где ход твой.',
@@ -287,6 +294,13 @@ const ru = {
 
 const en: typeof ru = {
   tasks: { dueWord: 'Due' },
+  moved: {
+    title: 'Sorry — your company has moved',
+    thanks: 'Thank you for working with us! {{company}} now runs on its own system.',
+    open: 'Open {{host}}',
+    tryText: 'We have a new way of working — if you are curious, try it with a company of your own.',
+    try: 'Try it',
+  },
   tbl: {
     title: 'On the table',
     sub: 'The most urgent. No more than three tasks where it’s your move.',
@@ -571,6 +585,13 @@ const en: typeof ru = {
 
 const he: typeof ru = {
   tasks: { dueWord: 'מועד' },
+  moved: {
+    title: 'סליחה — החברה שלכם עברה',
+    thanks: 'תודה על שיתוף הפעולה! {{company}} עובדת עכשיו במערכת משלה.',
+    open: 'לפתיחת {{host}}',
+    tryText: 'יש לנו דרך עבודה חדשה — אם מעניין, אפשר לנסות אותה עם חברה משלכם.',
+    try: 'לנסות',
+  },
   tbl: {
     title: 'על השולחן',
     sub: 'הכי דחוף. לא יותר משלוש משימות שבהן התור שלך.',

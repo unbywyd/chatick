@@ -1191,3 +1191,12 @@ button.keys-c:hover{background:var(--soft)}
 .sv-fold:hover{background:color-mix(in srgb,var(--ink) 6%,transparent);color:var(--ink)}
 .sv-fold svg{transition:transform .2s ease}
 .sv-fold.open svg{transform:rotate(180deg)}
+
+/* Компания переехала (platform_settings 'companies.moved') — баннер под шапкой */
+.moved{background:color-mix(in srgb,var(--accent) 22%,var(--paper));border-block-end:1px solid var(--line)}
+.moved-in{max-width:1240px;margin:0 auto;padding:14px 24px;display:flex;gap:16px 32px;align-items:center;justify-content:space-between;flex-wrap:wrap}
+.moved-t{display:flex;flex-direction:column;gap:2px;min-width:0}
+.moved-t b{font-size:15px}
+.moved-t span{font-size:13.5px;color:var(--ink2)}
+.moved-go{font-size:13.5px;font-weight:600;color:var(--ink);text-decoration:underline;text-underline-offset:2px}
+.moved-try{display:flex;align-items:center;gap:12px;font-size:13.5px;color:var(--ink2);flex-wrap:wrap}

@@ -46,6 +46,8 @@ export type Company = {
   myRole: CompanyRole
   isOwner: boolean
   projectsCount: number
+  /** Компания переехала на свою инфраструктуру — баннер; url — куда (platform_settings). */
+  moved?: { url: string | null } | null
   mainProjectId?: string | null
   /** Язык писем приглашённым и умолчание для новых проектов. */
   locale?: string

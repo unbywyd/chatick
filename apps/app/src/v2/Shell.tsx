@@ -18,6 +18,7 @@ import { inkOn } from './util'
 import './styles/main.css'
 import './styles/fixes.css'
 import './styles/rtl.css'
+import { MovedBanner } from './MovedBanner'
 import './i18n'
 
 const ACCENT = '#D4F36B'
@@ -46,6 +47,7 @@ export function Shell() {
     <UiProvider company={company}>
       <Frame>
         <Header />
+        <MovedBanner company={company} />
         <Body />
       </Frame>
     </UiProvider>
