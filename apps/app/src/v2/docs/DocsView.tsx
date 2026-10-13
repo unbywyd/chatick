@@ -856,27 +856,17 @@ function DocHistory({ projectId, docId }: { projectId: string; docId: string }) 
  */
 function AskCard({ kind, id, projectId, title }: { kind: 'document' | 'note'; id: string; projectId: string | null; title: string }) {
   const { t } = useTranslation('v2')
-  const { companyId, setAiOpen, flash } = useUi()
-  const qc = useQueryClient()
-  const send = useMutation({
-    mutationFn: (text: string) =>
-      api(`/api/v1/assistant/${companyId}/messages`, {
-        method: 'POST',
-        body: JSON.stringify({ text, context: { screen: `docs: ${kind} ${id}`, ...(projectId ? { projectId } : {}) } }),
-      }),
-    onSuccess: () => {
-      void qc.invalidateQueries({ queryKey: ['v2', 'assistant', companyId] })
-      setAiOpen(true)
-    },
-    onError: (e) => flash(errorCode(e) === 'busy' ? t('ai.busy') : t('err.generic')),
-  })
+  const { askAi } = useUi()
+  // Вопрос уходит через панель ассистента: она покажет «думаю…» и ответ
+  // потоком. Раньше кнопка слала сама, и открытая следом панель молчала.
+  const ask = (text: string) => askAi(text, { screen: `docs: ${kind} ${id}`, ...(projectId ? { projectId } : {}) })
   const keys = (kind === 'document' ? ['sum', 'old', 'tasks'] : ['sum', 'old']) as ('sum' | 'old' | 'tasks')[]
   return (
     <section className="card">
       <h3>{t('docs.askHead')}</h3>
       <div className="ask">
         {keys.map((k) => (
-          <button key={k} disabled={send.isPending} onClick={() => send.mutate(t(`docs.ask.${k}`, { title }))}>
+          <button key={k} onClick={() => ask(t(`docs.ask.${k}`, { title }))}>
             {t(`docs.askLabel.${k}`)}
           </button>
         ))}

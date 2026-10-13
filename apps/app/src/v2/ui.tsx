@@ -27,7 +27,13 @@ type Ui = {
   flash: (msg: string) => void
   aiOpen: boolean
   setAiOpen: (v: boolean) => void
+  /** Вопрос ассистенту с любого экрана: панель откроется и отправит его сама. */
+  askAi: (text: string, context?: AskContext) => void
+  pendingAsk: { text: string; context: AskContext } | null
+  clearAsk: () => void
 }
+
+export type AskContext = { projectId?: string; taskId?: string; screen?: string }
 
 const Ctx = createContext<Ui | null>(null)
 
@@ -37,6 +43,7 @@ export function UiProvider({ company, children }: { company: Company; children: 
   const [toast, setToast] = useState<string | null>(null)
   const [aiOpen, setAiOpenState] = useState(() => localStorage.getItem('chatick_v2_ai') === '1')
   const timer = useRef<number | undefined>(undefined)
+  const [pendingAsk, setPendingAsk] = useState<{ text: string; context: AskContext } | null>(null)
 
   const setParam = useCallback(
     (key: string, value: string | null) =>
@@ -78,8 +85,15 @@ export function UiProvider({ company, children }: { company: Company; children: 
         setAiOpenState(v)
         localStorage.setItem('chatick_v2_ai', v ? '1' : '0')
       },
+      askAi: (text, context = {}) => {
+        setPendingAsk({ text, context })
+        setAiOpenState(true)
+        localStorage.setItem('chatick_v2_ai', '1')
+      },
+      pendingAsk,
+      clearAsk: () => setPendingAsk(null),
     }),
-    [company, params, setParam, ho, toast, flash, aiOpen],
+    [company, params, setParam, ho, toast, flash, aiOpen, pendingAsk],
   )
   return <Ctx.Provider value={value}>{children}</Ctx.Provider>
 }
