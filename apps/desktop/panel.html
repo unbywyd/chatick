@@ -293,6 +293,11 @@
       .tr-t .tx { min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; unicode-bidi: plaintext; }
       [dir='ltr'] .tr-t .tx { text-align: left; }
       [dir='rtl'] .tr-t .tx { text-align: right; }
+      /* Остальные подписи с unicode-bidi: plaintext — тоже по интерфейсу, а не по
+         своему первому символу: «וי פיור - Vpure» в русском трее уезжало вправо,
+         к стрелке, а «Сегодня 1:23» под ним оставалось слева. */
+      [dir='ltr'] :is(.tr-co .nm, .tr-proj .nm, .tr-proj .sub, .tr-gh .nm, .tr-mi .nm, .tr-m .from, .cn-pick .nm, .tr-ev .l1, .tr-ev .q, .tr-ev .l3) { text-align: left; }
+      [dir='rtl'] :is(.tr-co .nm, .tr-proj .nm, .tr-proj .sub, .tr-gh .nm, .tr-mi .nm, .tr-m .from, .cn-pick .nm, .tr-ev .l1, .tr-ev .q, .tr-ev .l3) { text-align: right; }
       /* Новое по задаче — непрочитанное уведомление о ней. */
       .tr-new { width: 7px; height: 7px; flex: none; border-radius: 50%; background: var(--accent); box-shadow: 0 0 0 1.5px var(--moss); }
       .tr-m {
