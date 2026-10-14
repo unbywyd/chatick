@@ -608,3 +608,27 @@ html:has(.app .mwrap){overflow:hidden}
   .app .panel .ph .ib,.app .tmv .ea > button,.app .tmv .dh .add,.app .rel-x,.app .moved-x,.app .kb .tg > button{min-width:36px;min-height:36px}
   .app .newt button.mini,.app .rcell .rbtn,.app .cmt-act,.app .ntf .qx,.app .tgt,.app .tg-tog{min-height:36px}
 }
+
+/* Выпадающие списки с поиском на телефоне — панелью под шапкой: в строке у
+   низа экрана (выбор проекта в записи времени) список уходил за край, а снизу
+   его закрыла бы клавиатура. */
+@media (max-width:600px){
+  /* .cbx .cbx-pop — сильнее, чем time.css (грузится позже и ставит 280px от края). */
+  .app .cbx .cbx-pop,.app .tmv .cbx .cbx-pop,.app .newt .qpick .cbx-pop{position:fixed;top:72px;inset-inline:8px;width:auto;min-width:0;max-height:calc(100dvh - 88px);overflow:auto}
+}
+/* Документ, к которому прокрутили из дерева, — не под шапкой. */
+.app .kb .dl > .doc{scroll-margin-top:76px}
+/* На узком документ под деревом — не ниже экрана: пока он грузится (заглушка в
+   полтораста пикселей), страница была слишком короткой, и прокрутка к нему
+   упиралась в низ. */
+@container (max-width:720px){.app .kb .dl > .doc{min-height:calc(100dvh - 90px)}}
+/* Самые узкие телефоны (320px): аватар уезжал за край — всё в шапке на шаг меньше. */
+@media (max-width:360px){
+  .app .hdr{padding-inline:8px;gap:2px}
+  .app .nav .nv-more,.app .hd-search,.app .bell{width:34px;min-width:34px;height:36px;padding:0;justify-content:center}
+  .app[dir] .brand{padding:0 2px}
+  .app .me{width:32px;height:32px}
+  .app .gt{padding-inline:3px}
+  .app .gt-go{width:30px;height:30px}
+  .app .gt-time{font-size:14px;padding-inline:4px 2px}
+}

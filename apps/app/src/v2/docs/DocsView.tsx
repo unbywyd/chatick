@@ -164,6 +164,18 @@ export function DocsView({ mode = 'doc' }: { mode?: 'doc' | 'note' }) {
     [navigate, base, loc.search, mode],
   )
 
+  // На узком экране дерево стоит над документом: выбрав пункт, человек не
+  // видел, что что-то открылось. Прокручиваем к документу — только когда он
+  // ниже дерева (на широком они рядом, и прокрутка была бы лишней).
+  const jump = useRef(false)
+  useEffect(() => {
+    if (!jump.current) return
+    jump.current = false
+    const tree = document.querySelector('.kb .tree')?.getBoundingClientRect()
+    const doc = document.querySelector('.kb .dl > .doc')
+    if (tree && doc && doc.getBoundingClientRect().top >= tree.bottom - 1) doc.scrollIntoView({ behavior: 'smooth', block: 'start' })
+  }, [sel?.id])
+
   const fail = (e: unknown) => flash(errorCode(e).startsWith('Forbidden') || errorCode(e) === '403' ? t('docs.noRights') : t('err.generic'))
   const createDoc = useMutation({
     mutationFn: (pid: string) =>
@@ -305,7 +317,10 @@ export function DocsView({ mode = 'doc' }: { mode?: 'doc' | 'note' }) {
                     key={i.kind + i.id}
                     className={'di' + (on ? ' on' : '')}
                     aria-current={on ? 'page' : undefined}
-                    onClick={() => go(i.kind === 'doc' ? { kind: 'doc', projectId: i.projectId!, id: i.id } : { kind: 'note', id: i.id })}
+                    onClick={() => {
+                      jump.current = true
+                      go(i.kind === 'doc' ? { kind: 'doc', projectId: i.projectId!, id: i.id } : { kind: 'note', id: i.id })
+                    }}
                     title={i.preview?.trim() ? i.preview.trim().slice(0, 200) : i.kind === 'doc' ? t('docs.kindDoc') : t('docs.kindNote')}
                   >
                     <Svg d={i.kind === 'doc' ? DOC_PATH : NOTE_PATH} />
