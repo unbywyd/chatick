@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { useMutation, useQueryClient } from '@tanstack/react-query'
 import { api } from '@/lib/api'
@@ -124,6 +124,27 @@ export function TableScenes({ project }: { project: string | null }) {
     if (side === 'away' && !away.length && mine.length) setSide('mine')
   }, [side, mine.length, away.length])
   const scene = list.find((s) => s.id === cur) ?? list[0]
+  const idx = scene ? list.indexOf(scene) : -1
+  // Стол — карусель: стрелки по бокам листают задачи по кругу. Ряд чипов над
+  // ним листается колесом, а выбранный чип сам встаёт в видимую часть — иначе
+  // то, что не влезло, было не достать: ни полосы, ни стрелок.
+  const step = (d: 1 | -1) => list.length > 1 && setCur(list[(idx + d + list.length) % list.length]!.id)
+  const tabs = useRef<HTMLDivElement>(null)
+  useEffect(() => {
+    tabs.current?.querySelector('.sv-tab.on')?.scrollIntoView({ block: 'nearest', inline: 'nearest' })
+  }, [scene?.id])
+  useEffect(() => {
+    const el = tabs.current
+    if (!el) return
+    const rtl = getComputedStyle(el).direction === 'rtl'
+    const wheel = (e: WheelEvent) => {
+      if (Math.abs(e.deltaY) <= Math.abs(e.deltaX) || el.scrollWidth <= el.clientWidth) return
+      e.preventDefault()
+      el.scrollLeft += rtl ? -e.deltaY : e.deltaY
+    }
+    el.addEventListener('wheel', wheel, { passive: false })
+    return () => el.removeEventListener('wheel', wheel)
+  }, [folded, list.length])
   if (!table.data) return null
   // Пустой стол не прячем: иначе никто не узнает, что он есть и как на него класть.
   if (!mine.length && !away.length)
@@ -148,7 +169,7 @@ export function TableScenes({ project }: { project: string | null }) {
       </div>
       {!folded && (
         <>
-          <div className="sv-tabs">
+          <div className="sv-tabs" ref={tabs}>
             <div className="seg sv-seg" role="tablist" aria-label={t('tbl.whose')}>
               <button className={(side === 'mine' ? 'on' : '') + (mine.length ? '' : ' dis')} role="tab" aria-selected={side === 'mine'} onClick={() => setSide('mine')}>
                 {t('tbl.mine')}
@@ -168,7 +189,24 @@ export function TableScenes({ project }: { project: string | null }) {
                 </button>
               ))}
           </div>
-          {scene && <SceneView key={scene.id} s={scene} />}
+          {scene && (
+            <div className="sv-car">
+              <SceneView key={scene.id} s={scene} />
+              {list.length > 1 && (
+                <>
+                  <button className="sv-nav prev" aria-label={t('car.prev')} title={t('car.prev')} onClick={() => step(-1)}>
+                    <Icon name="chevronStart" />
+                  </button>
+                  <button className="sv-nav next" aria-label={t('car.next')} title={t('car.next')} onClick={() => step(1)}>
+                    <Icon name="chevronEnd" />
+                  </button>
+                  <span className="sv-pos">
+                    {idx + 1} / {list.length}
+                  </span>
+                </>
+              )}
+            </div>
+          )}
         </>
       )}
     </section>

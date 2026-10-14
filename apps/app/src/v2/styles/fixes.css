@@ -632,3 +632,13 @@ html:has(.app .mwrap){overflow:hidden}
   .app .gt-go{width:30px;height:30px}
   .app .gt-time{font-size:14px;padding-inline:4px 2px}
 }
+
+/* Стол — карусель: стрелки по бокам (по наведению; на сенсорном — всегда) и «1 / 3». */
+.app .sv-car{position:relative}
+.app .sv-nav{position:absolute;top:50%;translate:0 -50%;z-index:3;width:40px;height:40px;border-radius:50%;display:grid;place-items:center;background:var(--sheet);color:var(--ink);box-shadow:0 6px 18px -6px rgba(0,0,0,.25),inset 0 0 0 1px var(--line);opacity:0;transition:opacity .2s}
+.app .sv-nav.prev{inset-inline-start:8px}
+.app .sv-nav.next{inset-inline-end:8px}
+.app .sv-car:hover .sv-nav,.app .sv-nav:focus-visible{opacity:1}
+.app .sv-nav:hover{box-shadow:0 6px 18px -6px rgba(0,0,0,.25),inset 0 0 0 1px var(--ink3)}
+.app .sv-pos{position:absolute;bottom:10px;inset-inline-end:16px;font-size:12px;font-weight:600;color:var(--ink3);font-variant-numeric:tabular-nums;direction:ltr;unicode-bidi:isolate}
+@media (hover:none){.app .sv-nav{opacity:1}}
