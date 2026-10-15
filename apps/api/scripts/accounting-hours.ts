@@ -2,7 +2,7 @@
  * Табель часов за месяц для бухгалтерии — Excel.
  *
  *   npx tsx scripts/accounting-hours.ts --email <почта> --company <название> [--month 2026-09]
- *       [--out файл.xlsx] [--max-day 8] [--lang en|ru|he]
+ *       [--out файл.xlsx] [--max-day 8] [--lang en|ru|he] [--until 2026-10-15]
  *
  * Берёт записи трекера человека во всех проектах компании за месяц (сутки —
  * по часовому поясу компании), сохраняет сумму до минуты и раскладывает её по
@@ -118,7 +118,12 @@ async function main() {
     .map(({ id, name, minutes }) => ({ id, name, minutes }))
     .sort((a, b) => b.minutes - a.minutes)
 
-  const plan = planMonth(year, mon, total, maxDay * 60)
+  // Текущий месяц — только по сегодняшний день: на дни, что ещё не наступили,
+  // часы не ставим. --until YYYY-MM-DD задаёт последний день явно.
+  const todayLocal = new Intl.DateTimeFormat('en-CA', { timeZone: tz, year: 'numeric', month: '2-digit', day: '2-digit' }).format(new Date())
+  const untilArg = arg('until')
+  const untilDay = untilArg?.startsWith(month) ? Number(untilArg.slice(8, 10)) : todayLocal.startsWith(month) ? Number(todayLocal.slice(8, 10)) : undefined
+  const plan = planMonth(year, mon, total, maxDay * 60, untilDay)
   const cells = splitByProject(plan.days, perProject)
 
   // Точное значение, а показ — два знака (формат клетки ниже): так сумма

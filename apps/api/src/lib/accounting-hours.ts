@@ -47,14 +47,20 @@ function spread(total: number, n: number): number[] {
  * overflow — сколько минут не влезло даже с пятницами и субботами при
  * ограничении в день. Такие минуты всё равно раскладываются (сумму терять
  * нельзя), но дни выходят длиннее предела — это надо показать человеку.
+ *
+ * untilDay — последний день, на который можно класть часы: табель посреди
+ * месяца не должен ставить работу на дни, которые ещё не наступили.
  */
 export function planMonth(
   year: number,
   month: number,
   totalMinutes: number,
   maxDayMinutes = 8 * 60,
+  untilDay?: number,
 ): { days: DayPlan[]; usedFridays: boolean; usedSaturdays: boolean; overLimit: boolean } {
-  const days: DayPlan[] = daysOfMonth(year, month).map((d) => ({ ...d, minutes: 0 }))
+  const days: DayPlan[] = daysOfMonth(year, month)
+    .filter((d) => !untilDay || Number(d.date.slice(8, 10)) <= untilDay)
+    .map((d) => ({ ...d, minutes: 0 }))
   const tiers = [
     days.filter((d) => d.weekday !== FRIDAY && d.weekday !== SATURDAY),
     days.filter((d) => d.weekday === FRIDAY),

@@ -116,3 +116,14 @@ describe('проекты по дням', () => {
     for (const { d, c } of work) expect(Math.abs((c.get('a') ?? 0) / d.minutes - share)).toBeLessThan(0.01)
   })
 })
+
+describe('табель посреди месяца', () => {
+  it('часы не встают на дни после untilDay', () => {
+    // Октябрь 2026, по 15-е: 30 часов — только в 1..15, ни минуты позже.
+    const plan = planMonth(2026, 10, 30 * 60, 8 * 60, 15)
+    expect(plan.days.map((d) => d.date.slice(8))).toEqual(Array.from({ length: 15 }, (_, i) => String(i + 1).padStart(2, '0')))
+    expect(plan.days.reduce((a, d) => a + d.minutes, 0)).toBe(30 * 60)
+    expect(Math.max(...plan.days.map((d) => d.minutes))).toBeLessThanOrEqual(8 * 60)
+  })
+})
+
